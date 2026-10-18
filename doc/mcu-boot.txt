@@ -41,9 +41,41 @@ including the attempted failing instruction has SHA-256:
   dc95a12e8b706d71a3bb2472f753e946de804536895ad1785eedb84109625d00
 The MCU data sheet identifies PU0 as general GPIO or a CF/ATA signal depending
 on configuration; its Blofeld board connection is not established by that fact.
-No external high level is invented to bypass this wait.
+The default model leaves this input unknown; it does not supply a ready level.
 The image and CPU loop state are not patched or bypassed. This remains an untimed,
 unverified pin fixture; no application or complete-board boot is inferred.
+
+Original MCU sender experiment
+  ctest --test-dir build/strict -R '^original_mcu_sender$' --output-on-failure
+
+The optional regression checks the private ZIP's SHA-256 before execution and
+starts the unchanged MCU image at its reset vector. PE0/PE1 are explicitly high
+and the same detector window is supplied. At the PU0 poll, a register read first
+verifies that the unobserved input still faults with its address and input mask.
+The experiment then observes PU0 low for two executed polling iterations and
+high for the third. PB3/PB5/PB6/PB7 are explicitly observed low for PORTB reads.
+These are controlled laboratory inputs, not measured board levels or defaults.
+
+The original application executes its own delay loops, loads its own flash data
+and writes PORTB. The observer captures PB1 as candidate active-low selection,
+PB2 as clock and PB4 as serial data. It records only stable selected falling
+edges, requires 24 per frame and checks every captured word against original
+flash. The resulting 97 frames contain the length/address, all 94 DSP first-stage
+words and one additional trailing word. Exactly 7275 PORTB writes are required.
+With the two low polling iterations, this takes 1856593 MCU instructions.
+No host program-memory writes, CPU-state patches or loop skips supply this data.
+The private trace records PORTB writes/pads and CPU snapshots at the gate and
+after transmission; it is written under build/strict/Testing/.
+
+The first selection also lowers the previously high clock in the same PORTB
+write. The observer records this unordered transition without treating it as a
+data edge. It does not resolve physical transition order or feed a DSP receiver.
+The current SHI model rejects simultaneous SS/SCK transitions. DSP56371 data
+sheet Rev. 4.1 section 12, table 20, item 27 requires 10 ns from SS assertion to
+the first SCK edge in CPHA=1 slave mode. The GPIO write alone supplies neither
+pad skew nor that interval. Board routing, edge order and reset/clock behavior
+need qualification before direct combined boot can be claimed. The separate
+DSP fixture still uses host pin events (dsp-core.txt); no full boot is proven.
 
 Limits
 Reaching an application entry does not establish a complete Blofeld boot. DSP

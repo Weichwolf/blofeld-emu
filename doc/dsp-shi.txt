@@ -75,6 +75,8 @@ interrupt specifications, so it is not used as this model's behavioral oracle.
 Its DspBoot helper receives whole words, writes program memory and changes PC on
 the host; that HDI08 shortcut cannot establish original SHI boot-ROM execution.
 
-Original MCU transmission, NAND loading, board routing and clock ratios still
-require combined execution and stock-hardware validation. See mcu-boot.txt,
-firmware-layout.txt and coverage.txt.
+Original MCU transmission is separately executed and checked in the explicit
+pin experiment described in mcu-boot.txt. Its first selection changes SS/SCK in
+one GPIO write; this model does not guess the pad transition order. NAND loading,
+board routing and clock ratios still require combined execution and stock
+hardware validation. See firmware-layout.txt and coverage.txt.

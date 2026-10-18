@@ -53,7 +53,9 @@ doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts a
 doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
 doc/dsp-shi.txt covers the DSP-side SPI slave and native MCU GPIO exchange tests.
 doc/dsp-core.txt covers native DSP execution and the documented SPI bootstrap
-loading the unchanged Blofeld first stage. Combined MCU/DSP boot remains pending.
+loading the unchanged Blofeld first stage. A separate original MCU regression
+captures its complete GPIO transmission under explicit pin observations
+(doc/mcu-boot.txt). Combined MCU/DSP boot remains pending.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

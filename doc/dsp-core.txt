@@ -110,10 +110,16 @@ The public regression stops before that access, without requiring an unsupported
 access to remain unsupported. GPIO/NAND startup has not yet been reached natively.
 
 The host supplies pin events with explicit instruction interleaving. The original
-MCU is not yet the sender in this fixture, no elapsed DSP/MCU clock ratio is
+MCU is not the sender in this fixture, no elapsed DSP/MCU clock ratio is
 inferred, and no physical Blofeld has validated the route/timing. Native caches
 currently cover the 24-bit program address space and use substantial memory;
 these diagnostic runs provide no real-time audio performance claim.
+
+A separate original-MCU regression now executes reset/application and captures
+its complete 97-word GPIO transfer, including the trailing word, under explicit
+PU0/PB input observations. It does not drive this native DSP fixture: the initial
+SS/SCK transition is unordered at the current GPIO observation granularity.
+See mcu-boot.txt for reproducible checks and the remaining timing qualification.
 
 Offline DSP bus/model fuzzing
   cmake --build build/fuzz --target dsp-model-fuzz

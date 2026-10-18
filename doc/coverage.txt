@@ -109,7 +109,12 @@ MCU–DSP communication             partial  Native synthetic HC12 GPIO program 
                                           exact words with SHI in both directions.
                                           Native DSP receives original frame bytes
                                           from a host pin fixture. Original MCU
-                                          sender, board route and scheduling pending.
+                                          reset/application emits its own 97-word
+                                          transfer in an explicit PU0/PB experiment;
+                                          all words and 7275 GPIO writes checked
+                                          (mcu-boot.txt). First selection changes
+                                          SS/SCK together; pad timing, physical route
+                                          and combined scheduling remain pending.
 ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
@@ -125,6 +130,9 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           1672476 instructions through original
                                           CPU delays after SCI/RTI/USB setup, then
                                           stops on unknown PTU0 input at 0x0278.
+                                          Separate regression observes low/high PU0
+                                          and low PB inputs to execute the original
+                                          sender, without changing model defaults.
                                           No elapsed peripheral time/USB host;
                                           board wiring remains unresolved.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.

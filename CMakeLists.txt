@@ -163,6 +163,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-boot.trace")
   set_tests_properties(original_mcu_boot PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-mcu-sender-test test/original_mcu_sender_test.cpp)
+  target_link_libraries(blofeld-mcu-sender-test PRIVATE blofeld_core)
+  add_test(NAME original_mcu_sender COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_mcu_sender.py"
+    $<TARGET_FILE:blofeld-mcu-sender-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-mcu-sender.trace")
+  set_tests_properties(original_mcu_sender PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME firmware_python
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s test -v)
   set_tests_properties(firmware_python PROPERTIES
@@ -189,6 +197,7 @@ add_custom_target(quality
     blofeld-dsp-timers-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
+    blofeld-mcu-sender-test
   USES_TERMINAL)
 endif()
 
