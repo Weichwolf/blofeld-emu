@@ -164,7 +164,7 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           continuous command journaling and full
                                           board snapshots remain pending.
                                           NAND geometry/ECC and contents unresolved.
-Original update and recovery      pending  Helpers and recovery entry recovered;
+Original update and recovery      partial  Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an
                                           isolated RAM fixture. Original word routines
@@ -172,11 +172,26 @@ Original update and recovery      pending  Helpers and recovery entry recovered;
                                           reject non-erased words and force SEC=10.
                                           Original finalization writes recovery
                                           vectors; native reset fetches 8000.
+                                          56 original-command cold exports are
+                                          compared independently and restarted in
+                                          separate processes. Actual checksum,
+                                          option and vector outcomes checked
+                                          (original-update-restarts.txt).
+                                          Original resident SCI receiver loads
+                                          all 761 original first-helper bytes and
+                                          jumps to 1200 using own recovery frames.
+                                          Original Rescue file remains unavailable;
+                                          downloaded-helper execution pending.
                                           Explicit reference milestones only;
                                           full initialization/transport/recovery
                                           and hardware validation pending.
-Damaged updates/transfer loss     partial  Offline parser rejection only;
-                                          no emulated transport/update proof.
+Damaged updates/transfer loss     partial  Offline parser rejection and original
+                                          SCI recovery fixtures: interrupted or
+                                          unmatched normal-update data waits;
+                                          reordered final recovery packet reaches
+                                          entry with mismatched RAM, detected by
+                                          the test. Full update error/retry and
+                                          timed transport behavior pending.
 Power loss in every erase/program partial  Forty MCU command/reference-position
                                           reset/power-cycle cases, queued commands
                                           and unknown vector/option checks tested.

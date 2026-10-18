@@ -1,0 +1,84 @@
+Original MCU updater cold-restart and SCI recovery fixtures
+
+  ctest --test-dir build/strict -R '^(original_flash_restarts|original_recovery_wire)$' --output-on-failure
+
+Both optional tests verify the private 1.25 ZIP identity before execution and
+explicitly skip without it. All generated NVM, wire data, instruction/state traces
+and result manifests remain private under build/strict/Testing/. Source tests
+contain no manufacturer program bytes. No physical MIDI or flash device is used.
+
+Original programming checkpoints
+The unchanged RAM programming helper executes the calls described in
+mcu-flash-commands.txt. Its 14 erase/program commands export four cold NVM images
+each: FCMD selected, FSTAT launched, transferred into the executing slot, and
+completed. Export does not stop the live producer. These are reference-state
+cuts, not qualified electrical/pulse timings or kills of a live storage journal.
+
+An independent Python oracle applies the expected sector/word domains to the
+supplied source image, compares every data/knowledge/history byte and CRC of all
+56 files, and predicts the cold outcome from actual knownness, vector bytes and
+the additive checksum. Each file is then loaded in a separate native process.
+Every saved image must retain all 512 known original resident-loader bytes.
+Volatile flash state starts idle/unconfigured; RAM starts unknown. Reset samples
+the saved protection/security fields and fetches the saved vector without repair.
+
+Outcome                 Cases   Native observation
+Original application    2       Resident checksum succeeds and branches to 8200
+Original recovery       10      Resident checksum/control flow reaches receiver 8123
+Unknown application     3       Original checksum load at 80a3 rejects unknown data
+Unknown reset options   8       Cold bus construction rejects an unknown FPROT/FSEC cell
+Erased reset vector     32      Native reset fetches FFFF, not the intact loader
+Unknown reset vector    1       Native reset rejects the unknown FFFE word
+
+The boot fixtures supply PE input mask FB low and one 15-edge PHY detector
+window, as in mcu-boot.txt. CPU instructions choose their own path. No host PC,
+checksum, vector or RAM repair redirects a restart. Erased-vector cases stop
+after the actual reset fetch; they do not execute invented code at FFFF.
+Unknown states are conservative model results, not measured silicon outcomes.
+An intact loader alone does not establish a usable reset/recovery path.
+
+SCI receiver experiment
+The final completed image has the original recovery vectors and the programmed
+SEC=10 field, but an intentionally incomplete application/checksum. Its native
+cold boot enters the resident receiver. That receiver's SysEx command differs
+from the normal firmware update container. The old original Rescue file remains
+unavailable; these tests use our own framing inferred from the resident parser.
+They do not assert compatibility with an obtained official Rescue file.
+
+The host encodes the unchanged 761-byte first RAM helper from the original ZIP,
+pads it to 765 bytes, and divides it into three own recovery packets. Each group
+of five bytes uses a separate LSB flag byte and five seven-bit right-shifted
+bytes. The private wire stream is 951 bytes. Its signature is read from the
+supplied resident image; no manufacturer payload is embedded in test sources.
+
+The unchanged boot code configures SCI. The fixture drives only the external
+RX pad, observes the original divider 60, and supplies NRZ start/eight data/stop
+bits through advance_sci. It sends the next byte only at the original receiver
+poll after the previous native SCIDRL read. CPU instructions find the header,
+unpack the bytes, write RAM and jump to 1200. All 761 resulting helper bytes are
+compared with the original object. The receiver jumps before consuming the last
+F7, after 950 wire bytes; the host supplies neither RAM writes nor a PC change.
+This object belongs to the normal update. Its required caller context and its
+suitability as a cold-recovery program remain unqualified; loading it does not
+establish that it can execute correctly in the resident receiver's context.
+
+Four native wire cases are checked:
+- Valid own framing loads the entire unchanged helper and reaches its entry.
+- An interrupted stream waits in the original empty SCI poll.
+- The normal original update block does not match the recovery command and waits.
+- Sending the final own packet first reaches the helper entry with incomplete,
+  mismatched RAM. The test detects that outcome; no integrity check is invented
+  for the original receiver and no incomplete helper is executed by the test.
+
+Wire time is advanced for SCI only, between CPU instructions. Other peripherals
+and CPU execution are not globally scheduled during these frames. This verifies
+the modeled receive path and original control flow under the explicit fixture,
+not calibrated MIDI baud, realistic arrival rates, overrun/latency behavior or a
+physical board route. There is no host MIDI port or playable audio path yet.
+
+Remaining qualification
+Executing the downloaded helper, all original update stages, initialization's
+unqualified idle FSTAT read/modify/write, complete transport/checksum/error
+handling, NAND/DSP programming, continuous NVM durability, recovery after actual
+electrical loss and stock-device comparison remain outstanding. Reaching a RAM
+entry does not establish a successful or hardware-safe firmware update.

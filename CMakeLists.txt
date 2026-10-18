@@ -123,6 +123,22 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-flash-commands.trace")
   set_tests_properties(original_flash_commands PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-flash-restart-test test/original_flash_restart_test.cpp)
+  target_link_libraries(blofeld-original-flash-restart-test PRIVATE blofeld_core)
+  add_test(NAME original_flash_restarts COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_flash_restarts.py"
+    $<TARGET_FILE:blofeld-original-flash-test>
+    $<TARGET_FILE:blofeld-original-flash-restart-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing")
+  set_tests_properties(original_flash_restarts PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME original_recovery_wire COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_flash_restarts.py"
+    $<TARGET_FILE:blofeld-original-flash-test>
+    $<TARGET_FILE:blofeld-original-flash-restart-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing" --wire-only)
+  set_tests_properties(original_recovery_wire PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-flash-config-test test/mcu_flash_config_test.cpp)
   target_link_libraries(blofeld-flash-config-test PRIVATE blofeld_mcu)
   add_test(NAME flash_config COMMAND blofeld-flash-config-test)
@@ -239,6 +255,7 @@ add_custom_target(quality
     blofeld-flash-config-test blofeld-original-flash-config-test
     blofeld-flash-test
     blofeld-original-flash-test
+    blofeld-original-flash-restart-test
     blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
 endif()

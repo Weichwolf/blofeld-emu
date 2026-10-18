@@ -74,6 +74,8 @@ and vectors, malformed files and unknown security fields. This tests actual
 file-driven execution and fail-closed restoration instead of ZIP fallback. The
 original 1.25 archive is identity-checked and those tests explicitly skip when it
 is absent. No manufacturer code or runtime images are included in test sources.
+Original-command exports and cold-process recovery/SCI checks are described in
+original-update-restarts.txt; they preserve the same reference-timing limits.
 
 Offline fuzzing
   cmake --preset fuzz

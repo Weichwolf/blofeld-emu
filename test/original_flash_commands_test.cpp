@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
 #include "blofeld/firmware.hpp"
+#include "blofeld/flash_file.hpp"
 #include "blofeld/hc12.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_flash.hpp"
@@ -13,6 +14,8 @@
 #include <fstream>
 #include <iostream>
 #include <span>
+#include <string>
+#include <utility>
 
 namespace {
 constexpr unsigned helper_base = 0x1200;
@@ -70,17 +73,22 @@ struct Call {
 
 class Runner {
 public:
-  Runner(blofeld::McuBus &bus, blofeld::Hc12 &cpu, std::ostream &trace)
-      : bus_(bus), cpu_(cpu), trace_(trace) {}
+  Runner(blofeld::McuBus &bus,
+         blofeld::Hc12 &cpu,
+         std::ostream &trace,
+         std::filesystem::path images = {})
+      : bus_(bus), cpu_(cpu), trace_(trace), images_(std::move(images)) {}
 
   void observe(const blofeld::BusEvent &event) {
     if (event.address == command) {
       require(event.value == program_command || event.value == erase_command,
               "Original helper chooses its documented word-program or sector-erase command");
+      capture("selected", launches_ + 1);
     }
     if (event.address == status && event.value == 0x80) {
       transfer_ = true;
       ++launches_;
+      capture("launched", launches_);
     }
   }
 
@@ -106,6 +114,12 @@ public:
   [[nodiscard]] unsigned launches() const { return launches_; }
 
 private:
+  void capture(const char *phase, const unsigned index) const {
+    if (images_.empty()) { return; }
+    const auto path = images_ / ("command-" + std::to_string(index) + "-" + phase + ".bfnvm");
+    blofeld::save_flash_image(path, bus_.power_off_flash_image());
+  }
+
   void execute_until(const std::uint16_t stop) {
     unsigned completed = 0;
     while (cpu_.state().pc != stop) {
@@ -115,6 +129,7 @@ private:
       if (before.pc == helper_poll && polls_ != 0) {
         if (polls_ == 2) {
           bus_.advance_flash(blofeld::FlashMilestone::complete_command);
+          capture("completed", launches_);
           polls_ = 0;
         } else {
           ++polls_;
@@ -125,6 +140,7 @@ private:
       cpu_.step();
       if (transfer_) {
         bus_.advance_flash(blofeld::FlashMilestone::transfer_buffer);
+        capture("active", launches_);
         transfer_ = false;
         polls_ = 1;
       }
@@ -137,6 +153,7 @@ private:
   blofeld::McuBus &bus_;
   blofeld::Hc12 &cpu_;
   std::ostream &trace_;
+  std::filesystem::path images_;
   unsigned launches_ = 0;
   unsigned polls_ = 0;
   bool transfer_ = false;
@@ -186,10 +203,12 @@ void test_security(blofeld::McuBus &bus, Runner &runner) {
 struct Inputs {
   std::filesystem::path firmware;
   std::filesystem::path trace;
+  std::filesystem::path images;
 };
 
 int run(const Inputs &inputs) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
+  if (!inputs.images.empty()) { std::filesystem::create_directories(inputs.images); }
   blofeld::McuBus bus(firmware.mcu);
   load_helper(bus, firmware);
   configure(bus);
@@ -197,7 +216,7 @@ int run(const Inputs &inputs) {
   std::ofstream trace(inputs.trace);
   require(trace.is_open(), "Cannot create private original flash command trace");
   trace.exceptions(std::ios::failbit | std::ios::badbit);
-  Runner runner(bus, cpu, trace);
+  Runner runner(bus, cpu, trace, inputs.images);
   bus.set_observer([&runner](const blofeld::BusEvent &event) { runner.observe(event); });
   test_guards_and_program(bus, runner);
   test_security(bus, runner);
@@ -227,10 +246,13 @@ int run(const Inputs &inputs) {
 
 int main(const int count, char **arguments) {
   try {
-    if (count != 3) {
-      throw blofeld::Fault("Usage: original-flash-commands-test firmware.zip private.trace");
+    if (count < 3 || count > 4) {
+      throw blofeld::Fault(
+          "Usage: original-flash-commands-test firmware.zip private.trace [private-images-dir]");
     }
-    return run({.firmware = arguments[1], .trace = arguments[2]});
+    return run({.firmware = arguments[1],
+                .trace = arguments[2],
+                .images = count == 4 ? arguments[3] : ""});
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;
