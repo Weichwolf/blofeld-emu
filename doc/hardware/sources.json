@@ -1,0 +1,26 @@
+[
+  {
+    "file": "DSP56371UM.pdf",
+    "source": "https://www.nxp.com/docs/en/user-guide/DSP56371UM.pdf",
+    "bytes": 5941916,
+    "sha256": "3303088730c14b47816d6058040d0e8bd18f4c256b9febddb79e02fc3842e8ce"
+  },
+  {
+    "file": "DSP56371.pdf",
+    "source": "https://www.nxp.com/docs/en/data-sheet/DSP56371.pdf",
+    "bytes": 1219995,
+    "sha256": "70ad00d5e82f06befaf96f04f0a217565bcd66de0977926a2689fe818cd4072d"
+  },
+  {
+    "file": "9S12UF32_ZIP.zip",
+    "source": "https://www.nxp.com/docs/en/data-sheet/9S12UF32_ZIP.zip",
+    "bytes": 4392344,
+    "sha256": "a9126741fa59bb31680c9931e936120d1c71fa7af58ab0646ea1600014101d5d"
+  },
+  {
+    "file": "HCS12COREUG.pdf",
+    "source": "https://www.nxp.com/docs/en/data-sheet/HCS12COREUG.pdf",
+    "bytes": 8246322,
+    "sha256": "4ff8ce8ad0d5fb1eea307f813a79b0f11e0d1c196db38b005c1b7ed24d42b70e"
+  }
+]

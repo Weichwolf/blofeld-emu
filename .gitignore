@@ -1,0 +1,20 @@
+__pycache__/
+build/
+doc/local/
+
+# Manufacturer materials are private references; manifests remain tracked.
+/doc/*.zip
+/doc/*.pdf
+/doc/library/*.zip
+/doc/library/*.wpc
+/doc/library/*.pdf
+/doc/hardware/*.pdf
+/doc/hardware/*.zip
+/doc/produktbilder/*.jpg
+
+# Private firmware analysis must stay local even when generated outside doc/local/.
+/doc/firmware-analysis.txt
+/doc/**/*.asm
+/doc/**/*.bin
+/doc/**/*.mid
+/doc/**/*.syx

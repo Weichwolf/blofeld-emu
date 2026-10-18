@@ -1,0 +1,71 @@
+{
+  "checked_on": "2026-10-18",
+  "sources": [
+    "https://waldorfmusic.com/de/faq-blofeld/",
+    "https://waldorfmusic.com/de/faq-blofeld-keyboard/"
+  ],
+  "notes": [
+    "Firmware 1.25 ist der aktuell öffentlich angebotene Download für Desktop und Keyboard.",
+    "Keyboard-Controller-Firmware 1.4 ist laut beiliegender README für Blofeld Keyboards bis einschließlich Baujahr 2014; neuere Keyboards benötigen sie nicht. Nicht auf Blofeld Desktop installieren.",
+    "OS 1.25 HS wird laut Waldorf-FAQ bei Windows-11-USB-Problemen auf Anfrage vom Support bereitgestellt und ist hier nicht enthalten.",
+    "Spectre ist ein Computerprogramm zur Übertragung von Samples und Firmware, keine Geräte-Firmware."
+  ],
+  "files": [
+    {
+      "file": "Blofeld_Handbuch.pdf",
+      "description": "Deutsches Bedienhandbuch für Blofeld Desktop und Keyboard",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/4NbWm4DbdLS4a63",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/4NbWm4DbdLS4a63/download",
+      "bytes": 9108933,
+      "sha256": "84df97ab99efb814d6692f9eb60c2dff684a1c18f8165e00b5a4cc4fbb4f9bdc"
+    },
+    {
+      "file": "Blofeld_Firmware_V1.25.zip",
+      "description": "Firmware 1.25 für Blofeld Desktop und Keyboard",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/MMtiTjL3PTgExsg",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/MMtiTjL3PTgExsg/download",
+      "bytes": 102986,
+      "sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72"
+    },
+    {
+      "file": "BlofeldKBC14.zip",
+      "description": "Keyboard-Controller-Firmware 1.4",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/TjdK9L6yFXkydpG",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/TjdK9L6yFXkydpG/download",
+      "bytes": 5797,
+      "sha256": "ca1d2d71a1e115b51e77fa21993b8bf83ca44ae9199a14c8587072ada54b0823"
+    },
+    {
+      "file": "Spectre_1.00_Win_Mac.zip",
+      "description": "Spectre 1.00 für Windows, enthält zusätzlich die ältere Mac-Version 1.00",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/96yYiNqx7dTn7bd",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/96yYiNqx7dTn7bd/download",
+      "bytes": 4003359,
+      "sha256": "7f456e55a3b0e448992dbab86129f2e369ce64aeaaaf4a4e8257c4bb648e192f"
+    },
+    {
+      "file": "Spectre_1.01_macOS.zip",
+      "description": "Spectre 1.01 für macOS",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/4H2mtSKorbb6im3",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/4H2mtSKorbb6im3/download",
+      "bytes": 1318469,
+      "sha256": "749dfe6b6203520f5e73df524ebfdf138cfcb6ce5303a8ba2bd1197a4e04fa4e"
+    },
+    {
+      "file": "Spectre_Manual.pdf",
+      "description": "Spectre-Anleitung",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/276GdWdt9kJ9ebT",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/276GdWdt9kJ9ebT/download",
+      "bytes": 1145241,
+      "sha256": "f4fde6c63647cacb8b8b7fd55e758d3aec3a504fe6f7e6e51f20fa751a61a8e0"
+    },
+    {
+      "file": "Wie_aktualisiere_ich_die_Blofeld_Firmware.pdf",
+      "description": "Firmware-Update-Anleitung",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/oT2dCg4yaLH7s4Y",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/oT2dCg4yaLH7s4Y/download",
+      "bytes": 185104,
+      "sha256": "65ed188c62ed09915e427ad5c6016e46e9b87bbb10f986031594ed1c3f5be4d4"
+    }
+  ]
+}

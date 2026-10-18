@@ -1,0 +1,64 @@
+Acceptance coverage for the headless Blofeld emulator
+
+Evidence categories: implemented / partial / pending. A passing check covers
+only its named behavior. No hardware equivalence or brick-safety claim is made.
+
+Requirement                       State    Evidence / remaining work
+Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
+                                          Actual device chip markings unverified.
+Standard sample library           partial  Both official MIDI and WPC downloaded;
+                                          library/sources.json. No runtime mapping.
+Update container extraction       partial  Python offline framing/object checks;
+                                          native ZIP/MIDI and runtime parser.
+Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
+                                          native HC12 instruction execution starts.
+                                          Pin read at PC 8029 remains unsupported.
+CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrite,
+                                          branches, code-cache invalidation and
+                                          word-transfer side effects tested; full ISA suite,
+                                          cycle timing and hardware comparison pending.
+                                          Independent reset/opcode reference:
+                                          HCS12COREUG section 3.1 and Appendix A.
+RAM/ROM/flash mapping             pending  Only flash reads and selected write
+                                          latches; no speculative RAM ranges.
+Interrupts, timers, clock         pending  Reads fail instead of inventing readiness.
+Original DSP runtime              partial  127 checked records extracted; DSP56300
+                                          checkout built separately; its assembler,
+                                          JIT, interpreter and optimizer suites pass.
+                                          No combined board execution.
+DSP56371 peripherals/boot ROM     pending  NXP documentation available; SHI bootstrap,
+                                          PLL, ESAI, DMA and chip profile unimplemented.
+MCU–DSP communication             pending  No combined scheduled execution.
+ROM wavetables and other assets   pending  Must establish dependencies from real
+                                          execution accesses; ROM contents unresolved.
+Cold boot and reset               pending  No complete original boot yet.
+MIDI/controller input             pending  No virtual/physical MIDI port yet.
+Voice management and audio        pending  No original audio generation or PCM output.
+Persistent storage               pending  NAND geometry/ECC and contents unresolved.
+Original update and recovery      pending  Helpers and recovery entry recovered;
+                                          they are not yet executed end to end.
+Damaged updates/transfer loss     partial  Offline parser rejection only;
+                                          no emulated transport/update proof.
+Power loss in every erase/program pending  Flash/NAND controllers, phase injection,
+                                          reset/security/vector checks pending.
+Sanitizers and static analysis    partial  Strict gates pass on initial bring-up;
+                                          native dependencies instrumented too.
+                                          No audio/concurrency/board coverage yet.
+Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
+                                          campaign (~20k executions) without findings;
+                                          sustained/structured fuzzing pending.
+Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
+Traces and snapshots              partial  MCU state, disassembly and register-write
+                                          trace; board snapshots/replay pending.
+Desktop/Keyboard differences      pending  Both requested with 1.25; keyboard scanner
+                                          and profile differences remain unresolved.
+Stock hardware validation         pending  No Blofeld connected in this environment;
+                                          detection alone will not count as validation.
+
+Performance plan
+Use a deterministic CPU/interpreter reference path and compare a DSP JIT against
+it before real-time claims. Measure worst callback duration, underruns and output
+under dense MIDI/polyphony/effects with host load, separately from sanitizer runs.
+The current machine is an i5-1135G7 (4 cores, 8 threads); its sufficiency is not
+established. Vulkan would require a separate equivalent DSP execution backend and
+synchronization model. No GPU backend is currently planned or implemented.

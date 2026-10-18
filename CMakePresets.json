@@ -1,0 +1,102 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "strict",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/strict",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19",
+        "BLOFELD_SANITIZER": "address-undefined"
+      }
+    },
+    {
+      "name": "release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19",
+        "BLOFELD_SANITIZER": "none"
+      }
+    },
+    {
+      "name": "thread",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/thread",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19",
+        "BLOFELD_SANITIZER": "thread"
+      }
+    },
+    {
+      "name": "fuzz",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/fuzz",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19",
+        "BLOFELD_SANITIZER": "address-undefined",
+        "BLOFELD_FUZZING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "strict",
+      "configurePreset": "strict",
+      "jobs": 4
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "jobs": 4
+    },
+    {
+      "name": "thread",
+      "configurePreset": "thread",
+      "jobs": 4
+    },
+    {
+      "name": "fuzz",
+      "configurePreset": "fuzz",
+      "jobs": 4
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "strict",
+      "configurePreset": "strict",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "thread",
+      "configurePreset": "thread",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "fuzz",
+      "configurePreset": "fuzz",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+Blofeld firmware reference layout
+
+The emulator loads the user's local official 1.25 ZIP/MIDI update. The source
+repository contains no manufacturer firmware, ROMs, sample data, manuals,
+photographs, extracted programs or disassemblies. Download locations and
+cryptographic identities are recorded in the reference manifests.
+
+The supported update has six checked transfer blocks. Seven-bit MIDI framing,
+packet order and XOR checks precede unpacking the little-endian 24-bit words.
+Embedded MCU, DSP and secondary-page objects have additional checksums.
+The main runtime container holds a 32 KiB MCU flash image including its resident
+boot/recovery code and 127 ordered DSP memory records. Later records deliberately
+overwrite earlier addresses; record order is significant. These objects do not
+establish that all persistent NAND, ROM, wavetable, sample or device-identity
+contents required by the original hardware are available.
+
+The current native MCU executor starts the original reset vector and stops at
+an unmodeled input port. Complete boot, DSP handoff, MIDI/audio and real-device
+equivalence are not established. See coverage.txt for the full acceptance scope.
+Private firmware analysis and execution artifacts belong under doc/local/.
+
+Reproduce locally:
+  python3 tools/references.py --fetch
+  python3 tools/extract_runtime.py doc/Blofeld_Firmware_V1.25.zip --output doc/local/runtime-1.25
+  cmake --build build/strict --target quality
+
+All reference contents retain their original terms and remain outside the
+emulator's GPL-3.0-only license. Only our original implementation is published.

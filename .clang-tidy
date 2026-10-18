@@ -1,0 +1,30 @@
+HeaderFilterRegex: '.*/(include|src|test)/.*'
+ExcludeHeaderFilterRegex: '.*/(usr|doc/local|build)/.*'
+FormatStyle: file
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  cert-*,
+  concurrency-*,
+  misc-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  modernize-*,
+  -misc-no-recursion,
+  -modernize-use-trailing-return-type,
+  -readability-uppercase-literal-suffix
+WarningsAsErrors: '*'
+CheckOptions:
+  readability-function-size.LineThreshold: 120
+  readability-identifier-length.MinimumVariableNameLength: 1
+  readability-identifier-length.MinimumParameterNameLength: 1
+  readability-identifier-length.MinimumLoopCounterNameLength: 1
+  bugprone-signed-bitwise.IgnorePositiveIntegerLiterals: true
+  misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true
+  readability-magic-numbers.IgnoredIntegerValues: '0;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16'
+  readability-magic-numbers.IgnorePowersOf2IntegerValues: true
+  readability-magic-numbers.IgnoredFloatingPointValues: '0.0;0.5;1.0;2.0;3.0;4.0;100.0'
+# Recursion and return/suffix spelling are style choices, not correctness defects.
+# Do not add disabled checks or NOLINT markers just to make existing findings pass.

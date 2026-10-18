@@ -1,0 +1,69 @@
+{
+  "downloaded_on": "2026-10-18",
+  "files": [
+    {
+      "file": "desktop-weiss-oben.jpg",
+      "description": "Desktop weiß, Draufsicht",
+      "source": "https://waldorfmusic.com/de/blofeld-desktop/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_top.jpg",
+      "bytes": 2845156,
+      "sha256": "c18430eaac2c14951367ff14d2e6e035c3fa39814e0ac1c898ae8b4fafa05e9b"
+    },
+    {
+      "file": "desktop-weiss-perspektive.jpg",
+      "description": "Desktop weiß, Perspektive",
+      "source": "https://waldorfmusic.com/de/blofeld-desktop/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_left-1.jpg",
+      "bytes": 2816211,
+      "sha256": "0cdb6259f13a4f735366155bcd5bc46e7f6787d8c237ad0492c8ec8d9da13cf8"
+    },
+    {
+      "file": "desktop-weiss-rueckseite.jpg",
+      "description": "Desktop weiß, Rückseite",
+      "source": "https://waldorfmusic.com/de/blofeld-desktop/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_white_back.jpg",
+      "bytes": 125161,
+      "sha256": "18d10370a4a344be9591b434fc440e54c321e4edde90304873ca600d75d7436e"
+    },
+    {
+      "file": "desktop-schwarz-oben.jpg",
+      "description": "Desktop schwarz, Draufsicht",
+      "source": "https://waldorfmusic.com/de/blofeld-desktop/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_black_top-1-scaled.jpg",
+      "bytes": 286826,
+      "sha256": "b6b9aef478b796f5a214dcb9152d5d8484f04ded7811d7dc7012540262ac5365"
+    },
+    {
+      "file": "keyboard-weiss-oben.jpg",
+      "description": "Keyboard weiß, Draufsicht",
+      "source": "https://waldorfmusic.com/de/blofeld-keyboard/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_kb_topview-1-scaled.jpg",
+      "bytes": 178821,
+      "sha256": "8a8feb63cbc549575a2c246a5aa48a3ef83a12d1ed01e18601a9f34072a98b76"
+    },
+    {
+      "file": "keyboard-weiss-perspektive.jpg",
+      "description": "Keyboard weiß, Perspektive",
+      "source": "https://waldorfmusic.com/de/blofeld-keyboard/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_kb_perspective-1-scaled.jpg",
+      "bytes": 231835,
+      "sha256": "1661665a93b10967d5f87711061cd34ff23bec7f9fbade86f9d131a142f9c472"
+    },
+    {
+      "file": "keyboard-weiss-rueckseite.jpg",
+      "description": "Keyboard weiß, Rückseite",
+      "source": "https://waldorfmusic.com/de/blofeld-keyboard/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_kb_backview-1-scaled.jpg",
+      "bytes": 113982,
+      "sha256": "9525148411edc0954e7e1641b9f5bf0dd717b60b659caea6a3c9fda723ff6a5d"
+    },
+    {
+      "file": "keyboard-schwarz-oben.jpg",
+      "description": "Keyboard schwarz, Draufsicht",
+      "source": "https://waldorfmusic.com/de/blofeld-keyboard/",
+      "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_key_black_top-1-scaled.jpg",
+      "bytes": 224214,
+      "sha256": "9798b6ed0a58a5d369c6f3e916e5e222f264da9479ef2f147542c0e29e8711a7"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "ghidra": {
+    "version": "12.1.2",
+    "source": "https://github.com/NationalSecurityAgency/ghidra",
+    "files": [
+      {
+        "file": "Ghidra/Processors/HCS12/data/languages/HC12.sla",
+        "sha256": "1a8a8d4c36dc7fd4dee64ba5bf2d26dbf2bc50b9e5db2e134727d89d848cd14a"
+      },
+      {
+        "file": "Ghidra/Processors/HCS12/data/languages/HCS_HC12.sinc",
+        "sha256": "7904b9b892232890287e0052198d6fab8167409654207484e407cef49919d276"
+      },
+      {
+        "file": "Ghidra/Features/Decompiler/src/decompile/cpp/emulate.cc",
+        "sha256": "626a556e976077f6bd3baf1bf960328e5af071aa01a894518a9cfd63f6132d0f"
+      },
+      {
+        "file": "Ghidra/Features/Decompiler/src/decompile/cpp/memstate.cc",
+        "sha256": "ef68ee18511cac1bec55a602c64e43f57bc4755ca00e8204f411434d51d27f92"
+      }
+    ]
+  },
+  "dsp56300": {
+    "source": "https://github.com/dsp56300/dsp56300",
+    "revision": "3ff6610d5018d798f35bc784696f3384ade0e3c4",
+    "integrated": false
+  }
+}

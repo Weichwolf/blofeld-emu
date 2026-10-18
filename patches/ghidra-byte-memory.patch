@@ -1,0 +1,31 @@
+--- memstate.cc
++++ memstate.cc
+@@ -184,2 +184,13 @@
+ {
++  // A byte-backed hardware bus must not read old values or merge neighboring IO.
++  if (wordsize == 1) {
++    if (size < 1 || size > sizeof(uintb))
++      throw LowlevelError("Invalid byte-bank write size");
++    for (int4 index = 0; index < size; ++index) {
++      int4 byteIndex = space->isBigEndian() ? size - index - 1 : index;
++      insert(offset + index, (val >> (8 * byteIndex)) & 0xff);
++    }
++    return;
++  }
++
+   uintb alignmask = (uintb)(wordsize-1);
+@@ -254,2 +265,14 @@
+ {
++  // Generic aligned-word extraction assumes at most two natural words.
++  if (wordsize == 1) {
++    if (size < 1 || size > sizeof(uintb))
++      throw LowlevelError("Invalid byte-bank read size");
++    uintb value = 0;
++    for (int4 index = 0; index < size; ++index) {
++      int4 byteIndex = space->isBigEndian() ? size - index - 1 : index;
++      value |= (find(offset + index) & 0xff) << (8 * byteIndex);
++    }
++    return value;
++  }
++
+   uintb res;

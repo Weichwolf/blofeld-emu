@@ -1,0 +1,26 @@
+Original emulator code: GPL-3.0-only (LICENSE).
+
+Native SLEIGH and the HC12 language specification:
+  Ghidra 12.1.2, National Security Agency and contributors.
+  https://github.com/NationalSecurityAgency/ghidra
+  Apache License 2.0 (LICENSES/Apache-2.0.txt).
+  Built from the user's existing Ghidra distribution; no JVM is used at runtime.
+  Source notices are retained in that distribution. Its source and license must
+  accompany any redistributable binary package as required by the licenses.
+  A local byte-memory patch is applied only to the build copy (patches/README.txt).
+  The integration uses exceptions as the native SLEIGH error interface.
+
+zlib:
+  Jean-loup Gailly and Mark Adler, zlib license (LICENSES/Zlib.txt).
+  https://zlib.net/zlib_license.html
+  Linked against the system zlib package; package notices remain installed.
+
+DSP56300:
+  https://github.com/dsp56300/dsp56300
+  GPL-3.0 (see the dependency's LICENSE.md), currently a separate checkout.
+  Its asmjit and other components have separate licenses retained upstream.
+  The DSP core is not yet integrated into the Blofeld board model.
+
+Manufacturer firmware, samples, manuals and product photographs retain their
+original terms. They are private references, excluded from source commits and
+not covered by the emulator's license.

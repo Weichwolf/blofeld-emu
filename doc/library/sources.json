@@ -1,0 +1,38 @@
+{
+  "downloaded_on": "2026-10-18",
+  "catalogue": "https://waldorfmusic.com/de/faq-blofeld-keyboard/",
+  "files": [
+    {
+      "file": "Standard_Factory_Sample_Content_V1.0_for_License_SL_as_MID_File.zip",
+      "description": "Official standard factory sample library, MIDI distribution",
+      "bytes": 23546761,
+      "sha256": "a6f2adb407253392cfe9d6b211c3cfce29d652421373745c72e06634bf3ed1a0",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/33B3t58F6GMAj4j",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/33B3t58F6GMAj4j/download"
+    },
+    {
+      "file": "Standard_Factory_Sample_Content_V1.0_for_License_SL_as_WPC_File.wpc",
+      "description": "Official standard factory sample library, WPC distribution",
+      "bytes": 24600576,
+      "sha256": "e494f42a9a1b73ba39abbf6dade460741a0b750345303e451de062cb07c8c3ba",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/GLDtp5ZiKSG6WNR",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/GLDtp5ZiKSG6WNR/download"
+    },
+    {
+      "file": "Blofeld_Factory_Soundset_2012.zip",
+      "description": "Factory sounds 2012",
+      "bytes": 1619259,
+      "sha256": "f57365289d9862c9ecf1aab25965d82cefc0e04e66cb8a03cb406df9a15195f7",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/fi4DWR7G2aXnWQ3",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/fi4DWR7G2aXnWQ3/download"
+    },
+    {
+      "file": "Blofeld_sysex_v1_04.pdf",
+      "description": "Official Blofeld SysEx documentation 1.04",
+      "bytes": 105135,
+      "sha256": "6d3b6557b2a8ee377ff517460ec920a1dd8b576506f47d2bf40c553af82c80d5",
+      "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/ybExJgT4TzqT8ir",
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/ybExJgT4TzqT8ir/download"
+    }
+  ]
+}
