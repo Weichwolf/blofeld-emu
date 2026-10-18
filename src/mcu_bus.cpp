@@ -253,6 +253,14 @@ void McuBus::observe_phy(const PhyClockWindow window) {
   clock_.observe_phy(window);
 }
 
+void McuBus::advance_oscillator(const unsigned cycles) {
+  clock_.advance_oscillator(cycles);
+}
+
+unsigned McuBus::oscillator_cycles_until_rti() const {
+  return clock_.oscillator_cycles_until_rti();
+}
+
 void McuBus::sync_peripheral_pins() {
   const auto routing = gpio_.read(hc12::modrr);
   const bool small_package = (routing & 1U) != 0;

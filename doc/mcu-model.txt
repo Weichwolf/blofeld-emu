@@ -75,11 +75,16 @@ USB PHY and clock qualification
   clock observations; with the pin fixture above it stops at this boundary.
   Tests supply explicit edge windows and execute the original polling branch:
   14 edges keeps it waiting, 15 permits clock selection and reaching SCI setup.
-- Enabling the USB controller, triggering resets/resume and RTI counting
+- Enabling the USB controller and triggering resets/resume
   remain unsupported and requests fail. CRG lock-change interrupt enables feed
   instruction-boundary delivery (mcu-interrupts.txt). COP watchdog is also
   unsupported; wait/stop semantics and timing remain unvalidated. No successful
-  USB enumeration or timer is inferred.
+  USB enumeration or complete board boot is inferred.
+
+RTI counter
+See mcu-rti.txt for the independent oscillator-clocked periodic interrupt,
+control-write restart, sticky flags and CPU ISR tests. CPU instruction retirement
+does not advance oscillator time. Wait/stop and complete scheduling are pending.
 
 SCI
 See mcu-sci.txt for the explicit-clock serial model, flags, pin routing, tests

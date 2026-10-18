@@ -28,6 +28,8 @@ constexpr unsigned cop_wait = 1;
 constexpr unsigned reference_divider_mask = 15;
 constexpr unsigned interrupt_enable_mask = 0x90;
 constexpr unsigned rti_control_mask = 0x7f;
+constexpr unsigned rti_flag = 0x80;
+constexpr unsigned rti_modulus_mask = 15;
 constexpr unsigned byte_mask = 0xff;
 }
 
@@ -37,6 +39,8 @@ void McuClock::reset() {
   flags_ = static_cast<std::uint8_t>(flags_ & power_on_flag);
   clock_select_ = 0;
   interrupt_enable_ = 0;
+  rti_control_ = 0;
+  rti_phase_ = 0;
   cop_wait_written_ = false;
   lock_known_ = true;
 }
@@ -77,10 +81,10 @@ std::uint8_t McuClock::read(const std::uint16_t offset) const {
       return flags_;
     case hc12::clock_select: return clock_select_;
     case hc12::crg_interrupts: return interrupt_enable_;
+    case hc12::rti_control: return rti_control_;
     case hc12::usb_control: return static_cast<std::uint8_t>(usb_control_ >> 8U);
     case hc12::usb_control + 1: return static_cast<std::uint8_t>(usb_control_ & byte_mask);
-    case hc12::crg_test_flags:
-    case hc12::rti_control: return 0;
+    case hc12::crg_test_flags: return 0;
     default: throw Fault("Unknown MCU clock register read at " + hex(offset));
   }
 }
@@ -160,7 +164,8 @@ void McuClock::write(const ByteWrite write) {
       interrupt_enable_ = static_cast<std::uint8_t>(write.value & interrupt_enable_mask);
       return;
     case hc12::rti_control:
-      if ((write.value & rti_control_mask) != 0) { throw Fault("Unimplemented RTI counter"); }
+      rti_control_ = static_cast<std::uint8_t>(write.value & rti_control_mask);
+      rti_phase_ = 0;
       return;
     default: throw Fault("Unknown MCU clock register write at " + hex(write.address));
   }
@@ -174,8 +179,27 @@ bool McuClock::lock_interrupt_pending() const {
 }
 
 bool McuClock::realtime_interrupt_pending() const {
-  constexpr unsigned realtime_flag = 0x80;
-  return (flags_ & interrupt_enable_ & realtime_flag) != 0;
+  return (flags_ & interrupt_enable_ & rti_flag) != 0;
+}
+
+unsigned McuClock::rti_period() const {
+  const unsigned prescale = rti_control_ >> 4U;
+  if (prescale == 0) { return 0; }
+  // S12CRGUV1 table 3-2: OSCCLK / (2^(9+RTR[6:4]) * (1+RTR[3:0])).
+  return (1U << (9U + prescale)) * ((rti_control_ & rti_modulus_mask) + 1U);
+}
+
+unsigned McuClock::oscillator_cycles_until_rti() const {
+  const auto period = rti_period();
+  return period == 0 ? 0 : period - rti_phase_;
+}
+
+void McuClock::advance_oscillator(const unsigned cycles) {
+  const auto period = rti_period();
+  if (period == 0 || cycles == 0) { return; }
+  const auto total = static_cast<std::uint64_t>(rti_phase_) + cycles;
+  if (total >= period) { flags_ = static_cast<std::uint8_t>(flags_ | rti_flag); }
+  rti_phase_ = static_cast<unsigned>(total % period);
 }
 
 }

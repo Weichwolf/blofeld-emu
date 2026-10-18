@@ -32,15 +32,15 @@ Controller and sources
   applies. Invalid/reserved priority selections fall back to external IRQ.
   XIRQ outranks maskable sources. ITCR/ITEST follow documented normal-mode gates.
   The old INT guide's ambiguous RTI/HPRIO replacement case fails explicitly;
-  implementing the RTI counter requires resolving that device-specific wording.
+  simultaneous RTI/other requests require resolving that device-specific wording.
 - Timer channels map to 0xffee..0xffe0 and overflow to 0xffde. TIE/TOI gate
   latched CnF/TOF flags. SCI maps to 0xffd6: TIE/TDRE, TCIE/TC, RIE/(RDRF|OR)
   and ILIE/IDLE. CRG lock changes map to 0xffc6. Request polling does not read
   status registers, clear peripheral flags or impersonate firmware acknowledgments.
 - Peripheral enables are modeled; flags clear through their real register
   sequences. The controller acknowledges only the external IRQ edge latch.
-  RTI counting, COP, pulse accumulator and unimplemented peripheral sources
-  remain unsupported. There is no host MIDI transport yet.
+  RTI counting is oscillator-clocked (mcu-rti.txt). COP, pulse accumulator and
+  unimplemented peripheral sources remain unsupported. No host MIDI transport exists yet.
 
 Evidence and references
 S12CPUV2 sections 7.5, 7.7, 7.8 and its instruction glossary define frames,

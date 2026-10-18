@@ -1,0 +1,48 @@
+MC9S12UF32 real-time interrupt counter
+
+The normal-run CRG_U RTI is driven by explicit oscillator edges through
+McuBus::advance_oscillator. These are OSCCLK cycles, independently of timer/SCI
+bus cycles and PHY qualification windows. The API does not assume a Blofeld
+crystal frequency or estimate elapsed time from executed instruction counts.
+McuBus::oscillator_cycles_until_rti exposes the next timeout for a future board
+scheduler; zero means the counter is disabled.
+
+Behavior
+- RTICTL at 0x003b implements bits 6..0, resets to zero and ignores bit 7.
+  RTR[6:4]=0 disables the counter for every modulus setting. Otherwise the
+  period in oscillator cycles is (1+RTR[3:0]) * 2^(9+RTR[6:4]), following
+  S12CRGUV1 table 3-2. The smallest period is 1024 cycles, largest 1048576.
+- Every RTICTL write restarts the entire timeout period, including writes of an
+  unchanged value. A write does not acknowledge an existing RTIF flag.
+- Each timeout sets CRGFLG.RTIF and immediately starts a new period. Multiple
+  timeouts retain one sticky flag and preserve the phase of the ongoing period.
+  CRGINT.RTIE gates the request at vector 0xfff0, without stopping the counter.
+  Firmware clears the flag by writing one; writing zero has no effect.
+- Disabling RTI does not clear its pending flag. External reset clears counter,
+  phase, interrupt enable and RTIF. CRG's existing PORF retention remains intact.
+- Register relocation changes the control/flag addresses without losing counter
+  state. Flag writes do not reset the counter. PHY LOCK changes, PLLSEL/REFDV
+  writes and peripheral bus-clock advances do not supply oscillator elapsed time.
+
+Evidence and limits
+Run build/strict/blofeld-rti-test or the complete quality target. Tests cover
+all 128 implemented register values against an independent literal prescaler
+table, exact boundaries, repeated periods, same/different control writes,
+reset/relocation, enable/W1C behavior, and a UINT32_MAX clock slice. A synthetic
+CPU ISR clears RTIF, updates its RAM mailbox and returns with restored context;
+the following period generates another interrupt. No vendor program is embedded.
+
+Original firmware configures RTICTL=0x40 and RTIE during application startup.
+The untimed private continuation probe now passes those instructions and stops
+at the unimplemented USB endpoint/configuration selector write, PC 0xbeb2.
+This does not establish a scheduled application boot or successful USB operation.
+Wait/stop, active BDM gating, pad/interrupt latency and automatic CPU/bus/oscillator
+scheduling remain unimplemented. The ambiguous RTI/HPRIO replacement wording in
+S12INTV1 still fails explicitly for the unresolved multi-source arbitration case
+described in mcu-interrupts.txt. Stock hardware calibration remains pending.
+
+References
+S12CRGUV1 sections 3.1.3, 3.1.4, 3.1.6 and 4.2, table 3-2 and figure 4-2 define
+flags, enables and the oscillator divider. 9S12UF32DGV1 tables 1-1 and 5-1 define
+register placement and the interrupt vector. doc/hardware/sources.json pins the
+official NXP bundle containing these documents.

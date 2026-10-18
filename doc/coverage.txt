@@ -42,8 +42,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Instruction-boundary IRQ/XIRQ selection,
                                           HPRIO/write gates, SCI/TIM/PLL requests
                                           and real synthetic SCI/TIM ISRs tested.
+                                          Oscillator RTI: 128 control settings,
+                                          exact timeouts, restart/W1C/phase and
+                                          real CPU ISR checked (mcu-rti.txt).
                                           Analog startup, scheduled CPU/bus clocks,
-                                          RTI counter/COP and full latency pending.
+                                          COP, wait/stop and full latency pending.
 USB device/transport              partial  PHY control only. Controller enable,
                                           commands and endpoint behavior unsupported.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
@@ -58,8 +61,8 @@ ROM wavetables and other assets   pending  Must establish dependencies from real
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Private application probe now stops at
-                                          unsupported RTICTL write (PC 8835), after
-                                          SCI receive-interrupt enable is accepted.
+                                          unsupported USB selector write (PC beb2),
+                                          after SCI interrupt and RTI setup.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
@@ -80,8 +83,8 @@ Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU 
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
                                           campaign (~20k executions) without findings;
                                           MCU model harness covers bus, map, GPIO,
-                                          PHY/SCI/timer clocks, IRQ selection and
-                                          reset: 48725 runs in 61 s without
+                                          PHY/SCI/timer/RTI clocks, IRQ selection
+                                          and reset: 50563 runs in 61 s without
                                           sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.

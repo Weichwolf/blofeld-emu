@@ -34,6 +34,7 @@ constexpr unsigned usb_disconnect = 0x20;
 constexpr unsigned usb_configuration_mask = 0x3f;
 constexpr unsigned all_clock_options_except_cop = 0xb6;
 constexpr unsigned lock_change_flag = 0x10;
+constexpr unsigned realtime_flag = 0x80;
 
 void require(const bool condition, const std::string &message) {
   if (!condition) { throw blofeld::Fault(message); }
@@ -191,8 +192,11 @@ void test_unimplemented_usb_commands_and_interrupts() {
   clock.reset();
   require(clock.read(interrupt_enable) == 0 && !clock.lock_interrupt_pending(),
           "Reset clears interrupt enable and pending lock requests");
-  reject([&clock] { clock.write({.address = rti_control, .value = lock_change_flag}); },
-         "RTI cannot succeed as an inert control latch");
+  clock.write({.address = rti_control, .value = lock_change_flag});
+  constexpr unsigned minimum_rti_period = 1024;
+  clock.advance_oscillator(minimum_rti_period);
+  require((clock.read(flags) & realtime_flag) != 0,
+          "RTI configuration starts an oscillator-clocked counter");
   constexpr unsigned reserved_clock = 0x34;
   reject([&clock] { static_cast<void>(clock.read(reserved_clock)); },
          "Unknown clock registers fail");

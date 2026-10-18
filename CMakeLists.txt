@@ -106,6 +106,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-interrupt-test test/interrupt_test.cpp)
   target_link_libraries(blofeld-interrupt-test PRIVATE blofeld_core)
   add_test(NAME mcu_interrupt COMMAND blofeld-interrupt-test)
+  add_executable(blofeld-rti-test test/mcu_rti_test.cpp)
+  target_link_libraries(blofeld-rti-test PRIVATE blofeld_core)
+  add_test(NAME mcu_rti COMMAND blofeld-rti-test)
   add_executable(blofeld-boot-test test/original_boot_test.cpp)
   target_link_libraries(blofeld-boot-test PRIVATE blofeld_core)
   add_test(NAME original_mcu_boot COMMAND blofeld-boot-test
@@ -133,7 +136,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
-    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-boot-test
+    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test blofeld-boot-test
   USES_TERMINAL)
 endif()
 

@@ -43,6 +43,8 @@ public:
   void set_observer(std::function<void(const BusEvent &)> observer);
   void set_pin_drive(McuPort port, PinDrive drive);
   void observe_phy(PhyClockWindow window);
+  void advance_oscillator(unsigned cycles);
+  [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   void advance_sci(unsigned bus_cycles);
   void sample_timer_inputs(std::uint8_t mask);
   void advance_timer(unsigned bus_cycles);
