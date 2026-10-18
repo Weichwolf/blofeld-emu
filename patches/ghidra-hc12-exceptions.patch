@@ -20,3 +20,8 @@
 +	Push2( ba );
 @@ -5622 +5622,0 @@
 -	addr:2 = $(VECTOR_SWI);
+@@ -5929,2 +5933,2 @@
+-	Push1( A );
+-	Push1( B );
++	ba:2 = (zext(B) << 8) | zext(A);
++	Push2( ba );

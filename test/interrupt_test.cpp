@@ -174,6 +174,10 @@ void test_masks_and_xirq() {
   const auto unmask = cpu.step();
   require(unmask.instruction_executed && !unmask.interrupt_vector && bus.acknowledgements == 0,
           "Masked IRQ waits while the real ANDCC instruction executes");
+  const auto deferred = cpu.step();
+  require(deferred.instruction_executed && !deferred.interrupt_vector &&
+              cpu.state().pc == entry + code.size(),
+          "S12CPUV2 CLI guarantees execution of the following instruction before maskable entry");
   const auto accepted = cpu.step();
   require(!accepted.instruction_executed && cpu.state().pc == handler,
           "IRQ is recognized before the next unexecuted instruction");

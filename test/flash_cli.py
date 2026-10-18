@@ -17,11 +17,12 @@ FIRMWARE = Path(sys.argv[2]).resolve()
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def encoded(unknown=()):
+def encoded(unknown=(), code=b""):
     # Own synthetic HC12 NOP image with an independent reset vector/options.
     data = bytearray([0xa7]) * 32768
     data[0x7f0d], data[0x7f0f] = 0xff, 0xfe
     data[-2:] = bytes.fromhex("90 00")
+    data[0x1000:0x1000 + len(code)] = code
     known = bytearray([255]) * 4096
     for address in unknown:
         data[address] = 0
@@ -97,6 +98,25 @@ class PersistentExecution(unittest.TestCase):
                 self.assertIn(f"pc=0x{0x9000 + instructions:04x}".encode(), result.stdout)
                 self.assertEqual(path.read_bytes(), original)
                 self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+    def test_wai_stops_without_scheduler_and_exports_cold_nvm(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "wai.bfnvm"
+            output = root / "saved.bfnvm"
+            trace = root / "wai.trace"
+            # Own code: LDS #2000; WAI; NOP. No external scheduler or wake input.
+            original = encoded(code=bytes.fromhex("cf 20 00 3e a7"))
+            path.write_bytes(original)
+            result = invoke(FIRMWARE, "--flash-in", path, "--flash-out", output,
+                            "--trace", trace, "--instructions", 5)
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+            self.assertIn(b"MCU waiting for an external interrupt", result.stdout)
+            self.assertIn(b"pc=0x9004", result.stdout)
+            self.assertIn(b"sp=0x1ff7", result.stdout)
+            self.assertIn("WAI", trace.read_text())
+            self.assertNotIn("pc=0x9004", trace.read_text())
+            self.assertEqual(output.read_bytes(), original)
 
     def test_unknown_code_and_vector_remain_unknown_without_fallback(self):
         for unknown in ((0x1000,), (0x7ffe, 0x7fff)):

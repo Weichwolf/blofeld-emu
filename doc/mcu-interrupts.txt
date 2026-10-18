@@ -19,7 +19,8 @@ CPU behavior
   The byte CCR and word B:A/X/Y/PC transfers retain their logical operand widths.
 - A build-local SLEIGH patch fixes SWI's vector dereference/fetch order and
   inverted STOP-disable test. Disabled STOP is a two-byte NOP. Enabled STOP
-  stacks context, then fails at unsupported clock suspension. WAI, low-power
+  stacks context, then fails at unsupported clock suspension. WAI uses its saved
+  frame for logical wakeup (mcu-wai.txt). Low-power
   recovery, opcode traps, pipeline fetches and exact bus-cycle timing are pending.
 
 Controller and sources

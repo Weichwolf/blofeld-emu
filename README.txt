@@ -54,6 +54,8 @@ doc/original-update-restarts.txt covers 56 original-command cold restarts and
 the original resident SCI receiver loading an unchanged RAM helper with own framing.
 doc/original-parallel-update.txt covers the normal RAM-copy path, original caller
 ABI and first helper callback under an explicit parallel-input fixture.
+doc/mcu-wai.txt covers native WAI, idle/wakeup frames, CLI/TAP ordering and the
+standalone driver's explicit wait stop when no scheduler supplies an interrupt.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.

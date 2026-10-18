@@ -26,6 +26,11 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           Interrupt frames, vector-first entry,
                                           RTI frame reuse, SWI and STOP-disable
                                           gate checked (mcu-interrupts.txt).
+                                          Native WAI frame/idle/wake/RTI, operand
+                                          widths, CLI/TAP ordering, wrap/faults
+                                          and reset/debug cancellation tested
+                                          (mcu-wai.txt). Low-power clock gates
+                                          and full interrupt latency pending.
                                           CPU byte/word operand widths retained;
                                           IRQ/RTI B:A word transfers checked.
                                           Bounded P-code reuse with live data,
@@ -189,7 +194,12 @@ Original update and recovery      partial  Helpers and recovery entry recovered;
                                           callback (original-parallel-update.txt).
                                           12 synthetic lengths and 12 withdrawn
                                           input positions checked. Actual request
-                                          delivery and later callbacks pending.
+                                          delivery from the external peer pending.
+                                          Controlled XIRQ wakes original WAI;
+                                          original handler/RTI/main dispatch sets
+                                          and consumes the request without host
+                                          flag writes. Earlier application init
+                                          and later callbacks remain pending.
                                           Explicit reference milestones only;
                                           full initialization/transport/recovery
                                           and hardware validation pending.

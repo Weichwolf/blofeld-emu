@@ -162,6 +162,10 @@ public:
 
   [[nodiscard]] ghidra::Address getExecuteAddress() const override { return address_; }
 
+  [[nodiscard]] bool waiting() const { return waiting_; }
+
+  void cancel_wait() { waiting_ = false; }
+
   void clear_translations() {
     if (executing_) { throw Fault("Cannot invalidate an active HC12 translation"); }
     discard_translations();
@@ -212,6 +216,14 @@ protected:
       throw Fault("Unknown HC12 p-code user operation");
     }
     const auto &name = user_operations_.at(static_cast<std::size_t>(identifier));
+    if (name == "WaitForInterrupt") {
+      if (currentOp->numInput() != 1 || currentOp->getOutput() != nullptr) {
+        throw Fault("Unexpected HC12 WaitForInterrupt semantics");
+      }
+      waiting_ = true;
+      fallthruOp();
+      return;
+    }
     if (name != "LoadStack") { throw Fault("Unimplemented HC12 operation: " + name); }
     if (currentOp->numInput() != 2 || currentOp->getOutput() == nullptr ||
         currentOp->getOutput()->size != 2) {
@@ -283,6 +295,7 @@ private:
   std::size_t index_ = 0;
   bool finished_ = true;
   bool executing_ = false;
+  bool waiting_ = false;
 };
 
 } // namespace
@@ -335,6 +348,7 @@ public:
   }
 
   std::uint64_t decoded_revision = 0;
+  bool defer_irq = false;
   Bus &bus;
   CodeImage image;
   ghidra::ContextInternal context;
@@ -356,6 +370,8 @@ Hc12::Hc12(Bus &bus, const std::filesystem::path &specification) try
 Hc12::~Hc12() = default;
 
 void Hc12::reset() {
+  impl_->executor->cancel_wait();
+  impl_->defer_irq = false;
   CpuState initial;
   initial.sp = hc12::reset_sp;   // S12CPU15UG section 3.1.3, reset programming model.
   initial.ccr = hc12::reset_ccr; // S, X and I are set by CPU12 reset.
@@ -365,6 +381,8 @@ void Hc12::reset() {
 }
 
 void Hc12::set_state(const CpuState &state) {
+  impl_->executor->cancel_wait();
+  impl_->defer_irq = false;
   impl_->memory.setValue("D", state.d);
   impl_->memory.setValue("IX", state.x);
   impl_->memory.setValue("IY", state.y);
@@ -384,6 +402,10 @@ CpuState Hc12::state() const {
           .ccr = static_cast<std::uint8_t>(impl_->memory.getValue("CCR"))};
 }
 
+bool Hc12::waiting() const {
+  return impl_->executor->waiting();
+}
+
 std::string Hc12::disassemble() const try {
   impl_->refresh_decoder();
   Assembly assembly;
@@ -395,7 +417,8 @@ std::string Hc12::disassemble() const try {
 }
 
 std::optional<InterruptRequest> Hc12::pending_interrupt() const {
-  const auto ccr = state().ccr;
+  const auto ccr =
+      static_cast<std::uint8_t>(state().ccr | (impl_->defer_irq ? hc12::interrupt_mask : 0));
   if ((ccr & (hc12::interrupt_mask | hc12::xirq_mask)) ==
       (hc12::interrupt_mask | hc12::xirq_mask)) {
     return {};
@@ -448,13 +471,29 @@ CpuStep Hc12::step() {
     const auto before = state();
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
     if (const auto request = pending_interrupt()) {
-      enter_interrupt(*request, {});
+      const bool reuse = waiting();
+      enter_interrupt(*request, reuse ? std::optional(before.sp) : std::nullopt);
       impl_->bus.retire_instruction();
-      return {.instruction_executed = false, .interrupt_vector = request->vector};
+      return {.instruction_executed = false,
+              .interrupt_vector = request->vector,
+              .stack_reused = reuse};
     }
+    if (waiting()) { return {.instruction_executed = false}; }
     const auto opcode = impl_->bus.peek(before.pc);
+    constexpr unsigned andcc_opcode = 0x10;
+    constexpr unsigned transfer_opcode = 0xb7;
+    constexpr unsigned tap_operand = 2;
+    const bool clearing_instruction =
+        opcode == andcc_opcode ||
+        (opcode == transfer_opcode && impl_->bus.peek(static_cast<std::uint16_t>(
+                                          (before.pc + 1U) & hc12::address_mask)) == tap_operand);
     impl_->refresh_decoder();
     impl_->executor->execute();
+    // S12CPUV2 CLI/ANDCC and TAP guarantee execution of the following
+    // instruction when they clear a previously set I bit. No elapsed cycles
+    // are inferred by this instruction-boundary delivery rule.
+    impl_->defer_irq = clearing_instruction && (before.ccr & hc12::interrupt_mask) != 0 &&
+                       (state().ccr & hc12::interrupt_mask) == 0;
     constexpr unsigned rti_opcode = 0x0b;
     constexpr unsigned swi_opcode = 0x3f;
     CpuStep result;

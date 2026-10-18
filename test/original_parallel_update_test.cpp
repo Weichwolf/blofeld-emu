@@ -49,6 +49,12 @@ constexpr unsigned update_mode = 12;
 constexpr unsigned interrupt_masked = 0xd0;
 constexpr unsigned pe_mask = 0xfb;
 constexpr unsigned packed_word_bits = 24;
+constexpr unsigned application_wait = 0x8314;
+constexpr unsigned application_dispatch = 0x8315;
+constexpr unsigned request_flags = 0x1815;
+constexpr unsigned request_handler_return = 0xba62;
+constexpr unsigned xirq_vector = 0xfff4;
+constexpr unsigned unmasked_flags = 0x80;
 
 void require(const bool condition, const char *message) {
   if (!condition) { throw blofeld::Fault(message); }
@@ -98,7 +104,7 @@ std::vector<std::uint8_t> encode(const std::span<const std::uint8_t> payload) {
   return samples;
 }
 
-void prepare(blofeld::McuBus &bus, blofeld::Hc12 &cpu) {
+void prepare(blofeld::McuBus &bus, blofeld::Hc12 &cpu, const bool dispatch) {
   for (unsigned offset = 0; offset < scratch_bytes; ++offset) {
     bus.write(static_cast<std::uint16_t>(helper + offset), sentinel);
   }
@@ -106,8 +112,14 @@ void prepare(blofeld::McuBus &bus, blofeld::Hc12 &cpu) {
   bus.write(caller, jsr_extended);
   bus.write(caller + 1, receiver >> 8U);
   bus.write(caller + 2, receiver & byte_mask);
-  bus.set_pin_drive(blofeld::McuPort::q, {.mask = external_mask, .levels = update_mode});
-  cpu.set_state({.pc = caller, .sp = stack, .ccr = interrupt_masked});
+  if (dispatch) {
+    require((bus.read(request_flags) & 9U) == 0, "Native boot leaves the request unasserted");
+    bus.set_pin_drive(blofeld::McuPort::q, {.mask = byte_mask, .levels = update_mode});
+    cpu.set_state({.pc = application_wait, .sp = stack, .ccr = unmasked_flags});
+  } else {
+    bus.set_pin_drive(blofeld::McuPort::q, {.mask = external_mask, .levels = update_mode});
+    cpu.set_state({.pc = caller, .sp = stack, .ccr = interrupt_masked});
+  }
 }
 
 void check_target(blofeld::McuBus &bus, const std::span<const std::uint8_t> expected) {
@@ -128,19 +140,75 @@ void check_entry(blofeld::McuBus &bus, const blofeld::Hc12 &cpu) {
 struct Transfer {
   std::span<const std::uint8_t> payload;
   std::optional<std::size_t> loss_at = std::nullopt;
+  bool dispatch = false;
+};
+
+class RequestDelivery {
+public:
+  explicit RequestDelivery(const bool enabled) : enabled_(enabled) {}
+
+  void before_step(blofeld::McuBus &bus, blofeld::Hc12 &cpu) {
+    if (!enabled_ || !cpu.waiting() || injected_) { return; }
+    const auto state = cpu.state();
+    require(state.pc == application_dispatch && state.sp == stack - 9 &&
+                (bus.read(request_flags) & 9U) == 0,
+            "Original application WAI waits with its own frame before request delivery");
+    for (unsigned idle = 0; idle < 2; ++idle) {
+      require(!cpu.step().instruction_executed && cpu.waiting(),
+              "Original wait does not fabricate a request while clocks/inputs are unchanged");
+    }
+    bus.set_pin_drive(blofeld::McuPort::e, {.mask = pe_mask, .levels = 2});
+    injected_ = true;
+  }
+
+  void after_step(blofeld::McuBus &bus,
+                  const blofeld::Hc12 &cpu,
+                  const blofeld::CpuState &before,
+                  const blofeld::CpuStep &result) {
+    if (result.interrupt_vector) {
+      require(enabled_ && *result.interrupt_vector == xirq_vector && !result.instruction_executed &&
+                  result.stack_reused,
+              "Original request enters through native XIRQ using the WAI frame");
+      ++entries_;
+      bus.set_pin_drive(blofeld::McuPort::e, {.mask = pe_mask, .levels = 3});
+    }
+    if (enabled_ && before.pc == request_handler_return) {
+      require(cpu.state().pc == application_dispatch && cpu.state().sp == stack &&
+                  (bus.read(request_flags) & 9U) == 9,
+              "Original XIRQ instructions set the request and RTI restores the main wait context");
+      ++returns_;
+      bus.set_pin_drive(blofeld::McuPort::q, {.mask = external_mask, .levels = update_mode});
+    }
+  }
+
+  void verify(blofeld::McuBus &bus, std::ostream &trace) const {
+    if (!enabled_) { return; }
+    require(injected_ && entries_ == 1 && returns_ == 1 && (bus.read(request_flags) & 8U) == 0,
+            "Original main dispatch consumes the request without host flag writes or redirects");
+    trace << "native-request xirq-entries=1 rti-returns=1 main-dispatch=1\n";
+  }
+
+private:
+  bool enabled_ = false;
+  bool injected_ = false;
+  unsigned entries_ = 0;
+  unsigned returns_ = 0;
 };
 
 void transfer(blofeld::McuBus &bus,
               blofeld::Hc12 &cpu,
               const Transfer &request,
               std::ostream &trace) {
-  prepare(bus, cpu);
+  prepare(bus, cpu, request.dispatch);
   const auto samples = encode(request.payload);
   std::size_t consumed = 0;
   unsigned instructions = 0;
+  unsigned steps = 0;
+  RequestDelivery delivery(request.dispatch);
   while (cpu.state().pc != helper) {
-    require(instructions < call_limit, "Original receiver must reach an explicit bounded outcome");
+    require(steps < call_limit, "Original receiver must reach an explicit bounded outcome");
     const auto state = cpu.state();
+    delivery.before_step(bus, cpu);
     if (state.pc == sample_pc) {
       const auto output = bus.observe_pads(blofeld::McuPort::q, strobe);
       require(output.known == strobe && output.levels == (consumed % 2 == 0 ? strobe : 0),
@@ -156,7 +224,9 @@ void transfer(blofeld::McuBus &bus,
     trace << "pc=" << blofeld::hex(state.pc) << " d=" << blofeld::hex(state.d)
           << " sp=" << blofeld::hex(state.sp) << '\n';
     try {
-      cpu.step();
+      const auto result = cpu.step();
+      if (result.instruction_executed) { ++instructions; }
+      delivery.after_step(bus, cpu, state, result);
     } catch (const blofeld::Fault &fault) {
       trace << "observed-fault " << fault.what() << '\n';
       const std::string_view message(fault.what());
@@ -170,12 +240,13 @@ void transfer(blofeld::McuBus &bus,
       trace << "input-loss samples=" << consumed << " copied=" << copied << '\n';
       return;
     }
-    ++instructions;
+    ++steps;
   }
   require(!request.loss_at && consumed == samples.size(),
           "Complete input reaches the helper using the exact expected sample count");
   check_target(bus, request.payload);
   check_entry(bus, cpu);
+  delivery.verify(bus, trace);
   trace << "helper-entry bytes=" << request.payload.size() << " samples=" << consumed
         << " instructions=" << instructions << " return=" << blofeld::hex(helper_return) << '\n';
 }
@@ -216,7 +287,8 @@ int run(const Inputs &inputs) {
   boot(bus, cpu, trace);
   transfer(bus,
            cpu,
-           {.payload = original_helper(firmware.update_blocks.at(0), original_first_bytes)},
+           {.payload = original_helper(firmware.update_blocks.at(0), original_first_bytes),
+            .dispatch = true},
            trace);
   check_first_callback(bus, cpu, trace);
   transfer(bus,

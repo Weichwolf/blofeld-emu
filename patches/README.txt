@@ -48,6 +48,10 @@ HC12 exception corrections
 ghidra-hc12-exceptions.patch corrects SWI's indirect vector fetch, reads the
 vector before stacking, and writes the B:A stack word in hardware byte order.
 RTI restores B:A with a word transfer, preserving its documented operand width.
+WAI also saves B:A with one word operand; the original two byte stores violate
+its NXP operand-width definition. Native mcu_wai tests independently check four
+word stores and one CCR byte, literal frame/order, idle and wake/RTI behavior;
+they fail with the original WAI description.
 It also fixes the reversed STOP-disable condition. Enabled STOP remains an
 unsupported clock-suspension operation; disabled STOP must be a two-byte NOP.
 The patch follows the branch and indexed-word patches under the same source

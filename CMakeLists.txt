@@ -207,6 +207,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-interrupt-test test/interrupt_test.cpp)
   target_link_libraries(blofeld-interrupt-test PRIVATE blofeld_core)
   add_test(NAME mcu_interrupt COMMAND blofeld-interrupt-test)
+  add_executable(blofeld-wai-test test/wai_test.cpp)
+  target_link_libraries(blofeld-wai-test PRIVATE blofeld_core)
+  add_test(NAME mcu_wai COMMAND blofeld-wai-test)
   add_executable(blofeld-rti-test test/mcu_rti_test.cpp)
   target_link_libraries(blofeld-rti-test PRIVATE blofeld_core)
   add_test(NAME mcu_rti COMMAND blofeld-rti-test)
@@ -265,6 +268,7 @@ add_custom_target(quality
     blofeld-original-flash-test
     blofeld-original-flash-restart-test
     blofeld-original-parallel-update-test
+    blofeld-wai-test
     blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
 endif()

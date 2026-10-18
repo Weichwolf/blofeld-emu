@@ -20,8 +20,17 @@ This is a controlled loopback/input experiment. Neither this strap connection,
 the actual MCU package nor the external Q bus has been verified on a Blofeld.
 No default pin, ready level, register value or board profile is changed.
 
-An own RAM caller invokes the unchanged normal-copy routine at BAD9. Its stack
-and a bounded target window are prepared explicitly for isolated calls. The
+The first-helper fixture selects the original application WAI at 8314 with an
+explicit register/stack context after the conditional boot. It observes two idle
+steps, then asserts and releases external XIRQ. Original instructions at the
+FFF4 handler sample request mode 0C on Q, set the request flag and return with
+RTI using the WAI frame. The original main-loop branch then calls BAD9 and
+consumes the request. No host flag write, callback return or later PC redirect
+causes that dispatch. Preceding application initialization is not executed by
+this isolated entry experiment; it does not establish a complete main-loop boot.
+
+For the other cases, an own RAM caller invokes the unchanged normal-copy routine
+at BAD9. The stack and target window are explicitly prepared for isolated calls. The
 fixture supplies request mode 0C, six data bits and Q6 low, leaving Q7 driven by
 the MCU. Before each native input read, the next observed six-bit value is
 supplied. Four observations encode three bytes, most-significant groups first.

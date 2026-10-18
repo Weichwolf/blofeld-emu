@@ -1,0 +1,67 @@
+HC12 WAI and logical interrupt wakeup
+
+  ctest --test-dir build/strict -R '^(mcu_wai|mcu_interrupt|flash_cli|original_parallel_update)$' --output-on-failure
+
+Reference: S12CPUV2 Rev. 4.0 instruction glossary (WAI, CLI/ANDCC and TAP) and
+interrupt sections 7.5..7.8, supplied in the pinned NXP MCU bundle. These checks
+establish instruction/frame/order behavior. CPU/peripheral clocks, wake latency,
+low-power clock gates and pad synchronization remain uncalibrated.
+Public core reference (instruction appendix):
+  https://www.nxp.com/docs/en/data-sheet/HCS12COREUG.pdf
+
+Native behavior
+WAI executes its native SLEIGH semantics and saves next PC, Y, X, B:A and CCR in
+a descending nine-byte frame. It preserves CCR and leaves the visible PC at the
+following instruction. The original description incorrectly used two byte stores
+for B/A. The local exception patch makes this one word operand, as defined in
+the NXP operation/bus table. Four word operands and one CCR byte are checked
+independently, including byte order and the exact stack bus sequence.
+
+The WaitForInterrupt intrinsic latches the CPU wait state. Repeated step calls
+without an eligible request execute no opcode and perform no data read/write,
+lookahead, instruction fetch or retirement. The caller can still supply explicit
+external observations and qualified peripheral-clock inputs between steps.
+
+An eligible interrupt reads its vector and reuses the existing WAI frame. No
+second register frame is written. I becomes set; an XIRQ also sets X. The wake
+event reports instruction_executed=false and stack_reused=true. RTI executes its
+native restore and resumes after WAI. A masked source cannot release the wait.
+A request already eligible before WAI instead enters before that opcode executes.
+
+CLI/ANDCC and TAP that change I from 1 to 0 defer maskable delivery through the
+following instruction, as explicitly required by the NXP instruction descriptions.
+This permits CLI-WAI to save its own frame even with a pending maskable request.
+An independently unmasked XIRQ remains eligible. ANDCC without an I transition
+does not create this deferral. RTI retains its separate documented frame-reuse
+behavior. This is an instruction-order guarantee, not an elapsed-cycle scheduler;
+other IRQ latency and CCR-write pipeline cases remain unqualified.
+
+Stack/fetch/vector failures remain visible. A failed WAI stack write retains its
+partial bus effects and does not enter wait. A failed wake vector preserves the
+waiting frame and does not acknowledge the source; a later valid observation can
+retry. CPU reset and explicit debug set_state cancel waiting and IRQ deferral.
+set_state replaces registers; it is not a complete execution-snapshot restore.
+
+Standalone driver
+Without a scheduler or eligible wake request, the headless CLI reports the WAI
+wait and returns its quiescent CPU state instead of spinning on an instruction
+budget that cannot advance. The following opcode is not executed or traced.
+Requested cold NVM export still occurs. A budget stop with an eligible request
+is reported as budget exhaustion. Neither outcome establishes complete boot.
+
+Evidence and limits
+Independent synthetic tests cover literal frame bytes and operand widths, idle
+bus silence, IRQ/XIRQ masks, preexisting requests, CLI/TAP-WAI, an XIRQ during the
+maskable deferral, stack and PC wrapping, fetch/stack/vector failures, vector
+retry, reset, debug state replacement and native RTI restoration. The native WAI
+test fails with the uncorrected B/A operand description. A separate CLI process
+executes own LDS/WAI code, verifies the wait report/trace and saves unchanged NVM.
+
+The original parallel-update fixture additionally executes original WAI, XIRQ
+handler, RTI, main dispatch and RAM-loader instructions. The native handler sets
+the request flag; no host flag write triggers the branch. See
+original-parallel-update.txt for the controlled entry/pin assumptions.
+
+STOP clock suspension, BDM, global clock-domain scheduling, whole-board snapshot
+restoration, full application/update/recovery and hardware comparison remain
+outstanding. Explicit clock APIs have not established all MCU wait-mode gates.

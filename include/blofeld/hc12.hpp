@@ -34,8 +34,10 @@ public:
   Hc12(const Hc12 &) = delete;
   Hc12 &operator=(const Hc12 &) = delete;
   void reset();
+  // Debug register replacement cancels WAI and interrupt deferral.
   void set_state(const CpuState &state);
   [[nodiscard]] CpuState state() const;
+  [[nodiscard]] bool waiting() const;
   [[nodiscard]] std::string disassemble() const;
   [[nodiscard]] std::optional<InterruptRequest> pending_interrupt() const;
   CpuStep step();

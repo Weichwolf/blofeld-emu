@@ -197,6 +197,7 @@ int run(const Options &config) {
   std::uint64_t executed = 0;
   std::uint64_t interrupts = 0;
   bool reset_completed = false;
+  bool stopped_waiting = false;
   try {
     cpu.reset();
     reset_completed = true;
@@ -206,6 +207,10 @@ int run(const Options &config) {
       if (result.instruction_executed) { ++executed; }
       if (result.interrupt_vector) { ++interrupts; }
       trace_interrupt(trace, result);
+      if (cpu.waiting() && !cpu.pending_interrupt()) {
+        stopped_waiting = true;
+        break;
+      }
     }
   } catch (const blofeld::Fault &fault) {
     if (trace.is_open()) { trace.flush(); }
@@ -221,7 +226,9 @@ int run(const Options &config) {
     return 2;
   }
   if (trace.is_open()) { trace.flush(); }
-  std::cout << "Instruction budget reached; boot completion is not established.\n";
+  std::cout << (stopped_waiting
+                    ? "MCU waiting for an external interrupt; no scheduler supplied a wakeup.\n"
+                    : "Instruction budget reached; boot completion is not established.\n");
   std::cout << "Delivered interrupt entries: " << interrupts << '\n';
   print_state(std::cout, cpu.state());
   std::cout << '\n';
