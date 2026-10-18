@@ -3,6 +3,7 @@
 #include "blofeld/firmware.hpp"
 #include "blofeld/hc12.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_gpio.hpp"
 
 #include <charconv>
 #include <cstdint>
@@ -10,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -22,7 +24,26 @@ struct Options {
   std::filesystem::path trace;
   std::uint64_t instructions = 1000000;
   bool inspect = false;
+  std::optional<blofeld::PinDrive> port_e_input;
 };
+
+std::uint8_t hex_byte(const std::string_view value) {
+  unsigned result = 0;
+  const auto conversion = std::from_chars(value.data(), value.data() + value.size(), result, 16);
+  constexpr unsigned byte_mask = 0xff;
+  if (conversion.ec != std::errc{} || conversion.ptr != value.data() + value.size() ||
+      result > byte_mask) {
+    throw blofeld::Fault("Invalid GPIO byte value");
+  }
+  return static_cast<std::uint8_t>(result);
+}
+
+blofeld::PinDrive pin_drive(const std::string_view value) {
+  if (value.size() != 5 || value[2] != ':') {
+    throw blofeld::Fault("GPIO input fixture requires two hexadecimal bytes: MASK:LEVELS");
+  }
+  return {.mask = hex_byte(value.substr(0, 2)), .levels = hex_byte(value.substr(3, 2))};
+}
 
 Options options(const int count, char **values) {
   Options result;
@@ -40,6 +61,8 @@ Options options(const int count, char **values) {
       result.specification = value;
     } else if (argument == "--trace") {
       result.trace = value;
+    } else if (argument == "--port-e-input") {
+      result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
       const auto conversion =
           std::from_chars(value.data(), value.data() + value.size(), result.instructions);
@@ -52,7 +75,7 @@ Options options(const int count, char **values) {
   }
   if (result.firmware.empty()) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
-                         "[--instructions N] [--trace file]");
+                         "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS]");
   }
   return result;
 }
@@ -85,6 +108,13 @@ int run(const Options &config) {
     trace.exceptions(std::ios::failbit | std::ios::badbit);
   }
   blofeld::McuBus bus(firmware.mcu);
+  if (config.port_e_input) {
+    bus.set_pin_drive(blofeld::McuPort::e, *config.port_e_input);
+    std::cout << "Explicit simulated port E input fixture: mask="
+              << blofeld::hex(config.port_e_input->mask, 2)
+              << " levels=" << blofeld::hex(config.port_e_input->levels, 2)
+              << "; board wiring is unverified.\n";
+  }
   bus.set_observer([&trace](const blofeld::BusEvent &event) {
     if (trace.is_open()) {
       trace << "  io-write " << blofeld::hex(event.address) << '=' << blofeld::hex(event.value, 2)

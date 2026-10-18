@@ -2,8 +2,10 @@
 #pragma once
 
 #include "blofeld/bus.hpp"
+#include "blofeld/mcu_gpio.hpp"
+#include "blofeld/mcu_memory.hpp"
 
-#include <array>
+#include <cstdint>
 #include <functional>
 #include <span>
 #include <string_view>
@@ -29,13 +31,19 @@ public:
   [[nodiscard]] std::uint64_t revision() const override { return revision_; }
 
   void check_execute(InstructionFetch fetch) const override;
+  void retire_instruction() override;
   void set_observer(std::function<void(const BusEvent &)> observer);
+  void set_pin_drive(McuPort port, PinDrive drive);
+  void reset();
 
 private:
-  static bool ram_mapped(std::uint16_t address);
-  static std::string_view latch_name(std::uint16_t address);
+  [[nodiscard]] std::uint8_t read_register(std::uint16_t offset) const;
+  [[nodiscard]] std::string_view write_register(ByteWrite write);
+  [[nodiscard]] static bool reserved_register(std::uint16_t offset);
   std::uint64_t revision_ = 0;
-  std::array<std::uint8_t, 65536> bytes_{};
+  McuMemory memory_;
+  McuGpio gpio_;
+  std::uint8_t timer_control_ = 0;
   std::function<void(const BusEvent &)> observer_;
 };
 

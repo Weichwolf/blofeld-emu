@@ -1,5 +1,8 @@
 Blofeld firmware emulator — initial headless bring-up
 
+License: GPL-3.0-only. Dependency notices are in THIRD_PARTY.txt. Manufacturer
+firmware and reference assets are separate local inputs and are not included.
+
 Objective
 Execute original firmware 1.25 for Desktop and Keyboard, with a faithful board
 model, MIDI/audio and reproducible firmware-development tests. The complete
@@ -8,9 +11,10 @@ booting Blofeld, a playable synthesizer or a verified replacement-firmware targe
 
 Build and quality checks
 Requirements: LLVM 19 (clang, clang-tidy, clang-format and sanitizer runtime),
-CMake >= 3.25, Ninja, GNU patch, Python 3, zlib development files and Ghidra 12.1.2 including
-its native SLEIGH sources. Set GHIDRA_ROOT if it is not installed under
-~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java at runtime.
+CMake >= 3.25, Ninja, GNU patch, Python 3, zlib development files and Ghidra 12.1.2
+including its native SLEIGH sources and compiler. Set GHIDRA_ROOT if it is not
+installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java at
+runtime.
 
   cmake --preset strict
   cmake --build --preset strict
@@ -36,6 +40,11 @@ original ZIP are explicitly skipped when that private reference is absent.
   build/strict/blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip --inspect
   build/strict/blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip --trace doc/local/mcu.trace --instructions 1000
 
+Explicit simulated pin inputs can explore the next boot stage; see
+doc/mcu-model.txt for the implemented map, GPIO behavior and remaining limits.
+The native HC12 description is patched and recompiled locally for independently
+verified BRSET/BRN corrections; no installed Ghidra files are modified.
+
 The execution command must stop visibly on unsupported hardware. An instruction
 budget being exhausted does not establish successful boot. Downloading firmware
 and extracting its contents does not exercise the real update/recovery path.
@@ -51,3 +60,9 @@ No fuzzing path opens physical MIDI devices. Preserve minimized regressions for
 findings; keep proprietary seeds and derived corpus members under doc/local/.
 
 See AGENTS.md for the binding development rules and THIRD_PARTY.txt for licenses.
+
+The separate mcu-model-fuzz target exercises mapping, pin drives, unknown-byte
+tracking, accesses and reset sequences using only synthetic bytes:
+  cmake --build build/fuzz --target mcu-model-fuzz
+  mkdir -p doc/local/mcu-fuzz-corpus doc/local/mcu-fuzz-artifacts
+  build/fuzz/mcu-model-fuzz doc/local/mcu-fuzz-corpus -artifact_prefix=doc/local/mcu-fuzz-artifacts/ -max_len=1536 -max_total_time=60

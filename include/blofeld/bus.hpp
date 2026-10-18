@@ -11,6 +11,11 @@ struct Fault : std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+struct ByteWrite {
+  std::uint16_t address = 0;
+  std::uint8_t value = 0;
+};
+
 struct InstructionFetch {
   std::uint16_t address = 0;
   unsigned length = 0;
@@ -24,6 +29,10 @@ public:
   [[nodiscard]] virtual std::uint8_t peek(std::uint16_t address) const = 0;
   [[nodiscard]] virtual std::uint64_t revision() const = 0;
   virtual void check_execute(InstructionFetch fetch) const = 0;
+
+  // Commit effects that become visible after the current instruction's final
+  // bus transaction. This is not an instruction-to-cycle timing approximation.
+  virtual void retire_instruction() {}
 };
 
 std::string hex(std::uint64_t value, unsigned width = 4);

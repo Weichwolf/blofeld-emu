@@ -298,6 +298,7 @@ void Hc12::step() {
   try {
     impl_->refresh_decoder();
     impl_->executor->execute(impl_->bus);
+    impl_->bus.retire_instruction();
   } catch (const ghidra::LowlevelError &error) {
     throw Fault("HC12 at " + hex(state().pc) + ": " + error.explain);
   }

@@ -69,15 +69,17 @@ endif()
 # Apply clang-tidy to our targets, after the third-party target was created.
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/share")
-configure_file("${GHIDRA_ROOT}/Ghidra/Processors/HCS12/data/languages/HC12.sla"
-               "share/HC12.sla" COPYONLY)
+include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
-add_library(blofeld_core src/hc12.cpp src/mcu_bus.cpp)
+add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp)
+target_include_directories(blofeld_mcu PUBLIC include)
+target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
+add_library(blofeld_core src/hc12.cpp)
+add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC include)
-target_link_libraries(blofeld_core PUBLIC blofeld_firmware PRIVATE blofeld_sleigh)
+target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
 add_executable(blofeld-headless src/main.cpp)
@@ -87,6 +89,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-core-test test/core_test.cpp)
   target_link_libraries(blofeld-core-test PRIVATE blofeld_core)
   add_test(NAME native_core COMMAND blofeld-core-test)
+  add_executable(blofeld-mcu-test test/mcu_model_test.cpp)
+  target_link_libraries(blofeld-mcu-test PRIVATE blofeld_core)
+  add_test(NAME mcu_model COMMAND blofeld-mcu-test)
   add_test(NAME firmware_python
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s test -v)
   set_tests_properties(firmware_python PROPERTIES
@@ -107,7 +112,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-core-test
+  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
   USES_TERMINAL)
 endif()
 
@@ -115,4 +120,7 @@ if(BLOFELD_FUZZING)
   add_executable(firmware-fuzz test/firmware_fuzz.cpp)
   target_link_libraries(firmware-fuzz PRIVATE blofeld_firmware)
   target_link_options(firmware-fuzz PRIVATE -fsanitize=fuzzer)
+  add_executable(mcu-model-fuzz test/mcu_model_fuzz.cpp)
+  target_link_libraries(mcu-model-fuzz PRIVATE blofeld_mcu)
+  target_link_options(mcu-model-fuzz PRIVATE -fsanitize=fuzzer)
 endif()

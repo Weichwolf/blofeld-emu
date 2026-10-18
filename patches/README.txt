@@ -17,3 +17,14 @@ ef68ee18511cac1bec55a602c64e43f57bc4755ca00e8204f411434d51d27f92
 Regressions: native_core stack/call overwrite and byte-transfer side-effect
 checks. This patch does not establish completeness of the SLEIGH instruction
 semantics or correctness of other native memory-bank configurations.
+
+HC12 branch corrections
+----------------------
+ghidra-hc12-branches.patch corrects the BRSET predicate in all three operand
+constructors and makes BRN decode its displacement byte. It is guarded by the
+original HCS_HC12.sinc SHA-256 recorded in doc/dependencies.json. It is applied
+only to a build-directory copy, then compiled with Ghidra's native SLEIGH tool.
+No manufacturer firmware bytes or processor-language source copies are shipped
+in this repository. The specification retains Ghidra's Apache-2.0 license.
+S12CPUV2 instruction definitions provide the independent behavior reference;
+native_core covers 12288 bit-branch cases and BRN's fetch length.

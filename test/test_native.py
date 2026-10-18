@@ -50,6 +50,16 @@ class NativeParserTest(NativeCli):
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("six-block", result.stderr)
 
+    def test_invalid_gpio_fixture_syntax_is_rejected(self):
+        for fixture in ("", "0", "zz:00", "ff-00", "fff:00"):
+            with self.subTest(fixture=fixture):
+                result = subprocess.run(
+                    [self.binary, "--firmware", "unused", "--port-e-input", fixture],
+                    capture_output=True, text=True, timeout=15, check=False,
+                )
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn("GPIO", result.stderr)
+
 
 class NativeReferenceTest(NativeCli):
     @classmethod
@@ -113,3 +123,30 @@ class NativeReferenceTest(NativeCli):
         )
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertTrue(result.stderr.strip())
+
+    def test_explicit_gpio_fixtures_reach_the_next_unsupported_peripheral(self):
+        for fixture, completed in (("fb:00", 34), ("fb:08", 32)):
+            with self.subTest(fixture=fixture), tempfile.TemporaryDirectory() as temporary:
+                trace = Path(temporary) / "mcu.trace"
+                result = subprocess.run(
+                    [self.binary, "--firmware", self.reference, "--instructions", "100",
+                     "--port-e-input", fixture, "--trace", trace],
+                    capture_output=True, text=True, timeout=15, check=False,
+                )
+                listing = trace.read_text()
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(f"{completed} completed MCU instructions", result.stderr)
+                self.assertIn("MCU write at 0x0300", result.stderr)
+                self.assertIn("pc=0x8046", result.stderr)
+                self.assertIn("Explicit simulated", result.stdout)
+                self.assertIn("board wiring is unverified", result.stdout)
+                self.assertIn("reserved/write ignored", listing)
+                self.assertEqual("CMPB #0x0" in listing, fixture == "fb:00")
+
+    def test_inconsistent_gpio_drive_mask_is_rejected(self):
+        result = subprocess.run(
+            [self.binary, "--firmware", self.reference, "--port-e-input", "01:ff"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Invalid MCU GPIO external drive", result.stderr)

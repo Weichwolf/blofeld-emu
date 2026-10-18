@@ -1,0 +1,246 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "blofeld/mcu_gpio.hpp"
+
+#include "blofeld/bus.hpp"
+#include "blofeld/hc12_registers.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string_view>
+
+namespace blofeld {
+namespace {
+constexpr unsigned byte_mask = 0xff;
+constexpr unsigned port_e_direction_mask = 0xfc;
+constexpr unsigned port_e_pull_mask = 0x9f;
+constexpr unsigned port_e_clock_disable = 0x10;
+constexpr unsigned port_m_mask = 0x3f;
+constexpr unsigned port_u_mask = 0x3f;
+constexpr unsigned port_t_mask = 0x0f;
+constexpr unsigned routing_mask = 0x1f;
+constexpr unsigned port_m_tied_mask = 0x27;
+constexpr unsigned port_u_tied_mask = 0x3e;
+constexpr unsigned port_t_tied_mask = 0x0c;
+constexpr unsigned core_pull_mask = 0x93;
+constexpr unsigned core_pull_reset = 0x90;
+constexpr std::uint16_t pim_end = 0x0280;
+
+struct PortSpec {
+  std::uint16_t base = 0;
+  unsigned valid = byte_mask;
+  unsigned initial_latch_known = byte_mask;
+  unsigned initial_pull = 0;
+};
+
+constexpr std::array<PortSpec, 11> specs{{{.base = hc12::porta, .initial_latch_known = 0},
+                                          {.base = hc12::portb, .initial_latch_known = 0},
+                                          {.base = hc12::porte, .initial_latch_known = 0},
+                                          {.base = hc12::ptt, .valid = port_t_mask},
+                                          {.base = hc12::ptm, .valid = port_m_mask},
+                                          {.base = hc12::ptj, .valid = 7},
+                                          {.base = hc12::ptp},
+                                          {.base = hc12::ptq},
+                                          {.base = hc12::ptr},
+                                          {.base = hc12::pts},
+                                          {.base = hc12::ptu, .valid = port_u_mask}}};
+
+std::size_t port_index(const McuPort port) {
+  const auto index = static_cast<std::size_t>(port);
+  if (index >= specs.size()) { throw Fault("Unknown MCU GPIO port"); }
+  return index;
+}
+
+struct Register {
+  McuPort port = McuPort::a;
+  unsigned kind = 0;
+};
+
+std::optional<Register> lookup(const std::uint16_t offset) {
+  switch (offset) {
+    case hc12::porta: return Register{.port = McuPort::a, .kind = 0};
+    case hc12::portb: return Register{.port = McuPort::b, .kind = 0};
+    case hc12::ddra: return Register{.port = McuPort::a, .kind = 2};
+    case hc12::ddrb: return Register{.port = McuPort::b, .kind = 2};
+    case hc12::porte: return Register{.port = McuPort::e, .kind = 0};
+    case hc12::ddre: return Register{.port = McuPort::e, .kind = 2};
+    default: break;
+  }
+  if (offset < hc12::ptt || offset >= pim_end) { return {}; }
+  const auto relative = static_cast<unsigned>(offset) - hc12::ptt;
+  if (relative % 8 > 5) { return {}; }
+  return Register{.port = static_cast<McuPort>(static_cast<unsigned>(McuPort::t) + (relative / 8)),
+                  .kind = relative % 8};
+}
+}
+
+McuGpio::McuGpio() {
+  reset();
+}
+
+void McuGpio::reset() {
+  for (std::size_t index = 0; index < ports_.size(); ++index) {
+    const auto external = ports_[index].external;
+    ports_[index] = {.latch_known = static_cast<std::uint8_t>(specs[index].initial_latch_known),
+                     .pull_enable = static_cast<std::uint8_t>(specs[index].initial_pull),
+                     .external = external};
+  }
+  routing_ = 0;
+  assignment_e_ = 0;
+  pull_control_ = core_pull_reset;
+}
+
+void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
+  const auto index = port_index(port);
+  if ((drive.mask & drive.floating) != 0 || (drive.levels & ~drive.mask) != 0 ||
+      ((drive.mask | drive.floating) & ~specs[index].valid) != 0) {
+    throw Fault("Invalid MCU GPIO external drive masks");
+  }
+  ports_[index].external = drive;
+}
+
+std::uint8_t McuGpio::tied_low(const McuPort port) const {
+  if ((routing_ & 3U) != 3) { return 0; }
+  switch (port) {
+    case McuPort::p:
+    case McuPort::q: return byte_mask;
+    case McuPort::m: return port_m_tied_mask;
+    case McuPort::t: return port_t_tied_mask;
+    case McuPort::u: return port_u_tied_mask;
+    case McuPort::s: return port_t_mask;
+    case McuPort::a:
+    case McuPort::b:
+    case McuPort::e:
+    case McuPort::j:
+    case McuPort::r: return 0;
+    default: throw Fault("Unknown MCU GPIO port");
+  }
+}
+
+std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) const {
+  const auto index = port_index(port);
+  const auto &state = ports_[index];
+  const auto tied = static_cast<unsigned>(tied_low(port));
+  const auto direction = static_cast<unsigned>(state.direction);
+  const auto output = direction & state.latch_known & ~tied;
+  unsigned known = tied | state.external.mask | output;
+  unsigned value = (state.external.levels | (state.latch & output)) & ~tied;
+  const auto conflict =
+      state.external.mask & (tied | output) & (state.external.levels ^ (state.latch & ~tied));
+  if ((conflict & requested) != 0) {
+    throw Fault("MCU GPIO output contention at " + hex(specs[index].base));
+  }
+  auto pull_enable = static_cast<unsigned>(state.pull_enable);
+  if (port == McuPort::a) { pull_enable = (pull_control_ & 1U) != 0 ? byte_mask : 0; }
+  if (port == McuPort::b) { pull_enable = (pull_control_ & 2U) != 0 ? byte_mask : 0; }
+  if (port == McuPort::e) {
+    pull_enable = (pull_control_ & port_e_clock_disable) != 0 ? port_e_pull_mask : 0;
+  }
+  const auto weak = state.external.floating & pull_enable & ~direction & ~tied;
+  known |= weak;
+  value |= weak & ~static_cast<unsigned>(state.pull_down);
+  const auto unknown = requested & ~known & specs[index].valid;
+  if (unknown != 0) {
+    throw Fault("Unknown MCU GPIO input at " + hex(specs[index].base) + " mask=" + hex(unknown, 2));
+  }
+  return static_cast<std::uint8_t>(value & requested & specs[index].valid);
+}
+
+std::uint8_t McuGpio::data(const McuPort port) const {
+  const auto index = port_index(port);
+  const auto &state = ports_[index];
+  if (port == McuPort::e && (assignment_e_ & port_e_clock_disable) == 0) {
+    throw Fault("Unimplemented MCU ECLK pin function at " + hex(hc12::porte));
+  }
+  if ((state.direction & ~state.latch_known) != 0) {
+    throw Fault("Uninitialized MCU GPIO output latch at " + hex(specs[index].base));
+  }
+  const auto inputs =
+      static_cast<std::uint8_t>(~static_cast<unsigned>(state.direction) & specs[index].valid);
+  return static_cast<std::uint8_t>((state.latch & state.direction) | sample(port, inputs));
+}
+
+std::string_view McuGpio::register_name(const std::uint16_t offset) {
+  switch (offset) {
+    case hc12::pear: return "PEAR";
+    case hc12::pucr: return "PUCR";
+    case hc12::modrr: return "MODRR";
+    default: break;
+  }
+  const auto reg = lookup(offset);
+  if (!reg) { return {}; }
+  switch (reg->kind) {
+    case 0: return "GPIO data";
+    case 1: return "GPIO pin input";
+    case 2: return "GPIO direction";
+    case 3: return "GPIO reduced drive";
+    case 4: return "GPIO pull enable";
+    case 5: return "GPIO pull select";
+    default: return {};
+  }
+}
+
+std::uint8_t McuGpio::read(const std::uint16_t offset) const {
+  switch (offset) {
+    case hc12::pear: return assignment_e_;
+    case hc12::pucr: return pull_control_;
+    case hc12::modrr: return routing_;
+    default: break;
+  }
+  const auto reg = lookup(offset);
+  if (!reg) { throw Fault("Unknown MCU GPIO read at " + hex(offset)); }
+  const auto &state = ports_[port_index(reg->port)];
+  switch (reg->kind) {
+    case 0: return data(reg->port);
+    case 1: return sample(reg->port, static_cast<std::uint8_t>(specs[port_index(reg->port)].valid));
+    case 2: return state.direction;
+    case 3: return state.reduced_drive;
+    case 4: return state.pull_enable;
+    case 5: return state.pull_down;
+    default: throw Fault("Unknown MCU GPIO register kind");
+  }
+}
+
+void McuGpio::write(const ByteWrite write) {
+  const auto offset = write.address;
+  const auto value = write.value;
+  if (offset == hc12::pear) {
+    if ((value & ~port_e_clock_disable) != 0) {
+      throw Fault("Unimplemented MCU port E alternate function");
+    }
+    assignment_e_ = value;
+    return;
+  }
+  if (offset == hc12::pucr) {
+    pull_control_ = static_cast<std::uint8_t>(value & core_pull_mask);
+    return;
+  }
+  if (offset == hc12::modrr) {
+    routing_ = static_cast<std::uint8_t>(value & routing_mask);
+    return;
+  }
+  const auto reg = lookup(offset);
+  if (!reg) { throw Fault("Unknown MCU GPIO write at " + hex(offset)); }
+  const auto index = port_index(reg->port);
+  auto &state = ports_[index];
+  const auto masked = static_cast<std::uint8_t>(value & specs[index].valid);
+  switch (reg->kind) {
+    case 0:
+      state.latch = masked;
+      state.latch_known = static_cast<std::uint8_t>(specs[index].valid);
+      return;
+    case 1: return; // Read-only input register; documented writes have no effect.
+    case 2:
+      state.direction = reg->port == McuPort::e
+                            ? static_cast<std::uint8_t>(value & port_e_direction_mask)
+                            : masked;
+      return;
+    case 3: state.reduced_drive = masked; return;
+    case 4: state.pull_enable = masked; return;
+    case 5: state.pull_down = masked; return;
+    default: throw Fault("Unknown MCU GPIO register kind");
+  }
+}
+
+}

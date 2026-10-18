@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+
+#include "blofeld/bus.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string_view>
+
+namespace blofeld {
+
+enum class McuPort : std::uint8_t { a, b, e, t, m, j, p, q, r, s, u };
+
+struct PinDrive {
+  std::uint8_t mask = 0;
+  std::uint8_t levels = 0;
+  std::uint8_t floating = 0;
+};
+
+// Logical GPIO and explicit external drives, with unknown inputs tracked.
+// Electrical transition/synchronizer timing and alternate peripheral functions
+// are not yet a complete board model.
+class McuGpio {
+public:
+  McuGpio();
+  void reset();
+  void set_drive(McuPort port, PinDrive drive);
+  [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
+  [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
+  void write(ByteWrite write);
+
+private:
+  static constexpr std::size_t port_count = 11;
+
+  struct PortState {
+    std::uint8_t latch = 0;
+    std::uint8_t latch_known = 0;
+    std::uint8_t direction = 0;
+    std::uint8_t reduced_drive = 0;
+    std::uint8_t pull_enable = 0;
+    std::uint8_t pull_down = 0;
+    PinDrive external;
+  };
+
+  [[nodiscard]] std::uint8_t sample(McuPort port, std::uint8_t requested) const;
+  [[nodiscard]] std::uint8_t data(McuPort port) const;
+  [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
+  std::array<PortState, port_count> ports_{};
+  std::uint8_t routing_ = 0;
+  std::uint8_t assignment_e_ = 0;
+  std::uint8_t pull_control_ = 0;
+};
+
+}

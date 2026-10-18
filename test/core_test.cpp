@@ -32,6 +32,7 @@ class TestBus final : public blofeld::Bus {
 public:
   std::uint64_t generation = 0;
   unsigned read_count = 0;
+  mutable unsigned last_fetch_length = 0;
   std::array<std::uint8_t, 65536> bytes{};
 
   std::uint8_t read(const std::uint16_t address) override {
@@ -50,7 +51,9 @@ public:
 
   [[nodiscard]] std::uint64_t revision() const override { return generation; }
 
-  void check_execute(blofeld::InstructionFetch /*fetch*/) const override {}
+  void check_execute(const blofeld::InstructionFetch fetch) const override {
+    last_fetch_length = fetch.length;
+  }
 
   void code(const std::span<const std::uint8_t> program) {
     std::ranges::copy(program, bytes.begin() + 0x8000);
@@ -189,6 +192,68 @@ void test_word_bus_transfers() {
           "Word read must fetch exactly two bytes in big-endian order");
 }
 
+void test_bit_branch(const bool branch_if_set, const unsigned form, const std::uint8_t mask) {
+  TestBus bus;
+  constexpr std::uint16_t indexed_operand = 0x2000;
+  constexpr std::uint16_t direct_operand = 0x40;
+  constexpr std::uint8_t displacement = 7;
+  constexpr std::array<std::uint8_t, 3> set_opcodes{0x4e, 0x1e, 0x0e};
+  constexpr std::array<std::uint8_t, 3> clear_opcodes{0x4f, 0x1f, 0x0f};
+  const auto opcode = branch_if_set ? set_opcodes.at(form) : clear_opcodes.at(form);
+  const auto operand = form == 0 ? direct_operand : indexed_operand;
+  const std::array<std::uint8_t, 4> direct{opcode, direct_operand, mask, displacement};
+  const std::array<std::uint8_t, 5> extended{opcode, 0x20, 0, mask, displacement};
+  const std::array<std::uint8_t, 4> indexed{opcode, 0, mask, displacement};
+  unsigned length = 0;
+  if (form == 0) {
+    bus.code(direct);
+    length = direct.size();
+  } else if (form == 1) {
+    bus.code(extended);
+    length = extended.size();
+  } else {
+    bus.code(indexed);
+    length = indexed.size();
+  }
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  constexpr std::uint8_t unchanged_ccr = 0xff;
+  for (unsigned value = 0; value < 256; ++value) {
+    bus.bytes[operand] = static_cast<std::uint8_t>(value);
+    bus.read_count = 0;
+    cpu.set_state({.pc = 0x8000, .x = indexed_operand, .ccr = unchanged_ccr});
+    cpu.step();
+    const bool taken = branch_if_set ? (value & mask) == mask : (value & mask) == 0;
+    const auto expected = 0x8000 + length + (taken ? displacement : 0);
+    if (cpu.state().pc != expected || cpu.state().ccr != unchanged_ccr || bus.read_count != 1) {
+      throw blofeld::Fault(std::string(branch_if_set ? "BRSET" : "BRCLR") +
+                           " form=" + std::to_string(form) + " value=" + blofeld::hex(value, 2) +
+                           " mask=" + blofeld::hex(mask, 2));
+    }
+  }
+}
+
+void test_bit_branches_and_branch_never() {
+  // S12CPUV2 instruction definitions: all selected bits, not any selected bit.
+  constexpr std::array<std::uint8_t, 8> masks{0, 1, 8, 0x80, 0x0f, 0xf0, 0xaa, 0xff};
+  for (unsigned form = 0; form < 3; ++form) {
+    for (const auto mask : masks) {
+      test_bit_branch(true, form, mask);
+      test_bit_branch(false, form, mask);
+    }
+  }
+  TestBus bus;
+  constexpr std::array<std::uint8_t, 4> code{0x21, 0x7f, 0x86, 0x09};
+  bus.code(code);
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  cpu.reset();
+  cpu.step();
+  require(cpu.state().pc == after_load && bus.last_fetch_length == 2,
+          "BRN consumes its displacement byte as a two-byte NOP");
+  cpu.step();
+  constexpr unsigned expected_accumulator = 0x900;
+  require(cpu.state().d == expected_accumulator, "BRN ignores the displacement value");
+}
+
 void test_strict_bus() {
   const std::array<std::uint8_t, 32768> flash{};
   blofeld::McuBus bus(flash);
@@ -214,6 +279,7 @@ int main() {
     test_code_modification_and_branch();
     test_conditional_branch();
     test_word_bus_transfers();
+    test_bit_branches_and_branch_never();
     std::cout << "HC12 arithmetic/flags, stack/calls and strict bus checks passed\n";
     return 0;
   } catch (const std::exception &error) {

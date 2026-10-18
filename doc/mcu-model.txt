@@ -1,0 +1,71 @@
+MC9S12UF32 model: implemented behavior and limits
+
+This is a normal single-chip configuration inferred from the firmware accesses
+and NXP documentation. Actual silicon markings and board wiring are unverified.
+It does not establish a complete Desktop or Keyboard hardware profile.
+
+Memory
+- Physical SMRAM is 3584 bytes in its normal system-memory configuration.
+  At reset it is visible at 0x1200..0x1fff. The wider allocated SMRAM window
+  contains documented reserved holes; those are not additional RAM.
+- Physical QRAM is 1536 bytes, with a 2048-byte allocated window. At reset,
+  registers overlay the first 1024 bytes of that window. INITEE can place QRAM
+  at 0x2000..0x25ff, adjacent to the reset SMRAM mapping.
+- Mapping uses physical backing stores: changing the map never creates, loses
+  or duplicates the RAM contents. RAM is unknown until written. Unknown reads
+  and instruction fetches fail. External reset preserves contents and knownness.
+- Priority is registers, SMRAM, QRAM, flash. Accesses to reserved memory holes
+  fail instead of assuming an unspecified bus value or falling through to a
+  lower-priority device. The explicitly documented reserved register range
+  0x00d0..0x00ff reads zero and ignores writes.
+- INITRM controls the RAM region/alignment; INITRG relocates the register block.
+  These registers and MISC are write-once in normal mode. INITEE currently uses
+  the generic MMC write-anytime policy; chip-integration write rights still need
+  confirmation on actual Blofeld silicon.
+- Register changes are committed after the writing instruction. This preserves
+  the old selection for that instruction's final bus transaction. The specified
+  one-bus-cycle remap delay is not yet a complete within-instruction bus model.
+- Flash at 0x4000..0x7fff aliases 0x8000..0xbfff when ROMHM permits it; ROMON
+  controls visibility. Flash writes still fail without a flash-controller model.
+- SmartMedia 10-bit SMRAM mode, paged-flash behavior, expanded/BDM modes and
+  flash controller operations remain unsupported. No successful flash update,
+  recovery or power-loss behavior is inferred from these RAM tests.
+
+GPIO
+- A/B/E and PIM T/M/J/P/Q/R/S/U ports have masked data/direction, reduced-drive,
+  pull-enable and pull-select state. PORTE bits 0/1 remain input-only. Ordinary
+  output-data reads return their latch; PIM input registers sample the pad.
+- External pins are explicitly driven, explicitly floating, or unknown. Pulls
+  resolve explicitly floating inputs. An absent external model does not silently
+  imply a floating pin or a ready signal. Opposing known output drivers fail.
+- MODRR's 64-pin unused-pad tie-down is modeled separately from the port latches.
+  Enabled alternate peripheral functions and pad synchronization/transition
+  timing are not comprehensively modeled. ECLK and other unsupported functions
+  fail when required. PERJ uses its documented reset bitfield; conflicting
+  explanatory prose in the PIM manual still needs silicon calibration.
+- The CLI option --port-e-input MASK:LEVELS supplies hexadecimal input bytes
+  as an explicit simulated fixture. It makes no claim about actual board wiring.
+
+  build/strict/blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip --port-e-input fb:00 --instructions 100 --trace doc/local/pins-low.trace
+
+With these explicit fixtures the original reset code reaches an unsupported USB
+register write. Without them execution still stops at the unknown input read.
+Clock/PLL, timer counters/interrupts, USB and SCI are not made ready by stubs.
+TSCR1 currently has only a control latch; it is not a working timer.
+
+CPU description corrections
+The pinned Ghidra 12.1.2 HC12 description incorrectly reverses BRSET's condition
+and decodes BRN without its displacement byte. A private patched description is
+compiled with the native SLEIGH compiler. The installed Ghidra tree is untouched.
+Independent tests cover 12288 BRSET/BRCLR vectors (256 data values, eight masks,
+direct/extended/indexed forms), unchanged CCR and one operand read per branch;
+BRN is checked as a two-byte NOP. These checks do not validate the full ISA.
+
+References
+- doc/hardware/sources.json pins the NXP reference downloads.
+- 9S12UF32DGV1 table 1-1 and sections 6, 10, 18.
+- S12MMCV4 sections 3 and 4, especially select priority table 4-1.
+- S12SMRAM3P5K2EV1 sections 3 and 4.
+- S12MEBIV3 and S12UF32PIMV2 register descriptions.
+- S12CPUV2 instruction definitions for BRSET, BRCLR and BRN.
+The module guides are available inside the referenced 9S12UF32_ZIP.zip.

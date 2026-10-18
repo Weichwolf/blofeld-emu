@@ -1,0 +1,19 @@
+--- HCS_HC12.sinc
++++ HCS_HC12.sinc
+@@ -1964,5 +1964,2 @@
+-SkipNextInstr: dest is epsilon [ dest = inst_next + 1; ]  { export *[RAM]:1 dest; }
+-
+-:BRN SkipNextInstr                 is Prefix18=0 & op8=0x21 & SkipNextInstr
+-{
+-	goto SkipNextInstr;
++:BRN rel8                 is Prefix18=0 & op8=0x21; rel8
++{
+@@ -1974 +1971 @@
+-	if (result != 0) goto rel8;
++	if (result == 0) goto rel8;
+@@ -1980 +1977 @@
+-	if (result != 0) goto rel8;
++	if (result == 0) goto rel8;
+@@ -1986 +1983 @@
+-	if (result != 0) goto rel8;
++	if (result == 0) goto rel8;

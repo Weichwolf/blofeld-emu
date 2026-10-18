@@ -12,15 +12,20 @@ Update container extraction       partial  Python offline framing/object checks;
                                           native ZIP/MIDI and runtime parser.
 Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
                                           native HC12 instruction execution starts.
-                                          Pin read at PC 8029 remains unsupported.
+                                          Unknown pins still stop the default run.
+                                          Explicit port fixtures reach USB setup.
 CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrite,
                                           branches, code-cache invalidation and
-                                          word-transfer side effects tested; full ISA suite,
-                                          cycle timing and hardware comparison pending.
+                                          word-transfer side effects tested; 12288
+                                          bit-branch vectors and BRN length checked.
+                                          Full ISA, cycle timing and hardware
+                                          comparison pending.
                                           Independent reset/opcode reference:
                                           HCS12COREUG section 3.1 and Appendix A.
-RAM/ROM/flash mapping             pending  Only flash reads and selected write
-                                          latches; no speculative RAM ranges.
+RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tracking,
+                                          remapping, overlap priority and flash alias
+                                          tested. See mcu-model.txt for limits;
+                                          flash controller/paging/SmartMedia pending.
 Interrupts, timers, clock         pending  Reads fail instead of inventing readiness.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           checkout built separately; its assembler,
@@ -43,10 +48,14 @@ Power loss in every erase/program pending  Flash/NAND controllers, phase injecti
                                           reset/security/vector checks pending.
 Sanitizers and static analysis    partial  Strict gates pass on initial bring-up;
                                           native dependencies instrumented too.
-                                          No audio/concurrency/board coverage yet.
+                                          No complete-board, audio or concurrency
+                                          coverage yet.
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
                                           campaign (~20k executions) without findings;
-                                          sustained/structured fuzzing pending.
+                                          MCU model harness covers bus, map, GPIO
+                                          and reset sequences: 87715 executions in
+                                          61 s without sanitizer findings. Sustained
+                                          campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
                                           trace; board snapshots/replay pending.
