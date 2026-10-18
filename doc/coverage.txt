@@ -15,7 +15,8 @@ Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
                                           Unknown pins still stop the default run.
                                           Explicit port fixtures reach PHY startup;
                                           supplied clock windows exercise the real
-                                          lock polling/selection through SCI setup.
+                                          lock polling/selection through SCI setup
+                                          and the next timer configuration write.
 CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrite,
                                           branches, code-cache invalidation and
                                           word-transfer side effects tested; 12288
@@ -45,6 +46,10 @@ ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               pending  No complete original boot yet.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
+SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
+                                          sampled noise/framing, overrun, flag-clear
+                                          sequences and pin routing tested. See
+                                          mcu-sci.txt for unresolved flag timing.
 Voice management and audio        pending  No original audio generation or PCM output.
 Persistent storage               pending  NAND geometry/ECC and contents unresolved.
 Original update and recovery      pending  Helpers and recovery entry recovered;
@@ -53,14 +58,14 @@ Damaged updates/transfer loss     partial  Offline parser rejection only;
                                           no emulated transport/update proof.
 Power loss in every erase/program pending  Flash/NAND controllers, phase injection,
                                           reset/security/vector checks pending.
-Sanitizers and static analysis    partial  Strict gates pass on initial bring-up;
+Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU models;
                                           native dependencies instrumented too.
                                           No complete-board, audio or concurrency
                                           coverage yet.
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
                                           campaign (~20k executions) without findings;
                                           MCU model harness covers bus, map, GPIO,
-                                          PHY windows and reset: 67217 executions in
+                                          PHY/SCI clocks and reset: 63883 executions in
                                           61 s without sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.

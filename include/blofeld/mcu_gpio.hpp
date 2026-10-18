@@ -18,6 +18,12 @@ struct PinDrive {
   std::uint8_t floating = 0;
 };
 
+struct PinFunction {
+  std::uint8_t inputs = 0;
+  std::uint8_t outputs = 0;
+  std::uint8_t levels = 0;
+};
+
 // Logical GPIO and explicit external drives, with unknown inputs tracked.
 // Electrical transition/synchronizer timing and alternate peripheral functions
 // are not yet a complete board model.
@@ -26,6 +32,8 @@ public:
   McuGpio();
   void reset();
   void set_drive(McuPort port, PinDrive drive);
+  void set_function(McuPort port, PinFunction function);
+  [[nodiscard]] std::uint8_t read_pad(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
   void write(ByteWrite write);
@@ -41,6 +49,7 @@ private:
     std::uint8_t pull_enable = 0;
     std::uint8_t pull_down = 0;
     PinDrive external;
+    PinFunction function{};
   };
 
   [[nodiscard]] std::uint8_t sample(McuPort port, std::uint8_t requested) const;

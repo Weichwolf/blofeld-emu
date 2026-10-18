@@ -6,9 +6,12 @@
 #include "blofeld/mcu_clock.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_memory.hpp"
+#include "blofeld/mcu_sci.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -25,6 +28,7 @@ void McuBus::reset() {
   memory_.reset();
   gpio_.reset();
   clock_.reset();
+  sci_.reset();
   timer_control_ = 0;
   ++revision_;
 }
@@ -34,10 +38,11 @@ bool McuBus::reserved_register(const std::uint16_t offset) {
   return offset >= reserved_sci_end && offset < reserved_flash_begin;
 }
 
-std::uint8_t McuBus::read_register(const std::uint16_t offset) const {
+std::uint8_t McuBus::read_register(const std::uint16_t offset) {
   if (!McuMemory::register_name(offset).empty()) { return memory_.read_register(offset); }
   if (!McuGpio::register_name(offset).empty()) { return gpio_.read(offset); }
   if (!McuClock::register_name(offset).empty()) { return clock_.read(offset); }
+  if (!McuSci::register_name(offset).empty()) { return sci_.read(offset); }
   if (offset == hc12::smramcfg || offset == hc12::smramstat) { return 0; }
   if (reserved_register(offset)) { return 0; }
   if (offset == hc12::tscr1) { return timer_control_; }
@@ -61,6 +66,11 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   if (!clock_name.empty()) {
     clock_.write(write);
     return clock_name;
+  }
+  const auto sci_name = McuSci::register_name(offset);
+  if (!sci_name.empty()) {
+    sci_.write(write);
+    return sci_name;
   }
   if (reserved_register(offset)) { return "reserved/write ignored"; }
   if (offset == hc12::tscr1) {
@@ -90,6 +100,7 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
   if (location.space == McuSpace::registers) {
     try {
       const auto name = write_register({.address = location.offset, .value = value});
+      sync_sci_pins();
       if (observer_) {
         observer_({.write = true, .address = address, .value = value, .name = name});
       }
@@ -129,6 +140,45 @@ void McuBus::set_pin_drive(const McuPort port, const PinDrive drive) {
 
 void McuBus::observe_phy(const PhyClockWindow window) {
   clock_.observe_phy(window);
+}
+
+void McuBus::sync_sci_pins() {
+  constexpr unsigned small_tx = 0x20;
+  const bool small_package = (gpio_.read(hc12::modrr) & 1U) != 0;
+  const auto transmit = sci_.transmit_level();
+  const auto tx_mask = static_cast<std::uint8_t>(small_package ? small_tx : 8);
+  const auto rx_mask = static_cast<std::uint8_t>(small_package ? 16 : 4);
+  gpio_.set_function(McuPort::r, {});
+  gpio_.set_function(McuPort::s, {});
+  gpio_.set_function(small_package ? McuPort::s : McuPort::r,
+                     {.inputs = static_cast<std::uint8_t>(sci_.receiver_enabled() ? rx_mask : 0),
+                      .outputs = static_cast<std::uint8_t>(transmit ? tx_mask : 0),
+                      .levels = static_cast<std::uint8_t>(transmit && *transmit ? tx_mask : 0)});
+}
+
+void McuBus::advance_sci(const unsigned bus_cycles) {
+  if (bus_cycles == 0) { return; }
+  constexpr unsigned maximum_cycles = 1048576;
+  if (bus_cycles > maximum_cycles) { throw Fault("SCI board clock slice exceeds cycle limit"); }
+  const bool small_package = (gpio_.read(hc12::modrr) & 1U) != 0;
+  constexpr unsigned small_tx = 0x20;
+  const auto rx_mask = static_cast<std::uint8_t>(small_package ? 16 : 4);
+  const auto tx_mask = static_cast<std::uint8_t>(small_package ? small_tx : 8);
+  const auto port = small_package ? McuPort::s : McuPort::r;
+  unsigned remaining = bus_cycles;
+  while (remaining != 0) {
+    const auto until_sample = sci_.bus_cycles_until_sample();
+    const auto count = until_sample == 0 ? remaining : std::min(remaining, until_sample);
+    std::optional<bool> receive;
+    if (until_sample != 0 && count == until_sample && sci_.receiver_enabled()) {
+      receive = (gpio_.read_pad(port, rx_mask) & rx_mask) != 0;
+    }
+    const auto previous = sci_.transmit_level();
+    sci_.advance({.bus_cycles = count, .receive_level = receive});
+    remaining -= count;
+    if (sci_.transmit_level() != previous) { sync_sci_pins(); }
+    if (sci_.transmit_level()) { static_cast<void>(gpio_.read_pad(port, tx_mask)); }
+  }
 }
 
 void McuBus::set_observer(std::function<void(const BusEvent &)> observer) {

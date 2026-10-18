@@ -100,6 +100,20 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
   ports_[index].external = drive;
 }
 
+void McuGpio::set_function(const McuPort port, const PinFunction function) {
+  const auto index = port_index(port);
+  if ((function.inputs & function.outputs) != 0 || (function.levels & ~function.outputs) != 0 ||
+      ((function.inputs | function.outputs) & ~specs[index].valid) != 0) {
+    throw Fault("Invalid MCU GPIO peripheral-function masks");
+  }
+  ports_[index].function = function;
+}
+
+std::uint8_t McuGpio::read_pad(const McuPort port, const std::uint8_t mask) const {
+  if ((mask & ~specs[port_index(port)].valid) != 0) { throw Fault("Invalid MCU GPIO sample mask"); }
+  return sample(port, mask);
+}
+
 std::uint8_t McuGpio::tied_low(const McuPort port) const {
   if ((routing_ & 3U) != 3) { return 0; }
   switch (port) {
@@ -122,12 +136,16 @@ std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) c
   const auto index = port_index(port);
   const auto &state = ports_[index];
   const auto tied = static_cast<unsigned>(tied_low(port));
-  const auto direction = static_cast<unsigned>(state.direction);
-  const auto output = direction & state.latch_known & ~tied;
+  const auto &function = state.function;
+  const auto functions = static_cast<unsigned>(function.inputs) | function.outputs;
+  const auto direction = (state.direction & ~functions) | function.outputs;
+  const auto latch = (state.latch & ~static_cast<unsigned>(function.outputs)) | function.levels;
+  const auto latch_known = static_cast<unsigned>(state.latch_known) | function.outputs;
+  const auto output = direction & latch_known & ~tied;
   unsigned known = tied | state.external.mask | output;
-  unsigned value = (state.external.levels | (state.latch & output)) & ~tied;
+  unsigned value = (state.external.levels | (latch & output)) & ~tied;
   const auto conflict =
-      state.external.mask & (tied | output) & (state.external.levels ^ (state.latch & ~tied));
+      state.external.mask & (tied | output) & (state.external.levels ^ (latch & ~tied));
   if ((conflict & requested) != 0) {
     throw Fault("MCU GPIO output contention at " + hex(specs[index].base));
   }
@@ -137,7 +155,8 @@ std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) c
   if (port == McuPort::e) {
     pull_enable = (pull_control_ & port_e_clock_disable) != 0 ? port_e_pull_mask : 0;
   }
-  const auto weak = state.external.floating & pull_enable & ~direction & ~tied;
+  const auto weak =
+      state.external.floating & pull_enable & ~static_cast<unsigned>(direction) & ~tied;
   known |= weak;
   value |= weak & ~static_cast<unsigned>(state.pull_down);
   const auto unknown = requested & ~known & specs[index].valid;

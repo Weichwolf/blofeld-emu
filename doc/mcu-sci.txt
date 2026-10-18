@@ -1,0 +1,70 @@
+MC9S12UF32 SCI: serial execution model and limits
+
+Scope
+This is a native NRZ transmitter/receiver driven by explicit bus-clock cycles and
+RX pad levels. It is not a host MIDI port, a complete board clock scheduler or a
+stock-hardware validation. The CLI does not yet advance peripheral clocks.
+Run the synthetic checks with build/strict/blofeld-sci-test, or all strict gates
+with cmake --build build/strict --target quality.
+
+Registers
+- The eight registers at reset addresses 0x00c8..0x00cf follow the UF32 integration
+  map. The generic module's infrared/narrow-pulse and TXPOL/RXPOL bits are absent
+  on this chip and read zero. SCIBDL resets to 4; baud generation remains stopped
+  until TE or RE has first been enabled. Divisor zero disables generation.
+- SCIBDH stages five baud bits, committed by SCIBDL. The module guide does not
+  define a correct high-byte readback between those writes; such reads fail.
+- SCIDR has separate receive and transmit storage, plus persistent T8 and R8.
+  SCISR1 resets to 0xc0. Reads latch only flags actually observed. Reading or
+  writing SCIDRL subsequently clears the corresponding observed flags. SCIDRH
+  access alone does not acknowledge a receive word; status writes do nothing.
+- Overrun retains the older unread word. New framing/noise errors do not replace
+  that word's errors. FE blocks reception until acknowledged. IDLE requires a
+  new received frame after it has been cleared; RAF clears on an idle character.
+
+Transmit and receive
+- The baud divider preserves fractional sample-clock phase across advance calls.
+  Each bit has 16 sample periods. TE's rising edge starts a whole idle preamble;
+  queued data transfers at 9/16 of its last bit. TDRE reflects buffer-to-shifter
+  transfer, while TC waits for the final stop bit. Back-to-back frames need no
+  artificial idle gap. Disabling TE finishes an already loaded frame before
+  releasing the GPIO pad. Toggling TE can queue another preamble.
+- Frames contain start, eight or nine serial slots, and stop, LSB first. Parity
+  replaces the most significant slot when enabled. Receive shift bits are
+  retained in SCIDR alongside parity checking; this interpretation follows the
+  module's block diagram and R8 definition and still needs silicon calibration.
+- RX start qualification requires three preceding high samples and majority
+  verification at RT3/5/7. Data and stop use RT8/9/10 majorities with noise flags.
+  Valid falling data transitions rephase the receiver. Clean matched-baud frames,
+  all data bytes, sample-table vectors and selected error sequences are tested.
+  Complete mismatch, edge-phase, synchronizer and electrical behavior is unproven.
+- The guide specifies stop sampling but does not unambiguously locate every
+  SCIDR/status transfer edge. Register reads between the stop decision and the
+  end of the bit fail explicitly. After that interval the received frame is
+  available. Resolving this interval is required for a complete timing model.
+
+Board integration
+- Explicit bus-clock slices enter through McuBus::advance_sci. The caller must
+  split slices at external RX transitions. The bus processes each SCI sample,
+  updates TX pads and checks known output contention, including intermediate
+  transmitted bits. Unknown RX inputs fail when a sample is required.
+- MODRR selects PR3/PR2 for TX/RX in 100-pin mode and PS5/PS4 in 64-pin mode.
+  Peripheral functions override GPIO pad direction; GPIO latches and physical
+  pad samples remain separate. This currently models SCI as the sole alternate
+  function owner; CF/ATA/USB test-mode priority and pad delay are still pending.
+- With explicit port-E and PHY-window fixtures, original firmware 1.25 writes
+  SBR=60, SCICR1=8 and SCICR2=12, then reaches timer input-capture configuration.
+  At 30 MHz module clock SBR=60 gives 31250 baud. This does not prove the board
+  clock rate, a completed boot, MIDI routing or controller operation.
+
+Unsupported behaviors
+Interrupt enables, loop/single-wire mode, receiver wakeup and send-break requests
+fail. Mid-frame format/baud changes also fail. Wait/stop behavior, precise flag
+transfer timing, host MIDI ports and complete CPU/peripheral scheduling remain
+pending. No physical MIDI traffic is sent by the tests or fuzz harness.
+
+References
+doc/hardware/sources.json pins the official NXP bundle 9S12UF32_ZIP.zip.
+S12SCIV4 sections 3, 4.4, 4.5 and 4.6 describe the SCI module. UF32-specific masks
+and routing use 9S12UF32DGV1 sections 1, 2 and 15, and S12UF32PIMV2 tables 2-1/2-2
+and its port/module-routing definitions. Physical Blofeld wiring is unverified.

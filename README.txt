@@ -42,6 +42,8 @@ original ZIP are explicitly skipped when that private reference is absent.
 
 Explicit simulated pin inputs can explore the next boot stage; see
 doc/mcu-model.txt for the implemented map, GPIO behavior and remaining limits.
+doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
+it does not yet provide a host MIDI port or automatic peripheral scheduling.
 The native HC12 description is patched and recompiled locally for independently
 verified BRSET/BRN corrections; no installed Ghidra files are modified.
 
@@ -62,7 +64,7 @@ findings; keep proprietary seeds and derived corpus members under doc/local/.
 See AGENTS.md for the binding development rules and THIRD_PARTY.txt for licenses.
 
 The separate mcu-model-fuzz target exercises mapping, pin drives, unknown-byte
-tracking, PHY clock observations, accesses and reset sequences using synthetic bytes:
+tracking, PHY/SCI clocks, accesses and reset sequences using synthetic bytes:
   cmake --build build/fuzz --target mcu-model-fuzz
   mkdir -p doc/local/mcu-fuzz-corpus doc/local/mcu-fuzz-artifacts
   build/fuzz/mcu-model-fuzz doc/local/mcu-fuzz-corpus -artifact_prefix=doc/local/mcu-fuzz-artifacts/ -max_len=1536 -max_total_time=60

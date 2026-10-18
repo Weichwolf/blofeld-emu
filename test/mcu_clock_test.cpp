@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace {
 // Independent expectations: 9S12UF32DGV1 A.4.3, S12CRGUV1 section 3,
@@ -245,7 +246,22 @@ void test_original_boot_clock_boundary(const std::filesystem::path &reference) {
   cpu.step();
   cpu.step();
   require(cpu.state().pc == sci_setup_pc, "Original reset reaches SCI setup after clock selection");
-  reject([&cpu] { cpu.step(); }, "SCI baud write remains unsupported");
+  constexpr unsigned sci_setup_steps = 6;
+  for (unsigned index = 0; index < sci_setup_steps; ++index) { cpu.step(); }
+  constexpr unsigned timer_setup_pc = 0x8063;
+  constexpr unsigned sci_baud_low = 0xc9;
+  constexpr unsigned sci_control2 = 0xcb;
+  constexpr unsigned midi_divider = 60;
+  require(bus.read(sci_baud_low) == midi_divider && bus.read(sci_control2) == 12,
+          "Original firmware sets the MIDI baud divisor and enables RX/TX");
+  require(cpu.state().pc == timer_setup_pc, "Original reset reaches timer configuration");
+  bool timer_write_rejected = false;
+  try {
+    cpu.step();
+  } catch (const blofeld::Fault &fault) {
+    timer_write_rejected = std::string_view(fault.what()).contains("MCU write at 0x004d");
+  }
+  require(timer_write_rejected, "The next original instruction fails at the timer register write");
 }
 }
 
