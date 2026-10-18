@@ -2,16 +2,49 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_gpio.hpp"
+#include "blofeld/dsp_timers.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 
+namespace {
+constexpr unsigned timer_clock_action = 17;
+constexpr unsigned timer_drive_action = 18;
+constexpr unsigned timer_read_action = 19;
+constexpr unsigned timer_vectors_action = 20;
+constexpr unsigned timer_ack_action = 21;
+constexpr unsigned action_count = 22;
+
+void timer_action(blofeld::DspBus &bus,
+                  const std::uint8_t *record,
+                  const std::uint32_t address,
+                  const std::uint32_t value) {
+  switch ((record[0] % action_count) - timer_clock_action) {
+    case 0: {
+      const auto upper = (static_cast<std::uint64_t>(record[1]) << 24U) |
+                         (static_cast<std::uint64_t>(record[2]) << 16U) |
+                         (static_cast<std::uint64_t>(record[3]) << 8U) | record[4];
+      bus.timers().advance_clk2((upper << 32U) | value);
+      break;
+    }
+    case 1:
+      bus.timers().set_tio_drive(
+          record[1] % 4U,
+          (record[8] & 2U) != 0 ? std::nullopt : std::optional<bool>((record[8] & 1U) != 0));
+      break;
+    case 2: static_cast<void>(bus.timers().read(address, value)); break;
+    case 3: static_cast<void>(bus.timers().interrupt_vectors()); break;
+    case 4: bus.timers().acknowledge_interrupt(value); break;
+    default: throw blofeld::Fault("Invalid DSP timer fuzzer action");
+  }
+}
+}
+
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_t size) {
   constexpr std::size_t stride = 9;
   constexpr std::size_t operation_limit = 256;
-  constexpr unsigned action_count = 17;
   constexpr unsigned word_mask = 0xffffff;
   blofeld::DspBus bus;
   const auto count = size / stride < operation_limit ? size / stride : operation_limit;
@@ -62,7 +95,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
                   .read(static_cast<blofeld::DspGpioRegister>(record[2] % 4U), value));
           break;
         case 15:
-          static_cast<void>(bus.access_gpio_bit(
+          static_cast<void>(bus.access_peripheral_bit(
               {.space = area,
                .address = address,
                .bit = record[5],
@@ -74,6 +107,11 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
                       .value = value,
                       .mask = address});
           break;
+        case timer_clock_action:
+        case timer_drive_action:
+        case timer_read_action:
+        case timer_vectors_action:
+        case timer_ack_action: timer_action(bus, record, address, value); break;
         default: throw blofeld::Fault("Invalid DSP model-fuzzer action");
       }
     } catch (const blofeld::Fault &) {

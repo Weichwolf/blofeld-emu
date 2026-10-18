@@ -4,6 +4,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_gpio.hpp"
 #include "blofeld/dsp_shi.hpp"
+#include "blofeld/dsp_timers.hpp"
 #include "dsp56kEmu/assembler.h"
 
 #include <array>
@@ -246,6 +247,87 @@ void test_native_code_write_and_decoder_invalidation() {
   require(cpu.state().x == changed, "Changing a cached P opcode changes its destination register");
 }
 
+void test_native_timer_input_poll_and_reset() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("btst #0,x:<<$ffff8b");
+  const auto wait = program.pc();
+  program.emit("brclr #12,x:<<$ffff8b,$0");
+  const auto ready = program.pc();
+  program.emit("movep x:<<$ffff88,x0");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  cpu.step();
+  require((cpu.state().sr & 1U) == 0,
+          "Known TE can be tested while the separate live DI is unknown");
+  reject([&cpu] { cpu.step(); }, "A native NAND-style ready poll cannot fabricate unknown TIO1");
+  bus.timers().set_tio_drive(1, false);
+  cpu.reset_spi_boot();
+  cpu.step();
+  const auto status = cpu.state().sr;
+  for (unsigned index = 0; index < 3; ++index) {
+    cpu.step();
+    require(cpu.state().pc == wait && cpu.state().sr == status,
+            "Native BRCLR polls the observed low DI without changing flags");
+  }
+  bus.timers().set_tio_drive(1, true);
+  cpu.step();
+  require(cpu.state().pc == ready,
+          "Only an explicit high TIO1 observation releases the ready loop");
+  cpu.step();
+  require((cpu.state().x & word_mask) == 0, "GPIO polling does not invent timer counter progress");
+  cpu.reset_spi_boot();
+  constexpr unsigned tcsr1 = 0xffff8b;
+  constexpr unsigned input_bit = 0x1000;
+  require(bus.timers().read(tcsr1, input_bit) == input_bit && bus.timers().read(tcsr1, 1) == 0,
+          "Hardware reset clears timer control while preserving the externally held ready level");
+}
+
+void test_native_timer_w1c_word_writeback() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("bset #13,x:<<$ffff8f");
+  program.emit("movep x:<<$ffff8f,x0");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  constexpr unsigned tcsr0 = 0xffff8f;
+  constexpr unsigned tlr0 = 0xffff8e;
+  constexpr unsigned tcpr0 = 0xffff8d;
+  constexpr unsigned tcr0 = 0xffff8c;
+  constexpr unsigned flags = 0x300000;
+  constexpr unsigned data_output = 0x2000;
+  bus.timers().write({.address = tlr0, .value = word_mask});
+  bus.timers().write({.address = tcpr0, .value = word_mask});
+  bus.timers().write({.address = tcsr0, .value = 7});
+  bus.timers().advance_clk2(2);
+  require(bus.timers().read(tcsr0, flags) == flags,
+          "Known compare followed by wrap sets both W1C flags");
+  cpu.step();
+  require(
+      (cpu.state().sr & 1U) == 0 && bus.timers().read(tcsr0, data_output) == data_output &&
+          bus.timers().read(tcsr0, flags) == 0 && bus.timers().interrupt_vectors().empty(),
+      "BSET DO performs full TCSR writeback and clears both read-as-one W1C flags per NXP warning");
+  require(bus.timers().read(tcr0) == 0,
+          "One CPU reference step contributes no implicit CLK/2 event");
+  reject([&cpu] { cpu.step(); },
+         "Successful control RMW cannot make a live unknown DI word-readable");
+}
+
+void test_native_timer_read_only_input_bit() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("bclr #12,x:<<$ffff8b");
+  program.emit("btst #12,x:<<$ffff8b");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  bus.timers().set_tio_drive(1, true);
+  for (unsigned index = 0; index < program.instructions(); ++index) {
+    cpu.step();
+    require((cpu.state().sr & 1U) == 1,
+            "BCLR DI observes old high Carry but cannot clear the read-only pin input");
+  }
+}
+
 void test_native_symbolic_gpio_bits_and_effective_address() {
   blofeld::DspBus bus;
   Program program;
@@ -483,6 +565,16 @@ void test_software_reset_preserves_clock_and_memory_mode() {
   bus.pll().write(pll_command);
   bus.shi().write({.address = hcsr, .value = enable_spi_fifo});
   bus.pll().observe_pinit(true);
+  constexpr unsigned timer_control = 0xffff8f;
+  constexpr unsigned timer_compare_flag = 0x200000;
+  constexpr unsigned timer_input = 0x1000;
+  bus.timers().set_tio_drive(0, true);
+  bus.timers().write({.address = timer_control - 1, .value = 5});
+  bus.timers().write({.address = timer_control - 2, .value = 5});
+  bus.timers().write({.address = timer_control, .value = 1});
+  bus.timers().advance_clk2(1);
+  require(bus.timers().read(timer_control, timer_compare_flag) == timer_compare_flag,
+          "An explicitly clocked timer compare is pending before native RESET");
   cpu.step();
   constexpr unsigned retained_mode = 0x600085;
   constexpr unsigned retained_pointer = 0x55;
@@ -492,6 +584,10 @@ void test_software_reset_preserves_clock_and_memory_mode() {
   require(bus.pll().read() == pll_command && bus.read({.address = alias}) == input &&
               (bus.shi().read(hcsr) & 1U) == 0,
           "Software RESET clears SHI but preserves CPM PLL control and the OMR memory mapping");
+  require(bus.timers().read(timer_control - 3) == 0 &&
+              bus.timers().read(timer_control, timer_compare_flag | 1U) == 0 &&
+              bus.timers().read(timer_control, timer_input) == timer_input,
+          "Executed RESET clears timer count/control/flags and retains the external TIO drive");
   cpu.reset_spi_boot();
   constexpr unsigned pinit_high_control = 0x04601d;
   require(bus.pll().read() == pinit_high_control && cpu.state().omr == 5,
@@ -644,6 +740,9 @@ int main() {
     test_memory_boundaries_rom_and_retained_switch();
     test_native_reset_fetch_fault_and_arithmetic();
     test_native_code_write_and_decoder_invalidation();
+    test_native_timer_input_poll_and_reset();
+    test_native_timer_w1c_word_writeback();
+    test_native_timer_read_only_input_bit();
     test_native_symbolic_gpio_bits_and_effective_address();
     test_native_symbolic_port_f_pp_bits();
     test_native_symbolic_bit_branches();

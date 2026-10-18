@@ -84,6 +84,9 @@ write, preserving FIFO side effects. EA decoding/postincrement occurs once.
 BTST and bit branches share the checked read path. Native tests cover Carry,
 mixed GPIO states, pp/qq/EA and RAM aa forms, FIFO consumption and bit boundaries.
 These hooks do not establish bus-phase, interrupt or pad timing.
+The board adapter also handles timer TCSR bits, retaining full writable-word
+writeback and its W1C effects while ignoring the read-only DI field on writes.
+No additional SDK change is needed for that timer-specific board behavior.
 
 The SDK checkout stays unchanged. CMake stages and patches private build copies,
 then updates only changed output files so a small patch edit does not rewrite

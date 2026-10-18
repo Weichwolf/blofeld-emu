@@ -142,7 +142,7 @@ void test_symbolic_bit_access_preserves_unknown_state() {
        {.operation = Operation::change, .old = true, .level = 0},
        {.operation = Operation::test, .old = false, .level = 0}}};
   for (const auto &expected : cases) {
-    const auto old = bus.access_gpio_bit(
+    const auto old = bus.access_peripheral_bit(
         {.space = blofeld::DspSpace::x, .address = pdr, .operation = expected.operation});
     const auto output = gpio.outputs();
     require(old.has_value() && *old == expected.old && output.mask == 3 && output.known == 1 &&
@@ -153,23 +153,23 @@ void test_symbolic_bit_access_preserves_unknown_state() {
          "Masked bit success does not initialize a whole GPIO data word");
   reject(
       [&bus] {
-        static_cast<void>(bus.access_gpio_bit({.space = blofeld::DspSpace::x,
-                                               .address = pdr,
-                                               .bit = 1,
-                                               .operation = Operation::set}));
+        static_cast<void>(bus.access_peripheral_bit({.space = blofeld::DspSpace::x,
+                                                     .address = pdr,
+                                                     .bit = 1,
+                                                     .operation = Operation::set}));
       },
       "BSET needs the unknown previous bit for Carry even though its new value would be one");
-  const auto old = bus.access_gpio_bit(
+  const auto old = bus.access_peripheral_bit(
       {.space = blofeld::DspSpace::x, .address = prr, .bit = 2, .operation = Operation::set});
   require(old.has_value() && !*old && gpio.outputs().mask == 7 && gpio.outputs().known == 1,
           "A control bit write preserves neighboring direction bits and cold data latches");
   constexpr unsigned fifo = 0xffff94;
-  require(!bus.access_gpio_bit({.space = blofeld::DspSpace::x, .address = fifo}).has_value(),
+  require(!bus.access_peripheral_bit({.space = blofeld::DspSpace::x, .address = fifo}).has_value(),
           "Declining a non-GPIO access performs no empty/destructive FIFO read");
   constexpr unsigned invalid_bit = 24;
   reject(
       [&bus] {
-        static_cast<void>(bus.access_gpio_bit(
+        static_cast<void>(bus.access_peripheral_bit(
             {.space = blofeld::DspSpace::x, .address = pdr, .bit = invalid_bit}));
       },
       "Out-of-range bit indices are rejected before shifting");

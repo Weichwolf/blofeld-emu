@@ -42,6 +42,21 @@ def main() -> None:
             (16, 0, 1, 1), (16, 0, 1, 0), (15, 1, 0xFFFF94, 0),
             (0, 1, 0xFFFFBD, 0), (13, 0, 0, 0)]
     (output / "symbolic-gpio-bit-operations").write_bytes(b"".join(record(*row) for row in bits))
+    timer = [(0, 1, 0xFFFF8B, 0), (19, 0, 0xFFFF8B, 1), (18, 1, 0, 0),
+             (19, 0, 0xFFFF8B, 0x1000), (18, 1, 0, 1), (19, 0, 0xFFFF8B, 0x1000),
+             (1, 1, 0xFFFF86, 3), (1, 1, 0xFFFF85, 5), (1, 1, 0xFFFF87, 0x201),
+             (17, 0, 0, 3), (0, 1, 0xFFFF87, 0), (15, 1, 0xFFFF87, 0x15010000),
+             (1, 1, 0xFFFF87, 0x200207), (17, 255, 0xFFFFFF, 0xFFFFFFFF),
+             (20, 0, 0, 0), (21, 0, 0, 0x5C), (13, 0, 0, 0),
+             (1, 1, 0xFFFF8E, 0xFFFFFE), (1, 1, 0xFFFF8D, 0xFFFFFF),
+             (1, 1, 0xFFFF8F, 7), (17, 0, 0, 3), (15, 1, 0xFFFF8F, 0x0D020000)]
+    (output / "mode-zero-timers-and-tio").write_bytes(b"".join(record(*row) for row in timer))
+    prescaler = [(1, 1, 0xFFFF83, 2), (1, 1, 0xFFFF86, 3),
+                 (1, 1, 0xFFFF85, 5), (1, 1, 0xFFFF87, 0x8201),
+                 (17, 0, 0, 2), (0, 1, 0xFFFF82, 0), (17, 0, 0, 1),
+                 (0, 1, 0xFFFF84, 0), (1, 1, 0xFFFF83, 0), (17, 0, 0, 6),
+                 (17, 255, 0xFFFFFF, 0xFFFFFFFF), (20, 0, 0, 0)]
+    (output / "shared-prescaler-clocks").write_bytes(b"".join(record(*row) for row in prescaler))
     for area in range(3):
         base = 0xFF0000 if area == 0 else 0x4000
         rows = [(6, area, base, 0x123456), (0, area, base, 0), (0, area, base + 2, 0),

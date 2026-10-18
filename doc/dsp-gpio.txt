@@ -41,8 +41,9 @@ GPIO configuration bits use the same hook and retain neighboring bits.
 
 The hook models architectural GPIO state without inserting guessed pad levels.
 It does not expose separate read/write bus phases or establish cycle timing.
-Other peripherals decline the hook without side effects and retain their normal
-word accesses. In particular, a SHI FIFO bit test performs exactly one destructive
+Timer TCSR uses a separate full writable-word RMW path, including its W1C effects
+(dsp-timers.txt). Other peripherals decline the hook without side effects and
+retain normal word accesses. A SHI FIFO bit test performs exactly one destructive
 read; no preliminary read is used to construct a masked writeback.
 
 Reserved upper register bits read zero; nonzero writes are conservatively
@@ -76,7 +77,8 @@ reads/writes, bit requests and resets.
 
 Limits and original-firmware execution
 No board pin wiring, NAND device, ESAI stream, electrical/synchronizer latency or
-stock-device equivalence is established. Port D and timer GPIO remain pending.
+stock-device equivalence is established. Port D remains pending; mode-zero TIO
+GPIO and timer clocks have separate coverage in dsp-timers.txt.
 The original DSP still stops before reserved Y:002000 during its RAM-clear loop;
 no loop is skipped or reserved memory write discarded to reach these GPIOs.
 NXP section 3.1.1 warns against reserved-memory access and does not establish its

@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_gpio.hpp"
+#include "blofeld/dsp_timers.hpp"
 
 #include <array>
 #include <cstddef>
@@ -29,6 +30,17 @@ constexpr unsigned msw = 0x600000;
 constexpr unsigned switch_cycles = 3;
 constexpr unsigned bcr_reset = 0x1fffff;
 constexpr unsigned port_f_bus_control = 0x01ffff;
+
+std::uint32_t
+change_bit(const std::uint32_t value, const std::uint32_t mask, const DspBitOperation operation) {
+  switch (operation) {
+    case DspBitOperation::test: return value;
+    case DspBitOperation::clear: return value & ~mask;
+    case DspBitOperation::set: return value | mask;
+    case DspBitOperation::change: return value ^ mask;
+    default: throw Fault("Invalid DSP peripheral bit operation");
+  }
+}
 
 struct GpioRegister {
   DspPort port = DspPort::c;
@@ -100,6 +112,7 @@ void DspBus::reset() {
 
 void DspBus::reset_peripherals() {
   shi_.reset();
+  timers_.reset();
   for (auto &port : gpio_) { port.reset(); }
 }
 
@@ -109,13 +122,26 @@ DspGpio &DspBus::gpio(const DspPort port) {
   return gpio_.at(index);
 }
 
-std::optional<bool> DspBus::access_gpio_bit(const DspBitAccess access) {
+std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   constexpr unsigned word_bits = 24;
   const DspAddress target{.space = access.space, .address = access.address};
   static_cast<void>(bank(access.space));
   if (access.address > word_mask || access.bit >= word_bits ||
       static_cast<unsigned>(access.operation) > static_cast<unsigned>(DspBitOperation::change)) {
     throw Fault("Invalid DSP bit access at " + address_text(target));
+  }
+  const auto mask = 1U << access.bit;
+  if (access.space == DspSpace::x && DspTimers::is_control(access.address)) {
+    constexpr unsigned timer_input = 0x1000;
+    const bool old = (timers_.read(access.address, mask) & mask) != 0;
+    if (access.operation != DspBitOperation::test) {
+      // DI is read-only. All other TCSR fields participate in word writeback,
+      // including unselected W1C flags, exactly as in a hardware RMW access.
+      const auto current = timers_.read(access.address, word_mask & ~timer_input);
+      timers_.write(
+          {.address = access.address, .value = change_bit(current, mask, access.operation)});
+    }
+    return old;
   }
   const auto mapping = gpio_register(target);
   if (!mapping.has_value()) { return std::nullopt; }
@@ -124,16 +150,9 @@ std::optional<bool> DspBus::access_gpio_bit(const DspBitAccess access) {
                 ": Port F requires BCR=0x01ffff");
   }
   auto &port = gpio(mapping->port);
-  const auto mask = 1U << access.bit;
   const bool old = (port.read(mapping->reg, mask) & mask) != 0;
-  unsigned value = 0;
-  switch (access.operation) {
-    case DspBitOperation::test: return old;
-    case DspBitOperation::clear: break;
-    case DspBitOperation::set: value = mask; break;
-    case DspBitOperation::change: value = old ? 0U : mask; break;
-    default: throw Fault("Invalid DSP GPIO bit operation");
-  }
+  if (access.operation == DspBitOperation::test) { return old; }
+  const auto value = change_bit(old ? mask : 0U, mask, access.operation);
   port.write({.reg = mapping->reg, .value = value, .mask = mask});
   return old;
 }
@@ -273,6 +292,9 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
   constexpr unsigned first_priority = 0xfffffe;
   constexpr unsigned pll_control = 0xfffffd;
   constexpr unsigned bus_control = 0xfffffb;
+  if (access.space == DspSpace::x && DspTimers::handles(access.address)) {
+    return timers_.read(access.address);
+  }
   if (const auto target = gpio_register(access)) {
     if (target->port == DspPort::f && bus_control_ != port_f_bus_control) {
       throw Fault("Unqualified DSP GPIO read at " + address_text(access) +
@@ -301,6 +323,10 @@ void DspBus::write_peripheral(const DspStore access) {
   constexpr unsigned once_gdb = 0xfffffc;
   constexpr unsigned pll_control = 0xfffffd;
   constexpr unsigned bus_control = 0xfffffb;
+  if (access.space == DspSpace::x && DspTimers::handles(access.address)) {
+    timers_.write({.address = access.address, .value = access.value});
+    return;
+  }
   if (const auto target = gpio_register({.space = access.space, .address = access.address})) {
     if (target->port == DspPort::f && bus_control_ != port_f_bus_control) {
       throw Fault("Unqualified DSP GPIO write at " +

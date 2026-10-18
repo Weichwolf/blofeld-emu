@@ -4,6 +4,7 @@
 #include "blofeld/dsp_gpio.hpp"
 #include "blofeld/dsp_pll.hpp"
 #include "blofeld/dsp_shi.hpp"
+#include "blofeld/dsp_timers.hpp"
 
 #include <array>
 #include <cstddef>
@@ -54,7 +55,7 @@ public:
   void reset_peripherals();
   [[nodiscard]] std::uint32_t read(DspAddress access);
   void write(DspStore access);
-  [[nodiscard]] std::optional<bool> access_gpio_bit(DspBitAccess access);
+  [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);
@@ -66,6 +67,8 @@ public:
   [[nodiscard]] DspPll &pll() { return pll_; }
 
   [[nodiscard]] DspGpio &gpio(DspPort port);
+
+  [[nodiscard]] DspTimers &timers() { return timers_; }
 
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
@@ -92,6 +95,7 @@ private:
   std::array<Memory, 3> rom_;
   DspShi shi_;
   DspPll pll_;
+  DspTimers timers_;
   std::array<DspGpio, 3> gpio_{DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f)};
   std::uint32_t bus_control_ = 0;
   DspCodeChanges changes_;

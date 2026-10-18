@@ -96,7 +96,7 @@ public:
                  const dsp56k::TWord bit,
                  const dsp56k::PeripheralBitOp operation,
                  bool &old) override {
-    const auto result = bus_.access_gpio_bit(
+    const auto result = bus_.access_peripheral_bit(
         {.space = area_, .address = address, .bit = bit, .operation = bit_operation(operation)});
     if (!result.has_value()) { return false; }
     old = *result;

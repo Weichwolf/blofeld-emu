@@ -1,0 +1,85 @@
+DSP56371 mode-zero timers and TIO GPIO
+
+Reference: DSP56371UM chapter 11, especially 11.2.1, 11.3.1.1 and tables 11-1,
+11-3/11-4; Appendix C figures C-23..C-25; chapter 4 interrupt vector table.
+The pinned manual in hardware/sources.json remains an ignored local reference.
+
+Registers (X word addresses)
+  Timer 0: TCSR ffff8f, TLR ffff8e, TCPR ffff8d, TCR ffff8c
+  Timer 1: TCSR ffff8b, TLR ffff8a, TCPR ffff89, TCR ffff88
+  Timer 2: TCSR ffff87, TLR ffff86, TCPR ffff85, TCR ffff84
+  Shared prescaler: TPLR ffff83, TPCR ffff82
+TCR and TPCR are read-only; TLR is write-only. TCR/TPLR/TPCR reset to zero.
+TLR and TCPR reset content is undefined and remains unknown until supplied.
+Both hardware reset and peripheral RESET clear timer control/count/flags and
+restore undefined load/compare knowledge. External TIO observations survive.
+
+GPIO and input qualification
+Only timers 0/1 have TIO pins. TC=0 leaves the pins as GPIO independently of TE;
+DIR selects input/output and DO is the reset-defined output value. INV inverts
+the physical output and also the DI readback. Opposed known external/output
+drives fail. Unobserved inputs remain unknown and cannot become NAND-ready.
+Pin observations are qualified logical levels; synchronizer latency and the
+instantaneous DI reset latch are not timed here. Timer 2 has no external pin;
+its DI retains the documented zero reset value and pin-control use is rejected.
+Unused-pin silicon behavior remains part of stock-device qualification.
+
+Counter and prescaler clock model
+advance_clk2 consumes explicitly supplied internal CLK/2 rising-edge events.
+CPU instructions, bus reads, PCTL writes and wall-clock time add no such events.
+Mode 0 is implemented for all three counters. A TE rising transition clears TCR;
+the first timer edge loads TLR. Reaching TCPR sets TCF, and incrementing ffffff to
+zero sets TOF. With TRM set, the next edge after compare reloads TLR; that load
+does not itself generate an increment-overflow event. Disabling clears flags
+and freezes the counter; writing TE=1 while already enabled does not restart it.
+Live TLR changes apply on the next load, without immediately replacing TCR.
+
+The shared 21-bit down-counter is enabled only while a TE+PCE user exists. It
+loads PL on first enable and generates a pulse every PL+1 input clocks. Adding
+a second user preserves its phase. A new PL value applies at the next reload.
+Timers without PCE continue to see direct CLK/2 edges. Bulk advancement uses
+bounded modular arithmetic, including UINT64_MAX input and one-edge periods.
+Unknown load/compare values reject the entire batch without partially advancing
+another timer or the prescaler. Boundary expectations, including zero/equal
+compare and reload versus overflow, follow the manual's M-N+1 event model;
+stock-silicon edge-phase behavior is still unverified.
+
+Flags, RMW and interrupt sources
+TCF/TOF are W1C; writing zero preserves them. DI is read-only. Native bit tests
+can read a known control/status bit without requiring unrelated live DI.
+BCLR/BSET/BCHG perform full writable TCSR writeback. Unselected read-as-one W1C
+flags therefore clear too, matching NXP's warning against using BSET to clear
+only one flag. This is deliberately different from symbolic GPIO PDR merging.
+Servicing an enabled pending source clears its own flag. Relative vectors are
+54/56, 58/5a and 5c/5e for compare/overflow respectively; each timer enumerates
+overflow before compare. Cross-source CPU priority, delivery, vector frames and
+DMA event history are not established by this source-level interface. The bus
+still rejects enabled IPRP/IPRC configurations pending controller integration.
+
+Checks
+  ctest --test-dir build/strict -R '^(dsp_timers|native_dsp|original_dsp_boot)$' --output-on-failure
+Independent register/clock expectations cover reset permissions/unknown values,
+TIO polarity and contention, first preload, M-N+1 compare, reload, live preload,
+wrap/W1C, source acknowledgement, shared/direct clocks, PL changes/maxima,
+batch rejection and 64-bit boundaries. Native BRCLR uses observed TIO1, BCLR DI
+cannot overwrite its input, and BSET DO clears both existing W1C flags. Executed
+RESET clears timer count/control/flags while preserving the board input level.
+The model fuzzer includes timer registers, masks, clocks, pins and source IRQs.
+An independent literal edge sequence checks bulk results for eight preload/
+compare pairs in free-running and reload mode, with W1C and live preload changes.
+The oracle keeps its own pending-reload state and applies each manual clock transition.
+
+Unsupported / unqualified
+Nonzero TC modes (pulse/toggle, external counting, measurement, PWM, watchdog),
+external prescaler clocks, active PCE/TRM changes that keep TE enabled, live TCPR
+writes, wait/stop clock gating, electrical/PLL timing and full board scheduling
+fail or remain outside this interface. Disabling TE may also clear configuration.
+Table 11-1 permits TIO1 as prescaler source 2, whereas Appendix C marks it
+reserved; no external-source assumption is made. Clock batches aggregate sticky
+flags between observations; they do not replace a CPU/IRQ scheduler.
+
+The original DSP stage still stops on unqualified reserved Y:002000 writes.
+Its actual NAND-ready poll is not reached. The native timer tests use independent
+diagnostics, with no patched original loader, skipped clear loop or fake flash.
+Full boot, MIDI/audio, persistent storage, update/recovery and hardware comparison
+remain required by coverage.txt.
