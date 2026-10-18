@@ -77,6 +77,20 @@ pad skew nor that interval. Board routing, edge order and reset/clock behavior
 need qualification before direct combined boot can be claimed. The separate
 DSP fixture still uses host pin events (dsp-core.txt); no full boot is proven.
 
+Original application interrupt continuation
+A private continuation supplies PU0 high directly after its direction is released,
+PB3/PB5/PB6/PB7 low, and an explicit USB decoder state: full speed, not enumerated,
+not reset and not suspended. With
+no elapsed peripheral time, the MCU waits for RAM counter 182e. A second fixture
+supplies one configured RTI oscillator period at alternating visits to that wait,
+allowing an interrupted load to execute before the next delivery. The original
+handler at 88a5 increments the counter and scans GPIO; 255 interrupt entries and
+255 RTI returns release the wait at 86a4 after 2266847 completed instructions.
+No host counter writes or CPU-state patches cause that transition. Continuing
+stops after 2295981 instructions at PC 8ad2 on PORTB input mask 16 (hex), which
+has become unknown after GPIO direction changes. This is an explicit untimed
+interrupt experiment, not a calibrated oscillator/CPU ratio or complete boot.
+
 Limits
 Reaching an application entry does not establish a complete Blofeld boot. DSP
 loading, NAND/ROM assets, scheduled clocks/interrupts, actual MIDI/audio, update

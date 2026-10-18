@@ -27,8 +27,11 @@ Memory
   one-bus-cycle remap delay is not yet a complete within-instruction bus model.
 - Flash at 0x4000..0x7fff aliases 0x8000..0xbfff when ROMHM permits it; ROMON
   controls visibility. Flash writes still fail without a flash-controller model.
+- FCLKDIV, FSEC and FPROT normal-mode configuration, reset option loading and
+  protection windows are modeled separately (mcu-flash-config.txt). Command/status
+  registers and array programming still fail explicitly.
 - SmartMedia 10-bit SMRAM mode, paged-flash behavior, expanded/BDM modes and
-  flash controller operations remain unsupported. No successful flash update,
+  flash command operations remain unsupported. No successful flash update,
   recovery or power-loss behavior is inferred from these RAM tests.
 
 GPIO

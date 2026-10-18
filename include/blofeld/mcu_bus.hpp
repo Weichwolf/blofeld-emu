@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/mcu_clock.hpp"
+#include "blofeld/mcu_flash_config.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_interrupts.hpp"
 #include "blofeld/mcu_memory.hpp"
@@ -77,6 +78,7 @@ private:
   std::uint64_t code_revision_ = 0;
   mutable std::bitset<65536> decoded_bytes_;
   McuMemory memory_;
+  McuFlashConfig flash_config_;
   McuGpio gpio_;
   McuClock clock_;
   McuSci sci_;

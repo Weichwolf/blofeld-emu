@@ -75,6 +75,7 @@ add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp 
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
+  src/mcu_flash_config.cpp
   src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
@@ -96,6 +97,17 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-flash-config-test test/mcu_flash_config_test.cpp)
+  target_link_libraries(blofeld-flash-config-test PRIVATE blofeld_mcu)
+  add_test(NAME flash_config COMMAND blofeld-flash-config-test)
+  add_executable(blofeld-original-flash-config-test test/original_flash_config_test.cpp)
+  target_link_libraries(blofeld-original-flash-config-test PRIVATE blofeld_core)
+  add_test(NAME original_flash_config COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-flash-config-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-flash-config.trace")
+  set_tests_properties(original_flash_config PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-dsp-timers-test test/dsp_timers_test.cpp)
   target_link_libraries(blofeld-dsp-timers-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_timers COMMAND blofeld-dsp-timers-test)
@@ -166,7 +178,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-sender-test test/original_mcu_sender_test.cpp)
   target_link_libraries(blofeld-mcu-sender-test PRIVATE blofeld_core)
   add_test(NAME original_mcu_sender COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_mcu_sender.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
     $<TARGET_FILE:blofeld-mcu-sender-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-mcu-sender.trace")
@@ -198,6 +210,7 @@ add_custom_target(quality
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-mcu-sender-test
+    blofeld-flash-config-test blofeld-original-flash-config-test
   USES_TERMINAL)
 endif()
 

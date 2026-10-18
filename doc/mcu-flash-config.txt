@@ -1,0 +1,73 @@
+FTS32K configuration and protection reference
+
+Source: S12FTS32KV1/D V01.03 sections 3.3.1, 3.3.2 and 3.3.5, tables 3-4..3-9;
+UF32 integration in 9S12UF32DGV1/D section 10.1. Both are extracted from the
+official 9S12UF32_ZIP.zip identified in hardware/sources.json. The extracted
+S12FTS32KV1.pdf SHA-256 is:
+  ec5d95ac32a63dafa35fd11cb962362837b22610694b6fa605375ba1521bcb02
+
+Implemented normal-mode configuration
+- FCLKDIV (offset 0100) resets to zero. Its first write sets FDIVLD and latches
+  PRDIV8/FDIV; subsequent writes are ignored until reset. The queried oscillator
+  divisor is (FDIV+1) times the optional divide-by-eight prescaler. An unwritten
+  divider has no known configured divisor. No oscillator frequency, valid flash
+  programming clock, command timing or elapsed time is invented.
+- FSEC (0101) loads every bit from physical flash FF0F on reset and ignores
+  writes. Only SEC=10 reports unsecured and only KEYEN=10 enables the backdoor
+  configuration bitfield. Actual backdoor transactions, BDM restrictions and
+  special-mode security/unsecure algorithms remain unsupported.
+- FPROT (0104) loads from physical FF0D on reset. Normal-mode writes obey the
+  eight protection scenarios and their allowed transitions. Invalid scenarios
+  ignore the whole write. Each size field freezes while its corresponding range
+  disable bit is clear; sizes may be selected in the same write that enables a
+  range. NV6 remains an ordinary stored flag; the manual recommends leaving it
+  erased for future enhancements.
+- Byte protection queries use physical offsets 0000..7fff. Low windows are
+  512/1024/2048/4096 bytes and high windows 2048/4096/8192/16384 bytes. FPOPEN
+  selects protected windows or their complement. The whole-array-unprotected
+  predicate requires FPOPEN, FPHDIS and FPLDIS all set; it grants no permission
+  to execute a command without its other prerequisites.
+- MCU bus reads/writes honor INITRG relocation. Volatile register changes leave
+  flash contents intact; reset reloads the supplied image's option bytes.
+
+Command/status registers and flash array writes still fail explicitly. This
+configuration component does not implement a command state machine, interrupts,
+erase/program phases, persistence, reset-during-command or power-loss behavior.
+It supplies no fabricated command-ready flags or successful flash operations.
+
+Independent and original-code checks
+  ctest --test-dir build/strict -R '^(flash_config|original_flash_config)$' --output-on-failure
+
+Synthetic checks cover all divider/security byte values, the independent literal
+64-entry scenario transition table, all 65536 protection-byte writes and size
+locks, every byte in all 256 protection encodings (8388608 combinations), bus
+relocation and nonvolatile reload. Unknown
+command/status accesses and direct array writes remain visible failures.
+
+The optional original-code fixture verifies the private firmware ZIP identity,
+copies its unchanged 632-byte update helper into MCU RAM and selects the isolated
+flash-initialization entry with a diagnostic stack and masked interrupts. Four
+original instructions request FCLKDIV=48 and FPROT=ff; the test stops before
+FSTAT access and checks security, persistent fields and reset. The private trace
+contains original instruction text. This is a subroutine experiment, not reset
+boot, delivery through the original update transport or execution of an update.
+
+The update's raw security byte is not proof of installed hardware security.
+Static inspection of the original programming helper shows it forces SEC=10
+when programming the FF0E/FF0F word. That programming path is not yet executed;
+the constructor/reset tests describe only the image actually supplied to them.
+Full recovery, security/vector/protection validation under interrupted erase and
+program operations and stock-hardware comparison remain required (coverage.txt).
+
+Offline fuzzing
+  cmake --build build/fuzz --target mcu-model-fuzz
+  python3 tools/make_mcu_flash_fuzz_seeds.py doc/local/flash-config-mcu-fuzz-corpus
+  mkdir -p doc/local/flash-config-mcu-fuzz-artifacts
+  build/fuzz/mcu-model-fuzz doc/local/flash-config-mcu-fuzz-corpus -artifact_prefix=doc/local/flash-config-mcu-fuzz-artifacts/ -max_len=1536 -max_total_time=60
+
+Action 26 reconstructs the synthetic MCU with arbitrary nonvolatile option bytes.
+The reproducible seeds cover all 256 initial protection bytes with security,
+divider writes, protection changes, reset, relocation and unsupported commands.
+The initial campaign completed 60733 runs in 61 seconds without sanitizer
+findings. It is not sustained or complete-board fuzzing. No physical devices
+or manufacturer bytes are used by this campaign.

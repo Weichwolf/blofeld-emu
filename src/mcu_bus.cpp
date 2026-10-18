@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_clock.hpp"
+#include "blofeld/mcu_flash_config.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_interrupts.hpp"
 #include "blofeld/mcu_memory.hpp"
@@ -86,10 +87,15 @@ void route_function(std::array<PinFunction, port_count> &ports,
 }
 }
 
-McuBus::McuBus(const std::span<const std::uint8_t> flash) : memory_(flash) {}
+McuBus::McuBus(const std::span<const std::uint8_t> flash)
+    : memory_(flash),
+      flash_config_({.protection = memory_.read(hc12::flash_protection_field),
+                     .security = memory_.read(hc12::flash_security_field)}) {}
 
 void McuBus::reset() {
   memory_.reset();
+  flash_config_.reset({.protection = memory_.read(hc12::flash_protection_field),
+                       .security = memory_.read(hc12::flash_security_field)});
   gpio_.reset();
   clock_.reset();
   sci_.reset();
@@ -110,6 +116,7 @@ bool McuBus::reserved_register(const std::uint16_t offset) {
 
 std::uint8_t McuBus::read_register(const std::uint16_t offset) {
   if (!McuMemory::register_name(offset).empty()) { return memory_.read_register(offset); }
+  if (!McuFlashConfig::register_name(offset).empty()) { return flash_config_.read(offset); }
   if (!McuGpio::register_name(offset).empty()) { return gpio_.read(offset); }
   if (!McuClock::register_name(offset).empty()) { return clock_.read(offset); }
   if (!McuSci::register_name(offset).empty()) { return sci_.read(offset); }
@@ -128,6 +135,11 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   if (!memory_name.empty()) {
     memory_.write_register(write);
     return memory_name;
+  }
+  const auto flash_name = McuFlashConfig::register_name(offset);
+  if (!flash_name.empty()) {
+    flash_config_.write(write);
+    return flash_name;
   }
   const auto gpio_name = McuGpio::register_name(offset);
   if (!gpio_name.empty()) {

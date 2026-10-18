@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Check the original firmware identity before the private MCU sender experiment."""
+"""Check the original firmware identity before a private CPU execution experiment."""
 
 import hashlib
 import json
@@ -11,7 +11,7 @@ import sys
 def main() -> int:
     binary, firmware, trace = map(Path, sys.argv[1:])
     if not firmware.is_file():
-        print("SKIP original MCU sender: private firmware absent")
+        print("SKIP original CPU reference: private firmware absent")
         return 77
     manifest = json.loads((Path(__file__).resolve().parents[1] / "doc/downloads.json").read_text())
     expected = next(row["sha256"] for row in manifest["files"]

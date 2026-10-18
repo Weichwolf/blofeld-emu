@@ -40,6 +40,10 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           remapping, overlap priority and flash alias
                                           tested. See mcu-model.txt for limits;
                                           flash controller/paging/SmartMedia pending.
+                                          FCLKDIV/FSEC/FPROT reset/configuration and
+                                          protection ranges independently tested;
+                                          see mcu-flash-config.txt. Command/status,
+                                          array programming and persistence pending.
                                           DSP initial and MS/MSW=111 maps, retained
                                           X/P alias, protected/missing ROM and
                                           explicit three-cycle switch tested.
@@ -133,6 +137,11 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           Separate regression observes low/high PU0
                                           and low PB inputs to execute the original
                                           sender, without changing model defaults.
+                                          Private original-RTI continuation with a
+                                          known USB decoder state executes 255
+                                          original interrupts/returns and releases
+                                          its RAM-counter wait, then stops on unknown
+                                          PORTB inputs (mcu-boot.txt).
                                           No elapsed peripheral time/USB host;
                                           board wiring remains unresolved.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
@@ -143,7 +152,10 @@ SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity
 Voice management and audio        pending  No original audio generation or PCM output.
 Persistent storage               pending  NAND geometry/ECC and contents unresolved.
 Original update and recovery      pending  Helpers and recovery entry recovered;
-                                          they are not yet executed end to end.
+                                          original flash-initialization subroutine
+                                          executes four unchanged instructions in an
+                                          isolated RAM fixture; command execution
+                                          and end-to-end update/recovery pending.
 Damaged updates/transfer loss     partial  Offline parser rejection only;
                                           no emulated transport/update proof.
 Power loss in every erase/program pending  Flash/NAND controllers, phase injection,
@@ -162,6 +174,10 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           57850 runs in 61 s without
                                           sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
+                                          Flash-option/reset/remap synthetic seeds
+                                          and arbitrary nonvolatile options:
+                                          60733 runs in 61 s without findings
+                                          (mcu-flash-config.txt).
                                           SHI edge/register harness with synthetic
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.

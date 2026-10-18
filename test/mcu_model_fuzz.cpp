@@ -12,7 +12,7 @@
 #include <span>
 
 namespace {
-constexpr unsigned action_count = 26;
+constexpr unsigned action_count = 27;
 enum class UsbAction : std::uint8_t { decoder = 18, sof, setup, out, input, finish, configuration };
 
 void usb_action(blofeld::McuBus &bus, const std::span<const std::uint8_t, 6> record) {
@@ -60,6 +60,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
   constexpr unsigned clock_slice_mask = 0x0fff;
   constexpr unsigned memory_read_action = 17;
   constexpr unsigned code_observation_action = 25;
+  constexpr unsigned flash_options_action = 26;
+  constexpr unsigned flash_protection_offset = 0x7f0d;
+  constexpr unsigned flash_security_offset = 0x7f0f;
   const std::array<std::uint8_t, 32768> flash{}; // Own synthetic bytes, no firmware required.
   auto bus = std::make_unique<blofeld::McuBus>(flash);
   const auto operations = size / stride < operation_limit ? size / stride : operation_limit;
@@ -68,6 +71,13 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
     const auto address =
         static_cast<std::uint16_t>((static_cast<unsigned>(record[1]) << 8U) | record[2]);
     try {
+      if (record[0] % action_count == flash_options_action) {
+        auto configured_flash = flash;
+        configured_flash[flash_protection_offset] = record[3];
+        configured_flash[flash_security_offset] = record[4];
+        bus = std::make_unique<blofeld::McuBus>(configured_flash);
+        continue;
+      }
       if (record[0] % action_count == code_observation_action) {
         bus->note_code_byte(address);
         static_cast<void>(bus->code_revision());
