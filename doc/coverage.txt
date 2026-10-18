@@ -182,6 +182,14 @@ Original update and recovery      partial  Helpers and recovery entry recovered;
                                           jumps to 1200 using own recovery frames.
                                           Original Rescue file remains unavailable;
                                           downloaded-helper execution pending.
+                                          Normal RAM-copy routine loads both
+                                          original helpers from controlled Q-bus
+                                          observations, supplies its own table
+                                          argument and executes the first helper
+                                          callback (original-parallel-update.txt).
+                                          12 synthetic lengths and 12 withdrawn
+                                          input positions checked. Actual request
+                                          delivery and later callbacks pending.
                                           Explicit reference milestones only;
                                           full initialization/transport/recovery
                                           and hardware validation pending.

@@ -1,0 +1,70 @@
+Original normal MCU RAM-loader input fixture
+
+  ctest --test-dir build/strict -R '^original_parallel_update$' --output-on-failure
+
+The optional test verifies the private 1.25 ZIP identity, executes unchanged MCU
+instructions and keeps payloads/traces under ignored build/. It exercises the
+normal RAM-copy routine separately from the resident SCI receiver described in
+original-update-restarts.txt. It does not implement a substitute updater.
+
+Conditional setup
+Original reset executes the RAM clear/checksum and reaches 8200. PE0/PE1 are
+observed high, other supplied E inputs low. At the original strap observations,
+E3 follows the known original E2 output: high at the first observation and low
+at the second. Original instructions consequently retain MODRR=0, the documented
+100-pin routing, instead of tying unused Q pins low in the 64-pin configuration.
+Q inputs are initially observed low, and the same explicit 15-edge PHY window
+used by the other boot fixtures completes lock qualification.
+
+This is a controlled loopback/input experiment. Neither this strap connection,
+the actual MCU package nor the external Q bus has been verified on a Blofeld.
+No default pin, ready level, register value or board profile is changed.
+
+An own RAM caller invokes the unchanged normal-copy routine at BAD9. Its stack
+and a bounded target window are prepared explicitly for isolated calls. The
+fixture supplies request mode 0C, six data bits and Q6 low, leaving Q7 driven by
+the MCU. Before each native input read, the next observed six-bit value is
+supplied. Four observations encode three bytes, most-significant groups first.
+Every native Q7 strobe level must match its alternating reference sequence.
+Original instructions execute their delay loops; no elapsed pad timing is inferred.
+
+Native copy and call evidence
+The original decoder reconstructs the two-byte big-endian object length and
+copies the following bytes into RAM at 1200. The native original call sequence
+then loads its service-table argument and calls that RAM entry. The test verifies
+the loaded bytes, unchanged sentinel tail, exact observation count, D=F81B,
+return PC BB56 and native stack frame. The host does not write the destination,
+set the table argument or redirect the PC during the transfer.
+
+The original 761-byte first helper and 632-byte main helper both load unchanged.
+The main helper serves as a second byte-copy reference; its actual later-stage
+delivery and invocation context remain unqualified.
+For the first helper, its own TFR and indirect JSR execute through the real table
+to the first original callback, including the expected nested return frame.
+The test stops there. Later callbacks require application state and GPIO inputs
+that this isolated fixture has not established.
+
+Independent synthetic cases cover 12 lengths: 0, 1, 2, 3, 4, 5, 8, 31, 255, 256,
+511 and 512. The data pattern exercises both byte halves and three-byte packing
+boundaries. A zero-length object still reaches the RAM entry with its target
+unchanged; this routine is not given an invented empty-object rejection.
+This observation does not establish how upstream firmware validates requests.
+
+Twelve further cases withdraw the six external data observations at positions
+0..11. The native input read must fault at BAD3 with address 0260, mask 3F and
+PC/CCR context. Every previously completed group yields the independently
+expected copied prefix; the remaining target window stays unchanged. Withdrawal
+means unknown pin values, not a physical model of lost packet timing or a timeout.
+
+After all 26 transfers, every MCU flash byte and its original knownness/erase
+history must match the source image. Source data, snapshot bytes and traces are
+never included in the public tests. No physical MIDI or flash device is used.
+
+Qualification limits
+This proves the conditional normal-copy/caller ABI and first callback through
+the original table. Original request delivery into this routine, the external
+peer/DSP connection, complete application initialization, all later helper stages,
+whole-image bounds/checksum validation, flash scheduling, NAND/DSP programming,
+live durability and stock-device comparison remain pending. The headless CLI
+still has no host MIDI port or original audio output. Full update/recovery and
+hardware safety remain unproven.

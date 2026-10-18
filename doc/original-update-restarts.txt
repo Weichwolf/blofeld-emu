@@ -61,6 +61,8 @@ F7, after 950 wire bytes; the host supplies neither RAM writes nor a PC change.
 This object belongs to the normal update. Its required caller context and its
 suitability as a cold-recovery program remain unqualified; loading it does not
 establish that it can execute correctly in the resident receiver's context.
+The normal RAM-copy/caller ABI is independently exercised by the conditional
+parallel-input fixture in original-parallel-update.txt.
 
 Four native wire cases are checked:
 - Valid own framing loads the entire unchanged helper and reaches its entry.

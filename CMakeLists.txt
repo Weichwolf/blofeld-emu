@@ -139,6 +139,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing" --wire-only)
   set_tests_properties(original_recovery_wire PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-parallel-update-test test/original_parallel_update_test.cpp)
+  target_link_libraries(blofeld-original-parallel-update-test PRIVATE blofeld_core)
+  add_test(NAME original_parallel_update COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-parallel-update-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-parallel-update.trace")
+  set_tests_properties(original_parallel_update PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-flash-config-test test/mcu_flash_config_test.cpp)
   target_link_libraries(blofeld-flash-config-test PRIVATE blofeld_mcu)
   add_test(NAME flash_config COMMAND blofeld-flash-config-test)
@@ -256,6 +264,7 @@ add_custom_target(quality
     blofeld-flash-test
     blofeld-original-flash-test
     blofeld-original-flash-restart-test
+    blofeld-original-parallel-update-test
     blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
 endif()

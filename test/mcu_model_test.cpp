@@ -11,6 +11,7 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace {
 // Independent expectations: 9S12UF32DGV1 table 1-1 and section 18,
@@ -263,6 +264,33 @@ void test_bus_remapping_and_reset() {
   reject([&bus] { bus.write(smartmedia_config, 1); },
          "Unimplemented SmartMedia RAM mode must fail");
 }
+
+void check_context_fault(const auto &operation, const std::string_view access) {
+  try {
+    operation();
+  } catch (const blofeld::Fault &fault) {
+    const std::string_view message(fault.what());
+    require(message.contains(access) && message.contains("pc=0x9123") &&
+                message.contains("ccr=0x40"),
+            "Peripheral faults retain operation/address and the caller's PC/CCR");
+    return;
+  }
+  throw blofeld::Fault("Unknown peripheral access unexpectedly succeeded");
+}
+
+void test_peripheral_fault_context() {
+  const auto flash = flash_fixture();
+  blofeld::McuBus bus(flash);
+  constexpr unsigned pc = 0x9123;
+  constexpr unsigned ccr = 0x40;
+  constexpr unsigned unsupported = 0x0d;
+  constexpr unsigned usb_configuration = 0x310;
+  bus.begin_instruction({.pc = pc, .ccr = ccr});
+  check_context_fault([&bus] { static_cast<void>(bus.read(0)); }, "MCU read at 0x0000");
+  check_context_fault([&bus] { bus.write(unsupported, 0); }, "MCU write at 0x000d");
+  check_context_fault([&bus] { bus.write_memory({.address = usb_configuration, .size = 2}); },
+                      "MCU operand write at 0x0310");
+}
 }
 
 int main() {
@@ -276,6 +304,7 @@ int main() {
     test_gpio_contention_and_reset();
     test_bus_remapping_and_reset();
     test_instruction_mapping_boundary();
+    test_peripheral_fault_context();
     std::cout << "MCU memory mapping, initialization, GPIO and reset checks passed\n";
     return 0;
   } catch (const std::exception &error) {

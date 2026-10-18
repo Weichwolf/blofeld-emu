@@ -191,7 +191,8 @@ std::uint8_t McuBus::read(const std::uint16_t address) {
       return read_register(location.offset);
     } catch (const Fault &fault) {
       throw Fault("MCU read at " + hex(address) + " (register offset " + hex(location.offset) +
-                  "): " + fault.what());
+                  ") pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) + ": " +
+                  fault.what());
     }
   }
   if (location.space == McuSpace::flash) {
@@ -218,7 +219,8 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
       }
     } catch (const Fault &fault) {
       throw Fault("MCU write at " + hex(address) + " (register offset " + hex(location.offset) +
-                  "): " + fault.what());
+                  ") pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) + ": " +
+                  fault.what());
     }
   } else if (location.space == McuSpace::flash) {
     stage_flash({.address = address, .size = 1, .value = value});
@@ -265,7 +267,8 @@ void McuBus::write_memory(const MemoryWrite access) {
     }
   } catch (const Fault &fault) {
     throw Fault("MCU operand write at " + hex(access.address) + " (register offset " +
-                hex(location.offset) + "): " + fault.what());
+                hex(location.offset) + ") pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) +
+                ": " + fault.what());
   }
 }
 
