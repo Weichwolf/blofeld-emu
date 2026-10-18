@@ -19,6 +19,13 @@ def main() -> None:
               (1, 0, 0x1000, 0xABCDEF), (3, 0, 0, 0), (4, 0, 0, 3),
               (0, 1, 0x10000, 0), (5, 0, 0, 0), (0, 1, 0x10000, 0), (7, 0, 0, 0)]
     (output / "memory-switch-retention").write_bytes(b"".join(record(*row) for row in switch))
+    pll = [(0, 1, 0xFFFFFD, 0), (10, 0, 0, 0), (9, 0, 0, 1), (5, 0, 0, 0),
+           (0, 1, 0xFFFFFD, 0), (1, 1, 0xFFFFFD, 0x03E10B), (10, 0, 0, 0),
+           (1, 1, 0xFFFFFD, 0x03A00B), (10, 0, 0, 0), (1, 1, 0xFFFFFD, 0x04681D),
+           (1, 1, 0xFFFFFD, 0x00601D), (1, 1, 0xFFFFFD, 0x046000),
+           (9, 0, 0, 2), (5, 0, 0, 0), (0, 1, 0xFFFFFD, 0),
+           (1, 1, 0xFFFFFD, 0x1FE7FF), (10, 0, 0, 0)]
+    (output / "pll-pinit-and-targets").write_bytes(b"".join(record(*row) for row in pll))
     for area in range(3):
         base = 0xFF0000 if area == 0 else 0x4000
         rows = [(6, area, base, 0x123456), (0, area, base, 0), (0, area, base + 2, 0),

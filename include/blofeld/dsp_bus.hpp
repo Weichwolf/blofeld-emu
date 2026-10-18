@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_pll.hpp"
 #include "blofeld/dsp_shi.hpp"
 
 #include <array>
@@ -40,6 +41,7 @@ class DspBus {
 public:
   DspBus();
   void reset();
+  void reset_peripherals();
   [[nodiscard]] std::uint32_t read(DspAddress access);
   void write(DspStore access);
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
@@ -50,9 +52,13 @@ public:
 
   [[nodiscard]] DspShi &shi() { return shi_; }
 
+  [[nodiscard]] DspPll &pll() { return pll_; }
+
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
 private:
+  enum class Operation : std::uint8_t { read, write };
+
   struct Memory {
     std::vector<std::uint32_t> words;
     std::vector<std::uint8_t> known;
@@ -64,14 +70,15 @@ private:
     bool rom = false;
   };
 
-  [[nodiscard]] Location locate(DspAddress access) const;
-  [[nodiscard]] Location locate_program(std::uint32_t address) const;
-  [[nodiscard]] Location locate_data(DspAddress access) const;
+  [[nodiscard]] Location locate(DspAddress access, Operation operation = Operation::read) const;
+  [[nodiscard]] Location locate_program(std::uint32_t address, Operation operation) const;
+  [[nodiscard]] Location locate_data(DspAddress access, Operation operation) const;
   [[nodiscard]] std::uint32_t read_peripheral(DspAddress access);
   void write_peripheral(DspStore access);
   std::array<Memory, 3> ram_;
   std::array<Memory, 3> rom_;
   DspShi shi_;
+  DspPll pll_;
   DspCodeChanges changes_;
   bool switched_ = false;
   bool requested_switch_ = false;

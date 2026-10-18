@@ -34,5 +34,11 @@
     "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
     "bytes": 24396254,
     "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e"
+  },
+  {
+    "file": "DSP56371E.pdf",
+    "source": "https://www.nxp.com/docs/en/errata/DSP56371E.pdf",
+    "bytes": 147566,
+    "sha256": "9485646b1421f75d43c7551f48db80c5fe6fe04ba24f65f521087180989a2d4a"
   }
 ]

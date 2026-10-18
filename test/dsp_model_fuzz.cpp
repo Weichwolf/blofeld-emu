@@ -5,11 +5,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_t size) {
   constexpr std::size_t stride = 9;
   constexpr std::size_t operation_limit = 256;
-  constexpr unsigned action_count = 9;
+  constexpr unsigned action_count = 11;
   constexpr unsigned word_mask = 0xffffff;
   blofeld::DspBus bus;
   const auto count = size / stride < operation_limit ? size / stride : operation_limit;
@@ -40,6 +41,11 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
                                  .clock = (record[7] & 1U) != 0,
                                  .mosi = (record[8] & 1U) != 0});
           break;
+        case 9:
+          bus.pll().observe_pinit(
+              (record[8] & 2U) != 0 ? std::nullopt : std::optional<bool>((record[8] & 1U) != 0));
+          break;
+        case 10: static_cast<void>(bus.pll().target_ratio()); break;
         default: throw blofeld::Fault("Invalid DSP model-fuzzer action");
       }
     } catch (const blofeld::Fault &) {

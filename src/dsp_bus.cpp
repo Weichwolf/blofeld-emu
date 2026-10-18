@@ -58,11 +58,16 @@ void DspBus::reset() {
   requested_switch_ = false;
   switch_delay_ = 0;
   changes_ = {.all = true, .addresses = {}};
-  shi_.reset();
+  reset_peripherals();
+  pll_.reset();
   once_latch_.reset();
 }
 
-DspBus::Location DspBus::locate(const DspAddress access) const {
+void DspBus::reset_peripherals() {
+  shi_.reset();
+}
+
+DspBus::Location DspBus::locate(const DspAddress access, const Operation operation) const {
   static_cast<void>(bank(access.space));
   const auto address = access.address;
   if (address > word_mask) { throw Fault("DSP address exceeds 24 bits: " + address_text(access)); }
@@ -71,20 +76,24 @@ DspBus::Location DspBus::locate(const DspAddress access) const {
        (access.space == DspSpace::x && address >= x_switched_end && address < x_high_end))) {
     throw Fault("DSP memory access requires elapsed switch cycles: " + address_text(access));
   }
-  return access.space == DspSpace::p ? locate_program(address) : locate_data(access);
+  return access.space == DspSpace::p ? locate_program(address, operation)
+                                     : locate_data(access, operation);
 }
 
-DspBus::Location DspBus::locate_program(const std::uint32_t address) const {
+DspBus::Location DspBus::locate_program(const std::uint32_t address,
+                                        const Operation operation) const {
   if (address < program_ram_end) { return {.offset = address}; }
   if (switched_ && address < x_low_end) {
     return {.bank = 1,
             .offset = x_low_end + x_switched_end - data_rom_end + address - program_ram_end};
   }
   if (address >= program_rom_base) { return {.offset = address - program_rom_base, .rom = true}; }
-  throw Fault("Unmapped DSP memory at " + address_text({.address = address}));
+  throw Fault(std::string("Unmapped DSP memory ") +
+              (operation == Operation::read ? "read at " : "write at ") +
+              address_text({.address = address}));
 }
 
-DspBus::Location DspBus::locate_data(const DspAddress access) const {
+DspBus::Location DspBus::locate_data(const DspAddress access, const Operation operation) const {
   const auto address = access.address;
   const auto index = bank(access.space);
   const auto low_end = access.space == DspSpace::x ? x_low_end : y_low_end;
@@ -97,7 +106,8 @@ DspBus::Location DspBus::locate_data(const DspAddress access) const {
   if (address >= data_rom_end && address < high_end) {
     return {.bank = index, .offset = low_end + address - data_rom_end};
   }
-  throw Fault("Unmapped DSP memory at " + address_text(access));
+  throw Fault(std::string("Unmapped DSP memory ") +
+              (operation == Operation::read ? "read at " : "write at ") + address_text(access));
 }
 
 std::uint32_t DspBus::read(const DspAddress access) {
@@ -121,7 +131,7 @@ void DspBus::write(const DspStore access) {
     write_peripheral(access);
     return;
   }
-  const auto location = locate(target);
+  const auto location = locate(target, Operation::write);
   if (location.rom) { throw Fault("Protected DSP ROM write at " + address_text(target)); }
   auto &memory = ram_.at(location.bank);
   memory.words.at(location.offset) = access.value;
@@ -190,6 +200,8 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
   constexpr unsigned first_shi = 0xffff90;
   constexpr unsigned last_shi = 0xffff94;
   constexpr unsigned first_priority = 0xfffffe;
+  constexpr unsigned pll_control = 0xfffffd;
+  if (access.space == DspSpace::x && access.address == pll_control) { return pll_.read(); }
   if (access.space == DspSpace::x && access.address >= first_shi && access.address <= last_shi) {
     return shi_.read(access.address);
   }
@@ -202,6 +214,11 @@ void DspBus::write_peripheral(const DspStore access) {
   constexpr unsigned last_shi = 0xffff94;
   constexpr unsigned first_priority = 0xfffffe;
   constexpr unsigned once_gdb = 0xfffffc;
+  constexpr unsigned pll_control = 0xfffffd;
+  if (access.space == DspSpace::x && access.address == pll_control) {
+    pll_.write(access.value);
+    return;
+  }
   if (access.space == DspSpace::x && access.address == once_gdb) {
     once_latch_ = access.value;
     return;

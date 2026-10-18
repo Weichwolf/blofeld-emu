@@ -1,0 +1,45 @@
+DSP56371 PLL control and requested clock ratios
+
+Primary references, pinned in hardware/sources.json:
+  https://www.nxp.com/docs/en/user-guide/DSP56371UM.pdf
+  Chapter 4.6 and chapter 5, especially 5.2 and tables 5-3/5-4.
+  https://www.nxp.com/docs/en/errata/DSP56371E.pdf
+  Rev. 1, mask 1L41N, ED57.
+
+Implemented command state
+PCTL is X:fffffd, a 24-bit read/write control register, not a lock-status register.
+Reset defines PDF=4, MF=29, OD1=0, OD0=1, DF=0 and PSTP=0. PEN samples PINIT only
+on hardware reset. If that pin was not observed, a PCTL read or clock-target query
+fails explicitly. A full software write defines PEN independently of PINIT.
+
+MF and PDF use their literal integer fields, not field-plus-one encoding.
+The low-power divider is 2^DF; the feedback multiplier is 2*(1+OD1) and the output
+divider is 2^(OD1+OD0). The reduced rational target relative to EXTAL is:
+  PEN=0: 1 / low_power_divider
+  PEN=1: MF * feedback / (PDF * low_power_divider * output_divider)
+The NXP two-step example, using 24.576 MHz EXTAL, requests 45.056 MHz with 03e10b
+and 180.224 MHz with 03a00b. Tests use these independent documented expectations.
+
+Reserved-bit writes and zero PDF/MF fail without changing the command. Enabled
+PLL divide-by-one is rejected as unqualified per the manual's programming rule.
+ED57 requires a nonzero prior DF field before changing OD0; DF can return to zero
+in the same write that changes OD0. This conservative workaround is enforced;
+the actual Blofeld silicon mask still needs inspection. No corrupt-operation
+outcome is invented for the rejected sequence.
+
+Limits
+These are requested ratios, not measured or qualified operating frequencies.
+PSTP is retained, but STOP/wakeup and analog PLL behavior are not modeled. No
+oscillator frequency, lock event, 0.5 ms startup, overshoot, instruction duration
+or peripheral clock is inferred from a PCTL write. Electrical operating ranges
+depend on an observed EXTAL frequency and chip profile, which remain unresolved.
+There is no elapsed-time API or automatically successful lock/ready flag here.
+
+Checks
+  ctest --test-dir build/strict -R '^(dsp_pll|native_dsp|original_dsp_boot)$' --output-on-failure
+PINIT capture/unknown/reset behavior, all DF settings, both feedback multipliers,
+all qualified OD settings, maximum field widths, reserved/invalid commands and
+ED57 sequencing are covered. Native RESET preserves CPU memory mode and PLL
+control while resetting SHI; external reset resamples PINIT and restores the map.
+The unmodified first-stage MOVEP writes its own PCTL value before its RAM clear.
+Complete clock, reset, board, update/recovery and hardware validation remain open.

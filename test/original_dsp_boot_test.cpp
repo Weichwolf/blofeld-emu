@@ -24,6 +24,9 @@ constexpr unsigned stage_base = 0x6a;
 constexpr unsigned instruction_limit = 20000;
 constexpr unsigned hcsr = 0xffff91;
 constexpr unsigned pll_pc = 0x6f;
+constexpr unsigned clear_pc = 0x72;
+constexpr unsigned known_long_ram_end = 0x2000;
+constexpr unsigned clear_count = 0x20000;
 constexpr unsigned word_bits = 24;
 
 void require(const bool condition, const std::string &message) {
@@ -134,9 +137,25 @@ int run(const Inputs &inputs) {
   require(
       cpu.state().omr == original_memory_mode && cpu.state().r[4] == 0,
       "Unmodified first-stage instructions select their own memory mode and clear their pointer");
+  runner.step();
+  require(bus.pll().read() == bus.read({.address = pll_pc + 1}),
+          "Original MOVEP writes its own unmodified PCTL operand");
+  runner.step();
+  require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count,
+          "Fractional short immediate X0 supplies the full 24-bit REP count, not integer two");
+  while (cpu.state().r[4] != known_long_ram_end) { runner.step(); }
+  require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count - known_long_ram_end,
+          "Bounded native REP yields at the first reserved Y address without skipping iterations");
+  for (const auto space : {blofeld::DspSpace::x, blofeld::DspSpace::y}) {
+    for (unsigned address = 0; address < known_long_ram_end; ++address) {
+      require(bus.read({.space = space, .address = address}) == 0,
+              "Original REP and long-memory stores clear every mapped low X/Y word pair");
+    }
+  }
   std::cout << "Documented NXP SPI bootstrap loaded all original 94 DSP words through pin events; "
-            << runner.completed() << " completed reference steps. Original first stage reached PLL "
-            << "configuration; no complete DSP/board boot is proven.\n";
+            << runner.completed() << " completed reference steps. Original first stage programmed "
+            << "PCTL and cleared 8192 X/Y word pairs; reserved-address write behavior remains "
+            << "unverified. No complete DSP/board boot is proven.\n";
   return 0;
 }
 }

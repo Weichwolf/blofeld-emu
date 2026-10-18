@@ -244,6 +244,72 @@ void test_native_code_write_and_decoder_invalidation() {
   require(cpu.state().x == changed, "Changing a cached P opcode changes its destination register");
 }
 
+void test_software_reset_preserves_clock_and_memory_mode() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("move #>$600085,omr");
+  program.emit("move #>$55,r0");
+  program.emit("reset");
+  const auto after_reset = program.pc();
+  program.emit("nop");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  cpu.step();
+  cpu.step();
+  bus.advance_instruction_cycles(3);
+  constexpr unsigned alias = 0x1000;
+  constexpr unsigned pll_command = 0x03e10b;
+  constexpr unsigned hcsr = 0xffff91;
+  constexpr unsigned enable_spi_fifo = 0xa9;
+  bus.write({.address = alias, .value = input});
+  bus.pll().write(pll_command);
+  bus.shi().write({.address = hcsr, .value = enable_spi_fifo});
+  bus.pll().observe_pinit(true);
+  cpu.step();
+  constexpr unsigned retained_mode = 0x600085;
+  constexpr unsigned retained_pointer = 0x55;
+  require(cpu.state().pc == after_reset && cpu.state().omr == retained_mode &&
+              cpu.state().r[0] == retained_pointer,
+          "DSP56300FM RESET resets peripheral/interrupt state while CPU execution continues");
+  require(bus.pll().read() == pll_command && bus.read({.address = alias}) == input &&
+              (bus.shi().read(hcsr) & 1U) == 0,
+          "Software RESET clears SHI but preserves CPM PLL control and the OMR memory mapping");
+  cpu.reset_spi_boot();
+  constexpr unsigned pinit_high_control = 0x04601d;
+  require(bus.pll().read() == pinit_high_control && cpu.state().omr == 5,
+          "Hardware reset samples PINIT and restores the selected SPI boot profile");
+  require(bus.read({.space = blofeld::DspSpace::x, .address = 0x10000}) == input,
+          "Hardware reset restores the original map and retains the physical RAM contents");
+}
+
+void test_short_immediates_and_register_repeat_count() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("move #<5,x0");
+  program.emit("move #<7,r0");
+  program.emit("move #<9,a1");
+  program.emit("rep x0");
+  const auto body = program.pc();
+  program.emit("move x0,x:(r0)+");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  for (unsigned index = 0; index < 4; ++index) { cpu.step(); }
+  // DSP56300FM immediate-short parallel move: X0 is fractional; R0/A1 are integers.
+  constexpr unsigned fractional_five = 0x050000;
+  constexpr unsigned decremented_count = 0x04ffff;
+  constexpr std::uint64_t integer_accumulator = 0x09000000;
+  require((cpu.state().x & word_mask) == fractional_five && cpu.state().r[0] == 7 &&
+              cpu.state().a == integer_accumulator,
+          "Short immediate alignment depends on destination register, independently of spelling");
+  require(
+      cpu.state().pc == body && cpu.state().lc == fractional_five,
+      "REP S uses the full 24-bit source count, not a truncated or integer-reinterpreted value");
+  cpu.step();
+  require(bus.read({.space = blofeld::DspSpace::x, .address = 7}) == fractional_five &&
+              cpu.state().r[0] == 8 && cpu.state().lc == decremented_count,
+          "A large register-specified REP remains bounded to one store per reference step");
+}
+
 void test_bounded_rep_steps() {
   blofeld::DspBus bus;
   Program program;
@@ -360,6 +426,8 @@ int main() {
     test_memory_boundaries_rom_and_retained_switch();
     test_native_reset_fetch_fault_and_arithmetic();
     test_native_code_write_and_decoder_invalidation();
+    test_software_reset_preserves_clock_and_memory_mode();
+    test_short_immediates_and_register_repeat_count();
     test_bounded_rep_steps();
     test_bounded_do_waits_for_real_spi_words();
     test_rep_latches_opcode_and_extension_without_stale_cache();

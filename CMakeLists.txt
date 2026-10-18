@@ -80,7 +80,7 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.c
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
-add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp)
+add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
 add_library(blofeld_dsp src/dsp_core.cpp)
@@ -95,6 +95,9 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-pll-test test/dsp_pll_test.cpp)
+  target_link_libraries(blofeld-dsp-pll-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME dsp_pll COMMAND blofeld-dsp-pll-test)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
@@ -174,7 +177,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
-    blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test
+    blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
   USES_TERMINAL)

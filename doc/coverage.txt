@@ -43,6 +43,8 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           DSP initial and MS/MSW=111 maps, retained
                                           X/P alias, protected/missing ROM and
                                           explicit three-cycle switch tested.
+                                          Original DSP RAM clear reaches reserved
+                                          Y:002000; write/alias behavior unverified.
                                           Other DSP layouts and full timing pending.
 Interrupts, timers, clock         partial  USB PHY control, CRG qualification, lock
                                           loss, W1C/POR flags and write gates tested.
@@ -55,6 +57,9 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Oscillator RTI: 128 control settings,
                                           exact timeouts, restart/W1C/phase and
                                           real CPU ISR checked (mcu-rti.txt).
+                                          DSP PCTL command/PINIT reset and target
+                                          ratios tested against NXP worked example;
+                                          ED57 sequence guard (dsp-pll.txt).
                                           Analog startup, scheduled CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
 USB device/transport              partial  PHY control and register/data-side enable.
@@ -77,11 +82,14 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
 DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled privately;
                                           no complete/hardware-dumped ROM supplied.
                                           Original MCU-embedded 94-word DSP stage
-                                          executes to its PLL setup. SHI SPI
+                                          programs PCTL and clears 8192 mapped
+                                          X/Y word pairs, then needs reserved-write
+                                          behavior qualification. SHI SPI
                                           pins/registers/FIFO, error-clear sequences,
                                           request vectors and reset cycles tested
-                                          (dsp-shi.txt). PLL, ESAI, DMA and chip profile
-                                          pending; no combined MCU/DSP board boot.
+                                          (dsp-shi.txt). PLL timing/lock, GPIO,
+                                          ESAI, DMA and chip profile pending;
+                                          no combined MCU/DSP board boot.
 MCU–DSP communication             partial  Native synthetic HC12 GPIO program exchanges
                                           exact words with SHI in both directions.
                                           Native DSP receives original frame bytes
@@ -91,6 +99,9 @@ ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
+                                          Native DSP RESET preserves OMR/PLL while
+                                          clearing SHI; hardware reset resamples
+                                          PINIT and restores the RAM map.
                                           Private application probe completes
                                           1672476 instructions through original
                                           CPU delays after SCI/RTI/USB setup, then
@@ -127,8 +138,8 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           SHI edge/register harness with synthetic
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.
-                                          DSP bus/map/ROM/reset model harness:
-                                          43564 runs in 61 s without findings.
+                                          DSP bus/map/ROM/reset/PLL model harness:
+                                          40988 runs in 61 s without findings.
                                           Native DSP instruction fuzzing pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write

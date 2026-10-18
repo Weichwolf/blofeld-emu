@@ -36,7 +36,10 @@ DSP56371 memory and peripheral scope
   state is accepted; enabling CPU interrupt priorities fails pending integration.
 - OGDB writes latch the 24-bit debug value (DSP56300FM 7.2.4/7.2.5). DSP reads,
   JTAG/debug commands, security behavior and debug interrupts remain unimplemented.
-- PLL, remaining GPIO/timers, ESAI, DMA, NAND and clock scheduling are not modeled.
+- PCTL command/reset state and requested EXTAL ratios follow DSP56371UM chapter 5;
+  see dsp-pll.txt. Hardware reset samples observed PINIT, while the DSP RESET
+  instruction resets SHI/interrupt state without resetting CPU OMR or PLL control.
+- GPIO/timers, ESAI, DMA, NAND and clock scheduling are not modeled.
   Native power-up register undefined-state tracking and full derivative reset,
   interrupt, pipeline and instruction-cycle fidelity need further validation.
 
@@ -49,6 +52,10 @@ addition/negation/flags, strict extension fetches, original P stores into unknow
 RAM, opcode/operand changes, REP latching and bounded DO waits for separate SPI
 words. Changing backing ROM in a REP cache regression checks the interpreter's
 coherence contract; it is not a physical ROM programming or prefetch test.
+Short immediates are checked against DSP56300FM's destination-dependent fractional
+versus integer alignment, including a full 24-bit register-specified REP count.
+Native RESET and external reset independently check SHI, PCTL and memory-map
+retention/restoration; these do not establish complete derivative reset fidelity.
 
 Document-derived SPI bootstrap reference
 DSP56371UM Appendix A publishes the SPI path, but references a separate EEPROM
@@ -72,11 +79,16 @@ The fixture starts native mode-five execution at ff0000, then a host pin fixture
 clocks the MCU-embedded original 94-word Blofeld first stage through SHI. The
 executing ROM instructions receive the length/address, run their own DO loop,
 write all 94 P words and jump to P:6a. No host writes P RAM, patches the image or
-changes PC after reset. The original first stage executes through its memory-mode
-and pointer setup to PC 6f after 4821 completed reference steps. Its next operation
-is PLL configuration; a private continuation stops on the unsupported X:fffffd
-write with PC/OMR context. The regression stops at the verified stage boundary;
-it does not assert that an unimplemented PLL must remain unimplemented.
+changes PC after reset. The original first stage programs PCTL and performs 8192
+long-memory stores, clearing every low mapped X/Y word pair. After 13015 completed
+reference steps, PC is 72, R4 is 2000 and LC is 1e000. The short immediate loaded
+into X0 is fractional 020000, so REP attempts 131072 stores, not two. Continuing
+reaches reserved Y:002000 and fails visibly with PC/OMR context. The manual gives
+the reserved map but does not establish that a write there is safely discarded or
+cannot alias another block. Actual reserved/ROM write behavior requires stronger
+evidence; no broad RAM allocation, dropped-write shortcut or loop skip is used.
+The public regression stops before that access, without requiring an unsupported
+access to remain unsupported. GPIO/NAND startup has not yet been reached natively.
 
 The host supplies pin events with explicit instruction interleaving. The original
 MCU is not yet the sender in this fixture, no elapsed DSP/MCU clock ratio is
@@ -90,8 +102,9 @@ Offline DSP bus/model fuzzing
   python3 tools/make_dsp_fuzz_seeds.py doc/local/dsp-fuzz-corpus
   build/fuzz/dsp-model-fuzz doc/local/dsp-fuzz-corpus -artifact_prefix=doc/local/dsp-fuzz-artifacts/ -max_len=2304 -max_total_time=60
 
-The current synthetic campaign completed 43564 runs in 61 seconds without
-sanitizer findings. It covers bus/map/ROM/reset/SHI inputs, not arbitrary native
+The expanded synthetic campaign completed 40988 runs in 61 seconds without
+sanitizer findings. The model harness also exercises PCTL commands, PINIT
+observations and clock-target queries. It covers bus/map/ROM/reset/SHI/PLL inputs, not arbitrary native
 DSP instruction streams or the complete board. Sustained and differential CPU
 campaigns, actual NAND/assets, full application/audio and hardware comparison
 remain required; see coverage.txt.

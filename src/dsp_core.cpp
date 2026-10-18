@@ -94,7 +94,7 @@ public:
   std::uint32_t exec() override { return MaxDelayCycles; }
 
   void reset() override {
-    if (area_ == DspSpace::x) { bus_.reset(); }
+    if (area_ == DspSpace::x) { bus_.reset_peripherals(); }
   }
 
   void setSymbols(dsp56k::Disassembler & /*disassembler*/) const override {}
@@ -154,6 +154,7 @@ DspCore::DspCore(DspBus &bus) : impl_(std::make_unique<Impl>(bus)) {
 DspCore::~DspCore() = default;
 
 void DspCore::reset_spi_boot() {
+  impl_->bus.reset();
   impl_->cpu.resetHW();
   impl_->cpu.regs().omr.var = spi_mode;
   impl_->cpu.setPC(boot_entry);
