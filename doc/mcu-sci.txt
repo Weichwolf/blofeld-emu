@@ -50,10 +50,11 @@ Board integration
   transmitted bits. Unknown RX inputs fail when a sample is required.
 - MODRR selects PR3/PR2 for TX/RX in 100-pin mode and PS5/PS4 in 64-pin mode.
   Peripheral functions override GPIO pad direction; GPIO latches and physical
-  pad samples remain separate. This currently models SCI as the sole alternate
-  function owner; CF/ATA/USB test-mode priority and pad delay are still pending.
+  pad samples remain separate. SCI and timer currently own the supported alternate
+  functions; CF/ATA/USB test-mode priority and pad delay
+  are still pending.
 - With explicit port-E and PHY-window fixtures, original firmware 1.25 writes
-  SBR=60, SCICR1=8 and SCICR2=12, then reaches timer input-capture configuration.
+  SBR=60, SCICR1=8 and SCICR2=12, then sets the timer prescaler to divide by 64.
   At 30 MHz module clock SBR=60 gives 31250 baud. This does not prove the board
   clock rate, a completed boot, MIDI routing or controller operation.
 

@@ -1,0 +1,62 @@
+MC9S12UF32 timer: normal-mode model and remaining limits
+
+The TIM16B8C block is mapped at 0x0040..0x006f. It is driven by explicit bus
+cycles, independently of the as-yet missing CPU/peripheral clock scheduler.
+Run build/strict/blofeld-timer-test for synthetic checks.
+
+Counting and registers
+- TEN gates the 16-bit up counter. Normal-mode TCNT writes have no counter
+  effect. Reset clears timer registers, flags, counter and prescaler state.
+- The eight divisors are 1,2,4,8,16,32,64,128. A new PR selection is held until
+  all seven modeled prescaler stages are zero. Divisor readback changes before
+  the active divider does. TEN clear preserves count and modeled prescaler phase;
+  the precise restart phase still needs silicon calibration.
+- Counter overflow sets TOF. Channel and overflow flags use write-one-to-clear
+  while TEN remains enabled. TFFCA performs the documented access-dependent
+  clears: reading capture registers, writing compare registers, and accessing
+  TCNT clear their respective flags. Compare reads do not clear capture flags.
+- Capture-register writes have no effect. Compare registers accept high/low-byte
+  writes. No extra atomic latch is invented for TCNT or TCn: separate byte
+  accesses can observe different values when explicitly separated by clock or
+  capture events. CPU word-access bus timing remains to be integrated.
+
+Capture and compare
+- Each channel has disabled, rising, falling and either-edge capture selection.
+  Captures store TCNT and set CnF; a later capture overwrites the channel value.
+  Logical input levels/history must be known before capture is enabled.
+- observe_inputs supplies post-synchronizer levels at the current timer time.
+  McuBus::sample_timer_inputs maps requested logical channels to GPIO pad samples.
+  Prime this fixture before enabling edges, advance clocks between events, and
+  split advances at synchronized transitions. Raw-pad synchronization and the
+  specified greater-than-two-bus-clock minimum pulse width are not yet modeled.
+- Output compares set CnF and apply disconnected/toggle/clear/set actions. Forced
+  actions use the same output logic without setting a channel flag. Unknown
+  initial peripheral latches remain unknown; set/clear/OC7D actions resolve them.
+  Channel 7 mask/data overrides take precedence over simultaneous channel events.
+- TCRE with a nonzero TC7 holds the matched count for one bus cycle, then resets
+  TCNT and restarts its prescaler period. TC7=FFFF suppresses ordinary overflow
+  in that mode. TTOV toggles initialized output latches at ordinary overflow.
+- Ambiguous activation exactly at the current compare count, compare-at-reset,
+  coincident TTOV/compare actions, and forced channel 7 with TCRE fail explicitly.
+  These boundaries require more timing evidence; they are not successful stubs.
+
+Pin integration and scope
+- In 100-pin mode channels 0..3 route to PT0..3 and 4..7 to PR4..7. In 64-pin mode
+  the default inputs route to PT0/1, PM3/4, PQ4..7; outputs also have the Port B
+  mirror documented for ATA disabled. MODRR's optional route selects Port B only.
+- SCI and timer pad ownership are merged; a SCI clock step does not release timer
+  pins. Peripheral pad direction overrides GPIO direction. GPIO data latches
+  remain distinct from pad levels, and known opposing output drivers fail.
+- This is the normal-reset profile with ATA/CF/SD/MS controllers inactive.
+  Enabling those unimplemented controllers fails. Their pin-priority integration,
+  wait/freeze behavior, interrupt delivery and the pulse accumulator are pending.
+  Normal-mode reserved/test registers read zero and ignore writes as documented.
+- The original reset code writes TSCR1=0x90 and TSCR2=6: TEN/TFFCA and divide by
+  64. This register setup does not establish real CPU/peripheral elapsed time,
+  a complete Blofeld boot, physical pin wiring or safe flash programming.
+
+References
+doc/hardware/sources.json pins NXP's 9S12UF32_ZIP.zip. The TIM16B8C guide sections
+1.3.2 and 1.4 specify registers, clearing and timing. 9S12UF32DGV1 section 19 and
+S12UF32PIMV2 define integration/routing. S12ATA5HCV1 HCFG and S12CFHCV1 CFE
+document their disabled reset state. The actual Blofeld package is unverified.

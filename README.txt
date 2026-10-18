@@ -44,8 +44,11 @@ Explicit simulated pin inputs can explore the next boot stage; see
 doc/mcu-model.txt for the implemented map, GPIO behavior and remaining limits.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
+doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.
+The original MCU bootloader reaches its application entry in the explicit
+untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.
 The native HC12 description is patched and recompiled locally for independently
-verified BRSET/BRN corrections; no installed Ghidra files are modified.
+verified branch and indexed-word corrections; no installed Ghidra files are modified.
 
 The execution command must stop visibly on unsupported hardware. An instruction
 budget being exhausted does not establish successful boot. Downloading firmware

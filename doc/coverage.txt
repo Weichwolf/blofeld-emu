@@ -11,16 +11,18 @@ Standard sample library           partial  Both official MIDI and WPC downloaded
 Update container extraction       partial  Python offline framing/object checks;
                                           native ZIP/MIDI and runtime parser.
 Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
-                                          native HC12 instruction execution starts.
+                                          original reset reaches application entry
+                                          after 90314 instructions in the explicit
+                                          untimed fixture; RAM clear and original
+                                          checksum verified (mcu-boot.txt).
                                           Unknown pins still stop the default run.
-                                          Explicit port fixtures reach PHY startup;
-                                          supplied clock windows exercise the real
-                                          lock polling/selection through SCI setup
-                                          and the next timer configuration write.
 CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrite,
                                           branches, code-cache invalidation and
                                           word-transfer side effects tested; 12288
                                           bit-branch vectors and BRN length checked.
+                                          Indexed words: 96 signed-offset load/store
+                                          pairs plus word postincrement; patched
+                                          the missing memory dereference.
                                           Full ISA, cycle timing and hardware
                                           comparison pending.
                                           Independent reset/opcode reference:
@@ -31,8 +33,11 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           flash controller/paging/SmartMedia pending.
 Interrupts, timers, clock         partial  USB PHY control, CRG qualification, lock
                                           loss, W1C/POR flags and write gates tested.
+                                          Timer prescaling, capture/compare, flags,
+                                          TC7 reset and routing tested; see
+                                          mcu-timer.txt for unresolved boundaries.
                                           Analog startup, scheduled CPU/bus clocks,
-                                          counters and interrupt delivery pending.
+                                          RTI/COP and interrupt delivery pending.
 USB device/transport              partial  PHY control only. Controller enable,
                                           commands and endpoint behavior unsupported.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
@@ -44,7 +49,8 @@ DSP56371 peripherals/boot ROM     pending  NXP documentation available; SHI boot
 MCU–DSP communication             pending  No combined scheduled execution.
 ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
-Cold boot and reset               pending  No complete original boot yet.
+Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
+                                          no complete scheduled board/DSP boot yet.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
@@ -65,12 +71,13 @@ Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU 
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
                                           campaign (~20k executions) without findings;
                                           MCU model harness covers bus, map, GPIO,
-                                          PHY/SCI clocks and reset: 63883 executions in
+                                          PHY/SCI/timer clocks and reset: 66242 runs in
                                           61 s without sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
-                                          trace; board snapshots/replay pending.
+                                          trace; full bootloader trace under build/.
+                                          Board snapshots/replay pending.
 Desktop/Keyboard differences      pending  Both requested with 1.25; keyboard scanner
                                           and profile differences remain unresolved.
 Stock hardware validation         pending  No Blofeld detected on USB; DIN wiring

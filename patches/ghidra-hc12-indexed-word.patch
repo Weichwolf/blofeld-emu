@@ -1,0 +1,5 @@
+--- HCS_HC12.sinc
++++ HCS_HC12.sinc
+@@ -735 +735 @@
+-	export indexed5;
++	export *:2 indexed5;

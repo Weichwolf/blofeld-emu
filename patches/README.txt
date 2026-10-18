@@ -28,3 +28,17 @@ No manufacturer firmware bytes or processor-language source copies are shipped
 in this repository. The specification retains Ghidra's Apache-2.0 license.
 S12CPUV2 instruction definitions provide the independent behavior reference;
 native_core covers 12288 bit-branch cases and BRN's fetch length.
+
+HC12 indexed word correction
+---------------------------
+ghidra-hc12-indexed-word.patch fixes the HC12 indexed2_5 operand export. The
+unpatched description exports an effective-address value or index register,
+instead of a two-byte memory operand. LDD then loads the address, and STD can
+overwrite the base register rather than memory. The patch restores the missing
+dereference, after the branch patch in the same private build copy. The original
+source hash remains the version gate; Ghidra's Apache-2.0 license still applies.
+
+Independent regressions exercise 96 signed-offset LDD/STD pairs across X, Y and
+SP, exact byte order/flags, unchanged base registers, IO access counts, and a
+word postincrement. They fail against the uncorrected description. No vendor
+program bytes are embedded in these vectors.

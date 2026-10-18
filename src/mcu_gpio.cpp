@@ -103,6 +103,7 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
 void McuGpio::set_function(const McuPort port, const PinFunction function) {
   const auto index = port_index(port);
   if ((function.inputs & function.outputs) != 0 || (function.levels & ~function.outputs) != 0 ||
+      (function.unknown & ~function.outputs) != 0 || (function.levels & function.unknown) != 0 ||
       ((function.inputs | function.outputs) & ~specs[index].valid) != 0) {
     throw Fault("Invalid MCU GPIO peripheral-function masks");
   }
@@ -137,10 +138,14 @@ std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) c
   const auto &state = ports_[index];
   const auto tied = static_cast<unsigned>(tied_low(port));
   const auto &function = state.function;
+  if ((function.unknown & requested & ~tied) != 0) {
+    throw Fault("Unknown MCU peripheral output latch at " + hex(specs[index].base));
+  }
   const auto functions = static_cast<unsigned>(function.inputs) | function.outputs;
   const auto direction = (state.direction & ~functions) | function.outputs;
   const auto latch = (state.latch & ~static_cast<unsigned>(function.outputs)) | function.levels;
-  const auto latch_known = static_cast<unsigned>(state.latch_known) | function.outputs;
+  const auto latch_known = (static_cast<unsigned>(state.latch_known) | function.outputs) &
+                           ~static_cast<unsigned>(function.unknown);
   const auto output = direction & latch_known & ~tied;
   unsigned known = tied | state.external.mask | output;
   unsigned value = (state.external.levels | (latch & output)) & ~tied;

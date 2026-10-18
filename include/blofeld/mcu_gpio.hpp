@@ -22,6 +22,7 @@ struct PinFunction {
   std::uint8_t inputs = 0;
   std::uint8_t outputs = 0;
   std::uint8_t levels = 0;
+  std::uint8_t unknown = 0; // Output pads whose peripheral latch is not known.
 };
 
 // Logical GPIO and explicit external drives, with unknown inputs tracked.

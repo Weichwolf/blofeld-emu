@@ -165,6 +165,65 @@ void test_conditional_branch() {
   require(rejected, "Unsupported BGND must fail visibly on its own step");
 }
 
+void test_indexed_word_memory_operands() {
+  TestBus bus;
+  constexpr std::array<std::uint8_t, 4> initial_code{0xec, 0, 0x6c, 0};
+  bus.code(initial_code); // Own LDD/STD with a five-bit indexed postbyte.
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  constexpr std::array<unsigned, 3> bases{0x2000, 0x2400, 0x2800};
+  constexpr unsigned stored_word = 0xabcd;
+  constexpr unsigned stored_high = 0xab;
+  constexpr unsigned stored_low = 0xcd;
+  constexpr unsigned loaded_flags = 0xf1;
+  constexpr unsigned stored_flags = 0xf9;
+  constexpr unsigned load_postbyte = 0x8001;
+  for (unsigned reg = 0; reg < bases.size(); ++reg) {
+    for (int offset = -16; offset < 16; ++offset) {
+      const auto postbyte =
+          static_cast<std::uint8_t>((reg << 6U) | (static_cast<unsigned>(offset + 32) % 32));
+      bus.write(load_postbyte, postbyte);
+      constexpr unsigned store_postbyte = 0x8003;
+      bus.write(store_postbyte, postbyte);
+      const auto target = static_cast<std::uint16_t>(static_cast<int>(bases[reg]) + offset);
+      bus.write(target, index_high);
+      bus.write(static_cast<std::uint16_t>(target + 1), index_low);
+      const blofeld::CpuState initial{
+          .pc = 0x8000, .x = 0x2000, .y = 0x2400, .sp = 0x2800, .ccr = 0xff};
+      cpu.set_state(initial);
+      bus.read_count = 0;
+      cpu.step();
+      require(cpu.state().d == index_value && cpu.state().x == initial.x &&
+                  cpu.state().y == initial.y && cpu.state().sp == initial.sp &&
+                  bus.read_count == 2 && cpu.state().ccr == loaded_flags,
+              "Indexed LDD dereferences two bytes without changing its base register");
+      auto state = cpu.state();
+      state.d = stored_word;
+      cpu.set_state(state);
+      bus.read_count = 0;
+      cpu.step();
+      require(bus.bytes[target] == stored_high && bus.bytes[target + 1] == stored_low &&
+                  cpu.state().x == initial.x && cpu.state().y == initial.y &&
+                  cpu.state().sp == initial.sp && bus.read_count == 0 &&
+                  cpu.state().ccr == stored_flags,
+              "Indexed STD stores memory without assigning the base register or prereading IO");
+    }
+  }
+}
+
+void test_indexed_word_postincrement() {
+  TestBus bus;
+  constexpr std::array<std::uint8_t, 2> code{0xec, 0x31}; // Own LDD 2,X+.
+  bus.code(code);
+  constexpr unsigned operand = 0x2200;
+  bus.bytes[operand] = index_high;
+  bus.bytes[operand + 1] = index_low;
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  cpu.set_state({.pc = 0x8000, .x = operand});
+  cpu.step();
+  require(cpu.state().d == index_value && cpu.state().x == operand + 2,
+          "Word postincrement loads the old address's data and increments the index by two");
+}
+
 void test_word_bus_transfers() {
   TestBus bus;
   // LDD #$1234; STD $0030; LDD $0030.
@@ -281,6 +340,8 @@ int main() {
   try {
     test_load_and_flags();
     test_index_and_stack();
+    test_indexed_word_memory_operands();
+    test_indexed_word_postincrement();
     test_strict_bus();
     test_code_modification_and_branch();
     test_conditional_branch();

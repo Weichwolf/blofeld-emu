@@ -12,7 +12,6 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
-#include <string_view>
 
 namespace {
 // Independent expectations: 9S12UF32DGV1 A.4.3, S12CRGUV1 section 3,
@@ -255,13 +254,9 @@ void test_original_boot_clock_boundary(const std::filesystem::path &reference) {
   require(bus.read(sci_baud_low) == midi_divider && bus.read(sci_control2) == 12,
           "Original firmware sets the MIDI baud divisor and enables RX/TX");
   require(cpu.state().pc == timer_setup_pc, "Original reset reaches timer configuration");
-  bool timer_write_rejected = false;
-  try {
-    cpu.step();
-  } catch (const blofeld::Fault &fault) {
-    timer_write_rejected = std::string_view(fault.what()).contains("MCU write at 0x004d");
-  }
-  require(timer_write_rejected, "The next original instruction fails at the timer register write");
+  cpu.step();
+  constexpr unsigned timer_prescaler = 0x4d;
+  require(bus.read(timer_prescaler) == 6, "Original reset selects a divide-by-64 timer prescaler");
 }
 }
 

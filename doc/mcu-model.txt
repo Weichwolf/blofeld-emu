@@ -50,7 +50,7 @@ GPIO
 
 With these explicit fixtures the original reset code initializes USB PHY control
 and reaches clock qualification. Without them execution still stops at the
-unknown input read. TSCR1 has only a control latch, not a working timer.
+unknown input read. Explicit-clock SCI/timer behavior is described separately.
 
 USB PHY and clock qualification
 - UMCR resets to 0x0820: PHY suspended, controller clock disabled, disconnected.
@@ -83,7 +83,12 @@ USB PHY and clock qualification
 SCI
 See mcu-sci.txt for the explicit-clock serial model, flags, pin routing, tests
 and unverified timing. Clock-window fixtures let the original reset code configure
-SCI and reach the next unsupported timer register. No host MIDI port exists yet.
+SCI and set the timer prescaler. No host MIDI port exists yet.
+
+Timer
+See mcu-timer.txt for the explicit-clock counter, capture/compare behavior,
+flag clearing, GPIO routing and unresolved timing. CPU/peripheral scheduling
+and physical calibration remain outstanding.
 
 CPU description corrections
 The pinned Ghidra 12.1.2 HC12 description incorrectly reverses BRSET's condition
@@ -92,6 +97,9 @@ compiled with the native SLEIGH compiler. The installed Ghidra tree is untouched
 Independent tests cover 12288 BRSET/BRCLR vectors (256 data values, eight masks,
 direct/extended/indexed forms), unchanged CCR and one operand read per branch;
 BRN is checked as a two-byte NOP. These checks do not validate the full ISA.
+The HC12 indexed-word export also needs a missing two-byte dereference. Separate
+tests cover signed five-bit offsets on X/Y/SP, memory rather than register
+assignment, load/store flags and access counts, and word postincrement.
 
 References
 - doc/hardware/sources.json pins the NXP reference downloads.

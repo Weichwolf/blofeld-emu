@@ -73,7 +73,8 @@ include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
-add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp src/mcu_clock.cpp src/mcu_sci.cpp)
+add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
+  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
@@ -99,6 +100,15 @@ if(BUILD_TESTING)
   add_executable(blofeld-sci-test test/mcu_sci_test.cpp)
   target_link_libraries(blofeld-sci-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_sci COMMAND blofeld-sci-test)
+  add_executable(blofeld-timer-test test/mcu_timer_test.cpp)
+  target_link_libraries(blofeld-timer-test PRIVATE blofeld_mcu)
+  add_test(NAME mcu_timer COMMAND blofeld-timer-test)
+  add_executable(blofeld-boot-test test/original_boot_test.cpp)
+  target_link_libraries(blofeld-boot-test PRIVATE blofeld_core)
+  add_test(NAME original_mcu_boot COMMAND blofeld-boot-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-boot.trace")
+  set_tests_properties(original_mcu_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME firmware_python
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s test -v)
   set_tests_properties(firmware_python PROPERTIES
@@ -119,7 +129,8 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test blofeld-clock-test blofeld-sci-test
+  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
+    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-boot-test
   USES_TERMINAL)
 endif()
 

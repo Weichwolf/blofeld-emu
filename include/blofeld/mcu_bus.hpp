@@ -6,6 +6,7 @@
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_memory.hpp"
 #include "blofeld/mcu_sci.hpp"
+#include "blofeld/mcu_timer.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -38,19 +39,22 @@ public:
   void set_pin_drive(McuPort port, PinDrive drive);
   void observe_phy(PhyClockWindow window);
   void advance_sci(unsigned bus_cycles);
+  void sample_timer_inputs(std::uint8_t mask);
+  void advance_timer(unsigned bus_cycles);
   void reset();
 
 private:
   [[nodiscard]] std::uint8_t read_register(std::uint16_t offset);
   [[nodiscard]] std::string_view write_register(ByteWrite write);
   [[nodiscard]] static bool reserved_register(std::uint16_t offset);
-  void sync_sci_pins();
+  void sync_peripheral_pins();
+  void check_timer_outputs() const;
   std::uint64_t revision_ = 0;
   McuMemory memory_;
   McuGpio gpio_;
   McuClock clock_;
   McuSci sci_;
-  std::uint8_t timer_control_ = 0;
+  McuTimer timer_;
   std::function<void(const BusEvent &)> observer_;
 };
 

@@ -1,0 +1,37 @@
+Original 1.25 MCU bootloader execution fixture
+
+  build/strict/blofeld-boot-test doc/Blofeld_Firmware_V1.25.zip build/strict/Testing/original-boot.trace
+
+The private ZIP is required; CTest explicitly skips this reference check if it is
+absent. The synthetic CPU/peripheral tests do not require manufacturer assets.
+Keep the generated trace private: it contains manufacturer instruction text.
+
+Fixture and evidence
+- Loads the checked, unmodified MCU image and starts at its original reset vector.
+  Port E's externally supplied mask 0xfb is driven low. One explicitly supplied
+  detector window with 15 PHY edges lets the original lock polling finish.
+- CPU instructions execute without elapsed bus/oscillator time. This isolates
+  instruction, memory and boot-algorithm behavior; it is not a scheduled board
+  model or a hardware-derived pin/clock profile.
+- The original code clears all 5120 bytes at 0x1200..0x25ff. The test first checks
+  cold RAM is unknown, then verifies every byte after the loop and its final X/Y.
+- The original checksum routine reads the application flash, updates its sum on
+  the emulated stack and chooses its own success path. No host checksum result
+  replaces CPU execution or patches the image. D=0 and restored SP=0x2600 are
+  checked at the original application entry 0x8200.
+- This fixture reaches that entry after 90314 instructions. The trace records
+  instruction text and PC/D/X/Y/SP/CCR before each instruction. Budget exhaustion
+  or an unknown access fails the test instead of counting as a boot.
+
+CPU regression found by this check
+Ghidra's HC12 indexed-word operand omitted its memory dereference. LDD loaded an
+address and STD could assign its base register, corrupting SP and the checksum.
+Independent synthetic LDD/STD addressing tests reproduce that error without
+manufacturer code. A separately versioned, hash-gated local language patch fixes
+the export. See patches/README.txt; installed Ghidra files remain untouched.
+
+Limits
+Reaching an application entry does not establish a complete Blofeld boot. DSP
+loading, NAND/ROM assets, scheduled clocks/interrupts, actual MIDI/audio, update
+and recovery execution, persistence and power-loss behavior still need coverage.
+Desktop/Keyboard pin differences and comparison with stock hardware are pending.
