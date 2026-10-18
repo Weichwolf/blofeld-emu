@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
+#include "blofeld/flash_image.hpp"
 #include "blofeld/mcu_memory.hpp"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace blofeld {
@@ -14,6 +16,22 @@ void validate(const FlashRange range) {
     throw Fault("Invalid physical MCU flash range at " + hex(range.offset));
   }
 }
+}
+
+McuMemory::McuMemory(const McuFlashImage &image) {
+  image.validate();
+  flash_ = image.bytes;
+  flash_known_ = image.known;
+  flash_fresh_ = image.fresh;
+  reset();
+}
+
+McuFlashImage McuMemory::flash_image() const {
+  McuFlashImage image{.bytes = flash_, .known = flash_known_, .fresh = flash_fresh_};
+  for (std::size_t offset = 0; offset < image.bytes.size(); ++offset) {
+    if (!image.known.test(offset)) { image.bytes[offset] = 0; }
+  }
+  return image;
 }
 
 std::uint8_t McuMemory::read_flash(const std::uint16_t offset) const {

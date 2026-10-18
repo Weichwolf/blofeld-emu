@@ -46,7 +46,10 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           executing/buffered jobs and interruption
                                           unknownness use explicit reference
                                           milestones (mcu-flash-commands.txt).
-                                          Timing and file persistence pending.
+                                          Cold MCU NVM files preserve bytes,
+                                          knowledge and erase history; see
+                                          mcu-flash-persistence.txt. Timed flash
+                                          scheduling remains pending.
                                           DSP initial and MS/MSW=111 maps, retained
                                           X/P alias, protected/missing ROM and
                                           explicit three-cycle switch tested.
@@ -153,9 +156,13 @@ SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity
                                           sequences and pin routing tested. See
                                           mcu-sci.txt for unresolved flag timing.
 Voice management and audio        pending  No original audio generation or PCM output.
-Persistent storage               partial  MCU flash mutations/unknownness survive
-                                          in-process reset/power-cycle tests; file
-                                          snapshots and persistence pending.
+Persistent storage               partial  MCU NVM files preserve mutations,
+                                          unknownness and erase history across
+                                          reconstruction; native/CLI and real
+                                          process-death file-publication tests.
+                                          Atomic private cold exports only;
+                                          continuous command journaling and full
+                                          board snapshots remain pending.
                                           NAND geometry/ECC and contents unresolved.
 Original update and recovery      pending  Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
@@ -197,6 +204,10 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           and reference reset/power-cycle seeds:
                                           64613 runs in 61 s without findings
                                           (mcu-flash-commands.txt).
+                                          Private MCU NVM codec with structured
+                                          synthetic seeds and CRC-aware mutations:
+                                          166146 runs in 61 s without findings
+                                          (mcu-flash-persistence.txt).
                                           SHI edge/register harness with synthetic
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.

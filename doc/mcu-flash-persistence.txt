@@ -1,0 +1,92 @@
+Private MCU NVM files
+
+This stores the physical 32 KiB MCU flash array, per-byte knowledge and per-word
+erase eligibility. It is a cold NVM image, not a CPU/RAM/controller/board snapshot.
+Restoring it starts volatile state cold and never fills unknown cells from the
+firmware ZIP. NAND, samples and DSP/board state are not stored by this format.
+
+  build/strict/blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip --flash-out doc/local/state.bfnvm --instructions 0
+  build/strict/blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip --flash-in doc/local/state.bfnvm --flash-out doc/local/state.bfnvm --instructions 1000
+
+The original ZIP is still required for the checked DSP records. With --flash-in,
+MCU execution uses the file's bytes, including its reset vector and option fields.
+--inspect rejects flash execution flags. Existing trace/input aliases, including
+hardlinks, are rejected before opening the trace. Input and output NVM may be the
+same file. Output symlinks are rejected. .bfnvm and temporary siblings are ignored
+globally because runtime NVM may contain manufacturer firmware.
+
+The CLI saves at instruction-budget completion or a caught CPU/model Fault,
+including a failed reset-vector fetch. It does not continuously journal commands.
+An uncatchable emulator-process failure before export leaves only the last saved
+image. A failure loading the file, constructing reset options or constructing the
+CPU cannot export a new image. Save failures are reported with exit status 1;
+a model Fault with a successful export returns 2. Normal budget exhaustion is 0.
+
+Cold export conservatively marks an active program's word, an active sector
+erase's 512 bytes, or an active mass erase's entire array unknown. Verify does not
+change cells. Untransferred buffers are discarded. Export does not mutate the
+live controller. Completed data and erase history survive import. In particular,
+FFFF bytes do not establish prior erase eligibility, and programming FFFF still
+consumes it. These are the explicit reference-state rules in mcu-flash-commands.txt,
+not a model of electrical pulse phases or calibrated interruption timing.
+
+Version 1 layout (fixed 38932 bytes)
+Offset   Size   Contents
+0        8      ASCII BLFNVM followed by CR LF
+8        4      Little-endian version 1
+12       4      Little-endian payload size 38912 (00009800)
+16       32768  Physical array bytes, starting at logical 8000
+32784    4096   Known bits, physical byte index, LSB first within each byte
+36880    2048   Freshly erased bits, physical word index, LSB first
+38928    4      Little-endian CRC-32/ISO-HDLC over all preceding bytes
+
+Unknown data bytes must be canonical zero. Fresh words require both bytes known
+and FF. Length, header, version, CRC and these invariants are validated before
+construction. Unknown reset options stop bus construction; unknown vectors or
+instruction bytes stop CPU execution. CRC detects corruption, not authenticity.
+There are no file-controlled allocation sizes or optional trailing sections.
+
+Host publication
+Encode and validate first, then create a private 0600 exclusive temporary sibling.
+Write it completely, fsync, close, atomically rename over the destination, then
+fsync the containing directory. Errors clean up the temporary file where possible
+and propagate; a post-rename sync error cannot restore the previous generation.
+A process killed before rename leaves the previous destination and may leave a
+private ignored temporary file. A kill after rename leaves the complete new file.
+No simultaneous writers or external directory renames are coordinated.
+
+Tests
+  ctest --test-dir build/strict -R '^(flash_image|flash_file_processes|flash_cli)$' --output-on-failure
+
+The native test uses a separate bit-at-a-time CRC oracle and literal layout
+expectations, rejects every truncated prefix, and checks 24 command/export
+positions (four commands at six staging/transfer/completion positions), every
+byte and history bit, cold reconstruction, pending-successor discard,
+unknown aliases, active-program export isolation, consumed FFFF program history
+and unknown reset options. The file test stops a child after actual create,
+write, file-fsync, rename and directory-fsync calls, kills it, and checks the
+destination against an independent Python encoding. It also checks replacement,
+permissions, failed-publish cleanup and rejected symlinks. These SIGKILL tests
+exercise host process death, not sudden disk/power loss or real flash hardware.
+
+CLI tests use own NOP code with a different reset vector, unknown instructions
+and vectors, malformed files and unknown security fields. This tests actual
+file-driven execution and fail-closed restoration instead of ZIP fallback. The
+original 1.25 archive is identity-checked and those tests explicitly skip when it
+is absent. No manufacturer code or runtime images are included in test sources.
+
+Offline fuzzing
+  cmake --preset fuzz
+  cmake --build build/fuzz --target flash-image-fuzz
+  python3 tools/make_flash_image_fuzz_seeds.py doc/local/flash-image-fuzz-corpus
+  mkdir -p doc/local/flash-image-fuzz-artifacts
+  build/fuzz/flash-image-fuzz doc/local/flash-image-fuzz-corpus -artifact_prefix=doc/local/flash-image-fuzz-artifacts/ -max_len=38964 -max_total_time=60
+
+Own seeds cover known, erased, unknown, partial-known, inconsistent-history,
+noncanonical, unsupported-version, truncated and corrupt images. Half of eligible
+mutations repair the CRC to reach semantic checks; the other half retain raw
+corruption coverage. This parser harness performs no file or physical-device I/O.
+The current strict-sanitizer campaign completed 166146 runs in 61 seconds without
+findings. This is a short parser campaign, not sustained storage/board fuzzing.
+Full live storage durability, board snapshots, timed power-loss behavior and
+original end-to-end update/recovery validation remain outstanding.

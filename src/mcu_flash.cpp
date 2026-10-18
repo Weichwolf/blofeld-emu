@@ -2,6 +2,7 @@
 #include "blofeld/mcu_flash.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/flash_image.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_flash_config.hpp"
 #include "blofeld/mcu_memory.hpp"
@@ -258,6 +259,12 @@ void McuFlash::check_array_read() const {
 
 bool McuFlash::interrupt_pending() const {
   return (control_ & status() & (buffer_empty | command_complete)) != 0;
+}
+
+McuFlashImage McuFlash::power_off_image() const {
+  auto image = memory_.flash_image();
+  if (active_ && active_->command != erase_verify) { image.invalidate(affected(*active_)); }
+  return image;
 }
 
 void McuFlash::observe_clock(const FlashClockRates rates) {

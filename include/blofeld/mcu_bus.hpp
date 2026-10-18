@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/bus.hpp"
+#include "blofeld/flash_image.hpp"
 #include "blofeld/mcu_clock.hpp"
 #include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_gpio.hpp"
@@ -33,6 +34,8 @@ struct BusEvent {
 class McuBus final : public Bus {
 public:
   explicit McuBus(std::span<const std::uint8_t> flash);
+  explicit McuBus(const McuFlashImage &image);
+  [[nodiscard]] McuFlashImage power_off_flash_image() const;
   std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
   void write_memory(MemoryWrite access) override;

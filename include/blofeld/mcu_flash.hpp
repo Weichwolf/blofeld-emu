@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/bus.hpp"
+#include "blofeld/flash_image.hpp"
 #include "blofeld/mcu_flash_config.hpp"
 #include "blofeld/mcu_memory.hpp"
 
@@ -34,6 +35,7 @@ public:
   void observe_clock(FlashClockRates rates);
   void check_array_read() const;
   [[nodiscard]] bool interrupt_pending() const;
+  [[nodiscard]] McuFlashImage power_off_image() const;
 
 private:
   enum class BufferState : std::uint8_t { empty, word, command, launched };

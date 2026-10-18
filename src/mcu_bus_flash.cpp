@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
+#include "blofeld/flash_image.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_memory.hpp"
@@ -8,6 +9,12 @@
 #include <string>
 
 namespace blofeld {
+
+McuBus::McuBus(const McuFlashImage &image) : memory_(image), flash_(memory_) {}
+
+McuFlashImage McuBus::power_off_flash_image() const {
+  return flash_.power_off_image();
+}
 
 void McuBus::stage_flash(const MemoryWrite access) {
   constexpr unsigned address_space = 65536;

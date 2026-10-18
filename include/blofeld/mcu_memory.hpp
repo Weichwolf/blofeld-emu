@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/bus.hpp"
+#include "blofeld/flash_image.hpp"
 
 #include <array>
 #include <bitset>
@@ -19,15 +20,12 @@ struct McuLocation {
   std::uint16_t offset = 0;
 };
 
-struct FlashRange {
-  std::uint16_t offset = 0;
-  unsigned size = 0;
-};
-
 // Normal single-chip MC9S12UF32 mapping. Power-on RAM is unknown until written.
 class McuMemory {
 public:
   explicit McuMemory(std::span<const std::uint8_t> flash);
+  explicit McuMemory(const McuFlashImage &image);
+  [[nodiscard]] McuFlashImage flash_image() const;
   [[nodiscard]] McuLocation locate(std::uint16_t address) const;
   [[nodiscard]] std::uint8_t read(std::uint16_t address) const;
   void write(ByteWrite write);

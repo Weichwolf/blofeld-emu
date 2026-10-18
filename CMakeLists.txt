@@ -74,12 +74,15 @@ include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
+add_library(blofeld_storage src/flash_image.cpp src/flash_file.cpp)
+target_include_directories(blofeld_storage PUBLIC include)
+target_link_libraries(blofeld_storage PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
   src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
-target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
+target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
 add_library(blofeld_core src/hc12.cpp)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
   src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp)
@@ -97,6 +100,18 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-flash-image-test test/flash_image_test.cpp)
+  target_link_libraries(blofeld-flash-image-test PRIVATE blofeld_core)
+  add_test(NAME flash_image COMMAND blofeld-flash-image-test)
+  add_executable(blofeld-flash-file-worker test/flash_file_worker.cpp)
+  target_link_libraries(blofeld-flash-file-worker PRIVATE blofeld_storage)
+  add_test(NAME flash_file_processes COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/flash_file_processes.py"
+    $<TARGET_FILE:blofeld-flash-file-worker>)
+  add_test(NAME flash_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/flash_cli.py"
+    $<TARGET_FILE:blofeld-headless>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip")
   add_executable(blofeld-flash-test test/mcu_flash_test.cpp)
   target_link_libraries(blofeld-flash-test PRIVATE blofeld_core)
   add_test(NAME flash_commands COMMAND blofeld-flash-test)
@@ -224,10 +239,14 @@ add_custom_target(quality
     blofeld-flash-config-test blofeld-original-flash-config-test
     blofeld-flash-test
     blofeld-original-flash-test
+    blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
 endif()
 
 if(BLOFELD_FUZZING)
+  add_executable(flash-image-fuzz test/flash_image_fuzz.cpp)
+  target_link_libraries(flash-image-fuzz PRIVATE blofeld_storage ZLIB::ZLIB)
+  target_link_options(flash-image-fuzz PRIVATE -fsanitize=fuzzer)
   add_executable(firmware-fuzz test/firmware_fuzz.cpp)
   target_link_libraries(firmware-fuzz PRIVATE blofeld_firmware)
   target_link_options(firmware-fuzz PRIVATE -fsanitize=fuzzer)

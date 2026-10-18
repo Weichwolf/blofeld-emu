@@ -48,6 +48,8 @@ doc/mcu-flash-config.txt covers reset security/protection and flash-clock
 configuration, including the isolated original updater initialization check.
 doc/mcu-flash-commands.txt covers the explicit reference command/milestone model,
 interrupted-NVM unknownness and isolated original programming/recovery-vector checks.
+doc/mcu-flash-persistence.txt describes private --flash-in/--flash-out MCU NVM
+files, cold reconstruction, atomic host publication and process-death tests.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.

@@ -46,8 +46,8 @@ Array and interruption behavior
   sector/mass erase invalidates the affected sector/block. Verify changes no
   cells. Unknown contents remain unknown across later resets.
 - power_cycle also makes SMRAM/QRAM unknown. Committed NVM and interruption
-  unknownness survive in the same model instance. File persistence and complete
-  snapshots remain pending.
+  unknownness survive in the same model instance. Cold MCU NVM file export/import
+  is described in mcu-flash-persistence.txt; complete board snapshots remain pending.
 - Unknown option fields fail reset; unknown reset vectors cannot choose a boot
   address. Reset does not restore a pristine firmware image.
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
 #include "blofeld/firmware.hpp"
+#include "blofeld/flash_file.hpp"
+#include "blofeld/flash_image.hpp"
 #include "blofeld/hc12.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
@@ -22,6 +24,8 @@ struct Options {
   std::filesystem::path firmware;
   std::filesystem::path specification;
   std::filesystem::path trace;
+  std::filesystem::path flash_in;
+  std::filesystem::path flash_out;
   std::uint64_t instructions = 1000000;
   bool inspect = false;
   std::optional<blofeld::PinDrive> port_e_input;
@@ -61,6 +65,10 @@ Options options(const int count, char **values) {
       result.specification = value;
     } else if (argument == "--trace") {
       result.trace = value;
+    } else if (argument == "--flash-in") {
+      result.flash_in = value;
+    } else if (argument == "--flash-out") {
+      result.flash_out = value;
     } else if (argument == "--port-e-input") {
       result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
@@ -75,9 +83,49 @@ Options options(const int count, char **values) {
   }
   if (result.firmware.empty()) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
-                         "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS]");
+                         "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS] "
+                         "[--flash-in state.bfnvm] [--flash-out state.bfnvm]");
+  }
+  if (result.inspect && (!result.flash_in.empty() || !result.flash_out.empty())) {
+    throw blofeld::Fault("--inspect cannot be combined with MCU NVM execution inputs/outputs");
   }
   return result;
+}
+
+struct FilePair {
+  std::filesystem::path first;
+  std::filesystem::path second;
+};
+
+void distinct_files(const FilePair &files) {
+  if (files.first.empty() || files.second.empty()) { return; }
+  const auto first = std::filesystem::weakly_canonical(files.first);
+  const auto second = std::filesystem::weakly_canonical(files.second);
+  bool same = first == second;
+  if (!same && std::filesystem::exists(first) && std::filesystem::exists(second)) {
+    same = std::filesystem::equivalent(first, second);
+  }
+  if (same) { throw blofeld::Fault("Input/output file collision: " + files.first.string()); }
+}
+
+void validate_files(const Options &config, const std::filesystem::path &specification) {
+  for (const auto &path : {config.flash_in, config.flash_out}) {
+    if (!path.empty() && path.extension() != ".bfnvm") {
+      throw blofeld::Fault("MCU NVM files require the private .bfnvm extension");
+    }
+  }
+  for (const auto &input : {config.firmware, specification, config.flash_in, config.flash_out}) {
+    distinct_files({.first = config.trace, .second = input});
+  }
+  for (const auto &input : {config.firmware, specification}) {
+    distinct_files({.first = config.flash_out, .second = input});
+  }
+}
+
+void persist_flash(const Options &config, const blofeld::McuBus &bus) {
+  if (config.flash_out.empty()) { return; }
+  blofeld::save_flash_image(config.flash_out, bus.power_off_flash_image());
+  std::cout << "Saved private MCU NVM image: " << config.flash_out << '\n';
 }
 
 std::filesystem::path default_specification() {
@@ -116,6 +164,9 @@ void trace_interrupt(std::ofstream &trace, const blofeld::CpuStep result) {
 }
 
 int run(const Options &config) {
+  const auto specification =
+      config.specification.empty() ? default_specification() : config.specification;
+  validate_files(config, specification);
   const auto firmware = blofeld::Firmware::load(config.firmware);
   std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
             << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
@@ -126,7 +177,9 @@ int run(const Options &config) {
     if (!trace) { throw blofeld::Fault("Cannot create trace file"); }
     trace.exceptions(std::ios::failbit | std::ios::badbit);
   }
-  blofeld::McuBus bus(firmware.mcu);
+  const auto image = config.flash_in.empty() ? blofeld::McuFlashImage::from_known(firmware.mcu)
+                                             : blofeld::load_flash_image(config.flash_in);
+  blofeld::McuBus bus(image);
   if (config.port_e_input) {
     bus.set_pin_drive(blofeld::McuPort::e, *config.port_e_input);
     std::cout << "Explicit simulated port E input fixture: mask="
@@ -140,13 +193,13 @@ int run(const Options &config) {
             << ' ' << event.name << '\n';
     }
   });
-  const auto specification =
-      config.specification.empty() ? default_specification() : config.specification;
   blofeld::Hc12 cpu(bus, specification);
-  cpu.reset();
   std::uint64_t executed = 0;
   std::uint64_t interrupts = 0;
+  bool reset_completed = false;
   try {
+    cpu.reset();
+    reset_completed = true;
     while (executed < config.instructions) {
       trace_instruction(trace, cpu, executed);
       const auto result = cpu.step();
@@ -158,8 +211,13 @@ int run(const Options &config) {
     if (trace.is_open()) { trace.flush(); }
     std::cerr << "Stopped after " << executed << " completed MCU instructions: " << fault.what()
               << "\n";
-    print_state(std::cerr, cpu.state());
-    std::cerr << '\n';
+    if (reset_completed) {
+      print_state(std::cerr, cpu.state());
+      std::cerr << '\n';
+    } else {
+      std::cerr << "MCU reset did not complete; CPU state unavailable.\n";
+    }
+    persist_flash(config, bus);
     return 2;
   }
   if (trace.is_open()) { trace.flush(); }
@@ -167,6 +225,7 @@ int run(const Options &config) {
   std::cout << "Delivered interrupt entries: " << interrupts << '\n';
   print_state(std::cout, cpu.state());
   std::cout << '\n';
+  persist_flash(config, bus);
   return 0;
 }
 
