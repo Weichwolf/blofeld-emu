@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_gpio.hpp"
 #include "blofeld/dsp_pll.hpp"
 #include "blofeld/dsp_shi.hpp"
 
@@ -54,6 +55,8 @@ public:
 
   [[nodiscard]] DspPll &pll() { return pll_; }
 
+  [[nodiscard]] DspGpio &gpio(DspPort port);
+
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
 private:
@@ -79,6 +82,8 @@ private:
   std::array<Memory, 3> rom_;
   DspShi shi_;
   DspPll pll_;
+  std::array<DspGpio, 3> gpio_{DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f)};
+  std::uint32_t bus_control_ = 0;
   DspCodeChanges changes_;
   bool switched_ = false;
   bool requested_switch_ = false;

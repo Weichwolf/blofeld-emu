@@ -87,7 +87,11 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           behavior qualification. SHI SPI
                                           pins/registers/FIFO, error-clear sequences,
                                           request vectors and reset cycles tested
-                                          (dsp-shi.txt). PLL timing/lock, GPIO,
+                                          (dsp-shi.txt). C/E/F GPIO mux, unknown
+                                          pads/latches, contention and Port F BIU
+                                          setup tested (dsp-gpio.txt), including
+                                          native C output/E input operations.
+                                          PLL timing/lock, remaining GPIO,
                                           ESAI, DMA and chip profile pending;
                                           no combined MCU/DSP board boot.
 MCU–DSP communication             partial  Native synthetic HC12 GPIO program exchanges
@@ -102,6 +106,8 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           Native DSP RESET preserves OMR/PLL while
                                           clearing SHI; hardware reset resamples
                                           PINIT and restores the RAM map.
+                                          DSP GPIO PCR/PRR reset disconnects pins;
+                                          PDR latches remain nonreset.
                                           Private application probe completes
                                           1672476 instructions through original
                                           CPU delays after SCI/RTI/USB setup, then
@@ -138,8 +144,8 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           SHI edge/register harness with synthetic
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.
-                                          DSP bus/map/ROM/reset/PLL model harness:
-                                          40988 runs in 61 s without findings.
+                                          DSP bus/map/ROM/reset/PLL/GPIO model harness:
+                                          39981 runs in 61 s without findings.
                                           Native DSP instruction fuzzing pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write

@@ -2,6 +2,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_gpio.hpp"
 #include "blofeld/dsp_shi.hpp"
 #include "dsp56kEmu/assembler.h"
 
@@ -244,6 +245,42 @@ void test_native_code_write_and_decoder_invalidation() {
   require(cpu.state().x == changed, "Changing a cached P opcode changes its destination register");
 }
 
+void test_native_gpio_output_bits_and_external_input() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("movep #>$fff,x:<<$ffffbe");
+  program.emit("movep #>$615,x:<<$ffffbd");
+  program.emit("bclr #4,x:<<$ffffbd");
+  program.emit("bset #11,x:<<$ffffbd");
+  program.emit("movep #>$fff,y:<<$ffff9f");
+  program.emit("movep y:<<$ffff9d,x0");
+  const auto before_reset = program.instructions();
+  program.emit("reset");
+  const auto after_reset = program.pc();
+  program.emit("movep #>$fff,x:<<$ffffbe");
+  program.emit("movep x:<<$ffffbd,x0");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  constexpr unsigned inputs = 0xa53;
+  constexpr unsigned all_pins = 0xfff;
+  constexpr unsigned output = 0xe05;
+  bus.gpio(blofeld::DspPort::e).set_drive({.mask = all_pins, .levels = inputs});
+  for (unsigned index = 0; index < before_reset; ++index) { cpu.step(); }
+  const auto driven = bus.gpio(blofeld::DspPort::c).outputs();
+  require(driven.mask == all_pins && driven.known == all_pins && driven.levels == output,
+          "Native MOVEP/BCLR/BSET update the GPIO latch and its physical output mask");
+  require((cpu.state().x & word_mask) == inputs && (cpu.state().sr & 1U) == 0,
+          "Native Y-space MOVEP samples observed E inputs; BSET carry reflects previous C bit");
+  cpu.step();
+  require(cpu.state().pc == after_reset && bus.gpio(blofeld::DspPort::c).outputs().mask == 0 &&
+              bus.gpio(blofeld::DspPort::e).read(blofeld::DspGpioRegister::control) == 0,
+          "Executed DSP RESET disconnects both native GPIO banks without changing PC flow");
+  cpu.step();
+  cpu.step();
+  require((cpu.state().x & word_mask) == output,
+          "Native re-enabling and reading C outputs after RESET sees the nonreset PDR latch");
+}
+
 void test_software_reset_preserves_clock_and_memory_mode() {
   blofeld::DspBus bus;
   Program program;
@@ -426,6 +463,7 @@ int main() {
     test_memory_boundaries_rom_and_retained_switch();
     test_native_reset_fetch_fault_and_arithmetic();
     test_native_code_write_and_decoder_invalidation();
+    test_native_gpio_output_bits_and_external_input();
     test_software_reset_preserves_clock_and_memory_mode();
     test_short_immediates_and_register_repeat_count();
     test_bounded_rep_steps();

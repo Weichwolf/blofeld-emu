@@ -1,0 +1,72 @@
+DSP56371 GPIO ports C, E and F
+
+Primary references
+DSP56371UM chapter 6, sections 8.5 and 9.5, and register maps in Appendix C.
+DSP56300FM sections 2.3.3 and 9.6.2 for the core BCR reset fields.
+Both reference PDFs are pinned in hardware/sources.json and remain local inputs.
+
+Register map (DSP word addresses)
+  Port C, 12 pins: X:ffffbd PDR, X:ffffbe PRR, X:ffffbf PCR
+  Port E, 12 pins: Y:ffff9d PDR, Y:ffff9e PRR, Y:ffff9f PCR
+  Port F, 11 pins: Y:fffff5 PDR, Y:fffff6 PRR, Y:fffff7 PCR
+
+PCR/PRR select each pin independently:
+  PRR=0, PCR=0: disconnected
+  PRR=0, PCR=1: GPIO input
+  PRR=1, PCR=0: GPIO output
+  PRR=1, PCR=1: ESAI (C), ESAI_1 (E), reserved (F)
+RESET and external reset clear PCR/PRR, preserving nonreset PDR latches and
+observed external drives. Cold PDR contents are unknown. Disconnected PDR reads
+remain undefined even if an old output latch was known before disconnection.
+
+GPIO data and pins
+Input reads require explicit external drive observations. Output values require
+an explicit PDR write while configured output. No pull-up, NAND-ready level,
+initial output zero or peripheral waveform is fabricated. The documented PDR
+behavior does not qualify a future output latch after a write in a non-output
+mode; those bits are conservatively marked unknown. Subsequent output-mode
+writes qualify them. Silicon behavior for input/disconnected preload still
+needs comparison, rather than assuming a retained or overwritten latch value.
+
+Pad observations return known/level masks independently of GPIO register reads.
+GPIO outputs expose driven/known/level masks and delegated peripheral ownership.
+Opposed known external/output drives fail; unknown output latches cannot be
+qualified by an external driver. Unmodeled ESAI-owned pads stay unknown. The
+GPIO library supports explicitly masked reads, but native peripheral accesses
+currently require the complete requested word to be known. Native bit operations
+are therefore not yet qualified for a mixed known/unknown PDR word.
+
+Reserved upper register bits read zero; nonzero writes are conservatively
+rejected pending hardware qualification. This does not establish harmless
+reserved-bit write masking. F rejects simultaneous PCR/PRR selection per pin.
+The F pin count and PD10 follow the register diagrams and signal table; section
+6.2.4.3's prose says PD(9:0), inconsistent with its own PD10 diagram.
+
+Port F and the BIU
+The bus exposes BCR at X:fffffb. Its modeled reset is 1fffff, matching the family
+manual's reset fields. Only the DSP56371-specific documented write 01ffff is
+accepted. Port F bus accesses are rejected until that configuration is supplied.
+After configuration, a whole BCR read fails because its read-only BBS bus-master
+status is unobserved; writing a command cannot establish that status. Other BCR
+configurations, BIU arbitration and wait-state timing are unsupported.
+Core BCR state is restored on external reset; peripheral RESET clears GPIO modes.
+This gate qualifies the documented logical setup, not measured BIU cycle timing.
+
+Checks
+  ctest --test-dir build/strict -R '^(dsp_gpio|native_dsp|original_dsp_boot)$' --output-on-failure
+Tests exercise every implemented pin as input/output, reset/disconnected data,
+latched outputs, masked/whole reads, contention and rejected-state preservation,
+both serial-port mux tables, reserved F functions, register-space separation and
+the BCR gate. Synthetic native MOVEP/BCLR/BSET drives C output bits and samples E
+inputs through the strict bus, then executes RESET and re-enables C outputs to
+verify their nonreset latch. Model fuzzing includes external pads, masked GPIO
+reads and resets.
+
+Limits and original-firmware execution
+No board pin wiring, NAND device, ESAI stream, electrical/synchronizer latency or
+stock-device equivalence is established. Port D and timer GPIO remain pending.
+The original DSP still stops before reserved Y:002000 during its RAM-clear loop;
+no loop is skipped or reserved memory write discarded to reach these GPIOs.
+NXP section 3.1.1 warns against reserved-memory access and does not establish its
+write effects. The GPIO tests are independent chip-model evidence, not evidence
+that the original NAND loader or full board now boots.

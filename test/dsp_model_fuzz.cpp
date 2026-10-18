@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
+#include "blofeld/dsp_gpio.hpp"
 
 #include <array>
 #include <cstddef>
@@ -10,7 +11,7 @@
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_t size) {
   constexpr std::size_t stride = 9;
   constexpr std::size_t operation_limit = 256;
-  constexpr unsigned action_count = 11;
+  constexpr unsigned action_count = 15;
   constexpr unsigned word_mask = 0xffffff;
   blofeld::DspBus bus;
   const auto count = size / stride < operation_limit ? size / stride : operation_limit;
@@ -46,6 +47,20 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
               (record[8] & 2U) != 0 ? std::nullopt : std::optional<bool>((record[8] & 1U) != 0));
           break;
         case 10: static_cast<void>(bus.pll().target_ratio()); break;
+        case 11:
+          bus.gpio(static_cast<blofeld::DspPort>(record[1] % 4U))
+              .set_drive({.mask = address, .levels = value});
+          break;
+        case 12:
+          static_cast<void>(
+              bus.gpio(static_cast<blofeld::DspPort>(record[1] % 4U)).observe_pads(value));
+          break;
+        case 13: bus.reset_peripherals(); break;
+        case 14:
+          static_cast<void>(
+              bus.gpio(static_cast<blofeld::DspPort>(record[1] % 4U))
+                  .read(static_cast<blofeld::DspGpioRegister>(record[2] % 4U), value));
+          break;
         default: throw blofeld::Fault("Invalid DSP model-fuzzer action");
       }
     } catch (const blofeld::Fault &) {

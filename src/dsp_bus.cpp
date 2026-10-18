@@ -2,10 +2,12 @@
 #include "blofeld/dsp_bus.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/dsp_gpio.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -25,6 +27,38 @@ constexpr unsigned io_base = 0xffff80;
 constexpr unsigned ms = 0x80;
 constexpr unsigned msw = 0x600000;
 constexpr unsigned switch_cycles = 3;
+constexpr unsigned bcr_reset = 0x1fffff;
+constexpr unsigned port_f_bus_control = 0x01ffff;
+
+struct GpioRegister {
+  DspPort port = DspPort::c;
+  DspGpioRegister reg = DspGpioRegister::data;
+};
+
+std::optional<GpioRegister> gpio_register(const DspAddress access) {
+  constexpr unsigned port_c_base = 0xffffbd;
+  constexpr unsigned port_e_base = 0xffff9d;
+  constexpr unsigned port_f_base = 0xfffff5;
+
+  struct Mapping {
+    DspPort port;
+    DspSpace space;
+    unsigned base;
+  };
+
+  constexpr std::array<Mapping, 3> ports{
+      {{.port = DspPort::c, .space = DspSpace::x, .base = port_c_base},
+       {.port = DspPort::e, .space = DspSpace::y, .base = port_e_base},
+       {.port = DspPort::f, .space = DspSpace::y, .base = port_f_base}}};
+  for (const auto &mapping : ports) {
+    if (access.space == mapping.space && access.address >= mapping.base &&
+        access.address - mapping.base < 3) {
+      return GpioRegister{.port = mapping.port,
+                          .reg = static_cast<DspGpioRegister>(access.address - mapping.base)};
+    }
+  }
+  return std::nullopt;
+}
 
 std::size_t bank(const DspSpace space) {
   switch (space) {
@@ -60,11 +94,19 @@ void DspBus::reset() {
   changes_ = {.all = true, .addresses = {}};
   reset_peripherals();
   pll_.reset();
+  bus_control_ = bcr_reset;
   once_latch_.reset();
 }
 
 void DspBus::reset_peripherals() {
   shi_.reset();
+  for (auto &port : gpio_) { port.reset(); }
+}
+
+DspGpio &DspBus::gpio(const DspPort port) {
+  const auto index = static_cast<std::size_t>(port);
+  if (index >= gpio_.size()) { throw Fault("Invalid DSP GPIO port"); }
+  return gpio_.at(index);
 }
 
 DspBus::Location DspBus::locate(const DspAddress access, const Operation operation) const {
@@ -201,6 +243,20 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
   constexpr unsigned last_shi = 0xffff94;
   constexpr unsigned first_priority = 0xfffffe;
   constexpr unsigned pll_control = 0xfffffd;
+  constexpr unsigned bus_control = 0xfffffb;
+  if (const auto target = gpio_register(access)) {
+    if (target->port == DspPort::f && bus_control_ != port_f_bus_control) {
+      throw Fault("Unqualified DSP GPIO read at " + address_text(access) +
+                  ": Port F requires BCR=0x01ffff");
+    }
+    return gpio(target->port).read(target->reg);
+  }
+  if (access.space == DspSpace::x && access.address == bus_control) {
+    if (bus_control_ != bcr_reset) {
+      throw Fault("Unknown DSP BCR read at X:0xfffffb: BIU bus-master state is unobserved");
+    }
+    return bus_control_;
+  }
   if (access.space == DspSpace::x && access.address == pll_control) { return pll_.read(); }
   if (access.space == DspSpace::x && access.address >= first_shi && access.address <= last_shi) {
     return shi_.read(access.address);
@@ -215,6 +271,23 @@ void DspBus::write_peripheral(const DspStore access) {
   constexpr unsigned first_priority = 0xfffffe;
   constexpr unsigned once_gdb = 0xfffffc;
   constexpr unsigned pll_control = 0xfffffd;
+  constexpr unsigned bus_control = 0xfffffb;
+  if (const auto target = gpio_register({.space = access.space, .address = access.address})) {
+    if (target->port == DspPort::f && bus_control_ != port_f_bus_control) {
+      throw Fault("Unqualified DSP GPIO write at " +
+                  address_text({.space = access.space, .address = access.address}) +
+                  ": Port F requires BCR=0x01ffff");
+    }
+    gpio(target->port).write({.reg = target->reg, .value = access.value});
+    return;
+  }
+  if (access.space == DspSpace::x && access.address == bus_control) {
+    if (access.value != port_f_bus_control) {
+      throw Fault("Unsupported DSP BCR write at X:0xfffffb value=" + hex(access.value, 6));
+    }
+    bus_control_ = access.value;
+    return;
+  }
   if (access.space == DspSpace::x && access.address == pll_control) {
     pll_.write(access.value);
     return;

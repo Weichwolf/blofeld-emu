@@ -39,7 +39,9 @@ DSP56371 memory and peripheral scope
 - PCTL command/reset state and requested EXTAL ratios follow DSP56371UM chapter 5;
   see dsp-pll.txt. Hardware reset samples observed PINIT, while the DSP RESET
   instruction resets SHI/interrupt state without resetting CPU OMR or PLL control.
-- GPIO/timers, ESAI, DMA, NAND and clock scheduling are not modeled.
+- C/E/F GPIO modes, data/pads, unknown latches and Port F's required BIU setup
+  are modeled (dsp-gpio.txt). BCR accepts only its documented Port F setup.
+- Port D/timer GPIO, timers, ESAI, DMA, NAND and clock scheduling are not modeled.
   Native power-up register undefined-state tracking and full derivative reset,
   interrupt, pipeline and instruction-cycle fidelity need further validation.
 
@@ -56,6 +58,8 @@ Short immediates are checked against DSP56300FM's destination-dependent fraction
 versus integer alignment, including a full 24-bit register-specified REP count.
 Native RESET and external reset independently check SHI, PCTL and memory-map
 retention/restoration; these do not establish complete derivative reset fidelity.
+Own native MOVEP/BCLR/BSET sequences drive port C pins and sample explicit port E
+input levels. The original first-stage GPIO sequence is not reached by this test.
 
 Document-derived SPI bootstrap reference
 DSP56371UM Appendix A publishes the SPI path, but references a separate EEPROM
@@ -102,9 +106,10 @@ Offline DSP bus/model fuzzing
   python3 tools/make_dsp_fuzz_seeds.py doc/local/dsp-fuzz-corpus
   build/fuzz/dsp-model-fuzz doc/local/dsp-fuzz-corpus -artifact_prefix=doc/local/dsp-fuzz-artifacts/ -max_len=2304 -max_total_time=60
 
-The expanded synthetic campaign completed 40988 runs in 61 seconds without
+The expanded synthetic campaign completed 39981 runs in 61 seconds without
 sanitizer findings. The model harness also exercises PCTL commands, PINIT
-observations and clock-target queries. It covers bus/map/ROM/reset/SHI/PLL inputs, not arbitrary native
-DSP instruction streams or the complete board. Sustained and differential CPU
+observations and clock-target queries. GPIO pad observations and peripheral
+reset are included. It covers bus/map/ROM/reset/SHI/PLL/GPIO inputs, not arbitrary
+native DSP instruction streams or the complete board. Sustained and differential CPU
 campaigns, actual NAND/assets, full application/audio and hardware comparison
 remain required; see coverage.txt.

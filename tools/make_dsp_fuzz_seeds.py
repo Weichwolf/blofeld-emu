@@ -26,6 +26,15 @@ def main() -> None:
            (9, 0, 0, 2), (5, 0, 0, 0), (0, 1, 0xFFFFFD, 0),
            (1, 1, 0xFFFFFD, 0x1FE7FF), (10, 0, 0, 0)]
     (output / "pll-pinit-and-targets").write_bytes(b"".join(record(*row) for row in pll))
+    gpio = [(0, 1, 0xFFFFBD, 0), (1, 1, 0xFFFFBE, 0xFFF),
+            (1, 1, 0xFFFFBD, 0x615), (0, 1, 0xFFFFBD, 0), (12, 0, 0, 0xFFF),
+            (14, 0, 0, 0xFFF), (14, 0, 0x10000, 0xFFF),
+            (11, 0, 0xFFF, 0x615), (11, 0, 0xFFF, 0x9EA),
+            (1, 2, 0xFFFF9F, 0xFFF), (11, 1, 0xFFF, 0xA53),
+            (0, 2, 0xFFFF9D, 0), (1, 2, 0xFFFFF6, 0x7FF),
+            (1, 1, 0xFFFFFB, 0x01FFFF), (1, 2, 0xFFFFF6, 0x7FF),
+            (1, 2, 0xFFFFF5, 0x615), (13, 0, 0, 0), (5, 0, 0, 0)]
+    (output / "gpio-banks-pads-reset").write_bytes(b"".join(record(*row) for row in gpio))
     for area in range(3):
         base = 0xFF0000 if area == 0 else 0x4000
         rows = [(6, area, base, 0x123456), (0, area, base, 0), (0, area, base + 2, 0),
