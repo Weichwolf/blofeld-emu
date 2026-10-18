@@ -66,17 +66,22 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           checkout built separately; its assembler,
                                           JIT, interpreter and optimizer suites pass.
                                           No combined board execution.
-DSP56371 peripherals/boot ROM     pending  NXP documentation available; SHI bootstrap,
-                                          PLL, ESAI, DMA and chip profile unimplemented.
+DSP56371 peripherals/boot ROM     pending  NXP bootstrap source documented; a separate
+                                          94-word DSP first stage is statically
+                                          identified inside the MCU image. SHI,
+                                          PLL, ESAI, DMA and chip profile unimplemented;
+                                          no original combined bootstrap execution.
 MCU–DSP communication             pending  No combined scheduled execution.
 ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
-                                          Private application probe executes 1M
-                                          instructions through original CPU delay
-                                          loops after SCI/RTI/USB setup; no elapsed
-                                          peripheral time or USB host is supplied.
+                                          Private application probe completes
+                                          1672476 instructions through original
+                                          CPU delays after SCI/RTI/USB setup, then
+                                          stops on unknown PTU0 input at 0x0278.
+                                          No elapsed peripheral time/USB host;
+                                          board wiring remains unresolved.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear

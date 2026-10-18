@@ -33,9 +33,15 @@ the export. See patches/README.txt; installed Ghidra files remain untouched.
 Application continuation probe
 A separate private diagnostic continues with PE0/PE1 explicitly high, leaving
 IRQ/XIRQ inactive. It passes application SCI receive-interrupt configuration,
-RTICTL=0x40, RTIE, USB UNCIR/UIMR and MEN setup. One million instructions execute
-through original CPU-counted delay loops; the diagnostic budget ends at PC
-0xb975. No elapsed bus/oscillator time or USB decoder events are supplied.
+RTICTL=0x40, RTIE, USB UNCIR/UIMR and MEN setup. After 1672476 completed
+instructions through original CPU-counted delay loops, execution fails on the
+unknown external PTU0 input (register 0x0278, bit 0, PC 0xb98d). No elapsed
+bus/oscillator time or USB decoder events are supplied. The full private trace
+including the attempted failing instruction has SHA-256:
+  dc95a12e8b706d71a3bb2472f753e946de804536895ad1785eedb84109625d00
+The MCU data sheet identifies PU0 as general GPIO or a CF/ATA signal depending
+on configuration; its Blofeld board connection is not established by that fact.
+No external high level is invented to bypass this wait.
 The image and CPU loop state are not patched or bypassed. This remains an untimed,
 unverified pin fixture; no application or complete-board boot is inferred.
 
