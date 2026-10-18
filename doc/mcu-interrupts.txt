@@ -16,6 +16,7 @@ CPU behavior
 - RTI executes real HC12 instructions to restore context. A request pending
   after restoration reuses that frame without rewriting memory. Entry events
   are reported separately from executed opcodes in CPU results and CLI traces.
+  The byte CCR and word B:A/X/Y/PC transfers retain their logical operand widths.
 - A build-local SLEIGH patch fixes SWI's vector dereference/fetch order and
   inverted STOP-disable test. Disabled STOP is a two-byte NOP. Enabled STOP
   stacks context, then fails at unsupported clock suspension. WAI, low-power

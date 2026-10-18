@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "blofeld/mcu_usb.hpp"
+
+#include "blofeld/bus.hpp"
+
+#include <cstdint>
+#include <string_view>
+
+namespace blofeld {
+namespace {
+constexpr unsigned select_high = 0x30e;
+constexpr unsigned select_low = 0x30f;
+constexpr unsigned data_high = 0x310;
+constexpr unsigned data_low = 0x312;
+constexpr unsigned data_end = 0x314;
+constexpr unsigned selector_mask = 15;
+constexpr unsigned buffer_selector_mask = 0x77;
+constexpr unsigned byte_mask = 0xff;
+constexpr unsigned word_mask = 0xffff;
+constexpr unsigned number_configuration_mask = 0x773;
+constexpr unsigned number_configurations = 8;
+constexpr unsigned alternate_settings = 9;
+}
+
+void McuUsb::reset() {
+  *this = McuUsb{};
+}
+
+std::string_view McuUsb::register_name(const std::uint16_t offset) {
+  if (offset == select_high) { return "UEPCSELR high"; }
+  if (offset == select_low) { return "UEPCSELR low"; }
+  if (configuration_data(offset)) { return "UUCFGR configuration window"; }
+  return {};
+}
+
+bool McuUsb::configuration_data(const std::uint16_t offset) {
+  return offset >= data_high && offset < data_end;
+}
+
+unsigned McuUsb::selected_register() const {
+  if (selector_ >= 1 && selector_ <= 5) { return selector_ - 1U; }
+  if (selector_ == number_configurations) { return 5; }
+  if (selector_ == alternate_settings) { return 6; }
+  throw Fault("Reserved USB configuration selection " + hex(selector_, 2));
+}
+
+std::uint8_t McuUsb::read(const std::uint16_t offset) const {
+  if (offset == select_high) { return selector_; }
+  if (offset == select_low) { return buffers_; }
+  if (!configuration_data(offset)) {
+    throw Fault("Unknown USB configuration read at " + hex(offset));
+  }
+  const auto shift = (data_end - offset - 1U) * 8;
+  return static_cast<std::uint8_t>((configuration_.at(selected_register()) >> shift) & byte_mask);
+}
+
+void McuUsb::write(const ByteWrite access) {
+  if (access.address == select_high) {
+    const auto next = static_cast<std::uint8_t>(access.value & selector_mask);
+    if (staged_high_ && next != selector_) {
+      throw Fault("Unverified USB configuration selection change between staged words");
+    }
+    selector_ = next;
+    return;
+  }
+  if (access.address == select_low) {
+    buffers_ = static_cast<std::uint8_t>(access.value & buffer_selector_mask);
+    return;
+  }
+  if (configuration_data(access.address)) {
+    throw Fault("USB UUCFGR requires ordered high/low 16-bit operand writes");
+  }
+  throw Fault("Unknown USB configuration write at " + hex(access.address));
+}
+
+void McuUsb::write_memory(const MemoryWrite access) {
+  if (access.size != 2 || (access.address != data_high && access.address != data_low)) {
+    throw Fault("Unsupported USB configuration write width/alignment at " + hex(access.address));
+  }
+  const auto index = selected_register();
+  const auto word = static_cast<std::uint16_t>(access.value & word_mask);
+  if (access.address == data_high) {
+    staged_high_ = word;
+    return;
+  }
+  if (!staged_high_) {
+    throw Fault("Unknown USB configuration staging word before low-word commit");
+  }
+  auto value = (static_cast<std::uint32_t>(*staged_high_) << 16U) | word;
+  if (selector_ == number_configurations) {
+    value &= number_configuration_mask;
+    const auto configurations = value & 3U;
+    const auto interfaces1 = (value >> 4U) & 7U;
+    const auto interfaces2 = (value >> 8U) & 7U;
+    if (configurations > 2 || interfaces1 > 4 || interfaces2 > 4) {
+      throw Fault("Reserved USB configuration/interface count");
+    }
+  }
+  configuration_.at(index) = value;
+  staged_high_.reset();
+}
+
+}

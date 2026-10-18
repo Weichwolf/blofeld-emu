@@ -1,5 +1,13 @@
 --- a/HCS_HC12.sinc
 +++ b/HCS_HC12.sinc
+@@ -4932,2 +4932,5 @@
+-	Pull1( B );
+-	Pull1( A );
++	ba:2 = 0;
++	Pull2( ba );
++	A = ba:1;
++	ba = ba >> 8;
++	B = ba:1;
 @@ -5321 +5321 @@
 -	if ($(S) == 0) goto <continue>;
 +	if ($(S) != 0) goto <continue>;

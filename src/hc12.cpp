@@ -103,8 +103,8 @@ std::string xml_text(const std::string &text) {
 // already committed or retain stale instructions after RAM code is modified.
 class InstructionExecutor final : public ghidra::EmulateMemory {
 public:
-  InstructionExecutor(ghidra::Sleigh &translator, ghidra::MemoryState &memory)
-      : EmulateMemory(&memory), translator_(translator) {
+  InstructionExecutor(Bus &bus, ghidra::Sleigh &translator, ghidra::MemoryState &memory)
+      : EmulateMemory(&memory), bus_(bus), translator_(translator) {
     ghidra::OpBehavior::registerInstructions(behaviors_, &translator_);
     translator_.getUserOpNames(user_operations_);
   }
@@ -124,13 +124,13 @@ public:
 
   [[nodiscard]] ghidra::Address getExecuteAddress() const override { return address_; }
 
-  void execute(Bus &bus) {
-    bus.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
+  void execute() {
+    bus_.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
     clear();
     ghidra::PcodeEmitCache emitter(operations_, varnodes_, behaviors_, 0);
     const auto length = translator_.oneInstruction(emitter, address_);
-    bus.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
-                       .length = static_cast<unsigned>(length)});
+    bus_.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
+                        .length = static_cast<unsigned>(length)});
     next_ = address_ + length;
     memstate->setValue("PC", next_.getOffset());
     index_ = 0;
@@ -150,6 +150,18 @@ public:
 
 protected:
   void fallthruOp() override { ++index_; }
+
+  void executeLoad() override {
+    const auto access = memory_access(false);
+    memstate->setValue(currentOp->getOutput(), bus_.read_memory(access));
+  }
+
+  void executeStore() override {
+    const auto access = memory_access(true);
+    bus_.write_memory({.address = access.address,
+                       .size = access.size,
+                       .value = memstate->getValue(currentOp->getInput(2))});
+  }
 
   void executeCallother() override {
     const auto identifier = memstate->getValue(currentOp->getInput(0));
@@ -185,6 +197,17 @@ protected:
   }
 
 private:
+  [[nodiscard]] MemoryRead memory_access(const bool write) const {
+    const auto *space = currentOp->getInput(0)->getSpaceFromConst();
+    if (space != translator_.getDefaultCodeSpace() || space->getWordSize() != 1) {
+      throw Fault("Unsupported HC12 load/store address space");
+    }
+    const auto offset = memstate->getValue(currentOp->getInput(1));
+    if (offset > hc12::address_mask) { throw Fault("HC12 operand address exceeds 16 bits"); }
+    const auto size = write ? currentOp->getInput(2)->size : currentOp->getOutput()->size;
+    return {.address = static_cast<std::uint16_t>(offset), .size = static_cast<unsigned>(size)};
+  }
+
   void clear() {
     // These objects are allocated and transferred by the native PcodeEmitCache API.
     for (auto *operation : operations_) { delete operation; }
@@ -194,6 +217,7 @@ private:
   }
 
   static constexpr unsigned operation_limit = 100000;
+  Bus &bus_;
   ghidra::Sleigh &translator_;
   ghidra::Address address_;
   ghidra::Address next_;
@@ -224,7 +248,7 @@ public:
     memory.setMemoryBank(ram.get());
     memory.setMemoryBank(registers.get());
     memory.setMemoryBank(temporaries.get());
-    executor = std::make_unique<InstructionExecutor>(translator, memory);
+    executor = std::make_unique<InstructionExecutor>(bus, translator, memory);
   }
 
   void refresh_decoder() {
@@ -241,10 +265,7 @@ public:
     const auto old = memory.getValue("SP");
     const auto stack = static_cast<std::uint16_t>((old + address_space - 2) & hc12::address_mask);
     memory.setValue("SP", stack);
-    bus.write(stack, static_cast<std::uint8_t>(value >> 8U));
-    constexpr unsigned byte_mask = 0xff;
-    bus.write(static_cast<std::uint16_t>((static_cast<unsigned>(stack) + 1) & hc12::address_mask),
-              static_cast<std::uint8_t>(value & byte_mask));
+    bus.write_memory({.address = stack, .size = 2, .value = value});
   }
 
   void push_byte(const std::uint8_t value) {
@@ -252,7 +273,7 @@ public:
     const auto stack = static_cast<std::uint16_t>((memory.getValue("SP") + address_space - 1) &
                                                   hc12::address_mask);
     memory.setValue("SP", stack);
-    bus.write(stack, value);
+    bus.write_memory({.address = stack, .value = value});
   }
 
   std::uint64_t decoded_revision = 0;
@@ -281,8 +302,7 @@ void Hc12::reset() {
   initial.sp = hc12::reset_sp;   // S12CPU15UG section 3.1.3, reset programming model.
   initial.ccr = hc12::reset_ccr; // S, X and I are set by CPU12 reset.
   initial.pc = static_cast<std::uint16_t>(
-      (static_cast<unsigned>(impl_->bus.read(hc12::reset_vector)) << 8U) |
-      impl_->bus.read(hc12::reset_vector + 1));
+      impl_->bus.read_memory({.address = hc12::reset_vector, .size = 2}));
   set_state(initial);
 }
 
@@ -344,9 +364,8 @@ std::optional<InterruptRequest> Hc12::pending_interrupt() const {
 void Hc12::enter_interrupt(const InterruptRequest request,
                            const std::optional<std::uint16_t> reuse_stack) {
   auto next = state();
-  const auto high = impl_->bus.read(request.vector);
-  const auto low = impl_->bus.read(static_cast<std::uint16_t>(request.vector + 1));
-  const auto target = static_cast<std::uint16_t>((static_cast<unsigned>(high) << 8U) | low);
+  const auto target =
+      static_cast<std::uint16_t>(impl_->bus.read_memory({.address = request.vector, .size = 2}));
   impl_->bus.acknowledge_interrupt(request.vector);
   if (reuse_stack) {
     impl_->memory.setValue("SP", *reuse_stack);
@@ -377,7 +396,7 @@ CpuStep Hc12::step() {
     }
     const auto opcode = impl_->bus.peek(before.pc);
     impl_->refresh_decoder();
-    impl_->executor->execute(impl_->bus);
+    impl_->executor->execute();
     constexpr unsigned rti_opcode = 0x0b;
     constexpr unsigned swi_opcode = 0x3f;
     CpuStep result;

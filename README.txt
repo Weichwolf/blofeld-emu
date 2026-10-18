@@ -47,6 +47,7 @@ it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.
 doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requests;
 doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.
+doc/mcu-usb.txt covers the USB configuration window and preserved CPU operand widths.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

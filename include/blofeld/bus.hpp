@@ -17,6 +17,18 @@ struct ByteWrite {
   std::uint8_t value = 0;
 };
 
+// Logical CPU operand widths, not promises about physical bus-cycle timing.
+struct MemoryRead {
+  std::uint16_t address = 0;
+  unsigned size = 1;
+};
+
+struct MemoryWrite {
+  std::uint16_t address = 0;
+  unsigned size = 1;
+  std::uint64_t value = 0;
+};
+
 struct InstructionFetch {
   std::uint16_t address = 0;
   unsigned length = 0;
@@ -40,6 +52,8 @@ public:
   virtual ~Bus() = default;
   virtual std::uint8_t read(std::uint16_t address) = 0;
   virtual void write(std::uint16_t address, std::uint8_t value) = 0;
+  [[nodiscard]] virtual std::uint64_t read_memory(MemoryRead access);
+  virtual void write_memory(MemoryWrite access);
   [[nodiscard]] virtual std::uint8_t peek(std::uint16_t address) const = 0;
   [[nodiscard]] virtual std::uint64_t revision() const = 0;
   virtual void check_execute(InstructionFetch fetch) const = 0;

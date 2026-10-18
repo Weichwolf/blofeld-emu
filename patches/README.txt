@@ -47,6 +47,7 @@ HC12 exception corrections
 -------------------------
 ghidra-hc12-exceptions.patch corrects SWI's indirect vector fetch, reads the
 vector before stacking, and writes the B:A stack word in hardware byte order.
+RTI restores B:A with a word transfer, preserving its documented operand width.
 It also fixes the reversed STOP-disable condition. Enabled STOP remains an
 unsupported clock-suspension operation; disabled STOP must be a two-byte NOP.
 The patch follows the branch and indexed-word patches under the same source
@@ -54,3 +55,5 @@ hash gate and Ghidra Apache-2.0 terms. No installed distribution is modified.
 
 Independent mcu_interrupt tests fail against the uncorrected SWI constructor
 and verify the corrected handler address, stack access order and STOP gate.
+memory_usb independently checks the IRQ save/RTI restore operand widths and fails
+against the original two-byte-load RTI description.

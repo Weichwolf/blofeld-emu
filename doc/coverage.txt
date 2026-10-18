@@ -26,6 +26,8 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           Interrupt frames, vector-first entry,
                                           RTI frame reuse, SWI and STOP-disable
                                           gate checked (mcu-interrupts.txt).
+                                          CPU byte/word operand widths retained;
+                                          IRQ/RTI B:A word transfers checked.
                                           Full ISA, cycle timing and hardware
                                           comparison pending.
                                           Independent reset/opcode reference:
@@ -47,8 +49,10 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           real CPU ISR checked (mcu-rti.txt).
                                           Analog startup, scheduled CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
-USB device/transport              partial  PHY control only. Controller enable,
+USB device/transport              partial  PHY control. Controller enable,
                                           commands and endpoint behavior unsupported.
+                                          UEPCSELR/UUCFGR banks and ordered 16-bit
+                                          staging/commit tested (mcu-usb.txt).
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           checkout built separately; its assembler,
                                           JIT, interpreter and optimizer suites pass.
@@ -61,8 +65,8 @@ ROM wavetables and other assets   pending  Must establish dependencies from real
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Private application probe now stops at
-                                          unsupported USB selector write (PC beb2),
-                                          after SCI interrupt and RTI setup.
+                                          unsupported USB interrupt mask (PC bec2),
+                                          after SCI interrupt, RTI and UNCIR setup.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
@@ -83,8 +87,9 @@ Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU 
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
                                           campaign (~20k executions) without findings;
                                           MCU model harness covers bus, map, GPIO,
-                                          PHY/SCI/timer/RTI clocks, IRQ selection
-                                          and reset: 50563 runs in 61 s without
+                                          PHY/SCI/timer/RTI clocks, IRQ selection,
+                                          USB configuration/operand widths and
+                                          reset: 43172 runs in 61 s without
                                           sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.

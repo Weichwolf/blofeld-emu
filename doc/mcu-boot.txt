@@ -33,8 +33,8 @@ the export. See patches/README.txt; installed Ghidra files remain untouched.
 Application continuation probe
 A separate private diagnostic continues with PE0/PE1 explicitly high, leaving
 IRQ/XIRQ inactive. It passes application SCI receive-interrupt configuration,
-RTICTL=0x40 and RTIE setup, then stops after 90384 completed instructions at
-PC 0xbeb2, writing the unimplemented USB endpoint/configuration selector.
+RTICTL=0x40, RTIE setup and USB UNCIR setup, then stops after 90391 completed
+instructions at PC 0xbec2, writing the unimplemented USB interrupt mask.
 No oscillator time is supplied in this diagnostic. This remains an untimed,
 unverified pin fixture; no application or complete-board boot is inferred.
 

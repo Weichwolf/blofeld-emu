@@ -12,6 +12,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
   constexpr std::size_t stride = 6;
   constexpr std::size_t operation_limit = 256;
   constexpr unsigned clock_slice_mask = 0x0fff;
+  constexpr unsigned action_count = 18;
+  constexpr unsigned memory_read_action = 17;
   const std::array<std::uint8_t, 32768> flash{}; // Own synthetic bytes, no firmware required.
   auto bus = std::make_unique<blofeld::McuBus>(flash);
   const auto operations = size / stride < operation_limit ? size / stride : operation_limit;
@@ -20,7 +22,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
     const auto address =
         static_cast<std::uint16_t>((static_cast<unsigned>(record[1]) << 8U) | record[2]);
     try {
-      switch (record[0] % 16U) {
+      switch (record[0] % action_count) {
         case 0: static_cast<void>(bus->read(address)); break;
         case 1: bus->write(address, record[3]); break;
         case 2: bus->retire_instruction(); break;
@@ -42,6 +44,14 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
         case 15:
           bus->advance_oscillator(address);
           static_cast<void>(bus->oscillator_cycles_until_rti());
+          break;
+        case 16:
+          bus->write_memory({.address = address,
+                             .size = (record[3] & 7U) + 1U,
+                             .value = (static_cast<unsigned>(record[4]) << 8U) | record[5]});
+          break;
+        case memory_read_action:
+          static_cast<void>(bus->read_memory({.address = address, .size = (record[3] & 7U) + 1U}));
           break;
         default: throw blofeld::Fault("Invalid model-fuzzer action");
       }

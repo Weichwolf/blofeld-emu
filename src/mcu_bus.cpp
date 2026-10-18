@@ -9,6 +9,7 @@
 #include "blofeld/mcu_memory.hpp"
 #include "blofeld/mcu_sci.hpp"
 #include "blofeld/mcu_timer.hpp"
+#include "blofeld/mcu_usb.hpp"
 
 #include <algorithm>
 #include <array>
@@ -93,6 +94,7 @@ void McuBus::reset() {
   clock_.reset();
   sci_.reset();
   timer_.reset();
+  usb_.reset();
   interrupts_.reset();
   context_ = {};
   interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
@@ -111,6 +113,7 @@ std::uint8_t McuBus::read_register(const std::uint16_t offset) {
   if (!McuSci::register_name(offset).empty()) { return sci_.read(offset); }
   if (!McuTimer::register_name(offset).empty()) { return timer_.read(offset); }
   if (!McuInterrupts::register_name(offset).empty()) { return interrupts_.read(offset); }
+  if (!McuUsb::register_name(offset).empty()) { return usb_.read(offset); }
   if (offset == hc12::smramcfg || offset == hc12::smramstat) { return 0; }
   if (reserved_register(offset)) { return 0; }
   throw Fault("Unimplemented MCU peripheral read at " + hex(offset));
@@ -148,6 +151,15 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   if (!interrupt_name.empty()) {
     interrupts_.write(write, context_.ccr);
     return interrupt_name;
+  }
+  const auto usb_name = McuUsb::register_name(offset);
+  if (!usb_name.empty()) {
+    constexpr unsigned module_clock_enable = 0x40;
+    if ((clock_.read(hc12::usb_control) & module_clock_enable) == 0) {
+      throw Fault("Unverified USB configuration write with module clock disabled");
+    }
+    usb_.write(write);
+    return usb_name;
   }
   if (reserved_register(offset)) { return "reserved/write ignored"; }
   if (offset == hc12::smramcfg && (value & 1U) == 0) { return "SMRAMCFG normal mode"; }
@@ -189,6 +201,36 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
 
 std::uint8_t McuBus::peek(const std::uint16_t address) const {
   return memory_.peek(address);
+}
+
+void McuBus::write_memory(const MemoryWrite access) {
+  const auto location = memory_.locate(access.address);
+  if (location.space != McuSpace::registers || !McuUsb::configuration_data(location.offset)) {
+    Bus::write_memory(access);
+    return;
+  }
+  try {
+    constexpr unsigned module_clock_enable = 0x40;
+    if ((clock_.read(hc12::usb_control) & module_clock_enable) == 0) {
+      throw Fault("Unverified USB configuration write with module clock disabled");
+    }
+    usb_.write_memory({.address = location.offset, .size = access.size, .value = access.value});
+    ++revision_;
+    if (observer_) {
+      constexpr unsigned byte_mask = 0xff;
+      for (unsigned index = 0; index < 2; ++index) {
+        const auto value =
+            static_cast<std::uint8_t>((access.value >> ((1U - index) * 8)) & byte_mask);
+        observer_({.write = true,
+                   .address = static_cast<std::uint16_t>(access.address + index),
+                   .value = value,
+                   .name = McuUsb::register_name(location.offset)});
+      }
+    }
+  } catch (const Fault &fault) {
+    throw Fault("MCU operand write at " + hex(access.address) + " (register offset " +
+                hex(location.offset) + "): " + fault.what());
+  }
 }
 
 void McuBus::check_execute(const InstructionFetch fetch) const {

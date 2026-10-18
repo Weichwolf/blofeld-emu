@@ -70,11 +70,11 @@ endif()
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 include(cmake/Hc12Spec.cmake)
-add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp)
+add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
-  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp)
+  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp src/mcu_usb.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
@@ -109,6 +109,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-rti-test test/mcu_rti_test.cpp)
   target_link_libraries(blofeld-rti-test PRIVATE blofeld_core)
   add_test(NAME mcu_rti COMMAND blofeld-rti-test)
+  add_executable(blofeld-memory-usb-test test/memory_usb_test.cpp)
+  target_link_libraries(blofeld-memory-usb-test PRIVATE blofeld_core)
+  add_test(NAME memory_usb COMMAND blofeld-memory-usb-test)
   add_executable(blofeld-boot-test test/original_boot_test.cpp)
   target_link_libraries(blofeld-boot-test PRIVATE blofeld_core)
   add_test(NAME original_mcu_boot COMMAND blofeld-boot-test
@@ -136,7 +139,8 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
-    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test blofeld-boot-test
+    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
+    blofeld-memory-usb-test blofeld-boot-test
   USES_TERMINAL)
 endif()
 

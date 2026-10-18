@@ -8,6 +8,7 @@
 #include "blofeld/mcu_memory.hpp"
 #include "blofeld/mcu_sci.hpp"
 #include "blofeld/mcu_timer.hpp"
+#include "blofeld/mcu_usb.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -31,6 +32,7 @@ public:
   explicit McuBus(std::span<const std::uint8_t> flash);
   std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
+  void write_memory(MemoryWrite access) override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;
 
   [[nodiscard]] std::uint64_t revision() const override { return revision_; }
@@ -62,6 +64,7 @@ private:
   McuClock clock_;
   McuSci sci_;
   McuTimer timer_;
+  McuUsb usb_;
   McuInterrupts interrupts_;
   ExecutionContext context_{};
   std::function<void(const BusEvent &)> observer_;
