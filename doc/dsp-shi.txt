@@ -1,0 +1,82 @@
+DSP56371 SHI SPI slave reference model
+
+Source: DSP56371UM Rev 2.1, sections 2.7, 7.4 and 7.7.1; interrupt vectors,
+priorities and encodings in tables 7-1..5. The downloaded primary manual is
+identified in doc/hardware/sources.json. This is original project code implementing
+register and serial behavior; no manufacturer bootstrap/program bytes are included.
+
+DspShi receives explicit SS/SCK/MOSI observations. It shifts MSB first in all four
+CPOL/CPHA modes and handles 8/16/24-bit words, with short receives left-aligned and
+zero-padded. CPHA=0 requires SS release between words; CPHA=1 supports continuous
+words. Early SS release discards the incomplete received word. MISO is tri-stated
+when deselected/disabled; an uninitialized active output remains unknown.
+
+The one- or ten-word receive FIFO preserves arrival order and discards new words
+on overrun. HTX and IOSR are separate: HTDE changes when HTX moves to IOSR. With no
+fresh HTX word, SPI shifts out retained IOSR contents, including previously received
+data. HROE clears only after HCSR-read then HRX-read; HTUE clears only after
+HCSR-read then HTX-write. Empty FIFO reads and unsupported registers fail visibly.
+
+HREQ is active low and depends on receive capacity, fresh transmit data or both,
+according to HRQE. It deasserts at the first clock. The precise CPHA=0 reassertion
+point after the final data edge but before SS release is uncalibrated: the output
+is explicitly unknown during that interval. A board that reads it must preserve
+that unknown state instead of inventing a ready flag. Simultaneous SS/SCK changes,
+unknown MOSI at a sampling edge, unsupported I2C/master operation, reserved modes
+and changes to HCKR without completed individual reset fail explicitly. Mode
+changes are conservatively limited to individual reset; HRQE changes require idle.
+
+HCSR reports the specified reset HIDLE/HTDE state; HCKR resets with CPHA set and
+CPOL clear, HSAR with the documented default address. Individual reset and clearing
+interrupt enables require one explicitly supplied DSP instruction cycle. These are
+the manual's instruction-cycle units, not an assumption of one tick per executed
+opcode. No CPU/clock conversion or analog edge/setup/hold timing is inferred.
+Stop-state behavior is not modeled. Reset retains externally observed wire levels.
+
+Polling and interrupt-request selection are covered: HRIE=01 selects nonempty,
+HRIE=11 selects full, HRIE=10 is rejected. Overrun/underrun select their distinct
+vectors. Requests are listed in documented internal priority order. DSP CPU
+interrupt delivery, priority registers, entry latency and I2C/master bus errors
+remain outside this component.
+
+Verification
+  build/strict/blofeld-shi-test
+  build/strict/blofeld-mcu-shi-test
+  cmake --build build/strict --target quality
+
+The first test uses independent expected words, flags, capacities, vectors and
+priority encodings, including abort/reset, both error-clear sequences and unknown
+signals. Separate vectors leave MOSI unknown on every non-capture edge, checking
+that each clock mode samples only its specified edge. The second executes an
+the project's own HC12 diagnostic program: real
+STAA writes drive GPIO SS/SCK/MOSI; real LDAA/ANDA reads sample SHI MISO into RAM.
+An explicit synthetic pin fixture connects the two models. It verifies the exact
+independent words in both directions. This proves MCU/peripheral communication,
+not execution of a DSP CPU, original DSP bootstrap or a Blofeld board profile.
+
+Offline edge/register fuzzing, using only synthetic seed data:
+  cmake --build build/fuzz --target dsp-shi-fuzz
+  mkdir -p doc/local/shi-fuzz-corpus doc/local/shi-fuzz-artifacts
+  python3 tools/make_shi_fuzz_seeds.py doc/local/shi-fuzz-corpus
+  build/fuzz/dsp-shi-fuzz doc/local/shi-fuzz-corpus -artifact_prefix=doc/local/shi-fuzz-artifacts/ -max_len=1536 -max_total_time=60
+
+The current structured-seed campaign completed 43811 executions in 61 seconds
+without sanitizer findings. Seeds cover all clock/word-size combinations and
+small/large FIFO overrun/reset sequences. This is an initial campaign, not an
+exhaustive or sustained-fuzzing claim.
+
+Remaining native DSP integration
+The separately pinned dsp56300 core is not yet linked into the board. Its reset
+starts at P:0 with OMR=0, whereas the DSP56371 SPI bootstrap mode enters P:ff0000
+with mode 5. Its built-in peripheral dispatcher accepts only predefined chip
+combinations. Its memory validator is debug-only and uses the write flag for
+reads; release accesses may return zero for missing memory. Those paths must be
+adapted before they can satisfy this project's unknown-access contract. The
+existing SHI implementation also differs from the DSP56371 error-clear and receive
+interrupt specifications, so it is not used as this model's behavioral oracle.
+Its DspBoot helper receives whole words, writes program memory and changes PC on
+the host; that HDI08 shortcut cannot establish original SHI boot-ROM execution.
+
+The NXP bootstrap source, MCU-embedded first stage, actual SHI handoff, NAND
+loading, board routing and clock ratios still require combined execution and
+stock-hardware validation. See mcu-boot.txt, firmware-layout.txt and coverage.txt.

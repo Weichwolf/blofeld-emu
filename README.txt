@@ -49,6 +49,8 @@ doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requ
 doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.
 doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts and CPU operand widths.
 doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
+doc/dsp-shi.txt covers the DSP-side SPI slave and native MCU GPIO exchange tests;
+the DSP CPU and original SHI bootstrap are not yet integrated into the board.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

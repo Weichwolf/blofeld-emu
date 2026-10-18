@@ -66,12 +66,17 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           checkout built separately; its assembler,
                                           JIT, interpreter and optimizer suites pass.
                                           No combined board execution.
-DSP56371 peripherals/boot ROM     pending  NXP bootstrap source documented; a separate
+DSP56371 peripherals/boot ROM     partial  NXP bootstrap source documented; a separate
                                           94-word DSP first stage is statically
-                                          identified inside the MCU image. SHI,
-                                          PLL, ESAI, DMA and chip profile unimplemented;
-                                          no original combined bootstrap execution.
-MCU–DSP communication             pending  No combined scheduled execution.
+                                          identified inside the MCU image. SHI SPI
+                                          pins/registers/FIFO, error-clear sequences,
+                                          request vectors and reset cycles tested
+                                          (dsp-shi.txt). PLL, ESAI, DMA and chip profile
+                                          pending; no combined original bootstrap.
+MCU–DSP communication             partial  Native synthetic HC12 GPIO program exchanges
+                                          exact words with SHI in both directions.
+                                          DSP CPU, real board routing and scheduled
+                                          original firmware handoff remain pending.
 ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
@@ -109,6 +114,9 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           57850 runs in 61 s without
                                           sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
+                                          SHI edge/register harness with synthetic
+                                          clock/size/FIFO/reset seeds: 43811 runs
+                                          in 61 s without sanitizer findings.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
                                           trace; full bootloader trace under build/.

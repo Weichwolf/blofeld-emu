@@ -79,6 +79,9 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.c
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
+add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp)
+target_include_directories(blofeld_dsp_peripherals PUBLIC include)
+target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
 add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC include)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh)
@@ -88,6 +91,12 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-shi-test test/dsp_shi_test.cpp)
+  target_link_libraries(blofeld-shi-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME dsp_shi COMMAND blofeld-shi-test)
+  add_executable(blofeld-mcu-shi-test test/mcu_shi_test.cpp)
+  target_link_libraries(blofeld-mcu-shi-test PRIVATE blofeld_core blofeld_dsp_peripherals)
+  add_test(NAME mcu_shi COMMAND blofeld-mcu-shi-test)
   add_executable(blofeld-core-test test/core_test.cpp)
   target_link_libraries(blofeld-core-test PRIVATE blofeld_core)
   add_test(NAME native_core COMMAND blofeld-core-test)
@@ -149,6 +158,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+    blofeld-shi-test blofeld-mcu-shi-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
   USES_TERMINAL)
@@ -161,4 +171,7 @@ if(BLOFELD_FUZZING)
   add_executable(mcu-model-fuzz test/mcu_model_fuzz.cpp)
   target_link_libraries(mcu-model-fuzz PRIVATE blofeld_mcu)
   target_link_options(mcu-model-fuzz PRIVATE -fsanitize=fuzzer)
+  add_executable(dsp-shi-fuzz test/dsp_shi_fuzz.cpp)
+  target_link_libraries(dsp-shi-fuzz PRIVATE blofeld_dsp_peripherals)
+  target_link_options(dsp-shi-fuzz PRIVATE -fsanitize=fuzzer)
 endif()
