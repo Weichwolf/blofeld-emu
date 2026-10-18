@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/hc12_registers.hpp"
+#include "blofeld/mcu_clock.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_memory.hpp"
 
@@ -23,6 +24,7 @@ McuBus::McuBus(const std::span<const std::uint8_t> flash) : memory_(flash) {}
 void McuBus::reset() {
   memory_.reset();
   gpio_.reset();
+  clock_.reset();
   timer_control_ = 0;
   ++revision_;
 }
@@ -35,6 +37,7 @@ bool McuBus::reserved_register(const std::uint16_t offset) {
 std::uint8_t McuBus::read_register(const std::uint16_t offset) const {
   if (!McuMemory::register_name(offset).empty()) { return memory_.read_register(offset); }
   if (!McuGpio::register_name(offset).empty()) { return gpio_.read(offset); }
+  if (!McuClock::register_name(offset).empty()) { return clock_.read(offset); }
   if (offset == hc12::smramcfg || offset == hc12::smramstat) { return 0; }
   if (reserved_register(offset)) { return 0; }
   if (offset == hc12::tscr1) { return timer_control_; }
@@ -53,6 +56,11 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   if (!gpio_name.empty()) {
     gpio_.write(write);
     return gpio_name;
+  }
+  const auto clock_name = McuClock::register_name(offset);
+  if (!clock_name.empty()) {
+    clock_.write(write);
+    return clock_name;
   }
   if (reserved_register(offset)) { return "reserved/write ignored"; }
   if (offset == hc12::tscr1) {
@@ -117,6 +125,10 @@ void McuBus::retire_instruction() {
 
 void McuBus::set_pin_drive(const McuPort port, const PinDrive drive) {
   gpio_.set_drive(port, drive);
+}
+
+void McuBus::observe_phy(const PhyClockWindow window) {
+  clock_.observe_phy(window);
 }
 
 void McuBus::set_observer(std::function<void(const BusEvent &)> observer) {

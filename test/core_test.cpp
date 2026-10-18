@@ -257,11 +257,17 @@ void test_bit_branches_and_branch_never() {
 void test_strict_bus() {
   const std::array<std::uint8_t, 32768> flash{};
   blofeld::McuBus bus(flash);
+  constexpr unsigned power_on_flag = 0x40;
+  require(bus.read(clock_flags) == power_on_flag,
+          "Suspended reset PHY has PORF set and LOCK clear");
+  constexpr unsigned usb_control_high = 0x300;
+  constexpr unsigned usb_clock_enable = 0x40;
+  bus.write(usb_control_high, usb_clock_enable);
   bool rejected = false;
   try {
     static_cast<void>(bus.read(clock_flags));
   } catch (const blofeld::Fault &) { rejected = true; }
-  require(rejected, "Unimplemented clock status must fail");
+  require(rejected, "Unobserved PHY startup must fail instead of fabricating LOCK");
   rejected = false;
   try {
     bus.write(0x8000, 1);

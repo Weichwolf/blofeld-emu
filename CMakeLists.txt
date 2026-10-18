@@ -73,7 +73,7 @@ include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
-add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp)
+add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp src/mcu_clock.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
@@ -92,6 +92,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-test test/mcu_model_test.cpp)
   target_link_libraries(blofeld-mcu-test PRIVATE blofeld_core)
   add_test(NAME mcu_model COMMAND blofeld-mcu-test)
+  add_executable(blofeld-clock-test test/mcu_clock_test.cpp)
+  target_link_libraries(blofeld-clock-test PRIVATE blofeld_core)
+  add_test(NAME mcu_clock COMMAND blofeld-clock-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip")
   add_test(NAME firmware_python
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s test -v)
   set_tests_properties(firmware_python PROPERTIES
@@ -112,7 +116,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
+  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test blofeld-clock-test
   USES_TERMINAL)
 endif()
 

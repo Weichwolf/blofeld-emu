@@ -48,10 +48,37 @@ GPIO
 
   build/strict/blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip --port-e-input fb:00 --instructions 100 --trace doc/local/pins-low.trace
 
-With these explicit fixtures the original reset code reaches an unsupported USB
-register write. Without them execution still stops at the unknown input read.
-Clock/PLL, timer counters/interrupts, USB and SCI are not made ready by stubs.
-TSCR1 currently has only a control latch; it is not a working timer.
+With these explicit fixtures the original reset code initializes USB PHY control
+and reaches clock qualification. Without them execution still stops at the
+unknown input read. TSCR1 has only a control latch, not a working timer.
+
+USB PHY and clock qualification
+- UMCR resets to 0x0820: PHY suspended, controller clock disabled, disconnected.
+  The model implements the MCE/SPHY and configuration write conditions, reserved
+  bits and read-only command behavior. It uses the newly written MCE bit for a
+  combined MCE/SPHY high-byte write, as required by the observed reset sequence.
+  Exact simultaneous-field and word-versus-byte bus timing still needs hardware
+  calibration. MCE controller-clock gating is distinct from PHY suspension.
+- CRGFLG has PORF, LOCKIF and read-only LOCK state. PORF and LOCKIF clear only on
+  write-one. External reset preserves PORF, including a software-cleared PORF.
+  LOCKIF records either lock acquisition or loss; repeated status does not
+  recreate a cleared flag. CLKSEL falls back to OSC when the PHY loses lock.
+  REFDV and SPHY writes are protected by PLLSEL, even before lock. COPWAI is
+  write-once in normal mode.
+- observe_phy accepts the observed PHY edge count in one completed window of
+  exactly three oscillator periods. The documented detector qualifies exactly
+  15 edges. This is an input from a future board clock source, not a direct LOCK
+  assignment or an analog startup model. Window phase and elapsed CPU/bus cycles
+  are not yet scheduled; callers must supply consecutive, nonoverlapping windows.
+- Releasing PHY suspension makes qualification unknown until an observation is
+  supplied. Reading CRGFLG then fails explicitly. The CLI does not synthesize
+  clock observations; with the pin fixture above it stops at this boundary.
+  Tests supply explicit edge windows and execute the original polling branch:
+  14 edges keeps it waiting, 15 permits clock selection and reaching SCI setup.
+- Enabling the USB controller, triggering resets/resume, RTI counting, interrupt
+  delivery and SCI remain unsupported and requests fail. COP watchdog is also
+  unsupported; wait/stop semantics and timing remain unvalidated. No successful
+  USB enumeration or timer is inferred.
 
 CPU description corrections
 The pinned Ghidra 12.1.2 HC12 description incorrectly reverses BRSET's condition
@@ -68,4 +95,6 @@ References
 - S12SMRAM3P5K2EV1 sections 3 and 4.
 - S12MEBIV3 and S12UF32PIMV2 register descriptions.
 - S12CPUV2 instruction definitions for BRSET, BRCLR and BRN.
+- 9S12UF32DGV1 appendix A.4.3, S12CRGUV1 section 3 and
+  S12USB20D6E2FV1 section 3.1.1 for PHY control and clock qualification.
 The module guides are available inside the referenced 9S12UF32_ZIP.zip.

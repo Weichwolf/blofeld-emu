@@ -13,7 +13,9 @@ Update container extraction       partial  Python offline framing/object checks;
 Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
                                           native HC12 instruction execution starts.
                                           Unknown pins still stop the default run.
-                                          Explicit port fixtures reach USB setup.
+                                          Explicit port fixtures reach PHY startup;
+                                          supplied clock windows exercise the real
+                                          lock polling/selection through SCI setup.
 CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrite,
                                           branches, code-cache invalidation and
                                           word-transfer side effects tested; 12288
@@ -26,7 +28,12 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           remapping, overlap priority and flash alias
                                           tested. See mcu-model.txt for limits;
                                           flash controller/paging/SmartMedia pending.
-Interrupts, timers, clock         pending  Reads fail instead of inventing readiness.
+Interrupts, timers, clock         partial  USB PHY control, CRG qualification, lock
+                                          loss, W1C/POR flags and write gates tested.
+                                          Analog startup, scheduled CPU/bus clocks,
+                                          counters and interrupt delivery pending.
+USB device/transport              partial  PHY control only. Controller enable,
+                                          commands and endpoint behavior unsupported.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           checkout built separately; its assembler,
                                           JIT, interpreter and optimizer suites pass.
@@ -52,8 +59,8 @@ Sanitizers and static analysis    partial  Strict gates pass on initial bring-up
                                           coverage yet.
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
                                           campaign (~20k executions) without findings;
-                                          MCU model harness covers bus, map, GPIO
-                                          and reset sequences: 87715 executions in
+                                          MCU model harness covers bus, map, GPIO,
+                                          PHY windows and reset: 67217 executions in
                                           61 s without sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
@@ -61,8 +68,9 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           trace; board snapshots/replay pending.
 Desktop/Keyboard differences      pending  Both requested with 1.25; keyboard scanner
                                           and profile differences remain unresolved.
-Stock hardware validation         pending  No Blofeld connected in this environment;
-                                          detection alone will not count as validation.
+Stock hardware validation         pending  No Blofeld detected on USB; DIN wiring
+                                          unverified. No stock hardware comparison;
+                                          detection alone is not validation.
 
 Performance plan
 Use a deterministic CPU/interpreter reference path and compare a DSP JIT against

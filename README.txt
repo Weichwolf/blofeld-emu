@@ -62,7 +62,7 @@ findings; keep proprietary seeds and derived corpus members under doc/local/.
 See AGENTS.md for the binding development rules and THIRD_PARTY.txt for licenses.
 
 The separate mcu-model-fuzz target exercises mapping, pin drives, unknown-byte
-tracking, accesses and reset sequences using only synthetic bytes:
+tracking, PHY clock observations, accesses and reset sequences using synthetic bytes:
   cmake --build build/fuzz --target mcu-model-fuzz
   mkdir -p doc/local/mcu-fuzz-corpus doc/local/mcu-fuzz-artifacts
   build/fuzz/mcu-model-fuzz doc/local/mcu-fuzz-corpus -artifact_prefix=doc/local/mcu-fuzz-artifacts/ -max_len=1536 -max_total_time=60

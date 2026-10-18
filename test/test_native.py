@@ -125,7 +125,7 @@ class NativeReferenceTest(NativeCli):
         self.assertTrue(result.stderr.strip())
 
     def test_explicit_gpio_fixtures_reach_the_next_unsupported_peripheral(self):
-        for fixture, completed in (("fb:00", 34), ("fb:08", 32)):
+        for fixture, completed in (("fb:00", 35), ("fb:08", 33)):
             with self.subTest(fixture=fixture), tempfile.TemporaryDirectory() as temporary:
                 trace = Path(temporary) / "mcu.trace"
                 result = subprocess.run(
@@ -136,8 +136,9 @@ class NativeReferenceTest(NativeCli):
                 listing = trace.read_text()
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertIn(f"{completed} completed MCU instructions", result.stderr)
-                self.assertIn("MCU write at 0x0300", result.stderr)
-                self.assertIn("pc=0x8046", result.stderr)
+                self.assertIn("MCU read at 0x0037", result.stderr)
+                self.assertIn("clock source is required", result.stderr)
+                self.assertIn("pc=0x8049", result.stderr)
                 self.assertIn("Explicit simulated", result.stdout)
                 self.assertIn("board wiring is unverified", result.stdout)
                 self.assertIn("reserved/write ignored", listing)
