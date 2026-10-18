@@ -23,8 +23,11 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace blofeld {
@@ -43,7 +46,9 @@ public:
       const auto offset = address.getOffset() + static_cast<ghidra::uintb>(index);
       // Decoder lookahead has no bus side effects. Actual instruction
       // bytes are separately checked before execution.
-      bytes[index] = bus_.peek(static_cast<std::uint16_t>(offset & hc12::address_mask));
+      const auto target = static_cast<std::uint16_t>(offset & hc12::address_mask);
+      bytes[index] = bus_.peek(target);
+      bus_.note_code_byte(target);
     }
   }
 
@@ -98,7 +103,40 @@ std::string xml_text(const std::string &text) {
   return result;
 }
 
-// Execute exactly one translation. Ghidra's EmulatePcodeCache eagerly decodes
+class DecodedInstruction {
+public:
+  DecodedInstruction() = default;
+
+  ~DecodedInstruction() {
+    // PcodeEmitCache transfers ownership of these objects to the receiving vectors.
+    for (auto *operation : operations) { delete operation; }
+    for (auto *varnode : varnodes) { delete varnode; }
+  }
+
+  DecodedInstruction(const DecodedInstruction &) = delete;
+  DecodedInstruction &operator=(const DecodedInstruction &) = delete;
+  std::vector<ghidra::PcodeOpRaw *> operations;
+  std::vector<ghidra::VarnodeData *> varnodes;
+  ghidra::int4 length = 0;
+};
+
+class ExecutionGuard {
+public:
+  explicit ExecutionGuard(bool &active) : active_(active) {
+    if (active_) { throw Fault("Re-entrant HC12 instruction execution"); }
+    active_ = true;
+  }
+
+  ~ExecutionGuard() { active_ = false; }
+
+  ExecutionGuard(const ExecutionGuard &) = delete;
+  ExecutionGuard &operator=(const ExecutionGuard &) = delete;
+
+private:
+  bool &active_;
+};
+
+// Execute exactly one cached translation. Ghidra's EmulatePcodeCache eagerly decodes
 // the following instruction, which can report a fault after the current one has
 // already committed or retain stale instructions after RAM code is modified.
 class InstructionExecutor final : public ghidra::EmulateMemory {
@@ -110,7 +148,7 @@ public:
   }
 
   ~InstructionExecutor() override {
-    clear();
+    discard_translations();
     for (auto *behavior : behaviors_) { delete behavior; }
   }
 
@@ -124,14 +162,19 @@ public:
 
   [[nodiscard]] ghidra::Address getExecuteAddress() const override { return address_; }
 
+  void clear_translations() {
+    if (executing_) { throw Fault("Cannot invalidate an active HC12 translation"); }
+    discard_translations();
+  }
+
   void execute() {
+    const ExecutionGuard guard(executing_);
     bus_.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
-    clear();
-    ghidra::PcodeEmitCache emitter(operations_, varnodes_, behaviors_, 0);
-    const auto length = translator_.oneInstruction(emitter, address_);
+    const auto &decoded = translation();
     bus_.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
-                        .length = static_cast<unsigned>(length)});
-    next_ = address_ + length;
+                        .length = static_cast<unsigned>(decoded.length)});
+    operations_ = decoded.operations;
+    next_ = address_ + decoded.length;
     memstate->setValue("PC", next_.getOffset());
     index_ = 0;
     finished_ = false;
@@ -141,7 +184,7 @@ public:
         setExecuteAddress(next_);
         break;
       }
-      currentOp = operations_.at(index_);
+      currentOp = operations_[index_];
       currentBehave = currentOp->getBehavior();
       executeCurrentOp();
     }
@@ -208,25 +251,38 @@ private:
     return {.address = static_cast<std::uint16_t>(offset), .size = static_cast<unsigned>(size)};
   }
 
-  void clear() {
-    // These objects are allocated and transferred by the native PcodeEmitCache API.
-    for (auto *operation : operations_) { delete operation; }
-    for (auto *varnode : varnodes_) { delete varnode; }
-    operations_.clear();
-    varnodes_.clear();
+  [[nodiscard]] const DecodedInstruction &translation() {
+    const auto pc = static_cast<std::uint16_t>(address_.getOffset());
+    if (const auto found = translations_.find(pc); found != translations_.end()) {
+      return *found->second;
+    }
+    if (translations_.size() == translation_limit) { discard_translations(); }
+    auto decoded = std::make_unique<DecodedInstruction>();
+    ghidra::PcodeEmitCache emitter(decoded->operations, decoded->varnodes, behaviors_, 0);
+    decoded->length = translator_.oneInstruction(emitter, address_);
+    return *translations_.emplace(pc, std::move(decoded)).first->second;
+  }
+
+  void discard_translations() {
+    operations_ = {};
+    currentOp = nullptr;
+    currentBehave = nullptr;
+    translations_.clear();
   }
 
   static constexpr unsigned operation_limit = 100000;
+  static constexpr unsigned translation_limit = 128;
   Bus &bus_;
   ghidra::Sleigh &translator_;
   ghidra::Address address_;
   ghidra::Address next_;
-  std::vector<ghidra::PcodeOpRaw *> operations_;
-  std::vector<ghidra::VarnodeData *> varnodes_;
+  std::span<ghidra::PcodeOpRaw *const> operations_;
+  std::unordered_map<std::uint16_t, std::unique_ptr<DecodedInstruction>> translations_;
   std::vector<ghidra::OpBehavior *> behaviors_;
   std::vector<std::string> user_operations_;
   std::size_t index_ = 0;
   bool finished_ = true;
+  bool executing_ = false;
 };
 
 } // namespace
@@ -252,11 +308,13 @@ public:
   }
 
   void refresh_decoder() {
-    if (decoded_revision != bus.revision()) {
+    const auto revision = bus.code_revision();
+    if (decoded_revision != revision) {
+      executor->clear_translations();
       translator.reset(&image, &context);
       ghidra::DocumentStorage documents;
       translator.initialize(documents);
-      decoded_revision = bus.revision();
+      decoded_revision = revision;
     }
   }
 

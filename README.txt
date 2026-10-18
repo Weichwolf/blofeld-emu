@@ -48,6 +48,7 @@ doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits
 doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requests;
 doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.
 doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts and CPU operand widths.
+doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

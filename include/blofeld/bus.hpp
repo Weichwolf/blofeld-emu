@@ -56,6 +56,13 @@ public:
   virtual void write_memory(MemoryWrite access);
   [[nodiscard]] virtual std::uint8_t peek(std::uint16_t address) const = 0;
   [[nodiscard]] virtual std::uint64_t revision() const = 0;
+
+  // Backends may conservatively track bytes read by the instruction decoder.
+  // The default keeps the original all-write invalidation contract.
+  [[nodiscard]] virtual std::uint64_t code_revision() const { return revision(); }
+
+  virtual void note_code_byte(std::uint16_t /*address*/) const {}
+
   virtual void check_execute(InstructionFetch fetch) const = 0;
 
   virtual void begin_instruction(ExecutionContext /*context*/) {}

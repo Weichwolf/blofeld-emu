@@ -1,0 +1,49 @@
+HC12 instruction translation and invalidation
+
+The reference interpreter executes one original instruction per step. It retains
+at most 128 immutable P-code translations, keyed by PC, and discards the working
+set when a new translation would exceed that limit. It never substitutes a host
+loop for firmware execution. Registers, flags, branches and bus loads/stores are
+evaluated again on every visit. Execution permissions are checked before lookup
+and across the entire instruction before executing even a cached translation.
+
+Bus::code_revision defaults to the general write revision. A backend without
+specialized tracking therefore retains conservative all-write invalidation.
+McuBus records the union of bytes observed by every decoder, including lookahead.
+Only writes overlapping that union invalidate translations; unrelated RAM data
+writes still advance the general revision. Both bytes of word writes are checked.
+Committed memory-map changes and external reset invalidate all translations.
+Reset also clears the observed-byte set; surviving CPU instances must refresh
+against the changed generation before executing retained RAM code.
+
+Decoder refresh clears owned P-code before resetting native SLEIGH. Each cached
+entry owns its emitted operations and varnodes. Cache eviction occurs between
+instructions. Self-modifying code refreshes before the following step; attempts
+to invalidate an instruction from a reentrant IO callback fail explicitly before
+freeing any active operation. Exception unwinding releases that execution guard.
+
+Verification
+  build/strict/blofeld-code-cache-test
+  cmake --build build/strict --target quality
+
+Independent synthetic cases cover immediate/opcode/branch rewrites, native
+self-modifying stores, byte and word invalidation, mapping and unknown-RAM
+permissions, retained RAM across reset, multiple decoders sharing a bus, live
+register/flag/data changes, capacity eviction and rejected reentrant refresh.
+The generic bus regression also checks default all-write invalidation.
+
+With the private original 1.25 reference, the 90314-instruction boot trace is
+byte-identical before and after caching (SHA-256):
+  9858f08ed36033636e4f9fb34bff1e41db9243ea6af5a5f932be01e0f8478f81
+The separate million-instruction private application probe is also byte-identical
+to its pre-cache trace (SHA-256):
+  97ab2cc640992eab444f454ee52c499fe1e7f8eb5288524afaa51ba3e105e1d2
+One local ASan/UBSan run took about 7.5 seconds versus 18 seconds before either
+optimization. These single diagnostic runs include tracing and are not controlled
+benchmarks, release performance measurements or evidence of real-time suitability.
+
+Limits
+This is an interpreter cache-coherence contract, not a model of the CPU12 physical
+instruction queue, prefetch bus cycles or pipeline behavior. No CPU/peripheral
+cycle scheduler or audio callback has been established. See mcu-boot.txt and
+coverage.txt for the remaining complete-board requirements.

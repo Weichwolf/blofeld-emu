@@ -73,7 +73,7 @@ include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
-add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
+add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
@@ -91,6 +91,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-core-test test/core_test.cpp)
   target_link_libraries(blofeld-core-test PRIVATE blofeld_core)
   add_test(NAME native_core COMMAND blofeld-core-test)
+  add_executable(blofeld-code-cache-test test/code_cache_test.cpp)
+  target_link_libraries(blofeld-code-cache-test PRIVATE blofeld_core)
+  add_test(NAME code_cache COMMAND blofeld-code-cache-test)
   add_executable(blofeld-mcu-test test/mcu_model_test.cpp)
   target_link_libraries(blofeld-mcu-test PRIVATE blofeld_core)
   add_test(NAME mcu_model COMMAND blofeld-mcu-test)
@@ -145,7 +148,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
+  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
   USES_TERMINAL)

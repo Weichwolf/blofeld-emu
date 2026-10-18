@@ -98,6 +98,8 @@ void McuBus::reset() {
   interrupts_.reset();
   context_ = {};
   interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
+  decoded_bytes_.reset();
+  ++code_revision_;
   ++revision_;
 }
 
@@ -200,6 +202,7 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
     memory_.write({.address = address, .value = value});
   }
   ++revision_;
+  invalidate_code({.address = address});
 }
 
 std::uint8_t McuBus::peek(const std::uint16_t address) const {
@@ -218,6 +221,7 @@ void McuBus::write_memory(const MemoryWrite access) {
       throw Fault("Unverified USB configuration write with module clock disabled");
     }
     usb_.write_memory({.address = location.offset, .size = access.size, .value = access.value});
+    invalidate_code({.address = access.address, .size = access.size});
     ++revision_;
     if (observer_) {
       constexpr unsigned byte_mask = 0xff;
@@ -249,7 +253,10 @@ void McuBus::check_execute(const InstructionFetch fetch) const {
 }
 
 void McuBus::retire_instruction() {
-  if (memory_.retire_instruction()) { ++revision_; }
+  if (memory_.retire_instruction()) {
+    ++revision_;
+    ++code_revision_;
+  }
 }
 
 void McuBus::set_pin_drive(const McuPort port, const PinDrive drive) {

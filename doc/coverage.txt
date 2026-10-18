@@ -28,6 +28,10 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           gate checked (mcu-interrupts.txt).
                                           CPU byte/word operand widths retained;
                                           IRQ/RTI B:A word transfers checked.
+                                          Bounded P-code reuse with live data,
+                                          RAM code mutation, remap/reset, shared
+                                          decoders and eviction tested
+                                          (mcu-code-cache.txt).
                                           Full ISA, cycle timing and hardware
                                           comparison pending.
                                           Independent reset/opcode reference:
@@ -95,8 +99,9 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           MCU model harness covers bus, map, GPIO,
                                           PHY/SCI/timer/RTI clocks, IRQ selection,
                                           USB registers/decoder events/packet
-                                          retries/operand widths and reset:
-                                          56758 runs in 61 s without
+                                          retries/operand widths, code-observation
+                                          invalidation and reset:
+                                          57850 runs in 61 s without
                                           sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.

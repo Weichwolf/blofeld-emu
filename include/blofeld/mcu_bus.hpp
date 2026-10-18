@@ -11,6 +11,7 @@
 #include "blofeld/mcu_usb.hpp"
 
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -37,6 +38,10 @@ public:
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;
 
   [[nodiscard]] std::uint64_t revision() const override { return revision_; }
+
+  [[nodiscard]] std::uint64_t code_revision() const override { return code_revision_; }
+
+  void note_code_byte(std::uint16_t address) const override;
 
   void check_execute(InstructionFetch fetch) const override;
   void retire_instruction() override;
@@ -66,7 +71,10 @@ private:
   [[nodiscard]] static bool reserved_register(std::uint16_t offset);
   void sync_peripheral_pins();
   void check_timer_outputs() const;
+  void invalidate_code(MemoryRead access);
   std::uint64_t revision_ = 0;
+  std::uint64_t code_revision_ = 0;
+  mutable std::bitset<65536> decoded_bytes_;
   McuMemory memory_;
   McuGpio gpio_;
   McuClock clock_;

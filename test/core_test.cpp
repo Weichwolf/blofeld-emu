@@ -138,6 +138,8 @@ void test_code_modification_and_branch() {
   require(cpu.state().pc == 0x8000, "Backward branch wraps its signed displacement");
   constexpr unsigned operand_address = 0x8001;
   bus.write(operand_address, 2);
+  require(bus.code_revision() == bus.revision(),
+          "Backends without precise code observations retain conservative invalidation");
   cpu.step();
   require(cpu.state().d == 0x200, "Modified instruction operand must not execute from stale cache");
 }

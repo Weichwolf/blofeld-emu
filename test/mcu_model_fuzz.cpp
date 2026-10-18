@@ -12,7 +12,7 @@
 #include <span>
 
 namespace {
-constexpr unsigned action_count = 25;
+constexpr unsigned action_count = 26;
 enum class UsbAction : std::uint8_t { decoder = 18, sof, setup, out, input, finish, configuration };
 
 void usb_action(blofeld::McuBus &bus, const std::span<const std::uint8_t, 6> record) {
@@ -59,6 +59,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
   constexpr std::size_t operation_limit = 256;
   constexpr unsigned clock_slice_mask = 0x0fff;
   constexpr unsigned memory_read_action = 17;
+  constexpr unsigned code_observation_action = 25;
   const std::array<std::uint8_t, 32768> flash{}; // Own synthetic bytes, no firmware required.
   auto bus = std::make_unique<blofeld::McuBus>(flash);
   const auto operations = size / stride < operation_limit ? size / stride : operation_limit;
@@ -67,6 +68,11 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
     const auto address =
         static_cast<std::uint16_t>((static_cast<unsigned>(record[1]) << 8U) | record[2]);
     try {
+      if (record[0] % action_count == code_observation_action) {
+        bus->note_code_byte(address);
+        static_cast<void>(bus->code_revision());
+        continue;
+      }
       if (record[0] % action_count >= static_cast<unsigned>(UsbAction::decoder)) {
         usb_action(*bus, std::span<const std::uint8_t, stride>{record, stride});
         continue;
