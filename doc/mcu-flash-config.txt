@@ -30,10 +30,10 @@ Implemented normal-mode configuration
 - MCU bus reads/writes honor INITRG relocation. Volatile register changes leave
   flash contents intact; reset reloads the supplied image's option bytes.
 
-Command/status registers and flash array writes still fail explicitly. This
-configuration component does not implement a command state machine, interrupts,
-erase/program phases, persistence, reset-during-command or power-loss behavior.
-It supplies no fabricated command-ready flags or successful flash operations.
+The separate command/reference-milestone integration is described in
+mcu-flash-commands.txt. Configuration alone supplies no successful operation.
+Timed erase/program phases, file persistence and complete update/recovery
+validation remain pending.
 
 Independent and original-code checks
   ctest --test-dir build/strict -R '^(flash_config|original_flash_config)$' --output-on-failure
@@ -41,8 +41,8 @@ Independent and original-code checks
 Synthetic checks cover all divider/security byte values, the independent literal
 64-entry scenario transition table, all 65536 protection-byte writes and size
 locks, every byte in all 256 protection encodings (8388608 combinations), bus
-relocation and nonvolatile reload. Unknown
-command/status accesses and direct array writes remain visible failures.
+relocation and nonvolatile reload. Illegal command/byte-write sequences set
+ACCERR without programming data; unqualified command operations fail visibly.
 
 The optional original-code fixture verifies the private firmware ZIP identity,
 copies its unchanged 632-byte update helper into MCU RAM and selects the isolated
@@ -54,8 +54,9 @@ boot, delivery through the original update transport or execution of an update.
 
 The update's raw security byte is not proof of installed hardware security.
 Static inspection of the original programming helper shows it forces SEC=10
-when programming the FF0E/FF0F word. That programming path is not yet executed;
-the constructor/reset tests describe only the image actually supplied to them.
+when programming the FF0E/FF0F word. The isolated programming fixture now executes
+that path (mcu-flash-commands.txt). The configuration constructor/reset tests
+describe only the image actually supplied to them.
 Full recovery, security/vector/protection validation under interrupted erase and
 program operations and stock-hardware comparison remain required (coverage.txt).
 

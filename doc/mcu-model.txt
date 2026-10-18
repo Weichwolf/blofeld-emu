@@ -26,13 +26,15 @@ Memory
   the old selection for that instruction's final bus transaction. The specified
   one-bus-cycle remap delay is not yet a complete within-instruction bus model.
 - Flash at 0x4000..0x7fff aliases 0x8000..0xbfff when ROMHM permits it; ROMON
-  controls visibility. Flash writes still fail without a flash-controller model.
+  controls visibility. Aligned word stores stage flash-controller commands;
+  illegal byte stores set ACCERR without programming data (mcu-flash-commands.txt).
 - FCLKDIV, FSEC and FPROT normal-mode configuration, reset option loading and
-  protection windows are modeled separately (mcu-flash-config.txt). Command/status
-  registers and array programming still fail explicitly.
+  protection windows are modeled separately (mcu-flash-config.txt). The separate
+  command model requires explicit clock observations and reference milestones;
+  unknown interrupted NVM contents never become successful reads or fetches.
 - SmartMedia 10-bit SMRAM mode, paged-flash behavior, expanded/BDM modes and
-  flash command operations remain unsupported. No successful flash update,
-  recovery or power-loss behavior is inferred from these RAM tests.
+  timed flash operations remain unsupported. No complete flash update, recovery
+  or physical power-loss qualification is inferred from these component tests.
 
 GPIO
 - A/B/E and PIM T/M/J/P/Q/R/S/U ports have masked data/direction, reduced-drive,

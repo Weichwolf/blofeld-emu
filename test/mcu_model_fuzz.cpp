@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_usb.hpp"
 
@@ -12,8 +13,29 @@
 #include <span>
 
 namespace {
-constexpr unsigned action_count = 27;
+constexpr unsigned action_count = 31;
 enum class UsbAction : std::uint8_t { decoder = 18, sof, setup, out, input, finish, configuration };
+enum class FlashAction : std::uint8_t { clock = 27, transfer, complete, power_cycle };
+
+void flash_action(blofeld::McuBus &bus, const std::span<const std::uint8_t, 6> record) {
+  constexpr unsigned bus_hz_scale = 1000;
+  switch (static_cast<FlashAction>(record[0] % action_count)) {
+    case FlashAction::clock: {
+      const auto oscillator = ((static_cast<std::uint32_t>(record[1]) << 16U) |
+                               (static_cast<std::uint32_t>(record[2]) << 8U) | record[3]) *
+                              4;
+      const auto clock = ((static_cast<std::uint32_t>(record[4]) << 8U) | record[5]) * bus_hz_scale;
+      bus.observe_flash_clock({.oscillator_hz = oscillator, .bus_hz = clock});
+      return;
+    }
+    case FlashAction::transfer: bus.advance_flash(blofeld::FlashMilestone::transfer_buffer); return;
+    case FlashAction::complete:
+      bus.advance_flash(blofeld::FlashMilestone::complete_command);
+      return;
+    case FlashAction::power_cycle: bus.power_cycle(); return;
+    default: throw blofeld::Fault("Invalid flash model-fuzzer action");
+  }
+}
 
 void usb_action(blofeld::McuBus &bus, const std::span<const std::uint8_t, 6> record) {
   const auto address =
@@ -71,6 +93,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
     const auto address =
         static_cast<std::uint16_t>((static_cast<unsigned>(record[1]) << 8U) | record[2]);
     try {
+      if (record[0] % action_count >= static_cast<unsigned>(FlashAction::clock)) {
+        flash_action(*bus, std::span<const std::uint8_t, stride>{record, stride});
+        continue;
+      }
       if (record[0] % action_count == flash_options_action) {
         auto configured_flash = flash;
         configured_flash[flash_protection_offset] = record[3];

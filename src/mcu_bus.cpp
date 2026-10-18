@@ -4,7 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_clock.hpp"
-#include "blofeld/mcu_flash_config.hpp"
+#include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_interrupts.hpp"
 #include "blofeld/mcu_memory.hpp"
@@ -87,15 +87,14 @@ void route_function(std::array<PinFunction, port_count> &ports,
 }
 }
 
-McuBus::McuBus(const std::span<const std::uint8_t> flash)
-    : memory_(flash),
-      flash_config_({.protection = memory_.read(hc12::flash_protection_field),
-                     .security = memory_.read(hc12::flash_security_field)}) {}
+McuBus::McuBus(const std::span<const std::uint8_t> flash) : memory_(flash), flash_(memory_) {}
 
 void McuBus::reset() {
   memory_.reset();
-  flash_config_.reset({.protection = memory_.read(hc12::flash_protection_field),
-                       .security = memory_.read(hc12::flash_security_field)});
+  decoded_bytes_.reset();
+  ++code_revision_;
+  ++revision_;
+  flash_.reset();
   gpio_.reset();
   clock_.reset();
   sci_.reset();
@@ -104,9 +103,6 @@ void McuBus::reset() {
   interrupts_.reset();
   context_ = {};
   interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
-  decoded_bytes_.reset();
-  ++code_revision_;
-  ++revision_;
 }
 
 bool McuBus::reserved_register(const std::uint16_t offset) {
@@ -116,7 +112,7 @@ bool McuBus::reserved_register(const std::uint16_t offset) {
 
 std::uint8_t McuBus::read_register(const std::uint16_t offset) {
   if (!McuMemory::register_name(offset).empty()) { return memory_.read_register(offset); }
-  if (!McuFlashConfig::register_name(offset).empty()) { return flash_config_.read(offset); }
+  if (!McuFlash::register_name(offset).empty()) { return flash_.read(offset); }
   if (!McuGpio::register_name(offset).empty()) { return gpio_.read(offset); }
   if (!McuClock::register_name(offset).empty()) { return clock_.read(offset); }
   if (!McuSci::register_name(offset).empty()) { return sci_.read(offset); }
@@ -136,9 +132,14 @@ std::string_view McuBus::write_register(const ByteWrite write) {
     memory_.write_register(write);
     return memory_name;
   }
-  const auto flash_name = McuFlashConfig::register_name(offset);
+  const auto flash_name = McuFlash::register_name(offset);
   if (!flash_name.empty()) {
-    flash_config_.write(write);
+    try {
+      flash_.write(write);
+    } catch (const Fault &fault) {
+      throw Fault("MCU flash register pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) +
+                  ": " + fault.what());
+    }
     return flash_name;
   }
   const auto gpio_name = McuGpio::register_name(offset);
@@ -193,6 +194,15 @@ std::uint8_t McuBus::read(const std::uint16_t address) {
                   "): " + fault.what());
     }
   }
+  if (location.space == McuSpace::flash) {
+    try {
+      flash_.check_array_read();
+      return memory_.read(address);
+    } catch (const Fault &fault) {
+      throw Fault("MCU flash read at " + hex(address) + " pc=" + hex(context_.pc) +
+                  " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+    }
+  }
   return memory_.read(address);
 }
 
@@ -210,6 +220,9 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
       throw Fault("MCU write at " + hex(address) + " (register offset " + hex(location.offset) +
                   "): " + fault.what());
     }
+  } else if (location.space == McuSpace::flash) {
+    stage_flash({.address = address, .size = 1, .value = value});
+    return;
   } else {
     memory_.write({.address = address, .value = value});
   }
@@ -223,6 +236,10 @@ std::uint8_t McuBus::peek(const std::uint16_t address) const {
 
 void McuBus::write_memory(const MemoryWrite access) {
   const auto location = memory_.locate(access.address);
+  if (location.space == McuSpace::flash) {
+    stage_flash(access);
+    return;
+  }
   if (location.space != McuSpace::registers || !McuUsb::configuration_data(location.offset)) {
     Bus::write_memory(access);
     return;
@@ -260,7 +277,17 @@ void McuBus::check_execute(const InstructionFetch fetch) const {
   for (unsigned index = 0; index < fetch.length; ++index) {
     const auto target = static_cast<std::uint32_t>(fetch.address) + index;
     if (target > hc12::address_mask) { throw Fault("MCU instruction fetch exceeds address space"); }
-    memory_.check_execute(static_cast<std::uint16_t>(target));
+    if (memory_.locate(static_cast<std::uint16_t>(target)).space == McuSpace::flash) {
+      try {
+        flash_.check_array_read();
+        memory_.check_execute(static_cast<std::uint16_t>(target));
+      } catch (const Fault &fault) {
+        throw Fault("MCU flash instruction fetch at " + hex(target) + " pc=" + hex(context_.pc) +
+                    " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+      }
+    } else {
+      memory_.check_execute(static_cast<std::uint16_t>(target));
+    }
   }
 }
 
@@ -288,7 +315,7 @@ std::optional<InterruptRequest> McuBus::interrupt_request(const std::uint8_t ccr
   const auto urgent = interrupts_.select({}, static_cast<std::uint8_t>(ccr | hc12::interrupt_mask));
   if (urgent) { return urgent; }
   if ((ccr & hc12::interrupt_mask) != 0) { return {}; }
-  constexpr unsigned maximum_sources = 20;
+  constexpr unsigned maximum_sources = 21;
   std::array<std::uint16_t, maximum_sources> pending{};
   std::size_t count = 0;
   const auto append = [&pending, &count](const std::uint16_t vector) {
@@ -310,6 +337,8 @@ std::optional<InterruptRequest> McuBus::interrupt_request(const std::uint8_t ccr
   if (sci_.interrupt_pending()) { append(sci_vector); }
   if (clock_.lock_interrupt_pending()) { append(pll_vector); }
   if (clock_.realtime_interrupt_pending()) { append(realtime_vector); }
+  constexpr unsigned flash_vector = 0xffb8;
+  if (flash_.interrupt_pending()) { append(flash_vector); }
   constexpr std::array<std::uint16_t, 8> usb_vectors{
       0xffd4, 0xffd2, 0xffd0, 0xffbe, 0xffce, 0xffcc, 0xffca, 0xffc8};
   const auto usb_sources = usb_.interrupt_sources();

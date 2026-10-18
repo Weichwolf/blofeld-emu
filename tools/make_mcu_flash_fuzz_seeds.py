@@ -28,6 +28,34 @@ def make_seed(value):
     return data
 
 
+def word_stage(address, value):
+    return bytes([16, address >> 8, address & 255, 1, value >> 8, value & 255])
+
+
+def command_prefix(address=0x8234):
+    data = record(26, value=255, extra=254) + record(1, 0x100, 0x48)
+    # Explicit 12 MHz oscillator and 24 MHz bus in action 27's scaled encoding.
+    data += bytes([27, 0x2d, 0xc6, 0xc0, 0x5d, 0xc0])
+    data += word_stage(address, 0xffff) + record(1, 0x106, 0x40)
+    return data + record(1, 0x105, 0x80) + record(28) + record(29)
+
+
+def command_seed(opcode, phase, reset_action):
+    data = command_prefix() + word_stage(0x8234, 0x1234)
+    if phase >= 1:
+        data += record(1, 0x106, opcode)
+    if phase >= 2:
+        data += record(1, 0x105, 0x80)
+    if phase >= 3:
+        data += record(28)
+    if phase >= 4:
+        data += record(29)
+    data += record(reset_action)
+    for address in (0x8000, 0x8200, 0x8234, 0x8236, 0xff0d, 0xff0f, 0xfffe, 0x105):
+        data += record(0, address)
+    return data + record(5, 0x8234)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
@@ -35,7 +63,17 @@ def main():
     directory.mkdir(parents=True, exist_ok=True)
     for value in range(256):
         (directory / f"options-{value:02x}.seed").write_bytes(make_seed(value))
-    print("Created 256 synthetic flash-option/control/reset/remap seeds; no manufacturer data.")
+    for opcode in (0x20, 0x40, 0x41, 5):
+        for phase in range(5):
+            for reset_action in (4, 30):
+                filename = f"command-{opcode:02x}-phase-{phase}-reset-{reset_action}.seed"
+                (directory / filename).write_bytes(command_seed(opcode, phase, reset_action))
+    for address in (0xff0e, 0xfffe):
+        data = command_prefix(address) + word_stage(address, 0x8000)
+        data += record(1, 0x106, 0x20) + record(1, 0x105, 0x80) + record(28) + record(30)
+        data += record(0, address) + record(0, 0xff0d) + record(0, 0xff0f)
+        (directory / f"interrupted-vector-options-{address:04x}.seed").write_bytes(data)
+    print("Created 298 synthetic flash-option/command/reset/power-loss seeds; no manufacturer data.")
 
 
 if __name__ == "__main__":

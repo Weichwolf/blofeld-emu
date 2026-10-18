@@ -87,10 +87,13 @@ void test_data_writes_and_instruction_mutation() {
   require(cpu.state().pc == ram_code + 2,
           "A rewritten branch displacement changes the real control flow");
   const auto before_failure = bus.code_revision();
-  reject([&bus] { bus.write(flash_code + 1, 2); }, "Protected flash stores still fail");
-  require(
-      bus.code_revision() == before_failure && bus.read(flash_code + 1) == 1,
-      "A rejected flash write neither mutates code nor pretends to invalidate a successful store");
+  bus.write(flash_code + 1, 2);
+  constexpr unsigned flash_status = 0x105;
+  constexpr unsigned access_error = 0x10;
+  require(bus.code_revision() == before_failure && bus.read(flash_code + 1) == 1 &&
+              (bus.read(flash_status) & access_error) != 0,
+          "An illegal flash byte write sets ACCERR without mutating code or invalidating a "
+          "successful store");
 }
 
 void test_self_modifying_instruction_and_wide_store() {

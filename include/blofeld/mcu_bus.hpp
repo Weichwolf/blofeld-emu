@@ -3,7 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/mcu_clock.hpp"
-#include "blofeld/mcu_flash_config.hpp"
+#include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_interrupts.hpp"
 #include "blofeld/mcu_memory.hpp"
@@ -66,6 +66,9 @@ public:
   void sample_timer_inputs(std::uint8_t mask);
   void advance_timer(unsigned bus_cycles);
   void reset();
+  void power_cycle();
+  void observe_flash_clock(FlashClockRates rates);
+  void advance_flash(FlashMilestone milestone);
 
 private:
   [[nodiscard]] std::uint8_t read_register(std::uint16_t offset);
@@ -74,11 +77,12 @@ private:
   void sync_peripheral_pins();
   void check_timer_outputs() const;
   void invalidate_code(MemoryRead access);
+  void stage_flash(MemoryWrite access);
   std::uint64_t revision_ = 0;
   std::uint64_t code_revision_ = 0;
   mutable std::bitset<65536> decoded_bytes_;
   McuMemory memory_;
-  McuFlashConfig flash_config_;
+  McuFlash flash_;
   McuGpio gpio_;
   McuClock clock_;
   McuSci sci_;

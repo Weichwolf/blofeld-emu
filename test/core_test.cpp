@@ -329,11 +329,11 @@ void test_strict_bus() {
     static_cast<void>(bus.read(clock_flags));
   } catch (const blofeld::Fault &) { rejected = true; }
   require(rejected, "Unobserved PHY startup must fail instead of fabricating LOCK");
-  rejected = false;
-  try {
-    bus.write(0x8000, 1);
-  } catch (const blofeld::Fault &) { rejected = true; }
-  require(rejected, "Direct flash writes must fail");
+  constexpr unsigned flash_status = 0x105;
+  constexpr unsigned flash_access_error = 0x10;
+  bus.write(0x8000, 1);
+  require((bus.read(flash_status) & flash_access_error) != 0 && bus.read(0x8000) == 0,
+          "Illegal flash byte writes set ACCERR and preserve the original byte");
 }
 
 } // namespace

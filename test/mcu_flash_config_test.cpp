@@ -19,8 +19,8 @@ constexpr unsigned flash_bytes = 32768;
 constexpr unsigned byte_mask = 0xff;
 constexpr unsigned options_offset = 0x7f0d;
 constexpr unsigned security_offset = 0x7f0f;
-constexpr unsigned unsupported_status = 0x105;
-constexpr unsigned unsupported_command = 0x106;
+constexpr unsigned command_status = 0x105;
+constexpr unsigned command_register = 0x106;
 constexpr unsigned remap = 0x11;
 constexpr unsigned size_fields = 0x1b;
 constexpr unsigned helper_divider = 0x48;
@@ -160,12 +160,16 @@ void test_bus_reset_remap_and_unsupported_operations() {
   require(bus.read(new_base + protection) == 0 &&
               bus.read(new_base + divider) == loaded_helper_divider,
           "Register relocation preserves configuration state at the new base");
-  reject([&bus] { static_cast<void>(bus.read(new_base + unsupported_status)); },
-         "Configuration support does not fabricate command-ready flags");
-  reject([&bus] { bus.write(new_base + unsupported_command, 0x20); },
-         "Configuration support cannot silently accept a programming command");
-  reject([&bus] { bus.write(application_address, 0); },
-         "Flash array writes still require a command-state model");
+  constexpr unsigned reset_status = 0xc0;
+  constexpr unsigned sequence_error_status = 0xd0;
+  require(bus.read(new_base + command_status) == reset_status,
+          "Relocated command state reports its documented idle flags");
+  bus.write(new_base + command_register, 0x20);
+  require(bus.read(new_base + command_status) == sequence_error_status,
+          "A programming command without a staged word sets ACCERR");
+  bus.write(application_address, 0);
+  require(bus.read(application_address) == 0,
+          "A rejected array write cannot silently perform programming");
   bus.reset();
   require(bus.read(protection) == original_protection && bus.read(security) == original_security &&
               bus.read(divider) == 0,

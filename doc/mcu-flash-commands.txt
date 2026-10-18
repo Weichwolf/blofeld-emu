@@ -1,0 +1,100 @@
+FTS32K command and nonvolatile-memory reference
+
+Sources: S12FTS32KV1/D V01.03 sections 3.3 and 4..6; UF32 integration and NVM
+clock limits in 9S12UF32DGV1/D section 10.1 and appendix A.2. These are members
+of the official archive pinned in hardware/sources.json. Configuration and
+protection windows are described separately in mcu-flash-config.txt.
+
+Scope and explicit transition inputs
+McuFlash implements a normal-mode sequencer with independent executing and
+buffered jobs. An aligned word write latches address/data, FCMD selects the
+command, and writing CBEIF launches the buffer. Commands are word program (20),
+512-byte sector erase (40), mass erase (41), and erase verify (05). Documented
+ordering/alignment/divider errors set ACCERR; protected writes and protected mass
+erase set PVIOL. W1C clears error flags. FADDR/FDATA and reserved normal-mode
+registers read zero and ignore otherwise valid writes.
+
+The reference interface requires explicit operating-clock inputs and two
+milestones: transfer_buffer moves a launched job into the executing slot;
+complete_command applies its result. CBEIF becomes set at transfer; CCIF stays
+clear while an executing or launched job remains. Completion without an active
+command and transfer into an occupied slot fail visibly. FCNFG's CBEIE/CCIE
+generate the documented shared FFB8 interrupt source.
+
+No CPU instruction count, elapsed time, buffer-transfer latency or high-voltage
+pulse schedule is inferred. The UF32 timing formulae do not specify all internal
+phase boundaries or failure effects. Tests choose transitions explicitly; they
+establish protocol/state behavior and conditional original-code behavior, not
+calibrated timing. No default scheduler supplies completion to polling loops.
+
+Unknown operating clocks fail. The documented oscillator range 0.5..60 MHz, bus
+minimum 1 MHz, and exact rational NVM divider range 150..200 kHz are checked.
+Clock changes while a command is launched/executing fail. This is module-level
+qualification, not evidence of the Blofeld board's oscillator, PLL or CPU rate.
+The isolated fixtures supply a 12 MHz oscillator and 24 MHz bus.
+
+Array and interruption behavior
+- Logical aliases share physical flash bytes. CPU byte/misaligned writes set
+  ACCERR. Staging does not change executable code; mutation and reset invalidate
+  cached translations. Diagnostics identify operation, address and CPU context.
+- Array reads/fetches fail while CCIF is clear: the manual specifies invalid data
+  during an algorithm. No convenient data value is invented.
+- Programming requires a preceding known emulated erase. Even programming FFFF
+  consumes that eligibility; cumulative programming is not a bitwise AND. An
+  initial FFFF image does not establish its erase/program history.
+- Reset discards untransferred buffers. An executing program invalidates its word;
+  sector/mass erase invalidates the affected sector/block. Verify changes no
+  cells. Unknown contents remain unknown across later resets.
+- power_cycle also makes SMRAM/QRAM unknown. Committed NVM and interruption
+  unknownness survive in the same model instance. File persistence and complete
+  snapshots remain pending.
+- Unknown option fields fail reset; unknown reset vectors cannot choose a boot
+  address. Reset does not restore a pristine firmware image.
+
+The before/after-transfer distinction is a reference-state distinction. Applying
+it to a real interruption requires qualified timing or an observation of the
+actual phase. Brownout, voltage, wear, reset causes and pulse-level faults are
+not validated by these tests.
+
+Qualification boundaries
+Idle FSTAT writes containing CBEIF=1 without a staged command, duplicate/full
+launched-buffer writes, active protection changes, backdoor transactions and
+STOP/WAIT/BDM paths remain explicit qualification faults or unimplemented CPU
+paths. The original initialization's BSET FSTAT,30 reads back other flags; its
+idle CBEIF write is not guessed. The earlier initialization fixture still stops
+before that instruction. Full initialization and end-to-end update/recovery
+therefore remain unproven.
+
+Tests
+  ctest --test-dir build/strict -R '^(flash_commands|original_flash_commands)$' --output-on-failure
+
+Independent checks cover ordering, protection/errors, both buffer slots, shared
+aliases, complete sector/block extents, blank checks, programming history, clock
+boundaries, native IRQ entry/return and cached-code mutation. Reset and power
+loss are injected at five reference positions for four commands (40 cases),
+with additional pending-successor and reset-vector checks.
+
+The optional original-code fixture verifies the private ZIP and loads its
+unchanged 632-byte HC12 RAM helper. An own caller invokes the original word
+routine. Explicit fixture configuration replaces neither its instructions nor
+its command/data writes. One original busy-poll iteration runs before the
+fixture delivers completion. Tests check the 8200 floor, erase/program calls,
+non-erased-word rejection, and all four source SEC combinations becoming 10.
+The original vector-finalization sequence writes all three recovery vectors;
+a native reset fetch returns to 8000. All 512 resident-loader bytes are compared
+with the supplied source image. These are isolated subroutine/finalization
+checks, not full transport, full image update, recovery or hardware safety proof.
+Instruction traces and manufacturer bytes remain private under build/.
+
+Offline fuzzing
+  cmake --build build/fuzz --target mcu-model-fuzz
+  python3 tools/make_mcu_flash_fuzz_seeds.py doc/local/flash-commands-fuzz-corpus
+  mkdir -p doc/local/flash-commands-fuzz-artifacts
+  build/fuzz/mcu-model-fuzz doc/local/flash-commands-fuzz-corpus -artifact_prefix=doc/local/flash-commands-fuzz-artifacts/ -max_len=1536 -max_total_time=60
+
+The 298 own synthetic seeds include all configuration bytes, 40 reference
+interruption cases, and interrupted security/reset-vector programs. The harness
+accepts operating-clock observations, both milestones and power cycles. No
+physical devices or manufacturer data are used by this model campaign.
+The current campaign completed 64613 runs in 61 seconds without sanitizer
+findings. Sustained, whole-board and native-CPU fuzzing remain separate work.

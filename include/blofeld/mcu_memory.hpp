@@ -19,6 +19,11 @@ struct McuLocation {
   std::uint16_t offset = 0;
 };
 
+struct FlashRange {
+  std::uint16_t offset = 0;
+  unsigned size = 0;
+};
+
 // Normal single-chip MC9S12UF32 mapping. Power-on RAM is unknown until written.
 class McuMemory {
 public:
@@ -33,6 +38,12 @@ public:
   void write_register(ByteWrite write);
   bool retire_instruction();
   void reset();
+  void power_cycle();
+  [[nodiscard]] std::uint8_t read_flash(std::uint16_t offset) const;
+  void check_flash_program(std::uint16_t offset) const;
+  void program_flash(MemoryWrite physical_word);
+  void erase_flash(FlashRange range);
+  void invalidate_flash(FlashRange range);
 
 private:
   static constexpr std::size_t flash_size = 32768;
@@ -41,6 +52,8 @@ private:
   static constexpr std::size_t map_register_count = 4;
   [[nodiscard]] bool initialized(McuLocation location) const;
   std::array<std::uint8_t, flash_size> flash_{};
+  std::bitset<flash_size> flash_known_;
+  std::bitset<flash_size / 2> flash_fresh_;
   std::array<std::uint8_t, smram_size> smram_{};
   std::array<std::uint8_t, qram_size> qram_{};
   std::bitset<smram_size> smram_initialized_;

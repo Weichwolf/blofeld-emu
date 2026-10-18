@@ -39,11 +39,14 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
 RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tracking,
                                           remapping, overlap priority and flash alias
                                           tested. See mcu-model.txt for limits;
-                                          flash controller/paging/SmartMedia pending.
+                                          paging/SmartMedia remain pending.
                                           FCLKDIV/FSEC/FPROT reset/configuration and
                                           protection ranges independently tested;
-                                          see mcu-flash-config.txt. Command/status,
-                                          array programming and persistence pending.
+                                          see mcu-flash-config.txt. MCU flash commands,
+                                          executing/buffered jobs and interruption
+                                          unknownness use explicit reference
+                                          milestones (mcu-flash-commands.txt).
+                                          Timing and file persistence pending.
                                           DSP initial and MS/MSW=111 maps, retained
                                           X/P alias, protected/missing ROM and
                                           explicit three-cycle switch tested.
@@ -150,16 +153,28 @@ SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity
                                           sequences and pin routing tested. See
                                           mcu-sci.txt for unresolved flag timing.
 Voice management and audio        pending  No original audio generation or PCM output.
-Persistent storage               pending  NAND geometry/ECC and contents unresolved.
+Persistent storage               partial  MCU flash mutations/unknownness survive
+                                          in-process reset/power-cycle tests; file
+                                          snapshots and persistence pending.
+                                          NAND geometry/ECC and contents unresolved.
 Original update and recovery      pending  Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an
-                                          isolated RAM fixture; command execution
-                                          and end-to-end update/recovery pending.
+                                          isolated RAM fixture. Original word routines
+                                          erase/program, enforce the 8200 floor,
+                                          reject non-erased words and force SEC=10.
+                                          Original finalization writes recovery
+                                          vectors; native reset fetches 8000.
+                                          Explicit reference milestones only;
+                                          full initialization/transport/recovery
+                                          and hardware validation pending.
 Damaged updates/transfer loss     partial  Offline parser rejection only;
                                           no emulated transport/update proof.
-Power loss in every erase/program pending  Flash/NAND controllers, phase injection,
-                                          reset/security/vector checks pending.
+Power loss in every erase/program partial  Forty MCU command/reference-position
+                                          reset/power-cycle cases, queued commands
+                                          and unknown vector/option checks tested.
+                                          Exact timed/analog phases, NAND and stock
+                                          hardware interruption tests pending.
 Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU models;
                                           native dependencies instrumented too.
                                           No complete-board, audio or concurrency
@@ -178,6 +193,10 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           and arbitrary nonvolatile options:
                                           60733 runs in 61 s without findings
                                           (mcu-flash-config.txt).
+                                          Flash commands/queues/clock observations
+                                          and reference reset/power-cycle seeds:
+                                          64613 runs in 61 s without findings
+                                          (mcu-flash-commands.txt).
                                           SHI edge/register harness with synthetic
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.

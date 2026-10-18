@@ -40,6 +40,7 @@ std::size_t map_index(const std::uint16_t offset) {
 McuMemory::McuMemory(const std::span<const std::uint8_t> flash) {
   if (flash.size() != flash_.size()) { throw Fault("The MCU requires a 32768-byte flash image"); }
   std::ranges::copy(flash, flash_.begin());
+  flash_known_.set();
   reset();
 }
 
@@ -48,6 +49,12 @@ void McuMemory::reset() {
   pending_ = registers_;
   pending_writes_.reset();
   written_.reset();
+}
+
+void McuMemory::power_cycle() {
+  smram_initialized_.reset();
+  qram_initialized_.reset();
+  reset();
 }
 
 McuLocation McuMemory::locate(const std::uint16_t address) const {
@@ -84,7 +91,7 @@ bool McuMemory::initialized(const McuLocation location) const {
   switch (location.space) {
     case McuSpace::smram: return smram_initialized_.test(location.offset);
     case McuSpace::qram: return qram_initialized_.test(location.offset);
-    case McuSpace::flash: return true;
+    case McuSpace::flash: return flash_known_.test(location.offset);
     case McuSpace::reserved:
     case McuSpace::registers:
     case McuSpace::unmapped: return false;
@@ -105,7 +112,7 @@ std::uint8_t McuMemory::peek(const std::uint16_t address) const {
   switch (location.space) {
     case McuSpace::smram: return smram_[location.offset];
     case McuSpace::qram: return qram_[location.offset];
-    case McuSpace::flash: return flash_[location.offset];
+    case McuSpace::flash: return flash_known_.test(location.offset) ? flash_[location.offset] : 0;
     case McuSpace::reserved:
     case McuSpace::registers:
     case McuSpace::unmapped: return 0;
