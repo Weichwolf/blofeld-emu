@@ -77,6 +77,14 @@ P writes/mutation, retained map aliases, bounded DO/SPI waits and REP latching.
 The original_dsp_boot fixture executes documented partial NXP SPI ROM plus the
 unaltered MCU-embedded Blofeld first stage; all reference bytes remain private.
 
+Reference bit instructions optionally delegate GPIO accesses to a symbolic bit
+hook. Only the selected bit must be known; untouched output latches keep their
+knowledge state. Ordinary peripheral fallback performs one read and at most one
+write, preserving FIFO side effects. EA decoding/postincrement occurs once.
+BTST and bit branches share the checked read path. Native tests cover Carry,
+mixed GPIO states, pp/qq/EA and RAM aa forms, FIFO consumption and bit boundaries.
+These hooks do not establish bus-phase, interrupt or pad timing.
+
 The SDK checkout stays unchanged. CMake stages and patches private build copies,
 then updates only changed output files so a small patch edit does not rewrite
 all active native headers. This is a limited, uncalibrated DSP56371 reference

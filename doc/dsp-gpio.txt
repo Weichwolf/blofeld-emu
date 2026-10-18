@@ -32,9 +32,18 @@ Pad observations return known/level masks independently of GPIO register reads.
 GPIO outputs expose driven/known/level masks and delegated peripheral ownership.
 Opposed known external/output drives fail; unknown output latches cannot be
 qualified by an external driver. Unmodeled ESAI-owned pads stay unknown. The
-GPIO library supports explicitly masked reads, but native peripheral accesses
-currently require the complete requested word to be known. Native bit operations
-are therefore not yet qualified for a mixed known/unknown PDR word.
+GPIO library supports explicitly masked reads and symbolic read-modify-write.
+Native reference BCLR/BSET/BCHG require the selected previous bit for Carry and
+change its output latch while preserving unselected output knowledge, including
+unknown latches. BTST and bit branches read only the selected bit. An unknown
+selected bit still fails; a whole-word MOVEP still requires the whole word.
+GPIO configuration bits use the same hook and retain neighboring bits.
+
+The hook models architectural GPIO state without inserting guessed pad levels.
+It does not expose separate read/write bus phases or establish cycle timing.
+Other peripherals decline the hook without side effects and retain their normal
+word accesses. In particular, a SHI FIFO bit test performs exactly one destructive
+read; no preliminary read is used to construct a masked writeback.
 
 Reserved upper register bits read zero; nonzero writes are conservatively
 rejected pending hardware qualification. This does not establish harmless
@@ -59,8 +68,11 @@ latched outputs, masked/whole reads, contention and rejected-state preservation,
 both serial-port mux tables, reserved F functions, register-space separation and
 the BCR gate. Synthetic native MOVEP/BCLR/BSET drives C output bits and samples E
 inputs through the strict bus, then executes RESET and re-enables C outputs to
-verify their nonreset latch. Model fuzzing includes external pads, masked GPIO
-reads and resets.
+verify their nonreset latch. Native mixed-state tests check C (qq and EA) and F
+(pp), previous-bit Carry for all four operations, postincrement once, BRCLR/JSET
+on observed inputs, RAM short/EA fallback, FIFO read count, highest bit 23 and a
+rejected bit-24 encoding. Model fuzzing includes external pads, masked GPIO
+reads/writes, bit requests and resets.
 
 Limits and original-firmware execution
 No board pin wiring, NAND device, ESAI stream, electrical/synchronizer latency or

@@ -68,7 +68,7 @@ DspGpioSample DspGpio::observe_pads(const std::uint32_t mask) const {
 }
 
 std::uint32_t DspGpio::read(const DspGpioRegister reg, const std::uint32_t mask) const {
-  if ((mask & ~word_mask) != 0) { throw Fault("DSP GPIO read mask exceeds 24 bits"); }
+  if ((mask & ~DspGpioWrite::word_mask) != 0) { throw Fault("DSP GPIO read mask exceeds 24 bits"); }
   switch (reg) {
     case DspGpioRegister::control: return control_ & mask;
     case DspGpioRegister::direction: return direction_ & mask;
@@ -87,18 +87,22 @@ std::uint32_t DspGpio::read(const DspGpioRegister reg, const std::uint32_t mask)
 }
 
 void DspGpio::write_checked(const DspGpioWrite access) {
+  if ((access.mask & ~DspGpioWrite::word_mask) != 0 || (access.value & ~access.mask) != 0) {
+    throw Fault("Invalid DSP GPIO masked write at " + address(access.reg));
+  }
   if ((access.value & ~pin_mask()) != 0) {
     throw Fault("Unqualified DSP GPIO reserved-bit write at " + address(access.reg) +
                 " value=" + hex(access.value, 6));
   }
   switch (access.reg) {
-    case DspGpioRegister::control: control_ = access.value; break;
-    case DspGpioRegister::direction: direction_ = access.value; break;
+    case DspGpioRegister::control: control_ = (control_ & ~access.mask) | access.value; break;
+    case DspGpioRegister::direction: direction_ = (direction_ & ~access.mask) | access.value; break;
     case DspGpioRegister::data: {
-      const auto mask = direction_ & ~control_;
-      latch_ = access.value & mask;
+      const auto outputs = direction_ & ~control_;
+      const auto selected = outputs & access.mask;
+      latch_ = (latch_ & ~selected) | (access.value & selected);
       // Input/disconnected/peripheral writes do not qualify a later output latch.
-      latch_known_ = mask;
+      latch_known_ = (latch_known_ | selected) & outputs;
       break;
     }
     default: throw Fault("Invalid DSP GPIO register write");

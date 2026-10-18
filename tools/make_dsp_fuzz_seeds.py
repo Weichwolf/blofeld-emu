@@ -35,6 +35,13 @@ def main() -> None:
             (1, 1, 0xFFFFFB, 0x01FFFF), (1, 2, 0xFFFFF6, 0x7FF),
             (1, 2, 0xFFFFF5, 0x615), (13, 0, 0, 0), (5, 0, 0, 0)]
     (output / "gpio-banks-pads-reset").write_bytes(b"".join(record(*row) for row in gpio))
+    bits = [(1, 1, 0xFFFFBE, 1), (1, 1, 0xFFFFBD, 1), (1, 1, 0xFFFFBE, 3),
+            (15, 1, 0xFFFFBD, 0x00010000), (15, 1, 0xFFFFBD, 0x00020000),
+            (15, 1, 0xFFFFBD, 0x00030000), (15, 1, 0xFFFFBD, 0),
+            (15, 1, 0xFFFFBD, 0x01020000), (15, 1, 0xFFFFBD, 0x18010000),
+            (16, 0, 1, 1), (16, 0, 1, 0), (15, 1, 0xFFFF94, 0),
+            (0, 1, 0xFFFFBD, 0), (13, 0, 0, 0)]
+    (output / "symbolic-gpio-bit-operations").write_bytes(b"".join(record(*row) for row in bits))
     for area in range(3):
         base = 0xFF0000 if area == 0 else 0x4000
         rows = [(6, area, base, 0x123456), (0, area, base, 0), (0, area, base + 2, 0),

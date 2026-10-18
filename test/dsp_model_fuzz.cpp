@@ -11,7 +11,7 @@
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_t size) {
   constexpr std::size_t stride = 9;
   constexpr std::size_t operation_limit = 256;
-  constexpr unsigned action_count = 15;
+  constexpr unsigned action_count = 17;
   constexpr unsigned word_mask = 0xffffff;
   blofeld::DspBus bus;
   const auto count = size / stride < operation_limit ? size / stride : operation_limit;
@@ -60,6 +60,19 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
           static_cast<void>(
               bus.gpio(static_cast<blofeld::DspPort>(record[1] % 4U))
                   .read(static_cast<blofeld::DspGpioRegister>(record[2] % 4U), value));
+          break;
+        case 15:
+          static_cast<void>(bus.access_gpio_bit(
+              {.space = area,
+               .address = address,
+               .bit = record[5],
+               .operation = static_cast<blofeld::DspBitOperation>(record[6] % 5U)}));
+          break;
+        case 16:
+          bus.gpio(static_cast<blofeld::DspPort>(record[1] % 4U))
+              .write({.reg = static_cast<blofeld::DspGpioRegister>(record[2] % 4U),
+                      .value = value,
+                      .mask = address});
           break;
         default: throw blofeld::Fault("Invalid DSP model-fuzzer action");
       }

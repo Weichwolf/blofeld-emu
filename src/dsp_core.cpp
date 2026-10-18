@@ -37,6 +37,16 @@ DspSpace space(const dsp56k::EMemArea area) {
   }
 }
 
+DspBitOperation bit_operation(const dsp56k::PeripheralBitOp operation) {
+  switch (operation) {
+    case dsp56k::PeripheralBitOp::Test: return DspBitOperation::test;
+    case dsp56k::PeripheralBitOp::Clear: return DspBitOperation::clear;
+    case dsp56k::PeripheralBitOp::Set: return DspBitOperation::set;
+    case dsp56k::PeripheralBitOp::Change: return DspBitOperation::change;
+    default: throw Fault("Invalid native DSP peripheral bit operation");
+  }
+}
+
 class MemoryAccess final : public dsp56k::IMemoryValidator {
 public:
   explicit MemoryAccess(DspBus &bus) : bus_(bus) {}
@@ -80,6 +90,17 @@ public:
 
   dsp56k::TWord read(const dsp56k::TWord address, dsp56k::Instruction /*instruction*/) override {
     return bus_.read({.space = area_, .address = address});
+  }
+
+  bool bitAccess(const dsp56k::TWord address,
+                 const dsp56k::TWord bit,
+                 const dsp56k::PeripheralBitOp operation,
+                 bool &old) override {
+    const auto result = bus_.access_gpio_bit(
+        {.space = area_, .address = address, .bit = bit, .operation = bit_operation(operation)});
+    if (!result.has_value()) { return false; }
+    old = *result;
+    return true;
   }
 
   const dsp56k::TWord *readAsPtr(dsp56k::TWord /*address*/,

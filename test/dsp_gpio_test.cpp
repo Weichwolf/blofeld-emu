@@ -120,6 +120,65 @@ void test_mux_ownership_and_reserved_modes() {
   }
 }
 
+void test_symbolic_bit_access_preserves_unknown_state() {
+  blofeld::DspBus bus;
+  auto &gpio = bus.gpio(blofeld::DspPort::c);
+  gpio.write({.reg = Register::direction, .value = 1});
+  gpio.write({.value = 1});
+  gpio.write({.reg = Register::direction, .value = 3});
+  constexpr unsigned pdr = 0xffffbd;
+  constexpr unsigned prr = 0xffffbe;
+  using Operation = blofeld::DspBitOperation;
+
+  struct Expected {
+    Operation operation;
+    bool old;
+    unsigned level;
+  };
+
+  constexpr std::array<Expected, 4> cases{
+      {{.operation = Operation::clear, .old = true, .level = 0},
+       {.operation = Operation::set, .old = false, .level = 1},
+       {.operation = Operation::change, .old = true, .level = 0},
+       {.operation = Operation::test, .old = false, .level = 0}}};
+  for (const auto &expected : cases) {
+    const auto old = bus.access_gpio_bit(
+        {.space = blofeld::DspSpace::x, .address = pdr, .operation = expected.operation});
+    const auto output = gpio.outputs();
+    require(old.has_value() && *old == expected.old && output.mask == 3 && output.known == 1 &&
+                output.levels == expected.level,
+            "Only the selected output bit changes; an uninitialized output remains symbolic");
+  }
+  reject([&gpio] { static_cast<void>(gpio.read(Register::data)); },
+         "Masked bit success does not initialize a whole GPIO data word");
+  reject(
+      [&bus] {
+        static_cast<void>(bus.access_gpio_bit({.space = blofeld::DspSpace::x,
+                                               .address = pdr,
+                                               .bit = 1,
+                                               .operation = Operation::set}));
+      },
+      "BSET needs the unknown previous bit for Carry even though its new value would be one");
+  const auto old = bus.access_gpio_bit(
+      {.space = blofeld::DspSpace::x, .address = prr, .bit = 2, .operation = Operation::set});
+  require(old.has_value() && !*old && gpio.outputs().mask == 7 && gpio.outputs().known == 1,
+          "A control bit write preserves neighboring direction bits and cold data latches");
+  constexpr unsigned fifo = 0xffff94;
+  require(!bus.access_gpio_bit({.space = blofeld::DspSpace::x, .address = fifo}).has_value(),
+          "Declining a non-GPIO access performs no empty/destructive FIFO read");
+  constexpr unsigned invalid_bit = 24;
+  reject(
+      [&bus] {
+        static_cast<void>(bus.access_gpio_bit(
+            {.space = blofeld::DspSpace::x, .address = pdr, .bit = invalid_bit}));
+      },
+      "Out-of-range bit indices are rejected before shifting");
+  reject([&gpio] { gpio.write({.value = 2, .mask = 1}); },
+         "Masked write values cannot escape their mask");
+  constexpr unsigned outside_word = 0x1000000;
+  reject([&gpio] { gpio.write({.mask = outside_word}); }, "A mask cannot address a 25th GPIO bit");
+}
+
 void test_bus_spaces_and_port_f_biu_gate() {
   blofeld::DspBus bus;
   constexpr unsigned bcr = 0xfffffb;
@@ -168,6 +227,7 @@ int main() {
     test_reset_and_every_gpio_input_output();
     test_output_contention_and_nonreset_latches();
     test_mux_ownership_and_reserved_modes();
+    test_symbolic_bit_access_preserves_unknown_state();
     test_bus_spaces_and_port_f_biu_gate();
     std::cout << "DSP GPIO modes, unknown pads/latches, contention, reset and BIU gate passed\n";
     return 0;

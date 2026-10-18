@@ -27,6 +27,15 @@ struct DspStore {
   std::uint32_t value = 0;
 };
 
+enum class DspBitOperation : std::uint8_t { test, clear, set, change };
+
+struct DspBitAccess {
+  DspSpace space = DspSpace::x;
+  std::uint32_t address = 0;
+  unsigned bit = 0;
+  DspBitOperation operation = DspBitOperation::test;
+};
+
 struct DspRom {
   DspSpace space = DspSpace::p;
   std::uint32_t start = 0;
@@ -45,6 +54,7 @@ public:
   void reset_peripherals();
   [[nodiscard]] std::uint32_t read(DspAddress access);
   void write(DspStore access);
+  [[nodiscard]] std::optional<bool> access_gpio_bit(DspBitAccess access);
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);

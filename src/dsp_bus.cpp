@@ -109,6 +109,35 @@ DspGpio &DspBus::gpio(const DspPort port) {
   return gpio_.at(index);
 }
 
+std::optional<bool> DspBus::access_gpio_bit(const DspBitAccess access) {
+  constexpr unsigned word_bits = 24;
+  const DspAddress target{.space = access.space, .address = access.address};
+  static_cast<void>(bank(access.space));
+  if (access.address > word_mask || access.bit >= word_bits ||
+      static_cast<unsigned>(access.operation) > static_cast<unsigned>(DspBitOperation::change)) {
+    throw Fault("Invalid DSP bit access at " + address_text(target));
+  }
+  const auto mapping = gpio_register(target);
+  if (!mapping.has_value()) { return std::nullopt; }
+  if (mapping->port == DspPort::f && bus_control_ != port_f_bus_control) {
+    throw Fault("Unqualified DSP GPIO bit access at " + address_text(target) +
+                ": Port F requires BCR=0x01ffff");
+  }
+  auto &port = gpio(mapping->port);
+  const auto mask = 1U << access.bit;
+  const bool old = (port.read(mapping->reg, mask) & mask) != 0;
+  unsigned value = 0;
+  switch (access.operation) {
+    case DspBitOperation::test: return old;
+    case DspBitOperation::clear: break;
+    case DspBitOperation::set: value = mask; break;
+    case DspBitOperation::change: value = old ? 0U : mask; break;
+    default: throw Fault("Invalid DSP GPIO bit operation");
+  }
+  port.write({.reg = mapping->reg, .value = value, .mask = mask});
+  return old;
+}
+
 DspBus::Location DspBus::locate(const DspAddress access, const Operation operation) const {
   static_cast<void>(bank(access.space));
   const auto address = access.address;

@@ -22,6 +22,13 @@ CPU state requires reset. Native reset/interrupt entry incorrectly cast full SR
 masks into the smaller CCR enum; UBSan caught this during reset. The patch selects
 the correct SR-mask overloads, with instrumentation retained.
 
+Reference bit instructions use a GPIO-specific symbolic-access hook. BCLR/BSET/
+BCHG preserve untouched unknown latches; BTST/bit branches require only their
+selected bit. The previous bit must be known when it supplies Carry or a branch.
+Effective addresses are evaluated once and reused for writeback. Other memory
+and peripherals retain normal word accesses, with no extra destructive reads.
+Normal interpreter/JIT bit paths are not changed or qualified by this adapter.
+
 DSP56371 memory and peripheral scope
 - Independent P/X/Y windows, 24-bit values/addresses, missing-content tracking,
   ROM protection and RAM retention on external reset are modeled.
@@ -60,6 +67,9 @@ Native RESET and external reset independently check SHI, PCTL and memory-map
 retention/restoration; these do not establish complete derivative reset fidelity.
 Own native MOVEP/BCLR/BSET sequences drive port C pins and sample explicit port E
 input levels. The original first-stage GPIO sequence is not reached by this test.
+Mixed-state native bit regressions check C/F addressing, Carry, BRCLR/JSET input
+polls, postincrement, ordinary RAM operations, exactly one FIFO read, bit 23 and
+an invalid bit-24 encoding. Unknown selected bits and whole PDR reads still fail.
 
 Document-derived SPI bootstrap reference
 DSP56371UM Appendix A publishes the SPI path, but references a separate EEPROM
@@ -106,10 +116,11 @@ Offline DSP bus/model fuzzing
   python3 tools/make_dsp_fuzz_seeds.py doc/local/dsp-fuzz-corpus
   build/fuzz/dsp-model-fuzz doc/local/dsp-fuzz-corpus -artifact_prefix=doc/local/dsp-fuzz-artifacts/ -max_len=2304 -max_total_time=60
 
-The expanded synthetic campaign completed 39981 runs in 61 seconds without
+The expanded synthetic campaign completed 37288 runs in 61 seconds without
 sanitizer findings. The model harness also exercises PCTL commands, PINIT
 observations and clock-target queries. GPIO pad observations and peripheral
-reset are included. It covers bus/map/ROM/reset/SHI/PLL/GPIO inputs, not arbitrary
+reset, masked writes and GPIO bit requests are included. It covers
+bus/map/ROM/reset/SHI/PLL/GPIO inputs, not arbitrary
 native DSP instruction streams or the complete board. Sustained and differential CPU
 campaigns, actual NAND/assets, full application/audio and hardware comparison
 remain required; see coverage.txt.

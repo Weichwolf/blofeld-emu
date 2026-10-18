@@ -20,18 +20,22 @@
 -		Peripherals56367
 +		Peripherals56367,
 +		PeripheralsCustom
-@@ -108,0 +110 @@
+@@ -90,0 +92,2 @@
++	enum class PeripheralBitOp : uint8_t { Test, Clear, Set, Change };
++
+@@ -108,0 +112,2 @@
 +		virtual uint32_t exec() = 0;
-@@ -142 +144 @@
++		virtual bool bitAccess(TWord, TWord, PeripheralBitOp, bool&) { return false; }
+@@ -142 +147 @@
 -		uint32_t exec() noexcept { return MaxDelayCycles; }
 +		uint32_t exec() noexcept override { return MaxDelayCycles; }
-@@ -170 +172 @@
+@@ -170 +175 @@
 -		uint32_t exec() noexcept;
 +		uint32_t exec() noexcept override;
-@@ -222 +224 @@
+@@ -222 +227 @@
 -		uint32_t exec() noexcept;
 +		uint32_t exec() noexcept override;
-@@ -285 +287 @@
+@@ -285 +290 @@
 -		uint32_t exec() noexcept { return MaxDelayCycles; }
 +		uint32_t exec() noexcept override { return MaxDelayCycles; }
 --- a/source/dsp56kEmu/dsp.h
@@ -72,6 +76,8 @@
 @@ -416 +431 @@
 -			return m_opWordB;
 +			return extension;
+@@ -1468,0 +1484 @@
++		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
 @@ -7,0 +8 @@
@@ -176,6 +182,123 @@
 @@ -8 +8 @@
 -	void dspExecDefaultPreventInterrupt(DSP* _dsp) noexcept;
 +	void dspExecDefaultPreventInterrupt(DSP* _dsp);
-@@ -351,0 +352,2 @@
+@@ -11,0 +12,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bchg_ea>(op, PeripheralBitOp::Change));
++			return;
++		}
++
+@@ -30,0 +36,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bchg_aa>(op, PeripheralBitOp::Change));
++			return;
++		}
++
+@@ -37,0 +48,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bchg_pp>(op, PeripheralBitOp::Change));
++			return;
++		}
++
+@@ -44,0 +60,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bchg_qq>(op, PeripheralBitOp::Change));
++			return;
++		}
++
+@@ -62,0 +83,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bclr_ea>(op, PeripheralBitOp::Clear));
++			return;
++		}
++
+@@ -84,0 +110,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bclr_aa>(op, PeripheralBitOp::Clear));
++			return;
++		}
++
+@@ -91,0 +122,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bclr_pp>(op, PeripheralBitOp::Clear));
++			return;
++		}
++
+@@ -102,0 +138,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bclr_qq>(op, PeripheralBitOp::Clear));
++			return;
++		}
++
+@@ -139,0 +180,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bset_ea>(op, PeripheralBitOp::Set));
++			return;
++		}
++
+@@ -158,0 +204,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bset_aa>(op, PeripheralBitOp::Set));
++			return;
++		}
++
+@@ -165,0 +216,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bset_pp>(op, PeripheralBitOp::Set));
++			return;
++		}
++
+@@ -179,0 +235,5 @@
++		if(m_referenceMode) {
++			sr_toggle(CCR_C, referenceBitMemory<Bset_qq>(op, PeripheralBitOp::Set));
++			return;
++		}
++
+@@ -351,0 +412,2 @@
 +		else if(m_referenceMode)
 +			throw std::runtime_error("Unsupported native DSP opcode");
+--- a/source/dsp56kEmu/dsp_ops_helper.inl
++++ b/source/dsp56kEmu/dsp_ops_helper.inl
+@@ -180,0 +181,40 @@
++	// Reference bit operations preserve symbolic untouched GPIO bits. Other
++	// peripherals retain one normal read and, for RMW, one normal write.
++	template <Instruction Inst> bool DSP::referenceBitMemory(const TWord op, const PeripheralBitOp action)
++	{
++		const auto bit = getBit<Inst>(op);
++		if(bit >= 24) throw std::runtime_error("Invalid reference DSP bit index");
++		const auto area = getFieldValueMemArea<Inst>(op);
++		TWord address;
++		if constexpr(hasFields<Inst, Field_MMM, Field_RRR>()) {
++			const auto mode = (getFieldValue<Inst, Field_MMM>(op) << 3) | getFieldValue<Inst, Field_RRR>(op);
++			if(mode == MMMRRR_ImmediateData)
++				throw std::runtime_error("Invalid immediate reference bit operand");
++			address = effectiveAddress<Inst>(op);
++		} else if constexpr(hasFieldT<Inst, Field_pppppp>()) {
++			address = 0xffffc0 | getFieldValue<Inst, Field_pppppp>(op);
++		} else if constexpr(hasFieldT<Inst, Field_qqqqqq>()) {
++			address = 0xffff80 | getFieldValue<Inst, Field_qqqqqq>(op);
++		} else {
++			address = getFieldValue<Inst, Field_aaaaaa>(op);
++		}
++		const bool peripheral = isPeripheralAddress(address);
++		if(peripheral) {
++			bool old = false;
++			if(getPeriph(area)->bitAccess(address, bit, action, old)) return old;
++		}
++		auto value = peripheral ? memReadPeriph(area, address, Inst) : memRead(area, address);
++		const auto mask = TWord(1) << bit;
++		const bool old = (value & mask) != 0;
++		switch(action) {
++		case PeripheralBitOp::Test: return old;
++		case PeripheralBitOp::Clear: value &= ~mask; break;
++		case PeripheralBitOp::Set: value |= mask; break;
++		case PeripheralBitOp::Change: value ^= mask; break;
++		default: throw std::runtime_error("Invalid reference bit operation");
++		}
++		if(peripheral) memWritePeriph(area, address, value);
++		else memWrite(area, address, value);
++		return old;
++	}
++
+@@ -183,0 +224 @@
++		if(m_referenceMode) return referenceBitMemory<Inst>(op, PeripheralBitOp::Test);

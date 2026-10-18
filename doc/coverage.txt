@@ -91,6 +91,10 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           pads/latches, contention and Port F BIU
                                           setup tested (dsp-gpio.txt), including
                                           native C output/E input operations.
+                                          Symbolic C/F bit RMW and bit branches
+                                          preserve unknown neighbors; previous-bit
+                                          Carry and one EA update tested, including
+                                          RAM/FIFO fallback and bit-number bounds.
                                           PLL timing/lock, remaining GPIO,
                                           ESAI, DMA and chip profile pending;
                                           no combined MCU/DSP board boot.
@@ -145,7 +149,7 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.
                                           DSP bus/map/ROM/reset/PLL/GPIO model harness:
-                                          39981 runs in 61 s without findings.
+                                          37288 runs in 61 s without findings.
                                           Native DSP instruction fuzzing pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write

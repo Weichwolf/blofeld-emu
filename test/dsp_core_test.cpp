@@ -7,6 +7,7 @@
 #include "dsp56kEmu/assembler.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -245,6 +246,186 @@ void test_native_code_write_and_decoder_invalidation() {
   require(cpu.state().x == changed, "Changing a cached P opcode changes its destination register");
 }
 
+void test_native_symbolic_gpio_bits_and_effective_address() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("movep #>1,x:<<$ffffbe");
+  program.emit("movep #>1,x:<<$ffffbd");
+  program.emit("movep #>3,x:<<$ffffbe");
+  program.emit("bclr #0,x:<<$ffffbd");
+  program.emit("bset #0,x:<<$ffffbd");
+  program.emit("bchg #0,x:<<$ffffbd");
+  program.emit("btst #0,x:<<$ffffbd");
+  program.emit("move #>$ffffbd,r0");
+  program.emit("bchg #0,x:(r0)+");
+  program.emit("bset #1,x:<<$ffffbd");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  for (unsigned index = 0; index < 3; ++index) { cpu.step(); }
+  constexpr std::array<unsigned, 4> carries{1, 0, 1, 0};
+  constexpr std::array<unsigned, 4> levels{0, 1, 0, 0};
+  constexpr unsigned pdr = 0xffffbd;
+  for (std::size_t index = 0; index < carries.size(); ++index) {
+    cpu.step();
+    const auto output = bus.gpio(blofeld::DspPort::c).outputs();
+    require((cpu.state().sr & 1U) == carries.at(index) && output.mask == 3 && output.known == 1 &&
+                output.levels == levels.at(index),
+            "BCLR/BSET/BCHG/BTST report the previous bit and preserve unrelated unknown outputs");
+    reject([&bus] { static_cast<void>(bus.read({.space = blofeld::DspSpace::x, .address = pdr})); },
+           "Successful bit operations cannot qualify an unknown whole PDR word");
+  }
+  cpu.step();
+  cpu.step();
+  constexpr unsigned prr = 0xffffbe;
+  require(cpu.state().r[0] == prr && (cpu.state().sr & 1U) == 0 &&
+              bus.gpio(blofeld::DspPort::c).outputs().levels == 1 &&
+              bus.gpio(blofeld::DspPort::c).read(blofeld::DspGpioRegister::direction) == 3,
+          "EA postincrement happens once and writeback uses the captured PDR address");
+  reject([&cpu] { cpu.step(); }, "An unknown selected bit cannot supply the required carry value");
+  require(bus.gpio(blofeld::DspPort::c).outputs().known == 1,
+          "Rejected bit access does not invent the unknown output's previous value");
+}
+
+void test_native_symbolic_port_f_pp_bits() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("movep #>$01ffff,x:<<$fffffb");
+  program.emit("movep #>1,y:<<$fffff6");
+  program.emit("movep #>1,y:<<$fffff5");
+  program.emit("movep #>3,y:<<$fffff6");
+  program.emit("bclr #0,y:<<$fffff5");
+  program.emit("bchg #0,y:<<$fffff5");
+  program.emit("btst #0,y:<<$fffff5");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  for (unsigned index = 0; index < 4; ++index) { cpu.step(); }
+  constexpr std::array<unsigned, 3> carries{1, 0, 1};
+  constexpr std::array<unsigned, 3> levels{0, 1, 1};
+  for (std::size_t index = 0; index < carries.size(); ++index) {
+    cpu.step();
+    const auto output = bus.gpio(blofeld::DspPort::f).outputs();
+    require((cpu.state().sr & 1U) == carries.at(index) && output.mask == 3 && output.known == 1 &&
+                output.levels == levels.at(index),
+            "Y pp-addressed Port F bits preserve unknown latches after explicit BIU setup");
+  }
+}
+
+void test_native_symbolic_bit_branches() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("movep #>4,x:<<$ffffbf");
+  const auto wait = program.pc();
+  program.emit("brclr #2,x:<<$ffffbd,$0");
+  const auto after_wait = program.pc();
+  const auto landing = after_wait + 3;
+  program.emit("jset #2,x:<<$ffffbd," + address(landing));
+  program.emit("movep x:<<$ffffbd,x0");
+  require(program.pc() == landing,
+          "Independent branch length skips one deliberately unknown MOVEP");
+  program.emit("nop");
+  program.emit("btst #2,x:<<$ffffbd");
+  program.install(bus);
+  blofeld::DspCore cpu(bus);
+  cpu.step();
+  bus.gpio(blofeld::DspPort::c).set_drive({.mask = 4});
+  const auto status = cpu.state().sr;
+  cpu.step();
+  require(cpu.state().pc == wait && cpu.state().sr == status,
+          "BRCLR samples only its known input bit and does not modify CCR");
+  bus.gpio(blofeld::DspPort::c).set_drive({.mask = 4, .levels = 4});
+  cpu.step();
+  require(cpu.state().pc == after_wait, "Observed high input releases the original-style bit poll");
+  cpu.step();
+  require(cpu.state().pc == landing && cpu.state().sr == status,
+          "JSET reads the same masked pin and skips the unknown whole-word read");
+  cpu.step();
+  bus.gpio(blofeld::DspPort::c).set_drive({});
+  reject([&cpu] { cpu.step(); }, "A released input cannot become a fabricated successful bit test");
+}
+
+void test_native_highest_bit_and_rejected_encoding() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("btst #23,x:$20");
+  program.emit("bchg #23,x:$20");
+  program.emit("bset #23,x:$20");
+  program.emit("bclr #23,x:$20");
+  const auto invalid_pc = program.pc();
+  program.emit("btst #0,x:$20");
+  program.install(bus);
+  // DSP56300FM BTST's low five opcode bits are bbbbb; 24 is outside the 0..23 range.
+  constexpr unsigned bit_field = 0x1f;
+  constexpr unsigned invalid_index = 24;
+  const std::array<std::uint32_t, 1> invalid{(program.words().back() & ~bit_field) | invalid_index};
+  bus.install_rom({.start = invalid_pc, .words = invalid});
+  constexpr unsigned target = 0x20;
+  constexpr unsigned high_bit = 0x800000;
+  bus.write({.space = blofeld::DspSpace::x, .address = target, .value = high_bit});
+  blofeld::DspCore cpu(bus);
+  constexpr std::array<unsigned, 4> carries{1, 1, 0, 1};
+  constexpr std::array<unsigned, 4> words{high_bit, 0, high_bit, 0};
+  for (std::size_t index = 0; index < carries.size(); ++index) {
+    cpu.step();
+    require((cpu.state().sr & 1U) == carries.at(index) &&
+                bus.read({.space = blofeld::DspSpace::x, .address = target}) == words.at(index),
+            "Bit 23 remains a valid 24-bit source/result boundary for all four bit operations");
+  }
+  require(cpu.state().pc == invalid_pc, "Reserved bit-number encoding is the next native opcode");
+  reject([&cpu] { cpu.step(); }, "Native reserved bit number 24 must fail before any data shift");
+  require(bus.read({.space = blofeld::DspSpace::x, .address = target}) == 0,
+          "Rejected bit encoding cannot modify RAM");
+}
+
+void test_native_bit_ram_and_fifo_fallback() {
+  blofeld::DspBus bus;
+  Program program;
+  program.emit("move #>$20,r0");
+  program.emit("bset #2,x:(r0)+");
+  program.emit("bclr #7,x:$20");
+  program.emit("bchg #0,x:$21");
+  program.emit("btst #0,x:$21");
+  program.emit("movep #>$a9,x:<<$ffff91");
+  program.emit("btst #0,x:<<$ffff94");
+  program.emit("movep x:<<$ffff94,x0");
+  program.install(bus);
+  constexpr unsigned first_address = 0x20;
+  constexpr unsigned second_address = 0x21;
+  constexpr unsigned initial_value = 0x80;
+  constexpr unsigned set_value = 0x84;
+  bus.write({.space = blofeld::DspSpace::x, .address = first_address, .value = initial_value});
+  bus.write({.space = blofeld::DspSpace::x, .address = second_address, .value = 1});
+  blofeld::DspCore cpu(bus);
+  cpu.step();
+  cpu.step();
+  require(cpu.state().r[0] == second_address &&
+              bus.read({.space = blofeld::DspSpace::x, .address = first_address}) == set_value &&
+              bus.read({.space = blofeld::DspSpace::x, .address = second_address}) == 1,
+          "Reference RAM EA bit writeback shares one effective-address update");
+  cpu.step();
+  require(bus.read({.space = blofeld::DspSpace::x, .address = first_address}) == 4 &&
+              (cpu.state().sr & 1U) == 1,
+          "Absolute-short BCLR preserves unselected RAM bits and returns the original high bit");
+  cpu.step();
+  cpu.step();
+  require(bus.read({.space = blofeld::DspSpace::x, .address = second_address}) == 0 &&
+              (cpu.state().sr & 1U) == 0,
+          "Absolute-short BCHG and BTST retain normal RAM semantics");
+  cpu.step();
+  constexpr unsigned first_word = 0x101;
+  constexpr unsigned second_word = 0x202;
+  constexpr unsigned hrx = 0xffff94;
+  bus.shi().observe_spi({.mosi = false});
+  send_word(bus.shi(), first_word);
+  send_word(bus.shi(), second_word);
+  cpu.step();
+  require((cpu.state().sr & 1U) == 1, "Fallback BTST samples the first destructive FIFO read");
+  cpu.step();
+  require((cpu.state().x & word_mask) == second_word,
+          "A declined GPIO hook does not issue an extra SHI FIFO read");
+  reject([&bus] { static_cast<void>(bus.shi().read(hrx)); },
+         "Exactly two reads drain two FIFO words");
+}
+
 void test_native_gpio_output_bits_and_external_input() {
   blofeld::DspBus bus;
   Program program;
@@ -463,6 +644,11 @@ int main() {
     test_memory_boundaries_rom_and_retained_switch();
     test_native_reset_fetch_fault_and_arithmetic();
     test_native_code_write_and_decoder_invalidation();
+    test_native_symbolic_gpio_bits_and_effective_address();
+    test_native_symbolic_port_f_pp_bits();
+    test_native_symbolic_bit_branches();
+    test_native_highest_bit_and_rejected_encoding();
+    test_native_bit_ram_and_fifo_fallback();
     test_native_gpio_output_bits_and_external_input();
     test_software_reset_preserves_clock_and_memory_mode();
     test_short_immediates_and_register_repeat_count();

@@ -10,8 +10,10 @@ enum class DspPort : std::uint8_t { c, e, f };
 enum class DspGpioRegister : std::uint8_t { data, direction, control };
 
 struct DspGpioWrite {
+  static constexpr std::uint32_t word_mask = 0xffffff;
   DspGpioRegister reg = DspGpioRegister::data;
   std::uint32_t value = 0;
+  std::uint32_t mask = word_mask;
 };
 
 struct DspGpioDrive {
@@ -33,12 +35,11 @@ struct DspGpioOutputs {
 
 // Logical DSP56371 GPIO. External levels are observations, not board defaults.
 class DspGpio {
-  static constexpr std::uint32_t word_mask = 0xffffff;
-
 public:
   explicit DspGpio(DspPort port);
   void reset();
-  [[nodiscard]] std::uint32_t read(DspGpioRegister reg, std::uint32_t mask = word_mask) const;
+  [[nodiscard]] std::uint32_t read(DspGpioRegister reg,
+                                   std::uint32_t mask = DspGpioWrite::word_mask) const;
   void write(DspGpioWrite access);
   void set_drive(DspGpioDrive drive);
   [[nodiscard]] DspGpioOutputs outputs() const;
