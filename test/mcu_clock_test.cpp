@@ -160,7 +160,7 @@ void test_unimplemented_usb_commands_and_interrupts() {
   clock.write({.address = usb_high, .value = commands_without_clock});
   require(clock.read(usb_high) == 8, "MCE=0 blocks reset and resume commands");
   clock.write({.address = usb_high, .value = clock_enabled});
-  constexpr std::array<unsigned, 5> commands{0x60, 0x50, 0x44, 0x42, 0xc0};
+  constexpr std::array<unsigned, 4> commands{0x60, 0x50, 0x44, 0x42};
   for (const auto command : commands) {
     reject(
         [&clock, command] {

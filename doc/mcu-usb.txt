@@ -1,60 +1,104 @@
-MC9S12UF32 USB configuration window and limits
+MC9S12UF32 USB register/data side and limits
 
-Current scope
-This implements UEPCSELR at 0x030e..0x030f and the banked UUCFGR window at
-0x0310..0x0313, before controller enable. It does not yet implement USB tokens,
-enumeration, endpoint transfers, USB interrupt masks/status, buffer RAM, reset
-commands or a host transport. MEN still fails visibly; no ready/completion flags
-are fabricated. Existing UMCR/PHY-clock behavior is described in mcu-model.txt.
+Scope and inputs
+The native USB20D6E2F register/buffer side now accepts explicit post-PHY/protocol-
+decoder events. These are not raw D+/D- packets or a host USB transport. External
+observations supply reset/suspend/enumeration levels, valid SOF frame numbers,
+application SETUP requests and local-endpoint transactions. CRC validity is an
+input from the future decoder, not a claim that a wire parser checks CRCs today.
+Prime the decoder observation before MEN; an enabled module with unknown input
+state fails on live status/interrupt queries instead of inventing an idle bus.
 
-Configuration semantics
-- UCRSEL selects five physical endpoint registers (1..5), UNCIR (8) or UNASR (9).
-  Every bank resets to zero and has independent 32-bit storage. Reserved selector
-  bits read zero. Reserved selections fail on window access instead of aliasing
-  another bank. EPBSEL0/1 are stored/masked separately; buffer access is pending.
-- UUCFGR requires a high 16-bit operand write followed by a low 16-bit operand
-  write. The upper word is staged; only the lower word commits the complete
-  selected value. Reads during staging still return the old committed value.
-  Byte writes, misaligned words, one 32-bit operand, or a low word with unknown
-  upper-word staging fail explicitly. Changing UCRSEL between staged words is
-  unspecified by the guide and fails; changing only buffer selectors is allowed.
-- UNCIR implements mask 0x00000773. Reserved configuration/interface count values
-  fail rather than being treated as supported host configurations. UNASR retains
-  all eight alternate-setting nibbles. Endpoint fields are stored; their active
-  transfer rules and cross-endpoint constraints require the pending USB engine.
-- External reset clears selectors, every bank and the staging latch. MCU register
-  relocation preserves bank values and staging. Clock-disabled writes are not
-  specified sufficiently for this model and fail; no clockless success is assumed.
+MEN enables this modeled data path. UMCR protects MCE and disabled-only options
+while MEN is set; packet callbacks require MCE, an active PHY, DISCON clear,
+known decoder state, enumeration complete and no reset/suspend. High-speed
+transactions, automatic standard requests such as SET_ADDRESS, wire timing,
+reset/resume commands, IQUE endpoints and host ports remain unsupported. The
+model does not automatically assert ENUMD or report enumeration success.
 
-CPU integration
-Native HC12 p-code LOAD/STORE preserves each logical operand width in
-Bus::read_memory/write_memory. Normal transfers visit ascending addresses,
-most significant byte first, without synthetic read-before-write. This distinguishes
-STD's 16-bit operands from STAA's 8-bit operands. It is not a claim that unaligned
-or peripheral word accesses occupy one physical bus cycle. Precise bus timing,
-cross-address-space-boundary behavior and shared CPU/peripheral time are pending.
+Registers and interrupts
+- UMSR1 resets to 0xe040. ACTEP indicates no transaction and SPD has its documented
+  reset value. Explicit observations update live reset/suspend/enumeration/speed
+  fields and latch USSC/URSC changes. W1C clears only USSC, URSC, SOF, SETOVR,
+  SETUP; status reads and IRQ polling do not acknowledge them.
+- UIMR implements 0x7807. RESUMEIE is the documented USD=0 level request, distinct
+  from USSC. Clearing USSC does not clear that level; firmware must mask it or
+  observe suspended state. SOF does not advance without a supplied valid token;
+  corrupt/missing SOF does not update the read-only eleven-bit UTSR timestamp.
+- Decoder configuration requests expose CFGVALID/INTFVALID, requested fields and
+  SETECR. DONEECRU acknowledges SETECR and self-clears. UNCIR/UNASR bound decoded
+  requests. The guide's inclusive interface-count wording remains ambiguous at
+  the upper boundary; that case and overlapping configuration requests fail.
+- Status, application SETUP, configuration update and SOF use vectors 0xffd4,
+  0xffd2, 0xffd0 and 0xffbe. Local endpoint completions use 0xffce, 0xffcc,
+  0xffca, 0xffc8. Flags and their enables feed the real MCU priority controller;
+  selection/CPU entry never clear peripheral flags automatically.
 
-Reset/interrupt vector reads and hardware stack writes expose their widths too.
-A local SLEIGH correction restores B:A with one word during RTI, rather than two
-separate byte transfers. The independent width check fails before that correction.
-The byte-memory dependency patch is retained for native memory-bank fallback;
-the width-aware CPU load/store path now accesses the board bus directly.
+Configuration window
+UEPCSELR at 0x030e..0x030f selects five physical endpoint description banks (1..5),
+UNCIR (8), UNASR (9), and two separately selected local-buffer windows. UUCFGR at
+0x0310..0x0313 stages a high 16-bit operand and commits the complete selected
+32-bit value when its low word is written. Byte/misaligned writes, an unknown
+staging word, reserved selections and selection changes between words fail.
+UNCIR uses mask 0x00000773 and rejects reserved counts. UNCIR/UNASR writes are
+blocked while MEN=1; endpoint descriptions remain writable as documented.
 
-Tests and original-firmware evidence
-Run build/strict/blofeld-memory-usb-test or the full quality target. Independent
-vectors check operand width/byte order, partial write faults, invalid ranges,
-separate banks, staging/commit timing, reserved bits, reset and relocation. An
-own HC12 program performs the selector/high-word/low-word sequence and reads
-back the result into RAM; a later byte write must fail. No vendor program bytes
-are embedded. IRQ entry and RTI word-transfer counts are checked independently.
+Native HC12 LOAD/STORE preserves operand widths through Bus::read_memory and
+write_memory. Ordinary transfers visit ascending addresses, most significant
+byte first, without synthetic prereads. Reset/IRQ vector reads and stack word
+writes preserve those widths too. The local SLEIGH RTI correction restores B:A
+as one word. These are logical operand sizes, not completed CPU/bus-cycle timing.
 
-The unmodified original application passes UNCIR setup in the explicit untimed
-private fixture and then stops after 90391 completed instructions at PC 0xbec2,
-writing UIMR. This is only a configuration observation, not USB initialization or
-a completed Blofeld boot. Physical wiring and stock hardware remain unvalidated.
+Buffers and transactions
+- USTB at 0x0338..0x033f stores the eight-byte application SETUP request in wire
+  order and is valid only while SETUP=1. GET_DESCRIPTOR, class/vendor requests
+  and supported optional standard requests reach firmware. An unprocessed
+  request overwritten by another application SETUP latches SETOVR. Disabled
+  SET_DESCRIPTOR/SYNCH_FRAME support stalls the later data/status phase.
+- Two windows at 0x0380..0x03bf and 0x03c0..0x03ff select the same four 64-byte
+  buffers: default IN/OUT, endpoint 2, endpoint 3. Aliases share bytes; cold or
+  invalidated bytes remain unknown. Reserved bank selection fails.
+- UEPCSR0..3 implement STALL, DVALID, TCIE, W1C TFRC and sizes. OUT arrivals copy
+  actual supplied bytes, set DVALID/TFRC and toggle only when accepted. Occupied
+  buffers NAK new packets. A duplicate PID after a lost ACK is re-ACKed without
+  redelivery, including while firmware still owns the previous packet.
+- IN returns firmware-written bytes. No completion or toggle occurs until host
+  ACK. Retries preserve an immutable packet snapshot across failed handshakes
+  and intervening tokens. Empty IN buffers NAK; unknown data cannot become a
+  successful packet. New SETUP resets default-endpoint toggles to DATA1; a
+  completed configuration/interface update resets affected bulk toggles to DATA0.
+- CPU modification of unacknowledged IN buffers/control/descriptions, and ACTEP
+  reads during an in-flight IN packet, fail at explicitly unresolved ownership/
+  timing boundaries. OUT size writes and active endpoint descriptions outside
+  the implemented local full-speed configurations also fail visibly.
 
-References
-S12USB20D6E2FV1 sections 3.1.7/3.1.8, tables 3-5..3-10 and figures 3-7..3-10
-define selector fields and ordered word writes. 9S12UF32DGV1 defines the MCU
-integration addresses. S12CPUV2 sections 7.5/7.8 and the instruction glossary
-define CPU exception/operand sizes. doc/hardware/sources.json pins the NXP bundle.
+Tests and evidence
+Run blofeld-usb-event-test, blofeld-usb-isr-test, blofeld-memory-usb-test under
+build/strict, or the complete quality target. Independent literal register and
+payload vectors cover masks/flags, resume levels, SOF, configuration handshake,
+bank aliases, staging, reset, packet boundaries, bad CRC indications, NAKs,
+ACK loss, duplicate suppression, ownership and DATA0/DATA1 transitions.
+
+An own HC12 ISR acknowledges SETUP, copies an own descriptor from emulated ROM
+into USB RAM and queues it. Host ACK then drives a separate completion ISR;
+status OUT drives its own interrupt. Priority tests combine four USB sources,
+promote SOF with HPRIO, and execute real acknowledgments/RTI chaining. No Waldorf
+program bytes or descriptors are embedded in synthetic tests.
+
+The unmodified original application now passes UIMR and MEN setup. The private
+untimed probe executes one million instructions through original CPU delay loops;
+it has not established a full boot. No host/decoder inputs or elapsed oscillator/
+bus clocks are supplied in that diagnostic. Passing an instruction budget is not
+boot evidence. Original firmware still needs combined scheduling, DSP and storage.
+
+Calibration and references
+The logical model's functional USB reset cancels queued endpoint ownership and
+configuration and retains static endpoint descriptions/buffer bytes; external
+reset invalidates buffer knowledge. Exact UF32 bus-reset effects and status/ACK
+microtiming need stock-hardware comparison. Full protocol decoding, automatic
+standard-request handling and electrical/high-speed timing remain pending.
+
+S12USB20D6E2FV1 sections 3.1.2..3.1.19 and 4.1 define registers, buffers and source
+flags; 9S12UF32DGV1 table 5-1 defines vectors. USB 2.0 sections 8.6.2..8.6.4 define
+retry/toggle behavior. doc/hardware/sources.json pins both official NXP and USB-IF
+reference archives. Native exception/operand definitions use S12CPUV2 7.5/7.8.

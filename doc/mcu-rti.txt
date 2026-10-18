@@ -33,8 +33,8 @@ CPU ISR clears RTIF, updates its RAM mailbox and returns with restored context;
 the following period generates another interrupt. No vendor program is embedded.
 
 Original firmware configures RTICTL=0x40 and RTIE during application startup.
-The untimed private continuation probe now passes those instructions and stops
-at the unimplemented USB interrupt-mask write, PC 0xbec2, after UNCIR setup.
+The untimed private continuation probe now passes those instructions and USB
+register setup, then executes original CPU-counted delay loops to its budget.
 This does not establish a scheduled application boot or successful USB operation.
 Wait/stop, active BDM gating, pad/interrupt latency and automatic CPU/bus/oscillator
 scheduling remain unimplemented. The ambiguous RTI/HPRIO replacement wording in

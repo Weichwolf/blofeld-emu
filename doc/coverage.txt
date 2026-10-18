@@ -49,10 +49,15 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           real CPU ISR checked (mcu-rti.txt).
                                           Analog startup, scheduled CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
-USB device/transport              partial  PHY control. Controller enable,
-                                          commands and endpoint behavior unsupported.
+USB device/transport              partial  PHY control and register/data-side enable.
                                           UEPCSELR/UUCFGR banks and ordered 16-bit
                                           staging/commit tested (mcu-usb.txt).
+                                          Decoder observations, UMSR1/UIMR, local
+                                          buffers, setup/overrun, W1C/IRQs, SOF and
+                                          DATA0/DATA1 retries checked. Real HC12
+                                          setup/IN/OUT ISRs and priority chaining.
+                                          Wire decoding, automatic standard requests,
+                                          IQUE/reset commands and host ports pending.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           checkout built separately; its assembler,
                                           JIT, interpreter and optimizer suites pass.
@@ -64,9 +69,10 @@ ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
-                                          Private application probe now stops at
-                                          unsupported USB interrupt mask (PC bec2),
-                                          after SCI interrupt, RTI and UNCIR setup.
+                                          Private application probe executes 1M
+                                          instructions through original CPU delay
+                                          loops after SCI/RTI/USB setup; no elapsed
+                                          peripheral time or USB host is supplied.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
@@ -88,8 +94,9 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           campaign (~20k executions) without findings;
                                           MCU model harness covers bus, map, GPIO,
                                           PHY/SCI/timer/RTI clocks, IRQ selection,
-                                          USB configuration/operand widths and
-                                          reset: 43172 runs in 61 s without
+                                          USB registers/decoder events/packet
+                                          retries/operand widths and reset:
+                                          56758 runs in 61 s without
                                           sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.

@@ -73,8 +73,9 @@ include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
-add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
-  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp src/mcu_usb.cpp)
+add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
+  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
+  src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
@@ -112,6 +113,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-memory-usb-test test/memory_usb_test.cpp)
   target_link_libraries(blofeld-memory-usb-test PRIVATE blofeld_core)
   add_test(NAME memory_usb COMMAND blofeld-memory-usb-test)
+  add_executable(blofeld-usb-event-test test/usb_event_test.cpp)
+  target_link_libraries(blofeld-usb-event-test PRIVATE blofeld_core)
+  add_test(NAME usb_events COMMAND blofeld-usb-event-test)
+  add_executable(blofeld-usb-isr-test test/usb_isr_test.cpp)
+  target_link_libraries(blofeld-usb-isr-test PRIVATE blofeld_core)
+  add_test(NAME usb_cpu_isr COMMAND blofeld-usb-isr-test)
   add_executable(blofeld-boot-test test/original_boot_test.cpp)
   target_link_libraries(blofeld-boot-test PRIVATE blofeld_core)
   add_test(NAME original_mcu_boot COMMAND blofeld-boot-test
@@ -140,7 +147,7 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
-    blofeld-memory-usb-test blofeld-boot-test
+    blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
   USES_TERMINAL)
 endif()
 

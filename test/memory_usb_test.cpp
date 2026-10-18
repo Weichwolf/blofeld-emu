@@ -289,9 +289,12 @@ void test_real_cpu_configures_usb_window() {
   require(bus.read_memory({.address = data_low, .size = 2}) == 0,
           "Board reset clears USB configuration and restores its map");
   constexpr unsigned enable_controller = 0xc0;
-  reject(
-      [&bus] { bus.write(clock_control, enable_controller); },
-      "Configuration storage does not pretend that USB protocol/controller enable is implemented");
+  bus.write(clock_control, enable_controller);
+  require(bus.read(clock_control) == enable_controller,
+          "MEN enables the modeled USB register/data path");
+  constexpr unsigned usb_status = 0x302;
+  reject([&bus] { static_cast<void>(bus.read(usb_status)); },
+         "Controller enable cannot assume unknown USB protocol-decoder inputs");
 }
 
 void test_interrupt_and_return_word_transfers() {

@@ -109,15 +109,12 @@ void McuClock::write_usb(const ByteWrite write) {
   const unsigned requested =
       high_byte ? (static_cast<unsigned>(write.value) << 8U) | (previous & byte_mask)
                 : (previous & ~byte_mask) | write.value;
-  // Enabling USB operation requires the as-yet unimplemented controller. Do
-  // not accept an inert MEN latch as successful USB behavior.
-  if ((requested & usb_enable) != 0) { throw Fault("Unimplemented USB controller enable (MEN)"); }
   unsigned next = previous;
   if ((previous & usb_enable) == 0) {
     next = (next & ~usb_clock_enable) | (requested & usb_clock_enable);
   }
   if ((next & usb_clock_enable) != 0) {
-    if ((requested & usb_commands) != 0) {
+    if ((previous & usb_enable) == 0 && (requested & usb_commands) != 0) {
       throw Fault("Unimplemented USB reset or remote-resume command");
     }
     next = (next & ~usb_descriptor) | (requested & usb_descriptor);
@@ -125,10 +122,13 @@ void McuClock::write_usb(const ByteWrite write) {
       next = (next & ~usb_low_configuration) | (requested & usb_low_configuration);
     }
     if ((clock_select_ & pll_select) == 0) {
-      if ((requested & usb_phy_reset) != 0) { throw Fault("Unimplemented USB PHY reset command"); }
+      if ((previous & usb_enable) == 0 && (requested & usb_phy_reset) != 0) {
+        throw Fault("Unimplemented USB PHY reset command");
+      }
       next = (next & ~usb_suspend) | (requested & usb_suspend);
     }
   }
+  next = (next & ~usb_enable) | (requested & usb_enable);
   usb_control_ = static_cast<std::uint16_t>(next);
   if ((previous & usb_suspend) != (next & usb_suspend)) {
     if (phy_running()) {

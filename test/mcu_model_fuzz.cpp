@@ -2,17 +2,62 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
+#include "blofeld/mcu_usb.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <span>
+
+namespace {
+constexpr unsigned action_count = 25;
+enum class UsbAction : std::uint8_t { decoder = 18, sof, setup, out, input, finish, configuration };
+
+void usb_action(blofeld::McuBus &bus, const std::span<const std::uint8_t, 6> record) {
+  const auto address =
+      static_cast<std::uint16_t>((static_cast<unsigned>(record[1]) << 8U) | record[2]);
+  switch (static_cast<UsbAction>(record[0] % action_count)) {
+    case UsbAction::decoder:
+      bus.observe_usb_decoder({.reset = (record[3] & 1U) != 0,
+                               .suspended = (record[3] & 2U) != 0,
+                               .enumerated = (record[3] & 4U) != 0,
+                               .full_speed = (record[3] & 8U) != 0});
+      return;
+    case UsbAction::sof: bus.observe_usb_sof(address, (record[3] & 1U) != 0); return;
+    case UsbAction::setup: {
+      const std::array<std::uint8_t, 8> packet{
+          record[1], record[2], record[3], record[4], record[5], 0, 0, 0};
+      bus.receive_usb_setup(packet);
+      return;
+    }
+    case UsbAction::out:
+      bus.receive_usb_out({.buffer = static_cast<blofeld::UsbBuffer>(record[1]),
+                           .data = record.subspan(3),
+                           .data1 = (record[2] & 1U) != 0,
+                           .crc_valid = (record[2] & 2U) != 0});
+      return;
+    case UsbAction::input:
+      static_cast<void>(bus.request_usb_in(static_cast<blofeld::UsbBuffer>(record[1])));
+      return;
+    case UsbAction::finish: bus.finish_usb_in((record[3] & 1U) != 0); return;
+    case UsbAction::configuration: {
+      std::optional<std::uint8_t> interface;
+      if ((record[5] & 1U) != 0) { interface = record[4]; }
+      bus.observe_usb_configuration(
+          {.configuration = record[3], .interface = interface, .alternate = record[2]});
+      return;
+    }
+    default: throw blofeld::Fault("Invalid USB model-fuzzer action");
+  }
+}
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_t size) {
   constexpr std::size_t stride = 6;
   constexpr std::size_t operation_limit = 256;
   constexpr unsigned clock_slice_mask = 0x0fff;
-  constexpr unsigned action_count = 18;
   constexpr unsigned memory_read_action = 17;
   const std::array<std::uint8_t, 32768> flash{}; // Own synthetic bytes, no firmware required.
   auto bus = std::make_unique<blofeld::McuBus>(flash);
@@ -22,6 +67,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
     const auto address =
         static_cast<std::uint16_t>((static_cast<unsigned>(record[1]) << 8U) | record[2]);
     try {
+      if (record[0] % action_count >= static_cast<unsigned>(UsbAction::decoder)) {
+        usb_action(*bus, std::span<const std::uint8_t, stride>{record, stride});
+        continue;
+      }
       switch (record[0] % action_count) {
         case 0: static_cast<void>(bus->read(address)); break;
         case 1: bus->write(address, record[3]); break;

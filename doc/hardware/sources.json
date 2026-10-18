@@ -22,5 +22,11 @@
     "source": "https://www.nxp.com/docs/en/data-sheet/HCS12COREUG.pdf",
     "bytes": 8246322,
     "sha256": "4ff8ce8ad0d5fb1eea307f813a79b0f11e0d1c196db38b005c1b7ed24d42b70e"
+  },
+  {
+    "file": "usb_20_20250603.zip",
+    "source": "https://www.usb.org/sites/default/files/usb_20_20250603.zip",
+    "bytes": 14489344,
+    "sha256": "5fe9c53c04033818af396e8852b3acbca5c3a76ba92fab549fd81cd0ea7b3692"
   }
 ]

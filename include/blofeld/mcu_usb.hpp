@@ -4,14 +4,47 @@
 #include "blofeld/bus.hpp"
 
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
 
 namespace blofeld {
 
-// USB20D6E2F configuration window, before MEN. Endpoint traffic and controller
-// enable remain unsupported; this class must not fabricate completion flags.
+enum class UsbBuffer : std::uint8_t { control_in, control_out, endpoint2, endpoint3 };
+enum class UsbResponse : std::uint8_t { none, ack, nak, stall, data };
+
+// Explicit post-PHY/protocol-decoder signals, not raw D+/D- observations.
+struct UsbDecoderState {
+  bool reset = false;
+  bool suspended = false;
+  bool enumerated = false;
+  bool full_speed = true;
+};
+
+struct UsbOutPacket {
+  UsbBuffer buffer = UsbBuffer::control_out;
+  std::span<const std::uint8_t> data;
+  bool data1 = false;
+  bool crc_valid = true;
+};
+
+struct UsbConfigurationRequest {
+  std::uint8_t configuration = 0;
+  std::optional<std::uint8_t> interface = std::nullopt;
+  std::uint8_t alternate = 0;
+};
+
+struct UsbInPacket {
+  UsbResponse response = UsbResponse::none;
+  std::array<std::uint8_t, 64> data{};
+  unsigned size = 0;
+  bool data1 = false;
+};
+
+// USB20D6E2F register/buffer side. Wire decoding, automatic standard requests,
+// high-speed packets and IQUE endpoints remain unsupported.
 class McuUsb {
 public:
   void reset();
@@ -20,13 +53,61 @@ public:
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
   void write(ByteWrite access);
   void write_memory(MemoryWrite access);
+  void set_control(std::uint16_t value);
+  void observe_decoder(UsbDecoderState state);
+  void observe_sof(std::uint16_t frame, bool crc_valid = true);
+  void observe_configuration(UsbConfigurationRequest request);
+  UsbResponse receive_setup(const std::array<std::uint8_t, 8> &data, bool crc_valid = true);
+  UsbResponse receive_out(UsbOutPacket packet);
+  [[nodiscard]] UsbInPacket request_in(UsbBuffer endpoint);
+  void finish_in(bool acknowledged);
+  [[nodiscard]] std::uint8_t interrupt_sources() const;
 
 private:
+  struct Buffer {
+    std::array<std::uint8_t, 64> bytes{};
+    std::bitset<64> known;
+    std::uint16_t control = 0;
+    bool data1 = false;
+    std::optional<UsbInPacket> transmitted = std::nullopt;
+  };
+
+  struct PendingIn {
+    unsigned buffer = 0;
+    UsbInPacket packet;
+  };
+
   [[nodiscard]] unsigned selected_register() const;
+  [[nodiscard]] static unsigned buffer_index(UsbBuffer buffer);
+  [[nodiscard]] unsigned window_buffer(std::uint16_t offset) const;
+  [[nodiscard]] std::optional<std::uint8_t> read_live(std::uint16_t offset) const;
+  bool write_live(ByteWrite access);
+  void write_endpoint(ByteWrite access);
+  void acknowledge_configuration(ByteWrite access);
+  [[nodiscard]] bool enabled() const;
+  void require_observation() const;
+  void require_packet() const;
+  [[nodiscard]] bool input_endpoint(unsigned index) const;
+  [[nodiscard]] unsigned maximum_packet(unsigned index) const;
+  UsbResponse stall_response(unsigned index);
   std::array<std::uint32_t, 7> configuration_{};
   std::uint8_t selector_ = 0;
   std::uint8_t buffers_ = 0;
   std::optional<std::uint16_t> staged_high_;
+  static constexpr std::uint16_t initial_status = 0xe040;
+  static constexpr std::uint16_t initial_control = 0x0820;
+  std::uint16_t module_control_ = initial_control;
+  std::uint16_t status_ = initial_status;
+  std::uint16_t interrupt_mask_ = 0;
+  std::uint16_t frame_ = 0;
+  std::uint16_t configuration_status_ = 0;
+  std::array<std::uint8_t, 8> setup_{};
+  std::array<Buffer, 4> buffers_data_{};
+  std::optional<PendingIn> pending_in_;
+  UsbDecoderState decoder_{};
+  bool decoder_known_ = false;
+  bool setup_stall_ = false;
+  std::array<std::uint8_t, 4> alternate_{};
 };
 
 }

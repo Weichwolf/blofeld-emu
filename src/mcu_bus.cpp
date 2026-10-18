@@ -135,6 +135,9 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   const auto clock_name = McuClock::register_name(offset);
   if (!clock_name.empty()) {
     clock_.write(write);
+    usb_.set_control(
+        static_cast<std::uint16_t>((static_cast<unsigned>(clock_.read(hc12::usb_control)) << 8U) |
+                                   clock_.read(hc12::usb_control + 1)));
     return clock_name;
   }
   const auto sci_name = McuSci::register_name(offset);
@@ -262,7 +265,8 @@ std::optional<InterruptRequest> McuBus::interrupt_request(const std::uint8_t ccr
   const auto urgent = interrupts_.select({}, static_cast<std::uint8_t>(ccr | hc12::interrupt_mask));
   if (urgent) { return urgent; }
   if ((ccr & hc12::interrupt_mask) != 0) { return {}; }
-  std::array<std::uint16_t, 12> pending{};
+  constexpr unsigned maximum_sources = 20;
+  std::array<std::uint16_t, maximum_sources> pending{};
   std::size_t count = 0;
   const auto append = [&pending, &count](const std::uint16_t vector) {
     pending.at(count) = vector;
@@ -283,6 +287,12 @@ std::optional<InterruptRequest> McuBus::interrupt_request(const std::uint8_t ccr
   if (sci_.interrupt_pending()) { append(sci_vector); }
   if (clock_.lock_interrupt_pending()) { append(pll_vector); }
   if (clock_.realtime_interrupt_pending()) { append(realtime_vector); }
+  constexpr std::array<std::uint16_t, 8> usb_vectors{
+      0xffd4, 0xffd2, 0xffd0, 0xffbe, 0xffce, 0xffcc, 0xffca, 0xffc8};
+  const auto usb_sources = usb_.interrupt_sources();
+  for (unsigned source = 0; source < usb_vectors.size(); ++source) {
+    if ((usb_sources & (1U << source)) != 0) { append(usb_vectors[source]); }
+  }
   return interrupts_.select(std::span{pending}.first(count),
                             static_cast<std::uint8_t>(ccr | hc12::xirq_mask));
 }

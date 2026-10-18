@@ -10,6 +10,7 @@
 #include "blofeld/mcu_timer.hpp"
 #include "blofeld/mcu_usb.hpp"
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -45,6 +46,13 @@ public:
   void set_observer(std::function<void(const BusEvent &)> observer);
   void set_pin_drive(McuPort port, PinDrive drive);
   void observe_phy(PhyClockWindow window);
+  void observe_usb_decoder(UsbDecoderState state);
+  void observe_usb_sof(std::uint16_t frame, bool crc_valid = true);
+  void observe_usb_configuration(UsbConfigurationRequest request);
+  UsbResponse receive_usb_setup(const std::array<std::uint8_t, 8> &data, bool crc_valid = true);
+  UsbResponse receive_usb_out(UsbOutPacket packet);
+  [[nodiscard]] UsbInPacket request_usb_in(UsbBuffer buffer);
+  void finish_usb_in(bool acknowledged);
   void advance_oscillator(unsigned cycles);
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   void advance_sci(unsigned bus_cycles);

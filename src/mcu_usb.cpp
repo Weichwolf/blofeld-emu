@@ -2,6 +2,7 @@
 #include "blofeld/mcu_usb.hpp"
 
 #include "blofeld/bus.hpp"
+#include "mcu_usb_registers.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -27,6 +28,19 @@ void McuUsb::reset() {
 }
 
 std::string_view McuUsb::register_name(const std::uint16_t offset) {
+  if (offset == usb::status || offset == usb::status + 1) { return "UMSR1"; }
+  if (offset == usb::interrupts || offset == usb::interrupts + 1) { return "UIMR"; }
+  if (offset == usb::timestamp || offset == usb::timestamp + 1) { return "UTSR"; }
+  if (offset == usb::configuration_status || offset == usb::configuration_status + 1) {
+    return "UCCSR";
+  }
+  if (offset >= usb::endpoint_begin && offset < usb::endpoint_end) {
+    return "UEPCSR local endpoint";
+  }
+  if (offset >= usb::setup_begin && offset < usb::setup_end) { return "USTB setup buffer"; }
+  if (offset >= usb::buffer_begin && offset < usb::buffer_end) {
+    return "UEPLB local endpoint buffer";
+  }
   if (offset == select_high) { return "UEPCSELR high"; }
   if (offset == select_low) { return "UEPCSELR low"; }
   if (configuration_data(offset)) { return "UUCFGR configuration window"; }
@@ -45,6 +59,7 @@ unsigned McuUsb::selected_register() const {
 }
 
 std::uint8_t McuUsb::read(const std::uint16_t offset) const {
+  if (const auto value = read_live(offset)) { return *value; }
   if (offset == select_high) { return selector_; }
   if (offset == select_low) { return buffers_; }
   if (!configuration_data(offset)) {
@@ -55,6 +70,7 @@ std::uint8_t McuUsb::read(const std::uint16_t offset) const {
 }
 
 void McuUsb::write(const ByteWrite access) {
+  if (write_live(access)) { return; }
   if (access.address == select_high) {
     const auto next = static_cast<std::uint8_t>(access.value & selector_mask);
     if (staged_high_ && next != selector_) {
@@ -78,6 +94,7 @@ void McuUsb::write_memory(const MemoryWrite access) {
     throw Fault("Unsupported USB configuration write width/alignment at " + hex(access.address));
   }
   const auto index = selected_register();
+  if (enabled() && index >= 5) { return; } // UNCIR/UNASR writes require MEN=0.
   const auto word = static_cast<std::uint16_t>(access.value & word_mask);
   if (access.address == data_high) {
     staged_high_ = word;
@@ -85,6 +102,10 @@ void McuUsb::write_memory(const MemoryWrite access) {
   }
   if (!staged_high_) {
     throw Fault("Unknown USB configuration staging word before low-word commit");
+  }
+  if (index < 3 && buffers_data_.at(index == 0 ? 0 : index + 1).transmitted) {
+    throw Fault(
+        "Unverified USB endpoint description change before transmitted data is acknowledged");
   }
   auto value = (static_cast<std::uint32_t>(*staged_high_) << 16U) | word;
   if (selector_ == number_configurations) {

@@ -75,8 +75,10 @@ USB PHY and clock qualification
   clock observations; with the pin fixture above it stops at this boundary.
   Tests supply explicit edge windows and execute the original polling branch:
   14 edges keeps it waiting, 15 permits clock selection and reaching SCI setup.
-- Enabling the USB controller and triggering resets/resume
-  remain unsupported and requests fail. CRG lock-change interrupt enables feed
+- USB register/data-side enable now accepts explicit post-decoder inputs, with
+  live registers, local buffers and interrupts (mcu-usb.txt). Reset/resume
+  commands, wire decoding, automatic standard requests and a host transport
+  remain unsupported. CRG lock-change interrupt enables feed
   instruction-boundary delivery (mcu-interrupts.txt). COP watchdog is also
   unsupported; wait/stop semantics and timing remain unvalidated. No successful
   USB enumeration or complete board boot is inferred.
