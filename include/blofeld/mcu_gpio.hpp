@@ -25,6 +25,11 @@ struct PinFunction {
   std::uint8_t unknown = 0; // Output pads whose peripheral latch is not known.
 };
 
+struct PinSample {
+  std::uint8_t known = 0;
+  std::uint8_t levels = 0;
+};
+
 // Logical GPIO and explicit external drives, with unknown inputs tracked.
 // Electrical transition/synchronizer timing and alternate peripheral functions
 // are not yet a complete board model.
@@ -35,6 +40,7 @@ public:
   void set_drive(McuPort port, PinDrive drive);
   void set_function(McuPort port, PinFunction function);
   [[nodiscard]] std::uint8_t read_pad(McuPort port, std::uint8_t mask) const;
+  [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
   void write(ByteWrite write);
@@ -54,6 +60,7 @@ private:
   };
 
   [[nodiscard]] std::uint8_t sample(McuPort port, std::uint8_t requested) const;
+  [[nodiscard]] PinSample resolve(McuPort port, std::uint8_t requested) const;
   [[nodiscard]] std::uint8_t data(McuPort port) const;
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
   std::array<PortState, port_count> ports_{};

@@ -25,6 +25,8 @@ public:
   void observe_phy(PhyClockWindow window);
   [[nodiscard]] bool phy_running() const;
   [[nodiscard]] bool pll_selected() const;
+  [[nodiscard]] bool lock_interrupt_pending() const;
+  [[nodiscard]] bool realtime_interrupt_pending() const;
 
 private:
   static constexpr std::uint16_t usb_reset_control = 0x0820;
@@ -35,6 +37,7 @@ private:
   std::uint8_t reference_divider_ = 0;
   std::uint8_t flags_ = 0x40;
   std::uint8_t clock_select_ = 0;
+  std::uint8_t interrupt_enable_ = 0;
   bool cop_wait_written_ = false;
   bool lock_known_ = true;
 };

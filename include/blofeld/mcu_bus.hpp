@@ -4,12 +4,14 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/mcu_clock.hpp"
 #include "blofeld/mcu_gpio.hpp"
+#include "blofeld/mcu_interrupts.hpp"
 #include "blofeld/mcu_memory.hpp"
 #include "blofeld/mcu_sci.hpp"
 #include "blofeld/mcu_timer.hpp"
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -35,6 +37,9 @@ public:
 
   void check_execute(InstructionFetch fetch) const override;
   void retire_instruction() override;
+  void begin_instruction(ExecutionContext context) override;
+  [[nodiscard]] std::optional<InterruptRequest> interrupt_request(std::uint8_t ccr) const override;
+  void acknowledge_interrupt(std::uint16_t vector) override;
   void set_observer(std::function<void(const BusEvent &)> observer);
   void set_pin_drive(McuPort port, PinDrive drive);
   void observe_phy(PhyClockWindow window);
@@ -55,6 +60,8 @@ private:
   McuClock clock_;
   McuSci sci_;
   McuTimer timer_;
+  McuInterrupts interrupts_;
+  ExecutionContext context_{};
   std::function<void(const BusEvent &)> observer_;
 };
 

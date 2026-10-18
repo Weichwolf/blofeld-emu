@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -29,6 +30,8 @@
 namespace blofeld {
 
 namespace {
+constexpr unsigned first_maskable_vector = 0xff00;
+constexpr unsigned last_maskable_vector = 0xfff2;
 
 class CodeImage final : public ghidra::LoadImage {
 public:
@@ -233,6 +236,25 @@ public:
     }
   }
 
+  void push_word(const std::uint16_t value) {
+    constexpr unsigned address_space = 65536;
+    const auto old = memory.getValue("SP");
+    const auto stack = static_cast<std::uint16_t>((old + address_space - 2) & hc12::address_mask);
+    memory.setValue("SP", stack);
+    bus.write(stack, static_cast<std::uint8_t>(value >> 8U));
+    constexpr unsigned byte_mask = 0xff;
+    bus.write(static_cast<std::uint16_t>((static_cast<unsigned>(stack) + 1) & hc12::address_mask),
+              static_cast<std::uint8_t>(value & byte_mask));
+  }
+
+  void push_byte(const std::uint8_t value) {
+    constexpr unsigned address_space = 65536;
+    const auto stack = static_cast<std::uint16_t>((memory.getValue("SP") + address_space - 1) &
+                                                  hc12::address_mask);
+    memory.setValue("SP", stack);
+    bus.write(stack, value);
+  }
+
   std::uint64_t decoded_revision = 0;
   Bus &bus;
   CodeImage image;
@@ -294,11 +316,81 @@ std::string Hc12::disassemble() const try {
   throw Fault("Cannot disassemble HC12 at " + hex(state().pc) + ": " + error.explain);
 }
 
-void Hc12::step() {
+std::optional<InterruptRequest> Hc12::pending_interrupt() const {
+  const auto ccr = state().ccr;
+  if ((ccr & (hc12::interrupt_mask | hc12::xirq_mask)) ==
+      (hc12::interrupt_mask | hc12::xirq_mask)) {
+    return {};
+  }
+  const auto request = impl_->bus.interrupt_request(ccr);
+  if (!request) { return {}; }
+  switch (request->kind) {
+    case InterruptKind::maskable:
+      if ((ccr & hc12::interrupt_mask) != 0) { return {}; }
+      if ((request->vector & 1U) != 0 || request->vector < first_maskable_vector ||
+          request->vector > last_maskable_vector) {
+        throw Fault("Invalid CPU maskable interrupt vector " + hex(request->vector));
+      }
+      break;
+    case InterruptKind::xirq:
+      if ((ccr & hc12::xirq_mask) != 0) { return {}; }
+      if (request->vector != hc12::xirq_vector) { throw Fault("Invalid CPU XIRQ vector"); }
+      break;
+    default: throw Fault("Unknown CPU interrupt kind");
+  }
+  return request;
+}
+
+void Hc12::enter_interrupt(const InterruptRequest request,
+                           const std::optional<std::uint16_t> reuse_stack) {
+  auto next = state();
+  const auto high = impl_->bus.read(request.vector);
+  const auto low = impl_->bus.read(static_cast<std::uint16_t>(request.vector + 1));
+  const auto target = static_cast<std::uint16_t>((static_cast<unsigned>(high) << 8U) | low);
+  impl_->bus.acknowledge_interrupt(request.vector);
+  if (reuse_stack) {
+    impl_->memory.setValue("SP", *reuse_stack);
+  } else {
+    impl_->push_word(next.pc);
+    impl_->push_word(next.y);
+    impl_->push_word(next.x);
+    constexpr unsigned byte_mask = 0xff;
+    const auto ba = static_cast<std::uint16_t>(((next.d & byte_mask) << 8U) | (next.d >> 8U));
+    impl_->push_word(ba);
+    impl_->push_byte(next.ccr);
+  }
+  next.sp = static_cast<std::uint16_t>(impl_->memory.getValue("SP"));
+  next.ccr = static_cast<std::uint8_t>(next.ccr | hc12::interrupt_mask |
+                                       (request.kind == InterruptKind::xirq ? hc12::xirq_mask : 0));
+  next.pc = target;
+  set_state(next);
+}
+
+CpuStep Hc12::step() {
   try {
+    const auto before = state();
+    impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
+    if (const auto request = pending_interrupt()) {
+      enter_interrupt(*request, {});
+      impl_->bus.retire_instruction();
+      return {.instruction_executed = false, .interrupt_vector = request->vector};
+    }
+    const auto opcode = impl_->bus.peek(before.pc);
     impl_->refresh_decoder();
     impl_->executor->execute(impl_->bus);
+    constexpr unsigned rti_opcode = 0x0b;
+    constexpr unsigned swi_opcode = 0x3f;
+    CpuStep result;
+    if (opcode == swi_opcode) { result.interrupt_vector = hc12::swi_vector; }
+    if (opcode == rti_opcode) {
+      if (const auto request = pending_interrupt()) {
+        enter_interrupt(*request, before.sp);
+        result.interrupt_vector = request->vector;
+        result.stack_reused = true;
+      }
+    }
     impl_->bus.retire_instruction();
+    return result;
   } catch (const ghidra::LowlevelError &error) {
     throw Fault("HC12 at " + hex(state().pc) + ": " + error.explain);
   }

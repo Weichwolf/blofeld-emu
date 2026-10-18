@@ -36,6 +36,7 @@ void McuClock::reset() {
   reference_divider_ = 0;
   flags_ = static_cast<std::uint8_t>(flags_ & power_on_flag);
   clock_select_ = 0;
+  interrupt_enable_ = 0;
   cop_wait_written_ = false;
   lock_known_ = true;
 }
@@ -75,10 +76,10 @@ std::uint8_t McuClock::read(const std::uint16_t offset) const {
       }
       return flags_;
     case hc12::clock_select: return clock_select_;
+    case hc12::crg_interrupts: return interrupt_enable_;
     case hc12::usb_control: return static_cast<std::uint8_t>(usb_control_ >> 8U);
     case hc12::usb_control + 1: return static_cast<std::uint8_t>(usb_control_ & byte_mask);
     case hc12::crg_test_flags:
-    case hc12::crg_interrupts:
     case hc12::rti_control: return 0;
     default: throw Fault("Unknown MCU clock register read at " + hex(offset));
   }
@@ -156,15 +157,25 @@ void McuClock::write(const ByteWrite write) {
     case hc12::usb_control + 1: write_usb(write); return;
     case hc12::crg_test_flags: return; // Documented unimplemented writes in normal mode.
     case hc12::crg_interrupts:
-      if ((write.value & interrupt_enable_mask) != 0) {
-        throw Fault("Unimplemented CRG interrupt delivery");
-      }
+      interrupt_enable_ = static_cast<std::uint8_t>(write.value & interrupt_enable_mask);
       return;
     case hc12::rti_control:
       if ((write.value & rti_control_mask) != 0) { throw Fault("Unimplemented RTI counter"); }
       return;
     default: throw Fault("Unknown MCU clock register write at " + hex(write.address));
   }
+}
+
+bool McuClock::lock_interrupt_pending() const {
+  if ((interrupt_enable_ & lock_flag) == 0) { return false; }
+  if ((flags_ & lock_flag) != 0) { return true; }
+  if (!lock_known_) { throw Fault("Unknown PHY qualification with PLL interrupt enabled"); }
+  return false;
+}
+
+bool McuClock::realtime_interrupt_pending() const {
+  constexpr unsigned realtime_flag = 0x80;
+  return (flags_ & interrupt_enable_ & realtime_flag) != 0;
 }
 
 }

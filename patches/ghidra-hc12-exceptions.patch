@@ -1,0 +1,14 @@
+--- a/HCS_HC12.sinc
++++ b/HCS_HC12.sinc
+@@ -5321 +5321 @@
+-	if ($(S) == 0) goto <continue>;
++	if ($(S) != 0) goto <continue>;
+@@ -5611,0 +5612 @@
++	addr:2 = *:2 $(VECTOR_SWI):2;
+@@ -5616,2 +5617,2 @@
+-	Push1( A );
+-	Push1( B );
++	ba:2 = (zext(B) << 8) | zext(A);
++	Push2( ba );
+@@ -5622 +5622,0 @@
+-	addr:2 = $(VECTOR_SWI);

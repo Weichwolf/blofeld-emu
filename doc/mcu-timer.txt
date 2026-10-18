@@ -49,7 +49,8 @@ Pin integration and scope
   remain distinct from pad levels, and known opposing output drivers fail.
 - This is the normal-reset profile with ATA/CF/SD/MS controllers inactive.
   Enabling those unimplemented controllers fails. Their pin-priority integration,
-  wait/freeze behavior, interrupt delivery and the pulse accumulator are pending.
+  wait/freeze behavior and the pulse accumulator are pending. TIE/TOI gate
+  pending flags; instruction-boundary delivery is described in mcu-interrupts.txt.
   Normal-mode reserved/test registers read zero and ignore writes as documented.
 - The original reset code writes TSCR1=0x90 and TSCR2=6: TEN/TFFCA and divide by
   64. This register setup does not establish real CPU/peripheral elapsed time,

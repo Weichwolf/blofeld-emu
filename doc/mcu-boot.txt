@@ -30,6 +30,13 @@ Independent synthetic LDD/STD addressing tests reproduce that error without
 manufacturer code. A separately versioned, hash-gated local language patch fixes
 the export. See patches/README.txt; installed Ghidra files remain untouched.
 
+Application continuation probe
+A separate private diagnostic continues with PE0/PE1 explicitly high, leaving
+IRQ/XIRQ inactive. It passes application SCI receive-interrupt configuration
+and stops after 90372 completed instructions at PC 0x8835, writing RTICTL=0x40.
+The RTI counter is unsupported and fails visibly. This remains an untimed,
+unverified pin fixture; no application or complete-board boot is inferred.
+
 Limits
 Reaching an application entry does not establish a complete Blofeld boot. DSP
 loading, NAND/ROM assets, scheduled clocks/interrupts, actual MIDI/audio, update

@@ -59,8 +59,9 @@ Board integration
   clock rate, a completed boot, MIDI routing or controller operation.
 
 Unsupported behaviors
-Interrupt enables, loop/single-wire mode, receiver wakeup and send-break requests
-fail. Mid-frame format/baud changes also fail. Wait/stop behavior, precise flag
+Loop/single-wire mode, receiver wakeup and send-break requests fail. Interrupt
+enables feed the instruction-boundary controller described in mcu-interrupts.txt.
+Mid-frame format/baud changes also fail. Wait/stop behavior, precise flag
 transfer timing, host MIDI ports and complete CPU/peripheral scheduling remain
 pending. No physical MIDI traffic is sent by the tests or fuzz harness.
 

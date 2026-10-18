@@ -115,6 +115,13 @@ std::uint8_t McuGpio::read_pad(const McuPort port, const std::uint8_t mask) cons
   return sample(port, mask);
 }
 
+PinSample McuGpio::observe_pads(const McuPort port, const std::uint8_t mask) const {
+  if ((mask & ~specs[port_index(port)].valid) != 0) {
+    throw Fault("Invalid MCU GPIO observation mask");
+  }
+  return resolve(port, mask);
+}
+
 std::uint8_t McuGpio::tied_low(const McuPort port) const {
   if ((routing_ & 3U) != 3) { return 0; }
   switch (port) {
@@ -133,20 +140,18 @@ std::uint8_t McuGpio::tied_low(const McuPort port) const {
   }
 }
 
-std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) const {
+PinSample McuGpio::resolve(const McuPort port, const std::uint8_t requested) const {
   const auto index = port_index(port);
   const auto &state = ports_[index];
   const auto tied = static_cast<unsigned>(tied_low(port));
   const auto &function = state.function;
-  if ((function.unknown & requested & ~tied) != 0) {
-    throw Fault("Unknown MCU peripheral output latch at " + hex(specs[index].base));
-  }
   const auto functions = static_cast<unsigned>(function.inputs) | function.outputs;
   const auto direction = (state.direction & ~functions) | function.outputs;
   const auto latch = (state.latch & ~static_cast<unsigned>(function.outputs)) | function.levels;
   const auto latch_known = (static_cast<unsigned>(state.latch_known) | function.outputs) &
                            ~static_cast<unsigned>(function.unknown);
   const auto output = direction & latch_known & ~tied;
+  const auto unknown_output = direction & ~latch_known & ~tied;
   unsigned known = tied | state.external.mask | output;
   unsigned value = (state.external.levels | (latch & output)) & ~tied;
   const auto conflict =
@@ -164,11 +169,24 @@ std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) c
       state.external.floating & pull_enable & ~static_cast<unsigned>(direction) & ~tied;
   known |= weak;
   value |= weak & ~static_cast<unsigned>(state.pull_down);
-  const auto unknown = requested & ~known & specs[index].valid;
+  known = known & ~unknown_output & requested & specs[index].valid;
+  return {.known = static_cast<std::uint8_t>(known),
+          .levels = static_cast<std::uint8_t>(value & known)};
+}
+
+std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) const {
+  const auto index = port_index(port);
+  const auto unknown_output =
+      ports_[index].function.unknown & requested & ~static_cast<unsigned>(tied_low(port));
+  if (unknown_output != 0) {
+    throw Fault("Unknown MCU peripheral output latch at " + hex(specs[index].base));
+  }
+  const auto observation = resolve(port, requested);
+  const auto unknown = requested & ~static_cast<unsigned>(observation.known) & specs[index].valid;
   if (unknown != 0) {
     throw Fault("Unknown MCU GPIO input at " + hex(specs[index].base) + " mask=" + hex(unknown, 2));
   }
-  return static_cast<std::uint8_t>(value & requested & specs[index].valid);
+  return observation.levels;
 }
 
 std::uint8_t McuGpio::data(const McuPort port) const {

@@ -23,6 +23,9 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           Indexed words: 96 signed-offset load/store
                                           pairs plus word postincrement; patched
                                           the missing memory dereference.
+                                          Interrupt frames, vector-first entry,
+                                          RTI frame reuse, SWI and STOP-disable
+                                          gate checked (mcu-interrupts.txt).
                                           Full ISA, cycle timing and hardware
                                           comparison pending.
                                           Independent reset/opcode reference:
@@ -36,8 +39,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Timer prescaling, capture/compare, flags,
                                           TC7 reset and routing tested; see
                                           mcu-timer.txt for unresolved boundaries.
+                                          Instruction-boundary IRQ/XIRQ selection,
+                                          HPRIO/write gates, SCI/TIM/PLL requests
+                                          and real synthetic SCI/TIM ISRs tested.
                                           Analog startup, scheduled CPU/bus clocks,
-                                          RTI/COP and interrupt delivery pending.
+                                          RTI counter/COP and full latency pending.
 USB device/transport              partial  PHY control only. Controller enable,
                                           commands and endpoint behavior unsupported.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
@@ -51,6 +57,9 @@ ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
+                                          Private application probe now stops at
+                                          unsupported RTICTL write (PC 8835), after
+                                          SCI receive-interrupt enable is accepted.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
@@ -71,8 +80,9 @@ Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU 
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s
                                           campaign (~20k executions) without findings;
                                           MCU model harness covers bus, map, GPIO,
-                                          PHY/SCI/timer clocks and reset: 66242 runs in
-                                          61 s without sanitizer findings. Sustained
+                                          PHY/SCI/timer clocks, IRQ selection and
+                                          reset: 48725 runs in 61 s without
+                                          sanitizer findings. Sustained
                                           campaigns/structured inputs pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write

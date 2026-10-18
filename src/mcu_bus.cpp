@@ -5,6 +5,7 @@
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_clock.hpp"
 #include "blofeld/mcu_gpio.hpp"
+#include "blofeld/mcu_interrupts.hpp"
 #include "blofeld/mcu_memory.hpp"
 #include "blofeld/mcu_sci.hpp"
 #include "blofeld/mcu_timer.hpp"
@@ -92,6 +93,9 @@ void McuBus::reset() {
   clock_.reset();
   sci_.reset();
   timer_.reset();
+  interrupts_.reset();
+  context_ = {};
+  interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
   ++revision_;
 }
 
@@ -106,6 +110,7 @@ std::uint8_t McuBus::read_register(const std::uint16_t offset) {
   if (!McuClock::register_name(offset).empty()) { return clock_.read(offset); }
   if (!McuSci::register_name(offset).empty()) { return sci_.read(offset); }
   if (!McuTimer::register_name(offset).empty()) { return timer_.read(offset); }
+  if (!McuInterrupts::register_name(offset).empty()) { return interrupts_.read(offset); }
   if (offset == hc12::smramcfg || offset == hc12::smramstat) { return 0; }
   if (reserved_register(offset)) { return 0; }
   throw Fault("Unimplemented MCU peripheral read at " + hex(offset));
@@ -139,6 +144,11 @@ std::string_view McuBus::write_register(const ByteWrite write) {
     timer_.write(write);
     return timer_name;
   }
+  const auto interrupt_name = McuInterrupts::register_name(offset);
+  if (!interrupt_name.empty()) {
+    interrupts_.write(write, context_.ccr);
+    return interrupt_name;
+  }
   if (reserved_register(offset)) { return "reserved/write ignored"; }
   if (offset == hc12::smramcfg && (value & 1U) == 0) { return "SMRAMCFG normal mode"; }
   throw Fault("Unimplemented MCU peripheral write at " + hex(offset));
@@ -163,6 +173,7 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
     try {
       const auto name = write_register({.address = location.offset, .value = value});
       sync_peripheral_pins();
+      interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
       if (observer_) {
         observer_({.write = true, .address = address, .value = value, .name = name});
       }
@@ -198,6 +209,44 @@ void McuBus::retire_instruction() {
 
 void McuBus::set_pin_drive(const McuPort port, const PinDrive drive) {
   gpio_.set_drive(port, drive);
+  if (port == McuPort::e) { interrupts_.observe_pins(gpio_.observe_pads(port, 3)); }
+}
+
+void McuBus::begin_instruction(const ExecutionContext context) {
+  context_ = context;
+}
+
+std::optional<InterruptRequest> McuBus::interrupt_request(const std::uint8_t ccr) const {
+  const auto urgent = interrupts_.select({}, static_cast<std::uint8_t>(ccr | hc12::interrupt_mask));
+  if (urgent) { return urgent; }
+  if ((ccr & hc12::interrupt_mask) != 0) { return {}; }
+  std::array<std::uint16_t, 12> pending{};
+  std::size_t count = 0;
+  const auto append = [&pending, &count](const std::uint16_t vector) {
+    pending.at(count) = vector;
+    ++count;
+  };
+  constexpr unsigned timer0_vector = 0xffee;
+  constexpr unsigned overflow_vector = 0xffde;
+  constexpr unsigned sci_vector = 0xffd6;
+  constexpr unsigned pll_vector = 0xffc6;
+  constexpr unsigned realtime_vector = 0xfff0;
+  const auto timer_channels = timer_.interrupt_channels();
+  for (unsigned channel = 0; channel < 8; ++channel) {
+    if ((timer_channels & (1U << channel)) != 0) {
+      append(static_cast<std::uint16_t>(timer0_vector - (channel * 2)));
+    }
+  }
+  if (timer_.overflow_interrupt()) { append(overflow_vector); }
+  if (sci_.interrupt_pending()) { append(sci_vector); }
+  if (clock_.lock_interrupt_pending()) { append(pll_vector); }
+  if (clock_.realtime_interrupt_pending()) { append(realtime_vector); }
+  return interrupts_.select(std::span{pending}.first(count),
+                            static_cast<std::uint8_t>(ccr | hc12::xirq_mask));
+}
+
+void McuBus::acknowledge_interrupt(const std::uint16_t vector) {
+  interrupts_.acknowledge(vector);
 }
 
 void McuBus::observe_phy(const PhyClockWindow window) {

@@ -74,7 +74,7 @@ add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp 
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
-  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp)
+  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
@@ -103,6 +103,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-timer-test test/mcu_timer_test.cpp)
   target_link_libraries(blofeld-timer-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_timer COMMAND blofeld-timer-test)
+  add_executable(blofeld-interrupt-test test/interrupt_test.cpp)
+  target_link_libraries(blofeld-interrupt-test PRIVATE blofeld_core)
+  add_test(NAME mcu_interrupt COMMAND blofeld-interrupt-test)
   add_executable(blofeld-boot-test test/original_boot_test.cpp)
   target_link_libraries(blofeld-boot-test PRIVATE blofeld_core)
   add_test(NAME original_mcu_boot COMMAND blofeld-boot-test
@@ -130,7 +133,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-mcu-test
-    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-boot-test
+    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-boot-test
   USES_TERMINAL)
 endif()
 

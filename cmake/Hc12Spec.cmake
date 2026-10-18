@@ -13,8 +13,9 @@ if(NOT BLOFELD_HC12_SHA256 STREQUAL "7904b9b892232890287e0052198d6fab81674096542
 endif()
 set(BLOFELD_HC12_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-branches.patch")
 set(BLOFELD_HC12_INDEXED_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-indexed-word.patch")
+set(BLOFELD_HC12_EXCEPTIONS_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-exceptions.patch")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-  "${BLOFELD_HC12_PATCH}" "${BLOFELD_HC12_INDEXED_PATCH}"
+  "${BLOFELD_HC12_PATCH}" "${BLOFELD_HC12_INDEXED_PATCH}" "${BLOFELD_HC12_EXCEPTIONS_PATCH}"
   "${BLOFELD_HC12_LANGUAGES}/HCS_HC12.sinc")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12" "${CMAKE_CURRENT_BINARY_DIR}/share")
 configure_file("${BLOFELD_HC12_LANGUAGES}/HC12.slaspec" "generated/hc12/HC12.slaspec" COPYONLY)
@@ -27,8 +28,14 @@ execute_process(
 execute_process(
   COMMAND "${BLOFELD_PATCH}" --batch --silent
     --input "${BLOFELD_HC12_INDEXED_PATCH}"
-    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.sinc"
+    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.indexed.sinc"
     "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.branches.sinc"
+  COMMAND_ERROR_IS_FATAL ANY)
+execute_process(
+  COMMAND "${BLOFELD_PATCH}" --batch --silent
+    --input "${BLOFELD_HC12_EXCEPTIONS_PATCH}"
+    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.sinc"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.indexed.sinc"
   COMMAND_ERROR_IS_FATAL ANY)
 add_custom_command(
   OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"

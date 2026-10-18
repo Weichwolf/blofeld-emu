@@ -339,7 +339,7 @@ void test_unknown_input_and_unsupported_modes() {
   blofeld::McuSci sci;
   configure(sci, 4);
   reject([&sci] { sci.advance({.bus_cycles = 1}); }, "Unknown RX cannot be assumed idle");
-  constexpr std::array<std::uint8_t, 6> unsupported{1, 2, 0x10, 0x20, 0x40, 0x80};
+  constexpr std::array<std::uint8_t, 2> unsupported{1, 2};
   for (const auto value : unsupported) {
     reject([&sci, value] { sci.write({.address = control2, .value = value}); },
            "Unsupported control modes must fail");

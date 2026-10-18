@@ -28,6 +28,8 @@ public:
   void observe_inputs(TimerInputs inputs);
   [[nodiscard]] unsigned cycles_until_tick() const;
   [[nodiscard]] PinFunction pins() const; // Logical channels, before package routing.
+  [[nodiscard]] std::uint8_t interrupt_channels() const;
+  [[nodiscard]] bool overflow_interrupt() const;
 
 private:
   static constexpr std::size_t channel_count = 8;

@@ -7,7 +7,7 @@ Native SLEIGH and the HC12 language specification:
   Built from the user's existing Ghidra distribution; no JVM is used at runtime.
   Source notices are retained in that distribution. Its source and license must
   accompany any redistributable binary package as required by the licenses.
-  Local byte-memory, HC12 branch and indexed-word patches apply only to build copies
+  Local byte-memory, HC12 branch, indexed-word and exception patches apply only to build copies
   (patches/README.txt); the corrected language is compiled with native SLEIGH.
   The integration uses exceptions as the native SLEIGH error interface.
 

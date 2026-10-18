@@ -26,7 +26,10 @@ constexpr unsigned receiver_flags = 0x3f;
 constexpr unsigned transmitter_flags = 0xc0;
 constexpr unsigned transmitter_enable = 8;
 constexpr unsigned receiver_enable = 4;
-constexpr unsigned unsupported_control2 = 0xf3;
+constexpr unsigned unsupported_control2 = 3;
+constexpr unsigned transmitter_interrupts = 0xc0;
+constexpr unsigned receive_interrupt = 0x20;
+constexpr unsigned idle_interrupt = 0x10;
 constexpr unsigned loop_mode = 0x80;
 constexpr unsigned nine_bit_mode = 0x10;
 constexpr unsigned idle_after_stop = 4;
@@ -67,6 +70,16 @@ unsigned McuSci::character_bits() const {
 
 bool McuSci::receiver_enabled() const {
   return (control2_ & receiver_enable) != 0;
+}
+
+bool McuSci::interrupt_pending() const {
+  const bool transmit = (status_ & control2_ & transmitter_interrupts) != 0;
+  const bool receive =
+      (control2_ & receive_interrupt) != 0 && (status_ & (receive_full | overrun)) != 0;
+  const bool idle = (control2_ & idle_interrupt) != 0 && (status_ & idle_flag) != 0;
+  if (transmit || receive || idle) { return true; }
+  if ((control2_ & receive_interrupt) != 0) { require_transfer_known(); }
+  return false;
 }
 
 bool McuSci::busy() const {
@@ -115,7 +128,7 @@ std::uint8_t McuSci::read(const std::uint16_t offset) {
 
 void McuSci::write_control2(const std::uint8_t value) {
   if ((value & unsupported_control2) != 0) {
-    throw Fault("Unimplemented SCI interrupt delivery, wakeup or break generation");
+    throw Fault("Unimplemented SCI wakeup or break generation");
   }
   const unsigned previous = control2_;
   control2_ = value;

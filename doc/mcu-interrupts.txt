@@ -1,0 +1,54 @@
+HC12 interrupt entry and MC9S12UF32 routing
+
+Scope
+Requests are selected at logical instruction boundaries. CPU and peripheral
+elapsed cycles are not yet scheduled; no claim about interrupt latency, pad
+synchronizer delay, complete firmware boot or physical Blofeld behavior follows.
+Run build/strict/blofeld-interrupt-test for independent synthetic CPU and ISR
+checks. Firmware program bytes are not embedded in those tests.
+
+CPU behavior
+- Maskable entry requires CCR I=0; XIRQ requires X=0 and ignores I. The vector
+  contents are read before stack writes. The descending nine-byte frame contains
+  CCR, B, A, X high/low, Y high/low and return PC high/low in ascending memory.
+  Entry sets I; XIRQ also sets X, after saving the old flags. Stack/vector faults
+  remain visible, including partially advanced SP after a failed write.
+- RTI executes real HC12 instructions to restore context. A request pending
+  after restoration reuses that frame without rewriting memory. Entry events
+  are reported separately from executed opcodes in CPU results and CLI traces.
+- A build-local SLEIGH patch fixes SWI's vector dereference/fetch order and
+  inverted STOP-disable test. Disabled STOP is a two-byte NOP. Enabled STOP
+  stacks context, then fails at unsupported clock suspension. WAI, low-power
+  recovery, opcode traps, pipeline fetches and exact bus-cycle timing are pending.
+
+Controller and sources
+- INTCR/IRQCR resets to 0x40: active-low level IRQ enabled. IRQE is write-once;
+  IRQEN stays writable. Edge mode retains an observed falling edge until service
+  or reset. Disabled IRQEN prevents new edge capture without clearing an old
+  request. Resolved PE0/PE1 levels supply XIRQ/IRQ; unknown inputs/history fail
+  when required, rather than being assumed inactive. Pad timing is uncalibrated.
+- HPRIO resets to 0xf2. Only I=1 permits writes; bit zero reads zero. A valid
+  promoted vector outranks other maskable sources, otherwise address order
+  applies. Invalid/reserved priority selections fall back to external IRQ.
+  XIRQ outranks maskable sources. ITCR/ITEST follow documented normal-mode gates.
+  The old INT guide's ambiguous RTI/HPRIO replacement case fails explicitly;
+  implementing the RTI counter requires resolving that device-specific wording.
+- Timer channels map to 0xffee..0xffe0 and overflow to 0xffde. TIE/TOI gate
+  latched CnF/TOF flags. SCI maps to 0xffd6: TIE/TDRE, TCIE/TC, RIE/(RDRF|OR)
+  and ILIE/IDLE. CRG lock changes map to 0xffc6. Request polling does not read
+  status registers, clear peripheral flags or impersonate firmware acknowledgments.
+- Peripheral enables are modeled; flags clear through their real register
+  sequences. The controller acknowledges only the external IRQ edge latch.
+  RTI counting, COP, pulse accumulator and unimplemented peripheral sources
+  remain unsupported. There is no host MIDI transport yet.
+
+Evidence and references
+S12CPUV2 sections 7.5, 7.7, 7.8 and its instruction glossary define frames,
+vector-first entry, RTI reuse, SWI and STOP. S12INTV1, S12MEBIV3, 9S12UF32DGV1
+table 5-1 and the SCI/TIM/CRG guides define controller gates and source vectors.
+doc/hardware/sources.json pins the local NXP bundle containing these documents.
+Independent tests check literal stack bytes and access order, masks, XIRQ,
+priority/write protection, external edge retention, frame reuse and a serial
+waveform delivered through real ISR instructions with register acknowledgment.
+All eight timer channel vectors are checked through compare events and real
+ISRs that clear TFLG1 with W1C before returning through RTI.

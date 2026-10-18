@@ -75,8 +75,9 @@ USB PHY and clock qualification
   clock observations; with the pin fixture above it stops at this boundary.
   Tests supply explicit edge windows and execute the original polling branch:
   14 edges keeps it waiting, 15 permits clock selection and reaching SCI setup.
-- Enabling the USB controller, triggering resets/resume, RTI counting and interrupt
-  delivery remain unsupported and requests fail. COP watchdog is also
+- Enabling the USB controller, triggering resets/resume and RTI counting
+  remain unsupported and requests fail. CRG lock-change interrupt enables feed
+  instruction-boundary delivery (mcu-interrupts.txt). COP watchdog is also
   unsupported; wait/stop semantics and timing remain unvalidated. No successful
   USB enumeration or timer is inferred.
 

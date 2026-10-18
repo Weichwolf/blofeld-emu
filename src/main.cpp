@@ -96,6 +96,25 @@ void print_state(std::ostream &output, const blofeld::CpuState &state) {
          << " sp=" << blofeld::hex(state.sp) << " ccr=" << blofeld::hex(state.ccr, 2);
 }
 
+void trace_instruction(std::ofstream &trace,
+                       const blofeld::Hc12 &cpu,
+                       const std::uint64_t executed) {
+  if (!trace.is_open()) { return; }
+  trace << executed << ' ';
+  print_state(trace, cpu.state());
+  if (const auto request = cpu.pending_interrupt()) {
+    trace << " interrupt-entry vector=" << blofeld::hex(request->vector) << '\n';
+  } else {
+    trace << ' ' << cpu.disassemble() << '\n';
+  }
+}
+
+void trace_interrupt(std::ofstream &trace, const blofeld::CpuStep result) {
+  if (!trace.is_open() || !result.interrupt_vector) { return; }
+  trace << "  interrupt-vector " << blofeld::hex(*result.interrupt_vector)
+        << " stack-reused=" << result.stack_reused << '\n';
+}
+
 int run(const Options &config) {
   const auto firmware = blofeld::Firmware::load(config.firmware);
   std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
@@ -126,14 +145,14 @@ int run(const Options &config) {
   blofeld::Hc12 cpu(bus, specification);
   cpu.reset();
   std::uint64_t executed = 0;
+  std::uint64_t interrupts = 0;
   try {
-    for (; executed < config.instructions; ++executed) {
-      if (trace.is_open()) {
-        trace << executed << ' ';
-        print_state(trace, cpu.state());
-        trace << ' ' << cpu.disassemble() << '\n';
-      }
-      cpu.step();
+    while (executed < config.instructions) {
+      trace_instruction(trace, cpu, executed);
+      const auto result = cpu.step();
+      if (result.instruction_executed) { ++executed; }
+      if (result.interrupt_vector) { ++interrupts; }
+      trace_interrupt(trace, result);
     }
   } catch (const blofeld::Fault &fault) {
     if (trace.is_open()) { trace.flush(); }
@@ -145,6 +164,7 @@ int run(const Options &config) {
   }
   if (trace.is_open()) { trace.flush(); }
   std::cout << "Instruction budget reached; boot completion is not established.\n";
+  std::cout << "Delivered interrupt entries: " << interrupts << '\n';
   print_state(std::cout, cpu.state());
   std::cout << '\n';
   return 0;

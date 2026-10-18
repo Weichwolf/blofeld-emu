@@ -177,8 +177,20 @@ void test_unimplemented_usb_commands_and_interrupts() {
   constexpr unsigned reserved_interrupt_bits = 0x6f;
   clock.write({.address = interrupt_enable, .value = reserved_interrupt_bits});
   require(clock.read(interrupt_enable) == 0, "Reserved interrupt enable bits do not latch");
-  reject([&clock] { clock.write({.address = interrupt_enable, .value = lock_change_flag}); },
-         "Interrupt enables fail until CPU delivery is implemented");
+  require(!clock.lock_interrupt_pending(), "Disabled lock IRQ does not sample unknown clock state");
+  clock.write({.address = interrupt_enable, .value = lock_change_flag});
+  reject([&clock] { static_cast<void>(clock.lock_interrupt_pending()); },
+         "Enabled lock IRQ cannot assume unknown PHY qualification");
+  clock.observe_phy({.edges = 15});
+  require(clock.lock_interrupt_pending(), "Qualified PHY lock transition asserts enabled IRQ");
+  clock.write({.address = flags, .value = lock_change_flag});
+  require(!clock.lock_interrupt_pending(),
+          "Lock IRQ polling does not fabricate or retain a cleared flag");
+  clock.observe_phy({.edges = 14});
+  require(clock.lock_interrupt_pending(), "Lock loss also asserts the lock-change IRQ");
+  clock.reset();
+  require(clock.read(interrupt_enable) == 0 && !clock.lock_interrupt_pending(),
+          "Reset clears interrupt enable and pending lock requests");
   reject([&clock] { clock.write({.address = rti_control, .value = lock_change_flag}); },
          "RTI cannot succeed as an inert control latch");
   constexpr unsigned reserved_clock = 0x34;

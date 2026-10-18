@@ -20,7 +20,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
     const auto address =
         static_cast<std::uint16_t>((static_cast<unsigned>(record[1]) << 8U) | record[2]);
     try {
-      switch (record[0] % 12U) {
+      switch (record[0] % 15U) {
         case 0: static_cast<void>(bus->read(address)); break;
         case 1: bus->write(address, record[3]); break;
         case 2: bus->retire_instruction(); break;
@@ -36,6 +36,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
         case 9: bus->advance_sci(address & clock_slice_mask); break;
         case 10: bus->advance_timer(address & clock_slice_mask); break;
         case 11: bus->sample_timer_inputs(record[3]); break;
+        case 12: bus->begin_instruction({.pc = address, .ccr = record[3]}); break;
+        case 13: static_cast<void>(bus->interrupt_request(record[3])); break;
+        case 14: bus->acknowledge_interrupt(address); break;
         default: throw blofeld::Fault("Invalid model-fuzzer action");
       }
     } catch (const blofeld::Fault &) {

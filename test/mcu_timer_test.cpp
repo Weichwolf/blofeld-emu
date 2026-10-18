@@ -304,10 +304,17 @@ void test_overflow_toggle_and_unsupported_cases() {
   timer.advance(word_max);
   require(timer.pins().levels == 0 && timer.read(flags2) == timer_on,
           "TTOV toggles on a counter overflow");
-  reject([&timer] { timer.write({.address = interrupt_enable, .value = 1}); },
-         "Unimplemented channel interrupts fail");
-  reject([&timer] { timer.write({.address = control2, .value = timer_on}); },
-         "Unimplemented overflow interrupts fail");
+  require(timer.interrupt_channels() == 0 && !timer.overflow_interrupt(),
+          "Latched timer flags do not request masked interrupts");
+  timer.write({.address = interrupt_enable, .value = 1});
+  timer.write({.address = control2, .value = timer_on});
+  require(timer.interrupt_channels() == 1 && timer.overflow_interrupt(),
+          "Channel and overflow enables expose their already latched requests");
+  timer.write({.address = flags1, .value = 1});
+  require(timer.interrupt_channels() == 0 && timer.overflow_interrupt(),
+          "Clearing a channel flag leaves the overflow request asserted");
+  timer.write({.address = flags2, .value = timer_on});
+  require(!timer.overflow_interrupt(), "Overflow W1C deasserts its interrupt request");
   constexpr unsigned pulse_control = 0x60;
   reject([&timer] { static_cast<void>(timer.read(pulse_control)); },
          "Pulse accumulator is not a successful stub");

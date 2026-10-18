@@ -45,10 +45,12 @@ doc/mcu-model.txt for the implemented map, GPIO behavior and remaining limits.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.
+doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requests;
+automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.
 The native HC12 description is patched and recompiled locally for independently
-verified branch and indexed-word corrections; no installed Ghidra files are modified.
+verified branch, indexed-word and exception corrections; no installed Ghidra files are modified.
 
 The execution command must stop visibly on unsupported hardware. An instruction
 budget being exhausted does not establish successful boot. Downloading firmware

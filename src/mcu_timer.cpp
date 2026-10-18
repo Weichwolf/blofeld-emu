@@ -32,7 +32,7 @@ constexpr unsigned overflow_flags = 15;
 constexpr unsigned timer_enable = 0x80;
 constexpr unsigned fast_clear = 0x10;
 constexpr unsigned control1_mask = 0xf0;
-constexpr unsigned control2_mask = 0x0f;
+constexpr unsigned control2_mask = 0x8f;
 constexpr unsigned counter_reset = 8;
 constexpr unsigned prescale_mask = 7;
 constexpr unsigned prescaler_wrap = 128;
@@ -218,13 +218,8 @@ void McuTimer::write(const ByteWrite write) {
       if (!enabled() && (value & timer_enable) != 0) { activation_pending_ |= controls_[0]; }
       controls_[system_control1] = static_cast<std::uint8_t>(value & control1_mask);
       return;
-    case interrupt_enable:
-      if (value != 0) { throw Fault("Unimplemented timer channel interrupt delivery"); }
-      return;
+    case interrupt_enable: controls_[interrupt_enable] = value; return;
     case system_control2:
-      if ((value & timer_enable) != 0) {
-        throw Fault("Unimplemented timer overflow interrupt delivery");
-      }
       controls_[system_control2] = static_cast<std::uint8_t>(value & control2_mask);
       if (prescaler_phase_ == 0) { active_prescale_ = value & prescale_mask; }
       return;
@@ -339,6 +334,14 @@ unsigned McuTimer::cycles_until_tick() const {
   const auto next_tick = divider - (prescaler_phase_ % divider);
   const auto prescale_update = prescaler_wrap - prescaler_phase_;
   return next_tick < prescale_update ? next_tick : prescale_update;
+}
+
+std::uint8_t McuTimer::interrupt_channels() const {
+  return static_cast<std::uint8_t>(controls_[channel_flags] & controls_[interrupt_enable]);
+}
+
+bool McuTimer::overflow_interrupt() const {
+  return (controls_[overflow_flags] & controls_[system_control2] & overflow_flag) != 0;
 }
 
 }

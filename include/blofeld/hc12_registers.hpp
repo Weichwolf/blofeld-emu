@@ -7,6 +7,10 @@
 namespace blofeld::hc12 {
 inline constexpr std::uint16_t reset_sp = 0x00ff;
 inline constexpr std::uint8_t reset_ccr = 0xd0;
+inline constexpr std::uint8_t interrupt_mask = 0x10;
+inline constexpr std::uint8_t xirq_mask = 0x40;
+inline constexpr std::uint16_t xirq_vector = 0xfff4;
+inline constexpr std::uint16_t swi_vector = 0xfff6;
 inline constexpr std::uint16_t reset_vector = 0xfffe;
 inline constexpr std::uint32_t address_mask = 0xffff;
 inline constexpr std::uint16_t porta = 0x0000;
@@ -21,6 +25,10 @@ inline constexpr std::uint16_t initrm = 0x0010;
 inline constexpr std::uint16_t initrg = 0x0011;
 inline constexpr std::uint16_t initee = 0x0012;
 inline constexpr std::uint16_t misc = 0x0013;
+inline constexpr std::uint16_t interrupt_test_control = 0x0015;
+inline constexpr std::uint16_t interrupt_test = 0x0016;
+inline constexpr std::uint16_t irq_control = 0x001e;
+inline constexpr std::uint16_t interrupt_priority = 0x001f;
 inline constexpr std::uint16_t refdv = 0x0035;
 inline constexpr std::uint16_t crg_test_flags = 0x0036;
 inline constexpr std::uint16_t crg_flags = 0x0037;
