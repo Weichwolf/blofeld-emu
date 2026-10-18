@@ -11,10 +11,12 @@ booting Blofeld, a playable synthesizer or a verified replacement-firmware targe
 
 Build and quality checks
 Requirements: LLVM 19 (clang, clang-tidy, clang-format and sanitizer runtime),
-CMake >= 3.25, Ninja, GNU patch, Python 3, zlib development files and Ghidra 12.1.2
+CMake >= 3.25, Ninja, Git, GNU patch, Python 3, zlib development files and Ghidra 12.1.2
 including its native SLEIGH sources and compiler. Set GHIDRA_ROOT if it is not
 installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java at
 runtime.
+DSP56300_ROOT must point to a clean checkout of the revision in
+doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
 
   cmake --preset strict
   cmake --build --preset strict
@@ -26,7 +28,7 @@ errors, including the 120-line function limit. ASan/UBSan and additional integer
 checks are enabled in strict builds; dependencies also receive ASan/UBSan.
 release retains warning/static-analysis gates and disables sanitizers for timing
 measurements. thread selects separate TSan instrumentation. No concurrency is
-currently implemented. Native SLEIGH requires exceptions; any future audio
+currently implemented. Native CPU adapters use exceptions; any future audio
 callback must keep allocation and exceptions outside its real-time boundary.
 
 Local manufacturer references
@@ -49,8 +51,9 @@ doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requ
 doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.
 doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts and CPU operand widths.
 doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
-doc/dsp-shi.txt covers the DSP-side SPI slave and native MCU GPIO exchange tests;
-the DSP CPU and original SHI bootstrap are not yet integrated into the board.
+doc/dsp-shi.txt covers the DSP-side SPI slave and native MCU GPIO exchange tests.
+doc/dsp-core.txt covers native DSP execution and the documented SPI bootstrap
+loading the unchanged Blofeld first stage. Combined MCU/DSP boot remains pending.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

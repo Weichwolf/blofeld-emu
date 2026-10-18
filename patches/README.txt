@@ -57,3 +57,27 @@ Independent mcu_interrupt tests fail against the uncorrected SWI constructor
 and verify the corrected handler address, stack access order and STOP gate.
 memory_usb independently checks the IRQ save/RTI restore operand widths and fails
 against the original two-byte-load RTI description.
+
+DSP56300 reference adapter
+-------------------------
+dsp56300-reference-bus.patch applies only to the revision pinned in
+cmake/DspCore.cmake and doc/dependencies.json. GNU patch applies this zero-context
+diff against that exact revision. It adds unconditional strict bus hooks, custom
+peripheral dispatch, exception propagation, exact extension checks
+and a bounded reference entry for DO/positive REP. Program stores do not synthesize
+old-target reads. REP retains its latched opcode/extension but invalidates the
+body cache for later normal execution. Undefined decoded instructions fail in
+reference mode. The normal upstream interpreter remains separately callable;
+this integration forces the reference interpreter, not the JIT.
+
+UBSan caught reset using out-of-range CCR enum values for full SR masks. Reset
+and interrupt entry now use the correct SR-mask overloads. No sanitizer is
+suppressed. Independent native_dsp checks cover flags, unknown fetch/extension,
+P writes/mutation, retained map aliases, bounded DO/SPI waits and REP latching.
+The original_dsp_boot fixture executes documented partial NXP SPI ROM plus the
+unaltered MCU-embedded Blofeld first stage; all reference bytes remain private.
+
+The SDK checkout stays unchanged. CMake stages and patches private build copies,
+then updates only changed output files so a small patch edit does not rewrite
+all active native headers. This is a limited, uncalibrated DSP56371 reference
+path; full ISA, interrupts/timing and real-device equivalence remain open.

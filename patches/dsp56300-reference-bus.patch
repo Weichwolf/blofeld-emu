@@ -1,0 +1,181 @@
+--- a/source/dsp56kEmu/memory.h
++++ b/source/dsp56kEmu/memory.h
+@@ -36,0 +37,4 @@
++		// Optional bus-owned storage; fallback users retain their existing arrays.
++		virtual bool readWord(EMemArea, TWord, TWord&) const { return false; }
++		virtual bool writeWord(EMemArea, TWord, TWord) const { return false; }
++		virtual bool readOpcode(TWord, TWord&, TWord&) const { return false; }
+--- a/source/dsp56kEmu/memory.cpp
++++ b/source/dsp56kEmu/memory.cpp
+@@ -111,0 +112 @@
++		if(m_memoryMap.writeWord(_area, _offset, _value)) return true;
+@@ -163,0 +165,2 @@
++		TWord busValue;
++		if(m_memoryMap.readWord(_area, _offset, busValue)) return busValue;
+@@ -197,0 +201 @@
++		if(m_memoryMap.readOpcode(_offset, _wordA, _wordB)) return;
+--- a/source/dsp56kEmu/peripherals.h
++++ b/source/dsp56kEmu/peripherals.h
+@@ -26 +26,2 @@
+-		Peripherals56367
++		Peripherals56367,
++		PeripheralsCustom
+@@ -108,0 +110 @@
++		virtual uint32_t exec() = 0;
+@@ -142 +144 @@
+-		uint32_t exec() noexcept { return MaxDelayCycles; }
++		uint32_t exec() noexcept override { return MaxDelayCycles; }
+@@ -170 +172 @@
+-		uint32_t exec() noexcept;
++		uint32_t exec() noexcept override;
+@@ -222 +224 @@
+-		uint32_t exec() noexcept;
++		uint32_t exec() noexcept override;
+@@ -285 +287 @@
+-		uint32_t exec() noexcept { return MaxDelayCycles; }
++		uint32_t exec() noexcept override { return MaxDelayCycles; }
+--- a/source/dsp56kEmu/dsp.h
++++ b/source/dsp56kEmu/dsp.h
+@@ -40 +40 @@
+-	void dspExecInterrupts(DSP* _dsp) noexcept;
++	void dspExecInterrupts(DSP* _dsp);
+@@ -86 +86 @@
+-		typedef void (*TInterruptFunc)(DSP*) noexcept;
++		typedef void (*TInterruptFunc)(DSP*);
+@@ -162,0 +163,10 @@
++		bool m_referenceMode = false;
++		struct ReferenceRepeat {
++			TWord remaining = 0;
++			TWord body = 0;
++			TWord opcode = 0;
++			TWord extension = 0;
++			TWord next = 0;
++			TReg24 savedLC;
++			bool loaded = false;
++		} m_referenceRepeat;
+@@ -189 +199 @@
+-		ASMJIT_FORCE_INLINE void exec() noexcept
++		ASMJIT_FORCE_INLINE void exec()
+@@ -208 +218,4 @@
+-		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
++		// Single bounded reference step, including individual DO/REP body instructions.
++		void execReference();
++
++		ASMJIT_FORCE_INLINE void execInterpreter()
+@@ -411,2 +424,4 @@
+-		TWord	fetchOpWordB()
+-		{
++		TWord fetchOpWordB()
++		{
++			const auto extension = m_referenceRepeat.loaded
++				? m_referenceRepeat.extension : memRead(MemArea_P, pcCurrentInstruction + 1);
+@@ -416 +431 @@
+-			return m_opWordB;
++			return extension;
+--- a/source/dsp56kEmu/dsp.cpp
++++ b/source/dsp56kEmu/dsp.cpp
+@@ -7,0 +8 @@
++#include <stdexcept>
+@@ -45 +46 @@
+-	void dspExecDefaultPreventInterrupt(DSP* _dsp) noexcept
++	void dspExecDefaultPreventInterrupt(DSP* _dsp)
+@@ -52 +53 @@
+-	void dspExecInterrupts(DSP* _dsp) noexcept
++	void dspExecInterrupts(DSP* _dsp)
+@@ -65,0 +67,8 @@
++	}
++
++	void dspExecCustomPeripherals(DSP* dsp)
++	{
++		const auto x = dsp->getPeriph(0)->exec();
++		const auto y = dsp->getPeriph(1)->exec();
++		dsp->getPeriph(0)->resetDelayCycles(dsp->getInstructionCounter(), std::min(x, y));
++		dsp->processExternalInterrupts();
+@@ -74,2 +83 @@
+-		assert(false && "Peripherals configuration is not supported");
+-		return nullptr;
++		return &dspExecCustomPeripherals;
+@@ -111,0 +120,2 @@
++		m_referenceMode = false;
++		m_referenceRepeat = {};
+@@ -133,2 +143,2 @@
+-		const CCRMask srClear	= static_cast<CCRMask>(SR_RM | SR_SM | SR_CE | SR_SA | SR_FV | SR_LF | SR_DM | SR_SC | SR_S0 | SR_S1 | 0xf);
+-		const CCRMask srSet		= static_cast<CCRMask>(SR_CP0 | SR_CP1 | SR_I0 | SR_I1);
++		const SRMask srClear	= static_cast<SRMask>(SR_RM | SR_SM | SR_CE | SR_SA | SR_FV | SR_LF | SR_DM | SR_SC | SR_S0 | SR_S1 | 0xf);
++		const SRMask srSet		= static_cast<SRMask>(SR_CP0 | SR_CP1 | SR_I0 | SR_I1);
+@@ -264 +274 @@
+-				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
++				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
+@@ -322,0 +333,44 @@
++	}
++
++	void DSP::execReference()
++	{
++		m_referenceMode = true;
++		auto& repeat = m_referenceRepeat;
++		const bool repeated = repeat.remaining != 0;
++		if(repeated) {
++			pcCurrentInstruction = repeat.body;
++			m_srCurrentInstruction = reg.sr.toWord();
++			reg.pc.var = repeat.body;
++			if(!repeat.loaded) {
++				repeat.opcode = fetchPC();
++				repeat.extension = m_opWordB;
++			} else {
++				++reg.pc.var;
++				m_opWordB = repeat.extension;
++			}
++			execOp(repeat.opcode);
++			notifyProgramMemWrite(repeat.body); // A latched REP must not retain a stale opcode cache entry.
++			const auto next = repeat.body + m_currentOpLen;
++			if(reg.pc.toWord() != next)
++				throw std::runtime_error("Unsupported branch/control flow in reference REP");
++			repeat.next = next;
++			repeat.loaded = true;
++			if(--repeat.remaining) {
++				reg.lc.var = repeat.remaining;
++				reg.pc.var = repeat.body;
++				return;
++			}
++			reg.lc = repeat.savedLC;
++			repeat.loaded = false;
++		} else {
++			execInterpreter();
++		}
++		if(sr_test_noCache(SR_LF) && pcCurrentInstruction + m_currentOpLen == reg.la.toWord() + 1 &&
++			reg.pc.toWord() == reg.la.toWord() + 1) {
++			if(!sr_test_noCache(SR_FV) && reg.lc.var <= 1) {
++				do_end();
++			} else {
++				if(!sr_test_noCache(SR_FV)) --reg.lc.var;
++				setPC(hiword(reg.ss[ssIndex()]));
++			}
++		}
+@@ -525,0 +580,2 @@
++		if(m_referenceMode) return true;
++
+@@ -603,0 +660,10 @@
++		if(m_referenceMode) {
++			if(!_loopCount || m_referenceRepeat.remaining)
++				throw std::runtime_error("Unsupported zero/nested reference REP");
++			m_referenceRepeat.savedLC = reg.lc;
++			m_referenceRepeat.remaining = _loopCount;
++			m_referenceRepeat.body = reg.pc.toWord();
++			m_referenceRepeat.loaded = false;
++			reg.lc.var = _loopCount;
++			return true;
++		}
+@@ -1152,2 +1217,0 @@
+-		const auto oldValue = mem.get(MemArea_P, _offset);
+-
+@@ -1156 +1220 @@
+-		if (_offset < m_opcodeCache.size() && oldValue != _value)
++		if (res && _offset < m_opcodeCache.size())
+--- a/source/dsp56kEmu/dsp_ops.inl
++++ b/source/dsp56kEmu/dsp_ops.inl
+@@ -8 +8 @@
+-	void dspExecDefaultPreventInterrupt(DSP* _dsp) noexcept;
++	void dspExecDefaultPreventInterrupt(DSP* _dsp);
+@@ -351,0 +352,2 @@
++		else if(m_referenceMode)
++			throw std::runtime_error("Unsupported native DSP opcode");

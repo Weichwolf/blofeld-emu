@@ -40,6 +40,10 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           remapping, overlap priority and flash alias
                                           tested. See mcu-model.txt for limits;
                                           flash controller/paging/SmartMedia pending.
+                                          DSP initial and MS/MSW=111 maps, retained
+                                          X/P alias, protected/missing ROM and
+                                          explicit three-cycle switch tested.
+                                          Other DSP layouts and full timing pending.
 Interrupts, timers, clock         partial  USB PHY control, CRG qualification, lock
                                           loss, W1C/POR flags and write gates tested.
                                           Timer prescaling, capture/compare, flags,
@@ -63,20 +67,26 @@ USB device/transport              partial  PHY control and register/data-side en
                                           Wire decoding, automatic standard requests,
                                           IQUE/reset commands and host ports pending.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
-                                          checkout built separately; its assembler,
-                                          JIT, interpreter and optimizer suites pass.
-                                          No combined board execution.
-DSP56371 peripherals/boot ROM     partial  NXP bootstrap source documented; a separate
-                                          94-word DSP first stage is statically
-                                          identified inside the MCU image. SHI SPI
+                                          reference core now integrated with strict
+                                          memory and custom SHI. Arithmetic, P writes,
+                                          code mutation and bounded DO/REP tested.
+                                          Original 94-word first stage loads through
+                                          executed documented SPI ROM instructions
+                                          (dsp-core.txt). Full application and
+                                          combined board execution remain pending.
+DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled privately;
+                                          no complete/hardware-dumped ROM supplied.
+                                          Original MCU-embedded 94-word DSP stage
+                                          executes to its PLL setup. SHI SPI
                                           pins/registers/FIFO, error-clear sequences,
                                           request vectors and reset cycles tested
                                           (dsp-shi.txt). PLL, ESAI, DMA and chip profile
-                                          pending; no combined original bootstrap.
+                                          pending; no combined MCU/DSP board boot.
 MCU–DSP communication             partial  Native synthetic HC12 GPIO program exchanges
                                           exact words with SHI in both directions.
-                                          DSP CPU, real board routing and scheduled
-                                          original firmware handoff remain pending.
+                                          Native DSP receives original frame bytes
+                                          from a host pin fixture. Original MCU
+                                          sender, board route and scheduling pending.
 ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
@@ -117,6 +127,9 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           SHI edge/register harness with synthetic
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.
+                                          DSP bus/map/ROM/reset model harness:
+                                          43564 runs in 61 s without findings.
+                                          Native DSP instruction fuzzing pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
                                           trace; full bootloader trace under build/.

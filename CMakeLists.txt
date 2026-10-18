@@ -67,6 +67,7 @@ if(DEFINED blofeld_dependency_sanitizers)
     "-fsanitize=${blofeld_dependency_sanitizers}" -fno-sanitize-recover=all -fno-omit-frame-pointer -g)
 endif()
 # Apply clang-tidy to our targets, after the third-party target was created.
+include(cmake/DspCore.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 include(cmake/Hc12Spec.cmake)
@@ -79,9 +80,12 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.c
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
-add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp)
+add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
+add_library(blofeld_dsp src/dsp_core.cpp)
+target_include_directories(blofeld_dsp PUBLIC include)
+target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
 add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC include)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh)
@@ -91,6 +95,18 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-test test/dsp_core_test.cpp)
+  target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME native_dsp COMMAND blofeld-dsp-test)
+  add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp)
+  target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dsp)
+  add_test(NAME original_dsp_boot COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"
+    $<TARGET_FILE:blofeld-dsp-boot-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-boot.trace")
+  set_tests_properties(original_dsp_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-shi-test test/dsp_shi_test.cpp)
   target_link_libraries(blofeld-shi-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_shi COMMAND blofeld-shi-test)
@@ -158,7 +174,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
-    blofeld-shi-test blofeld-mcu-shi-test
+    blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
   USES_TERMINAL)
@@ -174,4 +190,7 @@ if(BLOFELD_FUZZING)
   add_executable(dsp-shi-fuzz test/dsp_shi_fuzz.cpp)
   target_link_libraries(dsp-shi-fuzz PRIVATE blofeld_dsp_peripherals)
   target_link_options(dsp-shi-fuzz PRIVATE -fsanitize=fuzzer)
+  add_executable(dsp-model-fuzz test/dsp_model_fuzz.cpp)
+  target_link_libraries(dsp-model-fuzz PRIVATE blofeld_dsp_peripherals)
+  target_link_options(dsp-model-fuzz PRIVATE -fsanitize=fuzzer)
 endif()

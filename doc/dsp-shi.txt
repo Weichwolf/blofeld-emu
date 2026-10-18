@@ -47,7 +47,7 @@ Verification
 The first test uses independent expected words, flags, capacities, vectors and
 priority encodings, including abort/reset, both error-clear sequences and unknown
 signals. Separate vectors leave MOSI unknown on every non-capture edge, checking
-that each clock mode samples only its specified edge. The second executes an
+that each clock mode samples only its specified edge. The second executes
 the project's own HC12 diagnostic program: real
 STAA writes drive GPIO SS/SCK/MOSI; real LDAA/ANDA reads sample SHI MISO into RAM.
 An explicit synthetic pin fixture connects the two models. It verifies the exact
@@ -65,18 +65,16 @@ without sanitizer findings. Seeds cover all clock/word-size combinations and
 small/large FIFO overrun/reset sequences. This is an initial campaign, not an
 exhaustive or sustained-fuzzing claim.
 
-Remaining native DSP integration
-The separately pinned dsp56300 core is not yet linked into the board. Its reset
-starts at P:0 with OMR=0, whereas the DSP56371 SPI bootstrap mode enters P:ff0000
-with mode 5. Its built-in peripheral dispatcher accepts only predefined chip
-combinations. Its memory validator is debug-only and uses the write flag for
-reads; release accesses may return zero for missing memory. Those paths must be
-adapted before they can satisfy this project's unknown-access contract. The
+Native DSP integration
+The pinned core now uses a custom dispatcher and strict memory hooks in the
+reference adapter, with explicit DSP56371 mode-five reset at P:ff0000. Bounded
+DO/REP steps let pin-driven SHI reception progress between CPU instructions;
+see dsp-core.txt for original first-stage execution and remaining limits. The
 existing SHI implementation also differs from the DSP56371 error-clear and receive
 interrupt specifications, so it is not used as this model's behavioral oracle.
 Its DspBoot helper receives whole words, writes program memory and changes PC on
 the host; that HDI08 shortcut cannot establish original SHI boot-ROM execution.
 
-The NXP bootstrap source, MCU-embedded first stage, actual SHI handoff, NAND
-loading, board routing and clock ratios still require combined execution and
-stock-hardware validation. See mcu-boot.txt, firmware-layout.txt and coverage.txt.
+Original MCU transmission, NAND loading, board routing and clock ratios still
+require combined execution and stock-hardware validation. See mcu-boot.txt,
+firmware-layout.txt and coverage.txt.

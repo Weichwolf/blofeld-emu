@@ -1,0 +1,97 @@
+Native DSP56371 reference execution
+
+The pinned C++ dsp56300 interpreter is integrated through DspCore and DspBus.
+Its JIT is disabled in this reference path. No host synthesizer or host bootstrap
+loader supplies executed DSP program words. Original chip data remain external
+local inputs. The headless CLI is still MCU-only; combined board scheduling and
+host MIDI/audio are not implemented by this library integration.
+
+Native adaptation
+patches/dsp56300-reference-bus.patch adds unconditional board-owned memory hooks,
+a custom peripheral dispatcher and a bounded execReference entry. Each DO body
+instruction yields independently. Positive REP counts also yield per body
+instruction, retaining the latched opcode/extension until repetition ends. A
+normal revisit sees subsequent code changes. Zero/nested REP, unsupported repeat
+control flow and undefined opcodes fail explicitly; this is not full ISA proof.
+
+Program fetches and actually used extensions are checked through the strict bus.
+Lookahead may inspect unknown bytes without granting execution permission. Native
+program stores no longer perform a synthetic read of their previously unknown
+target. Native exceptions can propagate to an address/PC/OMR diagnostic; a rejected
+CPU state requires reset. Native reset/interrupt entry incorrectly cast full SR
+masks into the smaller CCR enum; UBSan caught this during reset. The patch selects
+the correct SR-mask overloads, with instrumentation retained.
+
+DSP56371 memory and peripheral scope
+- Independent P/X/Y windows, 24-bit values/addresses, missing-content tracking,
+  ROM protection and RAM retention on external reset are modeled.
+- The initial 4K P / 36K X / 48K Y RAM map and 64K P / 32K X / 32K Y ROM windows
+  follow DSP56371UM chapter 3. Missing ROM contents fail, including X/Y tables.
+- MS=1, MSW1=MSW0=1 switches the upper 8K X RAM to P, preserving physical contents.
+  The three instruction-cycle delay is explicit. Affected accesses before supplied
+  switch time fail. Other switched layouts remain unsupported.
+  The linear X:10000..11fff to P:1000..2fff word correspondence is inferred from
+  the window sizes; its physical word order still needs hardware calibration.
+- SHI uses the separately tested model in dsp-shi.txt. Only the disabled IPRC/IPRP
+  state is accepted; enabling CPU interrupt priorities fails pending integration.
+- OGDB writes latch the 24-bit debug value (DSP56300FM 7.2.4/7.2.5). DSP reads,
+  JTAG/debug commands, security behavior and debug interrupts remain unimplemented.
+- PLL, remaining GPIO/timers, ESAI, DMA, NAND and clock scheduling are not modeled.
+  Native power-up register undefined-state tracking and full derivative reset,
+  interrupt, pipeline and instruction-cycle fidelity need further validation.
+
+Independent synthetic tests
+  build/strict/blofeld-dsp-test
+
+Checks cover physical RAM/ROM boundaries, unknown reads, protected writes, the
+explicit memory-switch deadline and retained aliases, mode-five reset vector,
+addition/negation/flags, strict extension fetches, original P stores into unknown
+RAM, opcode/operand changes, REP latching and bounded DO waits for separate SPI
+words. Changing backing ROM in a REP cache regression checks the interpreter's
+coherence contract; it is not a physical ROM programming or prefetch test.
+
+Document-derived SPI bootstrap reference
+DSP56371UM Appendix A publishes the SPI path, but references a separate EEPROM
+file and other ROM content is not supplied here. The optional fixture assembles
+only the 58-word prefix at P:ff0000..ff0039. Page headers are removed and equivalent
+label-colon syntax is used; instruction text is retained. The omitted EEPROM entry
+uses the separately published address, and the following burn-in entry retains
+its source position. Their bodies, main program ROM and X/Y ROM are unknown.
+This prefix is not a stock hardware ROM dump or complete mask-ROM image.
+
+After downloading verified references, supply dsp56300-asm 1.0.0 from
+https://github.com/xemu-project/dsp56300/releases/tag/v1.0.0 and pdftotext:
+  python3 tools/extract_nxp_spi_bootstrap.py --assembler /path/to/dsp56300-asm
+  ctest --test-dir build/strict -R original_dsp_boot --output-on-failure
+
+The tool records identities and creates only ignored doc/local/ outputs. The
+assembly tool release identity is in doc/dependencies.json. Test assets are
+SHA-256 checked before execution; absent private inputs explicitly skip the test.
+
+The fixture starts native mode-five execution at ff0000, then a host pin fixture
+clocks the MCU-embedded original 94-word Blofeld first stage through SHI. The
+executing ROM instructions receive the length/address, run their own DO loop,
+write all 94 P words and jump to P:6a. No host writes P RAM, patches the image or
+changes PC after reset. The original first stage executes through its memory-mode
+and pointer setup to PC 6f after 4821 completed reference steps. Its next operation
+is PLL configuration; a private continuation stops on the unsupported X:fffffd
+write with PC/OMR context. The regression stops at the verified stage boundary;
+it does not assert that an unimplemented PLL must remain unimplemented.
+
+The host supplies pin events with explicit instruction interleaving. The original
+MCU is not yet the sender in this fixture, no elapsed DSP/MCU clock ratio is
+inferred, and no physical Blofeld has validated the route/timing. Native caches
+currently cover the 24-bit program address space and use substantial memory;
+these diagnostic runs provide no real-time audio performance claim.
+
+Offline DSP bus/model fuzzing
+  cmake --build build/fuzz --target dsp-model-fuzz
+  mkdir -p doc/local/dsp-fuzz-corpus doc/local/dsp-fuzz-artifacts
+  python3 tools/make_dsp_fuzz_seeds.py doc/local/dsp-fuzz-corpus
+  build/fuzz/dsp-model-fuzz doc/local/dsp-fuzz-corpus -artifact_prefix=doc/local/dsp-fuzz-artifacts/ -max_len=2304 -max_total_time=60
+
+The current synthetic campaign completed 43564 runs in 61 seconds without
+sanitizer findings. It covers bus/map/ROM/reset/SHI inputs, not arbitrary native
+DSP instruction streams or the complete board. Sustained and differential CPU
+campaigns, actual NAND/assets, full application/audio and hardware comparison
+remain required; see coverage.txt.

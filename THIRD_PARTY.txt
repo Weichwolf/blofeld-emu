@@ -18,9 +18,20 @@ zlib:
 
 DSP56300:
   https://github.com/dsp56300/dsp56300
-  GPL-3.0 (see the dependency's LICENSE.md), currently a separate checkout.
-  Its asmjit and other components have separate licenses retained upstream.
-  The DSP core is not yet integrated into the Blofeld board model.
+  GPL-3.0 (see the dependency's LICENSE.md), pinned in doc/dependencies.json.
+  The native interpreter is built from a local checkout, patched only in build/.
+  Original notices remain in the build copy and source checkout. Its asmjit
+  component uses the Zlib license (source/asmjit/LICENSE.md). Other native source
+  notices remain upstream. Corresponding source and dependency notices must
+  accompany any redistributable binary package as required by their licenses.
+  The reference core is integrated; combined MCU/DSP board boot remains pending.
+
+Optional offline DSP assembly tool:
+  https://github.com/xemu-project/dsp56300
+  dsp56300-asm 1.0.0, Matt Borgerson, MIT license.
+  Used only to assemble a document-derived NXP SPI prefix into ignored local
+  references. It is not linked or distributed with the emulator. Its source
+  and binary notices remain in the separately downloaded local tool package.
 
 Manufacturer firmware, samples, manuals and product photographs retain their
 original terms. They are private references, excluded from source commits and
