@@ -8,6 +8,14 @@
 +	A = ba:1;
 +	ba = ba >> 8;
 +	B = ba:1;
+@@ -4938,2 +4941,5 @@
+-	Pull2( IY );
+-	Pull2( tmp ); # as ordered on page 289, not as documented in RTI description
++	SP = SP + 2;
++	Pull2( tmp );
++	SP = SP - 4;
++	Pull2( IY );
++	SP = SP + 2;
 @@ -5321 +5321 @@
 -	if ($(S) == 0) goto <continue>;
 +	if ($(S) != 0) goto <continue>;

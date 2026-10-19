@@ -67,6 +67,14 @@ public:
 
   virtual void begin_instruction(ExecutionContext /*context*/) {}
 
+  virtual void begin_execution(InstructionFetch /*fetch*/) {}
+
+  virtual void begin_reset(ExecutionContext /*context*/) {}
+
+  virtual void end_reset() {}
+
+  virtual void begin_interrupt(InterruptRequest /*request*/, bool /*reuse_stack*/) {}
+
   [[nodiscard]] virtual std::optional<InterruptRequest>
   interrupt_request(std::uint8_t /*ccr*/) const {
     return {};

@@ -48,6 +48,10 @@ HC12 exception corrections
 ghidra-hc12-exceptions.patch corrects SWI's indirect vector fetch, reads the
 vector before stacking, and writes the B:A stack word in hardware byte order.
 RTI restores B:A with a word transfer, preserving its documented operand width.
+Its native read order is corrected to CCR, B:A, X, return PC, then Y, with the
+specified SP adjustments. S12CPUV2 page 270 and S12CPU15UG page 289 agree on this
+order. hc12_cycles checks literal read addresses, widths, final registers and
+normal/chained cycle counts; the final nine-byte frame layout is unchanged.
 WAI also saves B:A with one word operand; the original two byte stores violate
 its NXP operand-width definition. Native mcu_wai tests independently check four
 word stores and one CCR byte, literal frame/order, idle and wake/RTI behavior;

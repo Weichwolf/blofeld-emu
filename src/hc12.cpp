@@ -204,6 +204,8 @@ public:
     const auto &decoded = translation();
     bus_.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
                         .length = static_cast<unsigned>(decoded.length)});
+    bus_.begin_execution({.address = static_cast<std::uint16_t>(address_.getOffset()),
+                          .length = static_cast<unsigned>(decoded.length)});
     operations_ = decoded.operations;
     next_ = address_ + decoded.length;
     memstate->setValue(&program_counter_, next_.getOffset());
@@ -225,16 +227,35 @@ public:
 protected:
   void fallthruOp() override { ++index_; }
 
+  void executeUnary() override {
+    const auto *input = currentOp->getInput(0);
+    const auto *output = currentOp->getOutput();
+    write_value(
+        output,
+        currentBehave->evaluateUnary(operand_size(output), operand_size(input), read_value(input)));
+  }
+
+  void executeBinary() override {
+    const auto *left = currentOp->getInput(0);
+    const auto *right = currentOp->getInput(1);
+    const auto *output = currentOp->getOutput();
+    const auto first = read_value(left);
+    const auto second = read_value(right);
+    write_value(
+        output,
+        currentBehave->evaluateBinary(operand_size(output), operand_size(left), first, second));
+  }
+
   void executeLoad() override {
     const auto access = memory_access(false);
-    memstate->setValue(currentOp->getOutput(), bus_.read_memory(access));
+    write_value(currentOp->getOutput(), bus_.read_memory(access));
   }
 
   void executeStore() override {
     const auto access = memory_access(true);
     bus_.write_memory({.address = access.address,
                        .size = access.size,
-                       .value = memstate->getValue(currentOp->getInput(2))});
+                       .value = read_value(currentOp->getInput(2))});
   }
 
   void executeCallother() override {
@@ -258,7 +279,7 @@ protected:
     }
     // CPU12 LDS loads its operand into SP. Ghidra represents that assignment
     // through an intrinsic so decompiler stack analysis can recognize it.
-    memstate->setValue(currentOp->getOutput(), memstate->getValue(currentOp->getInput(1)));
+    write_value(currentOp->getOutput(), read_value(currentOp->getInput(1)));
     fallthruOp();
   }
 
@@ -279,12 +300,37 @@ protected:
   }
 
 private:
+  [[nodiscard]] static ghidra::int4 operand_size(const ghidra::VarnodeData *node) {
+    if (node->size == 0 || node->size > sizeof(ghidra::uintb)) {
+      throw Fault("Unsupported HC12 p-code operand width");
+    }
+    return static_cast<ghidra::int4>(node->size);
+  }
+
+  [[nodiscard]] ghidra::uintb read_value(const ghidra::VarnodeData *node) const {
+    if (node->space != translator_.getDefaultCodeSpace()) { return memstate->getValue(node); }
+    if (node->offset > hc12::address_mask) { throw Fault("HC12 constant operand exceeds 16 bits"); }
+    return bus_.read_memory({.address = static_cast<std::uint16_t>(node->offset),
+                             .size = static_cast<unsigned>(node->size)});
+  }
+
+  void write_value(const ghidra::VarnodeData *node, const ghidra::uintb value) {
+    if (node->space != translator_.getDefaultCodeSpace()) {
+      memstate->setValue(node, value);
+      return;
+    }
+    if (node->offset > hc12::address_mask) { throw Fault("HC12 constant operand exceeds 16 bits"); }
+    bus_.write_memory({.address = static_cast<std::uint16_t>(node->offset),
+                       .size = static_cast<unsigned>(node->size),
+                       .value = value});
+  }
+
   [[nodiscard]] MemoryRead memory_access(const bool write) const {
     const auto *space = currentOp->getInput(0)->getSpaceFromConst();
     if (space != translator_.getDefaultCodeSpace() || space->getWordSize() != 1) {
       throw Fault("Unsupported HC12 load/store address space");
     }
-    const auto offset = memstate->getValue(currentOp->getInput(1));
+    const auto offset = read_value(currentOp->getInput(1));
     if (offset > hc12::address_mask) { throw Fault("HC12 operand address exceeds 16 bits"); }
     const auto size = write ? currentOp->getInput(2)->size : currentOp->getOutput()->size;
     return {.address = static_cast<std::uint16_t>(offset), .size = static_cast<unsigned>(size)};
@@ -422,9 +468,11 @@ void Hc12::reset() {
   CpuState initial;
   initial.sp = hc12::reset_sp;   // S12CPU15UG section 3.1.3, reset programming model.
   initial.ccr = hc12::reset_ccr; // S, X and I are set by CPU12 reset.
+  impl_->bus.begin_reset({.pc = 0, .ccr = initial.ccr});
   initial.pc = static_cast<std::uint16_t>(
       impl_->bus.read_memory({.address = hc12::reset_vector, .size = 2}));
   impl_->apply_state(initial);
+  impl_->bus.end_reset();
   impl_->checkpointable = true;
 }
 
@@ -526,6 +574,7 @@ std::optional<InterruptRequest> Hc12::pending_interrupt() const {
 
 void Hc12::enter_interrupt(const InterruptRequest request,
                            const std::optional<std::uint16_t> reuse_stack) {
+  impl_->bus.begin_interrupt(request, reuse_stack.has_value());
   auto next = state();
   const auto target =
       static_cast<std::uint16_t>(impl_->bus.read_memory({.address = request.vector, .size = 2}));

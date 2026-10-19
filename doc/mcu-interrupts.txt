@@ -1,8 +1,9 @@
 HC12 interrupt entry and MC9S12UF32 routing
 
 Scope
-Requests are selected at logical instruction boundaries. CPU and peripheral
-elapsed cycles are not yet scheduled; no claim about interrupt latency, pad
+Requests are selected at logical instruction boundaries. The optional reference
+cycle adapter clocks SCI/TIM under an explicit un-stretched memory contract
+(hc12-cycles.txt); the CLI and complete board remain unscheduled. No claim about full interrupt latency, pad
 synchronizer delay, complete firmware boot or physical Blofeld behavior follows.
 Run build/strict/blofeld-interrupt-test for independent synthetic CPU and ISR
 checks. Firmware program bytes are not embedded in those tests.
@@ -17,6 +18,9 @@ CPU behavior
   after restoration reuses that frame without rewriting memory. Entry events
   are reported separately from executed opcodes in CPU results and CLI traces.
   The byte CCR and word B:A/X/Y/PC transfers retain their logical operand widths.
+  Actual RTI reads are CCR, B:A, X, return PC, then Y; the build-local patch
+  corrects the previous Y-before-PC read order. Reference cycle tests check
+  native entry, normal return and reused-frame chaining independently.
 - A build-local SLEIGH patch fixes SWI's vector dereference/fetch order and
   inverted STOP-disable test. Disabled STOP is a two-byte NOP. Enabled STOP
   stacks context, then fails at unsupported clock suspension. WAI uses its saved

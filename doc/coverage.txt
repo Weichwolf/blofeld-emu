@@ -41,7 +41,10 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           CPU-owned native register descriptions
                                           avoid symbol searches while preserving
                                           live values and decoder-refresh lifetime.
-                                          Full ISA, cycle timing and hardware
+                                          Reference HCS12 operand-cycle scheduling,
+                                          IRQ/RTI and constant-address word widths
+                                          checked (hc12-cycles.txt). Full ISA,
+                                          qualified chip timing and hardware
                                           comparison pending.
                                           Independent reset/opcode reference:
                                           HCS12COREUG section 3.1 and Appendix A.
@@ -105,7 +108,12 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           DO/REP interaction checked
                                           (dsp-interrupts.txt). Other sources,
                                           stack extension and full latency pending.
-                                          Analog startup, scheduled CPU/bus clocks,
+                                          Conditional native CPU-cycle SCI/TIM
+                                          execution now includes live reception,
+                                          timer counts and IRQ/RTI, plus visible
+                                          rejection of the unqualified SCI flag
+                                          phase (hc12-cycles.txt).
+                                          Analog startup, whole-board CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
 USB device/transport              partial  PHY control and register/data-side enable.
                                           UEPCSELR/UUCFGR banks and ordered 16-bit
@@ -225,6 +233,12 @@ ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
+                                          Additional CPU-cycle adapter runs the
+                                          same original 90314-instruction MCU
+                                          bootloader with SCI/TIM clocks in
+                                          233749 un-stretched cycles, including
+                                          reset (hc12-cycles.txt). GPIO/PHY and
+                                          memory timing remain explicit contracts.
                                           Native DSP RESET preserves OMR/PLL while
                                           clearing SHI; hardware reset resamples
                                           PINIT and restores the RAM map.

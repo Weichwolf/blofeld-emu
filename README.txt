@@ -74,6 +74,8 @@ original XIRQ/helper requests, first-helper return/tail/main WAI and main-helper
 initialization up to its unqualified idle FSTAT write.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
+doc/hc12-cycles.txt covers the explicit un-stretched CPU cycle adapter, native
+SCI/TIM execution, IRQ/RTI and original MCU bootloader cycle checks.
 doc/midi-input.txt describes bounded byte-to-wire serialization, explicit SCI
 pad connection and partial-frame replay, including the original MCU receive path.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.
@@ -108,7 +110,7 @@ knowledge, program limits, native status/failure/readback and unchanged updater
 helper checks. doc/dsp-timers.txt includes explicit mode-six capture and native IRQ.
 doc/nand-persistence.txt describes private NAND images, durable write-ahead
 projections, fail-stop/reload and native original-helper process-death checks.
-Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
+CLI/whole-board CPU/peripheral scheduling and complete interrupt latency remain pending.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.
 The native HC12 description is patched and recompiled locally for independently

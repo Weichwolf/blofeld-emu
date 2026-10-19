@@ -90,7 +90,8 @@ void McuSci::require_transfer_known() const {
   // The guide specifies the RT8/9/10 stop decision but does not unambiguously
   // specify all data/flag transfer edges. Do not hide that unresolved interval.
   if (receiver_.stage == RxStage::stop && receiver_.sampled) {
-    throw Fault("Unverified SCI stop-to-data flag transfer phase");
+    throw Fault("Unverified SCI stop-to-data flag transfer phase at SCISR1 offset=" +
+                hex(hc12::sci_status1));
   }
 }
 

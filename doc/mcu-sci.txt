@@ -4,6 +4,8 @@ Scope
 This is a native NRZ transmitter/receiver driven by explicit bus-clock cycles and
 RX pad levels. It is not a host MIDI port, a complete board clock scheduler or a
 stock-hardware validation. The CLI does not yet advance peripheral clocks.
+The optional Hc12CycleBus adapter now clocks native SCI/TIM with executing CPU
+instructions under a declared un-stretched memory contract (hc12-cycles.txt).
 Run the synthetic checks with build/strict/blofeld-sci-test, or all strict gates
 with cmake --build build/strict --target quality.
 

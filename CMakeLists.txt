@@ -99,6 +99,9 @@ add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
 target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp src/mcu_machine.cpp)
+add_library(blofeld_hc12_cycles src/hc12_cycle_plan.cpp src/hc12_cycle_bus.cpp)
+target_include_directories(blofeld_hc12_cycles PUBLIC include)
+target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
 add_library(blofeld_midi_serial src/midi_serial.cpp)
 target_include_directories(blofeld_midi_serial PUBLIC include)
 target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
@@ -125,6 +128,20 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-hc12-cycle-test test/hc12_cycle_test.cpp)
+  target_link_libraries(blofeld-hc12-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME hc12_cycles COMMAND blofeld-hc12-cycle-test)
+  add_executable(blofeld-mcu-cycle-test test/mcu_cycle_test.cpp)
+  target_link_libraries(blofeld-mcu-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
+  add_test(NAME mcu_cycles COMMAND blofeld-mcu-cycle-test)
+  add_executable(blofeld-original-cycle-boot-test test/original_cycle_boot_test.cpp)
+  target_link_libraries(blofeld-original-cycle-boot-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
+  add_test(NAME original_cycle_boot COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-cycle-boot-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-cycle-boot.trace")
+  set_tests_properties(original_cycle_boot PROPERTIES SKIP_RETURN_CODE 77)
   find_program(BLOFELD_LLVM_NM NAMES llvm-nm-19 REQUIRED)
   find_program(BLOFELD_LLVM_READELF NAMES llvm-readelf-19 REQUIRED)
   add_test(NAME dependency_instrumentation COMMAND ${Python3_EXECUTABLE}
@@ -432,6 +449,9 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+    blofeld-hc12-cycle-test
+    blofeld-mcu-cycle-test
+    blofeld-original-cycle-boot-test
     blofeld-midi-serial-test blofeld-mcu-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
     blofeld-nand-image-test

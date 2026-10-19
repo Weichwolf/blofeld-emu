@@ -1,0 +1,75 @@
+HC12 reference bus-cycle execution
+
+Scope and contract
+Hc12CycleBus wraps the native CPU bus without replacing instruction semantics.
+It selects S12CPUV2 HCS12 cycle sequences and invokes a caller-supplied clock once
+per reference bus cycle. Data operands retain native addresses and widths, and
+commit after the corresponding clock callback. The caller must qualify the
+un-stretched internal-memory assumption and reject unsupported access timing.
+No wait-state, physical prefetch-address, measured board-frequency or analog
+pad-timing claim follows from this adapter. The default CLI remains untimed.
+
+The implemented families include common byte/word ALU/load/store modes, indexed
+and indirect operands, short branches, loop control, bit operations, stack/call/
+return, reset, WAI, IRQ and RTI. Unsupported encodings and native-length/operand
+disagreements fail with PC, CCR, operation/address and completed-cycle context.
+The clock callback and backing bus may already have advanced on failure;
+continuation requires a coordinated healthy CPU/bus/clock reconstruction.
+This is not a persistent or complete-board checkpoint implementation.
+
+P/O/f slots count documented un-stretched cycles without reconstructing the
+instruction queue's physical fetch addresses. q denotes the loop instruction's
+branch-dependent P/O slot; both alternatives take one cycle under this contract.
+Register micro-operation timing is not exposed to callbacks. Checkpoints remain
+restricted to completed native instructions; DMA/parallel RAM mutation and
+physical program-bus reconstruction are outside the supported contract.
+
+Evidence
+  cmake --build --preset strict --target blofeld-hc12-cycle-test blofeld-mcu-cycle-test blofeld-original-cycle-boot-test
+  ctest --test-dir build/strict -R '^(hc12_cycles|mcu_cycles|original_cycle_boot)$' --output-on-failure
+  cmake --build --preset strict --target quality
+
+Literal instruction vectors check operand-cycle boundaries and CPU state,
+five reset cycles, vector-first nine-cycle IRQ entry, eight-cycle RTI and
+eleven-cycle reused-frame RTI. Actual restore reads are CCR, B:A, X, PC, then Y.
+Both NXP manuals specify that order; the previous native description read Y
+before PC. The build-local exception patch corrects it without changing the
+final frame layout. S12CPUV2's glossary/section 7.5.5 and S12CPU15UG's RTI entry
+agree on eleven cycles; an inconsistent summary-table entry is not used.
+
+Constant-address p-code operands also retain their original byte/word width.
+They can appear directly in unary/binary operations instead of explicit LOAD/
+STORE operations. Routing them through the byte-backed MemoryBank had split
+direct word transfers into two bus calls. The CPU adapter now uses the same
+logical operand API for these accesses.
+
+A synthetic native CPU loop receives one serial byte while instructions run,
+advances the real timer, enables IRQ through its own CLI, acknowledges SCI in
+its real handler, stores the byte and returns through RTI: 12565 cycles including
+reset and explicit initial mark time. A second unmasked loop reaches the existing
+unqualified SCI stop-to-data flag phase and must fail, with execution context.
+No host receive flag, RAM result or CPU entry is injected during either run.
+
+The original 1.25 MCU bootloader runs through its application entry under the
+same explicit GPIO/PHY observations as original_boot. Native SCI and TIM clocks
+advance with CPU cycles; PS4 receives an explicit idle mark under the original
+bootloader's MODRR route. This is an observation fixture, not qualified physical
+MIDI wiring. Its 90314
+instructions occupy 233749 un-stretched reference cycles including reset. The
+independent total uses manual mnemonic/address-mode costs and branch outcomes
+from the existing private trace, not this timing decoder. RAM clear, checksum,
+final CPU state and unchanged MCU NVM/history are checked. The additional trace
+stays under build/; no manufacturer program bytes are published.
+
+Remaining requirements
+Oscillator/PLL clock-source transitions, whole-board CPU/DSP scheduling, memory
+wait states, remaining timed instructions, physical prefetches and complete
+interrupt/SCI timing remain open. Full Desktop/Keyboard boot, MIDI ports, voices,
+original audio and real-device comparisons are not established. No stock device
+is currently available (coverage.txt). These checks never run fuzz tests.
+
+References
+The pinned NXP bundle in hardware/sources.json contains S12CPUV2 sections 6.6,
+7.5/7.8 and its instruction glossary, and HCS12COREUG (S12CPU15UG V1.2), RTI
+page 289. Document-derived cycle and instruction facts do not qualify a Blofeld
+board profile without the remaining evidence.
