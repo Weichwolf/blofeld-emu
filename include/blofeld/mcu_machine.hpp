@@ -3,14 +3,26 @@
 
 #include "blofeld/flash_image.hpp"
 #include "blofeld/hc12.hpp"
+#include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_run_clock.hpp"
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace blofeld {
+
+enum class McuRunMemory : std::uint8_t { unqualified, unstretched_internal };
+
+struct McuRunContract {
+  McuRunClockInputs clock;
+  McuRunMemory memory_timing = McuRunMemory::unqualified;
+  bool operator==(const McuRunContract &) const = default;
+};
 
 // Immutable trusted in-process state. Not a file format or a whole-board snapshot.
 class McuCheckpoint {
@@ -33,6 +45,9 @@ private:
 class McuMachine {
 public:
   McuMachine(const McuFlashImage &image, const std::filesystem::path &specification);
+  McuMachine(const McuFlashImage &image,
+             const std::filesystem::path &specification,
+             std::optional<McuRunContract> run);
   ~McuMachine();
   McuMachine(const McuMachine &) = delete;
   McuMachine &operator=(const McuMachine &) = delete;
@@ -40,6 +55,13 @@ public:
   [[nodiscard]] Hc12 &cpu();
   [[nodiscard]] const McuBus &bus() const;
   [[nodiscard]] const Hc12 &cpu() const;
+  [[nodiscard]] bool clocked() const;
+  [[nodiscard]] const McuRunClock &run_clock() const;
+  [[nodiscard]] bool timing_faulted() const;
+  // Explicit pre-cycle pad observations; external callbacks are never checkpointed.
+  void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
+  // Prime selected timer inputs now, then sample them before each running cycle.
+  void set_timer_inputs(std::uint8_t mask);
   [[nodiscard]] McuCheckpoint checkpoint() const;
   // Strong exception guarantee; also permits recovery after a failed CPU step.
   void restore(const McuCheckpoint &checkpoint);

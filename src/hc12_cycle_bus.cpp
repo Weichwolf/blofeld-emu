@@ -29,6 +29,19 @@ Hc12CycleBus::Hc12CycleBus(Bus &bus, Clock clock) : bus_(bus), clock_(std::move(
   if (!clock_) { throw Fault("HC12 timed bus requires an explicit cycle clock/memory contract"); }
 }
 
+std::uint64_t Hc12CycleBus::checkpoint_cycles() const {
+  healthy();
+  if (active_) { throw Fault("HC12 cycle checkpoint requires a completed sequence"); }
+  return cycles_;
+}
+
+void Hc12CycleBus::restore_boundary(const std::uint64_t cycles, const ExecutionContext context) {
+  healthy();
+  if (active_ || cycles_ != 0) { throw Fault("HC12 cycle restore requires a fresh adapter"); }
+  cycles_ = cycles;
+  context_ = context;
+}
+
 void Hc12CycleBus::healthy() const {
   if (faulted_) {
     throw Fault("HC12 timed bus requires coordinated recovery after a failed cycle");

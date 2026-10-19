@@ -4,19 +4,43 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/flash_image.hpp"
 #include "blofeld/hc12.hpp"
+#include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_memory.hpp"
+#include "blofeld/mcu_run_clock.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <ios>
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace blofeld {
 namespace {
+struct RunState {
+  std::optional<McuRunContract> contract;
+  std::optional<McuRunClock> clock;
+  std::uint8_t timer_inputs = 0;
+};
+
+RunState initial_run(const std::optional<McuRunContract> contract) {
+  if (!contract) { return {}; }
+  if (contract->memory_timing != McuRunMemory::unstretched_internal) {
+    throw Fault("MCU run requires an explicit un-stretched internal-memory contract");
+  }
+  return {.contract = contract, .clock = McuRunClock(contract->clock)};
+}
+
+bool internal_ram(const McuSpace space) {
+  return space == McuSpace::smram || space == McuSpace::qram;
+}
+
 std::vector<std::uint8_t> read_specification(const std::filesystem::path &path) {
   constexpr std::uintmax_t maximum_size = 16777216;
   const auto size = std::filesystem::file_size(path);
@@ -34,19 +58,71 @@ std::vector<std::uint8_t> read_specification(const std::filesystem::path &path) 
 struct McuCheckpoint::Storage {
   Storage(std::unique_ptr<McuBus> bus_state,
           const Hc12Checkpoint &cpu_state,
-          const std::vector<std::uint8_t> &backend)
-      : bus(std::move(bus_state)), cpu(cpu_state), specification(backend) {}
+          const std::vector<std::uint8_t> &backend,
+          RunState run_state)
+      : bus(std::move(bus_state)), cpu(cpu_state), specification(backend), run(run_state) {}
 
   const std::unique_ptr<const McuBus> bus;
   const Hc12Checkpoint cpu;
   const std::vector<std::uint8_t> specification;
+  const RunState run;
 };
 
 struct McuMachine::State {
-  State(std::unique_ptr<McuBus> bus_state, const std::filesystem::path &specification)
-      : bus(std::move(bus_state)), cpu(*bus, specification) {}
+  State(std::unique_ptr<McuBus> bus_state,
+        const std::filesystem::path &specification,
+        RunState run_state)
+      : bus(std::move(bus_state)),
+        run(run_state),
+        timed(run.clock ? std::make_unique<Hc12CycleBus>(
+                              *bus, [this](const auto cycle) { advance(cycle); })
+                        : nullptr),
+        cpu(timed ? static_cast<Bus &>(*timed) : *bus, specification) {
+    if (const auto &clock = run.clock; timed && clock) {
+      timed->restore_boundary(clock->bus_cycles(), bus->context_);
+    }
+  }
+
+  void advance(const Hc12BusCycle cycle) {
+    if (cycle.address) {
+      const auto first = bus->memory_.locate(*cycle.address);
+      bool qualified = first.space != McuSpace::unmapped && first.space != McuSpace::reserved;
+      if (cycle.size == 2) {
+        const auto last = bus->memory_.locate(static_cast<std::uint16_t>(*cycle.address + 1U));
+        qualified = qualified && first.space == last.space && last.offset == first.offset + 1U &&
+                    ((*cycle.address & 1U) == 0 || internal_ram(first.space));
+      }
+      if (!qualified) {
+        throw Fault("Unqualified MCU reference " + std::string(1, cycle.kind) +
+                    " address=" + hex(*cycle.address) + " size=" + std::to_string(cycle.size));
+      }
+    }
+    if (observer) { observer(cycle); }
+    if (run.timer_inputs != 0) { bus->sample_timer_inputs(run.timer_inputs); }
+    auto &clock = run.clock;
+    if (!clock) { throw Fault("MCU reference cycle has no run clock"); }
+    clock->advance_run_cycle(*bus, cycle.context);
+  }
+
+  void check_inactive() const {
+    if (cpu.executing() || bus->notifying_) {
+      throw Fault("MCU run configuration requires an inactive CPU and bus observer");
+    }
+    if (!timed) { throw Fault("MCU machine has no reference run clock"); }
+  }
+
+  void check_clock_boundary() const {
+    const auto &clock = run.clock;
+    if (timed &&
+        (!clock || clock->faulted() || timed->checkpoint_cycles() != clock->bus_cycles())) {
+      throw Fault("MCU run checkpoint requires coordinated healthy cycle counters");
+    }
+  }
 
   std::unique_ptr<McuBus> bus;
+  RunState run;
+  std::unique_ptr<Hc12CycleBus> timed;
+  std::function<void(Hc12BusCycle)> observer;
   Hc12 cpu;
 };
 
@@ -56,9 +132,15 @@ McuCheckpoint::McuCheckpoint(std::shared_ptr<const Storage> storage)
 McuCheckpoint::~McuCheckpoint() = default;
 
 McuMachine::McuMachine(const McuFlashImage &image, const std::filesystem::path &specification)
+    : McuMachine(image, specification, std::nullopt) {}
+
+McuMachine::McuMachine(const McuFlashImage &image,
+                       const std::filesystem::path &specification,
+                       const std::optional<McuRunContract> run)
     : specification_(specification),
       specification_bytes_(read_specification(specification)),
-      state_(std::make_unique<State>(std::make_unique<McuBus>(image), specification)) {
+      state_(std::make_unique<State>(
+          std::make_unique<McuBus>(image), specification, initial_run(run))) {
   check_specification();
   state_->cpu.reset();
 }
@@ -81,6 +163,32 @@ const Hc12 &McuMachine::cpu() const {
   return state_->cpu;
 }
 
+bool McuMachine::clocked() const {
+  return state_->run.clock.has_value();
+}
+
+const McuRunClock &McuMachine::run_clock() const {
+  const auto &clock = state_->run.clock;
+  if (!clock) { throw Fault("MCU machine has no reference run clock"); }
+  return *clock;
+}
+
+bool McuMachine::timing_faulted() const {
+  const auto &clock = state_->run.clock;
+  return state_->timed && (!clock || state_->timed->faulted() || clock->faulted());
+}
+
+void McuMachine::set_cycle_observer(std::function<void(Hc12BusCycle)> observer) {
+  state_->check_inactive();
+  state_->observer = std::move(observer);
+}
+
+void McuMachine::set_timer_inputs(const std::uint8_t mask) {
+  state_->check_inactive();
+  state_->bus->sample_timer_inputs(mask);
+  state_->run.timer_inputs = mask;
+}
+
 void McuMachine::check_specification() const {
   if (read_specification(specification_) != specification_bytes_) {
     throw Fault("MCU checkpoint backend changed after machine construction");
@@ -89,9 +197,10 @@ void McuMachine::check_specification() const {
 
 McuCheckpoint McuMachine::checkpoint() const {
   const auto cpu_state = state_->cpu.checkpoint();
+  state_->check_clock_boundary();
   check_specification();
   return McuCheckpoint(std::make_shared<const McuCheckpoint::Storage>(
-      state_->bus->clone(), cpu_state, specification_bytes_));
+      state_->bus->clone(), cpu_state, specification_bytes_, state_->run));
 }
 
 void McuMachine::restore(const McuCheckpoint &checkpoint) {
@@ -102,8 +211,12 @@ void McuMachine::restore(const McuCheckpoint &checkpoint) {
   if (checkpoint.storage_->specification != specification_bytes_) {
     throw Fault("MCU checkpoint has an incompatible instruction backend");
   }
+  if (checkpoint.storage_->run.contract != state_->run.contract) {
+    throw Fault("MCU checkpoint has an incompatible reference run contract");
+  }
   check_specification();
-  auto replacement = std::make_unique<State>(checkpoint.storage_->bus->clone(), specification_);
+  auto replacement = std::make_unique<State>(
+      checkpoint.storage_->bus->clone(), specification_, checkpoint.storage_->run);
   replacement->cpu.restore_checkpoint(checkpoint.storage_->cpu);
   check_specification();
   state_.swap(replacement);

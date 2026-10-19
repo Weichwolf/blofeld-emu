@@ -58,6 +58,9 @@ public:
   [[nodiscard]] bool faulted() const { return faulted_; }
 
 private:
+  friend class McuMachine;
+  [[nodiscard]] std::uint64_t checkpoint_cycles() const;
+  void restore_boundary(std::uint64_t cycles, ExecutionContext context);
   void healthy() const;
   void start(std::string_view slots);
   void tick(Hc12BusCycle cycle);

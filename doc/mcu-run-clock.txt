@@ -45,6 +45,24 @@ wait states, asynchronous pad propagation, PHY acquisition or DSP scheduling.
 The default standalone CLI remains untimed. Dynamic-rate host MIDI and complete
 MCU/DSP board ownership still require integration.
 
+McuMachine now optionally owns the cycle adapter and run clock under an explicit
+McuRunContract. Its trusted checkpoint restores CPU, bus, run-clock phase/counters
+and timer observation mask together, and rejects failed/incomplete boundaries or
+incompatible contracts. External cycle/bus observers are excluded and must be
+reattached. Live mapped-memory guards qualify operands; no wait-state or physical
+prefetch model is added. See mcu-checkpoints.txt for the API and regressions.
+The default constructor and standalone CLI remain untimed; idle WAI time and
+whole-board/transport scheduling remain pending.
+
+Flash alignment limit
+The current un-stretched contract rejects odd-address Flash word operands.
+S12FTS32KV1 section 1.1 specifies two bus cycles for these reads, compared with
+one for a byte or aligned word. A source-fed original startup continuation reaches
+this boundary after coordinated recovery from its strict unknown-input failure.
+Supporting it requires the two data-byte phases and both elapsed bus cycles;
+accepting a single-cycle word or realigning original firmware data is incorrect.
+Full clocked cold-main WAI remains unverified.
+
 Evidence
   cmake --build --preset strict --target blofeld-mcu-run-clock-test blofeld-original-cycle-application-test blofeld-original-run-clock-test
   ctest --test-dir build/strict -R '^(mcu_run_clock|original_cycle_application|original_run_clock)$' --output-on-failure

@@ -37,14 +37,48 @@ serialization or version migration promise.
 
 Restore invalidates previous references to machine.bus() and machine.cpu().
 Observer callbacks are excluded: explicitly reattach an observer using the new
-bus. External peers, clocks, display objects and output recordings are owned by
-the caller and must be checkpointed/rebound separately. No callback runs as a
+bus. External peers, display objects and output recordings are owned by
+the caller and must be checkpointed/rebound separately. Untimed machines also
+leave external clocks caller-owned. No callback runs as a
 side effect of creating or restoring a checkpoint.
+
+Optional reference run clock
+The three-argument constructor accepts an explicit McuRunContract. It requires
+un-stretched internal memory and the oscillator/switch/phase contract described
+in mcu-run-clock.txt. The existing two-argument constructor remains untimed.
+The clocked owner executes all five reset cycles and owns the cycle adapter,
+SCI/TIM/OSC scheduling and fractional run-clock state. It does not advance time
+while native WAI is idle or implement WAI/STOP/BDM clock gates.
+
+A clocked checkpoint also retains the run contract, elapsed/cycle/OSC counters,
+fractional oscillator phase and timer observation mask. Only healthy completed
+sequences with matching adapter/run-clock cycle counters can be captured. Debug
+CPU register replacement cannot hide a failed timed sequence. Restore constructs
+a fresh adapter bound to the restored bus/clock; failed access/clock state is
+recovered only by replacing the coordinated state. Timed/untimed or differing
+run contracts reject before replacement. References to run_clock() also expire
+on restore. The handle is trusted in-process state, not a persistent clock format.
+
+set_cycle_observer supplies optional pre-cycle external observations. It is
+excluded from checkpoints, as is the ordinary bus observer, and must be explicitly
+reattached after restore. Neither callback can replace/capture its executing owner
+or replace itself. set_timer_inputs primes the chosen pad mask before capture is
+enabled and samples it before every subsequent running cycle. The mask and the
+bus's input history are restored together; missing/unknown observations still
+fail. Caller-owned peers and their own time/state remain outside this checkpoint.
+
+Operand timing is qualified against the live memory map, including relocated
+SMRAM/QRAM. Unaligned words require two contiguous bytes in the same internal RAM;
+odd flash/register words, physical region crossings and unmapped/reserved RAM
+reject with the cycle's operation/address/PC/CCR before the clock advances. This
+does not reconstruct program-prefetch addresses or qualify physical wait states.
 
 Regressions
   cmake --preset strict
   cmake --build --preset strict --target blofeld-mcu-checkpoint-test
   ctest --test-dir build/strict -R '^mcu_checkpoint$' --output-on-failure
+  cmake --build --preset strict --target blofeld-mcu-clock-checkpoint-test
+  ctest --test-dir build/strict -R '^mcu_clock_checkpoint$' --output-on-failure
 
 Controlled own instruction tests check literal native WAI frames, real IRQ/RTI
 replay, CLI/TAP deferral, unknown RAM, executable RAM mutation, deferred mapping,
@@ -55,6 +89,14 @@ IRQ edge history, GPIO unknown/floating pads, SCI half-frame
 receive/prepared transmit/clear history/staged baud writes, USB in-flight and
 lost-ACK ownership/PIDs/configuration staging, and staged/selected/launched/active/
 queued flash operations with independent expected data and erase history.
+
+mcu_clock_checkpoint checks literal reset/source-switch/phase/RTI/TIM counts,
+checkpoint lifetime, dropped callbacks, strict input-fault recovery, relocated
+word timing, active callback guards and incompatible run contracts. A native
+three-cycle branch loop receives the literal NRZ byte 55 through real SCI state;
+restoring mid-frame and reattaching the external observations preserves the
+actual receiver phase, data and acknowledgment. Timer edge capture replays at
+the independently expected count with the restored observation mask/history.
 
 The original_application regression additionally captures the native cold-main
 WAI reached under the explicit fixture in original-application.txt. It separately

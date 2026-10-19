@@ -14,6 +14,7 @@ struct McuRunClockInputs {
   std::uint32_t oscillator_hz = 0;
   std::uint64_t initial_oscillator_phase_ticks = 0;
   McuRunClockSwitch switch_timing = McuRunClockSwitch::unqualified;
+  bool operator==(const McuRunClockInputs &) const = default;
 };
 
 // Exact normal-run reference time. The oscillator rate and its initial phase

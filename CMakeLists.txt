@@ -122,7 +122,7 @@ if(BUILD_TESTING OR BLOFELD_FUZZING)
 endif()
 add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC include)
-target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh)
+target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh blofeld_hc12_cycles)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
 add_executable(blofeld-headless src/main.cpp)
@@ -144,6 +144,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-run-clock-test test/mcu_run_clock_test.cpp)
   target_link_libraries(blofeld-mcu-run-clock-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME mcu_run_clock COMMAND blofeld-mcu-run-clock-test)
+  add_executable(blofeld-mcu-clock-checkpoint-test test/mcu_clock_checkpoint_test.cpp)
+  target_link_libraries(blofeld-mcu-clock-checkpoint-test PRIVATE blofeld_core)
+  add_test(NAME mcu_clock_checkpoint COMMAND blofeld-mcu-clock-checkpoint-test)
   add_executable(blofeld-original-cycle-boot-test test/original_cycle_boot_test.cpp)
   target_link_libraries(blofeld-original-cycle-boot-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
   add_test(NAME original_cycle_boot COMMAND ${Python3_EXECUTABLE}
@@ -508,6 +511,7 @@ add_custom_target(quality
     blofeld-hc12-compare-stack-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
+    blofeld-mcu-clock-checkpoint-test
     blofeld-original-cycle-boot-test
     blofeld-original-cycle-application-test
     blofeld-original-run-clock-test

@@ -128,6 +128,13 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           actual CPU clocks without poll-slot
                                           period injection. Ideal switch/phase and
                                           explicit peripheral input contracts;
+                                          clocked MCU owner/checkpoints retain
+                                          CPU/bus/OSC phase and sampling history;
+                                          literal timer and native SCI half-frame
+                                          replay checked (mcu-checkpoints.txt).
+                                          Source-fed continuation after input-fault
+                                          restore reaches odd Flash word timing;
+                                          documented two-cycle reads still pending.
                                           calibrated whole-board clocks pending.
                                           Analog startup, whole-board CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
@@ -487,6 +494,11 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           checkpoints cover WAI/IRQ deferral,
                                           peripheral phases, active/queued flash,
                                           RAM/NVM knowledge and branch isolation.
+                                          Optional clocked owner also retains
+                                          reference cycles, fractional OSC phase
+                                          and the explicit timer sampling mask;
+                                          native SCI mid-frame and timed-fault
+                                          recovery checked (mcu-checkpoints.txt).
                                           Cold-main WAI replays the same 264 SCI
                                           bytes with matching original ISR and
                                           foreground traces under its controlled
