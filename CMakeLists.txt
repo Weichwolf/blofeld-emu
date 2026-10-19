@@ -434,6 +434,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-sci-test test/mcu_sci_test.cpp)
   target_link_libraries(blofeld-sci-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_sci COMMAND blofeld-sci-test)
+  add_executable(blofeld-sci-reference-test test/mcu_sci_reference_test.cpp
+    test/mcu_sci_reference_owner.cpp)
+  target_link_libraries(blofeld-sci-reference-test PRIVATE blofeld_core)
+  add_test(NAME mcu_sci_reference COMMAND blofeld-sci-reference-test)
   add_executable(blofeld-timer-test test/mcu_timer_test.cpp)
   target_link_libraries(blofeld-timer-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_timer COMMAND blofeld-timer-test)
@@ -553,7 +557,8 @@ add_custom_target(quality
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-vsl-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
-    blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
+    blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
+    blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-mcu-sender-test
     blofeld-flash-config-test blofeld-original-flash-config-test

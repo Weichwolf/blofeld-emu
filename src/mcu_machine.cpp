@@ -8,6 +8,7 @@
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_memory.hpp"
 #include "blofeld/mcu_run_clock.hpp"
+#include "blofeld/mcu_sci.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -227,6 +228,16 @@ void McuMachine::set_cycle_observer(std::function<void(Hc12BusCycle)> observer) 
 void McuMachine::set_wait_observer(std::function<void(McuWaitCycle)> observer) {
   state_->check_inactive();
   state_->wait_observer = std::move(observer);
+}
+
+void McuMachine::set_sci_receive_reference(const std::optional<SciReceiveReference> reference) {
+  state_->check_inactive();
+  state_->check_clock_boundary();
+  state_->bus->sci_.set_receive_reference(reference);
+}
+
+std::optional<SciReceiveReference> McuMachine::sci_receive_reference() const {
+  return state_->bus->sci_.receive_reference();
 }
 
 std::uint64_t McuMachine::idle_bus_cycles() const {

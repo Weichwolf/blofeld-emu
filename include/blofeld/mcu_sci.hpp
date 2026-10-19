@@ -14,6 +14,14 @@ struct SciClockSlice {
   std::optional<bool> receive_level = std::nullopt;
 };
 
+// Explicit experiment, not a qualified silicon timing model. Transfer occurs
+// this many IPBus periods after the RT10 stop majority, at the stated divisor.
+struct SciReceiveReference {
+  unsigned baud_divisor = 0;
+  unsigned transfer_delay_bus_cycles = 0;
+  bool operator==(const SciReceiveReference &) const = default;
+};
+
 // MC9S12UF32 SCI in normal NRZ mode. Clock slices have a constant RX pad level;
 // the board scheduler must split a slice at every external signal transition.
 class McuSci {
@@ -23,6 +31,8 @@ public:
   [[nodiscard]] std::uint8_t read(std::uint16_t offset);
   void write(ByteWrite write);
   void advance(SciClockSlice slice);
+  void set_receive_reference(std::optional<SciReceiveReference> reference);
+  [[nodiscard]] std::optional<SciReceiveReference> receive_reference() const;
   [[nodiscard]] bool receiver_enabled() const;
   [[nodiscard]] bool runs_in_wait() const;
   [[nodiscard]] bool interrupt_pending() const;
@@ -56,6 +66,12 @@ private:
     bool idle_armed = true;
   };
 
+  struct ReceiveTransfer {
+    unsigned word = 0;
+    unsigned errors = 0;
+    unsigned remaining_bus_cycles = 0;
+  };
+
   [[nodiscard]] unsigned character_bits() const;
   [[nodiscard]] bool busy() const;
   [[nodiscard]] TxFrame data_frame() const;
@@ -66,6 +82,10 @@ private:
   void receive_start(bool level);
   void receive_data(bool level);
   void receive_complete();
+  [[nodiscard]] ReceiveTransfer receive_frame() const;
+  void transfer_receive(ReceiveTransfer frame);
+  void schedule_receive_transfer();
+  void advance_reference(SciClockSlice slice);
   void track_idle(bool level);
   void write_control2(std::uint8_t value);
   void write_data(std::uint8_t value);
@@ -88,6 +108,8 @@ private:
   std::optional<TxFrame> transmitting_;
   std::optional<TxFrame> prepared_;
   Receiver receiver_;
+  std::optional<SciReceiveReference> receive_reference_;
+  std::optional<ReceiveTransfer> receive_transfer_;
 };
 
 }

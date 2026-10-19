@@ -45,6 +45,32 @@ Transmit and receive
   end of the bit fail explicitly. After that interval the received frame is
   available. Resolving this interval is required for a complete timing model.
 
+Explicit receive-timing experiments
+- The unqualified default above is unchanged. SciReceiveReference is an opt-in
+  test-scenario hypothesis, not a silicon constraint or physical-board profile.
+  It declares a baud divisor and an integer IPBus delay after the RT10 stop
+  majority, from zero through six sample periods. This chosen exploration
+  interval does not prove that silicon transfers within these bounds.
+- McuMachine::set_sci_receive_reference selects the hypothesis only at a healthy,
+  inactive owned-clock boundary with an idle receiver. Native registers cannot
+  select it. Each enabled receive advance must match the declared divisor.
+  The scenario is queryable and retained in trusted MCU checkpoints and reset;
+  reset aborts the native receive and pending deadline. Restoring an unqualified
+  checkpoint restores the strict model. Host observers remain external peers.
+- The chosen edge transfers the wire word and RDRF/NF/FE/PF together. Overrun
+  checks the live unread flag at that edge and preserves the older word/errors.
+  Status/data acknowledgements do not clear newly unobserved flags. RE disable
+  cancels a pending transfer; SCISWAI pauses its enabled-IPBus deadline. Clearing
+  FE during the residual stop bit does not re-transfer the word at bit end.
+- mcu_sci_reference checks all 361 declared delays for SBR=60 with independent
+  eight/nine-bit, parity, noise and framing vectors, plus acknowledgement races,
+  back-to-back frames, slice boundaries, reset and copied pending state. A native
+  own-program WAI/SCI/ISR/RTI test covers sub-sample delays, SCISWAI, coordinated
+  restore, literal stack bytes, register restoration and manual instruction costs.
+  These are deterministic offline tests; no fuzz campaign or device is used.
+  Original continuously clocked MIDI execution and hardware edge qualification
+  remain outstanding (public issue #4).
+
 Board integration
 - Explicit bus-clock slices enter through McuBus::advance_sci. The caller must
   split slices at external RX transitions. The bus processes each SCI sample,

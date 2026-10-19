@@ -6,6 +6,7 @@
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_run_clock.hpp"
+#include "blofeld/mcu_sci.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -66,6 +67,9 @@ public:
   // Explicit pre-cycle pad observations; external callbacks are never checkpointed.
   void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
   void set_wait_observer(std::function<void(McuWaitCycle)> observer);
+  // Explicit test-scenario hypothesis; never selected by native registers.
+  void set_sci_receive_reference(std::optional<SciReceiveReference> reference);
+  [[nodiscard]] std::optional<SciReceiveReference> sci_receive_reference() const;
   // Stop before executing the first pending interrupt. Returns elapsed idle
   // IPBus periods; native cpu().step() performs wake/frame reuse separately.
   unsigned advance_wait(unsigned maximum_bus_cycles);

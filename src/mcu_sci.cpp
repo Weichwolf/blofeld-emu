@@ -52,7 +52,28 @@ bool McuSci::runs_in_wait() const {
 }
 
 void McuSci::reset() {
+  const auto reference = receive_reference_;
   *this = McuSci{};
+  receive_reference_ = reference;
+}
+
+void McuSci::set_receive_reference(const std::optional<SciReceiveReference> reference) {
+  constexpr unsigned maximum_baud_divisor = 8191;
+  constexpr unsigned unresolved_sample_periods = oversampling - sample_last;
+  if (reference &&
+      (reference->baud_divisor == 0 || reference->baud_divisor > maximum_baud_divisor ||
+       reference->transfer_delay_bus_cycles >
+           unresolved_sample_periods * reference->baud_divisor)) {
+    throw Fault("Invalid SCI receive timing reference");
+  }
+  if (receiver_.stage != RxStage::idle || receive_transfer_) {
+    throw Fault("SCI receive timing reference requires an idle receiver");
+  }
+  receive_reference_ = reference;
+}
+
+std::optional<SciReceiveReference> McuSci::receive_reference() const {
+  return receive_reference_;
 }
 
 std::string_view McuSci::register_name(const std::uint16_t offset) {
@@ -94,7 +115,7 @@ bool McuSci::busy() const {
 void McuSci::require_transfer_known() const {
   // The guide specifies the RT8/9/10 stop decision but does not unambiguously
   // specify all data/flag transfer edges. Do not hide that unresolved interval.
-  if (receiver_.stage == RxStage::stop && receiver_.sampled) {
+  if (!receive_reference_ && receiver_.stage == RxStage::stop && receiver_.sampled) {
     throw Fault("Unverified SCI stop-to-data flag transfer phase at SCISR1 offset=" +
                 hex(hc12::sci_status1));
   }
@@ -148,7 +169,10 @@ void McuSci::write_control2(const std::uint8_t value) {
       transmitter_phase_ = 0;
     }
   }
-  if (!receiver_enabled()) { receiver_ = Receiver{}; }
+  if (!receiver_enabled()) {
+    receiver_ = Receiver{};
+    receive_transfer_.reset();
+  }
 }
 
 void McuSci::write_data(const std::uint8_t value) {
@@ -299,6 +323,7 @@ void McuSci::receive_data(const bool level) {
   if (receiver.samples != 0 && receiver.samples != 3) { receiver.errors |= noise; }
   if (receiver.stage == RxStage::stop) {
     if (!bit) { receiver.errors |= framing_error; }
+    if (receive_reference_) { schedule_receive_transfer(); }
     return;
   }
   if (bit) { receiver.word |= 1U << receiver.bit; }
@@ -309,23 +334,43 @@ void McuSci::receive_data(const bool level) {
   receiver.previous_bit = bit;
 }
 
-void McuSci::receive_complete() {
-  auto &receiver = receiver_;
+McuSci::ReceiveTransfer McuSci::receive_frame() const {
+  ReceiveTransfer frame{.word = receiver_.word, .errors = receiver_.errors};
+  if ((control1_ & parity_enable) != 0) {
+    const auto parity = (static_cast<unsigned>(std::popcount(frame.word)) & 1U);
+    const auto expected = (control1_ & odd_parity) != 0 ? 1U : 0U;
+    if (parity != expected) { frame.errors |= parity_error; }
+  }
+  return frame;
+}
+
+void McuSci::transfer_receive(const ReceiveTransfer frame) {
   if ((status_ & receive_full) != 0) {
     status_ = static_cast<std::uint8_t>(status_ | overrun);
     return;
   }
-  const unsigned data = receiver.word;
-  if ((control1_ & parity_enable) != 0) {
-    const auto parity = (static_cast<unsigned>(std::popcount(data)) & 1U);
-    const auto expected = (control1_ & odd_parity) != 0 ? 1U : 0U;
-    if (parity != expected) { receiver.errors |= parity_error; }
-  }
   // The shift-register bits feed SCIDR and the parity checker in parallel.
   // In nine-bit format R8 remains the received ninth bit, including parity.
-  received_ = static_cast<std::uint16_t>(data);
-  status_ = static_cast<std::uint8_t>(status_ | receive_full | receiver.errors);
-  receiver.idle_armed = true;
+  received_ = static_cast<std::uint16_t>(frame.word);
+  status_ = static_cast<std::uint8_t>(status_ | receive_full | frame.errors);
+  receiver_.idle_armed = true;
+}
+
+void McuSci::receive_complete() {
+  transfer_receive(receive_frame());
+}
+
+void McuSci::schedule_receive_transfer() {
+  if (!receive_reference_ || receive_transfer_) {
+    throw Fault("Invalid SCI reference receive transfer state");
+  }
+  auto frame = receive_frame();
+  frame.remaining_bus_cycles = receive_reference_->transfer_delay_bus_cycles;
+  if (frame.remaining_bus_cycles == 0) {
+    transfer_receive(frame);
+  } else {
+    receive_transfer_ = frame;
+  }
 }
 
 void McuSci::receive_tick(const bool level) {
@@ -339,7 +384,7 @@ void McuSci::receive_tick(const bool level) {
   }
   receiver.previous_level = level;
   track_idle(level);
-  if ((status_ & framing_error) != 0) { return; }
+  if ((status_ & framing_error) != 0 && receiver.stage != RxStage::stop) { return; }
   if (receiver.stage == RxStage::idle) {
     if (!level && preceding >= 3) {
       receiver.stage = RxStage::start;
@@ -372,7 +417,7 @@ void McuSci::receive_tick(const bool level) {
       if (receiver.bit == character_bits()) { receiver.stage = RxStage::stop; }
       break;
     case RxStage::stop:
-      receive_complete();
+      if (!receive_reference_) { receive_complete(); }
       receiver.stage = RxStage::idle;
       break;
     case RxStage::idle: break;
@@ -385,15 +430,46 @@ void McuSci::advance(const SciClockSlice slice) {
     throw Fault("SCI clock slice exceeds cycle limit");
   }
   if (slice.bus_cycles == 0 || !generator_started_ || baud_ == 0) { return; }
+  if (receive_reference_ && receiver_enabled() && receive_reference_->baud_divisor != baud_) {
+    throw Fault("SCI receive timing reference does not match the native baud divisor");
+  }
   const auto ticks = (divider_phase_ + slice.bus_cycles) / baud_;
   if (ticks != 0 && receiver_enabled() && !slice.receive_level) {
     throw Fault("Unknown SCI RX pad level");
+  }
+  if (receive_reference_) {
+    advance_reference(slice);
+    return;
   }
   const bool receive_level = slice.receive_level.value_or(false); // Unused without an RX sample.
   divider_phase_ = (divider_phase_ + slice.bus_cycles) % baud_;
   for (unsigned index = 0; index < ticks; ++index) {
     transmit_tick();
     if (receiver_enabled()) { receive_tick(receive_level); }
+  }
+}
+
+void McuSci::advance_reference(const SciClockSlice slice) {
+  // advance() rejects an unknown pad before any enabled RX sample.
+  const bool receive_level = slice.receive_level.value_or(false);
+  unsigned remaining = slice.bus_cycles;
+  while (remaining != 0) {
+    auto count = std::min(remaining, baud_ - divider_phase_);
+    if (receive_transfer_) { count = std::min(count, receive_transfer_->remaining_bus_cycles); }
+    divider_phase_ += count;
+    remaining -= count;
+    if (receive_transfer_) {
+      receive_transfer_->remaining_bus_cycles -= count;
+      if (receive_transfer_->remaining_bus_cycles == 0) {
+        transfer_receive(*receive_transfer_);
+        receive_transfer_.reset();
+      }
+    }
+    if (divider_phase_ == baud_) {
+      divider_phase_ = 0;
+      transmit_tick();
+      if (receiver_enabled()) { receive_tick(receive_level); }
+    }
   }
 }
 
