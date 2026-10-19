@@ -25,7 +25,8 @@ unsigned width(const char kind) {
 }
 }
 
-Hc12CycleBus::Hc12CycleBus(Bus &bus, Clock clock) : bus_(bus), clock_(std::move(clock)) {
+Hc12CycleBus::Hc12CycleBus(Bus &bus, Clock clock, ReadTiming read_timing)
+    : bus_(bus), clock_(std::move(clock)), read_timing_(std::move(read_timing)) {
   if (!clock_) { throw Fault("HC12 timed bus requires an explicit cycle clock/memory contract"); }
 }
 
@@ -76,7 +77,7 @@ void Hc12CycleBus::start(const std::string_view slots) {
   active_ = true;
 }
 
-void Hc12CycleBus::access(const MemoryRead transfer, const bool write) {
+char Hc12CycleBus::access(const MemoryRead transfer, const bool write) {
   healthy();
   if (!active_) { fail("Operand access outside a timed instruction/reset/interrupt"); }
   while (next_ < slots_.size() && !operand(slots_[next_])) { tick({.kind = slots_[next_++]}); }
@@ -85,18 +86,63 @@ void Hc12CycleBus::access(const MemoryRead transfer, const bool write) {
     fail(std::string(write ? "Write" : "Read") + " address=" + hex(transfer.address) +
          " size=" + std::to_string(transfer.size) + " disagrees with native bus-cycle sequence");
   }
-  tick({.kind = slots_[next_++], .address = transfer.address, .size = transfer.size});
+  return slots_[next_++];
+}
+
+std::uint64_t Hc12CycleBus::read_byte(const Hc12BusCycle cycle) {
+  if (!cycle.address) { fail("Expanded byte read requires an address"); }
+  tick(cycle);
+  try {
+    const auto value = bus_.read_memory({.address = *cycle.address});
+    constexpr unsigned byte_mask = 0xff;
+    if (value > byte_mask) {
+      throw Fault("Expanded byte read at " + hex(*cycle.address) +
+                  " returned more than eight bits");
+    }
+    return value;
+  } catch (const std::exception &error) { fail(error.what()); }
+}
+
+std::uint64_t Hc12CycleBus::read_word_bytes(const MemoryRead transfer, const char kind) {
+  constexpr unsigned last_address = 0xffff;
+  if (transfer.size != 2 || transfer.address == last_address) {
+    fail("Expanded word read at " + hex(transfer.address) +
+         " requires two bytes within the address space");
+  }
+  const auto high = read_byte(
+      {.kind = kind, .address = transfer.address, .size = 1, .word_part = Hc12WordPart::high});
+  const auto low = read_byte({.kind = kind,
+                              .address = static_cast<std::uint16_t>(transfer.address + 1U),
+                              .size = 1,
+                              .word_part = Hc12WordPart::low});
+  return (high << 8U) | low;
 }
 
 std::uint64_t Hc12CycleBus::read_memory(const MemoryRead transfer) {
-  access(transfer, false);
+  const auto kind = access(transfer, false);
+  auto timing = Hc12ReadTiming::single_cycle;
+  if (read_timing_) {
+    try {
+      timing = read_timing_(transfer);
+    } catch (const std::exception &error) {
+      fail("Read timing at " + hex(transfer.address) + ": " + error.what());
+    }
+  }
+  switch (timing) {
+    case Hc12ReadTiming::byte_cycles: return read_word_bytes(transfer, kind);
+    case Hc12ReadTiming::single_cycle: break;
+    case Hc12ReadTiming::unqualified:
+    default: fail("Unqualified operand read timing at " + hex(transfer.address));
+  }
+  tick({.kind = kind, .address = transfer.address, .size = transfer.size});
   try {
     return bus_.read_memory(transfer);
   } catch (const std::exception &error) { fail(error.what()); }
 }
 
 void Hc12CycleBus::write_memory(const MemoryWrite transfer) {
-  access({.address = transfer.address, .size = transfer.size}, true);
+  const auto kind = access({.address = transfer.address, .size = transfer.size}, true);
+  tick({.kind = kind, .address = transfer.address, .size = transfer.size});
   try {
     bus_.write_memory(transfer);
   } catch (const std::exception &error) { fail(error.what()); }

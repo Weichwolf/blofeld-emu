@@ -3,10 +3,11 @@ HC12 reference bus-cycle execution
 Scope and contract
 Hc12CycleBus wraps the native CPU bus without replacing instruction semantics.
 It selects S12CPUV2 HCS12 cycle sequences and invokes a caller-supplied clock once
-per reference bus cycle. Data operands retain native addresses and widths, and
-commit after the corresponding clock callback. The caller must qualify the
-un-stretched internal-memory assumption and reject unsupported access timing.
-No wait-state, physical prefetch-address, measured board-frequency or analog
+per bus cycle. Logical operands retain native addresses and widths. Optional
+read geometry expands a word into two separately clocked/latched bytes; normal
+accesses commit after their corresponding clock callback. The caller must qualify
+the memory timing contract and reject unsupported accesses.
+No general external wait-state, physical prefetch-address, measured board-frequency or analog
 pad-timing claim follows from this adapter. The default CLI remains untimed.
 
 The implemented families include common byte/word ALU/load/store modes, indexed
@@ -62,6 +63,11 @@ valid-input table; Carry uses the original accumulator. All 20000 valid BCD
 ADCA/DAA additions match independent integer decimal sums, defined flags and
 literal timing. Undefined DAA input combinations reject with PC and operands.
 These are deterministic instruction regressions, not fuzz tests.
+
+The optional mapped Flash read contract adds the documented second bus cycle
+for an odd FTS32K word. Independent literal values, flags, pointer/data phases,
+between-phase latching, strict failures and owner recovery are described in
+mcu-flash-read-timing.txt. The original un-stretched contract is unchanged.
 
 CPS immediate and extended forms decode three instruction bytes, not a one-byte
 skip followed by a program-memory data read. The build-local arithmetic patch

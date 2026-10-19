@@ -16,7 +16,7 @@
 
 namespace blofeld {
 
-enum class McuRunMemory : std::uint8_t { unqualified, unstretched_internal };
+enum class McuRunMemory : std::uint8_t { unqualified, unstretched_internal, internal_flash_reads };
 
 struct McuRunContract {
   McuRunClockInputs clock;

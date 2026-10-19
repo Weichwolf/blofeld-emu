@@ -44,7 +44,7 @@ side effect of creating or restoring a checkpoint.
 
 Optional reference run clock
 The three-argument constructor accepts an explicit McuRunContract. It requires
-un-stretched internal memory and the oscillator/switch/phase contract described
+explicit internal-memory timing and the oscillator/switch/phase contract described
 in mcu-run-clock.txt. The existing two-argument constructor remains untimed.
 The clocked owner executes all five reset cycles and owns the cycle adapter,
 SCI/TIM/OSC scheduling and fractional run-clock state. It does not advance time
@@ -69,8 +69,11 @@ fail. Caller-owned peers and their own time/state remain outside this checkpoint
 
 Operand timing is qualified against the live memory map, including relocated
 SMRAM/QRAM. Unaligned words require two contiguous bytes in the same internal RAM;
-odd flash/register words, physical region crossings and unmapped/reserved RAM
-reject with the cycle's operation/address/PC/CCR before the clock advances. This
+odd register words, physical region crossings and unmapped/reserved RAM
+reject with the cycle's operation/address/PC/CCR before the data clock advances.
+unstretched_internal also rejects odd Flash words; internal_flash_reads qualifies
+the documented two-cycle reads (mcu-flash-read-timing.txt). Both elapsed cycles
+belong to the same adapter/run clock and trusted checkpoint. This
 does not reconstruct program-prefetch addresses or qualify physical wait states.
 
 Regressions

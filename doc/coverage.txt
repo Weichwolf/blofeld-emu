@@ -134,7 +134,9 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           replay checked (mcu-checkpoints.txt).
                                           Source-fed continuation after input-fault
                                           restore reaches odd Flash word timing;
-                                          documented two-cycle reads still pending.
+                                          explicit two-cycle Flash read contract
+                                          checks byte phases, flags, latching and
+                                          recovery (mcu-flash-read-timing.txt).
                                           calibrated whole-board clocks pending.
                                           Analog startup, whole-board CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
@@ -273,7 +275,17 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           controlled inputs reach first original
                                           RTI return after 1944294 instructions/
                                           5618487 cycles (mcu-run-clock.txt).
-                                          This is not complete application boot.
+                                          Source-fed clocked owner now reaches
+                                          original main WAI with controlled PM3
+                                          low/high: 54952332 retired instructions,
+                                          6651 IRQ entries, 141809799 bus cycles
+                                          including 70 extra Flash read cycles.
+                                          Independent manual costs/phase census,
+                                          native WAI frame and unchanged NVM
+                                          checked (mcu-run-clock.txt). Local
+                                          integration; dedicated cold-main CTest,
+                                          idle WAI time and full DSP peer pending.
+                                          These are controlled MCU fixtures.
                                           Native DSP RESET preserves OMR/PLL while
                                           clearing SHI; hardware reset resamples
                                           PINIT and restores the RAM map.

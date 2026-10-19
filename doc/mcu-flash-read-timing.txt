@@ -1,0 +1,64 @@
+MC9S12UF32 Flash word read timing
+
+Contract
+McuRunMemory::internal_flash_reads adds the S12FTS32KV1 section 1.1 read timing
+to the normal-run owner: one bus cycle for a byte/aligned word, two for an odd
+word. Both bytes must map to consecutive offsets of the same modeled Flash
+array. Flash aliases use their logical addresses and actual physical offsets.
+The existing unstretched_internal contract retains its rejection of odd Flash
+word timing. Neither contract qualifies odd register words, array discontinuities,
+address-space wrapping, external wait states or odd Flash write timing.
+
+Hc12CycleBus retains one native logical 16-bit operand slot. The optional read
+geometry expands that slot into a high-byte phase at the operand address and a
+low-byte phase at the next address. Each phase clocks the owner once, then reads
+and latches only its byte. The native word result becomes available after both.
+An intervening value change cannot replace the already latched first byte.
+
+Callbacks retain the native slot kind (R, I, U or V) and instruction context.
+Each expanded callback has size=1 and Hc12WordPart::high/low. Ordinary accesses
+retain whole and their original widths. Both the cycle adapter and run clock
+count each expanded cycle, preserving the completed-boundary checkpoint invariant.
+Logical byte addresses/order are the explicit reference contract; this does not
+reconstruct physical Flash array strobes, sense timing or program prefetches.
+
+Failure and state
+The backing Flash controller checks array availability/knowledge at each read.
+Unknown bytes and callback failures stop at their own phase; a failed first phase
+cannot execute the second. Completed clocks remain visible, CPU execution and
+the timed adapter reject retry, and partial execution cannot be checkpointed.
+Recovery replaces the coordinated CPU/bus/clock state from an earlier valid
+checkpoint. Restoring an unknown-byte checkpoint preserves that unknownness.
+External observers must be reattached, as described in mcu-checkpoints.txt.
+
+The read classifier can explicitly reject unqualified geometry. Byte operands
+cannot request a two-byte expansion. Native word writes retain their previous
+schedule and strict mapping guards. Flash command buffers, erase/program timing,
+busy-array policy and interrupted NVM semantics are not changed by read timing.
+
+Independent checks
+  cmake --build --preset strict --target blofeld-hc12-flash-cycles-test
+  ctest --test-dir build/strict -R '^hc12_flash_cycles$' --output-on-failure
+
+Literal LDD values/flags check aligned Flash, odd Flash and odd RAM; RPO is three
+base cycles with one extra for an expanded Flash word. An indirect fIPRPf case
+expands both pointer and operand and checks all four byte addresses/clock slots.
+The five reset cycles remain independent. A controlled between-phase mutation
+checks latching. Unknown first/second bytes, first/second clock failures, retry
+exclusion, active checkpoint guards and coordinated owner recovery are checked.
+Flash aliases, unsupported array boundaries, wrapping, odd registers/writes and
+incompatible read contracts retain explicit expectations. STD EXT's PWO sequence
+completes its leading P before rejecting an unqualified W; no write reaches NVM.
+
+
+Local original-startup integration now reaches main WAI for both controlled PM3
+levels using the complete source-built MID, without realigning its code/data.
+Each recovered continuation executes 70 expanded Flash words; a separate native
+instruction/IRQ census and manual costs account for all 141809799 elapsed bus
+cycles. WAI frame, raw input and NVM/history checks agree. See mcu-run-clock.txt
+for the input contract, totals and the current local-only regression limitation.
+
+The pinned S12FTS32KV1 section 1.1 and S12CPUV2 section 6.6 in the NXP bundle
+listed by hardware/sources.json provide the timing references. These checks do
+not establish measured board timing, complete MCU/DSP boot, host MIDI/audio or
+Desktop/Keyboard equivalence. No physical device or fuzz campaign is involved.

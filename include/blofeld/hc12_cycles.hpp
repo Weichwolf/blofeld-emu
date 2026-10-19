@@ -20,19 +20,25 @@ struct Hc12CyclePlan {
 // Unsupported instructions reject; this is not a complete prefetch/bus model.
 [[nodiscard]] Hc12CyclePlan hc12_cycle_plan(const Bus &bus, ExecutionContext context);
 
+enum class Hc12WordPart : std::uint8_t { whole, high, low };
+enum class Hc12ReadTiming : std::uint8_t { unqualified, single_cycle, byte_cycles };
+
 struct Hc12BusCycle {
   char kind = 'f'; // S12CPUV2 section 6.6 cycle code.
   std::optional<std::uint16_t> address = std::nullopt;
   unsigned size = 0;
+  // Expanded reads retain the native slot kind and expose each physical byte.
+  Hc12WordPart word_part = Hc12WordPart::whole;
   ExecutionContext context{};
 };
 
-// The caller must explicitly qualify un-stretched memory and advance one
-// reference bus cycle in its callback. Operands commit after that callback.
+// The caller qualifies memory and advances one bus cycle per callback. Optional
+// read geometry expands a native word into two separately clocked/latched bytes.
 class Hc12CycleBus final : public Bus {
 public:
   using Clock = std::function<void(Hc12BusCycle)>;
-  Hc12CycleBus(Bus &bus, Clock clock);
+  using ReadTiming = std::function<Hc12ReadTiming(MemoryRead)>;
+  Hc12CycleBus(Bus &bus, Clock clock, ReadTiming read_timing = {});
   std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
   [[nodiscard]] std::uint64_t read_memory(MemoryRead transfer) override;
@@ -64,11 +70,14 @@ private:
   void healthy() const;
   void start(std::string_view slots);
   void tick(Hc12BusCycle cycle);
-  void access(MemoryRead transfer, bool write);
+  [[nodiscard]] char access(MemoryRead transfer, bool write);
+  [[nodiscard]] std::uint64_t read_byte(Hc12BusCycle cycle);
+  [[nodiscard]] std::uint64_t read_word_bytes(MemoryRead transfer, char kind);
   void finish();
   [[noreturn]] void fail(std::string_view reason) const;
   Bus &bus_;
   Clock clock_;
+  ReadTiming read_timing_;
   ExecutionContext context_{};
   std::string_view slots_;
   std::size_t next_ = 0;

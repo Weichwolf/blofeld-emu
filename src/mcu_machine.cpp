@@ -31,8 +31,9 @@ struct RunState {
 
 RunState initial_run(const std::optional<McuRunContract> contract) {
   if (!contract) { return {}; }
-  if (contract->memory_timing != McuRunMemory::unstretched_internal) {
-    throw Fault("MCU run requires an explicit un-stretched internal-memory contract");
+  if (contract->memory_timing != McuRunMemory::unstretched_internal &&
+      contract->memory_timing != McuRunMemory::internal_flash_reads) {
+    throw Fault("MCU run requires an explicit internal-memory timing contract");
   }
   return {.contract = contract, .clock = McuRunClock(contract->clock)};
 }
@@ -75,12 +76,30 @@ struct McuMachine::State {
       : bus(std::move(bus_state)),
         run(run_state),
         timed(run.clock ? std::make_unique<Hc12CycleBus>(
-                              *bus, [this](const auto cycle) { advance(cycle); })
+                              *bus,
+                              [this](const auto cycle) { advance(cycle); },
+                              [this](const auto transfer) { return read_timing(transfer); })
                         : nullptr),
         cpu(timed ? static_cast<Bus &>(*timed) : *bus, specification) {
     if (const auto &clock = run.clock; timed && clock) {
       timed->restore_boundary(clock->bus_cycles(), bus->context_);
     }
+  }
+
+  [[nodiscard]] Hc12ReadTiming read_timing(const MemoryRead transfer) const {
+    const auto &contract = run.contract;
+    constexpr unsigned last_address = 0xffff;
+    if (!contract || contract->memory_timing != McuRunMemory::internal_flash_reads ||
+        transfer.size != 2 || (transfer.address & 1U) == 0 || transfer.address == last_address) {
+      return Hc12ReadTiming::single_cycle;
+    }
+    const auto first = bus->memory_.locate(transfer.address);
+    const auto last = bus->memory_.locate(static_cast<std::uint16_t>(transfer.address + 1U));
+    if (first.space == McuSpace::flash && last.space == McuSpace::flash &&
+        last.offset == first.offset + 1U) {
+      return Hc12ReadTiming::byte_cycles;
+    }
+    return Hc12ReadTiming::single_cycle;
   }
 
   void advance(const Hc12BusCycle cycle) {

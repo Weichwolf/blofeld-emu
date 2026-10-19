@@ -54,14 +54,15 @@ prefetch model is added. See mcu-checkpoints.txt for the API and regressions.
 The default constructor and standalone CLI remain untimed; idle WAI time and
 whole-board/transport scheduling remain pending.
 
-Flash alignment limit
-The current un-stretched contract rejects odd-address Flash word operands.
-S12FTS32KV1 section 1.1 specifies two bus cycles for these reads, compared with
-one for a byte or aligned word. A source-fed original startup continuation reaches
-this boundary after coordinated recovery from its strict unknown-input failure.
-Supporting it requires the two data-byte phases and both elapsed bus cycles;
-accepting a single-cycle word or realigning original firmware data is incorrect.
-Full clocked cold-main WAI remains unverified.
+Flash read alignment
+The un-stretched contract retains its rejection of odd Flash word operands.
+The explicit internal_flash_reads contract implements the two read cycles from
+S12FTS32KV1 section 1.1, with each byte latched after its own clock and native
+operand semantics preserved. See mcu-flash-read-timing.txt for independent phase,
+value/flag, failure and checkpoint checks. Firmware data placement is unchanged.
+A local source-fed clocked cold-main run now reaches the original WAI under the
+same controlled inputs; it is integration evidence, not a dedicated CTest gate.
+Idle WAI time and full MCU/DSP scheduling remain unimplemented.
 
 Evidence
   cmake --build --preset strict --target blofeld-mcu-run-clock-test blofeld-original-cycle-application-test blofeld-original-run-clock-test
@@ -99,6 +100,37 @@ next RTI period. Traces/census remain local; public tests pin the firmware hash.
 These observations establish a conditional first native handler, not the complete
 startup countdown, MCU/DSP board boot, physical ready peer, host MIDI/audio or
 Desktop/Keyboard hardware equivalence.
+
+
+Additional source-fed integration
+The complete source-built 1.25 MID matches the pinned original MID SHA-256
+447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0.
+A local McuMachine run uses internal_flash_reads, the same 12 MHz OSC/phase-zero
+ideal-boundary clock contract and explicit GPIO/PHY/LCD/ready fixture. No host
+writes MCU RAM/PC/CCR or injects oscillator periods at foreground polls.
+
+The strict missing-PM3 input stops after 53382260 retired instructions, 6448 IRQ
+entries and 137638117 completed cycles. Manual instruction costs give 137580079
+cycles + 5 reset + 6448*9 IRQ + 1 failed input-read clock. Every original RTI
+restores the foreground register state. A coordinated pre-input checkpoint at
+137638116 cycles recovers this failure with the caller-owned LCD fixture rebound.
+
+Controlled PM3 low/high each retire 1570072 further instructions and enter 203
+IRQs before the original main WAI. Each completes 141809799 total bus cycles;
+the continuation independently accounts for 4169786 instruction cycles + 203*9
+IRQ cycles + 70 expanded Flash words. Each word has consecutive high/low byte
+callbacks, with the low clock immediately following the high clock. The native
+nine-byte WAI frame, saved raw PM3 value and unchanged NVM bytes/knowledge/history
+match. Display counts are 344 commands, 4194 writes and 2244 reads in each case.
+The owned clock reports 283620262 timebase ticks and 56724052 OSC edges.
+
+Each continuation completes after 1570275 steps with a 20000000-step bound.
+The complete successful path is 54952332 retired instructions, 6651 IRQ entries,
+5 reset cycles and 70 extra Flash cycles. Private traces, census, phase ledgers
+and executable/input hashes remain under ignored doc/local/. This local check
+has not yet been promoted to a dedicated full cold-main CTest regression. It
+ends at WAI without advancing idle time or qualifying the inferred board inputs,
+physical Flash strobes, DSP peer, audio or Desktop/Keyboard hardware profiles.
 
 References
 Pinned NXP bundle in doc/hardware/sources.json: 9S12UF32DGV1 section 1.2 operating
