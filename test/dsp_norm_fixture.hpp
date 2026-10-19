@@ -44,11 +44,16 @@ inline std::string number(const std::uint64_t value) {
   return text.str();
 }
 
-class NormProgram {
+class DspProgram {
 public:
+  void word(const std::uint32_t value) {
+    require(value <= word_mask, "Own DSP diagnostic word exceeds 24 bits");
+    words_.push_back(value);
+  }
+
   void emit(const std::string &text) {
     const auto instruction = assembler_.assemble(text.c_str());
-    require(instruction.success(), "Cannot assemble own NORM diagnostic: " + text);
+    require(instruction.success(), "Cannot assemble own DSP diagnostic: " + text);
     for (unsigned index = 0; index < instruction.wordCount; ++index) {
       words_.push_back(instruction.word[index]);
     }

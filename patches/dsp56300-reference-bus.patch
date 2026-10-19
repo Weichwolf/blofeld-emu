@@ -74,16 +74,49 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411 +432 @@
+@@ -411,2 +432,4 @@
 -		TWord	fetchOpWordB()
+-		{
 +		TWord fetchOpWordB()
-@@ -412,0 +434,2 @@
++		{
 +			const auto extension = m_referenceRepeat.loaded
 +				? m_referenceRepeat.extension : memRead(MemArea_P, pcCurrentInstruction + 1);
 @@ -416 +439 @@
 -			return m_opWordB;
 +			return extension;
-@@ -1468,0 +1492 @@
+@@ -523,15 +546,8 @@
+-		void	sr_s_update				()
+-		{
+-			if( sr_test_noCache(CCR_S) )
+-				return;
+-
+-			const TWord offset = sr_val_noCache(SRB_S1) - sr_val_noCache(SRB_S0);
+-			const TWord bitA = 46 + offset;
+-			const TWord bitB = 45 + offset;
+-
+-			const TReg56 a = aluA();
+-			const TReg56 b = aluB();
+-
+-			if	(	(bitvalue(a,bitA) != bitvalue(a,bitB))
+-				|	(bitvalue(b,bitA) != bitvalue(b,bitB)) )
+-				sr_set( CCR_S );
++		void sr_s_update(const TReg56& _source)
++		{
++			if(sr_test_noCache(CCR_S)) return;
++			// Only the accumulator actually driving a data bus contributes growth.
++			const int offset = sr_val_noCache(SRB_S1) - sr_val_noCache(SRB_S0);
++			const int high = 46 + offset + g_aluShift;
++			const auto value = static_cast<uint64_t>(_source.var);
++			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
+@@ -726,0 +743 @@
++			sr_s_update(reg.a);
+@@ -735,0 +753 @@
++			sr_s_update(reg.b);
+@@ -975,0 +994 @@
++			sr_s_update(_src);
+@@ -1004,0 +1024 @@
++			sr_s_update(_src);
+@@ -1468,0 +1489 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -95,15 +128,15 @@
 @@ -52 +53 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept
 +	void dspExecInterrupts(DSP* _dsp)
-@@ -67,0 +69,8 @@
+@@ -65,0 +67,8 @@
++	}
++
 +	void dspExecCustomPeripherals(DSP* dsp)
 +	{
 +		const auto x = dsp->getPeriph(0)->exec();
 +		const auto y = dsp->getPeriph(1)->exec();
 +		dsp->getPeriph(0)->resetDelayCycles(dsp->getInstructionCounter(), std::min(x, y));
 +		dsp->processExternalInterrupts();
-+	}
-+
 @@ -74,2 +83 @@
 -		assert(false && "Peripherals configuration is not supported");
 -		return nullptr;
@@ -258,6 +291,9 @@
 @@ -1156 +1293 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
+@@ -1570,0 +1708,2 @@
++		if(m_referenceMode)
++			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
 --- a/source/dsp56kEmu/dsp_ops.inl
 +++ b/source/dsp56kEmu/dsp_ops.inl
 @@ -8 +8 @@
@@ -401,3 +437,27 @@
 @@ -315 +315 @@
 -		case 0x10:	reg.vba = _val;				return;
 +		case 0x10:	reg.vba.var = m_referenceMode ? (_val.toWord() & 0xffff00) : _val.toWord();				return;
+--- a/source/dsp56kEmu/dsp_ops_alu.inl
++++ b/source/dsp56kEmu/dsp_ops_alu.inl
+@@ -1493,0 +1494,12 @@
++		if(m_referenceMode) {
++			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
++			const auto source = getFieldValue<Vsl, Field_S>(op);
++			const auto insert = getFieldValue<Vsl, Field_i>(op);
++			const auto value = static_cast<uint64_t>(getALU(source != 0).var);
++			const auto address = effectiveAddress<Vsl>(op);
++			const auto high = static_cast<TWord>((value >> 24) & 0xffffff);
++			const auto low = static_cast<TWord>(((value & 0xffffff) << 1) | insert) & 0xffffff;
++			memWrite(MemArea_X, address, high);
++			memWrite(MemArea_Y, address, low);
++			return;
++		}
+@@ -1495,2 +1507 @@
+-	}
+-}
++	}}
+--- a/source/dsp56kEmu/opcodeinfo.h
++++ b/source/dsp56kEmu/opcodeinfo.h
+@@ -385 +385 @@
+-		OpcodeInfo(Vsl,				"0000101S11MMMRRR110i0000",	"VSL S,i,L:ea", None, OpFlagCCR),
++		OpcodeInfo(Vsl,				"0000101S11MMMRRR110i0000",	"VSL S,i,L:ea", EffectiveAddress),

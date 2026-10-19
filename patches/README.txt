@@ -113,3 +113,16 @@ three-NORM regression fails against that path; 4608 independently computed
 vectors check scaling, A/B, Rn, compatibility and preserved state. Pinned external
 MCPX hardware corpus banks b0/b1 provide a separate instruction-state comparison
 (doc/dsp-validation.txt). This does not qualify the JIT or a Blofeld board.
+
+Whole-accumulator transfer helpers now update sticky S from the pre-move source
+before scaling/limiting. Raw partial transfers bypass that update. Register bit
+operations and accumulator REP sources use their standard S/L transfer rules.
+Independent dsp_transfers checks include parallel read-before-replace behavior,
+raw parts, MOVEC/MOVEM/MOVEP, SR replacement and unselected growth. Native VSL
+now stores raw MSP/shifted LSP with one EA update and no CCR changes; its opcode
+metadata permits an EA extension and rejects immediate data. dsp_vsl covers
+addressing/scaling/flag vectors, modulo REP, strict faults and preservation.
+In reference mode, unimplemented instructions throw their name before coreDump
+can obscure the cause with unrelated bus reads. These changes do not implement
+cache instructions or establish DSP56371 silicon/pipeline equivalence. See
+doc/dsp-validation.txt for scope and remaining derivative-specific loop questions.

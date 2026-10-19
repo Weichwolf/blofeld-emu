@@ -81,8 +81,9 @@ doc/dsp-core.txt covers native DSP execution and the documented SPI bootstrap
 loading the unchanged Blofeld first stage. A separate original MCU regression
 captures its complete GPIO transmission under explicit pin observations
 (doc/mcu-boot.txt). Combined MCU/DSP boot remains pending.
-doc/dsp-validation.txt covers the NORM flag correction, independent instruction
-vectors and pinned external MCPX silicon captures, with derivative limits.
+doc/dsp-validation.txt covers NORM/accumulator-transfer corrections, native VSL,
+independent instruction vectors and pinned external MCPX silicon captures, with
+derivative limits.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

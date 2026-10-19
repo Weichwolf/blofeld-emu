@@ -16,7 +16,7 @@ namespace blofeld::test {
 namespace {
 void test_no_shift_refreshes_flags() {
   DspBus bus;
-  NormProgram program;
+  DspProgram program;
   program.immediate("r1", 0);
   program.emit("clr a");
   constexpr unsigned initial_value = 0x123;
@@ -94,7 +94,7 @@ std::vector<NormInput> inputs() {
   return result;
 }
 
-unsigned initialize(NormProgram &program, const NormInput input) {
+unsigned initialize(DspProgram &program, const NormInput input) {
   for (const bool accumulator_b : {false, true}) {
     const auto value = accumulator_b == input.accumulator_b ? input.value : other_accumulator;
     const std::string name = accumulator_b ? "b" : "a";
@@ -136,7 +136,7 @@ void check_result(const DspState &after, const NormInput input, const unsigned p
 }
 
 void run_batch(DspBus &bus, DspCore &cpu, const std::span<const NormInput> batch) {
-  NormProgram program;
+  DspProgram program;
   std::vector<unsigned> instructions;
   for (const auto input : batch) { instructions.push_back(initialize(program, input)); }
   program.install(bus);

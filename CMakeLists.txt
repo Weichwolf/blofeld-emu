@@ -202,6 +202,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-norm-test test/dsp_norm_test.cpp)
   target_link_libraries(blofeld-dsp-norm-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_norm COMMAND blofeld-dsp-norm-test)
+  add_executable(blofeld-dsp-transfer-test test/dsp_transfer_test.cpp)
+  target_link_libraries(blofeld-dsp-transfer-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_transfers COMMAND blofeld-dsp-transfer-test)
+  add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
+  target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
   add_executable(blofeld-dsp-corpus-test test/dsp_corpus_test.cpp)
   target_link_libraries(blofeld-dsp-corpus-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_hardware_corpus COMMAND ${Python3_EXECUTABLE}
@@ -316,6 +322,7 @@ add_custom_target(quality
     blofeld-dsp-timers-test
     blofeld-dsp-interrupt-test
     blofeld-dsp-norm-test
+    blofeld-dsp-transfer-test blofeld-dsp-vsl-test
     blofeld-dsp-corpus-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
