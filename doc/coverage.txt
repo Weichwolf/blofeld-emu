@@ -239,11 +239,21 @@ Original update and recovery      partial  Helpers and recovery entry recovered;
                                           original handler/RTI/main dispatch sets
                                           and consumes the request without host
                                           flag writes. Earlier application init
-                                          remains pending. The complete original
+                                          is covered in the separate conditional
+                                          cold-start fixture. The complete original
                                           first helper returns through its own
                                           display/drawing/decompression calls in
                                           the separate LCD fixture; later updater
-                                          helpers remain pending.
+                                          helpers remain pending in that isolated test.
+                                          The same cold-start MCU now executes two
+                                          native XIRQ/helper requests: first-helper
+                                          return, nine-byte drain and natural WAI;
+                                          then main-helper loading/UI/configuration
+                                          to the idle FSTAT CBEIF RMW frontier.
+                                          Unknown parallel data must fail without
+                                          CPU/bus/NVM mutation before pin-only retry
+                                          (original-application-update.txt).
+                                          Full image programming remains unproven.
                                           Explicit reference milestones only;
                                           full initialization/transport/recovery
                                           and hardware validation pending.

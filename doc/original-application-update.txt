@@ -1,0 +1,75 @@
+Original MCU update requests after natural cold-start WAI
+
+  ctest --test-dir build/strict -R '^original_application$' --output-on-failure
+
+The private ZIP is hash checked by the existing original_application wrapper.
+The test continues the same two native cold-start CPUs described in
+original-application.txt. The low-PM3 case first completes its 264 SCI receives.
+No new CPU entry, caller, stack, flags, service table or RAM contents are supplied
+by the host. The separate private trace is original-application.trace.update.
+
+Conditional input experiment
+Both cases request the original 761-byte preparation helper, then the 632-byte
+main helper. PE2 is explicitly floating, alongside E4; native DDRE must leave
+E2 as input and PUCR must enable its pull-up. This additional pin condition is
+needed by the first helper's whole-byte PORTE read-modify-write. Without an E2
+observation, that original read fails; an external floating level is not assumed
+by the default board model. Q inputs carry request mode 0C; an explicit E0 assertion requests
+XIRQ, followed by release after native interrupt entry. Original ISR/RTI/main
+instructions set and consume the request, configure the Q bus and call the RAM
+entry through their own service table. The WAI frame is reused once per request.
+Two unchanged idle steps must precede each request.
+
+This uses the same inferred GPIO/LCD route and untimed pin conditions as the
+cold-start fixture. A test peer supplies four ordered six-bit observations per
+24-bit channel word, checking every native Q7 strobe. It is not a running DSP,
+a measured cable, or a scheduler for electrical setup/hold/propagation delays.
+
+At the first data read of each request, the peer deliberately withdraws the six
+data observations. The actual original LDAB must fail with PORTQ address,
+unknown mask, PC and CCR. Visible CPU state, bus revision and all NVM/history
+must remain unchanged. Supplying only the missing external observations then
+retries that same instruction. The host does not repair a register or RAM byte.
+
+Preparation-helper continuation
+The complete original first block supplies its unchanged object, padding and
+checksum. Six additional zero bytes are explicit own peer drain observations;
+they are not asserted to be actual DSP output. Original code reads the helper's
+length, copies all 761 bytes and calls it with its real table argument and return
+frame. Its display/drawing/decompression calls return normally and set its own
+prepared flag. The resident decoder then performs nine additional byte calls.
+Buffered padding and the remaining channel words produce 1032 six-bit samples in
+total, including 1020 samples through helper entry.
+
+The original loader restores Q inputs and pull-downs before waiting for peer
+release. The peer becomes floating; native PERQ/PPSQ configuration must resolve
+all eight pads to zero. Original CLI/RTS/foreground instructions then reach the
+natural main WAI again. Exact request/ISR/helper/return/drain/release counts and
+stack positions are checked. This covers the previously unexecuted tail/unwind;
+it does not establish a transport checksum check or the actual DSP trailer.
+
+Main-helper continuation and present frontier
+The second native request loads the original main helper from its verified
+container prefix, using 848 six-bit observations. Every RAM byte, real caller
+argument and frame is checked. Its own UI callbacks and flash configuration
+instructions execute through the original call chain. The test stops at its
+first idle FSTAT read-modify-write, before that unqualified access executes.
+FCLKDIV must be C8, FSTAT C0 and FCMD zero; no flash command has been launched.
+All MCU flash bytes, knownness and erase history must still equal their values
+before each request.
+
+S12FTS32KV1 sections 3.3.6/4.1.2 specify valid command launch and flag effects,
+but do not resolve this idle CBEIF write without staged address/data/command.
+NXP AN2400 Rev 3 page 8 explicitly cautions against BSET/BCLR on FSTAT because
+read-modify-write can clear other W1C flags. Neither that warning nor the fact
+that the original updater uses BSET establishes the missing silicon outcome.
+The strict model continues to reject this access. No ignored-write workaround,
+pre-staged command, fake success, firmware patch or PC skip is introduced.
+AN2400's URL and hash are pinned in hardware/sources.json; the PDF stays local.
+
+Remaining full-goal requirements
+The MCU image stream and full erase/program loop, complete recovery/updater,
+NAND programming, actual DSP peer/ROM data, scheduled board boot, MIDI/audio and
+Desktop/Keyboard hardware equivalence remain pending. Isolated original flash
+word routines and cold recovery tests retain their narrower scope. This cold
+entry/continuation check does not establish flash safety or a brick-proof target.

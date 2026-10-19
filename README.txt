@@ -62,6 +62,9 @@ doc/display-parallel.txt covers logical 6800 pin cycles and the complete origina
 first helper's display reads/return under an explicit GPIO/peripheral fixture.
 doc/original-application.txt covers original reset through main WAI, missing-input
 retry and both controlled PM3 levels under an untimed GPIO/USB/LCD/clock fixture.
+doc/original-application-update.txt continues those same cold CPUs through two
+original XIRQ/helper requests, first-helper return/tail/main WAI and main-helper
+initialization up to its unqualified idle FSTAT write.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.

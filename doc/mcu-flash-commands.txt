@@ -65,7 +65,11 @@ in wait mode; those remain separate from the reference milestones.
 The original initialization's BSET FSTAT,30 reads back other flags; its idle
 CBEIF write is not guessed. The earlier initialization fixture still stops
 before that instruction. Full initialization and end-to-end update/recovery
-therefore remain unproven.
+therefore remain unproven. The cold application continuation now also reaches
+this same frontier through two real request/ISR/helper call chains
+(original-application-update.txt), without substituting its entry or stack.
+NXP AN2400 Rev 3 page 8 independently warns against BSET/BCLR on FSTAT because
+other W1C bits can clear. It does not establish the missing idle-CBEIF outcome.
 
 Tests
   ctest --test-dir build/strict -R '^(flash_commands|original_flash_commands)$' --output-on-failure

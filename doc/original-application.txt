@@ -53,6 +53,14 @@ MCU NVM, knownness and erase history must survive all 264 receives unchanged.
 This checks MCU byte reception/activity, not complete MIDI message or DSP voice
 processing. Parser, synthesis and physical-controller requirements remain open.
 
+Native update continuation
+The same cold CPUs also execute two original XIRQ/update requests, without
+register replacement or an own RAM caller. The first helper returns, drains the
+resident nine-byte tail and reaches main WAI again. The main helper loads and
+executes through UI/flash initialization to its idle FSTAT RMW frontier. See
+original-application-update.txt for exact peer inputs, retry checks and limits.
+This adds no full-image flash programming or actual DSP peer claim.
+
 Limits
 These are untimed conditional MCU runs. CPU/SCI/TIM cycles are not scheduled
 against oscillator time; pad propagation, wait clock gates and physical board

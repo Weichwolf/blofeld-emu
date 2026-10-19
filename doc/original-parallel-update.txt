@@ -71,6 +71,12 @@ After all 26 transfers, every MCU flash byte and its original knownness/erase
 history must match the source image. Source data, snapshot bytes and traces are
 never included in the public tests. No physical MIDI or flash device is used.
 
+The separate cold continuation in original-application-update.txt now executes
+both original helper requests after natural application startup, first-helper
+return/nine-byte drain/main WAI, and main-helper initialization up to the idle
+FSTAT frontier. It uses no substitute caller or CPU entry. Its peer inputs
+remain controlled observations; actual DSP delivery is still unqualified.
+
 Qualification limits
 This proves the conditional normal-copy/caller ABI and first callback through
 the original table. Actual external request delivery, peer/DSP connection,

@@ -52,5 +52,11 @@
     "source": "https://285624.selcdn.ru/syms1/iblock/d6d/d6d9f2833cd418ac1c244286aa1471c3/2e2c9761cff436e0b57baec5a601dd33.pdf",
     "bytes": 2155606,
     "sha256": "fe34321ac03ad9b799188cded6a9a7e70094c51c6f8e5d88d921739268ba54da"
+  },
+  {
+    "file": "AN2400.pdf",
+    "source": "https://www.nxp.com/docs/en/application-note/AN2400.pdf",
+    "bytes": 1090229,
+    "sha256": "6c4cbdd603fc53064ac3fc4e8428a1fb6bc630b411dbca2c0c7a1dbd56a2b8ae"
   }
 ]
