@@ -172,6 +172,14 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           turnaround and upper Port F writes
                                           (nand-read.txt). No original NAND data
                                           transfer or default board route proven.
+                                          Program/erase reference milestones retain
+                                          per-bit unknownness and explicit history,
+                                          WP/protection and outcome observations.
+                                          Own native GPIO program/status/readback
+                                          checks all 528 bytes, actual failure
+                                          branches and missing-outcome rejection
+                                          (nand-write.txt); no original write path
+                                          or physical timing is thereby proven.
                                           PLL timing/lock, remaining GPIO/timer modes,
                                           ESAI, DMA and chip profile pending;
                                           no combined MCU/DSP board boot.
@@ -242,9 +250,12 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           Atomic private cold exports only;
                                           continuous command journaling and full
                                           board snapshots remain pending.
-                                          Candidate NAND read geometry is explicit;
-                                          board part, ECC, contents, programming,
-                                          erase and failure outcomes unresolved.
+                                          Candidate NAND geometry and untimed
+                                          program/erase outcomes are explicit;
+                                          interrupted active targets lose knowledge
+                                          and history. Board part, ECC, contents,
+                                          hardware timing and persistent NAND file
+                                          publication remain unresolved.
 Original update and recovery      partial  Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an
@@ -303,8 +314,14 @@ Damaged updates/transfer loss     partial  Offline parser rejection and original
 Power loss in every erase/program partial  Forty MCU command/reference-position
                                           reset/power-cycle cases, queued commands
                                           and unknown vector/option checks tested.
-                                          Exact timed/analog phases, NAND and stock
-                                          hardware interruption tests pending.
+                                          NAND reference milestones add 1074 program
+                                          and 14 erase reset/power cuts, including
+                                          every loaded byte and confirmation/observed
+                                          completion; neighboring storage, retry
+                                          history and component-copy isolation checked.
+                                          Exact timed/analog phases, complete original
+                                          updates and stock hardware interruption
+                                          tests remain pending (nand-write.txt).
 Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU models;
                                           native dependencies instrumented too.
                                           No complete-board, audio or concurrency
@@ -340,12 +357,13 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           and acknowledgement included:
                                           39720 runs in 61 s without findings.
                                           Native DSP instruction fuzzing pending.
-                                          Small-page NAND read protocol harness:
-                                          66218 sequences in 61 seconds without
-                                          sanitizer findings; bounded own seeds,
-                                          unknown bytes and reset/retry states
-                                          (nand-read.txt). NAND write/failure and
-                                          complete-board fuzzing remain pending.
+                                          Small-page NAND protocol harness:
+                                          7706 sequences in 61 seconds without
+                                          sanitizer findings; bounded own full-page,
+                                          erase/program/failure/power-loss seeds,
+                                          unknown cells/history/WP and masked status
+                                          (nand-read.txt). Native instruction and
+                                          complete-board NAND fuzzing remain pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
                                           trace; full bootloader trace under build/.

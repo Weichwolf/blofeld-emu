@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
-#include "blofeld/nand_read.hpp"
+#include "blofeld/nand.hpp"
 
 #include <array>
 #include <cstdint>
@@ -9,9 +9,9 @@
 #include <string>
 
 namespace {
-using blofeld::NandRead;
-constexpr unsigned last_page = NandRead::pages - 1;
-constexpr unsigned last_column = NandRead::page_bytes - 1;
+using blofeld::Nand;
+constexpr unsigned last_page = Nand::pages - 1;
+constexpr unsigned last_column = Nand::page_bytes - 1;
 constexpr unsigned byte_mask = 0xff;
 constexpr unsigned reset_command = 0xff;
 constexpr unsigned spare_command = 0x50;
@@ -32,21 +32,22 @@ void reject(const auto &operation, const std::string &reason) {
     const std::string message = fault.what();
     require(message.contains(reason) && message.contains("page=") && message.contains("column=") &&
                 message.contains("command="),
-            "Rejected NAND operations must include their reason and address/command context");
+            "Rejected NAND operations must include their reason and address/command context: " +
+                message);
     return;
   }
   throw blofeld::Fault("Unsupported NAND operation unexpectedly succeeded: " + reason);
 }
 
-void addresses(NandRead &device, const Selection selection) {
+void addresses(Nand &device, const Selection selection) {
   device.address(static_cast<std::uint8_t>(selection.column));
   device.address(static_cast<std::uint8_t>(selection.page & byte_mask));
   device.address(static_cast<std::uint8_t>((selection.page >> 8U) & byte_mask));
   device.address(static_cast<std::uint8_t>((selection.page >> 16U) & byte_mask));
 }
 
-std::array<std::uint8_t, NandRead::page_bytes> own_page(const unsigned page) {
-  std::array<std::uint8_t, NandRead::page_bytes> result{};
+std::array<std::uint8_t, Nand::page_bytes> own_page(const unsigned page) {
+  std::array<std::uint8_t, Nand::page_bytes> result{};
   for (unsigned column = 0; column < result.size(); ++column) {
     constexpr unsigned multiplier = 73;
     result[column] =
@@ -71,7 +72,7 @@ void test_rows_and_pointer_areas() {
   for (const unsigned row : {0U, 1U, 0xffU, 0x100U, 0xffffU, 0x10000U, last_page}) {
     const auto contents = own_page(row);
     for (const auto start : starts) {
-      NandRead device;
+      Nand device;
       device.observe_bytes(row, 0, contents);
       require(!device.ready().has_value(), "Observed contents must not qualify power/readiness");
       device.observe_power_ready();
@@ -83,7 +84,7 @@ void test_rows_and_pointer_areas() {
       device.address(byte_mask); // Documented surplus address cycles are ignored.
       device.observe_completion();
       reject([&] { device.address(byte_mask); }, "no qualified read command/address phase");
-      for (unsigned column = start.column; column < NandRead::page_bytes; ++column) {
+      for (unsigned column = start.column; column < Nand::page_bytes; ++column) {
         require(device.read() == contents[column], "NAND main/spare bytes must remain in order");
       }
       require(!device.ready().has_value(), "Unqualified sequential-row entry must remain unknown");
@@ -94,7 +95,7 @@ void test_rows_and_pointer_areas() {
 }
 
 void test_unknown_bytes_and_reset() {
-  NandRead device;
+  Nand device;
   reject([&] { device.command(0); }, "unqualified readiness");
   reject([&] { device.address(0); }, "no qualified read command");
   reject([&] { device.observe_completion(); }, "no pending reset/read");
@@ -127,10 +128,10 @@ void test_unknown_bytes_and_reset() {
 }
 
 void test_strict_rejections() {
-  NandRead device;
+  Nand device;
   device.command(reset_command); // Reset is the only qualified command before observed readiness.
   device.observe_completion();
-  constexpr std::array<std::uint8_t, 7> unsupported{0x70, 0x80, 0x10, 0x60, 0xd0, 0x90, 0x30};
+  constexpr std::array<std::uint8_t, 4> unsupported{0x41, 0x7a, 0x90, 0x30};
   for (const auto command : unsupported) {
     reject([&] { device.command(command); }, "unsupported value");
   }
@@ -144,7 +145,7 @@ void test_strict_rejections() {
   reject([&] { device.command(0); }, "unqualified readiness");
   device.observe_completion();
   const std::array<std::uint8_t, 1> byte{0x57};
-  reject([&] { device.observe_bytes(NandRead::pages, 0, byte); }, "range exceeds page");
+  reject([&] { device.observe_bytes(Nand::pages, 0, byte); }, "page exceeds device");
   constexpr unsigned past_last_column = last_column + 1;
   reject([&] { device.observe_bytes(last_page, past_last_column, byte); }, "range exceeds page");
   device.observe_bytes(last_page, last_column, byte);

@@ -3,10 +3,11 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/firmware.hpp"
-#include "blofeld/nand_read.hpp"
+#include "blofeld/nand.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "nand_gpio_fixture.hpp"
+#include "nand_program_fixture.hpp"
 
 #include <array>
 #include <cstddef>
@@ -23,49 +24,9 @@
 
 namespace blofeld::test {
 namespace {
-constexpr unsigned port_c_data = 0xffffbd;
-constexpr unsigned port_c_direction = 0xffffbe;
-constexpr unsigned port_c_control = 0xffffbf;
-constexpr unsigned port_f_data = 0xfffff5;
-constexpr unsigned port_f_direction = 0xfffff6;
-constexpr unsigned port_f_control = 0xfffff7;
-constexpr unsigned bus_control = 0xfffffb;
-constexpr unsigned port_f_bus = 0x01ffff;
-constexpr unsigned output_f = 0x4ff;
-constexpr unsigned input_f = 0x400;
-constexpr unsigned all_inputs_f = 0x3ff;
-constexpr unsigned idle_c = 0x300;
-constexpr unsigned byte_mask = 0xff;
 constexpr unsigned sample_row = 0x12345;
 constexpr unsigned instruction_limit = 10000;
 constexpr unsigned missing_column = 37;
-
-void movep(DspProgram &program, const unsigned value, const unsigned address, const char space) {
-  program.emit("movep #>" + number(value) + ',' + space + ":<<" + number(address));
-}
-
-void setup_gpio(DspProgram &program) {
-  program.immediate("sr", masked_status);
-  movep(program, port_f_bus, bus_control, 'x');
-  movep(program, nand_controls, port_c_direction, 'x');
-  movep(program, nand_data, port_c_control, 'x');
-  movep(program, idle_c, port_c_data, 'x');
-  movep(program, output_f, port_f_direction, 'y');
-  movep(program, 0, port_f_data, 'y');
-  movep(program, nand_other_f, port_f_control, 'y');
-}
-
-struct Latch {
-  unsigned value;
-  unsigned mode;
-};
-
-void latch(DspProgram &program, const Latch input) {
-  movep(program, input.value, port_f_data, 'y');
-  movep(program, idle_c | input.mode, port_c_data, 'x');
-  program.emit("bclr #9,x:<<" + number(port_c_data));
-  program.emit("bset #9,x:<<" + number(port_c_data));
-}
 
 unsigned own_reader(DspProgram &program, const unsigned row) {
   setup_gpio(program);
@@ -81,7 +42,7 @@ unsigned own_reader(DspProgram &program, const unsigned row) {
   movep(program, all_inputs_f, port_f_control, 'y');
   const auto poll = program.pc();
   program.emit("brclr #12,x:<<$ffff8b,$0");
-  for (unsigned column = 0; column < NandRead::page_bytes; ++column) {
+  for (unsigned column = 0; column < Nand::page_bytes; ++column) {
     program.emit("bclr #8,x:<<" + number(port_c_data));
     program.emit("movep y:<<" + number(port_f_data) + ",a");
     program.emit("move a1,x:(r0)+");
@@ -90,8 +51,8 @@ unsigned own_reader(DspProgram &program, const unsigned row) {
   return poll;
 }
 
-std::array<std::uint8_t, NandRead::page_bytes> sample_page() {
-  std::array<std::uint8_t, NandRead::page_bytes> bytes{};
+std::array<std::uint8_t, Nand::page_bytes> sample_page() {
+  std::array<std::uint8_t, Nand::page_bytes> bytes{};
   for (unsigned index = 0; index < bytes.size(); ++index) {
     constexpr unsigned multiplier = 29;
     bytes[index] = static_cast<std::uint8_t>((index * multiplier + (index >> 8U)) & byte_mask);
@@ -113,7 +74,7 @@ void test_own_reader(const unsigned row, const bool missing) {
   const auto poll = own_reader(program, row);
   DspBus bus;
   program.install(bus);
-  NandRead nand;
+  Nand nand;
   const auto bytes = sample_page();
   if (missing) {
     nand.observe_bytes(row, 0, std::span(bytes).first(missing_column));
@@ -123,7 +84,7 @@ void test_own_reader(const unsigned row, const bool missing) {
   }
   nand.observe_power_ready();
   std::ostringstream trace;
-  NandLink link(bus, nand, trace, {.poll_pc = poll, .selected = true});
+  NandLink link(bus, nand, trace, {.poll_pcs = {poll}, .selected = true, .outcomes = {}});
   DspCore cpu(bus);
   bool rejected = false;
   for (unsigned count = 0; cpu.state().pc != program.pc(); ++count) {
@@ -139,7 +100,7 @@ void test_own_reader(const unsigned row, const bool missing) {
       break;
     }
   }
-  const unsigned expected = missing ? missing_column : NandRead::page_bytes;
+  const unsigned expected = missing ? missing_column : Nand::page_bytes;
   require(rejected == missing && link.reads() == expected && nand.column() == expected &&
               nand.page() == row && link.commands() == 1 && link.addresses() == 4 &&
               link.polls() == 3,
@@ -158,10 +119,10 @@ void test_link_preconditions(const std::optional<bool> selected) {
   movep(program, 0, port_c_data, 'x');
   DspBus bus;
   program.install(bus);
-  NandRead nand;
+  Nand nand;
   nand.observe_power_ready();
   std::ostringstream trace;
-  NandLink link(bus, nand, trace, {.selected = selected});
+  NandLink link(bus, nand, trace, {.poll_pcs = {}, .selected = selected, .outcomes = {}});
   DspCore cpu(bus);
   std::string reason;
   for (unsigned count = 0; reason.empty(); ++count) {
@@ -219,10 +180,10 @@ void test_original_address(const Firmware &firmware, std::ostream &trace, const 
   DspBus bus;
   install_original_stage(bus, firmware);
   program.install(bus);
-  NandRead nand;
+  Nand nand;
   nand.observe_bytes(row, 0, sample_page());
   nand.observe_power_ready();
-  NandLink link(bus, nand, trace, {.poll_pc = original_poll, .selected = true});
+  NandLink link(bus, nand, trace, {.poll_pcs = {original_poll}, .selected = true, .outcomes = {}});
   DspCore cpu(bus);
   std::string reason;
   for (unsigned count = 0; reason.empty(); ++count) {

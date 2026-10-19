@@ -1,0 +1,71 @@
+NAND program/erase reference milestones and interruption checks
+
+The Nand model extends the explicit K9F1208U0C candidate from nand-read.txt.
+Samsung Rev.1.1 pages30/31/33/34/38 define 80/address/data/10 programming,
+60/row/D0 block erase, 70 status, reset interruption and WP restrictions:
+  https://www1.futureelectronics.com/doc/SAMSUNG/K9F1208U0C-PIB0000.pdf
+The specified consecutive partial-program limits are one main-array operation
+and two spare-array operations per erase. An erased-looking byte is not evidence
+of remaining program allowance. Protected-block and disabled/unstable-WP write
+outcomes remain unsupported, not silently successful.
+
+Storage knowledge and outcomes
+NandArray stores sparse bytes with per-bit knowledge, optional program history
+and separately observed block condition/protection. Defaults qualify none of
+them. Contents observations do not invent erased history or write permission.
+Program confirmation requires known WP high, a qualified valid unprotected block
+and available history. Before confirmation, staging changes no cells or counts.
+An active program withdraws knowledge of its page; active erase withdraws the
+whole 32-page block. Readiness stays busy until an explicit observed outcome.
+The no-argument read/reset completion method cannot complete a write.
+
+Observed program success applies 1-to-0 programming to the saved preimage and
+restores untouched bytes. Known programmed zeros can resolve previously unknown
+bits; input ones cannot manufacture known erased ones. Observed successful erase
+establishes FF cells and fresh history for the block. It also clears erasable
+program protection. No guessed partial completion or automatic pass is used.
+Failure, active reset or power loss leaves the affected page/block unknown,
+withdraws its history/block qualifications and preserves neighboring areas.
+Staged but unconfirmed data is discarded without consuming an allowance.
+
+Status output retains known masks. Busy/ready, WP and an observed result can be
+read individually. Unused status fields remain unknown after operations; a full
+GPIO word read cannot silently acquire zeros. The documented post-reset C0 value
+is qualified only with observed WP high. That cleared reset status does not
+restore data or prove that the preceding interrupted operation succeeded.
+
+Checks
+  cmake --build --preset strict --target blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-write-test
+  ctest --test-dir build/strict -R '^(nand_read|nand_write|nand_power|nand_gpio|nand_gpio_write|original_nand_address)$' --output-on-failure
+
+nand_write enumerates 1679616 ternary-byte/input combinations against an
+independent set-of-possible-bits oracle. It also checks whole-block/main/spare
+bounds, program history and limits, unknown permission/protection, pointer
+selection, failed completion and reset status versus retained unknown cells.
+nand_power runs 1074 program and 14 erase reset/power cuts: every own command,
+address/data byte, confirmation and observed-completion boundary. Completed
+history survives restart; discarded staging can be retried. Independent component
+copies isolate a cut branch from a successful completion of the same pending job.
+An additional failed-erase observation leaves the entire block unknown.
+
+nand_gpio_write runs own native DSP instructions from mode-five reset. It emits
+erase/program/status cycles through the candidate GPIO link, polls actual GPIO
+status bits, branches on failure and reads all 528 programmed bytes into operand
+RAM using native MOVEP/store. Outcomes are explicit laboratory inputs. Erase and
+program failure take the native JCS branch; missing either outcome fails visibly.
+Status changes remain visible while RE stays low. The long conditional jump uses
+own documented FM13-80/12-13/12-18 bits because the helper assembler omits it.
+The private Testing/nand-gpio-write.trace records CPU state, GPIO operations,
+status knowledge, outcomes and final branch positions for all five scenarios.
+No host writes operand RAM or substitutes instruction results.
+
+Limits
+These are untimed reference milestones and synthetic native instruction checks.
+Chip identity, wiring, WP setup/hold, NAND delays, partial physical programming,
+ECC/bad-block handling, protect commands, ID, sequential reads and persistent
+NAND file publication are not established. In-process component copies are not
+whole-board or persistent snapshots. Protocol fuzzing is described in nand-read.txt.
+The original loader's reserved-memory, Port F and turnaround frontiers are kept.
+No original erase/program helper or full original update/recovery path is claimed
+to complete. Full scheduled boot, MIDI/audio, all timed failure phases and stock
+Desktop/Keyboard validation remain required by coverage.txt.

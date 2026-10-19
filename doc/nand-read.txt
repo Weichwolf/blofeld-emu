@@ -4,10 +4,11 @@ The explicit K9F1208U0C candidate profile uses Samsung's Rev.1.1 June 2007
 datasheet, pinned in hardware/sources.json (manufacturer PDF on distributor host):
   https://www1.futureelectronics.com/doc/SAMSUNG/K9F1208U0C-PIB0000.pdf
 Pages 8/9 define 512 main plus 16 spare bytes, 131072 rows and four read-address
-cycles. Pages 26/34 define Read1/Read2, completion and reset. Implemented commands
-are 00/01/50 page reads and FF reset. Readiness requires explicit power/completion
-observations. Reset preserves cells; no status, ID, programming, erase, ECC or
-power-loss outcome is fabricated. Unobserved bytes are unknown, including spare
+cycles. Pages 26/34 define Read1/Read2, completion and reset. The read checks cover
+00/01/50 page reads and FF reset; program/erase/status extensions are described in
+nand-write.txt. Readiness requires explicit power/completion observations. Reset
+preserves cells when no write is active; interrupted writes remain unknown.
+No ID, ECC or successful write outcome is fabricated. Unobserved bytes are unknown, including spare
 and bad-block markers. A missing byte fails with row/column/command context and
 does not advance. Post-page sequential-row behavior remains unqualified; readiness
 becomes unknown. Nonzero upper spare-column bits fail conservatively because the
@@ -46,13 +47,14 @@ Offline protocol fuzzing
   cmake --preset fuzz
   cmake --build --preset fuzz --target nand-read-fuzz
   mkdir -p doc/local/nand-read-fuzz-corpus
-  build/fuzz/nand-read-fuzz -max_total_time=60 -max_len=4096 doc/local/nand-read-fuzz-corpus
+  build/fuzz/nand-read-fuzz -max_total_time=60 -max_len=8192 doc/local/nand-read-fuzz-corpus
 
-The harness bounds eight-byte action records and observed page fragments. It
-exercises command/address/completion/reset/read and rejected-state retries.
-A 61-second smoke campaign with own structured seeds completed 66218 sequences
-without sanitizer findings. It is not native instruction fuzzing, NAND write/
-power-loss validation or a sustained complete-board campaign.
+The harness bounds eight-byte action records and observed page fragments. It also
+exercises program/erase, masked status, WP/block observations and power loss.
+Its 1024-action limit admits full 528-byte program sequences plus setup, status
+and interruption events. A 61-second smoke campaign with own structured seeds
+completed 7706 sequences without sanitizer findings. It is not native instruction
+fuzzing, physical power-loss validation or a sustained complete-board campaign.
 
 original_nand_address separately calls an unchanged original first-stage routine
 from a native own caller with explicit register/GPIO preconditions. It checks the
@@ -77,7 +79,7 @@ wiring, polarity, CE timing, setup/hold or real-device equivalence.
 Full original boot still stops on reserved Y:002000 before reaching NAND GPIO.
 The 131072-store clear is unchanged. Actual NAND/ROM/wavetable/sample mappings and
 contents, original data reads, full scheduled boot/MIDI/audio/update/recovery,
-NAND writes/failure phases and stock Desktop/Keyboard comparisons remain pending.
+full original NAND updates and stock Desktop/Keyboard comparisons remain pending.
 A static candidate reconstruction from the updater's source ranges also leaves
 264 trailing page bytes outside the supplied update object. It is not an
 installed NAND dump; those bytes are not assumed erased or zero. Detailed source
