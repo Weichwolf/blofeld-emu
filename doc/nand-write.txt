@@ -36,7 +36,7 @@ restore data or prove that the preceding interrupted operation succeeded.
 
 Checks
   cmake --build --preset strict --target blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-write-test
-  ctest --test-dir build/strict -R '^(nand_read|nand_write|nand_power|nand_gpio|nand_gpio_write|original_nand_address)$' --output-on-failure
+  ctest --test-dir build/strict -R '^(nand_read|nand_write|nand_power|nand_gpio|nand_gpio_write|original_nand_address|original_nand_write)$' --output-on-failure
 
 nand_write enumerates 1679616 ternary-byte/input combinations against an
 independent set-of-possible-bits oracle. It also checks whole-block/main/spare
@@ -59,6 +59,35 @@ The private Testing/nand-gpio-write.trace records CPU state, GPIO operations,
 status knowledge, outcomes and final branch positions for all five scenarios.
 No host writes operand RAM or substitutes instruction results.
 
+Unmodified updater helper checks
+original_nand_write loads both original helper objects from the pinned firmware.
+An own native caller supplies explicit GPIO/register/source-buffer preconditions;
+executed OMR/NOP instructions expose the documented X/P switched RAM. This is an
+isolated subroutine experiment, not execution of the preceding full loader/init.
+Own bounded source words let each original routine serialize all 176 words into
+528 bytes without reserved Port F bits. All block cells, spare bytes, neighboring
+pages and source advancement are checked against independent big-endian byte
+expectations. Eight erase/program jobs use explicit pass/fail observations.
+Original mode-six timer writes execute; NAND completion remains an untimed event
+after three actual pending polls. No CLK/2 or synchronized capture time is thereby
+established. The following original status return still asserts RE while DSP
+data outputs remain driven and must fail visibly before any status data read.
+
+Two additional runs use the original runtime source prefix, checked against the
+independently parsed DSP record header. Both reject the same reserved Port F
+write after eleven accepted data bytes, before program confirmation. No upper
+bits are masked away, no bytes are replaced and no target cells are programmed.
+
+Twelve selected reset/power cuts follow actual native write-latch edges: the full
+unconfirmed program buffer, confirmed active programming and confirmed active
+erasure, for both helpers. They preserve unconfirmed storage and neighboring
+areas, withdraw active-target knowledge and distinguish reset status from data
+validity. A component retry probe checks that discarded native staging consumed
+no program allowance. These cuts are component observations; CPU/board power
+sequencing, complete original retry/recovery and all elapsed failure phases
+remain unqualified. The private Testing/original-nand-write.trace records all
+22 scenarios and the exact native boundaries.
+
 Limits
 These are untimed reference milestones and synthetic native instruction checks.
 Chip identity, wiring, WP setup/hold, NAND delays, partial physical programming,
@@ -66,6 +95,6 @@ ECC/bad-block handling, protect commands, ID, sequential reads and persistent
 NAND file publication are not established. In-process component copies are not
 whole-board or persistent snapshots. Protocol fuzzing is described in nand-read.txt.
 The original loader's reserved-memory, Port F and turnaround frontiers are kept.
-No original erase/program helper or full original update/recovery path is claimed
-to complete. Full scheduled boot, MIDI/audio, all timed failure phases and stock
+Original helper write cycles reach the stated laboratory milestones; their status
+return, original payload transfer and full original update/recovery do not complete. Full scheduled boot, MIDI/audio, all timed failure phases and stock
 Desktop/Keyboard validation remain required by coverage.txt.

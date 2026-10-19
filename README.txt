@@ -91,7 +91,8 @@ doc/nand-read.txt covers an explicit small-page NAND read candidate, native own
 GPIO reads and isolated original addressing/turnaround frontiers. It does not
 establish the target boards' NAND contents or complete original NAND loading.
 doc/nand-write.txt covers explicit program/erase outcomes, interrupted-cell
-knowledge, program limits and native status/failure/readback checks.
+knowledge, program limits, native status/failure/readback and unchanged updater
+helper checks. doc/dsp-timers.txt includes explicit mode-six capture and native IRQ.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

@@ -20,7 +20,8 @@ struct DspTimerPin {
   std::optional<bool> level;
 };
 
-// Mode-zero DSP56371 timers. Clock input is qualified CLK/2 edges, not instructions.
+// DSP56371 modes zero and capture-six (TRM=0). Clocks and synchronized input
+// samples are explicit observations; raw TIO pads do not invent capture timing.
 class DspTimers {
 public:
   DspTimers();
@@ -31,6 +32,7 @@ public:
                                    std::uint32_t mask = DspTimerWrite::word_mask) const;
   void write(DspTimerWrite access);
   void set_tio_drive(unsigned index, std::optional<bool> level);
+  void observe_synchronized_tio(unsigned index, bool level);
   [[nodiscard]] DspTimerPin observe_tio(unsigned index) const;
   void advance_clk2(std::uint64_t edges);
   [[nodiscard]] std::vector<std::uint32_t> interrupt_vectors() const;
@@ -44,6 +46,10 @@ private:
     std::optional<std::uint32_t> load;
     std::optional<std::uint32_t> compare;
     bool first_clock = false;
+    std::uint32_t captured = 0;
+    std::optional<bool> synchronized;
+    bool synchronized_qualified = false;
+    bool halted = false;
   };
 
   struct CounterAdvance {
@@ -57,6 +63,7 @@ private:
   [[nodiscard]] std::uint64_t advance_prescaler(std::uint64_t edges);
   static void advance_timer(Timer &timer, std::size_t index, std::uint64_t edges);
   static void advance_free(Timer &timer, CounterAdvance advance);
+  static void advance_capture(Timer &timer, std::size_t index, std::uint64_t edges);
   std::array<Timer, 3> timers_{};
   std::array<std::optional<bool>, 2> external_{};
   std::uint32_t prescaler_load_ = 0;

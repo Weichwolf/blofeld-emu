@@ -53,10 +53,12 @@ DSP56371 memory and peripheral scope
   instruction resets SHI/interrupt state without resetting CPU OMR or PLL control.
 - C/E/F GPIO modes, data/pads, unknown latches and Port F's required BIU setup
   are modeled (dsp-gpio.txt). BCR accepts only its documented Port F setup.
-- Mode-zero timer counters, shared internal prescaler, TIO GPIO and flag/source
-  behavior use explicit CLK/2 events (dsp-timers.txt). Native TIO1 polling and
-  TCSR W1C word writeback are tested. No CPU/IRQ clock schedule is implied.
-- Port D GPIO, other timer modes, ESAI, DMA, NAND and clock scheduling are not modeled.
+- Mode-zero timers and mode-six TRM=0 capture use explicit CLK/2 events and
+  qualified synchronized samples (dsp-timers.txt). Native TIO1 polling, capture
+  IRQ and TCSR W1C writeback are tested. No CPU/IRQ clock schedule is implied.
+- The NAND candidate has native own and isolated original helper checks
+  (nand-read.txt, nand-write.txt); full original NAND loading remains unproven.
+- Port D GPIO, remaining timer modes, ESAI, DMA and clock scheduling are not modeled.
   Native power-up register undefined-state tracking and full derivative reset,
   interrupt, pipeline and instruction-cycle fidelity need further validation.
 
@@ -130,11 +132,12 @@ Offline DSP bus/model fuzzing
   python3 tools/make_dsp_fuzz_seeds.py doc/local/dsp-fuzz-corpus
   build/fuzz/dsp-model-fuzz doc/local/dsp-fuzz-corpus -artifact_prefix=doc/local/dsp-fuzz-artifacts/ -max_len=2304 -max_total_time=60
 
-The expanded synthetic campaign completed 39720 runs in 61 seconds without
+The expanded synthetic campaign completed 35549 runs in 61 seconds without
 sanitizer findings. The model harness also exercises PCTL commands, PINIT
 observations and clock-target queries. GPIO pad observations and peripheral
 reset, masked writes and peripheral bit requests are included. Timer clocks,
-prescaler state, TIO observations, source acknowledgements, priority fields,
+prescaler state, raw TIO and qualified synchronized capture samples, source
+acknowledgements, priority fields,
 CPU-mask selection and controller acknowledgements are included too.
 It covers bus/map/ROM/reset/SHI/PLL/GPIO/timer inputs, not arbitrary
 native DSP instruction streams or the complete board. Sustained and differential CPU

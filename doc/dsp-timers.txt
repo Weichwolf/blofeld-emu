@@ -1,6 +1,6 @@
-DSP56371 mode-zero timers and TIO GPIO
+DSP56371 mode-zero timers, capture-six and TIO GPIO
 
-Reference: DSP56371UM chapter 11, especially 11.2.1, 11.3.1.1 and tables 11-1,
+Reference: DSP56371UM chapter 11, especially 11.2.1, 11.3.1.1, 11.3.2.3, 11.4.7 and tables 11-1,
 11-3/11-4; Appendix C figures C-23..C-25; chapter 4 interrupt vector table.
 The pinned manual in hardware/sources.json remains an ignored local reference.
 
@@ -44,6 +44,35 @@ another timer or the prescaler. Boundary expectations, including zero/equal
 compare and reload versus overflow, follow the manual's M-N+1 event model;
 stock-silicon edge-phase behavior is still unverified.
 
+Capture mode six, TRM=0
+Timers 0/1 support one-shot measurement capture. Internal CLK/2 or prescaler
+edges load TLR on the first clock and then increment the 24-bit internal counter.
+TCPR is ignored; an unobserved TCPR does not prevent measurement. Overflow sets
+TOF. The first selected synchronized rising edge (INV=0) or falling edge (INV=1)
+latches the count into TCR, sets TCF and halts the counter. TCR retains the prior
+capture across TE rearming; the new internal counter is cleared. Clearing TCF
+or acknowledging its IRQ does not rearm capture. Reset clears TCR/count/flags.
+
+observe_synchronized_tio supplies qualified synchronizer-output samples. A
+previous known sample is required before an enabled capture can detect an edge;
+it may be supplied in mode zero before the original-shaped direct mode-six
+TE write. Raw set_tio_drive levels and DI reads do not guess this clock-domain
+crossing. The manual describes physical measurement uncertainty of one clock;
+no synchronizer latency or raw-edge phase is invented here. Input samples and
+clock batches are separately ordered observations, not an automatic scheduler.
+An unknown synchronized input or a changed raw pad without a new qualified
+sample rejects clock advancement atomically. Raw changes retain the previous
+synchronized value for later edge detection, while withdrawing its timing
+qualification. Unknown TLR also rejects a batch; an explicitly ordered capture
+before the first timer clock can latch the reset-cleared internal zero.
+
+The native capture diagnostic executes mode-six setup, then consumes a qualified
+capture through the real fast-interrupt vector and source acknowledgement. The
+unmodified NAND helpers also execute their mode-six control writes, but their
+three-poll laboratory NAND completion does not prove physical capture timing.
+Capture TRM=1, timer-2 capture, nonzero capture DIR/DO and enabled mode/polarity
+changes remain explicitly unsupported.
+
 Flags, RMW and interrupt sources
 TCF/TOF are W1C; writing zero preserves them. DI is read-only. Native bit tests
 can read a known control/status bit without requiring unrelated live DI.
@@ -58,7 +87,7 @@ and SHI priority, vector fetch acknowledgement, fast/long entry and native RTI
 effects. DMA event history and physical interrupt timing remain pending.
 
 Checks
-  ctest --test-dir build/strict -R '^(dsp_timers|native_dsp|original_dsp_boot)$' --output-on-failure
+  ctest --test-dir build/strict -R '^(dsp_timers|dsp_capture|native_dsp|original_dsp_boot|original_nand_write)$' --output-on-failure
 Independent register/clock expectations cover reset permissions/unknown values,
 TIO polarity and contention, first preload, M-N+1 compare, reload, live preload,
 wrap/W1C, source acknowledgement, shared/direct clocks, PL changes/maxima,
@@ -71,7 +100,7 @@ compare pairs in free-running and reload mode, with W1C and live preload changes
 The oracle keeps its own pending-reload state and applies each manual clock transition.
 
 Unsupported / unqualified
-Nonzero TC modes (pulse/toggle, external counting, measurement, PWM, watchdog),
+Other TC modes (pulse/toggle, external counting, width/period, PWM, watchdog),
 external prescaler clocks, active PCE/TRM changes that keep TE enabled, live TCPR
 writes, wait/stop clock gating, electrical/PLL timing and full board scheduling
 fail or remain outside this interface. Disabling TE may also clear configuration.
@@ -80,7 +109,8 @@ reserved; no external-source assumption is made. Clock batches aggregate sticky
 flags between observations; they do not replace a CPU/IRQ scheduler.
 
 The original DSP stage still stops on unqualified reserved Y:002000 writes.
-Its actual NAND-ready poll is not reached. The native timer tests use independent
-diagnostics, with no patched original loader, skipped clear loop or fake flash.
+Its actual NAND-ready poll is not reached. The native timer diagnostics and
+isolated original NAND helper checks retain that full-boot frontier, with no
+patched original loader or skipped clear loop.
 Full boot, MIDI/audio, persistent storage, update/recovery and hardware comparison
 remain required by coverage.txt.

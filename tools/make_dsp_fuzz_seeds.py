@@ -57,6 +57,39 @@ def main() -> None:
                  (0, 1, 0xFFFF84, 0), (1, 1, 0xFFFF83, 0), (17, 0, 0, 6),
                  (17, 255, 0xFFFFFF, 0xFFFFFFFF), (20, 0, 0, 0)]
     (output / "shared-prescaler-clocks").write_bytes(b"".join(record(*row) for row in prescaler))
+    for inverted in (False, True):
+        control = 0x65 | (0x100 if inverted else 0)
+        capture = [(25, 0, 0, int(inverted)), (1, 1, 0xFFFF8E, 10),
+                   (1, 1, 0xFFFF8F, control), (17, 0, 0, 4),
+                   (25, 0, 0, int(not inverted)), (0, 1, 0xFFFF8C, 0),
+                   (20, 0, 0, 0), (21, 0, 0, 0x54),
+                   (17, 255, 0xFFFFFF, 0xFFFFFFFF),
+                   (25, 0, 0, int(inverted)), (25, 0, 0, int(not inverted)),
+                   (0, 1, 0xFFFF8C, 0), (1, 1, 0xFFFF8F, control & ~1),
+                   (25, 0, 0, int(inverted)), (1, 1, 0xFFFF8F, control),
+                   (25, 0, 0, int(not inverted)), (0, 1, 0xFFFF8C, 0)]
+        (output / f"capture-six-polarity-{int(inverted)}").write_bytes(
+            b"".join(record(*row) for row in capture))
+    capture_unknown = [(1, 1, 0xFFFF8F, 0x65), (25, 0, 0, 1),
+                       (17, 0, 0, 1), (1, 1, 0xFFFF8E, 10),
+                       (17, 0, 0, 1), (0, 1, 0xFFFF8C, 0),
+                       (1, 1, 0xFFFF8F, 0x165), (1, 1, 0xFFFF8F, 0x265),
+                       (1, 1, 0xFFFF87, 0x65), (25, 2, 0, 1), (13, 0, 0, 0)]
+    (output / "capture-six-unknown-input-and-load").write_bytes(
+        b"".join(record(*row) for row in capture_unknown))
+    capture_prescaled = [(25, 1, 0, 0), (1, 1, 0xFFFF83, 3),
+                         (1, 1, 0xFFFF8A, 7), (1, 1, 0xFFFF8B, 0x8065),
+                         (17, 0, 0, 8), (25, 1, 0, 1), (0, 1, 0xFFFF88, 0),
+                         (20, 0, 0, 0), (21, 0, 0, 0x58)]
+    (output / "capture-six-prescaled").write_bytes(
+        b"".join(record(*row) for row in capture_prescaled))
+    capture_crossing = [(25, 0, 0, 0), (1, 1, 0xFFFF8E, 10),
+                        (1, 1, 0xFFFF8F, 0x65), (18, 0, 0, 0), (25, 0, 0, 0),
+                        (17, 0, 0, 2), (18, 0, 0, 1), (17, 0, 0, 1),
+                        (25, 0, 0, 0), (17, 0, 0, 1), (25, 0, 0, 1),
+                        (0, 1, 0xFFFF8C, 0)]
+    (output / "capture-six-unqualified-raw-crossing").write_bytes(
+        b"".join(record(*row) for row in capture_crossing))
     for shi_priority in range(4):
         for timer_priority in range(4):
             priorities = (shi_priority << 2) | (timer_priority << 8)

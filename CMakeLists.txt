@@ -91,7 +91,7 @@ target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp src/mcu_machine.cpp)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
-  src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_interrupts.cpp)
+  src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
 add_library(blofeld_dsp src/dsp_core.cpp)
@@ -128,6 +128,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-address.trace")
   set_tests_properties(original_nand_address PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-nand-write-test test/original_nand_write_test.cpp test/nand_gpio_fixture.cpp)
+  target_link_libraries(blofeld-original-nand-write-test PRIVATE blofeld_nand blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_write COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-nand-write-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write.trace")
+  set_tests_properties(original_nand_write PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-flash-image-test test/flash_image_test.cpp)
   target_link_libraries(blofeld-flash-image-test PRIVATE blofeld_core)
   add_test(NAME flash_image COMMAND blofeld-flash-image-test)
@@ -212,6 +220,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-timers-test test/dsp_timers_test.cpp)
   target_link_libraries(blofeld-dsp-timers-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_timers COMMAND blofeld-dsp-timers-test)
+  add_executable(blofeld-dsp-capture-test test/dsp_capture_test.cpp)
+  target_link_libraries(blofeld-dsp-capture-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_capture COMMAND blofeld-dsp-capture-test)
   add_executable(blofeld-dsp-interrupt-test test/dsp_interrupt_test.cpp)
   target_link_libraries(blofeld-dsp-interrupt-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_interrupts COMMAND blofeld-dsp-interrupt-test)
@@ -359,10 +370,12 @@ add_custom_target(quality
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
     blofeld-nand-gpio-write-test
+    blofeld-original-nand-write-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test
+    blofeld-dsp-capture-test
     blofeld-dsp-interrupt-test
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-vsl-test

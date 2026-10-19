@@ -13,6 +13,8 @@ constexpr unsigned trm = 0x200;
 constexpr unsigned pce = 0x8000;
 constexpr unsigned tof = 0x100000;
 constexpr unsigned tcf = 0x200000;
+constexpr unsigned mode_mask = 0xf0;
+constexpr unsigned capture_mode = 0x60;
 constexpr std::uint64_t counter_range = 0x1000000;
 constexpr unsigned first_load = 0xffff8e;
 constexpr unsigned first_compare = 0xffff8d;
@@ -50,6 +52,10 @@ void DspTimers::advance_free(Timer &timer, const CounterAdvance advance) {
 
 void DspTimers::advance_timer(Timer &timer, const std::size_t index, std::uint64_t edges) {
   if ((timer.control & te) == 0 || edges == 0) { return; }
+  if ((timer.control & mode_mask) == capture_mode) {
+    advance_capture(timer, index, edges);
+    return;
+  }
   if (!timer.load.has_value()) {
     throw Fault("Unknown DSP timer load during clock at X:" + hex(first_load - (index * 4), 6));
   }

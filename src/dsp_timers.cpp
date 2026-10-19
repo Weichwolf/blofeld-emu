@@ -18,6 +18,7 @@ constexpr unsigned te = 1;
 constexpr unsigned toie = 2;
 constexpr unsigned tcie = 4;
 constexpr unsigned mode_mask = 0xf0;
+constexpr unsigned capture_mode = 0x60;
 constexpr unsigned inv = 0x100;
 constexpr unsigned trm = 0x200;
 constexpr unsigned dir = 0x800;
@@ -72,6 +73,7 @@ DspTimerPin DspTimers::observe_tio(const unsigned index) const {
 void DspTimers::set_tio_drive(const unsigned index, const std::optional<bool> level) {
   if (index >= external_.size()) { throw Fault("Invalid DSP timer TIO drive index"); }
   auto next = *this;
+  if (next.external_.at(index) != level) { next.timers_.at(index).synchronized_qualified = false; }
   next.external_.at(index) = level;
   static_cast<void>(next.observe_tio(index));
   *this = next;
@@ -86,7 +88,9 @@ std::uint32_t DspTimers::read(const std::uint32_t address, const std::uint32_t m
   const auto index = index_of(address);
   const auto &timer = timers_.at(index);
   switch (address & 3U) {
-    case 0: return timer.count & mask;
+    case 0:
+      if ((timer.control & mode_mask) == capture_mode) { return timer.captured & mask; }
+      return timer.count & mask;
     case 1:
       if (!timer.compare.has_value()) {
         throw Fault("Unknown DSP timer compare read at X:" + hex(address, 6));
@@ -110,16 +114,30 @@ std::uint32_t DspTimers::read(const std::uint32_t address, const std::uint32_t m
 
 void DspTimers::write_control(const std::size_t index, const std::uint32_t value) {
   auto &timer = timers_.at(index);
-  if ((value & ~allowed) != 0 || (value & mode_mask) != 0 ||
+  const auto mode = value & mode_mask;
+  const auto previous_mode = timer.control & mode_mask;
+  if ((value & ~allowed) != 0 || (mode != 0 && mode != capture_mode) ||
+      (mode == capture_mode && (index == 2 || (value & (trm | dir | data_out)) != 0)) ||
       (index == 2 && (value & (dir | data_out | inv)) != 0)) {
     throw Fault("Unsupported DSP timer control write at X:" + hex(last - (index * 4), 6) +
                 " value=" + hex(value, 6));
+  }
+  if ((timer.control & te) != 0 && previous_mode != mode) {
+    throw Fault("Unqualified active DSP timer mode change at X:" + hex(last - (index * 4), 6));
+  }
+  if (mode == capture_mode && (timer.control & value & te) != 0 &&
+      ((timer.control ^ value) & inv) != 0) {
+    throw Fault("Unqualified active DSP timer capture polarity change at X:" +
+                hex(last - (index * 4), 6));
   }
   if ((timer.control & value & te) != 0 && ((timer.control ^ value) & (pce | trm)) != 0) {
     throw Fault("Unqualified active DSP timer PCE/TRM write at X:" + hex(last - (index * 4), 6));
   }
   const bool was_prescaled = prescaler_enabled();
   const bool enable = (timer.control & te) == 0 && (value & te) != 0;
+  if (previous_mode != mode) {
+    if (previous_mode == 0) { timer.captured = timer.count; }
+  }
   timer.control = value & writable;
   timer.flags &= ~(value & (tof | tcf));
   if ((value & te) == 0) {
@@ -128,6 +146,7 @@ void DspTimers::write_control(const std::size_t index, const std::uint32_t value
   } else if (enable) {
     timer.count = 0;
     timer.first_clock = true;
+    timer.halted = false;
   }
   if (!was_prescaled && prescaler_enabled()) { prescaler_count_ = prescaler_load_; }
   if (index < external_.size()) { static_cast<void>(observe_tio(static_cast<unsigned>(index))); }

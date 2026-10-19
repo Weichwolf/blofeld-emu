@@ -164,6 +164,10 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           RAM/FIFO fallback and bit-number bounds.
                                           Mode-zero TIO1 polls use observed inputs;
                                           no NAND-ready level is fabricated.
+                                          Capture-six TRM=0 uses qualified clocks/
+                                          synchronized samples, selected edges,
+                                          halt/rearm and native IRQ acknowledgement;
+                                          physical crossing latency remains open.
                                           Explicit small-page NAND read candidate:
                                           42 row/area vectors; native own GPIO
                                           reads include all main/spare bytes.
@@ -178,8 +182,13 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           Own native GPIO program/status/readback
                                           checks all 528 bytes, actual failure
                                           branches and missing-outcome rejection
-                                          (nand-write.txt); no original write path
-                                          or physical timing is thereby proven.
+                                          (nand-write.txt). Both unchanged updater
+                                          helpers emit erase/program cycles under
+                                          controlled preconditions: eight outcomes,
+                                          all 528 bytes, twelve selected native cuts.
+                                          Original status turnaround and actual
+                                          source reserved-bit writes still reject;
+                                          complete update/physical timing unproven.
                                           PLL timing/lock, remaining GPIO/timer modes,
                                           ESAI, DMA and chip profile pending;
                                           no combined MCU/DSP board boot.
@@ -319,6 +328,9 @@ Power loss in every erase/program partial  Forty MCU command/reference-position
                                           every loaded byte and confirmation/observed
                                           completion; neighboring storage, retry
                                           history and component-copy isolation checked.
+                                          Twelve additional selected cuts follow
+                                          actual original-helper write-latch edges;
+                                          no original complete retry path claimed.
                                           Exact timed/analog phases, complete original
                                           updates and stock hardware interruption
                                           tests remain pending (nand-write.txt).
@@ -352,10 +364,11 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           clock/size/FIFO/reset seeds: 43811 runs
                                           in 61 s without sanitizer findings.
                                           DSP bus/map/ROM/reset/PLL/GPIO model harness:
-                                          Explicit 64-bit timer clocks, TIO and
+                                          Explicit 64-bit mode-zero/capture-six
+                                          clocks, raw TIO, synchronized samples,
                                           source IRQs, priority fields, CPU masks
                                           and acknowledgement included:
-                                          39720 runs in 61 s without findings.
+                                          35549 runs in 61 s without findings.
                                           Native DSP instruction fuzzing pending.
                                           Small-page NAND protocol harness:
                                           7706 sequences in 61 seconds without
