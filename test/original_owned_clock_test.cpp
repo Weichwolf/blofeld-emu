@@ -236,6 +236,7 @@ void run_continuations(McuMachine &machine,
     const auto initial = machine.bus().power_off_flash_image();
     const auto before = run_to_main(machine, display, case_path, trace, level);
     check_nvm(machine, initial);
+    verify_midi_reference_replays(machine, display, case_path, trace, level);
     verify_idle_replay(machine, display, before, case_path, trace, level);
     std::cout << "Original clocked input=" << level
               << ": main WAI and native idle/RTI replay passed." << '\n';
@@ -274,7 +275,7 @@ int main(const int count, char **arguments) {
       throw blofeld::Fault("Usage: original-owned-clock firmware.zip-or-mid private.trace");
     }
     run({.reference = arguments[1], .trace = arguments[2]});
-    std::cout << "Conditional original MCU reset/main WAI, native idle RTI wake and trusted replay "
+    std::cout << "Conditional original MCU reset/main WAI, native MIDI/RTI and trusted peer replay "
                  "passed. Full DSP/board/audio and physical timing remain unqualified.\n";
     return 0;
   } catch (const std::exception &error) {

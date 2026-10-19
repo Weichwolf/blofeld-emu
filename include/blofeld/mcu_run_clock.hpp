@@ -37,6 +37,8 @@ public:
 
   [[nodiscard]] std::uint64_t timebase_hz() const { return timebase_hz_; }
 
+  [[nodiscard]] std::uint32_t oscillator_hz() const { return oscillator_hz_; }
+
   [[nodiscard]] std::uint64_t elapsed_ticks() const { return elapsed_ticks_; }
 
   // Completed IPBus periods, including explicitly advanced native WAI time.

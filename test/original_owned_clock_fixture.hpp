@@ -91,4 +91,9 @@ void run_continuations(McuMachine &machine,
                        const PrefixCheckpoint &prefix,
                        const std::filesystem::path &path,
                        std::ostream &trace);
+void verify_midi_reference_replays(McuMachine &machine,
+                                   const LcdFixture &display,
+                                   const std::filesystem::path &path,
+                                   std::ostream &trace,
+                                   unsigned level);
 }

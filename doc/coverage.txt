@@ -332,6 +332,10 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           hardware-verified board profile.
 MIDI/controller input             partial  Bounded byte queue and rational 31250-baud
                                           8-N-1 source connect to native SCI pads.
+                                          Separate owned-clock peer drives pads
+                                          without advancing MCU time; per-period
+                                          observation, rate/failure checks and
+                                          coordinated mid-byte replay tested.
                                           Literal wire/timing, all-byte/pin routes,
                                           backpressure and partial-frame replay
                                           checked (midi-input.txt). Explicit clock
@@ -349,6 +353,13 @@ SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity
                                           Strict default still faults in the
                                           unqualified transfer interval; reference
                                           hypotheses are not hardware validation.
+                                          Original owned-clock sequence checks
+                                          SCI/RTI/main with7 declared hypotheses,
+                                          both controlled inputs and2 mid-byte
+                                          MCU/LCD/wire replays. Independent costs,
+                                          divider/IRQ phase, frames and NVM are
+                                          checked; strict default still fails at
+                                          the exact unresolved decision edge.
                                           Original post-startup WAI/SCI/ISR/RTI
                                           receives 264 frames including all 256
                                           byte values. Last-byte storage, activity

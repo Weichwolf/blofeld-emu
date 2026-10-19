@@ -67,6 +67,9 @@ def clock_ledger(text: str):
     assert switches == [(75, 0x80), (233898, 0), (233906, 0x80)], switches
     assert all(v == 0 for _, a, v in writes if a == 0x35), "Unreviewed REFDV change"
     assert [(c, v) for c, a, v in writes if a == 0x3b] == [(233874, 0x40)]
+    sci_config = [(c, a, v) for c, a, v in writes if 0xc8 <= a <= 0xcb]
+    assert sci_config == [(84, 0xc8, 0), (84, 0xc9, 60), (87, 0xca, 8),
+                          (90, 0xcb, 12), (233795, 0xcb, 0x2c)], sci_config
 
     def ticks_at(boundary):
         ticks = 0
@@ -87,6 +90,51 @@ def clock_ledger(text: str):
     expected_idle = (remaining_edges * 5 - main_ticks % 5 + 1) // 2
     assert remaining_edges == 913 and expected_idle == 2282
     return ticks_at, expected_idle
+
+
+def verify_midi(trace: Path, text: str, level: int, suffix: str, ticks_at) -> dict:
+    # The operand clock precedes the first TE/RE enable at boundary90. Native
+    # divider residue survives the entire cold start and partial-frame restore.
+    epoch, divisor, main = 90, 60, 141809799
+    first_fall = main + 960
+    first_sample = epoch + ((first_fall + 1 - epoch + divisor - 1) // divisor) * divisor
+    decision = first_sample + 153 * divisor
+    assert decision - main == 10191
+    prefix_cycles, prefix_idle = 141816115, 2282
+    strict_line, = [line for line in text.splitlines()
+                    if line.startswith(f"midi-strict input={level} ")]
+    strict = record(strict_line)
+    assert strict["cycles"] == decision
+    assert strict["idle"] == prefix_idle + decision - prefix_cycles
+    results = []
+    for delay in (0, 1, 59, 60, 61, 359, 360):
+        lines = [line for line in text.splitlines()
+                 if line.startswith(f"midi input={level} delay={delay} ")]
+        assert len(lines) == 2
+        replays = []
+        for attempt, line in enumerate(lines):
+            observed = record(line)
+            assert observed.pop("replay") == attempt
+            name = str(trace) + suffix + f".midi{delay}.r{attempt}"
+            costs = census(Path(name + ".census.jsonl"))
+            expanded = phases(Path(name + ".phases.json"))
+            assert observed["entries"] == observed["returns"]
+            assert 0 <= observed["reused"] <= observed["entries"]
+            assert observed["serial"] == 8 and observed["first-sci"] == decision + delay
+            irq_cycles = observed["reused"] * 6 + (observed["entries"] - observed["reused"]) * 9
+            expected = prefix_cycles + observed["idle"] - prefix_idle + irq_cycles + costs["instruction_cycles"] + expanded["low"]
+            assert observed["cycles"] == expected >= main + 960 + 8 * 9600
+            assert observed["retired"] == costs["retired"]
+            assert observed["extra-flash"] == expanded["low"]
+            assert observed["ticks"] == ticks_at(expected)
+            assert observed["OSC"] == observed["ticks"] // 5
+            replays.append({"observed": observed, "manual_costs": costs,
+                            "irq_cycles": irq_cycles, "phase_pairs": expanded})
+        assert replays[0] == replays[1], "Coordinated native MIDI peer replay changed execution/time"
+        results.append({"delay": delay, "replays": replays})
+    return {"scope": "Explicit unqualified timing hypotheses; not hardware equivalence",
+            "generator_epoch": epoch, "stop_decision": decision,
+            "strict_default": strict, "phases": results}
 
 
 def verify(trace: Path) -> dict:
@@ -134,7 +182,8 @@ def verify(trace: Path) -> dict:
                                  "irq_cycles": irq_cycles, "phase_pairs": wake_phases})
         assert wake_results[0] == wake_results[1], "Trusted idle replay changed execution or time"
         result["cases"].append({"input": level, "main": main, "manual_costs": costs,
-                                "phase_pairs": expanded, "wake_replays": wake_results})
+                                "phase_pairs": expanded, "wake_replays": wake_results,
+                                "midi": verify_midi(trace, text, level, suffix, ticks_at)})
     return result
 
 
@@ -154,7 +203,7 @@ def main() -> int:
     assert all(artifact(Path(name)) == expected for name, expected in frozen.items())
     result["inputs"] = frozen
     Path(str(trace) + ".verification.json").write_text(json.dumps(result, indent=2) + "\n")
-    print("Original clocked reset/WAI/native RTI replay: independent cycle/OSC ledger agrees.")
+    print("Original clocked reset/WAI/MIDI hypotheses: independent cycle/OSC/divider ledger agrees.")
     return 0
 
 

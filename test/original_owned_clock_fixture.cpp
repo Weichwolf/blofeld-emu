@@ -5,6 +5,7 @@
 #include "blofeld/flash_image.hpp"
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_cycles.hpp"
+#include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
@@ -213,7 +214,9 @@ void attach(McuMachine &machine, LcdFixture &display, FlashPhases &phases, std::
   machine.set_wait_observer([&machine](auto /*cycle*/) { require_idle_receive(machine); });
   machine.bus().set_observer([&machine, &display, &trace](const auto &event) {
     display.observe(event);
-    if (event.write && event.address < register_trace_end) {
+    const bool serial_config =
+        event.address >= hc12::sci_baud_high && event.address <= hc12::sci_control2;
+    if (event.write && (event.address < register_trace_end || serial_config)) {
       trace << "cycle=" << machine.run_clock().bus_cycles() << " write=" << hex(event.address)
             << ':' << hex(event.value, 2) << '\n';
     }

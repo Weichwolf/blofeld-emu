@@ -68,8 +68,13 @@ Explicit receive-timing experiments
   own-program WAI/SCI/ISR/RTI test covers sub-sample delays, SCISWAI, coordinated
   restore, literal stack bytes, register restoration and manual instruction costs.
   These are deterministic offline tests; no fuzz campaign or device is used.
-  Original continuously clocked MIDI execution and hardware edge qualification
-  remain outstanding (public issue #4).
+  The owned-clock wire peer now also supplies a fixed valid MIDI sequence to
+  original SCI/RTI/main under seven declared hypotheses and coordinated mid-byte
+  MCU/LCD/wire replay. Native divider residue is retained; an independent ledger
+  derives the first decision from original configuration writes. The default's
+  exact visible timing fault is still checked. Hardware edge qualification,
+  message/controller processing and full board/audio remain outstanding
+  (public issue #4; midi-input.txt).
 
 Board integration
 - Explicit bus-clock slices enter through McuBus::advance_sci. The caller must

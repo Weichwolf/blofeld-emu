@@ -106,7 +106,7 @@ target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
 add_library(blofeld_midi_serial src/midi_serial.cpp)
 target_include_directories(blofeld_midi_serial PUBLIC include)
 target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
-add_library(blofeld_mcu_midi src/mcu_midi.cpp)
+add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
@@ -181,8 +181,9 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     CACHE FILEPATH "Pinned original ZIP or identical complete source MID for clocked startup")
   add_executable(blofeld-original-owned-clock-test
-    test/original_owned_clock_test.cpp test/original_owned_clock_fixture.cpp)
-  target_link_libraries(blofeld-original-owned-clock-test PRIVATE blofeld_core blofeld_lcd_fixture)
+    test/original_owned_clock_test.cpp test/original_owned_clock_fixture.cpp test/original_owned_midi.cpp)
+  target_link_libraries(blofeld-original-owned-clock-test PRIVATE blofeld_core blofeld_lcd_fixture
+    blofeld_mcu_midi)
   add_test(NAME original_owned_clock COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_owned_clock.py"
     $<TARGET_FILE:blofeld-original-owned-clock-test>
@@ -438,6 +439,9 @@ if(BUILD_TESTING)
     test/mcu_sci_reference_owner.cpp)
   target_link_libraries(blofeld-sci-reference-test PRIVATE blofeld_core)
   add_test(NAME mcu_sci_reference COMMAND blofeld-sci-reference-test)
+  add_executable(blofeld-clocked-midi-test test/mcu_clocked_midi_test.cpp)
+  target_link_libraries(blofeld-clocked-midi-test PRIVATE blofeld_mcu_midi)
+  add_test(NAME mcu_clocked_midi COMMAND blofeld-clocked-midi-test)
   add_executable(blofeld-timer-test test/mcu_timer_test.cpp)
   target_link_libraries(blofeld-timer-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_timer COMMAND blofeld-timer-test)
@@ -540,7 +544,7 @@ add_custom_target(quality
     blofeld-original-cycle-application-test
     blofeld-original-run-clock-test
     blofeld-original-owned-clock-test
-    blofeld-midi-serial-test blofeld-mcu-midi-test
+    blofeld-midi-serial-test blofeld-mcu-midi-test blofeld-clocked-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
     blofeld-nand-image-test
     blofeld-nand-store-test

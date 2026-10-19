@@ -8,6 +8,28 @@ the 30 MHz/PR2 application fixture is an experiment, not measured Blofeld wiring
 or a Desktop/Keyboard profile. CPU, oscillator, timer and DSP time remain separate.
 No operating-system MIDI port or automatic board scheduler is implemented.
 
+Owned-clock wire peer
+McuClockedMidiInput supplies the same bounded byte source through pre-period
+observations from both McuMachine CPU and WAI hooks. It drives only the selected
+RX pad; it never advances SCI or any other MCU domain. The declared fixed bus
+rate must match the native source/divider, including the explicit OSC input.
+Unsupported rate changes fail before a new wire period is offered.
+
+Each observation first commits the preceding offered period only if the owner
+completed exactly one IPBus period at that rate. Repeated observations at an
+unadvanced IRQ boundary consume zero time. Call synchronize after every owner
+operation, before enqueue or checkpoint: it commits the final completed period
+and cancels any unused observation. Enqueue while a period remains offered fails
+without mutating the queue. Missing observations, backward/incompatible time or
+a failed run clock quarantine the peer with pad address and PC/CCR context.
+
+The peer retains no bus/CPU references. Copy the synchronized peer with the
+trusted MCU checkpoint and other external fixtures, then restore all of them.
+Restoring only the MCU or wire across different boundaries fails rather than
+retiming the source. This is a trusted in-process protocol, not an identity check
+against arbitrary unrelated MCU instances that happen to have equal counters.
+Host timestamp conversion, dynamic-rate resampling and device ports are pending.
+
 Transport
 - The source emits start-low, eight least-significant-bit-first data slots and
   stop-high at 31250 bits/second. It preserves every byte, including real-time,
@@ -32,8 +54,8 @@ Transport
   checkpoint before continuing; the receiver may already have advanced.
 
 Reproducible checks
-  cmake --build --preset strict --target blofeld-midi-serial-test blofeld-mcu-midi-test
-  ctest --test-dir build/strict -R '^(midi_serial|mcu_midi)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-midi-serial-test blofeld-mcu-midi-test blofeld-clocked-midi-test
+  ctest --test-dir build/strict -R '^(midi_serial|mcu_midi|mcu_clocked_midi)$' --output-on-failure
   cmake --build --preset strict --target quality
 
 Fixed wire arrays check A5, 55 and AA, including partial-bit consumption and ring
@@ -43,6 +65,9 @@ reach native SCI storage/IRQ acknowledgement on both pin routes. Mid-byte
 MCU/source copies replay with differently fragmented slices, including a
 fractional clock. Missing connected input fails with execution context; restored
 state can resume. These tests open no physical MIDI device and run no fuzzing.
+The owned-clock peer checks every byte and wire bit on both routes, preservation
+of neighbors, exact IPBus/TIM/reference time, mid-byte back-to-back queue replay,
+repeated/unused observations, enqueue ordering and unilateral restore/rate errors.
 
 The original_application regression uses this same transport for 264 frames
 after the unmodified MCU reaches main WAI in its controlled cold-start fixture.
@@ -50,8 +75,20 @@ Its original SCI vector, ISR, RTI, foreground wait, byte/activity fields, regist
 restoration and unchanged NVM remain checked. See original-application.txt and
 mcu-sci.txt for the fixture's conditions and unresolved SCI transfer edges.
 
+The separate original_owned_clock regression retains SCI divider state from the
+entire native cold start and sends a fixed valid eight-byte MIDI sequence while
+CPU, WAI, SCI, TIM and OSC continue. It checks the strict default's exact visible
+transfer-window fault, then explicitly selects seven reference delay hypotheses.
+After the first native RTI/foreground return, each partial first-byte MCU/LCD/wire
+checkpoint is replayed twice for both controlled GPIO levels. Native SCI handler
+byte/activity paths, all-register restoration, independent interrupt stack bytes,
+WAI frame reuse, native RTI, queue drain and unchanged NVM are checked. A separate
+mnemonic cost/Flash-phase/clock ledger verifies both replays and derives the first receive
+decision from native SCI configuration writes. These are conditional experiments;
+they do not qualify the real transfer edge, complete message semantics or audio.
+
 Remaining requirements
-Host MIDI ports, timestamped event scheduling with actual CPU/bus clocks,
+Host MIDI ports, external timestamp scheduling and dynamic-rate input,
 complete MIDI/controller handling by the original firmware and DSP, voices,
 audio output and hardware calibration are pending. A byte-to-SCI experiment
 does not establish complete board boot or playable MIDI/audio behavior.
