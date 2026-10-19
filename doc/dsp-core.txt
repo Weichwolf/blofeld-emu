@@ -41,8 +41,9 @@ DSP56371 memory and peripheral scope
   switch time fail. Other switched layouts remain unsupported.
   The linear X:10000..11fff to P:1000..2fff word correspondence is inferred from
   the window sizes; its physical word order still needs hardware calibration.
-- SHI uses the separately tested model in dsp-shi.txt. Only the disabled IPRC/IPRP
-  state is accepted; enabling CPU interrupt priorities fails pending integration.
+- SHI uses the separately tested model in dsp-shi.txt. SHI/TIM priority fields
+  arbitrate actual native fast/long interrupt entry; see dsp-interrupts.txt. Other
+  enabled IPRP/IPRC fields remain unsupported. No pipeline latency is implied.
 - OGDB writes latch the 24-bit debug value (DSP56300FM 7.2.4/7.2.5). DSP reads,
   JTAG/debug commands, security behavior and debug interrupts remain unimplemented.
 - PCTL command/reset state and requested EXTAL ratios follow DSP56371UM chapter 5;
@@ -127,11 +128,12 @@ Offline DSP bus/model fuzzing
   python3 tools/make_dsp_fuzz_seeds.py doc/local/dsp-fuzz-corpus
   build/fuzz/dsp-model-fuzz doc/local/dsp-fuzz-corpus -artifact_prefix=doc/local/dsp-fuzz-artifacts/ -max_len=2304 -max_total_time=60
 
-The expanded synthetic campaign completed 38124 runs in 61 seconds without
+The expanded synthetic campaign completed 39720 runs in 61 seconds without
 sanitizer findings. The model harness also exercises PCTL commands, PINIT
 observations and clock-target queries. GPIO pad observations and peripheral
 reset, masked writes and peripheral bit requests are included. Timer clocks,
-prescaler state, TIO observations and source acknowledgements are included too.
+prescaler state, TIO observations, source acknowledgements, priority fields,
+CPU-mask selection and controller acknowledgements are included too.
 It covers bus/map/ROM/reset/SHI/PLL/GPIO/timer inputs, not arbitrary
 native DSP instruction streams or the complete board. Sustained and differential CPU
 campaigns, actual NAND/assets, full application/audio and hardware comparison

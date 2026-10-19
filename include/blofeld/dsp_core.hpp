@@ -14,6 +14,9 @@ struct DspState {
   std::uint32_t sr = 0;
   std::uint32_t omr = 0;
   std::uint32_t sp = 0;
+  std::uint32_t vba = 0;
+  std::uint32_t stack_pc = 0;
+  std::uint32_t stack_sr = 0;
   std::uint32_t la = 0;
   std::uint32_t lc = 0;
   std::uint64_t x = 0;
@@ -26,7 +29,8 @@ struct DspState {
 };
 
 // Native interpreter reference path. Each DO/REP body instruction can yield
-// independently; peripheral time remains an explicit board-model input.
+// independently. Interrupt entry executes at most two vector words atomically;
+// peripheral time remains an explicit board-model input.
 class DspCore {
 public:
   explicit DspCore(DspBus &bus);

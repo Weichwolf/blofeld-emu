@@ -88,7 +88,7 @@ target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
-  src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp)
+  src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_interrupts.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
 add_library(blofeld_dsp src/dsp_core.cpp)
@@ -186,6 +186,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-timers-test test/dsp_timers_test.cpp)
   target_link_libraries(blofeld-dsp-timers-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_timers COMMAND blofeld-dsp-timers-test)
+  add_executable(blofeld-dsp-interrupt-test test/dsp_interrupt_test.cpp)
+  target_link_libraries(blofeld-dsp-interrupt-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_interrupts COMMAND blofeld-dsp-interrupt-test)
   add_executable(blofeld-dsp-gpio-test test/dsp_gpio_test.cpp)
   target_link_libraries(blofeld-dsp-gpio-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_gpio COMMAND blofeld-dsp-gpio-test)
@@ -291,6 +294,7 @@ add_custom_target(quality
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test
+    blofeld-dsp-interrupt-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-mcu-sender-test

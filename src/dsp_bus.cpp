@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_gpio.hpp"
+#include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_timers.hpp"
 
 #include <array>
@@ -11,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace blofeld {
 namespace {
@@ -111,6 +113,7 @@ void DspBus::reset() {
 }
 
 void DspBus::reset_peripherals() {
+  interrupts_.reset();
   shi_.reset();
   timers_.reset();
   for (auto &port : gpio_) { port.reset(); }
@@ -286,10 +289,32 @@ DspCodeChanges DspBus::take_code_changes() {
   return std::exchange(changes_, DspCodeChanges{});
 }
 
+std::optional<DspInterruptRequest> DspBus::interrupt_request(const unsigned mask) const {
+  constexpr unsigned shi_receive = 0x44;
+  constexpr unsigned timer_compare = 0x54;
+  std::vector<std::uint32_t> pending;
+  const auto shi_level = interrupts_.priority(shi_receive);
+  if (shi_level && *shi_level >= mask) { pending = shi_.interrupt_vectors(); }
+  const auto timer_level = interrupts_.priority(timer_compare);
+  if (timer_level && *timer_level >= mask) {
+    const auto timer = timers_.interrupt_vectors();
+    pending.insert(pending.end(), timer.begin(), timer.end());
+  }
+  return interrupts_.select(pending, mask);
+}
+
+void DspBus::acknowledge_interrupt(const DspInterruptRequest request) {
+  const auto current = interrupt_request(request.level);
+  if (!current || current->vector != request.vector || current->level != request.level) {
+    throw Fault("DSP interrupt fetch has no matching pending source");
+  }
+  constexpr unsigned first_timer = 0x54;
+  if (request.vector >= first_timer) { timers_.acknowledge_interrupt(request.vector); }
+}
+
 std::uint32_t DspBus::read_peripheral(const DspAddress access) {
   constexpr unsigned first_shi = 0xffff90;
   constexpr unsigned last_shi = 0xffff94;
-  constexpr unsigned first_priority = 0xfffffe;
   constexpr unsigned pll_control = 0xfffffd;
   constexpr unsigned bus_control = 0xfffffb;
   if (access.space == DspSpace::x && DspTimers::handles(access.address)) {
@@ -312,14 +337,15 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
   if (access.space == DspSpace::x && access.address >= first_shi && access.address <= last_shi) {
     return shi_.read(access.address);
   }
-  if (access.space == DspSpace::x && access.address >= first_priority) { return 0; }
+  if (access.space == DspSpace::x && DspInterrupts::handles(access.address)) {
+    return interrupts_.read(access.address);
+  }
   throw Fault("Unimplemented DSP peripheral read at " + address_text(access));
 }
 
 void DspBus::write_peripheral(const DspStore access) {
   constexpr unsigned first_shi = 0xffff90;
   constexpr unsigned last_shi = 0xffff94;
-  constexpr unsigned first_priority = 0xfffffe;
   constexpr unsigned once_gdb = 0xfffffc;
   constexpr unsigned pll_control = 0xfffffd;
   constexpr unsigned bus_control = 0xfffffb;
@@ -355,9 +381,8 @@ void DspBus::write_peripheral(const DspStore access) {
     shi_.write({.address = access.address, .value = access.value});
     return;
   }
-  // Only the disabled interrupt-controller state is implemented. Enables cannot
-  // appear successful until CPU delivery and derivative priorities are modeled.
-  if (access.space == DspSpace::x && access.address >= first_priority && access.value == 0) {
+  if (access.space == DspSpace::x && DspInterrupts::handles(access.address)) {
+    interrupts_.write(access.address, access.value);
     return;
   }
   throw Fault("Unimplemented DSP peripheral write at " +

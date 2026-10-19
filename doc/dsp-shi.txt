@@ -36,8 +36,9 @@ Stop-state behavior is not modeled. Reset retains externally observed wire level
 Polling and interrupt-request selection are covered: HRIE=01 selects nonempty,
 HRIE=11 selects full, HRIE=10 is rejected. Overrun/underrun select their distinct
 vectors. Requests are listed in documented internal priority order. DSP CPU
-interrupt delivery, priority registers, entry latency and I2C/master bus errors
-remain outside this component.
+interrupt delivery and SHI/TIM priority registers use the separate native bridge
+(dsp-interrupts.txt). Entry latency and I2C/master bus errors remain unqualified
+or unsupported; this component alone does not establish CPU exception behavior.
 
 Verification
   build/strict/blofeld-shi-test

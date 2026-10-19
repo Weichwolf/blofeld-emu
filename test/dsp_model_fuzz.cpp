@@ -15,7 +15,10 @@ constexpr unsigned timer_drive_action = 18;
 constexpr unsigned timer_read_action = 19;
 constexpr unsigned timer_vectors_action = 20;
 constexpr unsigned timer_ack_action = 21;
-constexpr unsigned action_count = 22;
+constexpr unsigned irq_select_action = 22;
+constexpr unsigned irq_ack_action = 23;
+constexpr unsigned irq_service_action = 24;
+constexpr unsigned action_count = 25;
 
 void timer_action(blofeld::DspBus &bus,
                   const std::uint8_t *record,
@@ -112,6 +115,13 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, const std::size_
         case timer_read_action:
         case timer_vectors_action:
         case timer_ack_action: timer_action(bus, record, address, value); break;
+        case irq_select_action: static_cast<void>(bus.interrupt_request(value)); break;
+        case irq_ack_action: bus.acknowledge_interrupt({.vector = address, .level = value}); break;
+        case irq_service_action:
+          if (const auto request = bus.interrupt_request(record[8] & 3U)) {
+            bus.acknowledge_interrupt(*request);
+          }
+          break;
         default: throw blofeld::Fault("Invalid DSP model-fuzzer action");
       }
     } catch (const blofeld::Fault &) {

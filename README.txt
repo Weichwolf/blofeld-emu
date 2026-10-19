@@ -70,6 +70,8 @@ doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.
 doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts and CPU operand widths.
 doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
 doc/dsp-shi.txt covers the DSP-side SPI slave and native MCU GPIO exchange tests.
+doc/dsp-interrupts.txt covers SHI/TIM arbitration, native fast/long entry, nested
+priority, RTI, relocated vectors and DO/REP behavior at instruction boundaries.
 doc/dsp-core.txt covers native DSP execution and the documented SPI bootstrap
 loading the unchanged Blofeld first stage. A separate original MCU regression
 captures its complete GPIO transmission under explicit pin observations

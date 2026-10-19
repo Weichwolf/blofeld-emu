@@ -52,9 +52,10 @@ flags therefore clear too, matching NXP's warning against using BSET to clear
 only one flag. This is deliberately different from symbolic GPIO PDR merging.
 Servicing an enabled pending source clears its own flag. Relative vectors are
 54/56, 58/5a and 5c/5e for compare/overflow respectively; each timer enumerates
-overflow before compare. Cross-source CPU priority, delivery, vector frames and
-DMA event history are not established by this source-level interface. The bus
-still rejects enabled IPRP/IPRC configurations pending controller integration.
+overflow before compare. The separate controller/native bridge integrates TIM
+and SHI priority, vector fetch acknowledgement, fast/long entry and native RTI
+(dsp-interrupts.txt). This source-level component alone proves none of those CPU
+effects. DMA event history and physical interrupt timing remain pending.
 
 Checks
   ctest --test-dir build/strict -R '^(dsp_timers|native_dsp|original_dsp_boot)$' --output-on-failure

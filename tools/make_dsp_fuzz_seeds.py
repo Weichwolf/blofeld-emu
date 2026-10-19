@@ -57,6 +57,17 @@ def main() -> None:
                  (0, 1, 0xFFFF84, 0), (1, 1, 0xFFFF83, 0), (17, 0, 0, 6),
                  (17, 255, 0xFFFFFF, 0xFFFFFFFF), (20, 0, 0, 0)]
     (output / "shared-prescaler-clocks").write_bytes(b"".join(record(*row) for row in prescaler))
+    for shi_priority in range(4):
+        for timer_priority in range(4):
+            priorities = (shi_priority << 2) | (timer_priority << 8)
+            rows = [(1, 1, 0xFFFFFE, priorities), (1, 1, 0xFFFF8E, 0xFFFFFF),
+                    (1, 1, 0xFFFF8D, 0), (1, 1, 0xFFFF8F, 7), (17, 0, 0, 2)]
+            rows += [(22, 0, 0, mask) for mask in range(5)]
+            rows += [(23, 0, 0x56, 2), (24, 0, 0, 0), (22, 0, 0, 0),
+                     (24, 0, 0, 0), (22, 0, 0, 0), (1, 1, 0xFFFFFF, 1),
+                     (1, 1, 0xFFFFFE, 0x400), (13, 0, 0, 0), (22, 0, 0, 0)]
+            (output / f"irq-priorities-{shi_priority}-{timer_priority}").write_bytes(
+                b"".join(record(*row) for row in rows))
     for area in range(3):
         base = 0xFF0000 if area == 0 else 0x4000
         rows = [(6, area, base, 0x123456), (0, area, base, 0), (0, area, base + 2, 0),

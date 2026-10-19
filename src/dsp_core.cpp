@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
+#include "blofeld/dsp_interrupts.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
@@ -16,6 +17,8 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace blofeld {
 namespace {
@@ -75,12 +78,35 @@ public:
                   dsp56k::TWord &first,
                   dsp56k::TWord &second) const override {
     first = bus_.read({.address = address});
-    second = bus_.peek_program(address + 1);
+    if (interrupt_ && address == interrupt_->address) {
+      second = bus_.read({.address = address + 1});
+      bus_.acknowledge_interrupt(interrupt_->request);
+      interrupt_.reset();
+    } else {
+      second = bus_.peek_program(address + 1);
+    }
     return true;
   }
 
+  void arm_interrupt(const DspInterruptRequest request, const std::uint32_t address) {
+    if (interrupt_) { throw Fault("DSP interrupt vector fetch is already armed"); }
+    interrupt_ = VectorFetch{.request = request, .address = address};
+  }
+
+  void verify_interrupt_fetch() const {
+    if (interrupt_) { throw Fault("Native DSP interrupt bypassed the strict vector fetch"); }
+  }
+
+  void reset() { interrupt_.reset(); }
+
 private:
+  struct VectorFetch {
+    DspInterruptRequest request;
+    std::uint32_t address = 0;
+  };
+
   DspBus &bus_;
+  mutable std::optional<VectorFetch> interrupt_;
 };
 
 class Peripherals final : public dsp56k::IPeripherals {
@@ -179,6 +205,7 @@ void DspCore::reset_spi_boot() {
   impl_->cpu.resetHW();
   impl_->cpu.regs().omr.var = spi_mode;
   impl_->cpu.setPC(boot_entry);
+  impl_->access.reset();
   impl_->faulted = false;
   impl_->invalidate();
 }
@@ -190,6 +217,9 @@ DspState DspCore::state() const {
                   .sr = static_cast<std::uint32_t>(register_value(cpu, dsp56k::Reg_SR)) & word_mask,
                   .omr = word(regs.omr),
                   .sp = word(regs.sp),
+                  .vba = word(regs.vba),
+                  .stack_pc = word(dsp56k::hiword(regs.ss[cpu.ssIndex()])),
+                  .stack_sr = word(dsp56k::loword(regs.ss[cpu.ssIndex()])),
                   .la = word(regs.la),
                   .lc = word(regs.lc),
                   .x = register_value(cpu, dsp56k::Reg_X) & data_mask,
@@ -207,14 +237,29 @@ DspState DspCore::state() const {
 void DspCore::step() {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
   const auto before = state();
+  std::optional<DspInterruptRequest> interrupt;
   try {
     impl_->invalidate();
-    impl_->cpu.execReference();
+    constexpr unsigned mask_shift = 8;
+    constexpr unsigned interrupt_mask = 3;
+    interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
+    if (interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc))) {
+      const auto vector = before.vba + interrupt->vector;
+      impl_->access.arm_interrupt(*interrupt, vector);
+      impl_->cpu.execReferenceInterrupt(vector, interrupt->level);
+      impl_->access.verify_interrupt_fetch();
+    } else {
+      interrupt.reset();
+      impl_->cpu.execReference();
+    }
     impl_->bus.observe_omr(word(impl_->cpu.regs().omr));
   } catch (const std::exception &error) {
     impl_->faulted = true;
-    throw Fault("DSP reference step pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) + ": " +
-                error.what());
+    const auto context = interrupt ? " irq=" + hex(interrupt->vector, 2) +
+                                         " level=" + std::to_string(interrupt->level)
+                                   : std::string{};
+    throw Fault("DSP reference step pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) +
+                context + ": " + error.what());
   }
 }
 

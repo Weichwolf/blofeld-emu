@@ -95,4 +95,14 @@ No additional SDK change is needed for that timer-specific board behavior.
 The SDK checkout stays unchanged. CMake stages and patches private build copies,
 then updates only changed output files so a small patch edit does not rewrite
 all active native headers. This is a limited, uncalibrated DSP56371 reference
-path; full ISA, interrupts/timing and real-device equivalence remain open.
+path; full ISA, complete interrupt sources/timing and real-device equivalence
+remain open.
+
+The bounded native interrupt entry uses source-selected priority rather than the
+SDK pending FIFO and its fixed level. Actual vector fetches use the strict bus;
+native JSR in either vector slot saves PC/SR, clears long-entry state and raises
+IPL, allowing only higher-level nesting. Native RTI restores the frame. Fast
+vectors retain foreground PC and may change SR. Native MOVEC masks read-only VBA
+bits; active/consecutive REP defers entry. Unsupported vector flows/lengths and
+stack overflow fail. Independent dsp_interrupts checks and reference limits are
+described in doc/dsp-interrupts.txt. No JIT or physical pipeline claim is made.

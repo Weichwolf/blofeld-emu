@@ -46,8 +46,11 @@
 @@ -86 +86 @@
 -		typedef void (*TInterruptFunc)(DSP*) noexcept;
 +		typedef void (*TInterruptFunc)(DSP*);
-@@ -162,0 +163,10 @@
+@@ -162,0 +163,13 @@
 +		bool m_referenceMode = false;
++		bool m_referenceVectorActive = false;
++		bool m_referenceLongEntry = false;
++		bool m_referenceRepeatCompleted = false;
 +		struct ReferenceRepeat {
 +			TWord remaining = 0;
 +			TWord body = 0;
@@ -57,26 +60,30 @@
 +			TReg24 savedLC;
 +			bool loaded = false;
 +		} m_referenceRepeat;
-@@ -189 +199 @@
+@@ -189 +202 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +218,4 @@
+@@ -208 +221,9 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
++		bool referenceInterruptible(TWord nextOpcode) const;
++		void execReferenceInterrupt(TWord vector, unsigned level);
++	private:
++		void execReferenceVectorWord(TWord address, TWord opcode, unsigned available);
++	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +424,4 @@
+@@ -411 +432 @@
 -		TWord	fetchOpWordB()
--		{
 +		TWord fetchOpWordB()
-+		{
+@@ -412,0 +434,2 @@
 +			const auto extension = m_referenceRepeat.loaded
 +				? m_referenceRepeat.extension : memRead(MemArea_P, pcCurrentInstruction + 1);
-@@ -416 +431 @@
+@@ -416 +439 @@
 -			return m_opWordB;
 +			return extension;
-@@ -1468,0 +1484 @@
+@@ -1468,0 +1492 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -88,33 +95,36 @@
 @@ -52 +53 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept
 +	void dspExecInterrupts(DSP* _dsp)
-@@ -65,0 +67,8 @@
-+	}
-+
+@@ -67,0 +69,8 @@
 +	void dspExecCustomPeripherals(DSP* dsp)
 +	{
 +		const auto x = dsp->getPeriph(0)->exec();
 +		const auto y = dsp->getPeriph(1)->exec();
 +		dsp->getPeriph(0)->resetDelayCycles(dsp->getInstructionCounter(), std::min(x, y));
 +		dsp->processExternalInterrupts();
++	}
++
 @@ -74,2 +83 @@
 -		assert(false && "Peripherals configuration is not supported");
 -		return nullptr;
 +		return &dspExecCustomPeripherals;
-@@ -111,0 +120,2 @@
+@@ -111,0 +120,7 @@
 +		m_referenceMode = false;
++		m_referenceVectorActive = false;
++		m_referenceLongEntry = false;
++		m_referenceRepeatCompleted = false;
 +		m_referenceRepeat = {};
-@@ -133,2 +143,2 @@
++		m_processingMode = Default;
++		m_interruptFunc = m_execPeripheralsFunc;
+@@ -133,2 +148,2 @@
 -		const CCRMask srClear	= static_cast<CCRMask>(SR_RM | SR_SM | SR_CE | SR_SA | SR_FV | SR_LF | SR_DM | SR_SC | SR_S0 | SR_S1 | 0xf);
 -		const CCRMask srSet		= static_cast<CCRMask>(SR_CP0 | SR_CP1 | SR_I0 | SR_I1);
 +		const SRMask srClear	= static_cast<SRMask>(SR_RM | SR_SM | SR_CE | SR_SA | SR_FV | SR_LF | SR_DM | SR_SC | SR_S0 | SR_S1 | 0xf);
 +		const SRMask srSet		= static_cast<SRMask>(SR_CP0 | SR_CP1 | SR_I0 | SR_I1);
-@@ -264 +274 @@
+@@ -264 +279 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -322,0 +333,44 @@
-+	}
-+
+@@ -324,0 +340,107 @@
 +	void DSP::execReference()
 +	{
 +		m_referenceMode = true;
@@ -145,7 +155,9 @@
 +			}
 +			reg.lc = repeat.savedLC;
 +			repeat.loaded = false;
++			m_referenceRepeatCompleted = true;
 +		} else {
++			m_referenceRepeatCompleted = false;
 +			execInterpreter();
 +		}
 +		if(sr_test_noCache(SR_LF) && pcCurrentInstruction + m_currentOpLen == reg.la.toWord() + 1 &&
@@ -157,10 +169,79 @@
 +				setPC(hiword(reg.ss[ssIndex()]));
 +			}
 +		}
-@@ -525,0 +580,2 @@
++	}
++
++
++	bool DSP::referenceInterruptible(const TWord nextOpcode) const
++	{
++		if(m_referenceRepeat.remaining || m_referenceVectorActive) return false;
++		if(!m_referenceRepeatCompleted) return true;
++		Instruction a, b;
++		m_opcodes.getInstructionTypes(nextOpcode, a, b);
++		return a < Rep_ea || a > Rep_S;
++	}
++
++	void DSP::execReferenceVectorWord(const TWord address, const TWord opcode, const unsigned available)
++	{
++		Instruction a, b;
++		m_opcodes.getInstructionTypes(opcode, a, b);
++		const auto length = m_opcodes.getOpcodeLength(opcode, a, b);
++		const bool branch = (m_opcodes.getFlags(a, b) & OpFlagBranch) != 0;
++		if(!length || length > available || (branch && a != Jsr_ea && a != Jsr_xxx) ||
++			(a >= Do_ea && a <= Enddo) ||
++			(a >= Rep_ea && a <= Reset) || a == Rti || a == Rts || a == Stop || a == Wait ||
++			a == Trap || a == Trapcc || a == Debug || a == Debugcc || a == Illegal)
++			throw std::runtime_error("Unsupported reference interrupt vector instruction");
++		pcCurrentInstruction = address;
++		m_srCurrentInstruction = getSR().toWord();
++		execOp(opcode);
++	}
++
++	void DSP::execReferenceInterrupt(const TWord vector, const unsigned level)
++	{
++		if(m_referenceRepeat.remaining || m_referenceVectorActive || level > 2 || (vector & 1))
++			throw std::runtime_error("Invalid reference interrupt entry");
++		m_referenceMode = true;
++		m_referenceVectorActive = true;
++		m_referenceLongEntry = false;
++		m_referenceRepeatCompleted = false;
++		m_processingMode = FastInterrupt;
++		const auto pc = reg.pc.toWord();
++		const auto sp = reg.sp.toWord();
++		TWord first, second;
++		memReadOpcode(vector, first, second);
++		m_opWordB = second;
++		execReferenceVectorWord(vector, first, 2);
++		if(!m_referenceLongEntry && m_currentOpLen == 1) {
++			m_opWordB = 0;
++			execReferenceVectorWord(vector+1, second, 1);
++		}
++		if(m_referenceLongEntry) {
++			if(reg.sp.toWord() != sp+1)
++				throw std::runtime_error("Unexpected reference interrupt stack change");
++			const auto clear = SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV | SR_I0 | SR_I1;
++			setSR((getSR().toWord() & ~static_cast<TWord>(clear)) | ((level+1) << 8));
++			m_processingMode = LongInterrupt;
++			m_interruptFunc = &dspExecNop;
++		} else {
++			if(reg.pc.toWord() != pc || reg.sp.toWord() != sp)
++				throw std::runtime_error("Unsupported reference fast-interrupt flow/stack change");
++			m_processingMode = DefaultPreventInterrupt;
++			m_interruptFunc = &dspExecDefaultPreventInterrupt;
++		}
++		m_referenceVectorActive = false;
++	}
++
+@@ -413,0 +536,5 @@
++		if(m_referenceVectorActive) {
++			if(ssIndex() >= reg.ss.size()-1)
++				throw std::runtime_error("Unsupported reference interrupt stack overflow");
++			m_referenceLongEntry = true;
++		}
+@@ -525,0 +653,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +660,10 @@
+@@ -603,0 +733,10 @@
 +		if(m_referenceMode) {
 +			if(!_loopCount || m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported zero/nested reference REP");
@@ -171,10 +252,10 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1217,0 @@
+@@ -1152,2 +1290,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1220 @@
+@@ -1156 +1293 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
 --- a/source/dsp56kEmu/dsp_ops.inl
@@ -302,3 +383,11 @@
 +
 @@ -183,0 +224 @@
 +		if(m_referenceMode) return referenceBitMemory<Inst>(op, PeripheralBitOp::Test);
+--- a/source/dsp56kEmu/dsp_decode.inl
++++ b/source/dsp56kEmu/dsp_decode.inl
+@@ -263 +263 @@
+-		case 0x30:	reg.vba = _val;			return;
++		case 0x30:	reg.vba.var = m_referenceMode ? (_val.toWord() & 0xffff00) : _val.toWord();			return;
+@@ -315 +315 @@
+-		case 0x10:	reg.vba = _val;				return;
++		case 0x10:	reg.vba.var = m_referenceMode ? (_val.toWord() & 0xffff00) : _val.toWord();				return;

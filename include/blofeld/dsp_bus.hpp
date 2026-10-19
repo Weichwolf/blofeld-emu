@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/dsp_gpio.hpp"
+#include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_pll.hpp"
 #include "blofeld/dsp_shi.hpp"
 #include "blofeld/dsp_timers.hpp"
@@ -61,6 +62,8 @@ public:
   void observe_omr(std::uint32_t value);
   void advance_instruction_cycles(unsigned cycles);
   [[nodiscard]] DspCodeChanges take_code_changes();
+  [[nodiscard]] std::optional<DspInterruptRequest> interrupt_request(unsigned mask) const;
+  void acknowledge_interrupt(DspInterruptRequest request);
 
   [[nodiscard]] DspShi &shi() { return shi_; }
 
@@ -96,6 +99,7 @@ private:
   DspShi shi_;
   DspPll pll_;
   DspTimers timers_;
+  DspInterrupts interrupts_;
   std::array<DspGpio, 3> gpio_{DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f)};
   std::uint32_t bus_control_ = 0;
   DspCodeChanges changes_;
