@@ -18,6 +18,9 @@ namespace blofeld::test {
 inline constexpr unsigned corpus_boot = 0xff0000;
 inline constexpr unsigned corpus_word_mask = 0xffffff;
 inline constexpr unsigned program_words = 4096;
+// Supplier bounds include zero-count loops with a conservative 70000-step budget.
+// Program size and dynamic instruction count are independent limits.
+inline constexpr unsigned maximum_case_steps = 100000;
 inline constexpr unsigned x_words = 3072;
 inline constexpr unsigned y_words = 2048;
 inline constexpr unsigned snapshot_ram_begin = 0x400;
@@ -62,7 +65,7 @@ inline std::vector<CorpusCase> read_cases(const std::filesystem::path &path) {
                                      item.end >> std::dec >> item.limit),
                    "Malformed DSP corpus metadata");
     corpus_require(tag == "case" && item.start < item.end && item.end <= program_words &&
-                       item.limit != 0 && item.limit <= program_words &&
+                       item.limit != 0 && item.limit <= maximum_case_steps &&
                        item.name.size() <= maximum_name,
                    "Unsupported DSP corpus case");
     fields >> std::ws;

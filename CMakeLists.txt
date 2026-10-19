@@ -208,6 +208,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
+  add_executable(blofeld-dsp-zero-loop-test test/dsp_zero_loop_test.cpp)
+  target_link_libraries(blofeld-dsp-zero-loop-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_zero_loops COMMAND blofeld-dsp-zero-loop-test)
   add_executable(blofeld-dsp-corpus-test test/dsp_corpus_test.cpp)
   target_link_libraries(blofeld-dsp-corpus-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_hardware_corpus COMMAND ${Python3_EXECUTABLE}
@@ -217,6 +220,9 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/dsp-corpus.json"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-hardware-corpus")
   set_tests_properties(dsp_hardware_corpus PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_corpus_bounds.py"
+    $<TARGET_FILE:blofeld-dsp-corpus-test>)
   add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp)
   target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dsp)
   add_test(NAME original_dsp_boot COMMAND ${Python3_EXECUTABLE}
@@ -333,7 +339,7 @@ add_custom_target(quality
     blofeld-dsp-interrupt-test
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-vsl-test
-    blofeld-dsp-corpus-test blofeld-coupled-boot-test
+    blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-mcu-sender-test

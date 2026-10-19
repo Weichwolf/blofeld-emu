@@ -128,11 +128,15 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           Scaled-S manual-table ambiguity remains
                                           unqualified; these are not full-ISA or
                                           timing proofs.
-                                          External MCPX silicon banks b0/b1 check
-                                          132 native cases: architectural registers,
+                                          Normal zero REP annulment and retained
+                                          zero-DO frames checked with 36 source/flag
+                                          vectors and nested/IRQ/failure cases
+                                          (dsp-zero-loops.txt).
+                                          External MCPX silicon banks b0/b1/b2 check
+                                          203 native cases: architectural registers,
                                           fifteen stack pairs and operand memory.
                                           Derivative and broader-corpus limits,
-                                          including zero-count loop behavior,
+                                          including compatibility/pipeline behavior,
                                           remain explicit
                                           (dsp-validation.txt). This is not a
                                           Blofeld hardware comparison.

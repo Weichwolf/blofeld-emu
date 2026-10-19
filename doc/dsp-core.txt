@@ -11,8 +11,10 @@ patches/dsp56300-reference-bus.patch adds unconditional board-owned memory hooks
 a custom peripheral dispatcher and a bounded execReference entry. Each DO body
 instruction yields independently. Positive REP counts also yield per body
 instruction, retaining the latched opcode/extension until repetition ends. A
-normal revisit sees subsequent code changes. Zero/nested REP, unsupported repeat
-control flow and undefined opcodes fail explicitly; this is not full ISA proof.
+normal revisit sees subsequent code changes. Normal-mode zero REP annuls a valid
+one-word target, while zero DO retains its frame writes (dsp-zero-loops.txt).
+Compatibility-zero/nested REP, unqualified targets, unsupported repeat control
+flow and undefined executed opcodes fail explicitly; this is not full ISA proof.
 
 Program fetches and actually used extensions are checked through the strict bus.
 Lookahead may inspect unknown bytes without granting execution permission. Native

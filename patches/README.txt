@@ -111,7 +111,7 @@ NORM's no-shift path now refreshes E/U/N/Z/V as specified by DSP56300FM 13-146.
 The SDK previously preserved stale flags indefinitely after a data MOVE. A
 three-NORM regression fails against that path; 4608 independently computed
 vectors check scaling, A/B, Rn, compatibility and preserved state. Pinned external
-MCPX hardware corpus banks b0/b1 provide a separate instruction-state comparison
+MCPX hardware corpus banks b0/b1/b2 provide a separate instruction-state comparison
 (doc/dsp-validation.txt). This does not qualify the JIT or a Blofeld board.
 
 Whole-accumulator transfer helpers now update sticky S from the pre-move source
@@ -126,3 +126,14 @@ In reference mode, unimplemented instructions throw their name before coreDump
 can obscure the cause with unrelated bus reads. These changes do not implement
 cache instructions or establish DSP56371 silicon/pipeline equivalence. See
 doc/dsp-validation.txt for scope and remaining derivative-specific loop questions.
+
+Normal zero REP now annuls valid one-word targets in reference mode, preserving
+count-source effects, LC and flags, with strict target/compatibility/placement
+failures. The interpretation uses SR.SC on FM5-13 and annulled REP timing A.2.6.6,
+corroborated by MCPX b2. Zero DO now performs native frame setup/unwind so popped
+stack slots retain LA/LC/body-PC/SR writes even though its body does not execute.
+The old early return omitted those writes. Own failure regressions, nested state,
+IRQ chains, boundaries and all71 pinned b2 cases check the corrections. Normal
+interpreter/JIT paths are unchanged; full chip/pipeline/compatibility qualification
+remains open. See doc/dsp-zero-loops.txt. The original nonzero clear loop is not
+shortened, skipped or allowed to write unqualified reserved memory.

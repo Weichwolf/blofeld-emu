@@ -271,13 +271,43 @@
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -525,0 +653,2 @@
+@@ -491,0 +619,8 @@
++				if(m_referenceMode) {
++					// Annulment skips the body, not the architectural frame writes
++					// (FM13-56/57; retained slots also observed in MCPX b2).
++					if(ssIndex() > reg.ss.size()-3)
++						throw std::runtime_error("Unsupported zero DO stack overflow at SP=" + std::to_string(reg.sp.toWord()));
++					do_start(&_loopcount, _addr);
++					do_end();
++				}
+@@ -525,0 +661,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +733,10 @@
+@@ -603,0 +741,31 @@
 +		if(m_referenceMode) {
-+			if(!_loopCount || m_referenceRepeat.remaining)
-+				throw std::runtime_error("Unsupported zero/nested reference REP");
++			if(m_referenceRepeat.remaining)
++				throw std::runtime_error("Unsupported nested reference REP");
++			if(!_loopCount) {
++				// FM5-13 and A.2.6.6 describe normal-mode annulment. The legacy
++				// 65536 text in REP13-160 is not applied to SC=0.
++				if(sr_test_noCache(SR_SC))
++					throw std::runtime_error("Unqualified compatibility-zero reference REP");
++				const auto last = reg.la.toWord();
++				if(sr_test_noCache(SR_LF) && pcCurrentInstruction <= last && last-pcCurrentInstruction <= 2)
++					throw std::runtime_error("Forbidden zero REP near DO loop end");
++				const auto body = reg.pc.toWord();
++				const auto opcode = memRead(MemArea_P, body);
++				Instruction a, b;
++				const auto decoded = m_opcodes.getInstructionTypes(opcode, a, b);
++				const auto forbidden = OpFlagBranch | OpFlagLoop | OpFlagDoLoop | OpFlagPushPC | OpFlagPopPC;
++				if(!decoded || m_opcodes.getOpcodeLength(opcode, a, b) != 1 ||
++					(m_opcodes.getFlags(a, b) & forbidden) || a == Stop || a == Wait ||
++					a == Trap || a == Trapcc || a == Debug || a == Debugcc || a == Illegal)
++					throw std::runtime_error("Unsupported reference zero REP target");
++				setPC((body+1) & 0xffffff);
++				m_referenceRepeatCompleted = true;
++				return true;
++			}
 +			m_referenceRepeat.savedLC = reg.lc;
 +			m_referenceRepeat.remaining = _loopCount;
 +			m_referenceRepeat.body = reg.pc.toWord();
@@ -285,13 +315,13 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1290,0 @@
+@@ -1152,2 +1319,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1293 @@
+@@ -1156 +1322 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1570,0 +1708,2 @@
+@@ -1570,0 +1737,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
 --- a/source/dsp56kEmu/dsp_ops.inl

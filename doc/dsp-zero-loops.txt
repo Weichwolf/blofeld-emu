@@ -1,0 +1,71 @@
+Native DSP zero-count loops
+
+  cmake --build --preset strict --target blofeld-dsp-zero-loop-test blofeld-dsp-corpus-test
+  ctest --test-dir build/strict -R '^(dsp_zero_loops|dsp_hardware_corpus|dsp_corpus_bounds)$' --output-on-failure
+
+Normal-mode interpretation
+DSP56300FM Rev.5 is internally inconsistent about zero REP counts. Its REP
+paragraph on 13-160 says 65536 repetitions. The SR.SC description on 5-13 says
+zero-count loops skip their bodies in normal mode (SC=0), distinguishing the
+16-bit compatibility mode. Appendix A.2.6.6 explicitly describes an annulled REP
+with a zero count. The reference interpreter implements normal-mode annulment;
+published MCPX GP captures independently corroborate this behavior. This is not
+a measured DSP56371/Blofeld result. The manufacturer PDF is pinned in
+hardware/sources.json:
+  https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf
+
+A zero REP still reads its count source: an EA updates once and SSH pops once.
+It then fetches/validates the target opcode and advances past it without
+executing it. LC and result flags are preserved except for effects of reading
+the count source. No target data operand is read, address register updated,
+peripheral accessed or result computed. A recognized unimplemented one-word
+instruction can be annulled without running its missing implementation.
+Consecutive REP prefixes continue to defer interrupt entry, including zero REP.
+
+Only valid one-word non-flow targets are qualified here. Missing target program
+contents fail. Extended, unknown or flow-changing targets, nested REP, zero REP
+with SC=1 and zero REP in the forbidden LA-2..LA positions fail explicitly with
+CPU context. The latter restriction follows A.3.1; a legal REP within a larger
+DO loop is checked separately. This does not establish SC transition timing,
+full compatibility behavior or complete pipeline-restriction coverage.
+
+Retained stack effects of annulled DO
+Normal zero DO skips its body but still writes the two frames described by
+13-56/57: previous LA/LC, followed by body PC/previous SR. Live SP, LA, LC and
+loop flags are restored; popped physical stack words remain. The previous SDK
+zero-count early return omitted those writes. The reference path now uses its
+native frame setup/unwind before advancing to the loop end, preserving all
+non-target slots. An unsupported stack overflow fails before frame writes.
+The MCPX b2 capture independently distinguishes this from an early return:
+three retained stack fields differed even though live registers matched.
+Normal interpreter/JIT behavior outside the reference path is not changed or
+qualified by these corrections.
+
+Independent checks
+dsp_zero_loops covers 21 REP source/flag vectors and 15 DO source/flag/physical
+stack vectors. Own opcode encodings cover memory forms missing from the helper
+assembler. REP sources include immediate, register, absolute X, indexed X, LC,
+SSH and accumulator A. DO sources cover immediate, X0, absolute/indexed X and LC.
+Unknown target RAM ensures annulled bodies really perform no operand read.
+Checks include exact PC/flags/register/counter preservation, EA update, source
+SSH pop, overwritten versus retained stack slots, nested annulled DO preserving
+an active outer loop, forbidden end positions, stack overflow, program-PC wrap,
+missing target, extended target, compatibility rejection, unimplemented PFLUSH
+annulment and a pending native timer IRQ across positive/zero/positive REP.
+Both missing REP support and omitted DO frame writes have regressions that fail
+against the preceding reference implementation. Expectations use documented bit
+fields, integer addresses and literal frame contents, not SDK loop helpers.
+
+Full pinned b0/b1/b2 silicon comparisons cover 203 cases and all captured fields
+(doc/dsp-validation.txt). b2 programs and all 71 metadata records remain unchanged.
+Its supplier uses conservative 70000-step limits for zero-loop cases. The trusted
+corpus parser now separates its 4096-word program bound from a 100000-step case
+bound. dsp_corpus_bounds independently accepts valid dynamic bounds, rejects zero
+and 100001 steps and still rejects invalid/out-of-window program ranges. Input
+file sizes and mapped-memory bounds remain enforced.
+
+Original boot scope
+The original first-stage clear count is nonzero (131072), so these corrections
+do not skip or shorten that loop. Reserved Y:002000 behavior, original NAND/ROM
+contents, calibrated MCU/DSP timing, complete boot/audio/update/recovery and
+stock Desktop/Keyboard validation remain open. See coverage.txt.
