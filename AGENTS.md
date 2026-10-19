@@ -13,7 +13,7 @@
 - Use C++23, CMake/Ninja and LLVM 19. Instrument our code and native dependencies with ASan/UBSan; run TSan separately once concurrent code exists.
 - Never weaken checks, add diagnostic baselines or add NOLINT markers to hide findings. Third-party source retains its notices and is analyzed separately from project-owned code.
 - Native SLEIGH uses exceptions as its error interface. This dependency requirement must stay explicit; no exceptions or allocations belong in a future real-time audio callback.
-- Fuzz untrusted firmware, MIDI and state parsers offline under sanitizers. Preserve a regression input for every finding. Never send malformed fuzz traffic to physical devices.
+- Run fuzz tests only when the user explicitly requests them; never run them automatically as part of routine development, validation or quality checks. When requested, fuzz untrusted firmware, MIDI and state parsers offline under sanitizers. Preserve a regression input for every finding. Never send malformed fuzz traffic to physical devices.
 - Test CPU flags, addressing and state changes against independent instruction expectations and recovered firmware behavior. Round trips and self-consistency alone are insufficient.
 - Recheck current binaries, test coverage and connected hardware before making claims. Do not label absent or untested requirements as complete.
 - Commit verified increments. Push to `upstream` only when that remote is configured; never invent a publication destination.

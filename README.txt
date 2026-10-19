@@ -106,6 +106,9 @@ budget being exhausted does not establish successful boot. Downloading firmware
 and extracting its contents does not exercise the real update/recovery path.
 
 Offline parser fuzzing
+Run fuzz tests only at the user's explicit request, never as an automatic part of
+routine development, validation or quality checks. Manual example:
+
   cmake --preset fuzz
   cmake --build build/fuzz --target firmware-fuzz
   mkdir -p doc/local/fuzz-corpus doc/local/fuzz-artifacts
