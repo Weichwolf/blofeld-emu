@@ -166,6 +166,39 @@ void test_unknown_data_and_reset_abort() {
   require(bus.sample(pins(idle)).drive == 0, "Reset also abandons an unfinished write");
 }
 
+void test_zero_address_hold_at_completion() {
+  blofeld::St7565Parallel bus;
+  reset(bus);
+  constexpr unsigned value = 0xa5;
+  bus.sample(pins(writing | pin::enable, value));
+  // Figure 38 permits A0/R/W to change at the completed overlap (tAH6=0).
+  const auto written = bus.sample(pins(idle, value));
+  const auto write_cycle = completed(written);
+  require(write_cycle.data && !write_cycle.read && written.drive == 0,
+          "Boundary A0 changes retain the completed data write's old address selection");
+  byte(bus.controller().ram(0, 0), value);
+  command(bus, 0);
+  byte(bus.sample(pins(reading | pin::enable)).data, 0);
+  const auto dummy = bus.sample(pins(idle));
+  require(completed(dummy).read && completed(dummy).data,
+          "Boundary R/W changes complete the previous read instead of starting a write");
+  byte(completed(dummy).byte, 0);
+  require(bus.controller().state().column == 0, "Completed dummy preserves the selected column");
+  byte(bus.sample(pins(reading | pin::enable)).data, value);
+  require(bus.controller().state().column == 0, "Valid read remains unconsumed during high E");
+  const auto selected_end = bus.sample(pins(idle | pin::enable));
+  require(selected_end.drive == 0 && completed(selected_end).read,
+          "CS deassertion can end a read with E high and new address/control levels");
+  byte(completed(selected_end).byte, value);
+  require(bus.controller().state().column == 1, "The boundary read advances exactly once");
+  bus.sample(pins(reading | pin::enable));
+  const auto unknown_after =
+      bus.sample({.control = pin::reset_n | pin::cs1_n, .known = pin::reset_n | pin::cs1_n});
+  require(unknown_after.drive == 0 && completed(unknown_after).read,
+          "Address uncertainty after a proven end cannot invalidate the already sampled read");
+  reject([&] { bus.sample(pins(selected | pin::enable | pin::read)); }, "status read");
+}
+
 void test_unknown_controls_and_status() {
   blofeld::St7565Parallel bus;
   reject([&] { bus.sample(pins(reading | pin::enable)); }, "before observed hardware reset");
@@ -211,7 +244,7 @@ void test_unstable_and_partial_write() {
   byte(bus.controller().ram(0, 0), 0, 0);
   reset(bus);
   bus.sample(pins(writing | pin::enable, old_value));
-  reject([&] { bus.sample(pins(selected, old_value)); }, "R/W or A0 changed");
+  reject([&] { bus.sample(pins(selected | pin::enable, old_value)); }, "R/W or A0 changed");
   byte(bus.controller().ram(0, 0), 0, 0);
   reset(bus);
   bus.sample(pins(reading | pin::enable));
@@ -229,6 +262,7 @@ int main() {
     test_write_boundaries();
     test_select_while_enable_high_and_release();
     test_unknown_data_and_reset_abort();
+    test_zero_address_hold_at_completion();
     test_unknown_controls_and_status();
     test_unstable_and_partial_write();
     std::cout << "ST7565 parallel overlap, read drive/completion, reset and unknown/fault checks "

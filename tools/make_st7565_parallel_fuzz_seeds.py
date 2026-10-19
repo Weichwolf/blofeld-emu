@@ -28,6 +28,12 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     reset = pins(0, known=32) + pins(33)
     samples = {"cold-read": read(), "reset-abort": reset + pins(54, 0xa5) + reset + read()}
+    samples["end-address-data-write"] = reset + pins(54, 0xa5) + pins(33, 0xa5) + reset
+    samples["end-address-read"] = (
+        reset + write(0x55, True) + write(0) + pins(63) + pins(62)
+        + pins(33) + pins(62) + pins(37) + reset)
+    samples["end-unknown-address"] = reset + pins(62) + pins(33, known=33) + reset
+    samples["mid-cycle-address-reject"] = reset + pins(54, 0xa5) + pins(38, 0xa5) + reset
     for command in range(256):
         samples[f"command-{command:02x}"] = (
             reset + write(command) + write(0) + write(0xa5, True) + read() * 2)

@@ -25,8 +25,11 @@ Writes latch once at the end of the overlap. All data bits must be driven, known
 and stable in the preceding high observation and at completion. Changes earlier
 in the high phase are permitted without premature RAM mutation. Unknown write
 data, host drive during a read, status reads with unqualified busy/reset timing,
-or changes/unknownness of R/W or A0 during a cycle fail visibly. Simultaneous
-control changes with unqualified ordering are not assigned a convenient order.
+or changes/unknownness of R/W or A0 while the overlap remains enabled fail visibly.
+Figure 38 / Table 27 specifies zero address hold time (tAH6=0). New or unknown
+R/W/A0 levels at a proven end therefore retain the preceding phase's selection;
+they do not invalidate it or begin a new cycle. Write data must still remain
+stable and driven at completion. Unproven CS/E ordering remains unsupported.
 
 An observed /RES low aborts an unfinished cycle without a completion event and
 applies the controller hardware reset. Holding /RES low does not repeat cycles.
@@ -71,10 +74,13 @@ Offline pin fuzzing
   mkdir -p doc/local/lcd-bus-fuzz-artifacts
   build/fuzz/st7565-parallel-fuzz doc/local/lcd-bus-fuzz-corpus -artifact_prefix=doc/local/lcd-bus-fuzz-artifacts/ -max_len=20480 -max_total_time=60
 
-The 346 own seeds cover all command bytes, control combinations, RAM pages, RMW,
-CS/E overlap, reset aborts and incomplete data observations. A custom mutator
-retains both raw invalid masks and canonical known/drive masks. Expected faults
-are caught per observation so later inputs can exercise the surviving state.
-The current 61-second campaign completed 36182 runs without sanitizer findings.
+The 350 own seeds cover all command bytes, control combinations, RAM pages, RMW,
+CS/E overlap, zero address hold, reset aborts and incomplete data observations.
+A custom mutator retains both raw invalid masks and canonical known/drive masks.
+Expected faults are caught per observation so later inputs can exercise the
+surviving state.
+The current 61-second campaign completed 31514 runs without sanitizer findings.
 An injected early-read variant fails the independent phase oracle: a valid read
 must not advance its RAM address before the overlap ends.
+The zero-address-hold oracle rejects the earlier adapter and passes after the
+end-phase correction, retaining rejection of address changes during enabled E.

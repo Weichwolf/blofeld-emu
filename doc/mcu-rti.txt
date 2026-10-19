@@ -33,13 +33,17 @@ CPU ISR clears RTIF, updates its RAM mailbox and returns with restored context;
 the following period generates another interrupt. No vendor program is embedded.
 
 Original firmware configures RTICTL=0x40 and RTIE during application startup.
-The untimed private continuation probe now passes those instructions and USB
-register setup, then executes original CPU-counted delay loops to its budget.
-This does not establish a scheduled application boot or successful USB operation.
-Wait/stop, active BDM gating, pad/interrupt latency and automatic CPU/bus/oscillator
-scheduling remain unimplemented. The ambiguous RTI/HPRIO replacement wording in
-S12INTV1 still fails explicitly for the unresolved multi-source arbitration case
-described in mcu-interrupts.txt. Stock hardware calibration remains pending.
+With explicit GPIO/USB/LCD observations, the private unmodified continuation
+executes 255 original interrupts/returns to release its first RAM-counter wait.
+Additional supplied periods let the original handler decrease a later foreground
+countdown, without host RAM/PC/flag writes. Main WAI remains unreached within the
+observation budget. The fixture has no calibrated CPU/SCI/TIM elapsed time or
+measured board wiring; it proves neither scheduled boot nor successful USB.
+Wait/stop clock gates, active BDM gating, pad/interrupt latency and automatic
+CPU/bus/oscillator scheduling remain unimplemented. The ambiguous RTI/HPRIO
+replacement wording in S12INTV1 still fails explicitly for the unresolved
+multi-source arbitration case described in mcu-interrupts.txt. Stock hardware
+calibration remains pending.
 
 References
 S12CRGUV1 sections 3.1.3, 3.1.4, 3.1.6 and 4.2, table 3-2 and figure 4-2 define

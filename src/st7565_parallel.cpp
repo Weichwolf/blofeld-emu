@@ -88,8 +88,10 @@ LcdBusResult St7565Parallel::sample(const LcdHostPins pins) {
   const bool next = enabled(pins);
   std::optional<LcdCycle> completed;
   if (active_) {
-    if ((pins.known & address_controls) != address_controls ||
-        ((pins.control ^ previous_.control) & address_controls) != 0) {
+    // Figure 38 specifies tAH6=0: new address levels at a proven end do
+    // not change the previous cycle. During an enabled phase they must hold.
+    if (next && ((pins.known & address_controls) != address_controls ||
+                 ((pins.control ^ previous_.control) & address_controls) != 0)) {
       throw Fault("ST7565 R/W or A0 changed during an active cycle");
     }
     if ((previous_.control & st7565_pin::read) != 0 && pins.drive != 0) {

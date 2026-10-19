@@ -67,7 +67,8 @@ Display peripheral               partial  Separate ST7565S transaction reference
                                           reads, RMW and distinct reset semantics
                                           checked (display.txt). Logical 6800
                                           CS/E overlap, deferred read/prefetch,
-                                          output release, stable writes, reset
+                                          output release, zero address hold at
+                                          completion, stable writes, reset
                                           aborts and unknown/drive faults checked.
                                           Original first helper completes with
                                           2060 LCD reads after a literal 1024-byte
@@ -156,20 +157,19 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           PDR latches remain nonreset.
                                           Executed RESET clears DSP timer state
                                           while preserving held external TIO input.
-                                          Private application probe completes
-                                          1672476 instructions through original
-                                          CPU delays after SCI/RTI/USB setup, then
-                                          stops on unknown PTU0 input at 0x0278.
-                                          Separate regression observes low/high PU0
-                                          and low PB inputs to execute the original
-                                          sender, without changing model defaults.
-                                          Private original-RTI continuation with a
-                                          known USB decoder state executes 255
-                                          original interrupts/returns and releases
-                                          its RAM-counter wait, then stops on unknown
-                                          PORTB inputs (mcu-boot.txt).
-                                          No elapsed peripheral time/USB host;
-                                          board wiring remains unresolved.
+                                          Private unmodified application continues
+                                          with known USB state, controlled U/B
+                                          observations, explicit floating Q/E4 and
+                                          inferred LCD routing. Native GPIO pulls
+                                          resolve the floated inputs. Original
+                                          RTI interrupts release the first RAM
+                                          counter wait; additional supplied periods
+                                          decrease a later foreground countdown
+                                          without host RAM/PC/flag writes.
+                                          Main WAI remains unreached within the
+                                          observation budget. No calibrated
+                                          CPU/SCI/TIM time, real DSP peer or
+                                          hardware-verified board profile.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
