@@ -106,3 +106,10 @@ vectors retain foreground PC and may change SR. Native MOVEC masks read-only VBA
 bits; active/consecutive REP defers entry. Unsupported vector flows/lengths and
 stack overflow fail. Independent dsp_interrupts checks and reference limits are
 described in doc/dsp-interrupts.txt. No JIT or physical pipeline claim is made.
+
+NORM's no-shift path now refreshes E/U/N/Z/V as specified by DSP56300FM 13-146.
+The SDK previously preserved stale flags indefinitely after a data MOVE. A
+three-NORM regression fails against that path; 4608 independently computed
+vectors check scaling, A/B, Rn, compatibility and preserved state. Pinned external
+MCPX hardware corpus banks b0/b1 provide a separate instruction-state comparison
+(doc/dsp-validation.txt). This does not qualify the JIT or a Blofeld board.

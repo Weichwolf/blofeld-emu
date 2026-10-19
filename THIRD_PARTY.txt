@@ -33,6 +33,13 @@ Optional offline DSP assembly tool:
   references. It is not linked or distributed with the emulator. Its source
   and binary notices remain in the separately downloaded local tool package.
 
+Optional offline silicon test corpus:
+  https://github.com/mborgerson/dsp56300
+  Matt Borgerson, MIT license; pinned in doc/dsp-corpus.json.
+  External MCPX GP silicon results, metadata and test programs stay in the local
+  checkout with their notices. They are not linked or redistributed with the
+  emulator and do not establish DSP56371/Blofeld hardware equivalence.
+
 Manufacturer firmware, samples, manuals and product photographs retain their
 original terms. They are private references, excluded from source commits and
 not covered by the emulator's license.

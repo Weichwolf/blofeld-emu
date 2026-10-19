@@ -199,6 +199,18 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
+  add_executable(blofeld-dsp-norm-test test/dsp_norm_test.cpp)
+  target_link_libraries(blofeld-dsp-norm-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_norm COMMAND blofeld-dsp-norm-test)
+  add_executable(blofeld-dsp-corpus-test test/dsp_corpus_test.cpp)
+  target_link_libraries(blofeld-dsp-corpus-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_hardware_corpus COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_hardware_corpus.py"
+    $<TARGET_FILE:blofeld-dsp-corpus-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/dsp56300-tools/tools/difftest/goldens"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/dsp-corpus.json"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-hardware-corpus")
+  set_tests_properties(dsp_hardware_corpus PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp)
   target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dsp)
   add_test(NAME original_dsp_boot COMMAND ${Python3_EXECUTABLE}
@@ -303,6 +315,8 @@ add_custom_target(quality
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test
     blofeld-dsp-interrupt-test
+    blofeld-dsp-norm-test
+    blofeld-dsp-corpus-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-mcu-sender-test

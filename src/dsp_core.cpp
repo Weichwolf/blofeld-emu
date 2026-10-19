@@ -234,6 +234,20 @@ DspState DspCore::state() const {
   return result;
 }
 
+DspDebugState DspCore::debug_state() const {
+  const auto &regs = impl_->cpu.regs();
+  DspDebugState result{
+      .cpu = state(),
+      .ep = word(regs.ep),
+      .sz = word(regs.sz),
+      .sc = static_cast<std::uint32_t>(register_value(impl_->cpu, dsp56k::Reg_SC)) & word_mask};
+  for (std::size_t index = 0; index < result.stack_high.size(); ++index) {
+    result.stack_high[index] = word(dsp56k::hiword(regs.ss[index]));
+    result.stack_low[index] = word(dsp56k::loword(regs.ss[index]));
+  }
+  return result;
+}
+
 void DspCore::step() {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
   const auto before = state();

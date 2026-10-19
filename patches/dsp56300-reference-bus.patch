@@ -338,6 +338,16 @@
 @@ -351,0 +412,2 @@
 +		else if(m_referenceMode)
 +			throw std::runtime_error("Unsupported native DSP opcode");
+@@ -447,0 +510,9 @@
++		}
++		else
++		{
++			// NORM updates E/U/N/Z/V even when its input flags select no shift
++			// (DSP56300FM 13-146). Subsequent iterations consume these flags.
++			const auto& value = D ? reg.b : reg.a;
++			sr_z_update(value);
++			sr_clear(CCR_V);
++			setCCRDirty(D, value, CCR_E | CCR_U | CCR_N);
 --- a/source/dsp56kEmu/dsp_ops_helper.inl
 +++ b/source/dsp56kEmu/dsp_ops_helper.inl
 @@ -180,0 +181,40 @@

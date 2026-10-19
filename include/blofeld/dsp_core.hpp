@@ -28,6 +28,17 @@ struct DspState {
   std::array<std::uint32_t, 8> m{};
 };
 
+// Architectural observations without destructive SSH reads. This is not a
+// restorable DSP checkpoint; native loop/IRQ execution state is not exported.
+struct DspDebugState {
+  DspState cpu;
+  std::uint32_t ep = 0;
+  std::uint32_t sz = 0;
+  std::uint32_t sc = 0;
+  std::array<std::uint32_t, 16> stack_high{};
+  std::array<std::uint32_t, 16> stack_low{};
+};
+
 // Native interpreter reference path. Each DO/REP body instruction can yield
 // independently. Interrupt entry executes at most two vector words atomically;
 // peripheral time remains an explicit board-model input.
@@ -39,6 +50,7 @@ public:
   DspCore &operator=(const DspCore &) = delete;
   void reset_spi_boot();
   [[nodiscard]] DspState state() const;
+  [[nodiscard]] DspDebugState debug_state() const;
   void step();
 
 private:

@@ -1,0 +1,61 @@
+{
+  "source": "https://github.com/mborgerson/dsp56300",
+  "revision": "82fb25a6917a36ac66212ae31f02aab62211f979",
+  "license": "MIT; external test inputs are not bundled",
+  "provenance": "Published MCPX APU GP silicon captures; not DSP56371 or Blofeld measurements",
+  "documentation": "https://github.com/mborgerson/dsp56300/blob/82fb25a6917a36ac66212ae31f02aab62211f979/tools/difftest/README.md",
+  "banks": [
+    {
+      "name": "b0",
+      "cases": 65,
+      "files": {
+        "corpus.lod": {
+          "bytes": 7544,
+          "sha256": "a6be00f47b4b3d071f71996609ea2b7e7c578722513de0a73c41b712229ad2d7"
+        },
+        "corpus.meta": {
+          "bytes": 1965,
+          "sha256": "d452e99ea95c0dbcf77b98e73d5de0b63c370368455bf1bf416edd591b6001ab"
+        },
+        "results_hw.txt": {
+          "bytes": 39187,
+          "sha256": "ec522db73f8ebfbd5ea7450ee6d4405d7c3722279ab7146b8e7a28587f2c8e4c"
+        },
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "ae24bf84a6526b79abcba21bf203d4be9d06a361c502f0fcb8988df4a2b47e77"
+        },
+        "PROVENANCE.md": {
+          "bytes": 2680,
+          "sha256": "297636ae4021a9b0d9a99e70521e511a5c97fdefce8bb9940d638720179b0254"
+        }
+      }
+    },
+    {
+      "name": "b1",
+      "cases": 67,
+      "files": {
+        "corpus.lod": {
+          "bytes": 8694,
+          "sha256": "0384b44a89717beeb3fd02d2d4d108c65f00926813c9448982a54bff906e1de9"
+        },
+        "corpus.meta": {
+          "bytes": 2308,
+          "sha256": "2db7f8a117a7c5aeafc70aabf075e8089a4b6ee6ba69bdd3beb0811cf0dc2036"
+        },
+        "results_hw.txt": {
+          "bytes": 32448,
+          "sha256": "03e9bd9bf7c57699c604f150595ef7bdbbdd056e9d65c6515ed9255ee42f04fc"
+        },
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "55ed1ce26c90ec55233152f715ace91c0d6fe52a9fe872e27f4003f91589df98"
+        },
+        "PROVENANCE.md": {
+          "bytes": 582,
+          "sha256": "c2a68b1dcd27a9a7a852c2145b1d49970b2910a667323ca53761214b83d078ac"
+        }
+      }
+    }
+  ]
+}

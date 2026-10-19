@@ -1,0 +1,77 @@
+Native DSP normalization and external silicon comparisons
+
+The reference interpreter executes DSP instructions; its behavior is not an
+independent oracle. Two different checks cover normalization: an instruction
+model derived from DSP56300FM Rev. 5, and pinned published hardware captures.
+Neither establishes complete DSP56371 or Blofeld equivalence.
+
+NORM correction
+DSP56300FM section 5.4.1.2, section 12.4.2 and instruction page 13-146 define
+the status bits and NORM behavior. Its incoming E/U/Z bits select right shift,
+left shift, or no accumulator/address update. The no-shift path still computes
+E/U/N/Z/V for the destination. S/C remain unchanged and L is sticky.
+
+The native SDK omitted the flag update on the no-shift path. CLR A sets Z,
+a subsequent MOVE into A1 leaves Z unchanged, and the first NORM does not shift.
+It must refresh the flags so the following two NORMs can shift. With A1=000123
+and R1=0, the three-instruction result is A1=00048c and R1=fffffe. The previous
+interpreter left A1 and R1 unchanged for all three iterations. The independent
+regression fails against that uncorrected interpreter.
+
+The SDK patch adds the missing no-shift result-flag update. Existing shift paths
+and the JIT are not changed. It applies only to the private build copy of the
+pinned dependency; the checkout and manufacturer programs remain unchanged.
+
+dsp_norm checks 4608 combinations of twelve 56-bit values, three scaling modes,
+A/B destinations, all eight Rn registers, 24/16-bit address arithmetic, and C/S/L
+preservation. Initial E/U/Z/N are consistent with each input; the separate
+three-NORM regression covers the observed stale-Z sequence. Expected bit
+arithmetic is independent of SDK helpers. Checks include exact PC/result/SR,
+address wrap, unselected registers, and absence of modulo/offset effects on the
+counter. This does not prove pipeline latency or all accumulator values.
+
+Published hardware corpus
+doc/dsp-corpus.json pins banks b0/b1 from Matt Borgerson's MIT-licensed DSP56300
+project, including programs, metadata, results, provenance and manifest hashes:
+  https://github.com/mborgerson/dsp56300
+  revision 82fb25a6917a36ac66212ae31f02aab62211f979
+
+The supplier records captures from an original Xbox's MCPX APU GP core, with
+explicit register/memory/stack initialization and sequential execution. That
+derivative and its peripheral map are not a Blofeld DSP56371. Our fixture
+retains the strict DSP56371 bus and uses the low mapped operand windows. It
+explicitly writes its zero memory and executes its own register/stack setup
+and jump from reset; zeros are not new device defaults. Original corpus words
+then execute unchanged, including NOP gaps. No host writes CPU registers or
+substitutes instruction results.
+
+The two banks contain 65 and 67 cases. All 46 architectural register fields are
+checked, including EP/SZ/SC. Empty-stack SSH/SSL remain explicitly unobserved;
+the native diagnostic does not perform destructive pops. All fifteen observed
+stack-slot pairs and the captured X/Y/P windows are compared against their zero
+seed, including sparse implicit-zero entries. Cycle counts are absent from the
+captures and are not timing evidence. The comparator rejects missing registers/
+cases, duplication/truncation, unknown fields, reordered cases and mismatched
+stack or memory. Separate negative tests ensure incomplete dumps cannot pass.
+
+Reproduce (external corpus is not included in published source)
+  git clone https://github.com/mborgerson/dsp56300 doc/local/dsp56300-tools
+  git -C doc/local/dsp56300-tools checkout 82fb25a6917a36ac66212ae31f02aab62211f979
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-dsp-norm-test blofeld-dsp-corpus-test
+  ctest --test-dir build/strict -R '^(dsp_norm|dsp_hardware_corpus)$' --output-on-failure
+
+The hardware-corpus test skips if the external reference directory is absent;
+an existing but incomplete or changed reference fails. Native dumps are written
+under build/strict/Testing/dsp-hardware-corpus/. NORM instruction vectors and
+comparator rejection tests need no external data. Inputs, their MIT notices and
+supplier recordings remain in the external checkout.
+
+Remaining scope
+The broader corpus is not qualified. An exploratory b2 run reached twenty cases,
+reported four S-bit differences in parallel transfers, then stopped on an
+unsupported X:fffffa access in VSL. Those results are not accepted baselines or
+ignored hardware accesses. Further ISA/control-flow and native instruction
+fuzzing, derivative reset/stack-error/interrupt/pipeline behavior, the original
+reserved Y:002000 frontier, ROM contents, combined MCU/DSP boot, original audio
+and measured Desktop/Keyboard validation remain open.
