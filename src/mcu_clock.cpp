@@ -71,6 +71,11 @@ bool McuClock::pll_selected() const {
   return (flags_ & locked_status) != 0;
 }
 
+McuRunClockRoute McuClock::run_clock_route() const {
+  return {.source = pll_selected() ? McuClockSource::usb_phy : McuClockSource::oscillator,
+          .bus_divider = 2U * (reference_divider_ + 1U)};
+}
+
 std::uint8_t McuClock::read(const std::uint16_t offset) const {
   switch (offset) {
     case hc12::refdv: return reference_divider_;

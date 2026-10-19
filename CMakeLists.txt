@@ -92,7 +92,7 @@ target_include_directories(blofeld_nand_store PUBLIC include)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
-  src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
+  src/mcu_clock.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
@@ -138,6 +138,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-cycle-test test/mcu_cycle_test.cpp)
   target_link_libraries(blofeld-mcu-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
   add_test(NAME mcu_cycles COMMAND blofeld-mcu-cycle-test)
+  add_executable(blofeld-mcu-run-clock-test test/mcu_run_clock_test.cpp)
+  target_link_libraries(blofeld-mcu-run-clock-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME mcu_run_clock COMMAND blofeld-mcu-run-clock-test)
   add_executable(blofeld-original-cycle-boot-test test/original_cycle_boot_test.cpp)
   target_link_libraries(blofeld-original-cycle-boot-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
   add_test(NAME original_cycle_boot COMMAND ${Python3_EXECUTABLE}
@@ -147,13 +150,21 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-cycle-boot.trace")
   set_tests_properties(original_cycle_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-original-cycle-application-test test/original_cycle_application_test.cpp)
-  target_link_libraries(blofeld-original-cycle-application-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
+  target_link_libraries(blofeld-original-cycle-application-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME original_cycle_application COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
     $<TARGET_FILE:blofeld-original-cycle-application-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-cycle-application.trace")
   set_tests_properties(original_cycle_application PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-run-clock-test test/original_run_clock_test.cpp)
+  target_link_libraries(blofeld-original-run-clock-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_lcd_fixture)
+  add_test(NAME original_run_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-run-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-run-clock.trace")
+  set_tests_properties(original_run_clock PROPERTIES SKIP_RETURN_CODE 77)
   find_program(BLOFELD_LLVM_NM NAMES llvm-nm-19 REQUIRED)
   find_program(BLOFELD_LLVM_READELF NAMES llvm-readelf-19 REQUIRED)
   add_test(NAME dependency_instrumentation COMMAND ${Python3_EXECUTABLE}
@@ -492,8 +503,10 @@ add_custom_target(quality
     blofeld-hc12-cycle-test
     blofeld-hc12-cycle-extended-test
     blofeld-mcu-cycle-test
+    blofeld-mcu-run-clock-test
     blofeld-original-cycle-boot-test
     blofeld-original-cycle-application-test
+    blofeld-original-run-clock-test
     blofeld-midi-serial-test blofeld-mcu-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
     blofeld-nand-image-test

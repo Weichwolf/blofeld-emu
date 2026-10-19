@@ -380,6 +380,16 @@ void McuBus::observe_phy(const PhyClockWindow window) {
   clock_.observe_phy(window);
 }
 
+McuRunClockRoute McuBus::run_clock_route() const {
+  try {
+    return clock_.run_clock_route();
+  } catch (const Fault &fault) {
+    const auto base = static_cast<unsigned>(memory_.read_register(hc12::initrg)) << 8U;
+    throw Fault("MCU run clock source at " + hex(base + hc12::clock_select) +
+                " pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+  }
+}
+
 void McuBus::advance_oscillator(const unsigned cycles) {
   clock_.advance_oscillator(cycles);
 }

@@ -1,0 +1,91 @@
+MC9S12UF32 normal-run reference clock
+
+McuRunClock couples each completed HCS12 reference bus cycle to SCI/TIM bus time
+and the oscillator edges driving CRG_U RTI. McuClock::run_clock_route observes
+native PLLSEL, REFDV and qualified LOCK without modifying them. An unlocked PHY
+falls back to OSC; an unknown qualification fails with the relocated CLKSEL
+address, operation, PC and CCR. No host writes a ready flag or interrupt request.
+
+Clock contract
+The selected source is OSC or the nominal 60 MHz USB PHY clock. The CPU/IP bus
+rate is source / (2 * (REFDV+1)): the device's 60 MHz operating rate corresponds
+to a 30 MHz CPU bus. The caller supplies oscillator frequency, initial oscillator
+phase and an explicit reference-cycle-boundary switching contract. Omitting the
+contract rejects. This ideal boundary rule is a reference assumption, not a
+measurement or implementation of analog clock switching/dead time.
+
+The timebase is LCM(OSC Hz, 60000000) ticks per second, computed in 64 bits.
+Each source/divider combination contributes an integer number of these ticks;
+oscillator fractions survive source switches and lock-loss fallback. No floating
+point rounding or per-switch phase reset occurs. Initial phase must be smaller
+than one oscillator period in this timebase. The accepted OSC range is 0.5..40 MHz.
+Selecting the nominal 60 MHz PHY requires the nominal 12 MHz oscillator; other
+OSC rates may run from OSC, but their PHY timing remains unqualified. A 15-edge
+observation in three OSC periods cannot independently establish an arbitrary
+60 MHz PHY/OSC relation. LOCK observations are still supplied separately.
+
+At OSC=12 MHz the common timebase is 60 MHz:
+  REFDV    OSC-selected bus       PHY-selected bus       RTI clock
+    0       6 MHz / 10 ticks       30 MHz / 2 ticks        12 MHz OSC
+   15     375 kHz / 160 ticks    1.875 MHz / 32 ticks        12 MHz OSC
+These are digital reference ratios, not guarantees outside the device's specified
+operating conditions. The counter advances SCI/TIM once per CPU bus cycle and
+RTI by the number of OSC edges elapsed. Clock/operand callbacks precede native
+operand commit, so a CLKSEL write affects the following reference cycle.
+
+Failure and ownership
+The clock stores no CPU, bus, pad-source or transport references. A trusted copy
+retains fractional phase and counters; it is not a persistent or whole-board
+checkpoint. A peripheral clock failure can leave earlier peripheral effects in
+place, and latches the clock against retry. An outer CPU/data-access failure also
+requires coordinated CPU/bus/clock recovery. Counters report completed cycles;
+they are not a transaction rollback. MIDI/pad observations remain caller-owned.
+This normal-run API does not implement WAI/STOP/BDM gates, physical switching,
+wait states, asynchronous pad propagation, PHY acquisition or DSP scheduling.
+The default standalone CLI remains untimed. Dynamic-rate host MIDI and complete
+MCU/DSP board ownership still require integration.
+
+Evidence
+  cmake --build --preset strict --target blofeld-mcu-run-clock-test blofeld-original-cycle-application-test blofeld-original-run-clock-test
+  ctest --test-dir build/strict -R '^(mcu_run_clock|original_cycle_application|original_run_clock)$' --output-on-failure
+
+mcu_run_clock checks all 16 software dividers against literal source rates and
+elapsed counts, fractional switches/lock loss, trusted copies, explicit initial
+phase, a coprime 64-bit timebase, invalid/unknown sources, relocation and latched
+peripheral failure. Own native instructions produce two real RTI interrupts,
+acknowledge RTIF and return at 3108 and 5146 bus cycles. Independent instruction
+costs, CLI deferral, a three-cycle branch crossing the next timeout, saved CPU
+state and oscillator phase supply the expectations; no period is injected at a
+foreground poll.
+
+original_cycle_application retains its two strict capture/PU failures and NVM
+checks under explicit 12 MHz OSC, phase 0, ideal-boundary switches and idle PR2.
+The unobserved capture case completes 233807 bus cycles / 468214 timebase ticks /
+93642 OSC edges. The controlled PT0 handover reaches the unchanged unknown PU
+input after 4850623 cycles / 9701910 ticks / 1940382 OSC edges. Native RTICTL=0x40
+leaves 4679 OSC edges to its next timeout and RTIF set while the CPU masks IRQs.
+CLKSEL writes at cycles 75, 233898, 233906 yield 83 OSC-selected bus cycles at 10 ticks,
+and the remaining PHY-selected cycles at 2 ticks. These independent register-event
+and rate calculations check the accumulated phase and RTI behavior.
+
+original_run_clock supplies the existing explicit GPIO/USB/LCD/ready observations
+and continues through the original first RTI handler, without host MCU RAM/PC or
+RTI-period injection. After 1944294 retired instructions and one interrupt entry,
+it restores every foreground register at 5618487 bus cycles. The real nine-byte
+frame has the independent NXP layout, and the original handler clears RTIF.
+A separate retired PC/CCR census and manual mnemonic/address-mode costs give
+5618473 instruction cycles + 5 reset + 9 IRQ entry. The census uses the clocked
+path; its cost calculation does not call the production timing decoder. The
+source ledger gives 11237638 timebase ticks, 2247527 OSC edges and 638 edges to the
+next RTI period. Traces/census remain local; public tests pin the firmware hash.
+These observations establish a conditional first native handler, not the complete
+startup countdown, MCU/DSP board boot, physical ready peer, host MIDI/audio or
+Desktop/Keyboard hardware equivalence.
+
+References
+Pinned NXP bundle in doc/hardware/sources.json: 9S12UF32DGV1 section 1.2 operating
+frequency, section 3 clock connections, sections 15/19 IPBus domains and appendix
+A.4.3 detector; S12CRGUV1 sections 3.1.1/3.1.5/3.1.6 and 4.2; HCS12COREUG section 7.
+S12CPUV2 supplies instruction costs and frame semantics. Board oscillator and
+physical source-switch calibration remain pending. No stock reference device has
+been supplied.

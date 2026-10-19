@@ -49,8 +49,13 @@ These are conditional MCU experiments: no calibrated CPU/SCI/TIM elapsed time,
 measured wiring, real DSP peer, complete board boot or successful USB is established.
 See original-application.txt for the original-input fault/retry, NXP WAI frame,
 LCD/NVM checks and subsequent original SCI interrupt reception.
-Wait/stop clock gates, active BDM gating, pad/interrupt latency and automatic
-CPU/bus/oscillator scheduling remain unimplemented. The ambiguous RTI/HPRIO
+McuRunClock now supplies automatic normal-run CPU/bus/OSC scheduling under an
+explicit ideal-boundary switch/phase contract. original_run_clock executes the
+first original RTI entry, acknowledgement and foreground restoration without
+poll-slot period injection (mcu-run-clock.txt). The long countdown regression
+above retains its separate untimed fixture; full elapsed-time startup remains open.
+Wait/stop clock gates, active BDM gating, pad/interrupt latency and qualified
+physical source transitions remain unimplemented. The ambiguous RTI/HPRIO
 replacement wording in S12INTV1 still fails explicitly for the unresolved
 multi-source arbitration case described in mcu-interrupts.txt. Stock hardware
 calibration remains pending.

@@ -102,6 +102,14 @@ instruction/RAM mutation, skipped loops or host peripheral-ready flags are used.
 The fixtures do not establish either physical Desktop/Keyboard routing or a
 complete application boot; those unknown inputs remain visible.
 
+Normal-run clock integration
+McuRunClock now derives OSC edges from native source/divider selection under an
+explicit reference-boundary switching/phase contract. original_cycle_application
+uses this clock and checks accumulated time/RTI phase at its strict input failures.
+original_run_clock completes the first original RTI handler from running CPU time,
+with independent frame/state and manual cost checks. See mcu-run-clock.txt; this
+does not qualify analog transitions or complete board scheduling.
+
 Remaining requirements
 Oscillator/PLL clock-source transitions, whole-board CPU/DSP scheduling, memory
 wait states, remaining timed instructions, physical prefetches and complete

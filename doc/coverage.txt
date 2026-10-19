@@ -117,6 +117,15 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           timer counts and IRQ/RTI, plus visible
                                           rejection of the unqualified SCI flag
                                           phase (hc12-cycles.txt).
+                                          Exact normal-run source/divider/OSC
+                                          clock: all 16 dividers, retained phase,
+                                          strict source faults and native RTI
+                                          checked (mcu-run-clock.txt). First original
+                                          RTI entry/acknowledge/return now follows
+                                          actual CPU clocks without poll-slot
+                                          period injection. Ideal switch/phase and
+                                          explicit peripheral input contracts;
+                                          calibrated whole-board clocks pending.
                                           Analog startup, whole-board CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
 USB device/transport              partial  PHY control and register/data-side enable.
@@ -249,6 +258,11 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           instructions/4850623 cycles. Independent
                                           census/manual cycle total agrees; NVM and
                                           failure latch checked (hc12-cycles.txt).
+                                          Coupled OSC clock now checks elapsed
+                                          time and RTI phase at those frontiers;
+                                          controlled inputs reach first original
+                                          RTI return after 1944294 instructions/
+                                          5618487 cycles (mcu-run-clock.txt).
                                           This is not complete application boot.
                                           Native DSP RESET preserves OMR/PLL while
                                           clearing SHI; hardware reset resamples

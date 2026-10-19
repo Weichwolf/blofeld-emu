@@ -5,7 +5,7 @@
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
-#include "blofeld/mcu_midi.hpp"
+#include "blofeld/mcu_run_clock.hpp"
 
 #include <cstdint>
 #include <exception>
@@ -21,7 +21,9 @@ constexpr unsigned input_mask = 0xfb;
 constexpr unsigned byte_mask = 0xff;
 constexpr unsigned ram_begin = 0x1200;
 constexpr unsigned last_ram_word = 0x25fe;
-constexpr unsigned idle_source_hz = 30000000;
+constexpr unsigned oscillator_hz = 12000000;
+constexpr unsigned reference_timebase_hz = 60000000;
+constexpr unsigned receive_pad = 4;
 constexpr unsigned instruction_limit = 2000000;
 
 void require(const bool condition, const char *message) {
@@ -38,22 +40,27 @@ struct ApplicationCase {
   unsigned instructions;
   unsigned cycles;
   unsigned pc;
+  unsigned timebase_ticks;
+  unsigned oscillator_cycles;
+  unsigned rti_remaining;
   const char *diagnostic;
 };
 
 void clock(blofeld::McuBus &board,
-           blofeld::McuMidiInput &input,
+           blofeld::McuRunClock &run_clock,
            const blofeld::Hc12BusCycle cycle,
            const bool capture_handover) {
   // S12CPUV2 6.6 permits unaligned internal-RAM words in one bus cycle.
-  // Flash/external stretching and clock-source transitions are unqualified.
+  // Flash/external stretching and analog clock switching remain unqualified.
   if (cycle.size == 2 && cycle.address && (*cycle.address & 1U) != 0 &&
       (*cycle.address < ram_begin || *cycle.address > last_ram_word)) {
     throw blofeld::Fault("Unqualified unaligned non-RAM word timing");
   }
-  input.advance_sci(board, cycle.context, 1);
+  const auto idle = board.observe_pads(blofeld::McuPort::r, receive_pad);
+  require(idle.known == receive_pad && idle.levels == receive_pad,
+          "PR2 remains an explicitly observed idle input across native source-clock changes");
   if (capture_handover) { board.sample_timer_inputs(1); }
-  board.advance_timer(1);
+  run_clock.advance_run_cycle(board, cycle.context);
 }
 
 void loopback(blofeld::McuBus &board, const unsigned pc) {
@@ -87,6 +94,21 @@ void check_failure(const ApplicationCase &item,
   }
 }
 
+void check_clock(const ApplicationCase &item,
+                 const blofeld::McuRunClock &clock,
+                 blofeld::McuBus &board) {
+  require(clock.timebase_hz() == reference_timebase_hz && clock.bus_cycles() == item.cycles &&
+              clock.elapsed_ticks() == item.timebase_ticks &&
+              clock.oscillator_cycles() == item.oscillator_cycles &&
+              board.oscillator_cycles_until_rti() == item.rti_remaining &&
+              clock.faulted() == !item.capture_handover,
+          "Native clock-source writes must retain independent elapsed time and oscillator phase");
+  constexpr unsigned crg_flags = 0x37;
+  constexpr unsigned rti_flag = 0x80;
+  require((board.read(crg_flags) & rti_flag) == (item.capture_handover ? rti_flag : 0U),
+          "RTIF comes from elapsed CPU/oscillator time, not foreground poll observations");
+}
+
 void run_case(const blofeld::Firmware &firmware,
               std::ofstream &trace,
               const ApplicationCase &item) {
@@ -95,10 +117,14 @@ void run_case(const blofeld::Firmware &firmware,
   // Explicit synthetic observations, not a hardware-validated board profile.
   board.set_pin_drive(blofeld::McuPort::e, {.mask = input_mask, .levels = 3});
   board.set_pin_drive(blofeld::McuPort::q, {.mask = byte_mask});
-  blofeld::McuMidiInput input(idle_source_hz, blofeld::SciReceivePin::pr2);
+  board.set_pin_drive(blofeld::McuPort::r, {.mask = receive_pad, .levels = receive_pad});
+  blofeld::McuRunClock run_clock(
+      {.oscillator_hz = oscillator_hz,
+       .initial_oscillator_phase_ticks = 0,
+       .switch_timing = blofeld::McuRunClockSwitch::reference_cycle_boundary});
   bool capture_handover = false;
-  blofeld::Hc12CycleBus bus(board, [&board, &input, &capture_handover](const auto cycle) {
-    clock(board, input, cycle, capture_handover);
+  blofeld::Hc12CycleBus bus(board, [&board, &run_clock, &capture_handover](const auto cycle) {
+    clock(board, run_clock, cycle, capture_handover);
   });
   board.set_observer([&trace, &bus](const auto &event) {
     trace << "cycle=" << bus.cycles() << " write=" << blofeld::hex(event.address) << ':'
@@ -131,21 +157,25 @@ void run_case(const blofeld::Firmware &firmware,
   require(phy && capture_handover == item.capture_handover,
           "Original code must reach the explicit PHY/capture observation contracts");
   check_failure(item, instructions, bus, cpu.state(), error);
+  check_clock(item, run_clock, board);
   const auto final = board.power_off_flash_image();
   require(initial.bytes == final.bytes && initial.known == final.known &&
               initial.fresh == final.fresh,
           "Original timed application and failure must preserve MCU NVM and erase history");
   const auto cycles = bus.cycles();
+  const auto elapsed = run_clock.elapsed_ticks();
   bool latched = false;
   try {
     cpu.step();
   } catch (const blofeld::Fault &fault) {
     latched = std::string(fault.what()).contains("requires coordinated recovery");
   }
-  require(latched && bus.cycles() == cycles,
+  require(latched && bus.cycles() == cycles && run_clock.elapsed_ticks() == elapsed,
           "A failed timed transaction must reject continued execution without extra clocks");
   trace << "capture-handover=" << item.capture_handover << " instructions=" << instructions
-        << " cycles=" << cycles << " fault=" << error << '\n';
+        << " cycles=" << cycles << " timebase-ticks=" << elapsed
+        << " oscillator-cycles=" << run_clock.oscillator_cycles()
+        << " rti-remaining=" << board.oscillator_cycles_until_rti() << " fault=" << error << '\n';
   board.set_observer({});
 }
 
@@ -153,13 +183,22 @@ constexpr ApplicationCase unobserved_capture{.capture_handover = false,
                                              .instructions = 90340,
                                              .cycles = 233807,
                                              .pc = 0x87ea,
+                                             .timebase_ticks = 468214,
+                                             .oscillator_cycles = 93642,
+                                             .rti_remaining = 0,
                                              .diagnostic = "Unknown active timer capture inputs"};
 // Independent untimed PC/CCR census and manual mnemonic/address-mode costs:
 // 4850617 retired cycles + 5 reset + 1 failing PU read = 4850623.
+// CLKSEL writes at cycles 75, 233898, 233906: 83 OSC cycles at 10 ticks,
+// remaining PHY cycles at 2 ticks; 5 ticks per 12 MHz oscillator edge.
+// RTICTL=40 starts after cycle 233874: 1846713 later OSC edges leave 4679 to timeout.
 constexpr ApplicationCase high_capture_handover{.capture_handover = true,
                                                 .instructions = 1672474,
                                                 .cycles = 4850623,
                                                 .pc = 0xb98d,
+                                                .timebase_ticks = 9701910,
+                                                .oscillator_cycles = 1940382,
+                                                .rti_remaining = 4679,
                                                 .diagnostic = "Unknown MCU GPIO input"};
 
 void run(const Inputs &inputs) {
@@ -178,7 +217,8 @@ int main(const int count, char **arguments) {
     }
     run({.reference = arguments[1], .trace = arguments[2]});
     std::cout << "Original timed application: strict capture/PU failures, independent cycle "
-                 "totals, unchanged NVM and latched recovery; conditional fixture only.\n";
+                 "totals, actual oscillator/RTI phase, unchanged NVM and latched recovery; "
+                 "conditional fixture only.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

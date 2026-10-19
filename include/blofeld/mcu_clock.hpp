@@ -14,6 +14,13 @@ struct PhyClockWindow {
   unsigned edges = 0;
 };
 
+enum class McuClockSource : std::uint8_t { oscillator, usb_phy };
+
+struct McuRunClockRoute {
+  McuClockSource source = McuClockSource::oscillator;
+  unsigned bus_divider = 2;
+};
+
 // Normal-run USB PHY control, CRG_U lock detection and oscillator-clocked RTI.
 // This does not generate analog PHY startup, CPU time or USB transactions.
 class McuClock {
@@ -27,6 +34,8 @@ public:
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   [[nodiscard]] bool phy_running() const;
   [[nodiscard]] bool pll_selected() const;
+  // Normal-run CPU/IP bus rate = selected source / (2 * (REFDV + 1)).
+  [[nodiscard]] McuRunClockRoute run_clock_route() const;
   [[nodiscard]] bool lock_interrupt_pending() const;
   [[nodiscard]] bool realtime_interrupt_pending() const;
 

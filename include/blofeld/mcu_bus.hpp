@@ -60,6 +60,7 @@ public:
   void update_pin_drive(McuPort port, std::uint8_t affected, PinDrive drive);
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
   void observe_phy(PhyClockWindow window);
+  [[nodiscard]] McuRunClockRoute run_clock_route() const;
   void observe_usb_decoder(UsbDecoderState state);
   void observe_usb_sof(std::uint16_t frame, bool crc_valid = true);
   void observe_usb_configuration(UsbConfigurationRequest request);
