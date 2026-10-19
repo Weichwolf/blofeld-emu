@@ -1,0 +1,67 @@
+Bounded native DSP instruction fixture
+
+Deterministic regression (no fuzz execution):
+  cmake --build --preset strict --target blofeld-dsp-instruction-test
+  ctest --test-dir build/strict -R '^dsp_(instruction_fixture|trap_conditions|debug_conditions|shift_counts)$' --output-on-failure
+
+The fixture executes own instructions through DspCore and its strict DSP56371
+bus, using the same patched native interpreter as original-firmware experiments.
+An assembled setup prefix establishes registers through native instructions;
+the test does not assign PC or architectural registers through a debug API.
+Each input executes at most 128 reference steps, with separately yielding REP/DO
+bodies. This is an instruction bound, not a clock or wall-time bound.
+
+Inputs contain fourteen big-endian 24-bit register seeds followed by 1..64 raw
+program words (45..234 bytes, whole words only). Seed order is X0/X1/Y0/Y1,
+A0/A1/A2, B0/B1/B2, R0/N0/M0, then CCR/scaling/compatibility bits. A2/B2 use eight
+bits; initial SR is c00300 OR (seed AND 002cff). Other R registers start at 100,
+N at 1 and M at ffffff. Stack slots 1..15, SP/SC/SZ/EP, LC and VBA start at zero;
+LA is ffffff and OMR is 5. X/Y:100..13f contain synthetic seed-derived data.
+Uninstalled program/data memory remains unknown and unmapped hardware fails.
+
+Regression checks use literal input bytes, independent ADD/store/load outcomes,
+bounded self-branches and REP progress, missing extensions, reserved-memory
+faults and the core's rejection-until-reset contract. FM table 12-18 and opcode
+formats 13-50/180 independently pin all sixteen TRAPcc/DEBUGcc encodings. Sixty-four
+true/false cases check PC progress or a named fault, retained CCR/SP and selected
+seeded RAM words.
+These are selected flag vectors, not an exhaustive condition-code proof.
+
+The saved own 48-byte oversized-shift input is retained literally in the
+deterministic shift-count regression. An earlier interrupted fuzz attempt stopped
+on UBSan in ASR's carry-bit calculation: count 63 plus native accumulator alignment
+produced a C++ shift exponent of 70. FM 13-16 explicitly leaves ASR counts above
+55 (40 in sixteen-bit arithmetic mode) undefined. Reference execution rejects
+them before native arithmetic. ASL counts above 55 are likewise unqualified and
+reject before native shifts. This does not specify a silicon result outside the
+qualified range or qualify the normal SDK/JIT paths. Eight independent normal-mode
+shift vectors check values, carry, overflow, sticky limit, CCR refresh and retained
+state; separate cases check first rejected counts and SA-mode immediate/register
+count sources. The ASL guard is a reference implementation limit, not a measured
+hardware maximum. General sixteen-bit arithmetic fidelity remains unqualified.
+
+Reference-mode TRAP/ILLEGAL, taken conditional TRAP, DEBUG/taken conditional
+DEBUG and STOP/WAIT reject with their operation and PC/OMR context. Software
+exception vectors, OnCE debug control and suspended clocks are not implemented;
+the adapter must not use the SDK's host debug break or silently continue.
+False conditional TRAP/DEBUG execute normally. Normal SDK interpreter/JIT paths
+remain outside this reference-mode qualification.
+
+Optional fuzz harness (run only on explicit user request):
+  cmake --preset fuzz
+  cmake --build --preset fuzz --target dsp-instruction-fuzz
+  build/strict/blofeld-dsp-instruction-test --write-seeds doc/local/dsp-instruction-corpus
+  mkdir -p doc/local/dsp-instruction-artifacts
+  build/fuzz/dsp-instruction-fuzz doc/local/dsp-instruction-corpus -artifact_prefix=doc/local/dsp-instruction-artifacts/ -max_len=234 -max_total_time=60
+
+Seed generation writes 28 own cases, without firmware/ROM bytes. Native dependency
+code receives fuzzer coverage instrumentation in fuzz builds, alongside existing
+ASan/UBSan. The harness counts decoded inputs, completed instructions, rejections
+and exhausted budgets. Expected emulator faults are accepted only after checking
+fail-stop. Exceptions outside the core's Fault interface (including setup and
+snapshot failures) and sanitizer findings remain failures. It is not a
+differential ISA oracle. The earlier attempt stopped on the shift finding;
+no successful native instruction campaign is established and no new fuzz run
+was used for the deterministic correction. Sustained campaigns, complete
+ISA/hardware qualification and a scheduled board boot with original MIDI/audio
+remain open.

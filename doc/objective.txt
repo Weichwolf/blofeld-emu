@@ -1,0 +1,47 @@
+Complete acceptance objective
+
+Build a headless standalone Blofeld Desktop and Keyboard emulator that executes
+the unmodified original 1.25 firmware, including its MCU bootloader, DSP loading
+sequence and required peripherals, processes MIDI and produces original audio.
+This is a firmware-development test target; neither a host synthesizer nor
+silently successful peripheral stubs satisfy this objective.
+
+Acceptance requirements (current evidence and gaps: coverage.txt):
+
+1. Keep verified official firmware, manuals and the official standard sample
+   library as local references. Track download URLs, sizes and hashes, without
+   publishing proprietary assets. Establish required wavetables, internal ROM
+   and external flash contents from actual firmware accesses; identify missing
+   data explicitly rather than supplying guessed values.
+2. Implement faithful CPU/DSP execution, board memory/peripherals and both device
+   profiles. Separate cores, board model, host transport and time-critical audio.
+   Unknown/unsupported accesses fail with address, operation, PC and context;
+   observed behavior, hypotheses and hardware-proven facts remain distinct.
+3. Provide reproducible tests for CPU/DSP instructions, flags/addressing/state,
+   memory maps, interrupts, timers, interprocessor communication, cold start,
+   reset, MIDI, voice management, audio and persistent storage. Independent
+   expectations and recovered firmware behavior supplement round-trip checks.
+4. Execute complete original update and recovery loaders. Test valid/damaged
+   updates, interrupted transmission, power loss and restart during every erase
+   and programming phase, checking the bootloader, reset vectors, flash
+   protection and security bits. Component milestones do not prove whole-update
+   recovery or physical-device flash safety.
+5. Maintain automatic deterministic regressions, offline parser-fuzz harnesses
+   with preserved regression inputs, long-run and real-time load tests. Run fuzz
+   tests only when the user explicitly requests them. Instrument project/native
+   dependencies with ASan/UBSan and use separate TSan once concurrency exists;
+   retain strict LLVM 19/C++23, warning, format and zero-finding analysis gates.
+6. Provide reproducible execution traces and memory snapshots suitable for
+   diagnosing failures and replaying firmware behavior. Document coverage,
+   deviations, unresolved inputs and remaining uncertainty requirement by
+   requirement; a passing subset does not complete the objective.
+7. Validate incrementally against real Desktop/Keyboard devices running stock
+   firmware. Detection is not validation. Establish a separate recovery procedure
+   before physical update/programming experiments; never transmit malformed
+   fuzz inputs to hardware or flash experimental firmware as a routine test.
+
+Completion requires evidence for the whole emulator and both profiles, original
+MIDI/audio, full update/recovery behavior, reproducible failure/performance tests
+and hardware comparisons. The current component/reference fixtures remain
+partial; coverage.txt names the missing requirements without treating them as
+successful boot, real-time operation or device equivalence.

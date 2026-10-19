@@ -324,6 +324,9 @@
 @@ -1570,0 +1737,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
+@@ -1682,0 +1851,2 @@
++		if(m_referenceMode)
++			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl
 +++ b/source/dsp56kEmu/dsp_ops.inl
 @@ -8 +8 @@
@@ -401,11 +404,16 @@
 +			return;
 +		}
 +
-@@ -351,0 +412,2 @@
+@@ -237,0 +298,2 @@
++		if(m_referenceMode)
++			throw std::runtime_error("Unqualified DSP reference DEBUG state");
+@@ -347,0 +410,2 @@
++		if(m_referenceMode && match(Opcodes::getOpcodeInfoAt(Illegal), op))
++			throw std::runtime_error("Unqualified DSP reference ILLEGAL exception");
+@@ -351,0 +416,2 @@
 +		else if(m_referenceMode)
 +			throw std::runtime_error("Unsupported native DSP opcode");
-@@ -447,0 +510,9 @@
-+		}
+@@ -448,0 +515,9 @@
 +		else
 +		{
 +			// NORM updates E/U/N/Z/V even when its input flags select no shift
@@ -414,6 +422,13 @@
 +			sr_z_update(value);
 +			sr_clear(CCR_V);
 +			setCCRDirty(D, value, CCR_E | CCR_U | CCR_N);
++		}
+@@ -548,0 +624,2 @@
++		if(m_referenceMode)
++			throw std::runtime_error("Unqualified DSP reference STOP clock state");
+@@ -591,0 +669,2 @@
++		if(m_referenceMode)
++			throw std::runtime_error("Unqualified DSP reference TRAP exception");
 --- a/source/dsp56kEmu/dsp_ops_helper.inl
 +++ b/source/dsp56kEmu/dsp_ops_helper.inl
 @@ -180,0 +181,40 @@
@@ -469,7 +484,18 @@
 +		case 0x10:	reg.vba.var = m_referenceMode ? (_val.toWord() & 0xffff00) : _val.toWord();				return;
 --- a/source/dsp56kEmu/dsp_ops_alu.inl
 +++ b/source/dsp56kEmu/dsp_ops_alu.inl
-@@ -1493,0 +1494,12 @@
+@@ -210,0 +211,5 @@
++		// FM 13-16 leaves larger ASR counts undefined. Check before host bit shifts.
++		const int referenceLimit = isSixteenBitArithmetic() ? 40 : 55;
++		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > referenceLimit))
++			throw std::runtime_error("Undefined DSP reference ASR shift count=" + std::to_string(_shiftAmount));
++
+@@ -236,0 +242,4 @@
++		// Counts outside the qualified 56-bit range must not reach host shifts.
++		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 55))
++			throw std::runtime_error("Unqualified DSP reference ASL shift count=" + std::to_string(_shiftAmount));
++
+@@ -1493,0 +1503,12 @@
 +		if(m_referenceMode) {
 +			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
 +			const auto source = getFieldValue<Vsl, Field_S>(op);
@@ -482,7 +508,7 @@
 +			memWrite(MemArea_Y, address, low);
 +			return;
 +		}
-@@ -1495,2 +1507 @@
+@@ -1495,2 +1516 @@
 -	}
 -}
 +	}}

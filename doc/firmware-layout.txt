@@ -17,10 +17,11 @@ contents required by the original hardware are available.
 Static inspection also identifies a 94-word (282-byte) DSP first stage embedded
 in the MCU image. Its transfer header specifies P:0x6a and matches the documented
 DSP56371 SHI bootstrap framing. This is separate from the 127 runtime records.
-The stage appears to read further records through a GPIO NAND interface; actual
-MCU-to-SHI transfer, DSP boot-ROM execution and NAND loading are not yet combined
-or validated. Finding this loader does not establish complete persistent contents
-or verified board wiring. Detailed extracted code remains private.
+The stage appears to read further records through a GPIO NAND interface.
+The native coupling fixture connects the original MCU sender to the documented
+partial DSP SPI ROM and reaches the mapped RAM-clear frontier (coupled-boot.txt).
+NAND loading, measured timing, complete persistent contents and verified board
+wiring remain unresolved. Detailed extracted code remains private.
 
 The current native MCU executor starts the original reset vector and stops at
 an unmodeled input port. Complete boot, DSP handoff, MIDI/audio and real-device

@@ -6,8 +6,9 @@ firmware and reference assets are separate local inputs and are not included.
 Objective
 Execute original firmware 1.25 for Desktop and Keyboard, with a faithful board
 model, MIDI/audio and reproducible firmware-development tests. The complete
-acceptance scope and current gaps are in doc/coverage.txt. This is not yet a
-booting Blofeld, a playable synthesizer or a verified replacement-firmware target.
+acceptance scope is in doc/objective.txt; evidence and gaps are in doc/coverage.txt.
+This is not yet a booting Blofeld, a playable synthesizer or a verified
+replacement-firmware target.
 
 Build and quality checks
 Requirements: LLVM 19 (clang, clang-tidy, clang-format and sanitizer runtime),
@@ -85,7 +86,9 @@ sender to the native DSP ROM under an explicit pad-order/interleaving experiment
 Measured timing and complete scheduled MCU/DSP board boot remain pending.
 doc/dsp-validation.txt covers NORM/accumulator-transfer corrections, native VSL,
 independent instruction vectors and pinned external MCPX silicon captures, with
-derivative limits. doc/dsp-zero-loops.txt covers normal zero REP annulment, retained
+derivative limits. doc/dsp-instructions.txt covers the bounded native instruction
+fixture, independent execution-control regressions and opt-in fuzz harness.
+doc/dsp-zero-loops.txt covers normal zero REP annulment, retained
 zero-DO frames, source/stack/IRQ checks and the remaining compatibility limits.
 doc/nand-read.txt covers an explicit small-page NAND read candidate, native own
 GPIO reads and isolated original addressing/turnaround frontiers. It does not

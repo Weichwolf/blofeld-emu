@@ -104,6 +104,10 @@ target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
 add_library(blofeld_dsp src/dsp_core.cpp)
 target_include_directories(blofeld_dsp PUBLIC include)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
+if(BUILD_TESTING OR BLOFELD_FUZZING)
+  add_library(blofeld_dsp_instruction_fixture test/dsp_instruction_fixture.cpp)
+  target_link_libraries(blofeld_dsp_instruction_fixture PUBLIC blofeld_dsp PRIVATE blofeld_dsp_native)
+endif()
 add_dependencies(blofeld_core blofeld_hc12_spec)
 target_include_directories(blofeld_core PUBLIC include)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh)
@@ -253,6 +257,16 @@ if(BUILD_TESTING)
   add_test(NAME dsp_pll COMMAND blofeld-dsp-pll-test)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_executable(blofeld-dsp-instruction-test test/dsp_instruction_test.cpp)
+  target_link_libraries(blofeld-dsp-instruction-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
+  add_test(NAME dsp_instruction_fixture COMMAND blofeld-dsp-instruction-test)
+  set_tests_properties(dsp_instruction_fixture PROPERTIES TIMEOUT 60)
+  foreach(control IN ITEMS trap debug)
+    add_test(NAME dsp_${control}_conditions COMMAND blofeld-dsp-instruction-test --conditions ${control})
+    set_tests_properties(dsp_${control}_conditions PROPERTIES TIMEOUT 60)
+  endforeach()
+  add_test(NAME dsp_shift_counts COMMAND blofeld-dsp-instruction-test --shift-counts)
+  set_tests_properties(dsp_shift_counts PROPERTIES TIMEOUT 60)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
   add_executable(blofeld-dsp-norm-test test/dsp_norm_test.cpp)
   target_link_libraries(blofeld-dsp-norm-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -394,6 +408,7 @@ add_custom_target(quality
     blofeld-original-nand-write-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
+    blofeld-dsp-instruction-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test
     blofeld-dsp-capture-test
@@ -419,6 +434,9 @@ add_custom_target(quality
 endif()
 
 if(BLOFELD_FUZZING)
+  add_executable(dsp-instruction-fuzz test/dsp_instruction_fuzz.cpp)
+  target_link_libraries(dsp-instruction-fuzz PRIVATE blofeld_dsp_instruction_fixture)
+  target_link_options(dsp-instruction-fuzz PRIVATE -fsanitize=fuzzer)
   add_executable(nand-image-fuzz test/nand_image_fuzz.cpp)
   target_link_libraries(nand-image-fuzz PRIVATE blofeld_nand ZLIB::ZLIB)
   target_link_options(nand-image-fuzz PRIVATE -fsanitize=fuzzer)

@@ -1,5 +1,6 @@
 Acceptance coverage for the headless Blofeld emulator
 
+The complete acceptance objective is in objective.txt.
 Evidence categories: implemented / partial / pending. A passing check covers
 only its named behavior. No hardware equivalence or brick-safety claim is made.
 
@@ -140,6 +141,21 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           remain explicit
                                           (dsp-validation.txt). This is not a
                                           Blofeld hardware comparison.
+                                          Bounded native instruction fixture checks
+                                          independent arithmetic/memory outcomes,
+                                          REP progress and strict faults. Five
+                                          unqualified exception/debug/halt controls
+                                          reject; 64 true/false TRAPcc/DEBUGcc cases
+                                          pin all 16 condition encodings and retained
+                                          CCR/SP and selected RAM words
+                                          (dsp-instructions.txt).
+                                          Actual exception/debug/clock states remain
+                                          unsupported, not silently successful.
+                                          A saved own oversized-shift input pins
+                                          an earlier ASR UBSan finding. Native
+                                          reference count guards reject undefined
+                                          ASR/unqualified ASL ranges before host
+                                          shifts (dsp-instructions.txt).
                                           Original 94-word first stage loads through
                                           executed documented SPI ROM instructions
                                           (dsp-core.txt). Native original MCU/DSP
@@ -382,7 +398,14 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           source IRQs, priority fields, CPU masks
                                           and acknowledgement included:
                                           35549 runs in 61 s without findings.
-                                          Native DSP instruction fuzzing pending.
+                                          Native DSP instruction harness and own
+                                          seed generator available. An earlier
+                                          interrupted attempt found an ASR shift
+                                          overflow, preserved as a deterministic
+                                          regression (dsp-instructions.txt); no
+                                          successful campaign is established.
+                                          Fuzz execution requires an explicit user
+                                          request; it is not an automatic gate.
                                           Small-page NAND protocol harness:
                                           7706 sequences in 61 seconds without
                                           sanitizer findings; bounded own full-page,

@@ -137,3 +137,17 @@ IRQ chains, boundaries and all71 pinned b2 cases check the corrections. Normal
 interpreter/JIT paths are unchanged; full chip/pipeline/compatibility qualification
 remains open. See doc/dsp-zero-loops.txt. The original nonzero clear loop is not
 shortened, skipped or allowed to write unqualified reserved memory.
+
+Reference TRAP/ILLEGAL, DEBUG, STOP and WAIT now reject their unqualified exception,
+debug or clock state before the SDK can issue a host debug break or silently
+continue. Conditional TRAP/DEBUG check their condition first: all sixteen literal
+encodings have true/false flag vectors with PC/CCR/SP and selected RAM checks in
+dsp_instruction_fixture. These guards do not implement software exception entry,
+OnCE or suspended clocks; see doc/dsp-instructions.txt.
+
+An earlier own instruction input exposed an ASR carry-bit shift exponent of 70
+under UBSan. The reference helper now rejects counts above FM 13-16's defined
+55/40 limits (normal/sixteen-bit arithmetic), before any C++ shift. ASL counts
+above 55 are also unqualified and reject. The saved raw input and deterministic
+boundary tests remain project-owned regression data; no sanitizer is suppressed
+and no physical result for an undefined shift is invented.
