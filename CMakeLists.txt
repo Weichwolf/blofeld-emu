@@ -83,6 +83,9 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.c
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
+add_library(blofeld_display src/st7565.cpp)
+target_include_directories(blofeld_display PUBLIC include)
+target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
   src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp)
@@ -210,6 +213,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-wai-test test/wai_test.cpp)
   target_link_libraries(blofeld-wai-test PRIVATE blofeld_core)
   add_test(NAME mcu_wai COMMAND blofeld-wai-test)
+  add_executable(blofeld-st7565-test test/st7565_test.cpp)
+  target_link_libraries(blofeld-st7565-test PRIVATE blofeld_display)
+  add_test(NAME st7565 COMMAND blofeld-st7565-test)
   add_executable(blofeld-rti-test test/mcu_rti_test.cpp)
   target_link_libraries(blofeld-rti-test PRIVATE blofeld_core)
   add_test(NAME mcu_rti COMMAND blofeld-rti-test)
@@ -269,11 +275,15 @@ add_custom_target(quality
     blofeld-original-flash-restart-test
     blofeld-original-parallel-update-test
     blofeld-wai-test
+    blofeld-st7565-test
     blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
 endif()
 
 if(BLOFELD_FUZZING)
+  add_executable(st7565-fuzz test/st7565_fuzz.cpp)
+  target_link_libraries(st7565-fuzz PRIVATE blofeld_display)
+  target_link_options(st7565-fuzz PRIVATE -fsanitize=fuzzer)
   add_executable(flash-image-fuzz test/flash_image_fuzz.cpp)
   target_link_libraries(flash-image-fuzz PRIVATE blofeld_storage ZLIB::ZLIB)
   target_link_options(flash-image-fuzz PRIVATE -fsanitize=fuzzer)

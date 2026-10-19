@@ -61,6 +61,14 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           Original DSP RAM clear reaches reserved
                                           Y:002000; write/alias behavior unverified.
                                           Other DSP layouts and full timing pending.
+Display peripheral               partial  Separate ST7565S transaction reference:
+                                          all RAM cells, unknown data masks, icon
+                                          bit, saturating columns, dummy/pipelined
+                                          reads, RMW and distinct reset semantics
+                                          checked (display.txt). Original helper
+                                          continuation identifies display reads;
+                                          candidate identity, board attachment,
+                                          busy/pad timing and optics unverified.
 Interrupts, timers, clock         partial  USB PHY control, CRG qualification, lock
                                           loss, W1C/POR flags and write gates tested.
                                           Timer prescaling, capture/compare, flags,

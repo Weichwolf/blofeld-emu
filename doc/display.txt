@@ -1,0 +1,75 @@
+ST7565S display transaction reference
+
+  ctest --test-dir build/strict -R '^st7565$' --output-on-failure
+
+Sources: Sitronix ST7565S v0.6b, pages 24..27 and 41..52; Powertip
+PE12864WRF-004HC1Q sample specification edition 002. URLs, sizes and hashes are
+in hardware/sources.json. The PDFs remain private local references.
+
+The original MCU setup and display subroutines use command/data cycles and
+commands consistent with this controller. The Powertip specification identifies
+an ST7565S-G controller for that module. This is a candidate peripheral, not a
+hardware-verified identification of either Blofeld profile or its PCB wiring.
+
+St7565 accepts completed, qualified transactions. It is separate from McuBus:
+there is no default attachment, implicit ready pin, generated CPU cycle count or
+claim that a particular GPIO transition met the datasheet timing requirements.
+Busy/status timing, LCD voltages, scan timing and visible optical output are not
+implemented. Mode writes retain digital settings; analog effects are not modeled.
+
+RAM and reads
+The model stores 132 columns in eight byte pages and the icon page's D0 cells.
+Cold RAM and the initial read holder are unknown. Read results carry a known-bit
+mask so an adapter can keep unobserved data pins unknown. Icon-page bits D1..D7
+are not assigned an invented value. Inspecting RAM does not consume a read cycle.
+
+Column addresses saturate at 83H and never carry into the page. Page and column
+commands require a new dummy read. A dummy read returns the previous bus holder,
+loads the selected cell and preserves the column. Subsequent normal reads return
+that holder and increment/prefetch. Figure 2 explicitly shows the address-write
+byte in the holder and on the bus during the following dummy read. Command and
+parameter writes therefore update the holder too. MPU RAM writes load that holder,
+write the addressed cell and increment the column. The next read again needs a
+dummy cycle, as described in the datasheet's internal-register pipeline.
+
+RMW saves its entry column, leaves read addresses unchanged and increments only
+on writes. END restores the saved column. Invalid addresses, unknown commands,
+test commands and unqualified END/parameter sequences fail visibly. The public
+API does not translate an unknown read mask into a successful zero byte.
+
+Reset and commands
+Access requires an explicitly observed hardware reset; construction alone does
+not infer power-up readiness. Hardware reset establishes the documented digital
+defaults. Software reset applies only reset-list items 11..19 and retains display,
+ADC, reverse, bias, all-points and power settings. Neither reset clears RAM or its
+knownness. Hardware reset invalidates unspecified read-holder history. Undocumented
+resistor/booster reset values remain optional rather than guessed constants.
+
+Two-byte volume, static-indicator ON and booster commands consume their following
+command byte as data. Indicator OFF is single-byte. Data cycles during a pending
+parameter remain unqualified. The command decoder also retains display mode,
+start line, ADC direction, bias, COM direction, power and resistor settings.
+Changing display direction or start line does not remap CPU RAM accesses.
+
+Independent tests cover every RAM cell, the icon bit mask, column saturation,
+literal read/dummy/RMW sequences, unknown cells, address isolation, distinct reset
+effects, single/double-byte commands, rejected accesses and state after rejection.
+Removing command writes from the holder fails the literal Figure 2 dummy-read
+oracle; the corrected transaction model passes it.
+st7565-fuzz exercises arbitrary transaction sequences under sanitizers. Whole-board
+attachment, actual MCU/DSP boot, MIDI/audio and physical-device comparison remain
+separate outstanding requirements. This digital reference is not a full snapshot
+format or proof of update/flash safety.
+
+Offline fuzzing
+  cmake --build build/fuzz --target st7565-fuzz
+  python3 tools/make_st7565_fuzz_seeds.py doc/local/display-fuzz-corpus
+  mkdir -p doc/local/display-fuzz-artifacts
+  build/fuzz/st7565-fuzz doc/local/display-fuzz-corpus -artifact_prefix=doc/local/display-fuzz-artifacts/ -max_len=6144 -max_total_time=60
+
+The 275 synthetic seeds cover all command bytes, all nine RAM pages, dummy/read
+bursts, RMW boundaries, resets and invalid addresses. They contain no manufacturer
+program data. Faults are caught per transaction so fuzzing can continue into the
+surviving state and exercise subsequent reset/recovery operations.
+The current 61-second campaign completed 137046 runs without sanitizer findings.
+It does not cover a physical display or the whole MCU/DSP board.

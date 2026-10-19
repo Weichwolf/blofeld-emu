@@ -56,6 +56,8 @@ doc/original-parallel-update.txt covers the normal RAM-copy path, original calle
 ABI and first helper callback under an explicit parallel-input fixture.
 doc/mcu-wai.txt covers native WAI, idle/wakeup frames, CLI/TAP ordering and the
 standalone driver's explicit wait stop when no scheduler supplies an interrupt.
+doc/display.txt describes the separate ST7565S RAM/command/read-pipeline reference;
+the candidate display and its board wiring are not hardware-verified.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.

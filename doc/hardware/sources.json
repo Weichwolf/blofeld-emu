@@ -40,5 +40,17 @@
     "source": "https://www.nxp.com/docs/en/errata/DSP56371E.pdf",
     "bytes": 147566,
     "sha256": "9485646b1421f75d43c7551f48db80c5fe6fe04ba24f65f521087180989a2d4a"
+  },
+  {
+    "file": "ST7565S.pdf",
+    "source": "https://www.crystalfontz.com/controllers/uploaded/Sitronix_ST7565S_v0.6b.pdf",
+    "bytes": 952424,
+    "sha256": "cb77ad5e1beea48cb8c54b403ba149deceed2e832e42f20921f1e7cd87b4d5a5"
+  },
+  {
+    "file": "PE12864WRF-004HC1Q.pdf",
+    "source": "https://285624.selcdn.ru/syms1/iblock/d6d/d6d9f2833cd418ac1c244286aa1471c3/2e2c9761cff436e0b57baec5a601dd33.pdf",
+    "bytes": 2155606,
+    "sha256": "fe34321ac03ad9b799188cded6a9a7e70094c51c6f8e5d88d921739268ba54da"
   }
 ]
