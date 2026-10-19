@@ -60,6 +60,8 @@ doc/display.txt describes the separate ST7565S RAM/command/read-pipeline referen
 the candidate display and its board wiring are not hardware-verified.
 doc/display-parallel.txt covers logical 6800 pin cycles and the complete original
 first helper's display reads/return under an explicit GPIO/peripheral fixture.
+doc/original-application.txt covers original reset through main WAI, missing-input
+retry and both controlled PM3 levels under an untimed GPIO/USB/LCD/clock fixture.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.

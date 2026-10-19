@@ -1,0 +1,62 @@
+Original MCU reset through application main WAI
+
+  ctest --test-dir build/strict -R '^original_application$' --output-on-failure
+
+The optional regression verifies the private 1.25 ZIP identity before execution.
+Missing firmware explicitly skips it. The test runs both controlled PM3 input
+levels; these are input experiments, not Desktop/Keyboard hardware profiles.
+
+The unchanged original reset/loader executes through its application entry using
+the conditional E2/E3 loopback and PHY window in original-parallel-update.txt.
+The application then executes every instruction, including its native DSP sender,
+display setup/drawing, original RTI handlers, countdowns and main WAI. It does not
+use an own RAM caller, CPU register replacement, host RAM readiness or loop skips.
+
+Explicit conditions
+- USB decoder state is known; U/B ready and other-input observations are supplied.
+- Q and E4 are explicitly floating after reset. Native pull configuration resolves
+  them. The LCD is explicitly reset and attached through the inferred logical
+  route in display-parallel.txt, using the shared LcdFixture test utility.
+- Oscillator periods enter only at two original foreground wait slots. After
+  delivery, the foreground poll must actually execute before another period can
+  enter. The original controller/CPU/ISR acknowledges each real interrupt.
+- PM3 is initially unobserved. Its original read must fail visibly with address,
+  PC, CCR and unknown mask, preserving visible CPU state, bus revision and NVM.
+  The test checks native input direction and disabled pull, supplies low/high,
+  then retries that same original instruction without redirecting the CPU.
+
+Checks
+After 90312 reset/loader instructions, each application case executes 11979871
+instructions and 6384 RTI entries. The original main reaches WAI with PC=8315,
+SP=25ea and enabled maskable interrupts. A separately specified NXP CCR/B/A/X/Y/
+next-PC byte layout checks the frame against the state before WAI at SP=25f3.
+The original PM3 state is checked in RAM, not written by the host. LCD counts are
+302 commands, 2402 writes and 2244 reads. All MCU NVM bytes, knownness and erase
+history must survive the failed read unchanged and match their pre-reset image
+after WAI.
+
+Native SCI reception
+After the low-PM3 cold start, the same untouched CPU is used for eight ordinary
+MIDI bytes and all 256 byte values. Native SBR=60, SCICR1=8, SCICR2=0x2c and
+MODRR=0 qualify the selected normal 100-pin PR2 input. The fixture supplies NRZ
+start/data/stop levels in 960-bus-cycle bit slices, including a complete stop bit;
+it does not write SCI control/data registers or MCU activity flags.
+
+Each complete frame must request the original SCI vector, wake main WAI using
+the saved frame without more stack writes, execute the original handler and RTI,
+restore CPU context and acknowledge reception. The exact byte in the original
+last-received mailbox is checked. Independent original-handler expectations check
+12 instructions for realtime bytes (0xf8..0xff) and 16 for other bytes. Realtime
+leaves the activity fields unchanged; other bytes set the activity bit and the
+20-count timeout. Original foreground instructions must then reach main WAI again.
+MCU NVM, knownness and erase history must survive all 264 receives unchanged.
+This checks MCU byte reception/activity, not complete MIDI message or DSP voice
+processing. Parser, synthesis and physical-controller requirements remain open.
+
+Limits
+These are untimed conditional MCU runs. CPU/SCI/TIM cycles are not scheduled
+against oscillator time; pad propagation, wait clock gates and physical board
+wiring remain unqualified. The U observation is not a running DSP peer. Complete
+MCU/DSP board boot, host MIDI/audio, ROM/NAND/sample mapping, full updater/recovery
+and stock-device equivalence remain pending. The standalone driver retains its
+explicit unknown-input and unsupported-access failures.

@@ -64,7 +64,9 @@ fail at the original PORTA read with address, PC and CCR, without completing tha
 read or changing NVM. Withdrawal is an unknown-input experiment, not a modeled
 physical disconnection or interruption of an on-device update.
 
-Whole application initialization, the real DSP peer, later update stages,
+The separate cold-MCU regression in original-application.txt also uses this
+adapter and reaches native main WAI after 2244 display reads under its explicit
+pin/clock observations. A measured board boot, the real DSP peer, later update stages,
 transport checksums/tail draining, flash scheduling, full recovery, host MIDI/audio,
 NAND/ROM/sample mapping and stock-device comparison remain pending.
 

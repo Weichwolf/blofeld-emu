@@ -58,6 +58,17 @@ Board integration
   At 30 MHz module clock SBR=60 gives 31250 baud. This does not prove the board
   clock rate, a completed boot, MIDI routing or controller operation.
 
+Original application regression
+original-application.txt describes an unmodified MCU cold start through main WAI
+under explicit GPIO/USB/LCD/oscillator observations. Native SCI setup remains
+SBR=60, SCICR1=8, SCICR2=0x2c and normal 100-pin routing. A PR2 NRZ waveform then
+delivers eight MIDI bytes and all 256 byte values through the original SCI vector,
+saved WAI frame, ISR, RTI and foreground return. Last-byte storage, activity flags,
+timeout updates and all-register restoration are checked without host RAM/flag
+writes or forced CPU entry. No host serial/MIDI device is opened. The original
+MCU handler's byte/activity behavior does not establish complete message parsing,
+DSP voice processing or the physical board's MIDI routing.
+
 Unsupported behaviors
 Loop/single-wire mode, receiver wakeup and send-break requests fail. Interrupt
 enables feed the instruction-boundary controller described in mcu-interrupts.txt.

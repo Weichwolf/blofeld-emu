@@ -152,14 +152,26 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-parallel-update.trace")
   set_tests_properties(original_parallel_update PROPERTIES SKIP_RETURN_CODE 77)
+  add_library(blofeld_lcd_fixture STATIC test/lcd_fixture.cpp)
+  target_link_libraries(blofeld_lcd_fixture PUBLIC blofeld_core blofeld_display)
+  add_library(blofeld_application_fixture STATIC test/application_fixture.cpp test/application_midi_fixture.cpp)
+  target_link_libraries(blofeld_application_fixture PUBLIC blofeld_lcd_fixture blofeld_parallel_fixture)
   add_executable(blofeld-original-lcd-helper-test test/original_lcd_helper_test.cpp)
-  target_link_libraries(blofeld-original-lcd-helper-test PRIVATE blofeld_parallel_fixture blofeld_display)
+  target_link_libraries(blofeld-original-lcd-helper-test PRIVATE blofeld_parallel_fixture blofeld_lcd_fixture)
   add_test(NAME original_lcd_helper COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
     $<TARGET_FILE:blofeld-original-lcd-helper-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-lcd-helper.trace")
   set_tests_properties(original_lcd_helper PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-application-test test/original_application_test.cpp)
+  target_link_libraries(blofeld-original-application-test PRIVATE blofeld_application_fixture)
+  add_test(NAME original_application COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-application-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-application.trace")
+  set_tests_properties(original_application PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-flash-config-test test/mcu_flash_config_test.cpp)
   target_link_libraries(blofeld-flash-config-test PRIVATE blofeld_mcu)
   add_test(NAME flash_config COMMAND blofeld-flash-config-test)
@@ -288,6 +300,7 @@ add_custom_target(quality
     blofeld-original-flash-restart-test
     blofeld-original-parallel-update-test
     blofeld-original-lcd-helper-test
+    blofeld-original-application-test
     blofeld-wai-test
     blofeld-st7565-test
     blofeld-st7565-parallel-test

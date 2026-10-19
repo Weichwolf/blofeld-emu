@@ -160,7 +160,7 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           PDR latches remain nonreset.
                                           Executed RESET clears DSP timer state
                                           while preserving held external TIO input.
-                                          Private unmodified application continues
+                                          Unmodified application continues
                                           with known USB state, controlled U/B
                                           observations, explicit floating Q/E4 and
                                           inferred LCD routing. Native GPIO pulls
@@ -170,21 +170,30 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           a later foreground countdown without host
                                           RAM/PC/flag writes. The next unobserved
                                           PM3 read fails with MCU NVM/history
-                                          unchanged. Separate controlled PM3 low
-                                          and high observations both reach the
+                                          unchanged. The original_application
+                                          regression checks unknown-read retry
+                                          and controlled PM3 low/high. Both reach
                                           original main WAI after 11979871
                                           application instructions and 2244 LCD
                                           reads, after the shared native reset
                                           fixture. MCU NVM/history remain
-                                          unchanged in both cases. These are
-                                          private conditional experiments, not
+                                          unchanged in both cases. Independent
+                                          NXP WAI-frame bytes and native saved
+                                          PM3 state are checked. These remain
+                                          conditional MCU experiments, not
                                           measured device profiles. No calibrated
                                           CPU/SCI/TIM time, real DSP peer or
                                           hardware-verified board profile.
 MIDI/controller input             pending  No virtual/physical MIDI port yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
-                                          sequences and pin routing tested. See
+                                          sequences and pin routing tested.
+                                          Original post-startup WAI/SCI/ISR/RTI
+                                          receives 264 frames including all 256
+                                          byte values. Last-byte storage, activity
+                                          fields, context restoration, foreground
+                                          wait and NVM preservation checked
+                                          (original-application.txt). See
                                           mcu-sci.txt for unresolved flag timing.
 Voice management and audio        pending  No original audio generation or PCM output.
 Persistent storage               partial  MCU NVM files preserve mutations,

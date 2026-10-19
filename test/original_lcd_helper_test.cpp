@@ -7,7 +7,7 @@
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/st7565.hpp"
-#include "blofeld/st7565_parallel.hpp"
+#include "lcd_fixture.hpp"
 #include "parallel_update_fixture.hpp"
 
 #include <algorithm>
@@ -20,7 +20,6 @@
 #include <string_view>
 
 namespace {
-namespace pin = blofeld::st7565_pin;
 constexpr unsigned byte_mask = 255;
 constexpr unsigned caller = 0x1700;
 constexpr unsigned stack = 0x2600;
@@ -45,97 +44,6 @@ constexpr unsigned other_serial_inputs = 0xe8;
 void require(const bool condition, const char *message) {
   if (!condition) { throw blofeld::Fault(message); }
 }
-
-struct Counts {
-  unsigned commands = 0;
-  unsigned writes = 0;
-  unsigned reads = 0;
-};
-
-struct Wire {
-  blofeld::McuPort port;
-  std::uint8_t mask;
-  unsigned signal;
-};
-
-// Inferred routing is an explicit test fixture, not a default board profile.
-class Display {
-public:
-  explicit Display(blofeld::McuBus &bus) : bus_(bus) {
-    device_.sample({.known = pin::reset_n});
-    device_.sample({.control = pin::reset_n | pin::cs1_n, .known = pin::all});
-  }
-
-  void withdraw_data() { withdraw_ = true; }
-
-  [[nodiscard]] Counts counts() const { return counts_; }
-
-  [[nodiscard]] const blofeld::St7565 &controller() const { return device_.controller(); }
-
-  void observe(const blofeld::BusEvent &event) {
-    if (!event.write || !gpio_address(event.address)) { return; }
-    if (!armed_) {
-      const auto enable = bus_.observe_pads(blofeld::McuPort::e, enable_pad);
-      if (event.address != blofeld::hc12::ddre ||
-          (bus_.read(blofeld::hc12::ddre) & enable_pad) == 0 || enable.known != enable_pad ||
-          enable.levels != 0) {
-        return;
-      }
-      armed_ = true;
-    }
-    const auto result = device_.sample(sample());
-    if (result.completed) {
-      if (result.completed->read) {
-        ++counts_.reads;
-      } else if (result.completed->data) {
-        ++counts_.writes;
-      } else {
-        ++counts_.commands;
-      }
-    }
-    const auto data = withdraw_ && result.drive != 0 ? blofeld::LcdByte{} : result.data;
-    bus_.set_pin_drive(
-        blofeld::McuPort::a,
-        {.mask = data.known,
-         .levels = data.value,
-         .floating = static_cast<std::uint8_t>(byte_mask & ~static_cast<unsigned>(result.drive))});
-  }
-
-private:
-  static bool gpio_address(const std::uint16_t address) {
-    return address == blofeld::hc12::porta || address == blofeld::hc12::portb ||
-           address == blofeld::hc12::porte || address == blofeld::hc12::ddra ||
-           address == blofeld::hc12::ddrb || address == blofeld::hc12::ddre;
-  }
-
-  [[nodiscard]] blofeld::LcdHostPins sample() const {
-    constexpr std::array<Wire, 5> wires{
-        {{.port = blofeld::McuPort::b, .mask = 0x80, .signal = pin::cs1_n},
-         {.port = blofeld::McuPort::b, .mask = 0x40, .signal = pin::cs2},
-         {.port = blofeld::McuPort::e, .mask = 0x10, .signal = pin::enable},
-         {.port = blofeld::McuPort::b, .mask = 0x20, .signal = pin::read},
-         {.port = blofeld::McuPort::b, .mask = 1, .signal = pin::data}}};
-    unsigned control = pin::reset_n;
-    unsigned known = pin::reset_n;
-    for (const auto wire : wires) {
-      const auto pad = bus_.observe_pads(wire.port, wire.mask);
-      if (pad.known == wire.mask) { known |= wire.signal; }
-      if (pad.levels != 0) { control |= wire.signal; }
-    }
-    const auto drive = bus_.read(blofeld::hc12::ddra);
-    const auto host = bus_.observe_pads(blofeld::McuPort::a, drive);
-    return {.control = static_cast<std::uint8_t>(control),
-            .known = static_cast<std::uint8_t>(known),
-            .drive = drive,
-            .data = {.value = host.levels, .known = host.known}};
-  }
-
-  blofeld::McuBus &bus_;
-  blofeld::St7565Parallel device_;
-  Counts counts_;
-  bool armed_ = false;
-  bool withdraw_ = false;
-};
 
 void setup(blofeld::McuBus &bus, blofeld::Hc12 &cpu, std::ostream &trace) {
   // Own caller invokes three complete original subroutines; no GPIO-direction stub.
@@ -174,7 +82,7 @@ void setup(blofeld::McuBus &bus, blofeld::Hc12 &cpu, std::ostream &trace) {
   trace << "native-setup instructions=" << instructions << " ddrb=f7\n";
 }
 
-void check_clear(const Display &display, const Counts before) {
+void check_clear(const blofeld::test::LcdFixture &display, const blofeld::test::LcdCounts before) {
   constexpr unsigned visible_columns = 128;
   constexpr unsigned visible_pages = 8;
   const auto counts = display.counts();
@@ -201,7 +109,7 @@ void check_clear(const Display &display, const Counts before) {
 
 void execute_helper(blofeld::McuBus &bus,
                     blofeld::Hc12 &cpu,
-                    Display &display,
+                    blofeld::test::LcdFixture &display,
                     std::ostream &trace,
                     const bool withdraw) {
   require(cpu.state().pc == first_service, "Helper continuation starts at its original callback");
@@ -258,7 +166,7 @@ int run(const Inputs &inputs) {
   require(trace.is_open(), "Cannot create private original LCD helper trace");
   trace.exceptions(std::ios::failbit | std::ios::badbit);
   blofeld::test::boot(bus, cpu, trace);
-  Display display(bus);
+  blofeld::test::LcdFixture display(bus);
   bus.set_pin_drive(blofeld::McuPort::e, {.mask = e_fixture_mask, .levels = 3});
   bus.set_pin_drive(blofeld::McuPort::b, {.mask = other_serial_inputs});
   bus.set_observer([&display](const blofeld::BusEvent &event) { display.observe(event); });
