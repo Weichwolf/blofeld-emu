@@ -1,75 +1,96 @@
 --- HCS_HC12.sinc
 +++ HCS_HC12.sinc
-@@ -2758 +2758 @@
+@@ -2629 +2628,0 @@
+-SkipNext2Bytes: dest is epsilon [ dest = inst_next + 2; ]  { export *[RAM]:1 dest; }
+@@ -2631 +2630 @@
+-:CPS loc                 is Prefix18=0 & (op8=0x8F) & SkipNext2Bytes [ loc = (inst_next & 0xffffff); ]
++:CPS iopr16i                 is Prefix18=0 & (op8=0x8F); iopr16i
+@@ -2633,2 +2632 @@
+-	local addr:$(SIZE) = inst_next;
+-	local op1:2 = *[RAM]:2 addr;
++	op1:2 = iopr16i;
+@@ -2640 +2637,0 @@
+-	goto SkipNext2Bytes;
+@@ -2653 +2650 @@
+-:CPS loc                 is Prefix18=0 & (op8=0xBF) & SkipNext2Bytes [ loc = (inst_next & 0xffffff); ]
++:CPS opr16a_16                 is Prefix18=0 & (op8=0xBF); opr16a_16
+@@ -2655,3 +2652 @@
+-	local addr:$(SIZE) = inst_next;
+-	local op1:2 = *[RAM]:2 addr;
+-	Load2(op1, op1);
++	op1:2 = opr16a_16;
+@@ -2663 +2657,0 @@
+-	goto SkipNext2Bytes;
+@@ -2758 +2752 @@
 -	A = decimalAdjustAccumulator(A, $(C), $(H));
 +	adjusted:1 = decimalAdjustAccumulator(A, $(C), $(H));
-@@ -2759,0 +2760 @@
+@@ -2759,0 +2754 @@
 +	A = adjusted;
-@@ -2762 +2763 @@
+@@ -2762 +2757 @@
 -	#V is undefined
 +	# V is undefined.
-@@ -2892 +2893,3 @@
+@@ -2892 +2887,3 @@
 -	tmp:4 = (zext(IY) << 16) | (zext(D));
 +	$(C) = (IX == 0);
 +	if ($(C) != 0) goto <ediv_done>;
 +	tmp:4 = (zext(IY) << 16) | zext(D);
-@@ -2893,0 +2897,2 @@
+@@ -2893,0 +2891,2 @@
 +	$(V) = (resultQ > 0x0000FFFF);
 +	if ($(V) != 0) goto <ediv_done>;
-@@ -2896 +2901 @@
+@@ -2896 +2895 @@
 -	D  = resultR:2;
 +	D = resultR:2;
-@@ -2899,2 +2904 @@
+@@ -2899,2 +2898 @@
 -	$(V) = (resultQ > 0x0000FFFF);
 -	$(C) = (IX == 0);
 +<ediv_done>
-@@ -2905 +2909,3 @@
+@@ -2905 +2903,3 @@
 -	tmp:4 = (zext(IY) << 16) | (zext(D));
 +	$(C) = (IX == 0);
 +	if ($(C) != 0) goto <edivs_done>;
 +	tmp:4 = (zext(IY) << 16) | zext(D);
-@@ -2906,0 +2913,2 @@
+@@ -2906,0 +2907,2 @@
 +	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0xFFFF8000);
 +	if ($(V) != 0) goto <edivs_done>;
-@@ -2909 +2917 @@
+@@ -2909 +2911 @@
 -	D  = resultR:2;
 +	D = resultR:2;
-@@ -2912,2 +2920 @@
+@@ -2912,2 +2914 @@
 -	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0x00008000);
 -	$(C) = (IX == 0);
 +<edivs_done>
-@@ -3492 +3499,2 @@
+@@ -3492 +3493,2 @@
 -	tmp:4 = (zext(D) << 16);
 +	if ($(V) != 0) goto <fdiv_saturated>;
 +	tmp:4 = zext(D) << 16;
-@@ -3496 +3504 @@
+@@ -3496 +3498 @@
 -	D  = resultR:2;
 +	D = resultR:2;
-@@ -3497,0 +3506,5 @@
+@@ -3497,0 +3500,5 @@
 +	goto <fdiv_done>;
 +<fdiv_saturated>
 +	IX = 0xFFFF;
 +	$(Z) = 0;
 +<fdiv_done>
-@@ -3575,0 +3589,2 @@
+@@ -3575,0 +3583,2 @@
 +	$(V) = 0;
 +	if ($(C) != 0) goto <idiv_zero>;
-@@ -3579 +3594 @@
+@@ -3579 +3588 @@
 -	D  = resultR;
 +	D = resultR;
-@@ -3581 +3596,5 @@
+@@ -3581 +3590,5 @@
 -	$(V) = 0;
 +	goto <idiv_done>;
 +<idiv_zero>
 +	IX = 0xFFFF;
 +	$(Z) = 0;
 +<idiv_done>
-@@ -3586,0 +3606 @@
+@@ -3586,0 +3600 @@
 +	if ($(C) != 0) goto <idivs_done>;
-@@ -3590 +3610 @@
+@@ -3590 +3604 @@
 -	D  = resultR:2;
 +	D = resultR:2;
-@@ -3593 +3613,2 @@
+@@ -3593 +3607,2 @@
 -	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0x00008000);
 +	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0xFFFF8000);
 +<idivs_done>

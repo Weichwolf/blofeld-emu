@@ -47,7 +47,10 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           MOV/RMW/TST/LEA, 1024 branch truth vectors,
                                           divide boundaries and 20000 BCD additions
                                           expose/correct native BGE/LBGE, PC-index,
-                                          signed-divide and DAA defects. Full ISA,
+                                          signed-divide and DAA defects. CPS length,
+                                          flags and cycles: 4608 independent cases,
+                                          overlapping entries and partial fetches
+                                          (hc12-cycles.txt). Full ISA,
                                           qualified chip timing and hardware
                                           comparison pending.
                                           Independent reset/opcode reference:

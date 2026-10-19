@@ -65,6 +65,15 @@ manual cycle counts and 20000 actual ADCA/DAA pairs against independent decimal
 addition and defined-flag expectations. These are project-owned deterministic
 instruction inputs; manufacturer program bytes and disassembly remain local.
 
+The same patch restores three-byte immediate/extended CPS constructors. Upstream
+encoded them as one-byte skips, reading instruction operands as program-memory
+data and concealing those bytes from execution-permission checks. The immediate
+form uses its instruction operand directly; extended CPS performs one word data
+read. The unused skip helper is removed. S12CPUV2 page 158 specifies the lengths,
+flags and cycles. hc12_compare_stack checks 4608 independent literal cases across
+all eight address modes, preserved registers/memory, overlapping alternative
+entries and unknown operand-byte fetches. No installed Ghidra source is modified.
+
 HC12 exception corrections
 -------------------------
 ghidra-hc12-exceptions.patch corrects SWI's indirect vector fetch, reads the

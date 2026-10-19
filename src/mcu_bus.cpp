@@ -288,7 +288,8 @@ void McuBus::write_memory(const MemoryWrite access) {
 void McuBus::check_execute(const InstructionFetch fetch) const {
   constexpr unsigned address_space_size = 65536;
   if (fetch.length == 0 || fetch.length > address_space_size - fetch.address) {
-    throw Fault("Invalid MCU instruction fetch range at " + hex(fetch.address));
+    throw Fault("Invalid MCU instruction fetch range at " + hex(fetch.address) +
+                " pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2));
   }
   for (unsigned index = 0; index < fetch.length; ++index) {
     const auto target = static_cast<std::uint32_t>(fetch.address) + index;
@@ -302,7 +303,12 @@ void McuBus::check_execute(const InstructionFetch fetch) const {
                     " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
       }
     } else {
-      memory_.check_execute(static_cast<std::uint16_t>(target));
+      try {
+        memory_.check_execute(static_cast<std::uint16_t>(target));
+      } catch (const Fault &fault) {
+        throw Fault("MCU instruction fetch at " + hex(target) + " pc=" + hex(context_.pc) +
+                    " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+      }
     }
   }
 }

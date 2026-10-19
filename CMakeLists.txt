@@ -135,6 +135,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-hc12-cycle-extended-test test/hc12_cycle_extended_test.cpp)
   target_link_libraries(blofeld-hc12-cycle-extended-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_cycle_extended COMMAND blofeld-hc12-cycle-extended-test)
+  add_executable(blofeld-hc12-compare-stack-test test/hc12_compare_stack_test.cpp)
+  target_link_libraries(blofeld-hc12-compare-stack-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME hc12_compare_stack COMMAND blofeld-hc12-compare-stack-test)
   add_executable(blofeld-mcu-cycle-test test/mcu_cycle_test.cpp)
   target_link_libraries(blofeld-mcu-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
   add_test(NAME mcu_cycles COMMAND blofeld-mcu-cycle-test)
@@ -502,6 +505,7 @@ add_custom_target(quality
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-hc12-cycle-test
     blofeld-hc12-cycle-extended-test
+    blofeld-hc12-compare-stack-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
     blofeld-original-cycle-boot-test
