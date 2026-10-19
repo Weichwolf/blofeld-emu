@@ -256,7 +256,15 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           measured device profiles. No calibrated
                                           CPU/SCI/TIM time, real DSP peer or
                                           hardware-verified board profile.
-MIDI/controller input             pending  No virtual/physical MIDI port yet.
+MIDI/controller input             partial  Bounded byte queue and rational 31250-baud
+                                          8-N-1 source connect to native SCI pads.
+                                          Literal wire/timing, all-byte/pin routes,
+                                          backpressure and partial-frame replay
+                                          checked (midi-input.txt). Explicit clock
+                                          and routing remain fixture assumptions.
+                                          No virtual/physical MIDI port, complete
+                                          message/controller processing or DSP
+                                          voice/audio integration yet.
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
                                           sequences and pin routing tested.
@@ -265,6 +273,7 @@ SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity
                                           byte values. Last-byte storage, activity
                                           fields, context restoration, foreground
                                           wait and NVM preservation checked
+                                          through the reusable byte-to-wire source
                                           (original-application.txt). See
                                           mcu-sci.txt for unresolved flag timing.
 Voice management and audio        pending  No original audio generation or PCM output.
@@ -364,7 +373,10 @@ Power loss in every erase/program partial  Forty MCU command/reference-position
                                           updates and stock hardware interruption
                                           tests remain pending (nand-write.txt).
 Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU models;
-                                          native dependencies instrumented too.
+                                          native SLEIGH/DSP sources instrumented.
+                                          System zlib is linked without rebuilding
+                                          it under sanitizers; instrumenting this
+                                          native dependency remains required.
                                           No complete-board, audio or concurrency
                                           coverage yet.
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s

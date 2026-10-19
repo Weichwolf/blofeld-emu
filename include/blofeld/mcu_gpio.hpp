@@ -38,6 +38,7 @@ public:
   McuGpio();
   void reset();
   void set_drive(McuPort port, PinDrive drive);
+  void update_drive(McuPort port, std::uint8_t affected, PinDrive drive);
   void set_function(McuPort port, PinFunction function);
   [[nodiscard]] std::uint8_t read_pad(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;

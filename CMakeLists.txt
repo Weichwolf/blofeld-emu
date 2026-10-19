@@ -97,6 +97,12 @@ add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
 target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp src/mcu_machine.cpp)
+add_library(blofeld_midi_serial src/midi_serial.cpp)
+target_include_directories(blofeld_midi_serial PUBLIC include)
+target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
+add_library(blofeld_mcu_midi src/mcu_midi.cpp)
+target_include_directories(blofeld_mcu_midi PUBLIC include)
+target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
   src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
@@ -117,6 +123,12 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-midi-serial-test test/midi_serial_test.cpp)
+  target_link_libraries(blofeld-midi-serial-test PRIVATE blofeld_midi_serial)
+  add_test(NAME midi_serial COMMAND blofeld-midi-serial-test)
+  add_executable(blofeld-mcu-midi-test test/mcu_midi_test.cpp)
+  target_link_libraries(blofeld-mcu-midi-test PRIVATE blofeld_mcu_midi)
+  add_test(NAME mcu_midi COMMAND blofeld-mcu-midi-test)
   add_executable(blofeld-nand-read-test test/nand_read_test.cpp)
   target_link_libraries(blofeld-nand-read-test PRIVATE blofeld_nand)
   add_test(NAME nand_read COMMAND blofeld-nand-read-test)
@@ -212,7 +224,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld_lcd_fixture PUBLIC blofeld_core blofeld_display)
   add_library(blofeld_application_fixture STATIC test/application_fixture.cpp test/application_midi_fixture.cpp
     test/application_update_fixture.cpp)
-  target_link_libraries(blofeld_application_fixture PUBLIC blofeld_lcd_fixture blofeld_parallel_fixture)
+  target_link_libraries(blofeld_application_fixture PUBLIC blofeld_lcd_fixture blofeld_parallel_fixture blofeld_mcu_midi)
   add_executable(blofeld-original-lcd-helper-test test/original_lcd_helper_test.cpp)
   target_link_libraries(blofeld-original-lcd-helper-test PRIVATE blofeld_parallel_fixture blofeld_lcd_fixture)
   add_test(NAME original_lcd_helper COMMAND ${Python3_EXECUTABLE}
@@ -405,6 +417,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+    blofeld-midi-serial-test blofeld-mcu-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
     blofeld-nand-image-test
     blofeld-nand-store-test

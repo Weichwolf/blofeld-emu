@@ -48,6 +48,11 @@ Board integration
   split slices at external RX transitions. The bus processes each SCI sample,
   updates TX pads and checks known output contention, including intermediate
   transmitted bits. Unknown RX inputs fail when a sample is required.
+- MidiSerialInput and McuMidiInput supply a bounded byte queue, rational 31250-baud
+  8-N-1 waveform and explicit PR2/PS4 connection without replacing the receiver.
+  The original application regression uses this transport. Source and bus copies
+  retain mid-byte state together; host ports and scheduling remain pending.
+  See midi-input.txt for clock assumptions, failure handling and checks.
 - MODRR selects PR3/PR2 for TX/RX in 100-pin mode and PS5/PS4 in 64-pin mode.
   Peripheral functions override GPIO pad direction; GPIO latches and physical
   pad samples remain separate. SCI and timer currently own the supported alternate

@@ -64,5 +64,11 @@
     "source": "https://www1.futureelectronics.com/doc/SAMSUNG/K9F1208U0C-PIB0000.pdf",
     "bytes": 844012,
     "sha256": "bf9217e55bdad1d3c1e3eb9462fcdafb02c2a77231f89261c3f3927c3fde226f"
+  },
+  {
+    "file": "MIDI_CA033_2014.pdf",
+    "source": "https://www.midi.org/wp-content/uploads/wpforo/default_attachments/1709416667-ca33-MIDI-10-Electrical-Specification-Update.pdf",
+    "bytes": 206124,
+    "sha256": "a1670586320e88a60723145e4833723157dfa29ce3fb807954d0b4c0df3fbd0a"
   }
 ]

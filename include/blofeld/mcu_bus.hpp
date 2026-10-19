@@ -57,6 +57,7 @@ public:
   void acknowledge_interrupt(std::uint16_t vector) override;
   void set_observer(std::function<void(const BusEvent &)> observer);
   void set_pin_drive(McuPort port, PinDrive drive);
+  void update_pin_drive(McuPort port, std::uint8_t affected, PinDrive drive);
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
   void observe_phy(PhyClockWindow window);
   void observe_usb_decoder(UsbDecoderState state);

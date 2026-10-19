@@ -26,7 +26,9 @@ doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
 clang-tidy runs as a mandatory build step on every project C++ translation unit;
 format-check checks formatting without changing files. All diagnostics are
 errors, including the 120-line function limit. ASan/UBSan and additional integer
-checks are enabled in strict builds; dependencies also receive ASan/UBSan.
+checks are enabled in strict builds; native SLEIGH and DSP sources also receive
+ASan/UBSan. The linked system zlib is not rebuilt with project instrumentation;
+instrumenting this dependency remains a quality-gate gap.
 release retains warning/static-analysis gates and disables sanitizers for timing
 measurements. thread selects separate TSan instrumentation. No concurrency is
 currently implemented. Native CPU adapters use exceptions; any future audio
@@ -68,6 +70,8 @@ original XIRQ/helper requests, first-helper return/tail/main WAI and main-helper
 initialization up to its unqualified idle FSTAT write.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
+doc/midi-input.txt describes bounded byte-to-wire serialization, explicit SCI
+pad connection and partial-frame replay, including the original MCU receive path.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.
 doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requests;
 doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.

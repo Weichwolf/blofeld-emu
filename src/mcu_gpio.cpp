@@ -100,6 +100,20 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
   ports_[index].external = drive;
 }
 
+void McuGpio::update_drive(const McuPort port, const std::uint8_t affected, const PinDrive drive) {
+  const auto index = port_index(port);
+  if ((affected & ~specs[index].valid) != 0 || ((drive.mask | drive.floating) & ~affected) != 0 ||
+      (drive.mask & drive.floating) != 0 || (drive.levels & ~drive.mask) != 0) {
+    throw Fault("Invalid MCU GPIO partial external drive mask");
+  }
+  const auto previous = ports_[index].external;
+  set_drive(
+      port,
+      {.mask = static_cast<std::uint8_t>((previous.mask & ~affected) | drive.mask),
+       .levels = static_cast<std::uint8_t>((previous.levels & ~affected) | drive.levels),
+       .floating = static_cast<std::uint8_t>((previous.floating & ~affected) | drive.floating)});
+}
+
 void McuGpio::set_function(const McuPort port, const PinFunction function) {
   const auto index = port_index(port);
   if ((function.inputs & function.outputs) != 0 || (function.levels & ~function.outputs) != 0 ||

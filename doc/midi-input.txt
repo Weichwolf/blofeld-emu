@@ -1,0 +1,62 @@
+MIDI byte input and explicit MCU SCI connection
+
+Scope
+MidiSerialInput converts an ordered byte span to ideal MIDI 1.0 NRZ levels.
+McuMidiInput connects those levels to an explicitly selected PR2 or PS4 pad and
+advances the existing SCI receiver. The caller supplies a fixed bus frequency;
+the 30 MHz/PR2 application fixture is an experiment, not measured Blofeld wiring
+or a Desktop/Keyboard profile. CPU, oscillator, timer and DSP time remain separate.
+No operating-system MIDI port or automatic board scheduler is implemented.
+
+Transport
+- The source emits start-low, eight least-significant-bit-first data slots and
+  stop-high at 31250 bits/second. It preserves every byte, including real-time,
+  status and data bytes, without interpreting messages or running status.
+- Bit boundaries use absolute rational phase in the declared bus clock, rounded
+  up to a whole cycle. Fragmenting clock slices or refilling a just-drained queue
+  without elapsed idle does not accumulate per-byte rounding error. Positive
+  idle time starts a fresh asynchronous epoch. Clocks below one cycle per bit
+  are rejected; changing the supplied frequency requires a new source.
+- The 4096-byte ring includes the active byte through its stop bit. Enqueue is
+  all-or-nothing: overflow fails visibly instead of dropping bytes. The consumer
+  obtains a stable-level slice and commits only after advancing its receiver;
+  crossing the offered bit boundary fails without consuming source state.
+- Partial GPIO updates preserve external observations on neighboring pads,
+  including floating/unknown inputs. Invalid masks fail before mutation.
+  The bridge supplies no SCI configuration or fabricated receive flags. Native
+  sampling, storage, error flags, interrupt requests and acknowledgement apply.
+- Copy the source together with the MCU/bus checkpoint to retain queued bytes,
+  partial frame and fractional phase. The bridge retains no bus/CPU references.
+  A rejected receiver slice latches a fault with the receive operation, pad
+  address, PC/CCR and underlying cause. Restore both source and bus from a healthy
+  checkpoint before continuing; the receiver may already have advanced.
+
+Reproducible checks
+  cmake --build --preset strict --target blofeld-midi-serial-test blofeld-mcu-midi-test
+  ctest --test-dir build/strict -R '^(midi_serial|mcu_midi)$' --output-on-failure
+  cmake --build --preset strict --target quality
+
+Fixed wire arrays check A5, 55 and AA, including partial-bit consumption and ring
+wrap. Independent absolute-time expectations check every bit of one second at
+2000001 Hz, both with one enqueue and with one-byte chunks. All 256 byte values
+reach native SCI storage/IRQ acknowledgement on both pin routes. Mid-byte
+MCU/source copies replay with differently fragmented slices, including a
+fractional clock. Missing connected input fails with execution context; restored
+state can resume. These tests open no physical MIDI device and run no fuzzing.
+
+The original_application regression uses this same transport for 264 frames
+after the unmodified MCU reaches main WAI in its controlled cold-start fixture.
+Its original SCI vector, ISR, RTI, foreground wait, byte/activity fields, register
+restoration and unchanged NVM remain checked. See original-application.txt and
+mcu-sci.txt for the fixture's conditions and unresolved SCI transfer edges.
+
+Remaining requirements
+Host MIDI ports, timestamped event scheduling with actual CPU/bus clocks,
+complete MIDI/controller handling by the original firmware and DSP, voices,
+audio output and hardware calibration are pending. A byte-to-SCI experiment
+does not establish complete board boot or playable MIDI/audio behavior.
+
+Reference
+The MIDI Association's CA-033 (2014), page 2, specifies 31250 baud, 8-N-1,
+least-significant-bit-first serial transport. doc/hardware/sources.json pins the
+official local PDF's URL, size and SHA-256; the PDF remains untracked.

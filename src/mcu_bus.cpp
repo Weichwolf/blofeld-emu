@@ -318,6 +318,13 @@ void McuBus::set_pin_drive(const McuPort port, const PinDrive drive) {
   if (port == McuPort::e) { interrupts_.observe_pins(gpio_.observe_pads(port, 3)); }
 }
 
+void McuBus::update_pin_drive(const McuPort port,
+                              const std::uint8_t affected,
+                              const PinDrive drive) {
+  gpio_.update_drive(port, affected, drive);
+  if (port == McuPort::e) { interrupts_.observe_pins(gpio_.observe_pads(port, 3)); }
+}
+
 PinSample McuBus::observe_pads(const McuPort port, const std::uint8_t mask) const {
   return gpio_.observe_pads(port, mask);
 }
