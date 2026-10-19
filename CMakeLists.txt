@@ -74,12 +74,19 @@ include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
+add_library(blofeld_private_files src/private_file.cpp)
+target_include_directories(blofeld_private_files PUBLIC include)
+target_link_libraries(blofeld_private_files PUBLIC blofeld_firmware)
 add_library(blofeld_storage src/flash_image.cpp src/flash_file.cpp)
 target_include_directories(blofeld_storage PUBLIC include)
-target_link_libraries(blofeld_storage PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
-add_library(blofeld_nand src/nand.cpp src/nand_write.cpp src/nand_array.cpp)
+target_link_libraries(blofeld_storage PUBLIC blofeld_firmware PRIVATE blofeld_private_files ZLIB::ZLIB)
+add_library(blofeld_nand src/nand.cpp src/nand_write.cpp src/nand_array.cpp src/nand_state.cpp
+  src/nand_image.cpp src/nand_image_codec.cpp)
 target_include_directories(blofeld_nand PUBLIC include)
-target_link_libraries(blofeld_nand PUBLIC blofeld_firmware)
+target_link_libraries(blofeld_nand PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
+add_library(blofeld_nand_store src/nand_file.cpp src/nand_store.cpp)
+target_include_directories(blofeld_nand_store PUBLIC include)
+target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
   src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
@@ -109,6 +116,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-read-test test/nand_read_test.cpp)
   target_link_libraries(blofeld-nand-read-test PRIVATE blofeld_nand)
   add_test(NAME nand_read COMMAND blofeld-nand-read-test)
+  add_executable(blofeld-nand-image-test test/nand_image_test.cpp)
+  target_link_libraries(blofeld-nand-image-test PRIVATE blofeld_nand)
+  add_test(NAME nand_image COMMAND blofeld-nand-image-test)
+  add_executable(blofeld-nand-store-test test/nand_store_test.cpp)
+  target_link_libraries(blofeld-nand-store-test PRIVATE blofeld_nand_store)
+  add_test(NAME nand_store COMMAND blofeld-nand-store-test)
   add_executable(blofeld-nand-write-test test/nand_write_test.cpp)
   target_link_libraries(blofeld-nand-write-test PRIVATE blofeld_nand)
   add_test(NAME nand_write COMMAND blofeld-nand-write-test)
@@ -116,10 +129,10 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-nand-power-test PRIVATE blofeld_nand)
   add_test(NAME nand_power COMMAND blofeld-nand-power-test)
   add_executable(blofeld-nand-gpio-test test/nand_gpio_test.cpp test/nand_gpio_fixture.cpp)
-  target_link_libraries(blofeld-nand-gpio-test PRIVATE blofeld_nand blofeld_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-nand-gpio-test PRIVATE blofeld_nand_store blofeld_dsp blofeld_dsp_native)
   add_test(NAME nand_gpio COMMAND blofeld-nand-gpio-test)
   add_executable(blofeld-nand-gpio-write-test test/nand_gpio_write_test.cpp test/nand_gpio_fixture.cpp)
-  target_link_libraries(blofeld-nand-gpio-write-test PRIVATE blofeld_nand blofeld_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-nand-gpio-write-test PRIVATE blofeld_nand_store blofeld_dsp blofeld_dsp_native)
   add_test(NAME nand_gpio_write COMMAND blofeld-nand-gpio-write-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/nand-gpio-write.trace")
   add_test(NAME original_nand_address COMMAND ${Python3_EXECUTABLE}
@@ -129,13 +142,19 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-address.trace")
   set_tests_properties(original_nand_address PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-original-nand-write-test test/original_nand_write_test.cpp test/nand_gpio_fixture.cpp)
-  target_link_libraries(blofeld-original-nand-write-test PRIVATE blofeld_nand blofeld_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-original-nand-write-test PRIVATE blofeld_nand_store blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_nand_write COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
     $<TARGET_FILE:blofeld-original-nand-write-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write.trace")
   set_tests_properties(original_nand_write PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME nand_store_processes COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/nand_store_processes.py"
+    $<TARGET_FILE:blofeld-original-nand-write-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/nand-store-processes.json")
+  set_tests_properties(nand_store_processes PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-flash-image-test test/flash_image_test.cpp)
   target_link_libraries(blofeld-flash-image-test PRIVATE blofeld_core)
   add_test(NAME flash_image COMMAND blofeld-flash-image-test)
@@ -369,6 +388,8 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
+    blofeld-nand-image-test
+    blofeld-nand-store-test
     blofeld-nand-gpio-write-test
     blofeld-original-nand-write-test
     blofeld-mcu-checkpoint-test
@@ -398,6 +419,9 @@ add_custom_target(quality
 endif()
 
 if(BLOFELD_FUZZING)
+  add_executable(nand-image-fuzz test/nand_image_fuzz.cpp)
+  target_link_libraries(nand-image-fuzz PRIVATE blofeld_nand ZLIB::ZLIB)
+  target_link_options(nand-image-fuzz PRIVATE -fsanitize=fuzzer)
   add_executable(nand-read-fuzz test/nand_read_fuzz.cpp)
   target_link_libraries(nand-read-fuzz PRIVATE blofeld_nand)
   target_link_options(nand-read-fuzz PRIVATE -fsanitize=fuzzer)

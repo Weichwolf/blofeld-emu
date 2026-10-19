@@ -9,6 +9,8 @@
 
 namespace blofeld {
 
+struct NandImage;
+
 struct NandByte {
   std::uint8_t value = 0;
   std::uint8_t known = 0;
@@ -44,6 +46,10 @@ public:
     std::array<NandByte, page_bytes> cells{};
     std::optional<NandProgramCount> programs;
   };
+
+  NandArray() = default;
+  explicit NandArray(const NandImage &image);
+  [[nodiscard]] NandImage image() const;
 
   void observe_bytes(NandLocation start, std::span<const std::uint8_t> bytes);
   void observe_cell(NandLocation location, NandByte cell);

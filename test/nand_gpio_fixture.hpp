@@ -5,10 +5,12 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/nand.hpp"
 #include "blofeld/nand_array.hpp"
+#include "blofeld/nand_store.hpp"
 
 #include <cstdint>
 #include <iosfwd>
 #include <optional>
+#include <variant>
 #include <vector>
 
 namespace blofeld::test {
@@ -32,6 +34,7 @@ struct NandLinkConditions {
 class NandLink {
 public:
   NandLink(DspBus &bus, Nand &nand, std::ostream &trace, NandLinkConditions conditions);
+  NandLink(DspBus &bus, NandStore &nand, std::ostream &trace, NandLinkConditions conditions);
   void after_step(const DspState &before);
 
   [[nodiscard]] unsigned commands() const { return commands_; }
@@ -47,12 +50,20 @@ public:
   [[nodiscard]] unsigned completed_writes() const { return completed_writes_; }
 
 private:
+  using Device = std::variant<Nand *, NandStore *>;
+  NandLink(DspBus &bus, Device device, std::ostream &trace, NandLinkConditions conditions);
+
+  template <typename Action> decltype(auto) with(Action action) {
+    return std::visit([&action](auto *device) -> decltype(auto) { return action(*device); },
+                      device_);
+  }
+
   void observe_edges();
   void latch_write(unsigned controls);
   void drive_status();
   void complete_operation();
   DspBus &bus_;
-  Nand &nand_;
+  Device device_;
   std::ostream &trace_;
   NandLinkConditions conditions_;
   std::optional<unsigned> previous_;

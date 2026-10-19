@@ -91,9 +91,10 @@ remain unqualified. The private Testing/original-nand-write.trace records all
 Limits
 These are untimed reference milestones and synthetic native instruction checks.
 Chip identity, wiring, WP setup/hold, NAND delays, partial physical programming,
-ECC/bad-block handling, protect commands, ID, sequential reads and persistent
-NAND file publication are not established. In-process component copies are not
-whole-board or persistent snapshots. Protocol fuzzing is described in nand-read.txt.
+ECC/bad-block handling, protect commands, ID and sequential reads are not
+established. Separate private NAND image publication and native process-death
+checks are described in nand-persistence.txt. In-process component copies are not
+whole-board snapshots. Protocol fuzzing is described in nand-read.txt.
 The original loader's reserved-memory, Port F and turnaround frontiers are kept.
 Original helper write cycles reach the stated laboratory milestones; their status
 return, original payload transfer and full original update/recovery do not complete. Full scheduled boot, MIDI/audio, all timed failure phases and stock

@@ -256,15 +256,28 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           unknownness and erase history across
                                           reconstruction; native/CLI and real
                                           process-death file-publication tests.
-                                          Atomic private cold exports only;
-                                          continuous command journaling and full
-                                          board snapshots remain pending.
+                                          MCU persistence uses private cold
+                                          exports; MCU continuous command journaling
+                                          and full board snapshots remain pending.
                                           Candidate NAND geometry and untimed
                                           program/erase outcomes are explicit;
                                           interrupted active targets lose knowledge
                                           and history. Board part, ECC, contents,
-                                          hardware timing and persistent NAND file
-                                          publication remain unresolved.
+                                          hardware timing and integration into
+                                          full boot remain unresolved. Separate
+                                          private NAND images retain cells,
+                                          knowledge, program history and block
+                                          qualification. NandStore durably publishes
+                                          the power-loss projection before pending
+                                          writes and observed completion before
+                                          ready/pass. Forty native original-helper
+                                          SIGKILL cases check both transactions at
+                                          five host file phases, independent bytes
+                                          and cold retries; four complete outcomes
+                                          also checked (nand-persistence.txt).
+                                          These are component cuts, not full
+                                          original update or physical power-loss
+                                          validation.
 Original update and recovery      partial  Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an
@@ -377,6 +390,11 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           unknown cells/history/WP and masked status
                                           (nand-read.txt). Native instruction and
                                           complete-board NAND fuzzing remain pending.
+                                          Private NAND image codec with nine own
+                                          seeds and CRC-aware mutations: 940270
+                                          runs in 61 s without findings
+                                          (nand-persistence.txt). Sustained
+                                          complete-board campaigns remain pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
                                           trace; full bootloader trace under build/.

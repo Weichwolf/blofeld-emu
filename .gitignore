@@ -2,6 +2,9 @@ __pycache__/
 build/
 *.bfnvm
 *.bfnvm.tmp.*
+*.bfnand
+*.bfnand.tmp.*
+*.bfnand.lock
 doc/local/
 
 # Manufacturer materials are private references; manifests remain tracked.

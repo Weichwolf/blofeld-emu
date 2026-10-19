@@ -93,6 +93,8 @@ establish the target boards' NAND contents or complete original NAND loading.
 doc/nand-write.txt covers explicit program/erase outcomes, interrupted-cell
 knowledge, program limits, native status/failure/readback and unchanged updater
 helper checks. doc/dsp-timers.txt includes explicit mode-six capture and native IRQ.
+doc/nand-persistence.txt describes private NAND images, durable write-ahead
+projections, fail-stop/reload and native original-helper process-death checks.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.
@@ -120,3 +122,10 @@ tracking, PHY/SCI clocks, accesses and reset sequences using synthetic bytes:
   cmake --build build/fuzz --target mcu-model-fuzz
   mkdir -p doc/local/mcu-fuzz-corpus doc/local/mcu-fuzz-artifacts
   build/fuzz/mcu-model-fuzz doc/local/mcu-fuzz-corpus -artifact_prefix=doc/local/mcu-fuzz-artifacts/ -max_len=1536 -max_total_time=60
+
+The separate nand-image-fuzz target checks untrusted sparse NAND images, CRC-aware
+semantic mutations and cold model reconstruction with own generated inputs:
+  cmake --build build/fuzz --target nand-image-fuzz
+  python3 tools/make_nand_image_fuzz_seeds.py doc/local/nand-image-fuzz-corpus
+  mkdir -p doc/local/nand-image-fuzz-artifacts
+  build/fuzz/nand-image-fuzz doc/local/nand-image-fuzz-corpus -artifact_prefix=doc/local/nand-image-fuzz-artifacts/ -max_len=65536 -max_total_time=60

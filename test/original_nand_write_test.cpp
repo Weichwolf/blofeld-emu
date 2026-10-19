@@ -5,12 +5,15 @@
 #include "blofeld/firmware.hpp"
 #include "blofeld/nand.hpp"
 #include "blofeld/nand_array.hpp"
+#include "blofeld/nand_file.hpp"
+#include "blofeld/nand_store.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "nand_gpio_fixture.hpp"
 #include "nand_program_fixture.hpp"
 
 #include <array>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -18,7 +21,10 @@
 #include <iostream>
 #include <ostream>
 #include <span>
+#include <sstream>
 #include <string>
+#include <string_view>
+#include <system_error>
 
 namespace blofeld::test {
 namespace {
@@ -357,13 +363,76 @@ void run(const Firmware &firmware, const Input input, std::ostream &trace) {
   trace << "checked writes=" << link.writes() << " completed-writes=" << link.completed_writes()
         << " source-end=" << hex(result.source_end, 6) << '\n';
 }
+
+unsigned worker_number(const std::string_view text) {
+  unsigned result = 0;
+  const auto parsed = std::from_chars(text.data(), text.data() + text.size(), result);
+  require(parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size(),
+          "Invalid persistent-worker number");
+  return result;
+}
+
+int persistent_worker(const Firmware &firmware, char **arguments) {
+  const auto program = worker_number(arguments[3]);
+  const auto fail = worker_number(arguments[4]);
+  const auto requested_transaction = worker_number(arguments[5]);
+  const auto requested_phase = worker_number(arguments[6]);
+  require(program <= 1 && fail <= 1 && requested_transaction <= 2 &&
+              requested_phase <= static_cast<unsigned>(NandFilePhase::directory_synced),
+          "Invalid persistent-worker job or phase");
+  const auto helper = helpers.back();
+  const auto outcome = fail != 0 ? NandOutcome::fail : NandOutcome::pass;
+  const auto source = source_words_from(firmware, false);
+  DspProgram caller;
+  const auto after_nops = own_caller(caller, program != 0 ? helper.program : helper.erase);
+  DspBus bus;
+  install_inputs(bus, firmware, helper, source);
+  caller.install(bus);
+  NandStore store(arguments[2]);
+  store.observe_power_ready();
+  store.observe_wp(true);
+  std::ostringstream trace;
+  NandLink link(
+      bus, store, trace, {.poll_pcs = {helper.poll}, .selected = true, .outcomes = {outcome}});
+  DspCore cpu(bus);
+  unsigned transactions = 0;
+  store.set_observer([&](const NandFilePhase phase) {
+    if (phase == NandFilePhase::created) { ++transactions; }
+    if (transactions - 1 != requested_transaction ||
+        static_cast<unsigned>(phase) != requested_phase) {
+      return;
+    }
+    const auto state = cpu.state();
+    std::cout << "NAND_FILE " << requested_transaction << ' ' << requested_phase
+              << " pc=" << hex(state.pc, 6) << " source=" << hex(state.r[0], 6)
+              << " pending=" << static_cast<unsigned>(store.pending())
+              << " ready=" << (store.ready() == true) << '\n'
+              << std::flush;
+    char resume = 0;
+    require(static_cast<bool>(std::cin.get(resume)), "Persistent worker was not resumed");
+  });
+  const auto result = execute(bus, cpu, link, after_nops, Stop::none, trace);
+  check_completed(store.device(),
+                  link,
+                  result,
+                  {.helper = helper, .program = program != 0, .outcome = outcome},
+                  source);
+  require(transactions == 2,
+          "Native helper must publish its start and observed outcome exactly once");
+  std::cout << "Persistent native helper checked through its expected turnaround frontier.\n";
+  return 0;
+}
 }
 }
 
 int main(const int count, char **arguments) {
   try {
-    if (count != 3) { throw blofeld::Fault("Usage: original-nand-write-test firmware.zip trace"); }
+    if (count != 3 && count != 7) {
+      throw blofeld::Fault("Usage: original-nand-write-test firmware.zip trace | firmware.zip "
+                           "state.bfnand program fail transaction phase");
+    }
     const auto firmware = blofeld::Firmware::load(arguments[1]);
+    if (count == 7) { return blofeld::test::persistent_worker(firmware, arguments); }
     std::ofstream trace(arguments[2]);
     trace.exceptions(std::ios::failbit | std::ios::badbit);
     for (const auto helper : blofeld::test::helpers) {

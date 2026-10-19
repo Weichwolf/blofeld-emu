@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/nand_array.hpp"
+#include "blofeld/nand_image.hpp"
 
 #include <array>
 #include <cstdint>
@@ -24,6 +25,10 @@ public:
   static constexpr unsigned block_pages = NandArray::block_pages;
   static constexpr unsigned status_bits = 0xc1;
   static constexpr std::uint8_t byte_mask = 0xff;
+
+  Nand() = default;
+  explicit Nand(const NandImage &image);
+  [[nodiscard]] NandImage persistent_image() const;
 
   void observe_power_ready();
   void observe_bytes(unsigned page, unsigned column, std::span<const std::uint8_t> bytes);

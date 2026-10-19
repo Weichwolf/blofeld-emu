@@ -1,0 +1,94 @@
+Private NAND images and durable command publication
+
+NandImage stores only physical cell knowledge, explicit main/spare program
+history and block qualification for the candidate small-page device described
+in nand-read.txt and nand-write.txt. Absent cells/history/qualification remain
+unknown. Known FF bytes do not establish fresh erase history. Import starts cold:
+WP, readiness, status, address/data buffers and pending-operation preimages are
+not restored. This is neither a complete board snapshot nor a stock-device dump.
+
+NandStore owns the device model and a private .bfnand file. Before accepting a
+program/erase confirm it durably publishes the cold power-loss projection of
+that operation: the affected page/block and history become uncertain. Only then
+does the live pending operation become visible. An explicitly observed pass/fail
+outcome is similarly persisted before live ready/status becomes visible. Reset,
+power loss and persistent cell/block observations use the same transaction path.
+Unconfirmed staging, reads, address cycles and volatile pin observations do not
+write files. Rejected device operations before IO preserve both file and model.
+
+Each publication uses an exclusive 0600 temporary, writes and fsyncs it, closes
+it, atomically renames it and fsyncs the parent directory. Host observations are
+created, written, synced, published and directory_synced. A process killed before
+rename retains the previous complete image; after rename it sees the following
+complete image. An unreturned transaction may therefore be absent or present.
+SIGKILL does not establish host storage behavior on power failure. These host
+phases are also distinct from physical NAND erase/program timing milestones.
+
+The store holds a cooperative nonblocking exclusive writer lease before loading
+or creating its image. Direct save_nand_image calls also acquire that lease.
+Reads, writes and the lease share one pinned parent-directory FD across the
+store's lifetime, including namespace renames and replacement directories.
+Creation refuses existing destinations; publication refuses a final symlink.
+The shared bounded regular-file reader also serves the existing MCU image format.
+An IO/observer error forces fail-stop and close/reload, including errors after
+rename. Caught failures clean temporary files; SIGKILL may leave a private orphan
+temporary, which is never treated as authoritative. Reentrant mutation is rejected.
+Copying/encoding, allocations, blocking IO and model time pauses belong outside
+the future real-time audio callback. The implementation is single-threaded.
+
+Version-one wire format
+All integers are little endian. Header, 32 bytes:
+  0: magic BLFNAND followed by LF, 8 bytes
+  8: version u32=1; 12: geometry u32=1
+  16: page count u32; 20: block count u32
+  24: page bytes u32=528; 28: reserved u32=0
+Then sorted unique block records (4 bytes): index u16, known flags u8, value flags
+u8. Flag bits 0/1/2 are valid/program-protected/erase-protected. Unknown value bits
+must be zero. Protected=true is supported only in the first 200 blocks.
+Then sorted unique page records (1064 bytes): index u32, main-program count u8,
+spare-program count u8, reserved u16=0, then 528 pairs of value u8/known mask u8.
+Main count is 0..1, spare count 0..2; both FF encode unknown history. History zero
+cannot coexist with known programmed zero bits in its area; it does not fill
+unknown cells. Unknown value bits must be zero. The final u32 is CRC32/ISO-HDLC
+over all preceding bytes. Page/block limits are 131072/4096; maximum file length
+is 139477028 bytes. Exact count-derived length and CRC are checked before record
+allocation. Reserved fields, invalid masks/history, duplicate/unordered indices,
+out-of-range geometry, truncation and trailing bytes fail visibly.
+
+Reproducible checks
+  cmake --build --preset strict --target blofeld-nand-image-test blofeld-nand-store-test blofeld-original-nand-write-test
+  ctest --test-dir build/strict --output-on-failure -R '^(nand_image|nand_store|nand_store_processes|original_nand_write|flash_file_processes)$'
+
+nand_image checks a literal 2172-byte sparse golden with an independent CRC,
+all truncations and single-bit corruptions, semantic corruptions with valid CRC,
+unknown/fresh/history contradictions and cold reconstruction. nand_store checks
+write-ahead visibility, fail-stop at all five host phases, reentrancy, leases,
+completed restart, unknown interrupted retries, bounded FIFO/oversized input and
+directory identity after renaming and replacing the original parent path.
+
+nand_store_processes requires the private pinned original 1.25 firmware and skips
+explicitly when absent. It executes an unchanged original DSP updater helper
+through an own caller and bounded own payload, using the explicit GPIO fixture
+and three-poll completion observations of nand-write.txt. It does not execute
+the complete original loader, initialization or real update payload. Forty actual
+SIGKILL cases cover program/erase, pass/fail, confirm/completion publications and
+all five host phases. Independently encoded Python expectations check exact
+file bytes, CRC, permissions, orphan temporaries and native PC/pending/readiness
+at the cut. Each case opens a fresh native worker to probe whether programming
+must reject unknown block/history or an exhausted main budget, or can proceed
+after an unconfirmed fresh command or a completed successful erase. Four complete
+native jobs check all program/erase pass/fail outcomes. The private report is
+build/strict/Testing/nand-store-processes.json.
+
+The separate nand-image-fuzz target uses nine own seeds, raw and CRC-aware
+mutations, semantic decoding and cold device reconstruction under sanitizers.
+See README.txt for commands. A 61-second smoke campaign completed 940270 runs
+without findings. This is not sustained complete-board or instruction fuzzing.
+
+Outstanding scope
+Actual part/wiring/contents/ROM/sample mapping, physical timing/partial programming,
+the original reserved-memory/Port F/status-turnaround frontiers, full original
+boot/update/recovery, all elapsed power-loss phases, host MIDI/audio, whole-board
+snapshots and stock Desktop/Keyboard validation remain open in coverage.txt.
+The standalone driver still executes only the MCU; this persistent device is
+currently integrated into the explicit native NAND fixture.
