@@ -53,6 +53,14 @@ each MCU GPIO store records its PC, value and serial pads. The final MCU registe
 state is recorded too. This is not a full DSP-register dump or restorable
 whole-board snapshot. The source checkpoint remains unchanged.
 
+Each successful experiment now also captures a selected point halfway through
+native MCU transmission. Both native machines and the caller-owned link's pin
+baseline/counters are restored together. The remaining CPU/pin trace must match
+the original suffix exactly through all loaded words, FIFO verification, mapped
+clear and final states. Saved DSP execution and partial SHI state supply this
+continuation. This remains a snapshot of the controlled experiment rather than
+a complete board, scheduler or persistent state file (dsp-checkpoints.txt).
+
 Three negative cases require visible failures: unresolved simultaneous SS/SCK,
 SS-before-SCK, and an unknown MOSI level at a selected capture edge. Diagnostics
 must retain the original reason, MCU write address and both CPU PCs. There is no

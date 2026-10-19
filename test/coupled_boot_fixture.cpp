@@ -22,6 +22,28 @@ Link::Link(
     McuMachine &mcu, DspBus &bus, DspCore &dsp, std::ostream &trace, const Experiment experiment)
     : mcu_(mcu), bus_(bus), dsp_(dsp), trace_(trace), experiment_(experiment) {}
 
+LinkState Link::checkpoint() const {
+  return {.previous = previous_,
+          .dsp_steps = dsp_steps_,
+          .writes = writes_,
+          .ordered_pairs = ordered_pairs_,
+          .completed_frames = completed_frames_,
+          .injected = injected_};
+}
+
+void Link::restore(const LinkState &state) {
+  const auto pads = sample();
+  require(pads.selected == state.previous.selected && pads.clock == state.previous.clock &&
+              pads.mosi == state.previous.mosi,
+          "Restored external link must match actual checkpoint MCU pads");
+  previous_ = state.previous;
+  dsp_steps_ = state.dsp_steps;
+  writes_ = state.writes;
+  ordered_pairs_ = state.ordered_pairs;
+  completed_frames_ = state.completed_frames;
+  injected_ = state.injected;
+}
+
 SpiInputs Link::sample() const {
   const auto pads = mcu_.bus().observe_pads(McuPort::b, serial_pins);
   require(pads.known == serial_pins, "Coupled experiment requires known native MCU serial pads");

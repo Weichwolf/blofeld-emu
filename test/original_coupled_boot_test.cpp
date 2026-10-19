@@ -2,6 +2,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_machine.hpp"
 #include "blofeld/firmware.hpp"
 #include "blofeld/flash_image.hpp"
 #include "blofeld/hc12.hpp"
@@ -17,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
@@ -112,18 +114,22 @@ void verify_clear_frontier(DspBus &bus, DspCore &dsp, Link &link) {
           "Original first-stage MOVEP must program its own PCTL operand");
 }
 
-std::string run_experiment(McuMachine &mcu,
-                           const std::span<const std::uint8_t> image,
-                           const std::span<const std::uint32_t> rom,
-                           const Experiment experiment) {
-  DspBus bus;
-  bus.install_rom({.start = bootstrap_base, .words = rom});
-  DspCore dsp(bus);
-  std::ostringstream trace;
-  Link link(mcu, bus, dsp, trace, experiment);
-  link.start();
-  mcu.bus().set_observer([&link](const BusEvent &event) { link.observe(event); });
+struct ReplayPoint {
+  McuCheckpoint mcu;
+  DspCheckpoint dsp;
+  LinkState link;
   unsigned completed = 0;
+  std::size_t trace_offset = 0;
+};
+
+void finish_experiment(McuMachine &mcu,
+                       DspMachine &dsp,
+                       Link &link,
+                       const std::span<const std::uint8_t> image,
+                       std::ostringstream &trace,
+                       unsigned completed,
+                       std::optional<ReplayPoint> *checkpoint) {
+  mcu.bus().set_observer([&link](const BusEvent &event) { link.observe(event); });
   // Independent original_mcu_sender trace: 1856593 total minus 1672478 before this checkpoint.
   constexpr unsigned sender_instructions = 184115;
   try {
@@ -136,6 +142,14 @@ std::string run_experiment(McuMachine &mcu,
               "Original sender must execute its own instructions without synthetic interrupts");
       ++completed;
       link.after_mcu_instruction();
+      if (checkpoint != nullptr && !checkpoint->has_value() &&
+          completed >= sender_instructions / 2 && link.checkpoint().previous.selected) {
+        *checkpoint = ReplayPoint{.mcu = mcu.checkpoint(),
+                                  .dsp = dsp.checkpoint(),
+                                  .link = link.checkpoint(),
+                                  .completed = completed,
+                                  .trace_offset = trace.str().size()};
+      }
     }
   } catch (...) {
     mcu.bus().set_observer({});
@@ -145,14 +159,42 @@ std::string run_experiment(McuMachine &mcu,
   require(completed == sender_instructions,
           "Coupling must preserve the original sender instruction count exactly");
   link.verify_transmission();
-  verify_loaded_stage(bus, image);
-  verify_clear_frontier(bus, dsp, link);
+  verify_loaded_stage(dsp.bus(), image);
+  verify_clear_frontier(dsp.bus(), dsp.cpu(), link);
   const auto state = mcu.cpu().state();
   trace << "sender-instructions=" << completed << " end-pc=" << hex(state.pc)
         << " d=" << hex(state.d) << " x=" << hex(state.x) << " y=" << hex(state.y)
         << " sp=" << hex(state.sp) << " ccr=" << hex(state.ccr, 2)
         << " dsp-instructions=" << link.dsp_steps() << '\n';
-  return trace.str();
+}
+
+std::string run_experiment(McuMachine &mcu,
+                           const std::span<const std::uint8_t> image,
+                           const std::span<const std::uint32_t> rom,
+                           const Experiment experiment) {
+  DspMachine dsp;
+  dsp.bus().install_rom({.start = bootstrap_base, .words = rom});
+  std::ostringstream trace;
+  Link link(mcu, dsp.bus(), dsp.cpu(), trace, experiment);
+  link.start();
+  std::optional<ReplayPoint> checkpoint;
+  const bool positive = experiment.order == PadOrder::clock_before_select && !experiment.break_mosi;
+  finish_experiment(mcu, dsp, link, image, trace, 0, positive ? &checkpoint : nullptr);
+  const auto result = trace.str();
+  if (positive) {
+    if (!checkpoint) {
+      throw Fault("Original coupling did not capture its selected mid-transfer state");
+    }
+    mcu.restore(checkpoint->mcu);
+    dsp.restore(checkpoint->dsp);
+    std::ostringstream replay;
+    Link replay_link(mcu, dsp.bus(), dsp.cpu(), replay, experiment);
+    replay_link.restore(checkpoint->link);
+    finish_experiment(mcu, dsp, replay_link, image, replay, checkpoint->completed, nullptr);
+    require(replay.str() == result.substr(checkpoint->trace_offset),
+            "Restored MCU, DSP and caller-owned link must replay every remaining CPU/pin event");
+  }
+  return result;
 }
 
 std::string verify_rejection(McuMachine &mcu,
@@ -223,7 +265,8 @@ int run(const Inputs &inputs) {
                             "Unknown DSP SHI MOSI")
         << '\n';
   std::cout << "Native original MCU GPIO loaded all 94 DSP words through executed documented ROM; "
-               "two explicit instruction interleavings, exact checkpoint replay and three strict "
+               "two explicit instruction interleavings, MCU plus mid-transfer MCU/DSP/link replay "
+               "and three strict "
                "pin-failure cases passed. Controlled one-way pad-order experiment, not a timed "
                "or hardware-verified Blofeld boot.\n";
   return 0;

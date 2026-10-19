@@ -101,7 +101,7 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
   src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
-add_library(blofeld_dsp src/dsp_core.cpp)
+add_library(blofeld_dsp src/dsp_core.cpp src/dsp_machine.cpp)
 target_include_directories(blofeld_dsp PUBLIC include)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
@@ -268,6 +268,10 @@ if(BUILD_TESTING)
   add_test(NAME dsp_shift_counts COMMAND blofeld-dsp-instruction-test --shift-counts)
   set_tests_properties(dsp_shift_counts PROPERTIES TIMEOUT 60)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
+  add_executable(blofeld-dsp-checkpoint-test test/dsp_checkpoint_test.cpp
+    test/dsp_checkpoint_interrupts.cpp test/dsp_checkpoint_peripherals.cpp)
+  target_link_libraries(blofeld-dsp-checkpoint-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_checkpoint COMMAND blofeld-dsp-checkpoint-test)
   add_executable(blofeld-dsp-norm-test test/dsp_norm_test.cpp)
   target_link_libraries(blofeld-dsp-norm-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_norm COMMAND blofeld-dsp-norm-test)
@@ -409,6 +413,7 @@ add_custom_target(quality
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-instruction-test
+    blofeld-dsp-checkpoint-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test
     blofeld-dsp-capture-test

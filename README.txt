@@ -75,6 +75,8 @@ doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts a
 doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
 doc/mcu-checkpoints.txt describes immutable in-process MCU checkpoints, native
 WAI/SCI replay, peripheral/flash state and the remaining whole-board snapshot scope.
+doc/dsp-checkpoints.txt covers native DSP checkpoints, latched REP/IRQ state,
+peripheral phases and coordinated MCU/DSP/link replay during original loading.
 doc/dsp-shi.txt covers the DSP-side SPI slave and native MCU GPIO exchange tests.
 doc/dsp-interrupts.txt covers SHI/TIM arbitration, native fast/long entry, nested
 priority, RTI, relocated vectors and DO/REP behavior at instruction boundaries.

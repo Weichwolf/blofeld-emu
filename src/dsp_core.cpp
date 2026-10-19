@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace blofeld {
 namespace {
@@ -29,6 +30,22 @@ constexpr unsigned spi_mode = 5;
 constexpr unsigned boot_entry = 0xff0000;
 constexpr std::uint64_t data_mask = 0xffffffffffff;
 constexpr std::uint64_t accumulator_mask = 0xffffffffffffff;
+
+class ExecutionGuard {
+public:
+  explicit ExecutionGuard(bool &active) : active_(active) {
+    if (active_) { throw Fault("Cannot reenter active DSP execution"); }
+    active_ = true;
+  }
+
+  ~ExecutionGuard() { active_ = false; }
+
+  ExecutionGuard(const ExecutionGuard &) = delete;
+  ExecutionGuard &operator=(const ExecutionGuard &) = delete;
+
+private:
+  bool &active_;
+};
 
 DspSpace space(const dsp56k::EMemArea area) {
   switch (area) {
@@ -164,6 +181,17 @@ std::uint64_t register_value(const dsp56k::DSP &cpu, const dsp56k::EReg reg) {
 }
 }
 
+struct DspCoreCheckpoint::Storage {
+  explicit Storage(dsp56k::DSP::ReferenceState state) : cpu(std::move(state)) {}
+
+  const dsp56k::DSP::ReferenceState cpu;
+};
+
+DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
+    : storage_(std::move(storage)) {}
+
+DspCoreCheckpoint::~DspCoreCheckpoint() = default;
+
 class DspCore::Impl {
 public:
   explicit Impl(DspBus &board)
@@ -192,6 +220,7 @@ public:
   Peripherals peripherals_y;
   dsp56k::DSP cpu;
   bool faulted = false;
+  bool active = false;
 };
 
 DspCore::DspCore(DspBus &bus) : impl_(std::make_unique<Impl>(bus)) {
@@ -201,6 +230,8 @@ DspCore::DspCore(DspBus &bus) : impl_(std::make_unique<Impl>(bus)) {
 DspCore::~DspCore() = default;
 
 void DspCore::reset_spi_boot() {
+  const ExecutionGuard guard(impl_->active);
+  impl_->faulted = true;
   impl_->bus.reset();
   impl_->cpu.resetHW();
   impl_->cpu.regs().omr.var = spi_mode;
@@ -208,6 +239,28 @@ void DspCore::reset_spi_boot() {
   impl_->access.reset();
   impl_->faulted = false;
   impl_->invalidate();
+}
+
+bool DspCore::executing() const {
+  return impl_->active;
+}
+
+DspCoreCheckpoint DspCore::checkpoint() const {
+  if (impl_->active || impl_->faulted) {
+    throw Fault("DSP checkpoint requires a completed reference step or reset");
+  }
+  impl_->access.verify_interrupt_fetch();
+  return DspCoreCheckpoint(
+      std::make_shared<const DspCoreCheckpoint::Storage>(impl_->cpu.referenceState()));
+}
+
+void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
+  const ExecutionGuard guard(impl_->active);
+  if (!checkpoint.storage_) { throw Fault("Cannot restore an empty native DSP checkpoint"); }
+  impl_->faulted = true;
+  impl_->cpu.restoreReferenceState(checkpoint.storage_->cpu);
+  impl_->access.reset();
+  impl_->faulted = false;
 }
 
 DspState DspCore::state() const {
@@ -238,6 +291,8 @@ DspDebugState DspCore::debug_state() const {
   const auto &regs = impl_->cpu.regs();
   DspDebugState result{
       .cpu = state(),
+      .native_instructions = impl_->cpu.getInstructionCounter(),
+      .native_cycles = impl_->cpu.getCycles(),
       .ep = word(regs.ep),
       .sz = word(regs.sz),
       .sc = static_cast<std::uint32_t>(register_value(impl_->cpu, dsp56k::Reg_SC)) & word_mask};
@@ -250,6 +305,7 @@ DspDebugState DspCore::debug_state() const {
 
 void DspCore::step() {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
+  const ExecutionGuard guard(impl_->active);
   const auto before = state();
   std::optional<DspInterruptRequest> interrupt;
   try {

@@ -26,17 +26,38 @@ struct DspState {
   std::array<std::uint32_t, 8> r{};
   std::array<std::uint32_t, 8> n{};
   std::array<std::uint32_t, 8> m{};
+  bool operator==(const DspState &) const = default;
 };
 
-// Architectural observations without destructive SSH reads. This is not a
-// restorable DSP checkpoint; native loop/IRQ execution state is not exported.
+// Observations without destructive SSH reads. This view omits native REP/IRQ
+// continuation; DspMachine provides opaque restorable checkpoints.
 struct DspDebugState {
   DspState cpu;
+  // SDK diagnostic counters, not calibrated elapsed instruction/bus clocks.
+  std::uint64_t native_instructions = 0;
+  std::uint64_t native_cycles = 0;
   std::uint32_t ep = 0;
   std::uint32_t sz = 0;
   std::uint32_t sc = 0;
   std::array<std::uint32_t, 16> stack_high{};
   std::array<std::uint32_t, 16> stack_low{};
+  bool operator==(const DspDebugState &) const = default;
+};
+
+// Opaque native state; only DspMachine can pair it with matching bus contents.
+class DspCoreCheckpoint {
+public:
+  DspCoreCheckpoint(const DspCoreCheckpoint &) = default;
+  DspCoreCheckpoint &operator=(const DspCoreCheckpoint &) = default;
+  DspCoreCheckpoint(DspCoreCheckpoint &&) noexcept = default;
+  DspCoreCheckpoint &operator=(DspCoreCheckpoint &&) noexcept = default;
+  ~DspCoreCheckpoint();
+
+private:
+  friend class DspCore;
+  struct Storage;
+  explicit DspCoreCheckpoint(std::shared_ptr<const Storage> storage);
+  std::shared_ptr<const Storage> storage_;
 };
 
 // Native interpreter reference path. Each DO/REP body instruction can yield
@@ -54,6 +75,10 @@ public:
   void step();
 
 private:
+  friend class DspMachine;
+  [[nodiscard]] DspCoreCheckpoint checkpoint() const;
+  void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
+  [[nodiscard]] bool executing() const;
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

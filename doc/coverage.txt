@@ -432,8 +432,21 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           Original MCU sender checkpoint replays
                                           native DSP/pin traces exactly in the
                                           controlled coupling experiment.
+                                          Immutable native DSP/bus checkpoints
+                                          retain registers, full stack, REP/DO,
+                                          IRQ continuation, RAM/ROM knowledge,
+                                          SHI partial words, GPIO/PLL/timer state
+                                          and explicit map-switch phases.
+                                          Independent native arithmetic/modulo,
+                                          nested loop/IRQ, code-mutation and
+                                          recovery checks supplement replay.
+                                          Selected mid-transfer MCU/DSP/link
+                                          snapshots replay the original stage
+                                          load and mapped clear under both
+                                          declared instruction interleavings
+                                          (dsp-checkpoints.txt).
                                           Persistent full-state format/fuzzing,
-                                          DSP/scheduler and whole-board replay
+                                          scheduler and complete-board replay
                                           remain pending.
 Desktop/Keyboard differences      pending  Both requested with 1.25; keyboard scanner
                                           and profile differences remain unresolved.

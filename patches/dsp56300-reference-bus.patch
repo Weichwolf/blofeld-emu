@@ -46,7 +46,7 @@
 @@ -86 +86 @@
 -		typedef void (*TInterruptFunc)(DSP*) noexcept;
 +		typedef void (*TInterruptFunc)(DSP*);
-@@ -162,0 +163,13 @@
+@@ -162,0 +163,31 @@
 +		bool m_referenceMode = false;
 +		bool m_referenceVectorActive = false;
 +		bool m_referenceLongEntry = false;
@@ -60,10 +60,28 @@
 +			TReg24 savedLC;
 +			bool loaded = false;
 +		} m_referenceRepeat;
-@@ -189 +202 @@
++	public:
++		// Trusted instruction-boundary state for the strict custom-bus reference path.
++		struct ReferenceState {
++			SRegs registers;
++			ReferenceRepeat repeat;
++			uint64_t instructions = 0, cycles = 0;
++			ProcessingMode mode = Default;
++			TInterruptFunc interruptFunc = nullptr;
++			TWord currentPC = 0, currentSR = 0, extension = 0;
++			uint32_t opLength = 0;
++			bool referenceMode = false, longEntry = false, repeatCompleted = false;
++			std::array<uint64_t, 2> peripheralTargets{};
++			std::vector<uint8_t> opcodeCycleCache;
++		};
++		ReferenceState referenceState() const;
++		void restoreReferenceState(const ReferenceState& state);
++	private:
++		void verifyReferenceCheckpoint() const;
+@@ -189 +220 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +221,9 @@
+@@ -208 +239,9 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
@@ -74,19 +92,19 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +432,4 @@
+@@ -411 +450 @@
 -		TWord	fetchOpWordB()
--		{
 +		TWord fetchOpWordB()
-+		{
+@@ -412,0 +452,2 @@
 +			const auto extension = m_referenceRepeat.loaded
 +				? m_referenceRepeat.extension : memRead(MemArea_P, pcCurrentInstruction + 1);
-@@ -416 +439 @@
+@@ -416 +457 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523,15 +546,8 @@
+@@ -523 +564 @@
 -		void	sr_s_update				()
--		{
++		void sr_s_update(const TReg56& _source)
+@@ -525,13 +566,6 @@
 -			if( sr_test_noCache(CCR_S) )
 -				return;
 -
@@ -100,23 +118,21 @@
 -			if	(	(bitvalue(a,bitA) != bitvalue(a,bitB))
 -				|	(bitvalue(b,bitA) != bitvalue(b,bitB)) )
 -				sr_set( CCR_S );
-+		void sr_s_update(const TReg56& _source)
-+		{
 +			if(sr_test_noCache(CCR_S)) return;
 +			// Only the accumulator actually driving a data bus contributes growth.
 +			const int offset = sr_val_noCache(SRB_S1) - sr_val_noCache(SRB_S0);
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -726,0 +743 @@
+@@ -726,0 +761 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +753 @@
+@@ -735,0 +771 @@
 +			sr_s_update(reg.b);
-@@ -975,0 +994 @@
+@@ -975,0 +1012 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1024 @@
+@@ -1004,0 +1042 @@
 +			sr_s_update(_src);
-@@ -1468,0 +1489 @@
+@@ -1468,0 +1507 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -128,15 +144,15 @@
 @@ -52 +53 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept
 +	void dspExecInterrupts(DSP* _dsp)
-@@ -65,0 +67,8 @@
-+	}
-+
+@@ -67,0 +69,8 @@
 +	void dspExecCustomPeripherals(DSP* dsp)
 +	{
 +		const auto x = dsp->getPeriph(0)->exec();
 +		const auto y = dsp->getPeriph(1)->exec();
 +		dsp->getPeriph(0)->resetDelayCycles(dsp->getInstructionCounter(), std::min(x, y));
 +		dsp->processExternalInterrupts();
++	}
++
 @@ -74,2 +83 @@
 -		assert(false && "Peripherals configuration is not supported");
 -		return nullptr;
@@ -157,7 +173,62 @@
 @@ -264 +279 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +340,107 @@
+@@ -324,0 +340,162 @@
++	void DSP::verifyReferenceCheckpoint() const
++	{
++		if(g_useJIT || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
++			m_trace != Disabled || m_terminate.load(std::memory_order_relaxed) ||
++			!m_pendingInterrupts.empty() || !m_pendingExternalInterrupts.empty() || !m_customInterrupts.empty() ||
++			perif[0]->getType() != PeripheralType::PeripheralsCustom ||
++			perif[1]->getType() != PeripheralType::PeripheralsCustom)
++			throw std::runtime_error("Unqualified native DSP checkpoint execution context");
++	}
++
++	DSP::ReferenceState DSP::referenceState() const
++	{
++		verifyReferenceCheckpoint();
++		getSR(); // Canonicalize deferred CCR updates just as the reference adapter's state observation does.
++		ReferenceState state;
++		state.registers = reg;
++		state.repeat = m_referenceRepeat;
++		state.instructions = m_instructions;
++		state.cycles = m_cycles;
++		state.mode = m_processingMode;
++		state.interruptFunc = m_interruptFunc;
++		state.currentPC = pcCurrentInstruction;
++		state.currentSR = m_srCurrentInstruction;
++		state.extension = m_opWordB;
++		state.opLength = m_currentOpLen;
++		state.referenceMode = m_referenceMode;
++		state.longEntry = m_referenceLongEntry;
++		state.repeatCompleted = m_referenceRepeatCompleted;
++		state.opcodeCycleCache = m_opcodeCycleCache;
++		for(size_t i = 0; i < perif.size(); ++i) state.peripheralTargets[i] = perif[i]->getTargetClock();
++		return state;
++	}
++
++	void DSP::restoreReferenceState(const ReferenceState& state)
++	{
++		verifyReferenceCheckpoint();
++		clearOpcodeCache();
++		m_opcodeCycleCache = state.opcodeCycleCache;
++		reg = state.registers;
++		resetCCRCache();
++		m_referenceRepeat = state.repeat;
++		m_instructions = state.instructions;
++		m_cycles = state.cycles;
++		m_processingMode = state.mode;
++		m_interruptFunc = state.interruptFunc;
++		pcCurrentInstruction = state.currentPC;
++		m_srCurrentInstruction = state.currentSR;
++		m_opWordB = state.extension;
++		m_currentOpLen = state.opLength;
++		m_referenceMode = state.referenceMode;
++		m_referenceLongEntry = state.longEntry;
++		m_referenceRepeatCompleted = state.repeatCompleted;
++		for(size_t i = 0; i < perif.size(); ++i) perif[i]->resetDelayCycles(state.peripheralTargets[i], 0);
++	}
++
 +	void DSP::execReference()
 +	{
 +		m_referenceMode = true;
@@ -265,13 +336,13 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -413,0 +536,5 @@
+@@ -413,0 +591,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +619,8 @@
+@@ -491,0 +674,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -280,10 +351,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +661,2 @@
+@@ -525,0 +716,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +741,31 @@
+@@ -603,0 +796,31 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -315,16 +386,16 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1319,0 @@
+@@ -1152,2 +1374,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1322 @@
+@@ -1156 +1377 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1570,0 +1737,2 @@
+@@ -1570,0 +1792,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +1851,2 @@
+@@ -1682,0 +1906,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl

@@ -151,3 +151,12 @@ under UBSan. The reference helper now rejects counts above FM 13-16's defined
 above 55 are also unqualified and reject. The saved raw input and deterministic
 boundary tests remain project-owned regression data; no sanitizer is suppressed
 and no physical result for an undefined shift is invented.
+
+The native reference checkpoint API captures registers/AGU state, yielded REP
+latches, interrupt continuation, diagnostic counters and peripheral pacing.
+Deferred CCR updates are canonicalized before capture. Restore rebuilds opcode
+dispatch while retaining cached diagnostic cycle costs. REP opcode/extension
+latches remain independent of later backing-program changes. JIT/debugger/external-bus and SDK interrupt
+queue/callback contexts reject. DspMachine pairs this trusted native state with
+an immutable strict-bus copy; no portable SDK object dump is exposed. See
+doc/dsp-checkpoints.txt for independent instruction and original-coupling checks.

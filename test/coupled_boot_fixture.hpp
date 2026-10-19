@@ -41,6 +41,15 @@ struct Experiment {
   bool break_mosi = false;
 };
 
+struct LinkState {
+  SpiInputs previous;
+  unsigned dsp_steps = 0;
+  unsigned writes = 0;
+  unsigned ordered_pairs = 0;
+  unsigned completed_frames = 0;
+  bool injected = false;
+};
+
 void require(bool condition, const std::string &message);
 
 // Controlled, one-way laboratory wiring. This is not a timed Blofeld profile.
@@ -53,6 +62,8 @@ public:
   void after_mcu_instruction();
   void step_dsp();
   void verify_transmission() const;
+  [[nodiscard]] LinkState checkpoint() const;
+  void restore(const LinkState &state);
 
   [[nodiscard]] unsigned dsp_steps() const { return dsp_steps_; }
 
