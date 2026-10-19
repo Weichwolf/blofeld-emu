@@ -1,0 +1,80 @@
+ST7565S logical 6800 bus and original helper fixture
+
+  ctest --test-dir build/strict -R '^(st7565|st7565_parallel|original_lcd_helper|original_parallel_update)$' --output-on-failure
+
+Reference: ST7565S v0.6b, system bus pins (page 20), chip select and bus-holder
+pipeline (24..25), and Figure 38 / timing footnote 3 (64..65). The pin/command
+reference is pinned in hardware/sources.json; display.txt describes the RAM model.
+The enabled phase is the overlap of /CS1 low, CS2 high and E high, including CS
+assertion after E has already risen.
+
+Logical adapter
+St7565Parallel accepts ordered LcdHostPins observations. Control bits are /CS1,
+CS2, E, R/W, A0 and /RES (bits 0..5). Known masks distinguish unobserved controls;
+host data has separate drive and known masks. The result reports LCD output drive,
+known data bits and at most one completed cycle. Unknown driven bits remain
+unknown; unselected outputs are high impedance. No ready/status byte is supplied.
+
+Read data is available combinationally during a selected high phase. The new
+read_output inspection does not consume a dummy read or advance the RAM address.
+Repeated pin observations leave this output and the controller state unchanged.
+Ending the qualified overlap completes one native read/prefetch and releases the
+output. A following selected overlap can return the next byte while E stays high.
+
+Writes latch once at the end of the overlap. All data bits must be driven, known
+and stable in the preceding high observation and at completion. Changes earlier
+in the high phase are permitted without premature RAM mutation. Unknown write
+data, host drive during a read, status reads with unqualified busy/reset timing,
+or changes/unknownness of R/W or A0 during a cycle fail visibly. Simultaneous
+control changes with unqualified ordering are not assigned a convenient order.
+
+An observed /RES low aborts an unfinished cycle without a completion event and
+applies the controller hardware reset. Holding /RES low does not repeat cycles.
+RAM and its knownness survive. Construction alone does not establish reset.
+
+This adapter does not infer elapsed nanoseconds, access latency, pulse widths,
+setup/hold/turnaround delays, voltages or physical board wiring. Callers still
+need a qualified clock/pad model before using it as a timing or hardware oracle.
+It is separate from the default McuBus and standalone driver.
+
+Original firmware experiment
+The optional test verifies the private 1.25 ZIP hash. It reuses the conditional
+PE2/E3 loopback reset and unchanged RAM-copy fixture (original-parallel-update.txt).
+An own RAM caller executes three complete original peripheral/display setup
+subroutines. Explicit U/B observations permit the original DSP sender and LCD
+initialization to return; this supplies no DSP receiver or measured ready signal.
+The display is explicitly reset and attached only after its clock is known low
+and the original MCU has configured that pad as an output.
+
+The inferred routing is A[7:0] for display data; B7=/CS1, B6=CS2, B5=R/W,
+B0=A0 and E4=E. It is an opt-in test assumption, not a verified Desktop/Keyboard
+profile. Every GPIO data/direction write resamples the logical interface; a read
+can become enabled on a B-port select change while the E pad is already high.
+
+Original WAI/XIRQ/main dispatch loads the original 761-byte first helper. Its
+first callback must write an independent literal zero frame to exactly 128 columns
+on eight pages, leaving the spare columns and icon RAM untouched. The helper's
+remaining drawing/decompression and real display reads then execute through its
+own return. Stack, prepared flag and MCU NVM/history are checked. A second own
+caller reloads the same original helper; withdrawing display observations must
+fail at the original PORTA read with address, PC and CCR, without completing that
+read or changing NVM. Withdrawal is an unknown-input experiment, not a modeled
+physical disconnection or interruption of an on-device update.
+
+Whole application initialization, the real DSP peer, later update stages,
+transport checksums/tail draining, flash scheduling, full recovery, host MIDI/audio,
+NAND/ROM/sample mapping and stock-device comparison remain pending.
+
+Offline pin fuzzing
+  cmake --build build/fuzz --target st7565-parallel-fuzz
+  python3 tools/make_st7565_parallel_fuzz_seeds.py doc/local/lcd-bus-fuzz-corpus
+  mkdir -p doc/local/lcd-bus-fuzz-artifacts
+  build/fuzz/st7565-parallel-fuzz doc/local/lcd-bus-fuzz-corpus -artifact_prefix=doc/local/lcd-bus-fuzz-artifacts/ -max_len=20480 -max_total_time=60
+
+The 346 own seeds cover all command bytes, control combinations, RAM pages, RMW,
+CS/E overlap, reset aborts and incomplete data observations. A custom mutator
+retains both raw invalid masks and canonical known/drive masks. Expected faults
+are caught per observation so later inputs can exercise the surviving state.
+The current 61-second campaign completed 36182 runs without sanitizer findings.
+An injected early-read variant fails the independent phase oracle: a valid read
+must not advance its RAM address before the overlap ends.

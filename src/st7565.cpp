@@ -96,12 +96,17 @@ void St7565::write_data(const std::uint8_t value) {
   dummy_ = true;
 }
 
-LcdByte St7565::read_data() {
+LcdByte St7565::read_output() const {
   require_reset();
   if (parameter_ != Parameter::none) {
     throw Fault("Unqualified ST7565 data read during a two-byte command");
   }
-  const auto result = holder_;
+  static_cast<void>(address(state_.page, state_.column));
+  return holder_;
+}
+
+LcdByte St7565::read_data() {
+  const auto result = read_output();
   if (!dummy_ && !state_.read_modify_write) { advance_column(); }
   holder_ = ram(state_.page, state_.column);
   dummy_ = false;

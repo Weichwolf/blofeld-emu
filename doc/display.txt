@@ -14,8 +14,10 @@ hardware-verified identification of either Blofeld profile or its PCB wiring.
 St7565 accepts completed, qualified transactions. It is separate from McuBus:
 there is no default attachment, implicit ready pin, generated CPU cycle count or
 claim that a particular GPIO transition met the datasheet timing requirements.
-Busy/status timing, LCD voltages, scan timing and visible optical output are not
-implemented. Mode writes retain digital settings; analog effects are not modeled.
+See display-parallel.txt for the separate logical 6800 adapter and conditional
+original-helper test. Busy/status timing, LCD voltages, scan timing and optical
+output are not implemented. Mode writes retain digital settings; analog effects
+are not modeled.
 
 RAM and reads
 The model stores 132 columns in eight byte pages and the icon page's D0 cells.
@@ -57,7 +59,7 @@ effects, single/double-byte commands, rejected accesses and state after rejectio
 Removing command writes from the holder fails the literal Figure 2 dummy-read
 oracle; the corrected transaction model passes it.
 st7565-fuzz exercises arbitrary transaction sequences under sanitizers. Whole-board
-attachment, actual MCU/DSP boot, MIDI/audio and physical-device comparison remain
+integration, actual MCU/DSP boot, MIDI/audio and physical-device comparison remain
 separate outstanding requirements. This digital reference is not a full snapshot
 format or proof of update/flash safety.
 

@@ -83,7 +83,7 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.c
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
-add_library(blofeld_display src/st7565.cpp)
+add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
 target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
 add_library(blofeld_core src/hc12.cpp)
@@ -142,14 +142,24 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing" --wire-only)
   set_tests_properties(original_recovery_wire PROPERTIES SKIP_RETURN_CODE 77)
+  add_library(blofeld_parallel_fixture STATIC test/parallel_update_fixture.cpp)
+  target_link_libraries(blofeld_parallel_fixture PUBLIC blofeld_core)
   add_executable(blofeld-original-parallel-update-test test/original_parallel_update_test.cpp)
-  target_link_libraries(blofeld-original-parallel-update-test PRIVATE blofeld_core)
+  target_link_libraries(blofeld-original-parallel-update-test PRIVATE blofeld_parallel_fixture)
   add_test(NAME original_parallel_update COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
     $<TARGET_FILE:blofeld-original-parallel-update-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-parallel-update.trace")
   set_tests_properties(original_parallel_update PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-lcd-helper-test test/original_lcd_helper_test.cpp)
+  target_link_libraries(blofeld-original-lcd-helper-test PRIVATE blofeld_parallel_fixture blofeld_display)
+  add_test(NAME original_lcd_helper COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-lcd-helper-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-lcd-helper.trace")
+  set_tests_properties(original_lcd_helper PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-flash-config-test test/mcu_flash_config_test.cpp)
   target_link_libraries(blofeld-flash-config-test PRIVATE blofeld_mcu)
   add_test(NAME flash_config COMMAND blofeld-flash-config-test)
@@ -216,6 +226,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-st7565-test test/st7565_test.cpp)
   target_link_libraries(blofeld-st7565-test PRIVATE blofeld_display)
   add_test(NAME st7565 COMMAND blofeld-st7565-test)
+  add_executable(blofeld-st7565-parallel-test test/st7565_parallel_test.cpp)
+  target_link_libraries(blofeld-st7565-parallel-test PRIVATE blofeld_display)
+  add_test(NAME st7565_parallel COMMAND blofeld-st7565-parallel-test)
   add_executable(blofeld-rti-test test/mcu_rti_test.cpp)
   target_link_libraries(blofeld-rti-test PRIVATE blofeld_core)
   add_test(NAME mcu_rti COMMAND blofeld-rti-test)
@@ -255,7 +268,7 @@ install(DIRECTORY LICENSES/ DESTINATION share/doc/blofeld-emu/licenses)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla" DESTINATION share/blofeld-emu)
 
 file(GLOB_RECURSE BLOFELD_FORMAT_SOURCES CONFIGURE_DEPENDS
-  "include/*.hpp" "src/*.hpp" "src/*.cpp" "test/*.cpp")
+  "include/*.hpp" "src/*.hpp" "src/*.cpp" "test/*.cpp" "test/*.hpp")
 add_custom_target(format-check
   COMMAND "${BLOFELD_CLANG_FORMAT}" --dry-run --Werror ${BLOFELD_FORMAT_SOURCES}
   VERBATIM)
@@ -274,13 +287,18 @@ add_custom_target(quality
     blofeld-original-flash-test
     blofeld-original-flash-restart-test
     blofeld-original-parallel-update-test
+    blofeld-original-lcd-helper-test
     blofeld-wai-test
     blofeld-st7565-test
+    blofeld-st7565-parallel-test
     blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
 endif()
 
 if(BLOFELD_FUZZING)
+  add_executable(st7565-parallel-fuzz test/st7565_parallel_fuzz.cpp)
+  target_link_libraries(st7565-parallel-fuzz PRIVATE blofeld_display)
+  target_link_options(st7565-parallel-fuzz PRIVATE -fsanitize=fuzzer)
   add_executable(st7565-fuzz test/st7565_fuzz.cpp)
   target_link_libraries(st7565-fuzz PRIVATE blofeld_display)
   target_link_options(st7565-fuzz PRIVATE -fsanitize=fuzzer)

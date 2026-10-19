@@ -42,6 +42,7 @@ public:
   void hardware_reset();
   void command(std::uint8_t value);
   void write_data(std::uint8_t value);
+  [[nodiscard]] LcdByte read_output() const;
   [[nodiscard]] LcdByte read_data();
   [[nodiscard]] LcdByte ram(unsigned page, unsigned column) const;
   [[nodiscard]] St7565State state() const;

@@ -65,9 +65,16 @@ Display peripheral               partial  Separate ST7565S transaction reference
                                           all RAM cells, unknown data masks, icon
                                           bit, saturating columns, dummy/pipelined
                                           reads, RMW and distinct reset semantics
-                                          checked (display.txt). Original helper
-                                          continuation identifies display reads;
-                                          candidate identity, board attachment,
+                                          checked (display.txt). Logical 6800
+                                          CS/E overlap, deferred read/prefetch,
+                                          output release, stable writes, reset
+                                          aborts and unknown/drive faults checked.
+                                          Original first helper completes with
+                                          2060 LCD reads after a literal 1024-byte
+                                          zero clear; withdrawn data fails with
+                                          PC/CCR and no NVM change
+                                          (display-parallel.txt). Candidate
+                                          identity, default board attachment,
                                           busy/pad timing and optics unverified.
 Interrupts, timers, clock         partial  USB PHY control, CRG qualification, lock
                                           loss, W1C/POR flags and write gates tested.
@@ -207,7 +214,11 @@ Original update and recovery      partial  Helpers and recovery entry recovered;
                                           original handler/RTI/main dispatch sets
                                           and consumes the request without host
                                           flag writes. Earlier application init
-                                          and later callbacks remain pending.
+                                          remains pending. The complete original
+                                          first helper returns through its own
+                                          display/drawing/decompression calls in
+                                          the separate LCD fixture; later updater
+                                          helpers remain pending.
                                           Explicit reference milestones only;
                                           full initialization/transport/recovery
                                           and hardware validation pending.

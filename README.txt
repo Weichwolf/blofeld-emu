@@ -58,6 +58,8 @@ doc/mcu-wai.txt covers native WAI, idle/wakeup frames, CLI/TAP ordering and the
 standalone driver's explicit wait stop when no scheduler supplies an interrupt.
 doc/display.txt describes the separate ST7565S RAM/command/read-pipeline reference;
 the candidate display and its board wiring are not hardware-verified.
+doc/display-parallel.txt covers logical 6800 pin cycles and the complete original
+first helper's display reads/return under an explicit GPIO/peripheral fixture.
 doc/mcu-sci.txt describes the bus-clocked serial model and its timing limits;
 it does not yet provide a host MIDI port or automatic peripheral scheduling.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.

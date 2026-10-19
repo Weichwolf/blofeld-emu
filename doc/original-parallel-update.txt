@@ -50,8 +50,10 @@ The main helper serves as a second byte-copy reference; its actual later-stage
 delivery and invocation context remain unqualified.
 For the first helper, its own TFR and indirect JSR execute through the real table
 to the first original callback, including the expected nested return frame.
-The test stops there. Later callbacks require application state and GPIO inputs
-that this isolated fixture has not established.
+This test stops there. The separate display-parallel.txt fixture executes complete
+original peripheral/display setup subroutines, then the whole first helper with
+logical display reads. Those remain explicit entry/pin/clock assumptions; neither
+test establishes a complete application boot or physical wiring.
 
 Independent synthetic cases cover 12 lengths: 0, 1, 2, 3, 4, 5, 8, 31, 255, 256,
 511 and 512. The data pattern exercises both byte halves and three-byte packing
@@ -71,8 +73,8 @@ never included in the public tests. No physical MIDI or flash device is used.
 
 Qualification limits
 This proves the conditional normal-copy/caller ABI and first callback through
-the original table. Original request delivery into this routine, the external
-peer/DSP connection, complete application initialization, all later helper stages,
+the original table. Actual external request delivery, peer/DSP connection,
+complete application initialization, all later helper stages,
 whole-image bounds/checksum validation, flash scheduling, NAND/DSP programming,
 live durability and stock-device comparison remain pending. The headless CLI
 still has no host MIDI port or original audio output. Full update/recovery and
