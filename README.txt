@@ -87,6 +87,9 @@ doc/dsp-validation.txt covers NORM/accumulator-transfer corrections, native VSL,
 independent instruction vectors and pinned external MCPX silicon captures, with
 derivative limits. doc/dsp-zero-loops.txt covers normal zero REP annulment, retained
 zero-DO frames, source/stack/IRQ checks and the remaining compatibility limits.
+doc/nand-read.txt covers an explicit small-page NAND read candidate, native own
+GPIO reads and isolated original addressing/turnaround frontiers. It does not
+establish the target boards' NAND contents or complete original NAND loading.
 Automatic CPU/peripheral time and complete interrupt latency remain unimplemented.
 The original MCU bootloader reaches its application entry in the explicit
 untimed fixture described in doc/mcu-boot.txt; this does not establish a full boot.

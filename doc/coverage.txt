@@ -164,6 +164,14 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           RAM/FIFO fallback and bit-number bounds.
                                           Mode-zero TIO1 polls use observed inputs;
                                           no NAND-ready level is fabricated.
+                                          Explicit small-page NAND read candidate:
+                                          42 row/area vectors; native own GPIO
+                                          reads include all main/spare bytes.
+                                          Isolated original command/address/poll
+                                          execution exposes unqualified data
+                                          turnaround and upper Port F writes
+                                          (nand-read.txt). No original NAND data
+                                          transfer or default board route proven.
                                           PLL timing/lock, remaining GPIO/timer modes,
                                           ESAI, DMA and chip profile pending;
                                           no combined MCU/DSP board boot.
@@ -234,7 +242,9 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           Atomic private cold exports only;
                                           continuous command journaling and full
                                           board snapshots remain pending.
-                                          NAND geometry/ECC and contents unresolved.
+                                          Candidate NAND read geometry is explicit;
+                                          board part, ECC, contents, programming,
+                                          erase and failure outcomes unresolved.
 Original update and recovery      partial  Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an
@@ -330,6 +340,12 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           and acknowledgement included:
                                           39720 runs in 61 s without findings.
                                           Native DSP instruction fuzzing pending.
+                                          Small-page NAND read protocol harness:
+                                          66218 sequences in 61 seconds without
+                                          sanitizer findings; bounded own seeds,
+                                          unknown bytes and reset/retry states
+                                          (nand-read.txt). NAND write/failure and
+                                          complete-board fuzzing remain pending.
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
                                           trace; full bootloader trace under build/.

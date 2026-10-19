@@ -64,6 +64,26 @@
       "download": "https://waldorfmusic.com/wp-content/uploads/2022/08/blofeld_key_black_top-1-scaled.jpg",
       "bytes": 224214,
       "sha256": "9798b6ed0a58a5d369c6f3e916e5e222f264da9479ef2f147542c0e29e8711a7"
+    },
+    {
+      "file": "desktop-mainboard-front-2020.jpg",
+      "description": "Desktop mainboard front, BfMB V2.03; processor area covered by display",
+      "source": "https://www.flickr.com/photos/deepsonic/50014025297/",
+      "download": "https://live.staticflickr.com/65535/50014025297_fc8333cc88_o.jpg",
+      "author": "deepsonic",
+      "downloaded_on": "2026-10-19",
+      "bytes": 807855,
+      "sha256": "e70c3a3c2ce853f2661cd0afd9c525e2a2e4abd7fcecd94e59f3b4926d7185b8"
+    },
+    {
+      "file": "desktop-mainboard-back-2020.jpg",
+      "description": "Desktop mainboard back, BfMB V2.03",
+      "source": "https://www.flickr.com/photos/deepsonic/50013231898/",
+      "download": "https://live.staticflickr.com/65535/50013231898_526ca42aa4_o.jpg",
+      "author": "deepsonic",
+      "downloaded_on": "2026-10-19",
+      "bytes": 502257,
+      "sha256": "23abf651bb81de197626a9a85e32366ca774962ed85a9490ac0a87a56123f324"
     }
   ]
 }

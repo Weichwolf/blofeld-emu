@@ -1,0 +1,84 @@
+Small-page NAND read reference and native GPIO experiment
+
+The explicit K9F1208U0C candidate profile uses Samsung's Rev.1.1 June 2007
+datasheet, pinned in hardware/sources.json (manufacturer PDF on distributor host):
+  https://www1.futureelectronics.com/doc/SAMSUNG/K9F1208U0C-PIB0000.pdf
+Pages 8/9 define 512 main plus 16 spare bytes, 131072 rows and four read-address
+cycles. Pages 26/34 define Read1/Read2, completion and reset. Implemented commands
+are 00/01/50 page reads and FF reset. Readiness requires explicit power/completion
+observations. Reset preserves cells; no status, ID, programming, erase, ECC or
+power-loss outcome is fabricated. Unobserved bytes are unknown, including spare
+and bad-block markers. A missing byte fails with row/column/command context and
+does not advance. Post-page sequential-row behavior remains unqualified; readiness
+becomes unknown. Nonzero upper spare-column bits fail conservatively because the
+address table and read prose describe them differently. This profile is not
+automatically attached to either Blofeld board.
+Surplus addresses are ignored only while the current transfer is pending.
+After completion, address-only restart semantics remain unqualified and fail;
+supported subsequent reads require a new explicit read command. A regression
+distinguishes rejection from silently treating those inputs as harmless extras.
+
+Part identification is a lead, not a hardware measurement of our target units:
+  https://elektron-users.com/index.php?Itemid=28&catid=11&func=fb_pdf&id=51550&option=com_fireboard
+The original poster reports that chip marking. The update's 528-byte chunks and
+32-page boundaries are consistent with the candidate, but do not prove the part.
+Two pinned deepsonic board photographs show BfMB V2.03; the display obscures the
+processor area. They establish neither chip identity nor signal continuity:
+  https://www.flickr.com/photos/deepsonic/50014025297/
+  https://www.flickr.com/photos/deepsonic/50013231898/
+All PDFs, photographs and extracted manufacturer instructions remain private.
+
+Checks
+  cmake --build --preset strict --target blofeld-nand-read-test blofeld-nand-gpio-test
+  ctest --test-dir build/strict -R '^(nand_read|nand_gpio|original_nand_address)$' --output-on-failure
+
+nand_read checks 42 row/area vectors, main/spare boundaries, upper row bits,
+explicit busy/completion, address-only power-on Read1, repeated/aborting reset,
+retained cells, unknown-byte retry and rejected ranges/commands/phases.
+nand_gpio uses native own DSP instructions, without firmware assets: command and
+address output, actual TIO1 ready polling, input/output turnaround, all 528 bytes
+and native X-memory stores. Two synthetic pages and a withdrawn byte check the
+candidate link. No host writes operand RAM or computes instruction results.
+Unknown/deselected chip-select observations and unordered simultaneous RE/WE
+transitions fail before any NAND operation, retaining CPU/device context.
+
+Offline protocol fuzzing
+  cmake --preset fuzz
+  cmake --build --preset fuzz --target nand-read-fuzz
+  mkdir -p doc/local/nand-read-fuzz-corpus
+  build/fuzz/nand-read-fuzz -max_total_time=60 -max_len=4096 doc/local/nand-read-fuzz-corpus
+
+The harness bounds eight-byte action records and observed page fragments. It
+exercises command/address/completion/reset/read and rejected-state retries.
+A 61-second smoke campaign with own structured seeds completed 66218 sequences
+without sanitizer findings. It is not native instruction fuzzing, NAND write/
+power-loss validation or a sustained complete-board campaign.
+
+original_nand_address separately calls an unchanged original first-stage routine
+from a native own caller with explicit register/GPIO preconditions. It checks the
+actual command, all four address bytes, row increment and ready-poll behavior
+for a low row, then requires a visible first-data-turnaround failure. A higher
+row independently requires the earlier reserved upper Port F write to fail;
+neither silently masks those bits nor extrapolates a complete high-row transfer.
+The experiment neither executes nor claims to complete the original preceding
+clear/init sequence. The routine
+asserts RE while data outputs are still enabled; accepting that transition would
+require measured pad timing/drive behavior. Its later Port F mode transition
+also requires qualification. Neither failure is ignored or patched around.
+
+Candidate test-only routing: C8 RE, C9 WE, C10 CLE, C11 ALE, F0..7 data and
+TIO1 ready. Chip-select is an explicit held-active laboratory observation, not an
+inferred GPIO route. In particular, F10 is not assumed to be CE; its role remains
+unqualified. Non-NAND F8/F9 low levels are separate controlled inputs.
+Completion after three executed polls is an explicit untimed laboratory event,
+not a measured NAND delay or DSP clock ratio. The tests do not establish board
+wiring, polarity, CE timing, setup/hold or real-device equivalence.
+
+Full original boot still stops on reserved Y:002000 before reaching NAND GPIO.
+The 131072-store clear is unchanged. Actual NAND/ROM/wavetable/sample mappings and
+contents, original data reads, full scheduled boot/MIDI/audio/update/recovery,
+NAND writes/failure phases and stock Desktop/Keyboard comparisons remain pending.
+A static candidate reconstruction from the updater's source ranges also leaves
+264 trailing page bytes outside the supplied update object. It is not an
+installed NAND dump; those bytes are not assumed erased or zero. Detailed source
+analysis and candidate extracts stay private and do not initialize a board model.

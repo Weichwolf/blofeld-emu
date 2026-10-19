@@ -77,6 +77,9 @@ target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB
 add_library(blofeld_storage src/flash_image.cpp src/flash_file.cpp)
 target_include_directories(blofeld_storage PUBLIC include)
 target_link_libraries(blofeld_storage PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
+add_library(blofeld_nand src/nand_read.cpp)
+target_include_directories(blofeld_nand PUBLIC include)
+target_link_libraries(blofeld_nand PUBLIC blofeld_firmware)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
   src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
@@ -103,6 +106,18 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-nand-read-test test/nand_read_test.cpp)
+  target_link_libraries(blofeld-nand-read-test PRIVATE blofeld_nand)
+  add_test(NAME nand_read COMMAND blofeld-nand-read-test)
+  add_executable(blofeld-nand-gpio-test test/nand_gpio_test.cpp test/nand_gpio_fixture.cpp)
+  target_link_libraries(blofeld-nand-gpio-test PRIVATE blofeld_nand blofeld_dsp blofeld_dsp_native)
+  add_test(NAME nand_gpio COMMAND blofeld-nand-gpio-test)
+  add_test(NAME original_nand_address COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-nand-gpio-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-address.trace")
+  set_tests_properties(original_nand_address PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-flash-image-test test/flash_image_test.cpp)
   target_link_libraries(blofeld-flash-image-test PRIVATE blofeld_core)
   add_test(NAME flash_image COMMAND blofeld-flash-image-test)
@@ -332,6 +347,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+    blofeld-nand-read-test blofeld-nand-gpio-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-gpio-test
@@ -358,6 +374,9 @@ add_custom_target(quality
 endif()
 
 if(BLOFELD_FUZZING)
+  add_executable(nand-read-fuzz test/nand_read_fuzz.cpp)
+  target_link_libraries(nand-read-fuzz PRIVATE blofeld_nand)
+  target_link_options(nand-read-fuzz PRIVATE -fsanitize=fuzzer)
   add_executable(st7565-parallel-fuzz test/st7565_parallel_fuzz.cpp)
   target_link_libraries(st7565-parallel-fuzz PRIVATE blofeld_display)
   target_link_options(st7565-parallel-fuzz PRIVATE -fsanitize=fuzzer)

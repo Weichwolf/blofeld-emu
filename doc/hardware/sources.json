@@ -58,5 +58,11 @@
     "source": "https://www.nxp.com/docs/en/application-note/AN2400.pdf",
     "bytes": 1090229,
     "sha256": "6c4cbdd603fc53064ac3fc4e8428a1fb6bc630b411dbca2c0c7a1dbd56a2b8ae"
+  },
+  {
+    "file": "K9F1208U0C.pdf",
+    "source": "https://www1.futureelectronics.com/doc/SAMSUNG/K9F1208U0C-PIB0000.pdf",
+    "bytes": 844012,
+    "sha256": "bf9217e55bdad1d3c1e3eb9462fcdafb02c2a77231f89261c3f3927c3fde226f"
   }
 ]
