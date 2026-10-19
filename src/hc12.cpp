@@ -7,6 +7,7 @@
 #include "emulate.hh"
 #include "error.hh"
 #include "globalcontext.hh"
+#include "hc12_decimal.hpp"
 #include "loadimage.hh"
 #include "memstate.hh"
 #include "opbehavior.hh"
@@ -272,6 +273,11 @@ protected:
       fallthruOp();
       return;
     }
+    if (name == "decimalAdjustAccumulator" || name == "decimalAdjustCarry") {
+      execute_decimal_adjust(name == "decimalAdjustCarry");
+      fallthruOp();
+      return;
+    }
     if (name != "LoadStack") { throw Fault("Unimplemented HC12 operation: " + name); }
     if (currentOp->numInput() != 2 || currentOp->getOutput() == nullptr ||
         currentOp->getOutput()->size != 2) {
@@ -300,6 +306,34 @@ protected:
   }
 
 private:
+  void execute_decimal_adjust(const bool carry_result) {
+    constexpr ghidra::int4 arguments = 4;
+    constexpr unsigned byte_mask = 0xff;
+    if (currentOp->numInput() != arguments || currentOp->getOutput() == nullptr ||
+        currentOp->getOutput()->size != 1) {
+      throw Fault("Unexpected HC12 decimal-adjust intrinsic shape");
+    }
+    for (ghidra::int4 index = 1; index < arguments; ++index) {
+      if (currentOp->getInput(index)->size != 1) {
+        throw Fault("Unexpected HC12 decimal-adjust operand width");
+      }
+    }
+    const auto accumulator = read_value(currentOp->getInput(1));
+    const auto carry = read_value(currentOp->getInput(2));
+    const auto half = read_value(currentOp->getInput(3));
+    if (accumulator > byte_mask || carry > 1 || half > 1) {
+      throw Fault("Unexpected HC12 decimal-adjust operand value");
+    }
+    try {
+      const auto result = detail::hc12_decimal_adjust(
+          {.a = static_cast<std::uint8_t>(accumulator), .carry = carry != 0, .half = half != 0});
+      const ghidra::uintb carry_value = result.carry ? 1U : 0U;
+      write_value(currentOp->getOutput(), carry_result ? carry_value : result.a);
+    } catch (const Fault &fault) {
+      throw Fault("HC12 DAA pc=" + hex(address_.getOffset()) + ": " + fault.what());
+    }
+  }
+
   [[nodiscard]] static ghidra::int4 operand_size(const ghidra::VarnodeData *node) {
     if (node->size == 0 || node->size > sizeof(ghidra::uintb)) {
       throw Fault("Unsupported HC12 p-code operand width");

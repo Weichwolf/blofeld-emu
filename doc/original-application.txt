@@ -26,14 +26,20 @@ Explicit conditions
   then retries that same original instruction without redirecting the CPU.
 
 Checks
-After 90312 reset/loader instructions, each application case executes 11979871
+After 90312 reset/loader instructions, each application case executes 12046302
 instructions and 6384 RTI entries. The original main reaches WAI with PC=8315,
 SP=25ea and enabled maskable interrupts. A separately specified NXP CCR/B/A/X/Y/
 next-PC byte layout checks the frame against the state before WAI at SP=25f3.
 The original PM3 state is checked in RAM, not written by the host. LCD counts are
-302 commands, 2402 writes and 2244 reads. All MCU NVM bytes, knownness and erase
+344 commands, 4194 writes and 2244 reads. All MCU NVM bytes, knownness and erase
 history must survive the failed read unchanged and match their pre-reset image
 after WAI.
+
+These totals are observed regression values under the pinned fixture, not
+independent whole-CPU timing claims. BGE/LBGE use the independently tested N=V
+condition. Correcting the inverted native predicate changes the original drawing
+paths and their instruction/write totals; RTI entries, display reads and native
+wait/frame/input/NVM checks retain their independent expectations.
 
 Native SCI reception
 After the low-PM3 cold start, the same untouched CPU is used for eight ordinary

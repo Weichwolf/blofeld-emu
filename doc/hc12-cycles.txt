@@ -10,9 +10,9 @@ No wait-state, physical prefetch-address, measured board-frequency or analog
 pad-timing claim follows from this adapter. The default CLI remains untimed.
 
 The implemented families include common byte/word ALU/load/store modes, indexed
-and indirect operands, short branches, loop control, bit operations, stack/call/
-return, reset, WAI, IRQ and RTI. Unsupported encodings and native-length/operand
-disagreements fail with PC, CCR, operation/address and completed-cycle context.
+and indirect operands, short/long branches, loop control, MOVB/MOVW, memory
+RMW/TST, LEA, integer multiply/divide, DAA, stack/call/return, reset, WAI, IRQ
+and RTI. Unsupported encodings and native-length/operand disagreements fail with PC, CCR, operation/address and completed-cycle context.
 The clock callback and backing bus may already have advanced on failure;
 continuation requires a coordinated healthy CPU/bus/clock reconstruction.
 This is not a persistent or complete-board checkpoint implementation.
@@ -25,8 +25,8 @@ restricted to completed native instructions; DMA/parallel RAM mutation and
 physical program-bus reconstruction are outside the supported contract.
 
 Evidence
-  cmake --build --preset strict --target blofeld-hc12-cycle-test blofeld-mcu-cycle-test blofeld-original-cycle-boot-test
-  ctest --test-dir build/strict -R '^(hc12_cycles|mcu_cycles|original_cycle_boot)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-hc12-cycle-test blofeld-hc12-cycle-extended-test blofeld-mcu-cycle-test blofeld-original-cycle-boot-test blofeld-original-cycle-application-test
+  ctest --test-dir build/strict -R '^(hc12_cycles|hc12_cycle_extended|mcu_cycles|original_cycle_boot|original_cycle_application)$' --output-on-failure
   cmake --build --preset strict --target quality
 
 Literal instruction vectors check operand-cycle boundaries and CPU state,
@@ -36,6 +36,30 @@ Both NXP manuals specify that order; the previous native description read Y
 before PC. The build-local exception patch corrects it without changing the
 final frame layout. S12CPUV2's glossary/section 7.5.5 and S12CPU15UG's RTI entry
 agree on eleven cycles; an inconsistent summary-table entry is not used.
+
+Extended independent vectors cover all six MOV modes for byte/word operands,
+nine memory modifications across six address modes, TST, LEA/BSR, CCR stack
+save/restore and index wrap/flags. Internal RAM permits unaligned words in a
+single cycle (S12CPUV2 6.6); the synthetic flat test memory deliberately supports
+this. A literal truth table checks all 16 short/long branch conditions, all 16
+CCR combinations and both instruction alignments (1024 native executions).
+These vectors exposed inverted BGE/LBGE predicates and incorrect grouping in
+PC-relative nine-bit address calculation; build-local patches correct both.
+The BGE correction changes observed legacy display/helper instruction/write
+counts. Private one-change reversion reproduces the former helper expectation;
+reverting only PC-relative addressing does not. Original return/frame/NVM and
+literal zero-clear checks remain strict; display counts are now exact. See
+original-application.txt and display-parallel.txt for corrected fixture totals.
+
+Literal multiply/divide results include signed limits, overflow and zero
+divisors; assertions exclude undefined flags/results. Native divide operations
+now test zero/overflow before changing protected results or dividing by zero.
+The signed overflow comparison uses the correct negative lower bound. Native
+DAA executes explicit decimal-adjust intrinsics from the manual's nine-row
+valid-input table; Carry uses the original accumulator. All 20000 valid BCD
+ADCA/DAA additions match independent integer decimal sums, defined flags and
+literal timing. Undefined DAA input combinations reject with PC and operands.
+These are deterministic instruction regressions, not fuzz tests.
 
 Constant-address p-code operands also retain their original byte/word width.
 They can appear directly in unary/binary operations instead of explicit LOAD/
@@ -54,12 +78,29 @@ The original 1.25 MCU bootloader runs through its application entry under the
 same explicit GPIO/PHY observations as original_boot. Native SCI and TIM clocks
 advance with CPU cycles; PS4 receives an explicit idle mark under the original
 bootloader's MODRR route. This is an observation fixture, not qualified physical
-MIDI wiring. Its 90314
-instructions occupy 233749 un-stretched reference cycles including reset. The
-independent total uses manual mnemonic/address-mode costs and branch outcomes
+MIDI wiring. Its 90314 instructions occupy 233749 un-stretched reference cycles
+including reset. The independent total uses manual mnemonic/address-mode costs and branch outcomes
 from the existing private trace, not this timing decoder. RAM clear, checksum,
 final CPU state and unchanged MCU NVM/history are checked. The additional trace
 stays under build/; no manufacturer program bytes are published.
+
+original_cycle_application uses a separate explicit E2/E3 loopback, E0/E1 high,
+Q low, PR2 idle and the same PHY qualification window. With no observed timer
+capture baseline, native execution fails at PC 87ea after 90340 instructions and
+233807 completed cycles, reporting TIM address 0040, channel mask 01 and CCR.
+A second case attaches constant-high PT0 only when native output is already
+high, immediately before the original TCTL4 capture-enable write. It samples
+the input before subsequent timer clocks without fabricating edges/flags.
+This conditional path executes 1672474 instructions and reaches the existing
+unknown PU input: native read 0278 mask 3f at PC b98d. Its 4850623 cycles equal an
+independent untimed PC/CCR census with manual mnemonic/address-mode costs:
+4850617 retired-instruction cycles + 5 reset + 1 failed data-read cycle. The
+unprimed timer failure occurs inside a clock callback and does not complete its
+failing cycle. Both cases preserve NVM/history and latch failures so retry
+cannot advance clocks. Traces and disassembly census remain local. No original
+instruction/RAM mutation, skipped loops or host peripheral-ready flags are used.
+The fixtures do not establish either physical Desktop/Keyboard routing or a
+complete application boot; those unknown inputs remain visible.
 
 Remaining requirements
 Oscillator/PLL clock-source transitions, whole-board CPU/DSP scheduling, memory

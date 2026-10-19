@@ -27,8 +27,8 @@ constexpr unsigned first_service = 0x8d70;
 constexpr unsigned callback_return = 0x1209;
 constexpr unsigned helper_return = 0xbb56;
 constexpr unsigned helper_bytes = 761;
-constexpr unsigned normal_helper_instructions = 196108;
-constexpr unsigned failed_helper_instructions = 43919;
+constexpr unsigned normal_helper_instructions = 210871;
+constexpr unsigned failed_helper_instructions = 43909;
 constexpr unsigned lcd_data_read = 0x8b5a;
 constexpr unsigned request_flags = 0x1815;
 constexpr unsigned update_prepared = 0x40;
@@ -145,9 +145,14 @@ void execute_helper(blofeld::McuBus &bus,
     }
   }
   const auto counts = display.counts();
+  // Pinned original drawing with the independently verified N=V BGE predicate.
+  constexpr unsigned expected_commands = 416;
+  constexpr unsigned expected_writes = 3078;
+  constexpr unsigned expected_reads = 2060;
   require(!withdraw && cleared && instructions == normal_helper_instructions &&
               cpu.state().sp == stack - 10 && (bus.read(request_flags) & update_prepared) != 0 &&
-              counts.reads > before.reads,
+              counts.commands == expected_commands && counts.writes == expected_writes &&
+              counts.reads == expected_reads,
           "Complete original first helper returns through its own RTS after real display reads");
   trace << "native-helper instructions=" << instructions << " commands=" << counts.commands
         << " writes=" << counts.writes << " reads=" << counts.reads << " return=bb56\n";

@@ -1,0 +1,75 @@
+--- HCS_HC12.sinc
++++ HCS_HC12.sinc
+@@ -2758 +2758 @@
+-	A = decimalAdjustAccumulator(A, $(C), $(H));
++	adjusted:1 = decimalAdjustAccumulator(A, $(C), $(H));
+@@ -2759,0 +2760 @@
++	A = adjusted;
+@@ -2762 +2763 @@
+-	#V is undefined
++	# V is undefined.
+@@ -2892 +2893,3 @@
+-	tmp:4 = (zext(IY) << 16) | (zext(D));
++	$(C) = (IX == 0);
++	if ($(C) != 0) goto <ediv_done>;
++	tmp:4 = (zext(IY) << 16) | zext(D);
+@@ -2893,0 +2897,2 @@
++	$(V) = (resultQ > 0x0000FFFF);
++	if ($(V) != 0) goto <ediv_done>;
+@@ -2896 +2901 @@
+-	D  = resultR:2;
++	D = resultR:2;
+@@ -2899,2 +2904 @@
+-	$(V) = (resultQ > 0x0000FFFF);
+-	$(C) = (IX == 0);
++<ediv_done>
+@@ -2905 +2909,3 @@
+-	tmp:4 = (zext(IY) << 16) | (zext(D));
++	$(C) = (IX == 0);
++	if ($(C) != 0) goto <edivs_done>;
++	tmp:4 = (zext(IY) << 16) | zext(D);
+@@ -2906,0 +2913,2 @@
++	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0xFFFF8000);
++	if ($(V) != 0) goto <edivs_done>;
+@@ -2909 +2917 @@
+-	D  = resultR:2;
++	D = resultR:2;
+@@ -2912,2 +2920 @@
+-	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0x00008000);
+-	$(C) = (IX == 0);
++<edivs_done>
+@@ -3492 +3499,2 @@
+-	tmp:4 = (zext(D) << 16);
++	if ($(V) != 0) goto <fdiv_saturated>;
++	tmp:4 = zext(D) << 16;
+@@ -3496 +3504 @@
+-	D  = resultR:2;
++	D = resultR:2;
+@@ -3497,0 +3506,5 @@
++	goto <fdiv_done>;
++<fdiv_saturated>
++	IX = 0xFFFF;
++	$(Z) = 0;
++<fdiv_done>
+@@ -3575,0 +3589,2 @@
++	$(V) = 0;
++	if ($(C) != 0) goto <idiv_zero>;
+@@ -3579 +3594 @@
+-	D  = resultR;
++	D = resultR;
+@@ -3581 +3596,5 @@
+-	$(V) = 0;
++	goto <idiv_done>;
++<idiv_zero>
++	IX = 0xFFFF;
++	$(Z) = 0;
++<idiv_done>
+@@ -3586,0 +3606 @@
++	if ($(C) != 0) goto <idivs_done>;
+@@ -3590 +3610 @@
+-	D  = resultR:2;
++	D = resultR:2;
+@@ -3593 +3613,2 @@
+-	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0x00008000);
++	$(V) = (resultQ s> 0x00007FFF) | (resultQ s< 0xFFFF8000);
++<idivs_done>

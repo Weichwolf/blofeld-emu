@@ -24,6 +24,7 @@ constexpr unsigned flags = 0xc0;
 constexpr unsigned nop = 0xa7;
 constexpr unsigned rts = 0x3d;
 constexpr unsigned prefix = 0x18;
+constexpr unsigned unsupported_mac = 0x12;
 constexpr unsigned accumulator = 0xa500;
 
 void require(const bool condition, const char *message) {
@@ -201,6 +202,7 @@ void test_visible_rejection_and_precommit_clocks() {
   static_cast<void>(rejects([&bus] { bus.advance_idle(1); }));
   FlatBus unsupported;
   unsupported.bytes[entry] = prefix;
+  unsupported.bytes[entry + 1] = unsupported_mac;
   blofeld::Hc12CycleBus other(unsupported, [](auto /*cycle*/) {});
   blofeld::Hc12 second(other, BLOFELD_DEFAULT_SLA);
   second.reset();

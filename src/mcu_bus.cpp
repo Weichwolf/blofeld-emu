@@ -19,6 +19,7 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -473,16 +474,22 @@ void McuBus::check_timer_outputs() const {
 }
 
 void McuBus::advance_timer(const unsigned bus_cycles) {
-  constexpr unsigned maximum_cycles = 1048576;
-  if (bus_cycles > maximum_cycles) { throw Fault("Timer board clock slice exceeds cycle limit"); }
-  unsigned remaining = bus_cycles;
-  while (remaining != 0) {
-    const auto until_tick = timer_.cycles_until_tick();
-    const auto count = until_tick == 0 ? remaining : std::min(remaining, until_tick);
-    timer_.advance(count);
-    remaining -= count;
-    sync_peripheral_pins();
-    check_timer_outputs();
+  try {
+    constexpr unsigned maximum_cycles = 1048576;
+    if (bus_cycles > maximum_cycles) { throw Fault("Timer board clock slice exceeds cycle limit"); }
+    unsigned remaining = bus_cycles;
+    while (remaining != 0) {
+      const auto until_tick = timer_.cycles_until_tick();
+      const auto count = until_tick == 0 ? remaining : std::min(remaining, until_tick);
+      timer_.advance(count);
+      remaining -= count;
+      sync_peripheral_pins();
+      check_timer_outputs();
+    }
+  } catch (const Fault &fault) {
+    throw Fault("MCU timer advance at " + hex(hc12::timer_base) + " pc=" + hex(context_.pc) +
+                " ccr=" + hex(context_.ccr, 2) + " cycles=" + std::to_string(bus_cycles) + ": " +
+                fault.what());
   }
 }
 

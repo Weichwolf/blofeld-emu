@@ -58,9 +58,12 @@ Original WAI/XIRQ/main dispatch loads the original 761-byte first helper. Its
 first callback must write an independent literal zero frame to exactly 128 columns
 on eight pages, leaving the spare columns and icon RAM untouched. The helper's
 remaining drawing/decompression and real display reads then execute through its
-own return. Stack, prepared flag and MCU NVM/history are checked. A second own
+own return in 210871 instructions, with 416 commands, 3078 writes and 2060 reads
+including setup. These are pinned observations with corrected BGE (N=V), not
+hardware timing measurements; the independent branch matrix rejects the former
+inverted predicate. Stack, prepared flag and MCU NVM/history are checked. A second own
 caller reloads the same original helper; withdrawing display observations must
-fail at the original PORTA read with address, PC and CCR, without completing that
+fail after 43909 instructions at the original PORTA read with address, PC and CCR, without completing that
 read or changing NVM. Withdrawal is an unknown-input experiment, not a modeled
 physical disconnection or interruption of an on-device update.
 

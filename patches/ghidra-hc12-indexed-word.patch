@@ -1,5 +1,8 @@
 --- HCS_HC12.sinc
 +++ HCS_HC12.sinc
+@@ -518 +518 @@
+-IDX_i_PCRel: target is ss0_0 ; imm8 [ target = inst_next + (ss0_0 << 8) | imm8; ] { export *[const]:2 target; }
++IDX_i_PCRel: target is ss0_0 ; imm8 [ target = inst_next + ((ss0_0 << 8) | imm8); ] { export *[const]:2 target; }
 @@ -735 +735 @@
 -	export indexed5;
 +	export *:2 indexed5;

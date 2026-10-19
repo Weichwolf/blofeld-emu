@@ -43,7 +43,11 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           live values and decoder-refresh lifetime.
                                           Reference HCS12 operand-cycle scheduling,
                                           IRQ/RTI and constant-address word widths
-                                          checked (hc12-cycles.txt). Full ISA,
+                                          checked (hc12-cycles.txt). Independent
+                                          MOV/RMW/TST/LEA, 1024 branch truth vectors,
+                                          divide boundaries and 20000 BCD additions
+                                          expose/correct native BGE/LBGE, PC-index,
+                                          signed-divide and DAA defects. Full ISA,
                                           qualified chip timing and hardware
                                           comparison pending.
                                           Independent reset/opcode reference:
@@ -239,6 +243,13 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           233749 un-stretched cycles, including
                                           reset (hc12-cycles.txt). GPIO/PHY and
                                           memory timing remain explicit contracts.
+                                          Timed native application: strict unknown
+                                          capture failure; conditional PT0 handover
+                                          reaches unknown PU after 1672474 native
+                                          instructions/4850623 cycles. Independent
+                                          census/manual cycle total agrees; NVM and
+                                          failure latch checked (hc12-cycles.txt).
+                                          This is not complete application boot.
                                           Native DSP RESET preserves OMR/PLL while
                                           clearing SHI; hardware reset resamples
                                           PINIT and restores the RAM map.
@@ -259,7 +270,7 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           unchanged. The original_application
                                           regression checks unknown-read retry
                                           and controlled PM3 low/high. Both reach
-                                          original main WAI after 11979871
+                                          original main WAI after 12046302
                                           application instructions and 2244 LCD
                                           reads, after the shared native reset
                                           fixture. MCU NVM/history remain

@@ -1,5 +1,8 @@
 --- HCS_HC12.sinc
 +++ HCS_HC12.sinc
+@@ -1738 +1738 @@
+-	if (($(N) ^ $(V)) == 1) goto rel8;
++	if (($(N) ^ $(V)) == 0) goto rel8;
 @@ -1964,5 +1964,2 @@
 -SkipNextInstr: dest is epsilon [ dest = inst_next + 1; ]  { export *[RAM]:1 dest; }
 -
@@ -17,3 +20,6 @@
 @@ -1986 +1983 @@
 -	if (result != 0) goto rel8;
 +	if (result == 0) goto rel8;
+@@ -3751 +3748 @@
+-	if (($(N) ^ $(V)) == 1) goto rel16;
++	if (($(N) ^ $(V)) == 0) goto rel16;

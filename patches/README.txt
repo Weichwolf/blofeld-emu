@@ -21,13 +21,16 @@ semantics or correctness of other native memory-bank configurations.
 HC12 branch corrections
 ----------------------
 ghidra-hc12-branches.patch corrects the BRSET predicate in all three operand
-constructors and makes BRN decode its displacement byte. It is guarded by the
+constructors, makes BRN decode its displacement byte, and fixes inverted BGE/
+LBGE predicates (N equals V). It is guarded by the
 original HCS_HC12.sinc SHA-256 recorded in doc/dependencies.json. It is applied
 only to a build-directory copy, then compiled with Ghidra's native SLEIGH tool.
 No manufacturer firmware bytes or processor-language source copies are shipped
 in this repository. The specification retains Ghidra's Apache-2.0 license.
 S12CPUV2 instruction definitions provide the independent behavior reference;
-native_core covers 12288 bit-branch cases and BRN's fetch length.
+native_core covers 12288 bit-branch cases and BRN's fetch length;
+hc12_cycle_extended independently checks 1024 short/long branch/CCR/alignment
+cases against literal truth masks.
 
 HC12 indexed word correction
 ---------------------------
@@ -35,13 +38,32 @@ ghidra-hc12-indexed-word.patch fixes the HC12 indexed2_5 operand export. The
 unpatched description exports an effective-address value or index register,
 instead of a two-byte memory operand. LDD then loads the address, and STD can
 overwrite the base register rather than memory. The patch restores the missing
-dereference, after the branch patch in the same private build copy. The original
-source hash remains the version gate; Ghidra's Apache-2.0 license still applies.
+dereference and groups the signed nine-bit PC displacement before adding it to
+the next instruction address, after the branch patch in the same private copy.
+The original source hash remains the version gate; Ghidra's Apache-2.0 license still applies.
 
 Independent regressions exercise 96 signed-offset LDD/STD pairs across X, Y and
 SP, exact byte order/flags, unchanged base registers, IO access counts, and a
-word postincrement. They fail against the uncorrected description. No vendor
-program bytes are embedded in these vectors.
+word postincrement. Additional LEA/LDD/STD vectors check positive/negative
+nine-bit PC-relative addresses, operand widths and manual cycle counts. They
+fail against the uncorrected description. No vendor program bytes are embedded in these vectors.
+
+HC12 arithmetic corrections
+---------------------------
+ghidra-hc12-arithmetic.patch follows the exception patch under the same pinned
+source hash and Apache-2.0 terms. EDIV/EDIVS preserve D/Y on zero and overflow;
+signed division compares against the correct negative lower bound. Divide-zero
+guards precede the native divide operation. IDIV and FDIV produce the documented
+FFFF quotient on zero/overflow as applicable; IDIVS preserves D/X on zero.
+Undefined flags/remainders remain outside assertions and hardware claims.
+DAA computes accumulator and Carry from the same original A/C/H operands. The
+native adapter implements its two declared intrinsics using S12CPUV2's nine-row
+valid-input table; invalid combinations fail visibly with PC/operands.
+
+hc12_cycle_extended executes literal normal/boundary/overflow/zero vectors with
+manual cycle counts and 20000 actual ADCA/DAA pairs against independent decimal
+addition and defined-flag expectations. These are project-owned deterministic
+instruction inputs; manufacturer program bytes and disassembly remain local.
 
 HC12 exception corrections
 -------------------------

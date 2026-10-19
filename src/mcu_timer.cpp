@@ -304,7 +304,8 @@ void McuTimer::advance(const unsigned bus_cycles) {
   if (bus_cycles > maximum_clock_slice) { throw Fault("Timer clock slice exceeds cycle limit"); }
   if (!enabled() || bus_cycles == 0) { return; }
   if ((capture_mask() & ~static_cast<unsigned>(inputs_known_)) != 0) {
-    throw Fault("Unknown active timer capture inputs");
+    throw Fault("Unknown active timer capture inputs mask=" +
+                hex(capture_mask() & ~static_cast<unsigned>(inputs_known_), 2));
   }
   check_activation();
   clocked_since_observation_ = true;

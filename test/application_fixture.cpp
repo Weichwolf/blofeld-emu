@@ -36,12 +36,13 @@ constexpr unsigned pm3_mask = 8;
 constexpr unsigned saved_pm3 = 0x182f;
 constexpr unsigned pm3_pull = 0x24c;
 constexpr unsigned rti_vector = 0xfff0;
-constexpr unsigned step_limit = 12000000;
 constexpr unsigned checkpoint_period = 100000;
 constexpr unsigned byte_mask = 255;
-constexpr unsigned application_instructions = 11979871;
-constexpr unsigned fault_instructions = 10708295;
+constexpr unsigned application_instructions = 12046302;
+constexpr unsigned fault_instructions = 10705413;
 constexpr unsigned periods_to_wait = 6384;
+// Native retired instructions plus real interrupt entries, with one boundary slot.
+constexpr unsigned step_limit = application_instructions + periods_to_wait + 1;
 
 void require(const bool condition, const char *message) {
   if (!condition) { throw Fault(message); }
@@ -167,8 +168,8 @@ ApplicationRun start_application(
   }
   check_wait(bus, cpu, before_wait);
   const auto counts = display.counts();
-  constexpr unsigned commands = 302;
-  constexpr unsigned writes = 2402;
+  constexpr unsigned commands = 344;
+  constexpr unsigned writes = 4194;
   constexpr unsigned reads = 2244;
   require(observed_pm3 && run.instructions == application_instructions &&
               run.interrupts == periods_to_wait && run.oscillator_periods == periods_to_wait &&
