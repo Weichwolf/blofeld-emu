@@ -3,6 +3,8 @@
 
 #include "blofeld/bus.hpp"
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -25,6 +27,22 @@ struct CpuStep {
   bool stack_reused = false;
 };
 
+// Trusted opaque instruction-boundary state, including native scratch registers.
+class Hc12Checkpoint {
+public:
+  Hc12Checkpoint(const Hc12Checkpoint &) = default;
+  Hc12Checkpoint &operator=(const Hc12Checkpoint &) = default;
+
+private:
+  friend class Hc12;
+  Hc12Checkpoint() = default;
+  static constexpr unsigned register_bytes = 256;
+  std::array<std::uint8_t, register_bytes> registers_{};
+  std::uint16_t pc_ = 0;
+  bool waiting_ = false;
+  bool defer_irq_ = false;
+};
+
 // Native SLEIGH semantics execute original HC12 instructions. Peripheral and
 // cycle timing are supplied by the board model, not by the instruction decoder.
 class Hc12 {
@@ -43,6 +61,10 @@ public:
   CpuStep step();
 
 private:
+  friend class McuMachine;
+  [[nodiscard]] Hc12Checkpoint checkpoint() const;
+  void restore_checkpoint(const Hc12Checkpoint &checkpoint);
+  [[nodiscard]] bool executing() const;
   void enter_interrupt(InterruptRequest request, std::optional<std::uint16_t> reuse_stack);
   class Impl;
   std::unique_ptr<Impl> impl_;

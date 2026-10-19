@@ -38,6 +38,8 @@ public:
   [[nodiscard]] McuFlashImage power_off_image() const;
 
 private:
+  friend class McuBus;
+  McuFlash(McuMemory &memory, const McuFlash &source);
   enum class BufferState : std::uint8_t { empty, word, command, launched };
 
   struct Job {

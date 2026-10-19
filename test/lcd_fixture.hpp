@@ -21,6 +21,8 @@ struct LcdCounts {
 class LcdFixture {
 public:
   explicit LcdFixture(McuBus &bus);
+  // Value-copy the controlled external fixture while rebinding its bus observer.
+  LcdFixture(McuBus &bus, const LcdFixture &source);
   void observe(const BusEvent &event);
 
   void withdraw_data() { withdraw_ = true; }

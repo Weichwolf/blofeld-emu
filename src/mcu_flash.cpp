@@ -42,6 +42,18 @@ FlashOptions McuFlash::options(const McuMemory &memory) {
 
 McuFlash::McuFlash(McuMemory &memory) : memory_(memory), config_(options(memory)) {}
 
+McuFlash::McuFlash(McuMemory &memory, const McuFlash &source)
+    : memory_(memory),
+      config_(source.config_),
+      buffered_(source.buffered_),
+      active_(source.active_),
+      buffer_state_(source.buffer_state_),
+      control_(source.control_),
+      command_(source.command_),
+      errors_(source.errors_),
+      blank_(source.blank_),
+      clock_(source.clock_) {}
+
 FlashRange McuFlash::affected(const Job job) {
   if (job.command == mass_erase) { return {.size = array_bytes}; }
   if (job.command == sector_erase) {

@@ -16,6 +16,7 @@
 #include <bitset>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -35,6 +36,8 @@ class McuBus final : public Bus {
 public:
   explicit McuBus(std::span<const std::uint8_t> flash);
   explicit McuBus(const McuFlashImage &image);
+  // Deep modeled-state copy. External observer callbacks are not copied.
+  [[nodiscard]] std::unique_ptr<McuBus> clone() const;
   [[nodiscard]] McuFlashImage power_off_flash_image() const;
   std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
@@ -74,6 +77,12 @@ public:
   void advance_flash(FlashMilestone milestone);
 
 private:
+  friend class McuMachine;
+  void notify(const BusEvent &event);
+
+  struct CloneState {};
+
+  McuBus(const McuBus &source, CloneState /*tag*/);
   [[nodiscard]] std::uint8_t read_register(std::uint16_t offset);
   [[nodiscard]] std::string_view write_register(ByteWrite write);
   [[nodiscard]] static bool reserved_register(std::uint16_t offset);
@@ -93,6 +102,7 @@ private:
   McuUsb usb_;
   McuInterrupts interrupts_;
   ExecutionContext context_{};
+  bool notifying_ = false;
   std::function<void(const BusEvent &)> observer_;
 };
 

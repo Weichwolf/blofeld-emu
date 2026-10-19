@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -190,6 +191,8 @@ public:
 
   void cancel_wait() { waiting_ = false; }
 
+  void restore_wait(const bool waiting) { waiting_ = waiting; }
+
   void clear_translations() {
     if (executing_) { throw Fault("Cannot invalidate an active HC12 translation"); }
     discard_translations();
@@ -346,9 +349,9 @@ public:
     executor = std::make_unique<InstructionExecutor>(bus, translator, memory, layout.pc);
   }
 
-  void refresh_decoder() {
+  void refresh_decoder(const bool force = false) {
     const auto revision = bus.code_revision();
-    if (decoded_revision != revision) {
+    if (force || decoded_revision != revision) {
       executor->clear_translations();
       translator.reset(&image, &context);
       ghidra::DocumentStorage documents;
@@ -356,6 +359,18 @@ public:
       layout = register_layout(translator);
       decoded_revision = revision;
     }
+  }
+
+  void apply_state(const CpuState &state) {
+    executor->cancel_wait();
+    defer_irq = false;
+    memory.setValue(&layout.d, state.d);
+    memory.setValue(&layout.x, state.x);
+    memory.setValue(&layout.y, state.y);
+    memory.setValue(&layout.sp, state.sp);
+    memory.setValue(&layout.ccr, state.ccr);
+    memory.setValue(&layout.pc, state.pc);
+    executor->setExecuteAddress(ghidra::Address(translator.getDefaultCodeSpace(), state.pc));
   }
 
   void push_word(const std::uint16_t value) {
@@ -376,6 +391,8 @@ public:
 
   std::uint64_t decoded_revision = 0;
   bool defer_irq = false;
+  bool active = false;
+  bool checkpointable = false;
   Bus &bus;
   CodeImage image;
   ghidra::ContextInternal context;
@@ -398,6 +415,8 @@ Hc12::Hc12(Bus &bus, const std::filesystem::path &specification) try
 Hc12::~Hc12() = default;
 
 void Hc12::reset() {
+  const ExecutionGuard guard(impl_->active);
+  impl_->checkpointable = false;
   impl_->executor->cancel_wait();
   impl_->defer_irq = false;
   CpuState initial;
@@ -405,20 +424,15 @@ void Hc12::reset() {
   initial.ccr = hc12::reset_ccr; // S, X and I are set by CPU12 reset.
   initial.pc = static_cast<std::uint16_t>(
       impl_->bus.read_memory({.address = hc12::reset_vector, .size = 2}));
-  set_state(initial);
+  impl_->apply_state(initial);
+  impl_->checkpointable = true;
 }
 
 void Hc12::set_state(const CpuState &state) {
-  impl_->executor->cancel_wait();
-  impl_->defer_irq = false;
-  impl_->memory.setValue(&impl_->layout.d, state.d);
-  impl_->memory.setValue(&impl_->layout.x, state.x);
-  impl_->memory.setValue(&impl_->layout.y, state.y);
-  impl_->memory.setValue(&impl_->layout.sp, state.sp);
-  impl_->memory.setValue(&impl_->layout.ccr, state.ccr);
-  impl_->memory.setValue(&impl_->layout.pc, state.pc);
-  impl_->executor->setExecuteAddress(
-      ghidra::Address(impl_->translator.getDefaultCodeSpace(), state.pc));
+  const ExecutionGuard guard(impl_->active);
+  impl_->checkpointable = false;
+  impl_->apply_state(state);
+  impl_->checkpointable = true;
 }
 
 CpuState Hc12::state() const {
@@ -432,6 +446,46 @@ CpuState Hc12::state() const {
 
 bool Hc12::waiting() const {
   return impl_->executor->waiting();
+}
+
+bool Hc12::executing() const {
+  return impl_->active;
+}
+
+Hc12Checkpoint Hc12::checkpoint() const {
+  if (impl_->active || !impl_->checkpointable) {
+    throw Fault("HC12 checkpoint requires a completed instruction, reset or register replacement");
+  }
+  Hc12Checkpoint result;
+  std::map<ghidra::VarnodeData, std::string> registers;
+  impl_->translator.getAllRegisters(registers);
+  const auto *space = impl_->translator.getSpaceByName("register");
+  for (const auto &[reg, name] : registers) {
+    if (reg.space == space &&
+        (reg.offset >= result.registers_.size() ||
+         static_cast<ghidra::uintb>(reg.size) > result.registers_.size() - reg.offset)) {
+      throw Fault("HC12 checkpoint cannot represent native register " + name);
+    }
+  }
+  impl_->registers->getChunk(
+      0, static_cast<ghidra::int4>(result.registers_.size()), result.registers_.data());
+  result.pc_ = state().pc;
+  result.waiting_ = waiting();
+  result.defer_irq_ = impl_->defer_irq;
+  return result;
+}
+
+void Hc12::restore_checkpoint(const Hc12Checkpoint &checkpoint) {
+  const ExecutionGuard guard(impl_->active);
+  impl_->checkpointable = false;
+  impl_->refresh_decoder(true);
+  impl_->registers->setChunk(
+      0, static_cast<ghidra::int4>(checkpoint.registers_.size()), checkpoint.registers_.data());
+  impl_->executor->setExecuteAddress(
+      ghidra::Address(impl_->translator.getDefaultCodeSpace(), checkpoint.pc_));
+  impl_->executor->restore_wait(checkpoint.waiting_);
+  impl_->defer_irq = checkpoint.defer_irq_;
+  impl_->checkpointable = true;
 }
 
 std::string Hc12::disassemble() const try {
@@ -491,10 +545,12 @@ void Hc12::enter_interrupt(const InterruptRequest request,
   next.ccr = static_cast<std::uint8_t>(next.ccr | hc12::interrupt_mask |
                                        (request.kind == InterruptKind::xirq ? hc12::xirq_mask : 0));
   next.pc = target;
-  set_state(next);
+  impl_->apply_state(next);
 }
 
 CpuStep Hc12::step() {
+  const ExecutionGuard guard(impl_->active);
+  impl_->checkpointable = false;
   try {
     const auto before = state();
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
@@ -502,11 +558,15 @@ CpuStep Hc12::step() {
       const bool reuse = waiting();
       enter_interrupt(*request, reuse ? std::optional(before.sp) : std::nullopt);
       impl_->bus.retire_instruction();
+      impl_->checkpointable = true;
       return {.instruction_executed = false,
               .interrupt_vector = request->vector,
               .stack_reused = reuse};
     }
-    if (waiting()) { return {.instruction_executed = false}; }
+    if (waiting()) {
+      impl_->checkpointable = true;
+      return {.instruction_executed = false};
+    }
     const auto opcode = impl_->bus.peek(before.pc);
     constexpr unsigned andcc_opcode = 0x10;
     constexpr unsigned transfer_opcode = 0xb7;
@@ -534,6 +594,7 @@ CpuStep Hc12::step() {
       }
     }
     impl_->bus.retire_instruction();
+    impl_->checkpointable = true;
     return result;
   } catch (const ghidra::LowlevelError &error) {
     throw Fault("HC12 at " + hex(state().pc) + ": " + error.explain);

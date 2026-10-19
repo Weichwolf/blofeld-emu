@@ -1,0 +1,71 @@
+MCU in-process checkpoints
+
+McuMachine owns one native HC12 and its strict MCU bus. checkpoint() creates an
+opaque, immutable, trusted handle; restore() builds a fresh bus/CPU pair before
+replacing the live pair. This is an offline test API, not a persistent snapshot
+file, a host MIDI transport, or a complete MCU/DSP/display board checkpoint.
+
+State boundary
+Capture is allowed after successful reset, debug register replacement or a whole
+completed step, including native WAI and interrupt entry. Capture during a CPU
+callback or after a failed step fails visibly. Restore during a CPU step also
+fails; an earlier valid checkpoint can recover a machine after a failed step.
+The API is single-threaded and does not belong in a real-time audio callback.
+
+The CPU state includes the native register bank, WAI and CLI/TAP interrupt
+deferral. The register-bank extent is checked against named native registers.
+Decoded instruction caches are recreated, allowing restored executable RAM to
+differ from code previously executed by the destination. The pinned HC12
+description has no externally supplied persistent decoder context; instruction
+temporaries and translation caches are not a board state format.
+
+The bus copy includes memory mapping, pending/write-once mapping writes, RAM
+initialization bits, NVM bytes/knowledge/erase history, live flash option latches,
+command buffer/active job/clock qualification, GPIO output knowledge and external
+drives, clock phase, SCI receive/transmit and acknowledgment state, timer phases
+and input history, USB pending/cached packets and configuration writes, interrupt
+edge history, execution diagnostics and code-observation revisions. The flash
+controller is rebound to the copied memory. Capture/restore does not reset the
+controller, resample nonvolatile options or invalidate active flash as power-off
+would. power_off_flash_image() retains its separate interrupted-NVM semantics.
+
+Handles own their state after the source machine dies and can seed another
+machine using identical SLA bytes. Missing, changed or incompatible backends and
+moved-from handles fail before replacing the destination. Backend files must not
+be concurrently modified. This is byte identity within one build, not a portable
+serialization or version migration promise.
+
+Restore invalidates previous references to machine.bus() and machine.cpu().
+Observer callbacks are excluded: explicitly reattach an observer using the new
+bus. External peers, clocks, display objects and output recordings are owned by
+the caller and must be checkpointed/rebound separately. No callback runs as a
+side effect of creating or restoring a checkpoint.
+
+Regressions
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-mcu-checkpoint-test
+  ctest --test-dir build/strict -R '^mcu_checkpoint$' --output-on-failure
+
+Controlled own instruction tests check literal native WAI frames, real IRQ/RTI
+replay, CLI/TAP deferral, unknown RAM, executable RAM mutation, deferred mapping,
+write-once history, callback exclusion, branch isolation, handle lifetime and
+atomic restore rejection after backend mutation/removal. Peripheral tests check
+partial RTI/timer phases, pending compare reset and prescaler changes, unknown
+IRQ edge history, GPIO unknown/floating pads, SCI half-frame
+receive/prepared transmit/clear history/staged baud writes, USB in-flight and
+lost-ACK ownership/PIDs/configuration staging, and staged/selected/launched/active/
+queued flash operations with independent expected data and erase history.
+
+The original_application regression additionally captures the native cold-main
+WAI reached under the explicit fixture in original-application.txt. It separately
+value-copies/rebinds that fixture's LCD model, supplies the same 264 SCI bytes
+before and after restore, and compares complete native ISR/foreground traces,
+final CPU state and display transaction counts. Each execution also checks the
+original ISR paths and unchanged MCU NVM. This is conditional original MCU
+execution, not stock-hardware validation or a complete board snapshot.
+
+Remaining scope
+Persistent bounded/versioned/checksummed snapshot parsing and fuzzing, DSP and
+external-flash/NAND state, a unified board scheduler and whole-board replay,
+long-running original MIDI/audio replay and measured Desktop/Keyboard comparison
+remain pending. Existing private MCU NVM files are not these full checkpoints.

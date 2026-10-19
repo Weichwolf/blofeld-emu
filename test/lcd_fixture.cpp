@@ -28,6 +28,13 @@ LcdFixture::LcdFixture(McuBus &bus) : bus_(bus) {
   device_.sample({.control = pin::reset_n | pin::cs1_n, .known = pin::all});
 }
 
+LcdFixture::LcdFixture(McuBus &bus, const LcdFixture &source)
+    : bus_(bus),
+      device_(source.device_),
+      counts_(source.counts_),
+      armed_(source.armed_),
+      withdraw_(source.withdraw_) {}
+
 void LcdFixture::observe(const BusEvent &event) {
   if (!event.write || !gpio_address(event.address)) { return; }
   if (!armed_) {

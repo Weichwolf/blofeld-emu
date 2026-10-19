@@ -77,7 +77,7 @@ target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB
 add_library(blofeld_storage src/flash_image.cpp src/flash_file.cpp)
 target_include_directories(blofeld_storage PUBLIC include)
 target_link_libraries(blofeld_storage PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
-add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
+add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
   src/mcu_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
@@ -86,7 +86,7 @@ target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
 add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
 target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
-add_library(blofeld_core src/hc12.cpp)
+add_library(blofeld_core src/hc12.cpp src/mcu_machine.cpp)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
   src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_interrupts.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
@@ -217,6 +217,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-core-test test/core_test.cpp)
   target_link_libraries(blofeld-core-test PRIVATE blofeld_core)
   add_test(NAME native_core COMMAND blofeld-core-test)
+  add_executable(blofeld-mcu-checkpoint-test test/mcu_checkpoint_test.cpp
+    test/mcu_checkpoint_peripherals.cpp test/mcu_checkpoint_flash.cpp)
+  target_link_libraries(blofeld-mcu-checkpoint-test PRIVATE blofeld_core)
+  add_test(NAME mcu_checkpoint COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/mcu_checkpoint.py"
+    $<TARGET_FILE:blofeld-mcu-checkpoint-test>)
   add_executable(blofeld-code-cache-test test/code_cache_test.cpp)
   target_link_libraries(blofeld-code-cache-test PRIVATE blofeld_core)
   add_test(NAME code_cache COMMAND blofeld-code-cache-test)
@@ -292,6 +298,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+    blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test

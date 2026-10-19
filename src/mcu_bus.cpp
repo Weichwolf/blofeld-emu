@@ -61,6 +61,20 @@ struct TimerRoute {
   std::uint8_t routing = 0;
 };
 
+class ObserverGuard {
+public:
+  explicit ObserverGuard(bool &active) : active_(active), previous_(active) { active_ = true; }
+
+  ~ObserverGuard() { active_ = previous_; }
+
+  ObserverGuard(const ObserverGuard &) = delete;
+  ObserverGuard &operator=(const ObserverGuard &) = delete;
+
+private:
+  bool &active_;
+  bool previous_;
+};
+
 Pad timer_pad(const TimerRoute route) {
   const auto channel = route.channel;
   const auto routing = route.routing;
@@ -214,9 +228,7 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
       const auto name = write_register({.address = location.offset, .value = value});
       sync_peripheral_pins();
       interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
-      if (observer_) {
-        observer_({.write = true, .address = address, .value = value, .name = name});
-      }
+      notify({.write = true, .address = address, .value = value, .name = name});
     } catch (const Fault &fault) {
       throw Fault("MCU write at " + hex(address) + " (register offset " + hex(location.offset) +
                   ") pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2) + ": " +
@@ -259,10 +271,10 @@ void McuBus::write_memory(const MemoryWrite access) {
       for (unsigned index = 0; index < 2; ++index) {
         const auto value =
             static_cast<std::uint8_t>((access.value >> ((1U - index) * 8)) & byte_mask);
-        observer_({.write = true,
-                   .address = static_cast<std::uint16_t>(access.address + index),
-                   .value = value,
-                   .name = McuUsb::register_name(location.offset)});
+        notify({.write = true,
+                .address = static_cast<std::uint16_t>(access.address + index),
+                .value = value,
+                .name = McuUsb::register_name(location.offset)});
       }
     }
   } catch (const Fault &fault) {
@@ -468,7 +480,14 @@ void McuBus::advance_timer(const unsigned bus_cycles) {
 }
 
 void McuBus::set_observer(std::function<void(const BusEvent &)> observer) {
+  if (notifying_) { throw Fault("Cannot replace an active MCU bus observer"); }
   observer_ = std::move(observer);
+}
+
+void McuBus::notify(const BusEvent &event) {
+  if (!observer_) { return; }
+  const ObserverGuard guard(notifying_);
+  observer_(event);
 }
 
 }
