@@ -14,7 +14,11 @@ Native SLEIGH and the HC12 language specification:
 zlib:
   Jean-loup Gailly and Mark Adler, zlib license (LICENSES/Zlib.txt).
   https://zlib.net/zlib_license.html
-  Linked against the system zlib package; package notices remain installed.
+  Version/source archive identity is pinned in doc/dependencies.json.
+  Built statically from the unmodified source archive; original notices remain
+  in the build copy. LICENSES/Zlib.txt retains that source version's full notice.
+  Source/notice availability for binary distribution remains governed by zlib's
+  own license. No manufacturer assets are part of this dependency.
 
 DSP56300:
   https://github.com/dsp56300/dsp56300

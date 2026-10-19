@@ -7,11 +7,13 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
-   NOT CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19 OR
-   NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 20)
-  message(FATAL_ERROR "Use LLVM 19: cmake --preset strict")
-endif()
+foreach(language C CXX)
+  if(NOT CMAKE_${language}_COMPILER_ID STREQUAL "Clang" OR
+     NOT CMAKE_${language}_COMPILER_VERSION VERSION_GREATER_EQUAL 19 OR
+     NOT CMAKE_${language}_COMPILER_VERSION VERSION_LESS 20)
+    message(FATAL_ERROR "Use LLVM 19 for C and C++: cmake --preset strict")
+  endif()
+endforeach()
 include(cmake/Quality.cmake)
 find_program(BLOFELD_CLANG_TIDY NAMES clang-tidy-19 REQUIRED)
 find_program(BLOFELD_CLANG_FORMAT NAMES clang-format-19 REQUIRED)
@@ -30,7 +32,7 @@ set(SLEIGH_SOURCE "${GHIDRA_ROOT}/Ghidra/Features/Decompiler/src/decompile/cpp")
 if(NOT EXISTS "${SLEIGH_SOURCE}/sleigh.cc")
   message(FATAL_ERROR "Set GHIDRA_ROOT to a Ghidra distribution containing native SLEIGH sources")
 endif()
-find_package(ZLIB REQUIRED)
+include(cmake/Zlib.cmake)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # Same native library source set as Ghidra's LIBSLA_NAMES; no JVM is needed.
@@ -123,6 +125,19 @@ add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  find_program(BLOFELD_LLVM_NM NAMES llvm-nm-19 REQUIRED)
+  find_program(BLOFELD_LLVM_READELF NAMES llvm-readelf-19 REQUIRED)
+  add_test(NAME dependency_instrumentation COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dependency_instrumentation.py"
+    --source "${CMAKE_CURRENT_SOURCE_DIR}"
+    --database "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
+    --binary $<TARGET_FILE:blofeld-headless>
+    --mode "${BLOFELD_SANITIZER}"
+    --nm "${BLOFELD_LLVM_NM}" --readelf "${BLOFELD_LLVM_READELF}"
+    --native zlibstatic=$<TARGET_FILE:zlibstatic>
+    --native blofeld_sleigh=$<TARGET_FILE:blofeld_sleigh>
+    --native blofeld_dsp_native=$<TARGET_FILE:blofeld_dsp_native>
+    --native asmjit=$<TARGET_FILE:asmjit>)
   add_executable(blofeld-midi-serial-test test/midi_serial_test.cpp)
   target_link_libraries(blofeld-midi-serial-test PRIVATE blofeld_midi_serial)
   add_test(NAME midi_serial COMMAND blofeld-midi-serial-test)

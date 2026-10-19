@@ -1,0 +1,47 @@
+Native dependency builds and instrumentation
+
+The emulator links native SLEIGH, the pinned DSP56300 interpreter and asmjit,
+and a static zlib built from the official source archive. Original source notices
+remain in their local/build trees. Project clang-tidy applies to project C++;
+third-party source is built separately with dependency sanitizer flags.
+
+zlib input
+doc/dependencies.json pins the source URL, version, size and SHA-256.
+  python3 tools/dependencies.py --fetch
+  python3 tools/dependencies.py --verify
+  cmake --preset strict
+  cmake --build --preset strict --target quality
+
+The default input is doc/local/zlib-1.3.2.tar.gz. --output selects a download
+destination; set BLOFELD_ZLIB_ARCHIVE in the environment or CMake cache to use it.
+Only --fetch accesses the network. CMake rejects missing/mismatching archives
+before extraction, copies pristine source under build/, and uses upstream's
+static-library target with its configure checks. The source archive stays local;
+no system-package fallback or source download occurs during configure/build.
+The packaged zlib license must match the archive's notice exactly.
+
+Verification
+  ctest --test-dir build/strict -R '^dependency_instrumentation$' --output-on-failure
+
+The quality suite checks every exported project/native compile command for the
+selected sanitizer set and fail-stop behavior. It also inspects undefined native
+object hooks with LLVM 19 nm and checks that the current executable contains
+static inflate/CRC implementations without a dynamic libz.so dependency.
+Missing dependency commands/archives, removed sanitizer flags, suppressing
+ignore lists and incompatible ASan/TSan combinations reject the check.
+Archive hashes establish source identity; compile commands and object hooks
+establish instrumentation, not complete behavioral coverage or memory safety.
+
+strict instruments our code plus native SLEIGH, DSP, asmjit and zlib with
+ASan/UBSan. Additional integer checks apply to project source. thread selects
+separate TSan; release disables sanitizer instrumentation for measurements.
+Both C and C++ compilers must be LLVM 19. A dependency archive can contain
+sanitizer hooks without exercising every instruction in its runtime tests.
+
+Existing deterministic regressions exercise native ZIP/raw-deflate firmware
+loading, CRC rejection, MCU/NAND image codecs, original boot/update helpers
+and their unchanged execution traces through this same static zlib.
+Upstream zlib examples/coverage/package tests run in a separate build; they are
+not imported into the emulator's CTest inventory. No fuzzer is run by quality.
+Full board boot, voice/audio processing, concurrency and real-time validation
+still require the work listed in coverage.txt.

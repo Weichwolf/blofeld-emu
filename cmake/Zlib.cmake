@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Build the pinned upstream source offline, before enabling project clang-tidy.
+function(blofeld_add_zlib)
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/doc/dependencies.json" manifest)
+  string(JSON version GET "${manifest}" zlib version)
+  string(JSON archive_name GET "${manifest}" zlib file)
+  string(JSON expected_size GET "${manifest}" zlib bytes)
+  string(JSON expected_hash GET "${manifest}" zlib sha256)
+  set(BLOFELD_ZLIB_ARCHIVE "$ENV{BLOFELD_ZLIB_ARCHIVE}" CACHE FILEPATH "Pinned zlib source archive")
+  if(NOT BLOFELD_ZLIB_ARCHIVE)
+    set(BLOFELD_ZLIB_ARCHIVE "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/${archive_name}")
+  endif()
+  if(NOT EXISTS "${BLOFELD_ZLIB_ARCHIVE}")
+    message(FATAL_ERROR "Missing pinned zlib archive: run python3 tools/dependencies.py --fetch, or set BLOFELD_ZLIB_ARCHIVE")
+  endif()
+  file(SIZE "${BLOFELD_ZLIB_ARCHIVE}" actual_size)
+  file(SHA256 "${BLOFELD_ZLIB_ARCHIVE}" actual_hash)
+  if(NOT actual_size EQUAL expected_size OR NOT actual_hash STREQUAL expected_hash)
+    message(FATAL_ERROR "zlib archive size/SHA-256 does not match doc/dependencies.json")
+  endif()
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/dependencies.json" "${BLOFELD_ZLIB_ARCHIVE}")
+
+  set(stage "${CMAKE_CURRENT_BINARY_DIR}/generated/zlib-stage")
+  set(source "${CMAKE_CURRENT_BINARY_DIR}/generated/zlib")
+  file(REMOVE_RECURSE "${stage}")
+  file(ARCHIVE_EXTRACT INPUT "${BLOFELD_ZLIB_ARCHIVE}" DESTINATION "${stage}")
+  file(GLOB_RECURSE staged_files RELATIVE "${stage}/zlib-${version}"
+    "${stage}/zlib-${version}/*")
+  foreach(relative IN LISTS staged_files)
+    get_filename_component(parent "${relative}" DIRECTORY)
+    file(MAKE_DIRECTORY "${source}/${parent}")
+    file(COPY_FILE "${stage}/zlib-${version}/${relative}" "${source}/${relative}" ONLY_IF_DIFFERENT)
+  endforeach()
+  file(REMOVE_RECURSE "${stage}")
+  file(SHA256 "${source}/LICENSE" upstream_license)
+  file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Zlib.txt" packaged_license)
+  if(NOT upstream_license STREQUAL packaged_license)
+    message(FATAL_ERROR "Packaged zlib notice differs from the pinned upstream LICENSE")
+  endif()
+
+  # Upstream examples/package tests run separately; the project quality target
+  # exercises its parsers and verifies every native dependency's instrumentation.
+  set(ZLIB_BUILD_STATIC ON)
+  set(ZLIB_BUILD_SHARED OFF)
+  set(ZLIB_BUILD_TESTING OFF)
+  set(ZLIB_INSTALL OFF)
+  set(ZLIB_PREFIX OFF)
+  add_subdirectory("${source}" "zlib" EXCLUDE_FROM_ALL SYSTEM)
+  add_library(ZLIB::ZLIB ALIAS zlibstatic)
+  if(DEFINED blofeld_dependency_sanitizers)
+    target_compile_options(zlibstatic PRIVATE
+      "-fsanitize=${blofeld_dependency_sanitizers}" -fno-sanitize-recover=all
+      -fno-omit-frame-pointer -g)
+  endif()
+  if(BLOFELD_FUZZING)
+    target_compile_options(zlibstatic PRIVATE -fsanitize=fuzzer-no-link)
+  endif()
+endfunction()
+
+blofeld_add_zlib()

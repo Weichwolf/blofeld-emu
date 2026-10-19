@@ -11,14 +11,18 @@ This is not yet a booting Blofeld, a playable synthesizer or a verified
 replacement-firmware target.
 
 Build and quality checks
-Requirements: LLVM 19 (clang, clang-tidy, clang-format and sanitizer runtime),
-CMake >= 3.25, Ninja, Git, GNU patch, Python 3, zlib development files and Ghidra 12.1.2
+Requirements: LLVM 19 (clang, clang-tidy, clang-format, llvm-nm, llvm-readelf and
+sanitizer runtime), CMake >= 3.25, Ninja, Git, GNU patch, Python 3 and Ghidra 12.1.2
 including its native SLEIGH sources and compiler. Set GHIDRA_ROOT if it is not
 installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java at
 runtime.
 DSP56300_ROOT must point to a clean checkout of the revision in
 doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
+The pinned zlib source archive is built locally; a system zlib package is not used.
+Download once with the explicit command below. Configure/build remain offline;
+BLOFELD_ZLIB_ARCHIVE can select another copy of the same verified archive.
 
+  python3 tools/dependencies.py --fetch
   cmake --preset strict
   cmake --build --preset strict
   cmake --build build/strict --target quality
@@ -26,9 +30,9 @@ doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
 clang-tidy runs as a mandatory build step on every project C++ translation unit;
 format-check checks formatting without changing files. All diagnostics are
 errors, including the 120-line function limit. ASan/UBSan and additional integer
-checks are enabled in strict builds; native SLEIGH and DSP sources also receive
-ASan/UBSan. The linked system zlib is not rebuilt with project instrumentation;
-instrumenting this dependency remains a quality-gate gap.
+checks are enabled in strict builds. Native SLEIGH, DSP, asmjit and zlib sources
+also receive ASan/UBSan. The dependency_instrumentation test verifies compile
+commands, native object hooks and static zlib linkage; see doc/dependency-build.txt.
 release retains warning/static-analysis gates and disables sanitizers for timing
 measurements. thread selects separate TSan instrumentation. No concurrency is
 currently implemented. Native CPU adapters use exceptions; any future audio
