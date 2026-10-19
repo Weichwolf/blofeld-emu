@@ -88,6 +88,7 @@ private:
   void set_run_hooks(RunHooks hooks);
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] std::uint64_t native_cycles() const;
+  [[nodiscard]] unsigned next_step_cycles() const;
   [[nodiscard]] DspCoreCheckpoint checkpoint() const;
   void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
   [[nodiscard]] bool executing() const;

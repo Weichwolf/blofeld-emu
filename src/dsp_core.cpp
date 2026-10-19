@@ -257,6 +257,27 @@ std::uint64_t DspCore::native_cycles() const {
   return impl_->cpu.getCycles();
 }
 
+unsigned DspCore::next_step_cycles() const {
+  if (impl_->active || impl_->faulted) {
+    throw Fault("DSP cycle preview requires a healthy completed step");
+  }
+  const auto before = state();
+  try {
+    constexpr unsigned compatibility = 0x2000;
+    constexpr unsigned mask_shift = 8;
+    constexpr unsigned interrupt_mask = 3;
+    const auto interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
+    if ((before.sr & compatibility) != 0 ||
+        (interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc)))) {
+      throw Fault("Unqualified DSP interrupt or compatibility-mode timing preview");
+    }
+    return impl_->cpu.referenceNextCycles();
+  } catch (const std::exception &error) {
+    throw Fault("DSP cycle preview pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) + ": " +
+                error.what());
+  }
+}
+
 bool DspCore::executing() const {
   return impl_->active;
 }

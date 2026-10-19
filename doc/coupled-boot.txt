@@ -76,3 +76,7 @@ manual-derived, not a complete stock ROM dump. The headless CLI remains MCU-only
 NAND loading, ROM/wavetable contents, complete scheduled Desktop/Keyboard boot,
 MIDI/audio, full update/recovery/power-loss behavior, persistent whole-board
 snapshots, stress and stock Blofeld validation remain open (coverage.txt).
+
+The separate original_scheduled_coupling regression now executes both original
+CPUs on a common nominal timebase, with explicit completion/pad/tie contracts.
+It preserves this legacy trace and its distinct scope; see scheduled-coupling.txt.

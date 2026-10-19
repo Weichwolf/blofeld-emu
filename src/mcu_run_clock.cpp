@@ -48,18 +48,23 @@ void McuRunClock::advance_wait_cycle(McuBus &bus, const ExecutionContext context
   advance_cycle(bus, context, true);
 }
 
+std::uint64_t McuRunClock::next_cycle_ticks(const McuBus &bus) const {
+  if (faulted_) { throw Fault("MCU duration preview requires a healthy run clock"); }
+  const auto route = bus.run_clock_route();
+  if (route.source == McuClockSource::usb_phy && oscillator_hz_ != nominal_oscillator_hz) {
+    throw Fault("Unqualified 60 MHz PHY with non-12 MHz reference oscillator: " +
+                std::to_string(oscillator_hz_));
+  }
+  const auto source_hz = route.source == McuClockSource::usb_phy ? phy_hz : oscillator_hz_;
+  return (timebase_hz_ / source_hz) * route.bus_divider;
+}
+
 void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, const bool waiting) {
   if (faulted_) { throw Fault("MCU run clock requires coordinated recovery after a failed cycle"); }
   bus.begin_instruction(context);
   try {
     const auto gates = waiting ? bus.wait_clock_gates() : McuWaitClockGates{};
-    const auto route = bus.run_clock_route();
-    if (route.source == McuClockSource::usb_phy && oscillator_hz_ != nominal_oscillator_hz) {
-      throw Fault("Unqualified 60 MHz PHY with non-12 MHz reference oscillator: " +
-                  std::to_string(oscillator_hz_));
-    }
-    const auto source_hz = route.source == McuClockSource::usb_phy ? phy_hz : oscillator_hz_;
-    const auto ticks = (timebase_hz_ / source_hz) * route.bus_divider;
+    const auto ticks = next_cycle_ticks(bus);
     const auto oscillator_total = oscillator_phase_ + ticks;
     const auto edges = oscillator_total / oscillator_period_;
     if (ticks > std::numeric_limits<std::uint64_t>::max() - elapsed_ticks_ ||

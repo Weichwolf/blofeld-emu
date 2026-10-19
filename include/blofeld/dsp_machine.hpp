@@ -19,6 +19,14 @@ struct DspRunContract {
   bool operator==(const DspRunContract &) const = default;
 };
 
+struct DspStepPlan {
+  DspDebugState before;
+  unsigned native_cycle_units = 0;
+  std::uint64_t start_ticks = 0;
+  std::uint64_t duration_ticks = 0;
+  bool operator==(const DspStepPlan &) const = default;
+};
+
 // Immutable trusted in-process state; not a portable file or whole-board format.
 class DspCheckpoint {
 public:
@@ -51,6 +59,8 @@ public:
   [[nodiscard]] bool clocked() const;
   [[nodiscard]] const DspRunClock &run_clock() const;
   [[nodiscard]] bool timing_faulted() const;
+  // Nominal completion preview only; no instruction, peripheral or clock advance.
+  [[nodiscard]] DspStepPlan plan_step() const;
   [[nodiscard]] DspCheckpoint checkpoint() const;
   // Strong exception guarantee; a prior valid checkpoint can recover a fault.
   void restore(const DspCheckpoint &checkpoint);

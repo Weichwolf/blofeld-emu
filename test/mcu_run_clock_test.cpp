@@ -79,6 +79,8 @@ void test_all_reference_dividers() {
     require(fallback.source == blofeld::McuClockSource::oscillator &&
                 fallback.bus_divider == divisors.at(index),
             "LOCK=0 selects the literal oscillator bus divider even with PLLSEL=1");
+    require(clock.next_cycle_ticks(bus) == oscillator_ticks.at(index) && clock.bus_cycles() == 0,
+            "The board duration offer preserves the literal source/divider without advancing time");
     tick(clock, bus);
     require(clock.timebase_hz() == timebase_hz && clock.bus_cycles() == 1 &&
                 clock.elapsed_ticks() == oscillator_ticks.at(index) &&
@@ -89,6 +91,8 @@ void test_all_reference_dividers() {
     require(selected.source == blofeld::McuClockSource::usb_phy &&
                 selected.bus_divider == divisors.at(index),
             "Qualified PHY selects the same software divider and fixed 60 MHz source");
+    require(clock.next_cycle_ticks(bus) == divisors.at(index) && clock.bus_cycles() == 1,
+            "A changed native source affects the pure next-period offer without consuming it");
     for (unsigned count = 0; count < 5; ++count) { tick(clock, bus); }
     require(clock.bus_cycles() == 6 &&
                 clock.elapsed_ticks() == oscillator_ticks.at(index) + (5 * divisors.at(index)) &&

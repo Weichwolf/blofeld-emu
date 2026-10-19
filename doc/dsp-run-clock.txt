@@ -41,8 +41,8 @@ The pinned native copy is patched without modifying its source checkout.
 DSP56300FM A-1/A-6/A-7 distinguishes long absolute from long immediate penalties,
 assigns no pre-update penalty to post-update by N, and gives P-space MOVEP six
 baseline cycles. The previous SDK estimates added both long-operand penalties,
-charged post-update by N, and assigned P-space MOVEP two. Own assembled and independently encoded cases
-check the actual encoded instruction form and literal table-derived costs,
+charged post-update by N, and assigned P-space MOVEP two. Own assembled and
+independently encoded cases check the actual encoded instruction form and literal table-derived costs,
 including immediate/absolute, post/pre-update, peripheral/register and P: forms.
 These corrections qualify these nominal entries, not every SDK instruction cost.
 
@@ -74,5 +74,9 @@ The next reserved Y:002000 store remains unqualified. DSP56371UM chapter 3 and
 AN3653 describe the memory map/no direct external memory interface; they do not
 identify discard versus alias behavior. DSP56300FMAD Rev6 supplies unrelated
 manual corrections, not this missing write behavior. No RAM expansion, ignored
-write or loop skip is used. Physical memory semantics, full boot, shared board
+write or loop skip is used. Physical memory semantics, full boot, physical board
 time, original audio, reset timing and hardware equivalence remain pending.
+
+The separate completion scheduler and original MCU/DSP common-time experiment
+are documented in scheduled-coupling.txt. plan_step() is a pure nominal preview;
+reference accounting uses the executed/latched word even after code mutation.

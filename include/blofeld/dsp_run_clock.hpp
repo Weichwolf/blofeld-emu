@@ -29,6 +29,7 @@ public:
   explicit DspRunClock(DspRunClockInputs inputs);
   void begin_step(const DspBus &bus, DspRunContext context);
   void finish_step(DspBus &bus, unsigned native_cycles);
+  [[nodiscard]] std::uint64_t next_step_ticks(const DspBus &bus, unsigned native_cycles) const;
   void fail() noexcept;
 
   [[nodiscard]] std::uint64_t timebase_hz() const { return inputs_.timebase_hz; }
@@ -44,6 +45,8 @@ public:
   [[nodiscard]] bool active() const { return active_; }
 
 private:
+  [[nodiscard]] std::uint64_t period_ticks(const DspBus &bus) const;
+  [[nodiscard]] std::uint64_t duration_ticks(unsigned native_cycles, std::uint64_t period) const;
   DspRunClockInputs inputs_;
   DspRunContext context_;
   std::uint64_t ticks_ = 0;

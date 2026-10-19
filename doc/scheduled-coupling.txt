@@ -1,0 +1,91 @@
+Common nominal MCU/DSP execution
+
+DspMachine::plan_step() previews the next native nominal duration without
+executing an instruction, consuming a peripheral operand or advancing a clock.
+The preview respects a latched REP word. Native reference accounting now uses
+the executed opcode too: changing backing code during REP, or a MOVEM replacing
+itself with NOP, must not change the completed instruction's cost. Synthetic
+regressions use literal NXP MOVE/REP/JMP/MOVEM costs as independent expectations.
+The pinned SDK checkout stays unchanged; the staged reference patch is applied.
+
+DspScheduledRun executes only completions within an absolute caller-supplied
+horizon at the DSP owner's exact reference timebase. It requires an explicit
+reference_completion_boundary observation contract. Operand reads/effects occur
+at that declared boundary; physical fetch/execute/bus phases are not inferred.
+Before versus through selects an exclusive versus inclusive deadline. This lets
+an external board model choose which observation wins a simultaneous event.
+A pending duration is checked again before execution, including after callbacks.
+McuRunClock::next_cycle_ticks() offers its native source/divider period without
+consuming it; actual MCU execution must subsequently complete that period.
+
+Unknown code, changed pending durations, reversed time, callback mutations,
+exhausted time/budgets and unilateral clock restore fail visibly. Completed
+native time is a prefix, never a skipped instruction or fabricated deadline.
+A trusted DspScheduleCheckpoint retains the pending plan, completed CPU/clock
+counts, horizon, epoch and observation contract. Restoring the native owner and
+schedule together is required. Active/faulted capture and incompatible restore
+reject. Snapshots are process-local; unrelated owners with matching state are
+not authenticated. The APIs are single-threaded reference facilities. Native snapshots and observer
+callbacks belong outside any future real-time audio callback.
+
+  cmake --build --preset strict --target blofeld-dsp-scheduled-run-test blofeld-scheduled-coupling-test
+  ctest --test-dir build/strict -R '^(dsp_scheduled_run|original_scheduled_coupling)$' --output-on-failure
+
+Original firmware experiment
+The optional original_scheduled_coupling regression pins the original 1.25 ZIP
+and the privately assembled 58-word NXP SPI prefix (dsp-core.txt). The original
+MCU executes from reset with owned CPU/SCI/TIM/OSC time and explicit laboratory
+inputs. At its first PU0-ready poll, actual native serial pads supply the DSP
+baseline. The DSP then starts its own mode-five ROM without an untimed pre-run.
+No PC/register replacement, host program load or synthetic FIFO word supplies
+the transfer. The separate legacy interleaving test remains in coupled-boot.txt.
+
+Declared inputs, not measured Blofeld hardware:
+- MCU OSC and DSP EXTAL are 12 MHz; low PINIT and the original PCTL command give
+  nominal DSP periods of 45 then 10 ticks at a 540 MHz common reference timebase.
+  MCU time converts exactly from its 60 MHz timebase, using native clock writes.
+- DSP reset release is at the MCU checkpoint or nine common ticks later. PU0 is
+  externally observed high at the next native ready poll at least 5400 common
+  ticks after release. This is a controlled 10 us minimum, not recovered reset,
+  HREQ routing, actual ready timing or device equivalence.
+- Candidate PB1/PB2/PB4 drive select/clock/MOSI. The source's one simultaneous
+  SS/SCK change uses the explicit SCK-before-SS observation experiment. Real pad
+  skew and minimum setup/hold intervals remain unknown.
+- At exact MCU PORTB-write/DSP-completion ties, both DSP-first and MCU-first
+  orders are tested. No default silently chooses one. Other writes may not
+  change serial pads unnoticed; unsupported control/clock-boundary changes fail.
+- SHI/reset/map delay counters retain the DSP owner's reference-unit rules.
+  Analog PLL settling, physical instruction pipelines and crossing latency
+  remain unqualified (dsp-run-clock.txt).
+
+Each of four phase/order cases performs all 7275 native MCU stores and 97 frames.
+The executing DSP ROM loads all 94 original stage words, jumps to them and runs
+its original RAM clear. At MCU sender return, phases zero/nine have respectively:
+  MCU retired instructions: 1856649 / 1856650
+  MCU bus cycles:           5364651 / 5364656
+  DSP native steps:         57310 / 57301
+  DSP nominal units:        210450 / 210444
+  DSP reference ticks:      9252515 / 9252595
+  Cleared X/Y word pairs:   6216 / 6206
+  Exact source-write ties:  368 / 365 per order
+The trailing word remains in the live SHI FIFO; diagnostic inspection uses a copy.
+Each selected mid-frame checkpoint restores both native machines, the wire peer,
+pending DSP deadline and phases; the remaining timestamped trace matches exactly.
+Four negative cases reject unresolved/reversed pad order, an unqualified exact
+tie and unknown capture MOSI, retaining the actual write address and both PCs.
+No physical traffic or automatic fuzz campaign is involved.
+
+An independent Python ledger uses the primary-manual MCU instruction/CCR costs,
+Flash byte phases and native clock-write history, plus separate primary-manual
+DSP encodings/costs. It checks every DSP completion, every MCU wire timestamp,
+1466 exact tie orderings and both final time totals. Detailed code/census/trace
+artifacts stay ignored beside build/strict/Testing/original-scheduled-coupling.trace.
+
+Scope
+This proves the declared common-time bootstrap prefix through MCU sender return.
+The CLI still executes MCU only. MISO/HREQ/PU0 wiring, a physical reset/clock
+profile, complete mask ROM/assets and scheduled Desktop/Keyboard board boot are
+not supplied. The original nonzero clear still reaches unqualified reserved
+Y:002000 if continued; RAM is not enlarged and no store or loop is bypassed.
+Full DSP runtime/NAND loading, voices/audio, complete update/recovery, persistent
+board state, stress/realtime and stock-hardware comparison remain pending.

@@ -29,17 +29,38 @@ DspRunClock::DspRunClock(const DspRunClockInputs inputs) : inputs_(inputs) {
   }
 }
 
+std::uint64_t DspRunClock::period_ticks(const DspBus &bus) const {
+  const auto ratio = bus.pll().target_ratio();
+  const auto numerator = inputs_.timebase_hz * ratio.denominator;
+  const auto denominator = static_cast<std::uint64_t>(inputs_.extal_hz) * ratio.numerator;
+  if (numerator % denominator != 0 || numerator < denominator) {
+    throw Fault("DSP PLL target is not integral in the declared reference timebase");
+  }
+  return numerator / denominator;
+}
+
+std::uint64_t DspRunClock::duration_ticks(const unsigned native_cycles,
+                                          const std::uint64_t period) const {
+  constexpr unsigned maximum_step_cycles = 1048576;
+  const auto remaining = std::numeric_limits<std::uint64_t>::max() - ticks_;
+  if (native_cycles == 0 || native_cycles > maximum_step_cycles ||
+      native_cycles > std::numeric_limits<std::uint64_t>::max() - cycles_ ||
+      native_cycles > remaining / period) {
+    throw Fault("Invalid or exhausted DSP reference cycle count");
+  }
+  return static_cast<std::uint64_t>(native_cycles) * period;
+}
+
+std::uint64_t DspRunClock::next_step_ticks(const DspBus &bus, const unsigned native_cycles) const {
+  if (faulted_ || active_) { throw Fault("DSP duration preview requires a healthy step boundary"); }
+  return duration_ticks(native_cycles, period_ticks(bus));
+}
+
 void DspRunClock::begin_step(const DspBus &bus, const DspRunContext context) {
   if (faulted_ || active_) { throw Fault("DSP reference clock requires a healthy step boundary"); }
   context_ = context;
   try {
-    const auto ratio = bus.pll().target_ratio();
-    const auto numerator = inputs_.timebase_hz * ratio.denominator;
-    const auto denominator = static_cast<std::uint64_t>(inputs_.extal_hz) * ratio.numerator;
-    if (numerator % denominator != 0 || numerator < denominator) {
-      throw Fault("DSP PLL target is not integral in the declared reference timebase");
-    }
-    period_ticks_ = numerator / denominator;
+    period_ticks_ = period_ticks(bus);
     active_ = true;
   } catch (const std::exception &error) {
     fail();
@@ -50,17 +71,11 @@ void DspRunClock::begin_step(const DspBus &bus, const DspRunContext context) {
 void DspRunClock::finish_step(DspBus &bus, const unsigned native_cycles) {
   if (faulted_ || !active_) { throw Fault("DSP reference clock has no healthy prepared step"); }
   try {
-    constexpr unsigned maximum_step_cycles = 1048576;
-    const auto remaining = std::numeric_limits<std::uint64_t>::max() - ticks_;
-    if (native_cycles == 0 || native_cycles > maximum_step_cycles ||
-        native_cycles > std::numeric_limits<std::uint64_t>::max() - cycles_ ||
-        native_cycles > remaining / period_ticks_) {
-      throw Fault("Invalid or exhausted DSP reference cycle count");
-    }
+    const auto ticks = duration_ticks(native_cycles, period_ticks_);
     const auto edges = ((cycles_ & 1U) + native_cycles) / 2;
     bus.advance_instruction_cycles(native_cycles);
     bus.timers().advance_clk2(edges);
-    ticks_ += static_cast<std::uint64_t>(native_cycles) * period_ticks_;
+    ticks_ += ticks;
     cycles_ += native_cycles;
     active_ = false;
   } catch (const std::exception &error) {

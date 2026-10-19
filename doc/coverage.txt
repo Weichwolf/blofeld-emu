@@ -269,9 +269,15 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           MCU-checkpoint replay and three pin-error
                                           cases checked (coupled-boot.txt). Raw
                                           simultaneous transitions still fail.
+                                          Common nominal MCU/DSP scheduling now
+                                          loads the same 94 words from 97 frames
+                                          under four explicit phase/tie contracts.
+                                          Native bus-cycle timestamps, 1466 exact
+                                          ties and mid-frame replay have separate
+                                          manual ledgers (scheduled-coupling.txt).
                                           MISO/HREQ/PU0 linkage, actual routing,
-                                          reset, elapsed clocks and full scheduling
-                                          remain unqualified.
+                                          reset, physical elapsed clocks and full
+                                          scheduling remain unqualified.
 ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
@@ -573,8 +579,12 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           load and mapped clear under both
                                           declared instruction interleavings
                                           (dsp-checkpoints.txt).
+                                          Common-time native MCU/DSP/link/deadline
+                                          mid-frame restore now checks every
+                                          remaining timestamped event under four
+                                          declared experiments.
                                           Persistent full-state format/fuzzing,
-                                          scheduler and complete-board replay
+                                          physical scheduler and complete-board replay
                                           remain pending.
 Desktop/Keyboard differences      pending  Both requested with 1.25; keyboard scanner
                                           and profile differences remain unresolved.

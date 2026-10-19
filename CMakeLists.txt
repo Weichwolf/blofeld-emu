@@ -114,7 +114,7 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
   src/dsp_run_clock.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
-add_library(blofeld_dsp src/dsp_core.cpp src/dsp_machine.cpp)
+add_library(blofeld_dsp src/dsp_core.cpp src/dsp_machine.cpp src/dsp_scheduled_run.cpp)
 target_include_directories(blofeld_dsp PUBLIC include)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
@@ -408,6 +408,17 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-coupled-boot.trace")
   set_tests_properties(original_coupled_boot PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-scheduled-coupling-test test/original_scheduled_coupling_test.cpp
+    test/scheduled_coupling_fixture.cpp test/original_owned_clock_fixture.cpp)
+  target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp
+    blofeld_dsp_native blofeld_lcd_fixture)
+  add_test(NAME original_scheduled_coupling COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_scheduled_coupling.py"
+    $<TARGET_FILE:blofeld-scheduled-coupling-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-scheduled-coupling.trace")
+  set_tests_properties(original_scheduled_coupling PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-shi-test test/dsp_shi_test.cpp)
   target_link_libraries(blofeld-shi-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_shi COMMAND blofeld-shi-test)
@@ -443,6 +454,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
   target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
+  add_executable(blofeld-dsp-scheduled-run-test test/dsp_scheduled_run_test.cpp)
+  target_link_libraries(blofeld-dsp-scheduled-run-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_scheduled_run COMMAND blofeld-dsp-scheduled-run-test)
   add_executable(blofeld-original-dsp-clock-test test/original_dsp_clock_test.cpp)
   target_link_libraries(blofeld-original-dsp-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_dsp_clock COMMAND ${Python3_EXECUTABLE}
@@ -552,6 +566,7 @@ add_custom_target(quality
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
     blofeld-dsp-run-clock-test
+    blofeld-dsp-scheduled-run-test
     blofeld-original-dsp-clock-test
     blofeld-mcu-clock-checkpoint-test
     blofeld-mcu-wait-clock-test
@@ -576,6 +591,7 @@ add_custom_target(quality
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-vsl-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
+    blofeld-scheduled-coupling-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
     blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test

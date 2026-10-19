@@ -630,3 +630,35 @@
 -		OpcodeCycles{Movep_eaqq,		2, 1, 1, 0},
 +		OpcodeCycles{Movep_eapp,		6, 1, 1, 0},
 +		OpcodeCycles{Movep_eaqq,		6, 1, 1, 0},
+--- a/source/dsp56kEmu/dsp.cpp
++++ b/source/dsp56kEmu/dsp.cpp
+@@ -392,0 +393,20 @@
++	}
++
++	uint32_t DSP::referenceCycleCost(const TWord pc, const TWord opcode) const
++	{
++		Instruction a, b;
++		if(!m_opcodes.getInstructionTypes(opcode, a, b))
++			throw std::runtime_error("Undefined DSP reference cycle-preview opcode");
++		return dsp56k::calcCycles(a, b, pc, opcode, mem.getBridgedMemoryAddress(), 1);
++	}
++
++	uint32_t DSP::referenceNextCycles() const
++	{
++		verifyReferenceCheckpoint();
++		const auto pc = reg.pc.toWord();
++		TWord opcode, extension;
++		if(m_referenceRepeat.remaining && m_referenceRepeat.loaded)
++			opcode = m_referenceRepeat.opcode;
++		else
++			mem.getOpcode(pc, opcode, extension);
++		return referenceCycleCost(pc, opcode);
+@@ -518 +538 @@
+-				m_cycles += getOpcodeCycles(currentOp);
++				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
+--- a/source/dsp56kEmu/dsp.h
++++ b/source/dsp56kEmu/dsp.h
+@@ -240,0 +241 @@
++		uint32_t referenceNextCycles() const;
+@@ -243,0 +245 @@
++		uint32_t referenceCycleCost(TWord pc, TWord opcode) const;

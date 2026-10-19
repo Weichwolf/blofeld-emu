@@ -6,6 +6,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
+#include <exception>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -115,6 +116,22 @@ const DspRunClock &DspMachine::run_clock() const {
 bool DspMachine::timing_faulted() const {
   const auto &clock = state_->run.clock;
   return clock && (clock->faulted() || state_->cpu.faulted());
+}
+
+DspStepPlan DspMachine::plan_step() const {
+  const auto &clock = run_clock();
+  state_->check_boundary();
+  const auto before = state_->cpu.debug_state();
+  try {
+    const auto units = state_->cpu.next_step_cycles();
+    return {.before = before,
+            .native_cycle_units = units,
+            .start_ticks = clock.elapsed_ticks(),
+            .duration_ticks = clock.next_step_ticks(state_->bus, units)};
+  } catch (const std::exception &error) {
+    throw Fault("DSP run plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
+                ": " + error.what());
+  }
 }
 
 DspCheckpoint DspMachine::checkpoint() const {
