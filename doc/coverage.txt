@@ -393,6 +393,12 @@ Sanitizers and static analysis    partial  Strict gates pass on current CPU/MCU 
                                           Native compile flags, object hooks and
                                           absence of a system libz dependency are
                                           checked (dependency-build.txt).
+                                          Shared project/native hardening includes
+                                          explicit PIC/PIE and Linux/x86 compiler
+                                          control-flow protection; compile/ELF
+                                          properties and negative controls checked
+                                          by build_hardening. Runtime CET and
+                                          future JIT behavior are not established.
                                           No complete-board, audio or concurrency
                                           coverage yet.
 Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 s

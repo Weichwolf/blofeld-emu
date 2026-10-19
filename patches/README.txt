@@ -78,6 +78,11 @@ body cache for later normal execution. Undefined decoded instructions fail in
 reference mode. The normal upstream interpreter remains separately callable;
 this integration forces the reference interpreter, not the JIT.
 
+The same build-local patch converts asmjit's ARM vector element mask explicitly
+to uint32_t before combining it with BaseReg's enum mask. Numeric register
+signatures are preserved under C++23, without suppressing mixed-enum diagnostics.
+This compatibility correction does not enable or validate a JIT backend.
+
 UBSan caught reset using out-of-range CCR enum values for full SR masks. Reset
 and interrupt entry now use the correct SR-mask overloads. No sanitizer is
 suppressed. Independent native_dsp checks cover flags, unknown fetch/extension,

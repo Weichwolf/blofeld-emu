@@ -48,6 +48,7 @@ function(blofeld_add_zlib)
   set(ZLIB_PREFIX OFF)
   add_subdirectory("${source}" "zlib" EXCLUDE_FROM_ALL SYSTEM)
   add_library(ZLIB::ZLIB ALIAS zlibstatic)
+  blofeld_harden_native(zlibstatic)
   if(DEFINED blofeld_dependency_sanitizers)
     target_compile_options(zlibstatic PRIVATE
       "-fsanitize=${blofeld_dependency_sanitizers}" -fno-sanitize-recover=all

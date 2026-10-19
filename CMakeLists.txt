@@ -63,6 +63,7 @@ list(APPEND SLEIGH_FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/memstate.cc")
 add_library(blofeld_sleigh STATIC ${SLEIGH_FILES})
 target_include_directories(blofeld_sleigh SYSTEM PUBLIC "${SLEIGH_SOURCE}")
 target_link_libraries(blofeld_sleigh PUBLIC ZLIB::ZLIB)
+blofeld_harden_native(blofeld_sleigh)
 
 if(DEFINED blofeld_dependency_sanitizers)
   target_compile_options(blofeld_sleigh PRIVATE
@@ -433,6 +434,34 @@ if(BUILD_TESTING)
   set_tests_properties(firmware_python PROPERTIES
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     ENVIRONMENT "BLOFELD_TEST_BINARY=$<TARGET_FILE:blofeld-headless>")
+  get_property(blofeld_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+  set(blofeld_hardened_executables "")
+  foreach(target IN LISTS blofeld_build_targets)
+    get_target_property(kind ${target} TYPE)
+    if(kind STREQUAL "EXECUTABLE")
+      string(APPEND blofeld_hardened_executables "$<TARGET_FILE:${target}>\n")
+    endif()
+  endforeach()
+  file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
+    CONTENT "${blofeld_hardened_executables}")
+  set(blofeld_hardening_options)
+  if(BLOFELD_USE_LIBSTDCXX)
+    list(APPEND blofeld_hardening_options --libstdcxx)
+  endif()
+  if(BLOFELD_CF_PROTECTION)
+    list(APPEND blofeld_hardening_options --cf-protection)
+  endif()
+  add_test(NAME build_hardening COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/build_hardening.py"
+    --source "${CMAKE_CURRENT_SOURCE_DIR}"
+    --database "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
+    --binary-list "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
+    --readelf "${BLOFELD_LLVM_READELF}" --compiler "${CMAKE_C_COMPILER}"
+    --native zlibstatic=$<TARGET_FILE:zlibstatic>
+    --native blofeld_sleigh=$<TARGET_FILE:blofeld_sleigh>
+    --native blofeld_dsp_native=$<TARGET_FILE:blofeld_dsp_native>
+    --native asmjit=$<TARGET_FILE:asmjit>
+    ${blofeld_hardening_options})
 endif()
 
 install(TARGETS blofeld-headless RUNTIME DESTINATION bin)

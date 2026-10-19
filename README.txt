@@ -33,6 +33,10 @@ errors, including the 120-line function limit. ASan/UBSan and additional integer
 checks are enabled in strict builds. Native SLEIGH, DSP, asmjit and zlib sources
 also receive ASan/UBSan. The dependency_instrumentation test verifies compile
 commands, native object hooks and static zlib linkage; see doc/dependency-build.txt.
+Shared hardening also covers native dependencies: explicit PIC/PIE, strong stack
+and stack-clash protection, format security, FORTIFY 3 and libstdc++ assertions.
+Linux/x86 adds compiler control-flow protection. build_hardening verifies compile
+commands and executable PIE/full RELRO/NX-stack properties, with negative controls.
 release retains warning/static-analysis gates and disables sanitizers for timing
 measurements. thread selects separate TSan instrumentation. No concurrency is
 currently implemented. Native CPU adapters use exceptions; any future audio

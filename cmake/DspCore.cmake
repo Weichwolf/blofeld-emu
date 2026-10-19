@@ -61,6 +61,7 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(blofeld_dsp_native PUBLIC asmjit Threads::Threads ${CMAKE_DL_LIBS} rt)
 foreach(dependency blofeld_dsp_native asmjit)
+  blofeld_harden_native(${dependency})
   if(DEFINED blofeld_dependency_sanitizers)
     target_compile_options(${dependency} PRIVATE
       "-fsanitize=${blofeld_dependency_sanitizers}" -fno-sanitize-recover=all -fno-omit-frame-pointer -g)

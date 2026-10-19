@@ -4,19 +4,19 @@ set(BLOFELD_SANITIZER "address-undefined" CACHE STRING "none, address-undefined,
 set_property(CACHE BLOFELD_SANITIZER PROPERTY STRINGS none address-undefined thread)
 option(BLOFELD_FUZZING "Build offline libFuzzer targets" OFF)
 
+include("${CMAKE_CURRENT_LIST_DIR}/Hardening.cmake")
 add_library(blofeld_quality INTERFACE)
+target_link_libraries(blofeld_quality INTERFACE blofeld_hardening)
 target_compile_options(blofeld_quality INTERFACE
   -Wall -Wextra -Wpedantic -Werror -pedantic-errors
-  -Wconversion -Wsign-conversion -Wshadow -Wformat=2 -Wundef
+  -Wconversion -Wsign-conversion -Wshadow -Wundef
   -Wcast-align -Wcast-qual -Wdouble-promotion -Wnull-dereference
   -Wimplicit-fallthrough -Wnon-virtual-dtor -Wold-style-cast
   -Woverloaded-virtual -Wextra-semi -Wvla -Wswitch-enum -Wswitch-default
-  -fstack-protector-strong -fstack-clash-protection -ffp-contract=off
-  -fno-omit-frame-pointer $<$<CONFIG:Debug>:-O1>)
+  -ffp-contract=off -fno-omit-frame-pointer)
 # SLEIGH's error interface requires exceptions. They must not cross a future audio callback.
-target_compile_definitions(blofeld_quality INTERFACE _GLIBCXX_ASSERTIONS _FORTIFY_SOURCE=3)
 target_link_options(blofeld_quality INTERFACE
-  -Wl,--fatal-warnings -Wl,-z,defs -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack)
+  -Wl,--fatal-warnings -Wl,-z,defs)
 
 if(BLOFELD_SANITIZER STREQUAL "address-undefined")
   set(blofeld_sanitizers "address,undefined,float-divide-by-zero,unsigned-integer-overflow,implicit-conversion")

@@ -4,6 +4,20 @@ The emulator links native SLEIGH, the pinned DSP56300 interpreter and asmjit,
 and a static zlib built from the official source archive. Original source notices
 remain in their local/build trees. Project clang-tidy applies to project C++;
 third-party source is built separately with dependency sanitizer flags.
+Upstream compiler diagnostics remain visible under its separate warning policy;
+project warnings remain errors. Partial enum switches, cross-enum ESAI arithmetic
+and JIT offsetof diagnostics remain unresolved, without suppressions or baselines.
+
+Shared hardening
+cmake/Hardening.cmake adds the same compiler protection to project source,
+SLEIGH, DSP, asmjit and zlib without replacing strict diagnostics or sanitizers:
+  -fstack-protector-strong -fstack-clash-protection
+  -Wformat=2 -Werror=format-security -D_FORTIFY_SOURCE=3
+C++ using libstdc++ also receives _GLIBCXX_ASSERTIONS. Debug builds retain -O1
+for active FORTIFY checks, including native dependencies. Linux/x86 adds
+-fcf-protection=full. CMake checks C/C++ PIE support and explicitly requests
+position-independent libraries and executables. Full RELRO uses -z relro/now;
+-z noexecstack retains a non-executable stack.
 
 zlib input
 doc/dependencies.json pins the source URL, version, size and SHA-256.
@@ -22,6 +36,17 @@ The packaged zlib license must match the archive's notice exactly.
 
 Verification
   ctest --test-dir build/strict -R '^dependency_instrumentation$' --output-on-failure
+  ctest --test-dir build/strict -R '^build_hardening$' --output-on-failure
+
+build_hardening checks every project/native compile command and all generated
+project executables for PIE, RELRO, immediate binding and a non-executable stack.
+Linux/x86 native archives must also contain object IBT/SHSTK properties.
+Its ELF verifier must also reject four separately compiled inert controls, each
+missing one protection; those control binaries are inspected and never executed.
+Compiler control-flow instrumentation is not proof of runtime CET enforcement.
+The DSP is forced to interpreter mode. Future JIT use needs a separate joint
+check of generated-code permissions and control-flow protection; NX stack and
+full RELRO remain applicable. No JIT validation follows from this build check.
 
 The quality suite checks every exported project/native compile command for the
 selected sanitizer set and fail-stop behavior. It also inspects undefined native
