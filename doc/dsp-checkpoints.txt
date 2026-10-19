@@ -27,7 +27,9 @@ Captured state
 The native adapter canonicalizes deferred CCR updates, as existing architectural
 state reads already do. Opcode dispatch is rebuilt; cached diagnostic cycle
 costs and peripheral pacing deadlines are retained. Native counters and pacing
-are not calibrated elapsed clocks and do not drive a new board scheduler.
+are not calibrated elapsed clocks. The optional run contract retains reference
+time, odd CLK/2 residue, ratio latching and fault status; see dsp-run-clock.txt.
+It does not establish a calibrated board scheduler.
 The API rejects native JIT, debugger/trace/external-bus contexts and SDK interrupt
 queues/callbacks, which are outside this custom-bus reference path.
 

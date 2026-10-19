@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -221,6 +222,7 @@ public:
   dsp56k::DSP cpu;
   bool faulted = false;
   bool active = false;
+  RunHooks run;
 };
 
 DspCore::DspCore(DspBus &bus) : impl_(std::make_unique<Impl>(bus)) {
@@ -231,6 +233,7 @@ DspCore::~DspCore() = default;
 
 void DspCore::reset_spi_boot() {
   const ExecutionGuard guard(impl_->active);
+  if (impl_->run.reset) { impl_->run.reset(); }
   impl_->faulted = true;
   impl_->bus.reset();
   impl_->cpu.resetHW();
@@ -239,6 +242,19 @@ void DspCore::reset_spi_boot() {
   impl_->access.reset();
   impl_->faulted = false;
   impl_->invalidate();
+}
+
+void DspCore::set_run_hooks(RunHooks hooks) {
+  if (impl_->active) { throw Fault("Cannot configure an active DSP run"); }
+  impl_->run = std::move(hooks);
+}
+
+bool DspCore::faulted() const {
+  return impl_->faulted;
+}
+
+std::uint64_t DspCore::native_cycles() const {
+  return impl_->cpu.getCycles();
 }
 
 bool DspCore::executing() const {
@@ -307,13 +323,18 @@ void DspCore::step() {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
   const ExecutionGuard guard(impl_->active);
   const auto before = state();
+  const auto before_cycles = impl_->cpu.getCycles();
   std::optional<DspInterruptRequest> interrupt;
   try {
     impl_->invalidate();
     constexpr unsigned mask_shift = 8;
     constexpr unsigned interrupt_mask = 3;
     interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
-    if (interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc))) {
+    if (interrupt && !impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc))) {
+      interrupt.reset();
+    }
+    if (impl_->run.begin) { impl_->run.begin(before, interrupt.has_value()); }
+    if (interrupt) {
       const auto vector = before.vba + interrupt->vector;
       impl_->access.arm_interrupt(*interrupt, vector);
       impl_->cpu.execReferenceInterrupt(vector, interrupt->level);
@@ -322,9 +343,18 @@ void DspCore::step() {
       interrupt.reset();
       impl_->cpu.execReference();
     }
+    if (impl_->run.complete) {
+      const auto after_cycles = impl_->cpu.getCycles();
+      if (after_cycles < before_cycles ||
+          after_cycles - before_cycles > std::numeric_limits<unsigned>::max()) {
+        throw Fault("Invalid native DSP cycle-estimate delta");
+      }
+      impl_->run.complete(static_cast<unsigned>(after_cycles - before_cycles));
+    }
     impl_->bus.observe_omr(word(impl_->cpu.regs().omr));
   } catch (const std::exception &error) {
     impl_->faulted = true;
+    if (impl_->run.failed) { impl_->run.failed(); }
     const auto context = interrupt ? " irq=" + hex(interrupt->vector, 2) +
                                          " level=" + std::to_string(interrupt->level)
                                    : std::string{};

@@ -70,5 +70,17 @@
     "source": "https://www.midi.org/wp-content/uploads/wpforo/default_attachments/1709416667-ca33-MIDI-10-Electrical-Specification-Update.pdf",
     "bytes": 206124,
     "sha256": "a1670586320e88a60723145e4833723157dfa29ce3fb807954d0b4c0df3fbd0a"
+  },
+  {
+    "file": "AN3653.pdf",
+    "source": "https://www.nxp.com/docs/en/application-note/AN3653.pdf",
+    "bytes": 551593,
+    "sha256": "0c3926548c00f9cab450c0c68cf9e13de880642ed874bcaa72b19309f22823d5"
+  },
+  {
+    "file": "DSP56300FMAD.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FMAD.pdf",
+    "bytes": 77434,
+    "sha256": "bde1abf48cbb7e944589dd62e2199ed70b95dd8398c0c1a3e709fd7d61ee1ac7"
   }
 ]

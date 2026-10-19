@@ -4,24 +4,73 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_run_clock.hpp"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace blofeld {
+namespace {
+struct RunState {
+  std::optional<DspRunContract> contract;
+  std::optional<DspRunClock> clock;
+};
+
+RunState initial_run(const std::optional<DspRunContract> contract) {
+  if (!contract) { return {}; }
+  if (contract->timing != DspRunTiming::native_internal_estimates) {
+    throw Fault("DSP run requires an explicit native-cycle-estimate timing contract");
+  }
+  return {.contract = contract, .clock = DspRunClock(contract->clock)};
+}
+}
 
 struct DspCheckpoint::Storage {
-  Storage(DspBus bus_state, DspCoreCheckpoint cpu_state)
-      : bus(std::move(bus_state)), cpu(std::move(cpu_state)) {}
+  Storage(DspBus bus_state, DspCoreCheckpoint cpu_state, RunState run_state)
+      : bus(std::move(bus_state)), cpu(std::move(cpu_state)), run(run_state) {}
 
   const DspBus bus;
   const DspCoreCheckpoint cpu;
+  const RunState run;
 };
 
 struct DspMachine::State {
-  State() : cpu(bus) {}
+  explicit State(const RunState run_state) : run(run_state), cpu(bus) {
+    if (run.clock) {
+      cpu.set_run_hooks(
+          {.begin =
+               [this](const auto state, const bool interrupt) {
+                 constexpr unsigned compatibility = 0x2000;
+                 if (interrupt || (state.sr & compatibility) != 0) {
+                   throw Fault("Unqualified DSP interrupt or compatibility-mode timing");
+                 }
+                 if (cpu.native_cycles() != run.clock->native_cycle_units()) {
+                   throw Fault("DSP clock/native counters require coordinated recovery");
+                 }
+                 run.clock->begin_step(bus, {.pc = state.pc, .omr = state.omr});
+               },
+           .complete = [this](const auto cycles) { run.clock->finish_step(bus, cycles); },
+           .failed = [this] { run.clock->fail(); },
+           .reset =
+               [this] {
+                 if (run.clock->faulted() || run.clock->native_cycle_units() != 0) {
+                   throw Fault("Clocked DSP reset requires a new epoch or coordinated restore");
+                 }
+               }});
+    }
+  }
+
+  void check_boundary() const {
+    const auto &clock = run.clock;
+    if (clock && (clock->faulted() || clock->active() ||
+                  cpu.native_cycles() != clock->native_cycle_units())) {
+      throw Fault("DSP checkpoint requires coordinated healthy reference clock counters");
+    }
+  }
 
   DspBus bus;
+  RunState run;
   DspCore cpu;
 };
 
@@ -30,7 +79,10 @@ DspCheckpoint::DspCheckpoint(std::shared_ptr<const Storage> storage)
 
 DspCheckpoint::~DspCheckpoint() = default;
 
-DspMachine::DspMachine() : state_(std::make_unique<State>()) {}
+DspMachine::DspMachine() : DspMachine(std::nullopt) {}
+
+DspMachine::DspMachine(const std::optional<DspRunContract> run)
+    : state_(std::make_unique<State>(initial_run(run))) {}
 
 DspMachine::~DspMachine() = default;
 
@@ -50,15 +102,35 @@ const DspCore &DspMachine::cpu() const {
   return state_->cpu;
 }
 
+bool DspMachine::clocked() const {
+  return state_->run.clock.has_value();
+}
+
+const DspRunClock &DspMachine::run_clock() const {
+  const auto &clock = state_->run.clock;
+  if (!clock) { throw Fault("DSP machine has no reference run clock"); }
+  return *clock;
+}
+
+bool DspMachine::timing_faulted() const {
+  const auto &clock = state_->run.clock;
+  return clock && (clock->faulted() || state_->cpu.faulted());
+}
+
 DspCheckpoint DspMachine::checkpoint() const {
   const auto cpu_state = state_->cpu.checkpoint();
-  return DspCheckpoint(std::make_shared<const DspCheckpoint::Storage>(state_->bus, cpu_state));
+  state_->check_boundary();
+  return DspCheckpoint(
+      std::make_shared<const DspCheckpoint::Storage>(state_->bus, cpu_state, state_->run));
 }
 
 void DspMachine::restore(const DspCheckpoint &checkpoint) {
   if (state_->cpu.executing()) { throw Fault("Cannot restore during active DSP execution"); }
   if (!checkpoint.storage_) { throw Fault("Cannot restore an empty DSP checkpoint"); }
-  auto replacement = std::make_unique<State>();
+  if (checkpoint.storage_->run.contract != state_->run.contract) {
+    throw Fault("DSP checkpoint has an incompatible reference run contract");
+  }
+  auto replacement = std::make_unique<State>(checkpoint.storage_->run);
   replacement->bus = checkpoint.storage_->bus;
   replacement->cpu.restore_checkpoint(checkpoint.storage_->cpu);
   state_.swap(replacement);

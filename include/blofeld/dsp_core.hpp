@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 namespace blofeld {
@@ -76,6 +77,17 @@ public:
 
 private:
   friend class DspMachine;
+
+  struct RunHooks {
+    std::function<void(DspState, bool)> begin;
+    std::function<void(unsigned)> complete;
+    std::function<void()> failed;
+    std::function<void()> reset;
+  };
+
+  void set_run_hooks(RunHooks hooks);
+  [[nodiscard]] bool faulted() const;
+  [[nodiscard]] std::uint64_t native_cycles() const;
   [[nodiscard]] DspCoreCheckpoint checkpoint() const;
   void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
   [[nodiscard]] bool executing() const;

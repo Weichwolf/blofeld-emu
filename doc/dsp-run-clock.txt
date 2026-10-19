@@ -1,0 +1,78 @@
+Owned DSP reference time
+
+DspMachine optionally accepts DspRunContract. The caller must select
+native_internal_estimates, reference_instruction_boundary switching, an EXTAL
+frequency and an integral reference timebase. Each completed native instruction
+supplies its SDK cycle-estimate delta. No caller supplies an elapsed-cycle chunk
+beside CPU execution. The default owner and headless CLI remain untimed.
+
+This is a declared instruction-boundary experiment, not measured Blofeld timing.
+DSP56300FM Rev5 A-1 assumes an internal-memory, full-pipeline, no-interlock case.
+The SDK does not establish all instruction costs, pipeline fill/stalls, chip
+latency or analog PLL settling. No calibrated MCU/DSP board scheduler follows
+from these counters. No original firmware instruction or memory limit is changed.
+
+Reference contract
+- begin_step latches the current PCTL requested EXTAL ratio. The completed
+  command uses that rate; a changed PCTL affects the next instruction. The model
+  does not synthesize lock or frequency measurements. Unobserved PINIT, invalid
+  or nonintegral ratios fail with PC/OMR context instead of rounding.
+- Completed estimate units advance SHI/reset delays and pending memory switching.
+  The native OMR observation follows that advance, so its three-unit map-switch
+  delay starts after its own command and covers subsequent completed units.
+- CLK/2 edges retain the odd cycle residue across instructions and checkpoints.
+  Timer configuration written by an instruction is visible to the end-of-step
+  timer advance. This ordering is an explicit experiment, not hardware evidence.
+  Capture modes still require their separately qualified external samples.
+- IRQ entry and SR.SC compatibility timing reject before native dispatch;
+  interrupt acknowledgement/vector fetching is not silently assigned a duration.
+  The untimed owner retains its independently tested native interrupt behavior.
+- A rejected step quarantines CPU/clock state; completed reference time is a
+  prefix, not permission to retry the partially executed instruction. Coordinated
+  restore recovers the native CPU, bus, timer phase and clock together. A live
+  external reset cannot silently zero elapsed time: a new owner epoch or trusted
+  restore is required. Continuous-time external reset remains pending.
+- Checkpoints retain the exact run contract and reject incompatible owners.
+  They are trusted process-local objects; external wire/scheduler state still
+  belongs to the caller. Restore invalidates CPU/bus references.
+
+Independent nominal expectations
+The pinned native copy is patched without modifying its source checkout.
+DSP56300FM A-1/A-6/A-7 distinguishes long absolute from long immediate penalties,
+assigns no pre-update penalty to post-update by N, and gives P-space MOVEP six
+baseline cycles. The previous SDK estimates added both long-operand penalties,
+charged post-update by N, and assigned P-space MOVEP two. Own assembled and independently encoded cases
+check the actual encoded instruction form and literal table-derived costs,
+including immediate/absolute, post/pre-update, peripheral/register and P: forms.
+These corrections qualify these nominal entries, not every SDK instruction cost.
+
+  cmake --build --preset strict --target blofeld-dsp-run-clock-test blofeld-original-dsp-clock-test
+  ctest --test-dir build/strict -R '^(dsp_run_clock|original_dsp_clock)$' --output-on-failure
+
+Own native tests check PCTL rate latching, exact timer compare/CLK2 phase, delayed
+OMR aliases, bounded REP continuation, odd-phase snapshots, contract mismatches,
+unknown input/timer failures, recovery, and visible IRQ/compatibility rejection.
+
+Original firmware experiment
+The optional original_dsp_clock test pins the original 1.25 ZIP and privately
+assembled 58-word NXP ROM prefix before execution (dsp-core.txt). The native ROM
+loads all 94 original MCU-embedded stage words through SHI and jumps to them.
+An explicit host wire fixture supplies edges at instruction boundaries; the
+executing MCU is not this test's sender and no physical SPI rate is inferred.
+
+The declared reference uses EXTAL 12 MHz, low PINIT and a 540 MHz integer timebase.
+The original PCTL command requests 9/2 of EXTAL, giving reference periods of 45
+and then 10 ticks per nominal unit. This is not a measured Blofeld EXTAL/PLL.
+An independent Python ledger uses primary-manual instruction encodings and costs,
+not the SDK cycle table, for every visited original PC. Private opcode/count
+records remain ignored beside build/strict/Testing/original-dsp-clock.trace.
+The complete mapped-clear prefix has 27342 nominal units, 943495 reference ticks
+and 13671 CLK/2 edges. A checkpoint after 4096 pairs replays to the same native
+state and time at 8192 pairs, PC=72, R4=2000, LC=1e000, OMR=600389 (hex).
+
+The next reserved Y:002000 store remains unqualified. DSP56371UM chapter 3 and
+AN3653 describe the memory map/no direct external memory interface; they do not
+identify discard versus alias behavior. DSP56300FMAD Rev6 supplies unrelated
+manual corrections, not this missing write behavior. No RAM expansion, ignored
+write or loop skip is used. Physical memory semantics, full boot, shared board
+time, original audio, reset timing and hardware equivalence remain pending.

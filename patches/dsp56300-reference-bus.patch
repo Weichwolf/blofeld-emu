@@ -613,3 +613,20 @@
 +  inline constexpr bool isVecD2() const noexcept { return _signature.subset(kBaseSignatureMask | static_cast<uint32_t>(kSignatureRegElementTypeMask)) == (RegTraits<RegType::kARM_VecV>::kSignature | kSignatureElementD); }
 +  inline constexpr bool isVecB4x4() const noexcept { return _signature.subset(kBaseSignatureMask | static_cast<uint32_t>(kSignatureRegElementTypeMask)) == (RegTraits<RegType::kARM_VecV>::kSignature | kSignatureElementB4); }
 +  inline constexpr bool isVecH2x4() const noexcept { return _signature.subset(kBaseSignatureMask | static_cast<uint32_t>(kSignatureRegElementTypeMask)) == (RegTraits<RegType::kARM_VecV>::kSignature | kSignatureElementH2); }
+--- a/source/dsp56kEmu/opcodecycles.cpp
++++ b/source/dsp56kEmu/opcodecycles.cpp
+@@ -62,0 +63 @@
++				break; // FM A-1: post-update by N is a baseline addressing mode.
+@@ -68,2 +69,3 @@
+-				c += cycles.lab;
+-				c += cycles.lim;
++				// FM A-1: long absolute and immediate are exclusive forms.
++				c += getFieldValue(_inst, Field_RRR, _op) == RRR_ImmediateData
++					? cycles.lim : cycles.lab;
+--- a/source/dsp56kEmu/opcodecycles.h
++++ b/source/dsp56kEmu/opcodecycles.h
+@@ -266,2 +266,2 @@
+-		OpcodeCycles{Movep_eapp,		2, 1, 1, 0},
+-		OpcodeCycles{Movep_eaqq,		2, 1, 1, 0},
++		OpcodeCycles{Movep_eapp,		6, 1, 1, 0},
++		OpcodeCycles{Movep_eaqq,		6, 1, 1, 0},

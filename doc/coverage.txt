@@ -105,6 +105,14 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           DSP PCTL command/PINIT reset and target
                                           ratios tested against NXP worked example;
                                           ED57 sequence guard (dsp-pll.txt).
+                                          Optional DSP clock owner retains nominal
+                                          native units, exact declared PLL ticks,
+                                          CLK/2 residue and memory-switch delays.
+                                          Original ROM/stage prefix has an
+                                          independent nominal timing ledger and
+                                          mid-REP replay (dsp-run-clock.txt).
+                                          IRQ/SC timing rejects explicitly; physical
+                                          pipeline/PLL/board timing remains open.
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
                                           source IRQs tested (dsp-timers.txt).
@@ -554,6 +562,9 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           IRQ continuation, RAM/ROM knowledge,
                                           SHI partial words, GPIO/PLL/timer state
                                           and explicit map-switch phases.
+                                          Optional DSP run contract/time/CLK2
+                                          phase restore together; incompatible
+                                          contracts and failed steps reject.
                                           Independent native arithmetic/modulo,
                                           nested loop/IRQ, code-mutation and
                                           recovery checks supplement replay.

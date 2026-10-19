@@ -110,7 +110,8 @@ add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
-  src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp)
+  src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp
+  src/dsp_run_clock.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
 add_library(blofeld_dsp src/dsp_core.cpp src/dsp_machine.cpp)
@@ -439,6 +440,18 @@ if(BUILD_TESTING)
     test/mcu_sci_reference_owner.cpp)
   target_link_libraries(blofeld-sci-reference-test PRIVATE blofeld_core)
   add_test(NAME mcu_sci_reference COMMAND blofeld-sci-reference-test)
+  add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
+  target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
+  add_executable(blofeld-original-dsp-clock-test test/original_dsp_clock_test.cpp)
+  target_link_libraries(blofeld-original-dsp-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_clock.py"
+    $<TARGET_FILE:blofeld-original-dsp-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clock.trace")
+  set_tests_properties(original_dsp_clock PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-clocked-midi-test test/mcu_clocked_midi_test.cpp)
   target_link_libraries(blofeld-clocked-midi-test PRIVATE blofeld_mcu_midi)
   add_test(NAME mcu_clocked_midi COMMAND blofeld-clocked-midi-test)
@@ -538,6 +551,8 @@ add_custom_target(quality
     blofeld-hc12-flash-cycles-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
+    blofeld-dsp-run-clock-test
+    blofeld-original-dsp-clock-test
     blofeld-mcu-clock-checkpoint-test
     blofeld-mcu-wait-clock-test
     blofeld-original-cycle-boot-test

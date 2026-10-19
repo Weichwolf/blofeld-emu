@@ -69,6 +69,8 @@ public:
 
   [[nodiscard]] DspPll &pll() { return pll_; }
 
+  [[nodiscard]] const DspPll &pll() const { return pll_; }
+
   [[nodiscard]] DspGpio &gpio(DspPort port);
 
   [[nodiscard]] DspTimers &timers() { return timers_; }

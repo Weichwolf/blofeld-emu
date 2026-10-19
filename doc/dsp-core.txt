@@ -58,7 +58,9 @@ DSP56371 memory and peripheral scope
   IRQ and TCSR W1C writeback are tested. No CPU/IRQ clock schedule is implied.
 - The NAND candidate has native own and isolated original helper checks
   (nand-read.txt, nand-write.txt); full original NAND loading remains unproven.
-- Port D GPIO, remaining timer modes, ESAI, DMA and clock scheduling are not modeled.
+- Port D GPIO, remaining timer modes, ESAI, DMA and calibrated board clock
+  scheduling are not modeled. An opt-in DSP owner advances explicit nominal
+  reference time, timers and switch delays; see dsp-run-clock.txt.
   Native power-up register undefined-state tracking and full derivative reset,
   interrupt, pipeline and instruction-cycle fidelity need further validation.
 
