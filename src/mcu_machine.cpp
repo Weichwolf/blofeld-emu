@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -27,6 +28,8 @@ struct RunState {
   std::optional<McuRunContract> contract;
   std::optional<McuRunClock> clock;
   std::uint8_t timer_inputs = 0;
+  std::uint64_t idle_cycles = 0;
+  bool wait_faulted = false;
 };
 
 RunState initial_run(const std::optional<McuRunContract> contract) {
@@ -82,7 +85,8 @@ struct McuMachine::State {
                         : nullptr),
         cpu(timed ? static_cast<Bus &>(*timed) : *bus, specification) {
     if (const auto &clock = run.clock; timed && clock) {
-      timed->restore_boundary(clock->bus_cycles(), bus->context_);
+      if (run.idle_cycles > clock->bus_cycles()) { throw Fault("Invalid MCU idle clock count"); }
+      timed->restore_boundary(clock->bus_cycles() - run.idle_cycles, bus->context_);
     }
   }
 
@@ -103,6 +107,7 @@ struct McuMachine::State {
   }
 
   void advance(const Hc12BusCycle cycle) {
+    if (run.wait_faulted) { throw Fault("MCU wait clock failure requires coordinated recovery"); }
     if (cycle.address) {
       const auto first = bus->memory_.locate(*cycle.address);
       bool qualified = first.space != McuSpace::unmapped && first.space != McuSpace::reserved;
@@ -123,6 +128,20 @@ struct McuMachine::State {
     clock->advance_run_cycle(*bus, cycle.context);
   }
 
+  [[nodiscard]] bool advance_wait_cycle(const ExecutionContext context) {
+    bus->begin_instruction(context);
+    if (wait_observer) { wait_observer({.context = context}); }
+    if (cpu.pending_interrupt()) { return false; }
+    const auto gates = bus->wait_clock_gates();
+    if (gates.timer && run.timer_inputs != 0) { bus->sample_timer_inputs(run.timer_inputs); }
+    if (cpu.pending_interrupt()) { return false; }
+    auto &clock = run.clock;
+    if (!clock) { throw Fault("MCU wait cycle has no run clock"); }
+    clock->advance_wait_cycle(*bus, context);
+    ++run.idle_cycles;
+    return true;
+  }
+
   void check_inactive() const {
     if (cpu.executing() || bus->notifying_) {
       throw Fault("MCU run configuration requires an inactive CPU and bus observer");
@@ -133,7 +152,8 @@ struct McuMachine::State {
   void check_clock_boundary() const {
     const auto &clock = run.clock;
     if (timed &&
-        (!clock || clock->faulted() || timed->checkpoint_cycles() != clock->bus_cycles())) {
+        (!clock || clock->faulted() || run.wait_faulted || run.idle_cycles > clock->bus_cycles() ||
+         timed->checkpoint_cycles() != clock->bus_cycles() - run.idle_cycles)) {
       throw Fault("MCU run checkpoint requires coordinated healthy cycle counters");
     }
   }
@@ -142,6 +162,7 @@ struct McuMachine::State {
   RunState run;
   std::unique_ptr<Hc12CycleBus> timed;
   std::function<void(Hc12BusCycle)> observer;
+  std::function<void(McuWaitCycle)> wait_observer;
   Hc12 cpu;
 };
 
@@ -194,12 +215,52 @@ const McuRunClock &McuMachine::run_clock() const {
 
 bool McuMachine::timing_faulted() const {
   const auto &clock = state_->run.clock;
-  return state_->timed && (!clock || state_->timed->faulted() || clock->faulted());
+  return state_->timed &&
+         (!clock || state_->timed->faulted() || clock->faulted() || state_->run.wait_faulted);
 }
 
 void McuMachine::set_cycle_observer(std::function<void(Hc12BusCycle)> observer) {
   state_->check_inactive();
   state_->observer = std::move(observer);
+}
+
+void McuMachine::set_wait_observer(std::function<void(McuWaitCycle)> observer) {
+  state_->check_inactive();
+  state_->wait_observer = std::move(observer);
+}
+
+std::uint64_t McuMachine::idle_bus_cycles() const {
+  return state_->run.idle_cycles;
+}
+
+unsigned McuMachine::advance_wait(const unsigned maximum_bus_cycles) {
+  state_->check_inactive();
+  state_->check_clock_boundary();
+  auto &cpu = state_->cpu;
+  const auto registers = cpu.state();
+  const ExecutionContext context{.pc = registers.pc, .ccr = registers.ccr};
+  cpu.begin_wait_clock();
+  unsigned completed = 0;
+  try {
+    state_->bus->begin_instruction(context);
+    static_cast<void>(state_->bus->wait_clock_gates());
+    while (completed < maximum_bus_cycles && !cpu.pending_interrupt()) {
+      if (!state_->advance_wait_cycle(context)) { break; }
+      ++completed;
+    }
+    cpu.end_wait_clock(true);
+    return completed;
+  } catch (const std::exception &error) {
+    cpu.end_wait_clock(false);
+    state_->run.wait_faulted = true;
+    throw Fault("MCU wait advance pc=" + hex(context.pc) + " ccr=" + hex(context.ccr, 2) +
+                " completed-idle-cycles=" + std::to_string(state_->run.idle_cycles) + ": " +
+                error.what());
+  } catch (...) {
+    cpu.end_wait_clock(false);
+    state_->run.wait_faulted = true;
+    throw;
+  }
 }
 
 void McuMachine::set_timer_inputs(const std::uint8_t mask) {

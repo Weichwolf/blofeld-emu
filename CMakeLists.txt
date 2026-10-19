@@ -150,6 +150,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-clock-checkpoint-test test/mcu_clock_checkpoint_test.cpp)
   target_link_libraries(blofeld-mcu-clock-checkpoint-test PRIVATE blofeld_core)
   add_test(NAME mcu_clock_checkpoint COMMAND blofeld-mcu-clock-checkpoint-test)
+  add_executable(blofeld-mcu-wait-clock-test test/mcu_wait_clock_test.cpp)
+  target_link_libraries(blofeld-mcu-wait-clock-test PRIVATE blofeld_core)
+  add_test(NAME mcu_wait_clock COMMAND blofeld-mcu-wait-clock-test)
   add_executable(blofeld-original-cycle-boot-test test/original_cycle_boot_test.cpp)
   target_link_libraries(blofeld-original-cycle-boot-test PRIVATE blofeld_core blofeld_hc12_cycles blofeld_mcu_midi)
   add_test(NAME original_cycle_boot COMMAND ${Python3_EXECUTABLE}
@@ -174,6 +177,18 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-run-clock.trace")
   set_tests_properties(original_run_clock PROPERTIES SKIP_RETURN_CODE 77)
+  set(BLOFELD_CLOCKED_STARTUP_REFERENCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    CACHE FILEPATH "Pinned original ZIP or identical complete source MID for clocked startup")
+  add_executable(blofeld-original-owned-clock-test
+    test/original_owned_clock_test.cpp test/original_owned_clock_fixture.cpp)
+  target_link_libraries(blofeld-original-owned-clock-test PRIVATE blofeld_core blofeld_lcd_fixture)
+  add_test(NAME original_owned_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_owned_clock.py"
+    $<TARGET_FILE:blofeld-original-owned-clock-test>
+    "${BLOFELD_CLOCKED_STARTUP_REFERENCE}"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-owned-clock.trace")
+  set_tests_properties(original_owned_clock PROPERTIES SKIP_RETURN_CODE 77)
   find_program(BLOFELD_LLVM_NM NAMES llvm-nm-19 REQUIRED)
   find_program(BLOFELD_LLVM_READELF NAMES llvm-readelf-19 REQUIRED)
   add_test(NAME dependency_instrumentation COMMAND ${Python3_EXECUTABLE}
@@ -516,9 +531,11 @@ add_custom_target(quality
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
     blofeld-mcu-clock-checkpoint-test
+    blofeld-mcu-wait-clock-test
     blofeld-original-cycle-boot-test
     blofeld-original-cycle-application-test
     blofeld-original-run-clock-test
+    blofeld-original-owned-clock-test
     blofeld-midi-serial-test blofeld-mcu-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
     blofeld-nand-image-test

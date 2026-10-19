@@ -1,0 +1,81 @@
+MC9S12UF32 owned WAI reference time
+
+Contract
+McuMachine::advance_wait(maximum_bus_cycles) requires a healthy completed native
+WAI boundary and an explicit run contract. It advances enabled IPBus periods,
+SCI/TIM domains and actual elapsed OSC edges, stopping at the bound or first
+pending native interrupt. cpu().step() performs wake/vector fetch/frame reuse;
+advance_wait never retires instructions, changes PC/CCR or pushes another frame.
+An interrupt supplied by the pre-period observer or timer-input sample stops
+before another period. Existing pending interrupts consume no idle time.
+
+The native CLKSEL wait bits must be zero; PLLSEL may select the already qualified
+source. CRG shutdown modes, oscillator-amplitude reduction, COP wait/reset and
+physical gate/switch latency remain unqualified and fail with the live relocated
+CLKSEL address and CPU context. SCI SCISWAI and TIM TSWAI independently stop their
+modules during WAI. They do not gate normal CPU execution or interrupt wake.
+A stopped SCI retains its in-flight sample/bit/divider state until normal wake.
+Changing only SCISWAI while busy is permitted; active data-format changes still
+reject. External line transitions remain explicitly supplied observations.
+
+Time and recovery
+run_clock().bus_cycles() counts total completed IPBus periods; idle_bus_cycles()
+counts those explicitly spent waiting. The native cycle adapter counts executed
+CPU bus slots, including reset/IRQ/WAI entry and expanded Flash phases. A healthy
+checkpoint requires adapter cycles + idle periods == total IPBus periods.
+Trusted restore retains both counts, OSC fraction, CPU waiting state and modeled
+peripherals. set_wait_observer installs a separate pre-idle input callback;
+set_cycle_observer continues to describe actual CPU bus slots. Restore drops both
+observers. Neither is a serialized transport or whole-board snapshot.
+
+CPU execution/reset/debug replacement, checkpoint/restore and owner reconfiguration
+are rejected inside an idle callback, including calls through an earlier CPU
+reference. Any failed idle observation, pad sample, interrupt selection or clock
+quarantines execution until coordinated trusted restore. Completed periods remain
+visible; partial peripheral effects are not rolled back or snapshot boundaries.
+
+Independent checks
+  cmake --build --preset strict --target blofeld-mcu-wait-clock-test
+  ctest --test-dir build/strict -R '^mcu_wait_clock$' --output-on-failure
+
+Literal tests check seven-cycle WAI entry and its NXP frame, fractional PHY/OSC
+phase through chunking/restore, 2558 idle periods to a real RTI, six-cycle native
+wake and a native acknowledge/RTI handler. SCI/TIM gate combinations, an in-flight
+SCI pause/resume, a real capture at the current boundary, existing/new external
+IRQs, unknown inputs/source, callback failures, active guards, relocation and
+strict unsupported CRG bits are checked without period or foreground injection.
+
+Original reference regression
+original_owned_clock uses a pinned local original ZIP by default. Configure
+BLOFELD_CLOCKED_STARTUP_REFERENCE with the complete byte-identical source MID to
+exercise that input explicitly. test/original_owned_clock.py pins identity,
+records executable/input hashes, runs native reset through strict missing-PM3
+recovery and controlled low/high main WAI, then checks idle RTI wake/replay.
+Its separate manual mnemonic/mode cost table, observed Flash pairs and native
+clock-register event ledger account for cycles and elapsed OSC phase. Runtime
+instruction bytes/disassembly, traces and census files remain ignored artifacts.
+The complete native/oracle regression passes with the source MID. Both PM3
+levels reach first main WAI at 141809799 bus cycles. The original RTICTL write
+and source ledger predict 913 remaining OSC edges: exactly 2282 idle periods,
+with a trusted checkpoint after the first 1000. Native wake reuses the frame in
+six cycles; the original handler/foreground then retire 1358 instructions with
+4028 independently accounted cycles and naturally reach main WAI again. Both
+replays end at 141816115 total periods, 283632894 ticks and 56726578 OSC edges,
+with NVM unchanged. No additional Flash word expansion occurs in that wake path.
+
+  cmake --build --preset strict --target blofeld-original-owned-clock-test
+  ctest --test-dir build/strict -R '^original_owned_clock$' --output-on-failure
+
+The full test executes the original cold countdown and can take many minutes
+under sanitizers. A source input can be selected at configuration with
+-DBLOFELD_CLOCKED_STARTUP_REFERENCE=/path/to/BlofeldV125.mid. Its exact identity
+must match the pinned complete original MID; changing the input does not relax
+any native state, frame, phase, NVM or independent cycle expectation.
+
+Primary references
+Pinned NXP bundle in doc/hardware/sources.json: S12CPUV2 WAI and instruction costs;
+S12CRGUV1 sections 3.1.5/4.3.2; S12SCIV4 SCISWAI and sections 4.10.2/4.11.3;
+S12TIM16B8C_V1 TSWAI. These are reference clocks/post-synchronizer observations,
+not measured hardware timing. Default CLI, full DSP/board scheduling, host MIDI,
+audio, STOP/BDM and Desktop/Keyboard equivalence remain pending. No fuzz or
+physical-device traffic is involved in these checks.

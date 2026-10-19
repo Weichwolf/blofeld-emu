@@ -24,6 +24,11 @@ struct McuRunContract {
   bool operator==(const McuRunContract &) const = default;
 };
 
+// Before an idle IPBus period; this is not an executing CPU bus-cycle slot.
+struct McuWaitCycle {
+  ExecutionContext context;
+};
+
 // Immutable trusted in-process state. Not a file format or a whole-board snapshot.
 class McuCheckpoint {
 public:
@@ -60,6 +65,11 @@ public:
   [[nodiscard]] bool timing_faulted() const;
   // Explicit pre-cycle pad observations; external callbacks are never checkpointed.
   void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
+  void set_wait_observer(std::function<void(McuWaitCycle)> observer);
+  // Stop before executing the first pending interrupt. Returns elapsed idle
+  // IPBus periods; native cpu().step() performs wake/frame reuse separately.
+  unsigned advance_wait(unsigned maximum_bus_cycles);
+  [[nodiscard]] std::uint64_t idle_bus_cycles() const;
   // Prime selected timer inputs now, then sample them before each running cycle.
   void set_timer_inputs(std::uint8_t mask);
   [[nodiscard]] McuCheckpoint checkpoint() const;

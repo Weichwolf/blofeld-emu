@@ -31,6 +31,7 @@ constexpr unsigned transmitter_interrupts = 0xc0;
 constexpr unsigned receive_interrupt = 0x20;
 constexpr unsigned idle_interrupt = 0x10;
 constexpr unsigned loop_mode = 0x80;
+constexpr unsigned stop_in_wait = 0x40;
 constexpr unsigned nine_bit_mode = 0x10;
 constexpr unsigned idle_after_stop = 4;
 constexpr unsigned parity_enable = 2;
@@ -44,6 +45,10 @@ constexpr unsigned maximum_clock_slice = 1048576;
 constexpr unsigned sample_first = 8;
 constexpr unsigned sample_last = 10;
 constexpr unsigned transfer_phase = 9;
+}
+
+bool McuSci::runs_in_wait() const {
+  return (control1_ & stop_in_wait) == 0;
 }
 
 void McuSci::reset() {
@@ -172,7 +177,9 @@ void McuSci::write(const ByteWrite write) {
     }
     case hc12::sci_control1:
       if ((value & loop_mode) != 0) { throw Fault("Unimplemented SCI loop/single-wire mode"); }
-      if (value != control1_ && busy()) { throw Fault("Unimplemented active SCI format change"); }
+      if (((value ^ control1_) & ~stop_in_wait) != 0 && busy()) {
+        throw Fault("Unimplemented active SCI format change");
+      }
       control1_ = value;
       return;
     case hc12::sci_control2: write_control2(value); return;

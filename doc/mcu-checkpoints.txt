@@ -48,11 +48,14 @@ explicit internal-memory timing and the oscillator/switch/phase contract describ
 in mcu-run-clock.txt. The existing two-argument constructor remains untimed.
 The clocked owner executes all five reset cycles and owns the cycle adapter,
 SCI/TIM/OSC scheduling and fractional run-clock state. It does not advance time
-while native WAI is idle or implement WAI/STOP/BDM clock gates.
+automatically while native WAI is idle. Explicit advance_wait separately counts
+idle periods and honors qualified SCI/TIM wait gates; CRG shutdown and STOP/BDM
+remain unqualified (mcu-wait-clock.txt).
 
 A clocked checkpoint also retains the run contract, elapsed/cycle/OSC counters,
 fractional oscillator phase and timer observation mask. Only healthy completed
-sequences with matching adapter/run-clock cycle counters can be captured. Debug
+sequences whose executed CPU cycles plus idle periods equal total run-clock
+periods can be captured. Debug
 CPU register replacement cannot hide a failed timed sequence. Restore constructs
 a fresh adapter bound to the restored bus/clock; failed access/clock state is
 recovered only by replacing the coordinated state. Timed/untimed or differing
@@ -114,3 +117,10 @@ Persistent bounded/versioned/checksummed snapshot parsing and fuzzing, DSP and
 external-flash/NAND state, a unified board scheduler and whole-board replay,
 long-running original MIDI/audio replay and measured Desktop/Keyboard comparison
 remain pending. Existing private MCU NVM files are not these full checkpoints.
+
+Owned wait checkpoints retain idle IPBus periods in addition to executed native
+cycle slots. Their checked sum equals total run-clock IPBus periods. Idle CPU
+operations are guarded against reentry, including held CPU references; failures
+quarantine native execution until coordinated restore. Idle observers are external
+and are dropped with ordinary cycle/bus callbacks. See mcu-wait-clock.txt for
+literal frame, phase, gate, capture-boundary and failure regressions.

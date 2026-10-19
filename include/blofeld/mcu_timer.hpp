@@ -27,6 +27,7 @@ public:
   void advance(unsigned bus_cycles);
   void observe_inputs(TimerInputs inputs);
   [[nodiscard]] unsigned cycles_until_tick() const;
+  [[nodiscard]] bool runs_in_wait() const;
   [[nodiscard]] PinFunction pins() const; // Logical channels, before package routing.
   [[nodiscard]] std::uint8_t interrupt_channels() const;
   [[nodiscard]] bool overflow_interrupt() const;

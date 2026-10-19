@@ -137,7 +137,17 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           explicit two-cycle Flash read contract
                                           checks byte phases, flags, latching and
                                           recovery (mcu-flash-read-timing.txt).
-                                          calibrated whole-board clocks pending.
+                                          Explicit owned WAI periods now retain
+                                          independent CPU/idle counts and OSC
+                                          phase; SCI/TIM gates, native RTI wake,
+                                          capture-boundary IRQ, chunking/replay
+                                          and failure guards checked with own
+                                          instructions (mcu-wait-clock.txt).
+                                          Original cold-main/idle RTI CTest
+                                          passes for both controlled PM3 levels,
+                                          with mid-wait checkpoint replay and
+                                          independent instruction/phase ledger.
+                                          Calibrated whole-board clocks pending.
                                           Analog startup, whole-board CPU/bus clocks,
                                           COP, wait/stop and full latency pending.
 USB device/transport              partial  PHY control and register/data-side enable.
@@ -282,10 +292,13 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           including 70 extra Flash read cycles.
                                           Independent manual costs/phase census,
                                           native WAI frame and unchanged NVM
-                                          checked (mcu-run-clock.txt). Local
-                                          integration; dedicated cold-main CTest,
-                                          idle WAI time and full DSP peer pending.
-                                          These are controlled MCU fixtures.
+                                          checked by original_owned_clock
+                                          (mcu-run-clock.txt). Native idle RTI
+                                          wake then reaches main WAI again at
+                                          141816115 periods, with exact mid-wait
+                                          replay. These are controlled MCU
+                                          fixtures; full DSP peer and physical
+                                          board/timing qualification pending.
                                           Native DSP RESET preserves OMR/PLL while
                                           clearing SHI; hardware reset resamples
                                           PINIT and restores the RAM map.

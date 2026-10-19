@@ -396,6 +396,17 @@ McuRunClockRoute McuBus::run_clock_route() const {
   }
 }
 
+McuWaitClockGates McuBus::wait_clock_gates() const {
+  constexpr unsigned unsupported_crg_wait = 0x37;
+  const auto selected = clock_.read(hc12::clock_select);
+  if ((selected & unsupported_crg_wait) != 0) {
+    const auto base = static_cast<unsigned>(memory_.read_register(hc12::initrg)) << 8U;
+    throw Fault("Unqualified MCU wait clock at " + hex(base + hc12::clock_select) + " value=" +
+                hex(selected, 2) + " pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2));
+  }
+  return {.sci = sci_.runs_in_wait(), .timer = timer_.runs_in_wait()};
+}
+
 void McuBus::advance_oscillator(const unsigned cycles) {
   clock_.advance_oscillator(cycles);
 }

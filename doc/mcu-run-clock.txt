@@ -40,8 +40,10 @@ checkpoint. A peripheral clock failure can leave earlier peripheral effects in
 place, and latches the clock against retry. An outer CPU/data-access failure also
 requires coordinated CPU/bus/clock recovery. Counters report completed cycles;
 they are not a transaction rollback. MIDI/pad observations remain caller-owned.
-This normal-run API does not implement WAI/STOP/BDM gates, physical switching,
-wait states, asynchronous pad propagation, PHY acquisition or DSP scheduling.
+A separate owned WAI API now advances idle IPBus/OSC time and honors SCI/TIM
+wait gates (mcu-wait-clock.txt). CRG wait shutdown, STOP/BDM gates, physical
+switching, external wait states, asynchronous pad propagation, PHY acquisition
+and DSP scheduling remain unqualified.
 The default standalone CLI remains untimed. Dynamic-rate host MIDI and complete
 MCU/DSP board ownership still require integration.
 
@@ -51,8 +53,9 @@ and timer observation mask together, and rejects failed/incomplete boundaries or
 incompatible contracts. External cycle/bus observers are excluded and must be
 reattached. Live mapped-memory guards qualify operands; no wait-state or physical
 prefetch model is added. See mcu-checkpoints.txt for the API and regressions.
-The default constructor and standalone CLI remain untimed; idle WAI time and
-whole-board/transport scheduling remain pending.
+The default constructor and standalone CLI remain untimed. Owned idle WAI time
+is separate from native CPU cycle callbacks; whole-board/transport scheduling
+remains pending (mcu-wait-clock.txt).
 
 Flash read alignment
 The un-stretched contract retains its rejection of odd Flash word operands.
@@ -60,9 +63,10 @@ The explicit internal_flash_reads contract implements the two read cycles from
 S12FTS32KV1 section 1.1, with each byte latched after its own clock and native
 operand semantics preserved. See mcu-flash-read-timing.txt for independent phase,
 value/flag, failure and checkpoint checks. Firmware data placement is unchanged.
-A local source-fed clocked cold-main run now reaches the original WAI under the
-same controlled inputs; it is integration evidence, not a dedicated CTest gate.
-Idle WAI time and full MCU/DSP scheduling remain unimplemented.
+The source-fed original_owned_clock regression reaches main WAI under the
+controlled inputs and continues through native idle RTI wake/return. Owned WAI
+idle clocks have separate independent regressions (mcu-wait-clock.txt). Full
+MCU/DSP scheduling remains unimplemented.
 
 Evidence
   cmake --build --preset strict --target blofeld-mcu-run-clock-test blofeld-original-cycle-application-test blofeld-original-run-clock-test
@@ -102,10 +106,10 @@ startup countdown, MCU/DSP board boot, physical ready peer, host MIDI/audio or
 Desktop/Keyboard hardware equivalence.
 
 
-Additional source-fed integration
+Original owned-clock regression
 The complete source-built 1.25 MID matches the pinned original MID SHA-256
 447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0.
-A local McuMachine run uses internal_flash_reads, the same 12 MHz OSC/phase-zero
+original_owned_clock uses internal_flash_reads, the same 12 MHz OSC/phase-zero
 ideal-boundary clock contract and explicit GPIO/PHY/LCD/ready fixture. No host
 writes MCU RAM/PC/CCR or injects oscillator periods at foreground polls.
 
@@ -126,11 +130,22 @@ The owned clock reports 283620262 timebase ticks and 56724052 OSC edges.
 
 Each continuation completes after 1570275 steps with a 20000000-step bound.
 The complete successful path is 54952332 retired instructions, 6651 IRQ entries,
-5 reset cycles and 70 extra Flash cycles. Private traces, census, phase ledgers
-and executable/input hashes remain under ignored doc/local/. This local check
-has not yet been promoted to a dedicated full cold-main CTest regression. It
-ends at WAI without advancing idle time or qualifying the inferred board inputs,
-physical Flash strobes, DSP peer, audio or Desktop/Keyboard hardware profiles.
+5 reset cycles and 70 extra Flash cycles. The tracked wrapper pins the original
+ZIP or identical complete source MID and retains private traces, census, phase
+ledgers and executable/input hashes as ignored run artifacts.
+
+Native CLKSEL=0x80 leaves system clocks running in WAI; SCI/TIM wait gates are
+clear. The original RTICTL write at bus cycle 233874 and source-switch ledger
+predict 913 remaining OSC edges, requiring 2282 idle IPBus periods. A trusted
+checkpoint after 1000 periods is restored for two native wake/return runs per
+PM3 level. The first RTI reuses the WAI frame in six cycles. Its handler and
+foreground retire 1358 instructions at 4028 manual cycles and reach WAI again
+at 141816115 total periods, 283632894 ticks and 56726578 OSC edges. Full-register
+restoration, RTIF acknowledgement, native WAI frame, saved input, unchanged NVM
+and equal independent replay/cost/phase records agree. No host period or CPU
+state is injected. This still does not qualify inferred board inputs, physical
+Flash strobes, a real DSP peer, audio or Desktop/Keyboard hardware profiles.
+See mcu-wait-clock.txt for the API, strict unsupported gates and commands.
 
 References
 Pinned NXP bundle in doc/hardware/sources.json: 9S12UF32DGV1 section 1.2 operating

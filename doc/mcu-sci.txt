@@ -79,9 +79,11 @@ DSP voice processing or the physical board's MIDI routing.
 Unsupported behaviors
 Loop/single-wire mode, receiver wakeup and send-break requests fail. Interrupt
 enables feed the instruction-boundary controller described in mcu-interrupts.txt.
-Mid-frame format/baud changes also fail. Wait/stop behavior, precise flag
-transfer timing, host MIDI ports and complete CPU/peripheral scheduling remain
-pending. No physical MIDI traffic is sent by the tests or fuzz harness.
+Mid-frame data-format/baud changes also fail. Changing only SCISWAI is permitted
+while active. The owned WAI API independently gates SCI and TIM; in-flight SCI
+sample/divider state survives WAI and trusted restore (mcu-wait-clock.txt).
+CRG wait shutdown, STOP behavior, precise flag-transfer timing, host MIDI ports
+and complete board scheduling remain pending. No physical MIDI traffic is sent by the tests or fuzz harness.
 
 References
 doc/hardware/sources.json pins the official NXP bundle 9S12UF32_ZIP.zip.

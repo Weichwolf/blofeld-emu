@@ -60,6 +60,11 @@ constexpr std::array<std::string_view, controls_size> names{"TIOS",
                                                             "TFLG2"};
 }
 
+bool McuTimer::runs_in_wait() const {
+  constexpr unsigned stop_in_wait = 0x40;
+  return (controls_[system_control1] & stop_in_wait) == 0;
+}
+
 void McuTimer::reset() {
   *this = McuTimer{};
 }

@@ -30,6 +30,11 @@ struct BusEvent {
   std::string_view name;
 };
 
+struct McuWaitClockGates {
+  bool sci = true;
+  bool timer = true;
+};
+
 // Initial strict bring-up model. Unimplemented reads fail rather than returning
 // fabricated ready flags. Register and pin coverage is expanded from traces.
 class McuBus final : public Bus {
@@ -61,6 +66,8 @@ public:
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
   void observe_phy(PhyClockWindow window);
   [[nodiscard]] McuRunClockRoute run_clock_route() const;
+  // Qualified system clocks continue through WAI; unsupported CRG gates fail.
+  [[nodiscard]] McuWaitClockGates wait_clock_gates() const;
   void observe_usb_decoder(UsbDecoderState state);
   void observe_usb_sof(std::uint16_t frame, bool crc_valid = true);
   void observe_usb_configuration(UsbConfigurationRequest request);

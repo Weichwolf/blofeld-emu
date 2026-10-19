@@ -65,6 +65,8 @@ private:
   [[nodiscard]] Hc12Checkpoint checkpoint() const;
   void restore_checkpoint(const Hc12Checkpoint &checkpoint);
   [[nodiscard]] bool executing() const;
+  void begin_wait_clock();
+  void end_wait_clock(bool healthy);
   void enter_interrupt(InterruptRequest request, std::optional<std::uint16_t> reuse_stack);
   class Impl;
   std::unique_ptr<Impl> impl_;

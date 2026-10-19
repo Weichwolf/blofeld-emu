@@ -473,6 +473,7 @@ public:
   bool defer_irq = false;
   bool active = false;
   bool checkpointable = false;
+  bool wait_clock_failed = false;
   Bus &bus;
   CodeImage image;
   ghidra::ContextInternal context;
@@ -534,8 +535,22 @@ bool Hc12::executing() const {
   return impl_->active;
 }
 
+void Hc12::begin_wait_clock() {
+  if (impl_->active || !impl_->checkpointable || impl_->wait_clock_failed || !waiting()) {
+    throw Fault("HC12 wait clocks require a healthy completed WAI boundary");
+  }
+  impl_->active = true;
+  impl_->checkpointable = false;
+}
+
+void Hc12::end_wait_clock(const bool healthy) {
+  impl_->active = false;
+  impl_->checkpointable = healthy;
+  impl_->wait_clock_failed = !healthy;
+}
+
 Hc12Checkpoint Hc12::checkpoint() const {
-  if (impl_->active || !impl_->checkpointable) {
+  if (impl_->active || !impl_->checkpointable || impl_->wait_clock_failed) {
     throw Fault("HC12 checkpoint requires a completed instruction, reset or register replacement");
   }
   Hc12Checkpoint result;
@@ -566,6 +581,7 @@ void Hc12::restore_checkpoint(const Hc12Checkpoint &checkpoint) {
   impl_->executor->setExecuteAddress(
       ghidra::Address(impl_->translator.getDefaultCodeSpace(), checkpoint.pc_));
   impl_->executor->restore_wait(checkpoint.waiting_);
+  impl_->wait_clock_failed = false;
   impl_->defer_irq = checkpoint.defer_irq_;
   impl_->checkpointable = true;
 }
@@ -632,6 +648,9 @@ void Hc12::enter_interrupt(const InterruptRequest request,
 }
 
 CpuStep Hc12::step() {
+  if (impl_->wait_clock_failed) {
+    throw Fault("HC12 wait clock failure requires coordinated recovery");
+  }
   const ExecutionGuard guard(impl_->active);
   impl_->checkpointable = false;
   try {

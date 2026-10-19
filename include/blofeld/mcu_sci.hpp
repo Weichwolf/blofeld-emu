@@ -24,6 +24,7 @@ public:
   void write(ByteWrite write);
   void advance(SciClockSlice slice);
   [[nodiscard]] bool receiver_enabled() const;
+  [[nodiscard]] bool runs_in_wait() const;
   [[nodiscard]] bool interrupt_pending() const;
   [[nodiscard]] unsigned bus_cycles_until_sample() const;
   [[nodiscard]] std::optional<bool> transmit_level() const;
