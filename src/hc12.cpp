@@ -136,13 +136,37 @@ private:
   bool &active_;
 };
 
+struct RegisterLayout {
+  ghidra::VarnodeData d;
+  ghidra::VarnodeData x;
+  ghidra::VarnodeData y;
+  ghidra::VarnodeData sp;
+  ghidra::VarnodeData ccr;
+  ghidra::VarnodeData pc;
+};
+
+RegisterLayout register_layout(const ghidra::Translate &translator) {
+  return {.d = translator.getRegister("D"),
+          .x = translator.getRegister("IX"),
+          .y = translator.getRegister("IY"),
+          .sp = translator.getRegister("SP"),
+          .ccr = translator.getRegister("CCR"),
+          .pc = translator.getRegister("PC")};
+}
+
 // Execute exactly one cached translation. Ghidra's EmulatePcodeCache eagerly decodes
 // the following instruction, which can report a fault after the current one has
 // already committed or retain stale instructions after RAM code is modified.
 class InstructionExecutor final : public ghidra::EmulateMemory {
 public:
-  InstructionExecutor(Bus &bus, ghidra::Sleigh &translator, ghidra::MemoryState &memory)
-      : EmulateMemory(&memory), bus_(bus), translator_(translator) {
+  InstructionExecutor(Bus &bus,
+                      ghidra::Sleigh &translator,
+                      ghidra::MemoryState &memory,
+                      const ghidra::VarnodeData &program_counter)
+      : EmulateMemory(&memory),
+        bus_(bus),
+        translator_(translator),
+        program_counter_(program_counter) {
     ghidra::OpBehavior::registerInstructions(behaviors_, &translator_);
     translator_.getUserOpNames(user_operations_);
   }
@@ -179,7 +203,7 @@ public:
                         .length = static_cast<unsigned>(decoded.length)});
     operations_ = decoded.operations;
     next_ = address_ + decoded.length;
-    memstate->setValue("PC", next_.getOffset());
+    memstate->setValue(&program_counter_, next_.getOffset());
     index_ = 0;
     finished_ = false;
     for (unsigned steps = 0; !finished_; ++steps) {
@@ -192,7 +216,7 @@ public:
       currentBehave = currentOp->getBehavior();
       executeCurrentOp();
     }
-    memstate->setValue("PC", address_.getOffset());
+    memstate->setValue(&program_counter_, address_.getOffset());
   }
 
 protected:
@@ -286,6 +310,7 @@ private:
   static constexpr unsigned translation_limit = 128;
   Bus &bus_;
   ghidra::Sleigh &translator_;
+  const ghidra::VarnodeData &program_counter_;
   ghidra::Address address_;
   ghidra::Address next_;
   std::span<ghidra::PcodeOpRaw *const> operations_;
@@ -309,6 +334,7 @@ public:
     auto *root = documents.parseDocument(configuration)->getRoot();
     documents.registerTag(root);
     translator.initialize(documents);
+    layout = register_layout(translator);
     ram = std::make_unique<BusBank>(translator.getDefaultCodeSpace(), bus);
     registers = std::make_unique<ghidra::MemoryHashOverlay>(
         translator.getSpaceByName("register"), 8, 256, 1024, nullptr);
@@ -317,7 +343,7 @@ public:
     memory.setMemoryBank(ram.get());
     memory.setMemoryBank(registers.get());
     memory.setMemoryBank(temporaries.get());
-    executor = std::make_unique<InstructionExecutor>(bus, translator, memory);
+    executor = std::make_unique<InstructionExecutor>(bus, translator, memory, layout.pc);
   }
 
   void refresh_decoder() {
@@ -327,23 +353,24 @@ public:
       translator.reset(&image, &context);
       ghidra::DocumentStorage documents;
       translator.initialize(documents);
+      layout = register_layout(translator);
       decoded_revision = revision;
     }
   }
 
   void push_word(const std::uint16_t value) {
     constexpr unsigned address_space = 65536;
-    const auto old = memory.getValue("SP");
+    const auto old = memory.getValue(&layout.sp);
     const auto stack = static_cast<std::uint16_t>((old + address_space - 2) & hc12::address_mask);
-    memory.setValue("SP", stack);
+    memory.setValue(&layout.sp, stack);
     bus.write_memory({.address = stack, .size = 2, .value = value});
   }
 
   void push_byte(const std::uint8_t value) {
     constexpr unsigned address_space = 65536;
-    const auto stack = static_cast<std::uint16_t>((memory.getValue("SP") + address_space - 1) &
-                                                  hc12::address_mask);
-    memory.setValue("SP", stack);
+    const auto stack = static_cast<std::uint16_t>(
+        (memory.getValue(&layout.sp) + address_space - 1) & hc12::address_mask);
+    memory.setValue(&layout.sp, stack);
     bus.write_memory({.address = stack, .value = value});
   }
 
@@ -354,6 +381,7 @@ public:
   ghidra::ContextInternal context;
   ghidra::Sleigh translator;
   ghidra::MemoryState memory;
+  RegisterLayout layout{};
   std::unique_ptr<BusBank> ram;
   std::unique_ptr<ghidra::MemoryHashOverlay> registers;
   std::unique_ptr<ghidra::MemoryHashOverlay> temporaries;
@@ -383,23 +411,23 @@ void Hc12::reset() {
 void Hc12::set_state(const CpuState &state) {
   impl_->executor->cancel_wait();
   impl_->defer_irq = false;
-  impl_->memory.setValue("D", state.d);
-  impl_->memory.setValue("IX", state.x);
-  impl_->memory.setValue("IY", state.y);
-  impl_->memory.setValue("SP", state.sp);
-  impl_->memory.setValue("CCR", state.ccr);
-  impl_->memory.setValue("PC", state.pc);
+  impl_->memory.setValue(&impl_->layout.d, state.d);
+  impl_->memory.setValue(&impl_->layout.x, state.x);
+  impl_->memory.setValue(&impl_->layout.y, state.y);
+  impl_->memory.setValue(&impl_->layout.sp, state.sp);
+  impl_->memory.setValue(&impl_->layout.ccr, state.ccr);
+  impl_->memory.setValue(&impl_->layout.pc, state.pc);
   impl_->executor->setExecuteAddress(
       ghidra::Address(impl_->translator.getDefaultCodeSpace(), state.pc));
 }
 
 CpuState Hc12::state() const {
   return {.pc = static_cast<std::uint16_t>(impl_->executor->getExecuteAddress().getOffset()),
-          .d = static_cast<std::uint16_t>(impl_->memory.getValue("D")),
-          .x = static_cast<std::uint16_t>(impl_->memory.getValue("IX")),
-          .y = static_cast<std::uint16_t>(impl_->memory.getValue("IY")),
-          .sp = static_cast<std::uint16_t>(impl_->memory.getValue("SP")),
-          .ccr = static_cast<std::uint8_t>(impl_->memory.getValue("CCR"))};
+          .d = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.d)),
+          .x = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.x)),
+          .y = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.y)),
+          .sp = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.sp)),
+          .ccr = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.ccr))};
 }
 
 bool Hc12::waiting() const {
@@ -449,7 +477,7 @@ void Hc12::enter_interrupt(const InterruptRequest request,
       static_cast<std::uint16_t>(impl_->bus.read_memory({.address = request.vector, .size = 2}));
   impl_->bus.acknowledge_interrupt(request.vector);
   if (reuse_stack) {
-    impl_->memory.setValue("SP", *reuse_stack);
+    impl_->memory.setValue(&impl_->layout.sp, *reuse_stack);
   } else {
     impl_->push_word(next.pc);
     impl_->push_word(next.y);
@@ -459,7 +487,7 @@ void Hc12::enter_interrupt(const InterruptRequest request,
     impl_->push_word(ba);
     impl_->push_byte(next.ccr);
   }
-  next.sp = static_cast<std::uint16_t>(impl_->memory.getValue("SP"));
+  next.sp = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.sp));
   next.ccr = static_cast<std::uint8_t>(next.ccr | hc12::interrupt_mask |
                                        (request.kind == InterruptKind::xirq ? hc12::xirq_mask : 0));
   next.pc = target;

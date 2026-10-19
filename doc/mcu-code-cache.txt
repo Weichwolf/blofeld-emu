@@ -22,6 +22,16 @@ instructions. Self-modifying code refreshes before the following step; attempts
 to invalidate an instruction from a reentrant IO callback fail explicitly before
 freeing any active operation. Exception unwinding releases that execution guard.
 
+Native register access
+The D/IX/IY/SP/CCR/PC descriptions are copied from SLEIGH into CPU-owned storage
+after initialization and every decoder refresh. They contain address-space,
+offset and width, never register values. State inspection, debug replacement,
+interrupt stacking and the executor's PC writes use these descriptions to avoid
+repeated symbol-name searches. Every access still reads/writes the live native
+register bank; its overlapping registers and P-code flag operations are unchanged.
+The executor references the stable CPU-owned PC description, not a symbol-table
+entry. Refresh replaces that description in place before execution resumes.
+
 Verification
   build/strict/blofeld-code-cache-test
   cmake --build build/strict --target quality
@@ -38,9 +48,15 @@ byte-identical before and after caching (SHA-256):
 The separate million-instruction private application probe is also byte-identical
 to its pre-cache trace (SHA-256):
   97ab2cc640992eab444f454ee52c499fe1e7f8eb5288524afaa51ba3e105e1d2
-One local ASan/UBSan run took about 7.5 seconds versus 18 seconds before either
-optimization. These single diagnostic runs include tracing and are not controlled
-benchmarks, release performance measurements or evidence of real-time suitability.
+Three serial local ASan/UBSan runs of the same 90314-instruction fixture had
+median times of 7.63 seconds with register-name searches and 3.35 seconds with
+copied register descriptions. All six traces have the first SHA-256 above.
+Complete original flash-command, MCU sender, parallel-transfer and LCD-helper
+traces also remain byte-identical. A longer private startup preserves the whole
+earlier eight-million-step diagnostic trace prefix; mcu-rti.txt describes its
+conditional pin/clock inputs and later native main-WAI result.
+These diagnostic runs include tracing and are not controlled benchmarks, release
+performance measurements or evidence of real-time suitability.
 
 Limits
 This is an interpreter cache-coherence contract, not a model of the CPU12 physical
