@@ -226,6 +226,16 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-boot.trace")
   set_tests_properties(original_dsp_boot PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-coupled-boot-test test/original_coupled_boot_test.cpp
+    test/coupled_boot_fixture.cpp)
+  target_link_libraries(blofeld-coupled-boot-test PRIVATE blofeld_core blofeld_dsp)
+  add_test(NAME original_coupled_boot COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"
+    $<TARGET_FILE:blofeld-coupled-boot-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-coupled-boot.trace")
+  set_tests_properties(original_coupled_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-shi-test test/dsp_shi_test.cpp)
   target_link_libraries(blofeld-shi-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_shi COMMAND blofeld-shi-test)
@@ -323,7 +333,7 @@ add_custom_target(quality
     blofeld-dsp-interrupt-test
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-vsl-test
-    blofeld-dsp-corpus-test
+    blofeld-dsp-corpus-test blofeld-coupled-boot-test
     blofeld-clock-test blofeld-sci-test blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-mcu-sender-test

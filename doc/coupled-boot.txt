@@ -1,0 +1,70 @@
+Original MCU-to-DSP bootstrap coupling experiment
+
+  cmake --build --preset strict --target blofeld-coupled-boot-test
+  ctest --test-dir build/strict -R '^original_coupled_boot$' --output-on-failure
+
+The optional test requires the private original 1.25 ZIP and the document-derived
+58-word SPI ROM prefix described in dsp-core.txt. The existing Python runner
+checks both pinned identities before execution; missing private inputs skip.
+No manufacturer program, ROM prefix or generated trace is distributed here.
+
+Executed path
+The unchanged MCU image starts at its original reset vector. Its bootloader and
+application execute 1672478 instructions to the third PU0 poll. PE/PHY/PB inputs
+are the explicit laboratory observations from mcu-boot.txt: PU0 remains unknown
+until observed low twice, then high. This does not infer a DSP-ready connection.
+An immutable in-process MCU checkpoint retains that executed instruction boundary
+for the subsequent experiments; no debug PC/register replacement supplies a path.
+
+The DSP is released from its own mode-five reset at that boundary, with the
+current native MCU serial pads as the external baseline. Its executed documented
+ROM prefix initializes OnCE/SHI and waits for serial data. This reset-release
+point is a fixture choice, not a recovered Blofeld reset signal or clock profile.
+
+The original MCU executes the remaining 184115 instructions and all 7275 PORTB
+stores. Candidate PB1/PB2/PB4 observations drive SHI selection/clock/data. Native
+DSP ROM instructions consume the resulting 97 serial frames, write all 94 stage
+words into P RAM and jump to them. The fixture does not inject receive words,
+write P RAM or replace the receiver's load algorithm. It compares every stored
+word with original MCU flash. The one trailing MCU word remains in the FIFO and
+is read only as a final verification observation, after native loading completes.
+
+The loaded original stage programs PCTL and clears all 8192 mapped low X/Y word
+pairs. Execution stops before the unqualified reserved Y:002000 write, with the
+original REP count still active. This retains the dsp-core.txt frontier; no
+reserved write is ignored and no clear-loop iteration is skipped.
+
+Controlled pad order and instruction interleaving
+The first native PORTB store changes SS and SCK together. Delivering that raw
+observation still fails in the unchanged SHI model. An explicit alternative
+experiment delivers the falling SCK observation while SS is deasserted, followed
+by SS assertion. The source GPIO value remains unchanged; these are two assumed
+receiver pad observations. Reversing their order fails the idle-clock check.
+This experiment establishes neither physical pad skew nor the data sheet's
+minimum SS-to-first-clock interval. It is not a default Blofeld wiring policy.
+
+Successful runs supply one and four DSP instructions after each MCU instruction.
+These are declared laboratory interleavings, not measured clock ratios or cycle
+accounting. Both check the exact MCU instruction/store/frame counts, native DSP
+program words, PLL operand, FIFO contents and mapped RAM clear. Repeating the
+first run from the executed MCU checkpoint with a fresh reset DSP produces an
+identical complete recorded CPU/pin trace. Each DSP step records PC/SR/OMR/LC/R4;
+each MCU GPIO store records its PC, value and serial pads. The final MCU register
+state is recorded too. This is not a full DSP-register dump or restorable
+whole-board snapshot. The source checkpoint remains unchanged.
+
+Three negative cases require visible failures: unresolved simultaneous SS/SCK,
+SS-before-SCK, and an unknown MOSI level at a selected capture edge. Diagnostics
+must retain the original reason, MCU write address and both CPU PCs. There is no
+fallback bit value or silently accepted pin transition. Each experiment has a
+finite instruction bound; budget exhaustion fails instead of proving boot.
+
+Scope and remaining requirements
+This is a one-way, untimed CPU/SHI integration experiment. Other MCU input pins
+remain separately controlled; DSP MISO/HREQ and the MCU's PU0 are not wired by
+this fixture. Pin routing, bidirectional board signals, reset sequencing, bus
+phases and elapsed clocks still need hardware qualification. The ROM prefix is
+manual-derived, not a complete stock ROM dump. The headless CLI remains MCU-only.
+NAND loading, ROM/wavetable contents, complete scheduled Desktop/Keyboard boot,
+MIDI/audio, full update/recovery/power-loss behavior, persistent whole-board
+snapshots, stress and stock Blofeld validation remain open (coverage.txt).

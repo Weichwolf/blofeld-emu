@@ -138,3 +138,10 @@ It covers bus/map/ROM/reset/SHI/PLL/GPIO/timer inputs, not arbitrary
 native DSP instruction streams or the complete board. Sustained and differential CPU
 campaigns, actual NAND/assets, full application/audio and hardware comparison
 remain required; see coverage.txt.
+
+Native original MCU/DSP coupling
+The separate original_coupled_boot regression now links original MCU GPIO stores
+to the executing DSP ROM prefix. It checks both CPUs, 94 loaded words, retained
+trailing data, mapped clears, checkpoint replay and strict pin failures under an
+explicit receiver pad-order experiment. This does not qualify the physical
+route, reset or elapsed clocks; see coupled-boot.txt for exact inputs and limits.

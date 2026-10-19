@@ -138,8 +138,10 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           Blofeld hardware comparison.
                                           Original 94-word first stage loads through
                                           executed documented SPI ROM instructions
-                                          (dsp-core.txt). Full application and
-                                          combined board execution remain pending.
+                                          (dsp-core.txt). Native original MCU/DSP
+                                          coupling now checked under controlled
+                                          pad order (coupled-boot.txt); full DSP
+                                          application/board execution pending.
 DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled privately;
                                           no complete/hardware-dumped ROM supplied.
                                           Original MCU-embedded 94-word DSP stage
@@ -161,16 +163,19 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           PLL timing/lock, remaining GPIO/timer modes,
                                           ESAI, DMA and chip profile pending;
                                           no combined MCU/DSP board boot.
-MCU–DSP communication             partial  Native synthetic HC12 GPIO program exchanges
-                                          exact words with SHI in both directions.
-                                          Native DSP receives original frame bytes
-                                          from a host pin fixture. Original MCU
-                                          reset/application emits its own 97-word
-                                          transfer in an explicit PU0/PB experiment;
-                                          all words and 7275 GPIO writes checked
-                                          (mcu-boot.txt). First selection changes
-                                          SS/SCK together; pad timing, physical route
-                                          and combined scheduling remain pending.
+MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges exact
+                                          words in both directions. Original cold MCU
+                                          sends its 97 frames through 7275 GPIO stores
+                                          to native DSP ROM, which loads all94 stage
+                                          words and reaches mapped RAM-clear frontier.
+                                          Explicit SCK-before-SS pad experiment and
+                                          1/4 DSP-instruction interleavings, exact
+                                          MCU-checkpoint replay and three pin-error
+                                          cases checked (coupled-boot.txt). Raw
+                                          simultaneous transitions still fail.
+                                          MISO/HREQ/PU0 linkage, actual routing,
+                                          reset, elapsed clocks and full scheduling
+                                          remain unqualified.
 ROM wavetables and other assets   pending  Must establish dependencies from real
                                           execution accesses; ROM contents unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
@@ -332,6 +337,9 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           bytes with matching original ISR and
                                           foreground traces under its controlled
                                           external LCD fixture (mcu-checkpoints.txt).
+                                          Original MCU sender checkpoint replays
+                                          native DSP/pin traces exactly in the
+                                          controlled coupling experiment.
                                           Persistent full-state format/fuzzing,
                                           DSP/scheduler and whole-board replay
                                           remain pending.

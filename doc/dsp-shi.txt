@@ -81,3 +81,10 @@ pin experiment described in mcu-boot.txt. Its first selection changes SS/SCK in
 one GPIO write; this model does not guess the pad transition order. NAND loading,
 board routing and clock ratios still require combined execution and stock
 hardware validation. See firmware-layout.txt and coverage.txt.
+
+Native original MCU/DSP coupling
+The separate original_coupled_boot regression now links original MCU GPIO stores
+to the executing DSP ROM prefix. It checks both CPUs, 94 loaded words, retained
+trailing data, mapped clears, checkpoint replay and strict pin failures under an
+explicit receiver pad-order experiment. This does not qualify the physical
+route, reset or elapsed clocks; see coupled-boot.txt for exact inputs and limits.

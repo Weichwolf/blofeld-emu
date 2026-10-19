@@ -80,7 +80,9 @@ priority, RTI, relocated vectors and DO/REP behavior at instruction boundaries.
 doc/dsp-core.txt covers native DSP execution and the documented SPI bootstrap
 loading the unchanged Blofeld first stage. A separate original MCU regression
 captures its complete GPIO transmission under explicit pin observations
-(doc/mcu-boot.txt). Combined MCU/DSP boot remains pending.
+(doc/mcu-boot.txt). doc/coupled-boot.txt connects the executing original MCU
+sender to the native DSP ROM under an explicit pad-order/interleaving experiment.
+Measured timing and complete scheduled MCU/DSP board boot remain pending.
 doc/dsp-validation.txt covers NORM/accumulator-transfer corrections, native VSL,
 independent instruction vectors and pinned external MCPX silicon captures, with
 derivative limits.

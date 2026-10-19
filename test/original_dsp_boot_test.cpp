@@ -3,8 +3,8 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/firmware.hpp"
+#include "dsp_boot_reference.hpp"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -13,11 +13,9 @@
 #include <iostream>
 #include <span>
 #include <string>
-#include <vector>
 
 namespace {
 constexpr unsigned bootstrap_base = 0xff0000;
-constexpr std::size_t bootstrap_words = 58;
 constexpr unsigned mcu_frame_offset = 0x7875;
 constexpr std::size_t stage_words = 94;
 constexpr unsigned stage_base = 0x6a;
@@ -31,28 +29,6 @@ constexpr unsigned word_bits = 24;
 
 void require(const bool condition, const std::string &message) {
   if (!condition) { throw blofeld::Fault(message); }
-}
-
-std::uint32_t read_word(const std::span<const std::uint8_t, 3> bytes) {
-  return (static_cast<std::uint32_t>(bytes[0]) << 16U) |
-         (static_cast<std::uint32_t>(bytes[1]) << 8U) | bytes[2];
-}
-
-std::vector<std::uint32_t> read_document_rom(const std::filesystem::path &path) {
-  std::ifstream file(path, std::ios::binary);
-  std::array<char, bootstrap_words * 3> bytes{};
-  file.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-  require(file.gcount() == static_cast<std::streamsize>(bytes.size()) &&
-              file.get() == std::char_traits<char>::eof(),
-          "Document-derived SPI bootstrap prefix must have the pinned length");
-  std::vector<std::uint32_t> words;
-  for (std::size_t offset = 0; offset < bytes.size(); offset += 3) {
-    const std::array<std::uint8_t, 3> triplet{static_cast<std::uint8_t>(bytes[offset]),
-                                              static_cast<std::uint8_t>(bytes[offset + 1]),
-                                              static_cast<std::uint8_t>(bytes[offset + 2])};
-    words.push_back(read_word(triplet));
-  }
-  return words;
 }
 
 class Runner {
@@ -102,7 +78,7 @@ struct Inputs {
 
 int run(const Inputs &inputs) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
-  const auto rom = read_document_rom(inputs.rom);
+  const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
   blofeld::DspBus bus;
   bus.install_rom({.start = bootstrap_base, .words = rom});
   bus.shi().observe_spi({.mosi = false});
@@ -116,19 +92,20 @@ int run(const Inputs &inputs) {
           "Documented bootstrap performs its own OnCE GDB initialization write");
   const auto frame =
       std::span<const std::uint8_t>(firmware.mcu).subspan(mcu_frame_offset, (stage_words + 2) * 3);
-  require(read_word(frame.first<3>()) == stage_words &&
-              read_word(frame.subspan<3, 3>()) == stage_base,
+  require(blofeld::test::dsp_boot_word(frame.first<3>()) == stage_words &&
+              blofeld::test::dsp_boot_word(frame.subspan<3, 3>()) == stage_base,
           "Unmodified MCU image supplies the independently identified first-stage frame");
   for (std::size_t offset = 0; offset < frame.size(); offset += 3) {
-    runner.send(read_word(std::span<const std::uint8_t, 3>(frame.subspan(offset, 3))));
+    runner.send(
+        blofeld::test::dsp_boot_word(std::span<const std::uint8_t, 3>(frame.subspan(offset, 3))));
   }
   while (cpu.state().pc != stage_base) { runner.step(); }
   require(cpu.state().sp == 0 && cpu.state().r[0] == stage_base + stage_words &&
               cpu.state().r[1] == stage_base,
           "Native ROM DO loop, stack and jump complete without host PC patching");
   for (std::size_t index = 0; index < stage_words; ++index) {
-    const auto expected =
-        read_word(std::span<const std::uint8_t, 3>(frame.subspan((index + 2) * 3, 3)));
+    const auto expected = blofeld::test::dsp_boot_word(
+        std::span<const std::uint8_t, 3>(frame.subspan((index + 2) * 3, 3)));
     require(bus.read({.address = static_cast<std::uint32_t>(stage_base + index)}) == expected,
             "Every original first-stage word was written by executed DSP MOVEP instructions");
   }
