@@ -8,7 +8,23 @@
       "bytes": 23546761,
       "sha256": "a6f2adb407253392cfe9d6b211c3cfce29d652421373745c72e06634bf3ed1a0",
       "source": "https://downloads.waldorfmusic.com/cloud/index.php/s/33B3t58F6GMAj4j",
-      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/33B3t58F6GMAj4j/download"
+      "download": "https://downloads.waldorfmusic.com/cloud/index.php/s/33B3t58F6GMAj4j/download",
+      "midi_member": {
+        "file": "Blofeld-SamplesV1_00.mid",
+        "bytes": 29801086,
+        "sha256": "e5e34f8f2830dc394360083d7e9d896cba7fb89c6748a7ede2d73af564651b56",
+        "transport_observations": {
+          "sysex_messages": 83352,
+          "commands": {
+            "0x73": 2981,
+            "0x74": 19,
+            "0x75": 80352
+          },
+          "bulk_groups": 1488,
+          "duplicate_empty_headers": 1488
+        },
+        "qualification": "Fixed official distribution observations. Command 0x75 receiver behavior and NAND/ROM/runtime mapping remain unqualified."
+      }
     },
     {
       "file": "Standard_Factory_Sample_Content_V1.0_for_License_SL_as_WPC_File.wpc",

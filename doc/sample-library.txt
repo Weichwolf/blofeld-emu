@@ -1,0 +1,53 @@
+Official standard sample references and unresolved runtime contents
+
+doc/library/sources.json pins the official standard-library MIDI ZIP and WPC
+downloads by URL, size and SHA-256. It also pins the contained 29801086-byte
+Blofeld-SamplesV1_00.mid member. These references remain local, outside source
+control. Verify the pinned local downloads without network or device access:
+  python3 tools/references.py --verify
+
+The unchanged MIDI contains 83352 SysEx messages: 2981 command 0x73 headers,
+19 command 0x74 packets and 80352 command 0x75 packets. The distribution has
+1488 bulk data groups, each with 54 command 0x75 packets and an identical extra
+header before its data-bearing header. Packet XORs and per-header sequences
+were checked offline. These are observations of one pinned distribution;
+the original receiver/programmer contract has not been qualified by execution.
+
+Reproduce the member identity and message census after download verification:
+  python3 - <<'PY'
+  from collections import Counter
+  import hashlib, json
+  from pathlib import Path
+  from zipfile import ZipFile
+  from tools.inspect_firmware import read_smf
+  entry = json.loads(Path('doc/library/sources.json').read_text())['files'][0]
+  member = entry['midi_member']
+  with ZipFile(Path('doc/library') / entry['file']) as archive:
+      assert archive.getinfo(member['file']).file_size == member['bytes']
+      data = archive.read(member['file'])
+  assert hashlib.sha256(data).hexdigest() == member['sha256']
+  messages, _ = read_smf(data)
+  census = {hex(k): v for k, v in Counter(m[3] for m in messages).items()}
+  expected = member['transport_observations']
+  assert len(messages) == expected['sysex_messages'] and census == expected['commands']
+  print(len(messages), census)
+  PY
+
+The firmware-only container parser explicitly rejects command 0x75. Its bounded
+OS-firmware input limits are retained; the larger sample member is a separate
+reference. No sample transfer to a physical device is part of these checks.
+
+The WPC file is not established as a raw NAND image. The observed transport
+header fields, packet lengths and file sizes do not identify physical page
+addresses, spare/ECC bytes, bad-block handling or flash history. Applying the
+existing OS-firmware packing/word-order interpretation has not established
+byte equivalence between WPC and MIDI. Transformations remain unresolved.
+
+No firmware-derived mapping from these distributions to a complete original
+NAND image has been established. Required internal wavetable/ROM data,
+device-specific contents and their actual runtime reads remain unestablished.
+They must not be supplied as guessed zero/erased defaults. The strict original
+boot frontier remains Y:002000 before full NAND loading and sample playback.
+Actual library installation, complete boot, voices/audio and stock-device
+equivalence remain pending. Source-side constraints are requested in:
+  https://github.com/Weichwolf/blofeld-src/issues/4
