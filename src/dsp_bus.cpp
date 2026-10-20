@@ -54,6 +54,7 @@ std::optional<GpioRegister> gpio_register(const DspAddress access) {
   constexpr unsigned port_c_base = 0xffffbd;
   constexpr unsigned port_e_base = 0xffff9d;
   constexpr unsigned port_f_base = 0xfffff5;
+  constexpr unsigned port_d_base = 0xffffd5;
 
   struct Mapping {
     DspPort port;
@@ -61,10 +62,11 @@ std::optional<GpioRegister> gpio_register(const DspAddress access) {
     unsigned base;
   };
 
-  constexpr std::array<Mapping, 3> ports{
+  constexpr std::array<Mapping, 4> ports{
       {{.port = DspPort::c, .space = DspSpace::x, .base = port_c_base},
        {.port = DspPort::e, .space = DspSpace::y, .base = port_e_base},
-       {.port = DspPort::f, .space = DspSpace::y, .base = port_f_base}}};
+       {.port = DspPort::f, .space = DspSpace::y, .base = port_f_base},
+       {.port = DspPort::d, .space = DspSpace::x, .base = port_d_base}}};
   for (const auto &mapping : ports) {
     if (access.space == mapping.space && access.address >= mapping.base &&
         access.address - mapping.base < 3) {
@@ -118,6 +120,7 @@ void DspBus::reset_peripherals() {
   shi_.reset();
   timers_.reset();
   dma_.reset();
+  dax_.reset();
   for (auto &port : gpio_) { port.reset(); }
   for (auto &serial : esai_) { serial.reset(); }
 }
@@ -137,6 +140,14 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
     throw Fault("Invalid DSP bit access at " + address_text(target));
   }
   const auto mask = 1U << access.bit;
+  if (access.space == DspSpace::x && DspDax::handles(access.address)) {
+    sync_dax();
+    const bool old = (dax_.read(access.address, mask) & mask) != 0;
+    if (access.operation != DspBitOperation::test) {
+      dax_.write(access.address, change_bit(dax_.read(access.address), mask, access.operation));
+    }
+    return old;
+  }
   if (access.space == DspSpace::x && DspDma::handles(access.address)) {
     const bool old = (dma_.read(access.address, mask) & mask) != 0;
     if (access.operation != DspBitOperation::test) {
@@ -168,6 +179,7 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   const auto value = change_bit(old ? mask : 0U, mask, access.operation);
   port.write({.reg = mapping->reg, .value = value, .mask = mask});
   sync_esai_port(mapping->port);
+  if (mapping->port == DspPort::d) { sync_dax(); }
   return old;
 }
 
@@ -328,6 +340,10 @@ void DspBus::acknowledge_interrupt(const DspInterruptRequest request) {
 }
 
 std::uint32_t DspBus::read_peripheral(const DspAddress access) {
+  if (access.space == DspSpace::x && DspDax::handles(access.address)) {
+    sync_dax();
+    return dax_.read(access.address);
+  }
   if (access.space == DspSpace::x && DspDma::handles(access.address)) {
     return dma_.read(access.address);
   }
@@ -365,6 +381,11 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
 }
 
 void DspBus::write_peripheral(const DspStore access) {
+  if (access.space == DspSpace::x && DspDax::handles(access.address)) {
+    sync_dax();
+    dax_.write(access.address, access.value);
+    return;
+  }
   if (access.space == DspSpace::x && DspDma::handles(access.address)) {
     dma_.write(access.address, access.value);
     return;
@@ -390,6 +411,7 @@ void DspBus::write_peripheral(const DspStore access) {
     }
     gpio(target->port).write({.reg = target->reg, .value = access.value});
     sync_esai_port(target->port);
+    if (target->port == DspPort::d) { sync_dax(); }
     return;
   }
   if (access.space == DspSpace::x && access.address == bus_control) {

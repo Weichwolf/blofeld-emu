@@ -6,7 +6,7 @@
 
 namespace blofeld {
 
-enum class DspPort : std::uint8_t { c, e, f };
+enum class DspPort : std::uint8_t { c, e, f, d };
 enum class DspGpioRegister : std::uint8_t { data, direction, control };
 
 struct DspGpioWrite {

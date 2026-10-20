@@ -51,15 +51,17 @@ DSP56371 memory and peripheral scope
 - PCTL command/reset state and requested EXTAL ratios follow DSP56371UM chapter 5;
   see dsp-pll.txt. Hardware reset samples observed PINIT, while the DSP RESET
   instruction resets SHI/interrupt state without resetting CPU OMR or PLL control.
-- C/E/F GPIO modes, data/pads, unknown latches and Port F's required BIU setup
+- C/D/E/F GPIO modes, data/pads, Port D's reset latch and Port F's required BIU setup
   are modeled (dsp-gpio.txt). BCR accepts only its documented Port F setup.
 - Mode-zero timers and mode-six TRM=0 capture use explicit CLK/2 events and
   qualified synchronized samples (dsp-timers.txt). Native TIO1 polling, capture
   IRQ and TCSR W1C writeback are tested. No CPU/IRQ clock schedule is implied.
 - The NAND candidate has native own and isolated original helper checks
   (nand-read.txt, nand-write.txt); full original NAND loading remains unproven.
-- Port D GPIO, remaining timer modes, complete ESAI, DMA and calibrated board clock
-  scheduling are not modeled. An opt-in DSP owner advances explicit nominal
+- DAX buffers/digital output and DMA line refills have explicit reference tests
+  (dsp-dax.txt). Remaining timer modes, complete ESAI, automatic native DMA and
+  calibrated board clock scheduling are not modeled. An opt-in DSP owner advances
+  explicit nominal
   reference time, timers and switch delays; see dsp-run-clock.txt.
   Native power-up register undefined-state tracking and full derivative reset,
   interrupt, pipeline and instruction-cycle fidelity need further validation.

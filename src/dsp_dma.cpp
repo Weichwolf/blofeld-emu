@@ -80,7 +80,7 @@ std::uint32_t DspDma::read(const unsigned address, const std::uint32_t mask) con
 
 void DspDma::validate_enable(const Channel &channel) const {
   if ((channel.control & (dma::interrupt | dma::continuous)) != 0 ||
-      (mode(channel) != 1 && mode(channel) != 3 && mode(channel) != 5)) {
+      (mode(channel) != 1 && mode(channel) != 2 && mode(channel) != 3 && mode(channel) != 5)) {
     throw Fault("Unsupported DSP DMA interrupt/continuous/transfer mode");
   }
   constexpr unsigned last_device_request = 22;
@@ -119,7 +119,7 @@ void DspDma::write_control(const unsigned index, const unsigned value) {
   }
   if (!enabled && old_enabled) {
     channel.settling = 0;
-    if (mode(channel) == 3) { channel.pending = false; }
+    if (mode(channel) == 2 || mode(channel) == 3) { channel.pending = false; }
     if (!channel.pending && (!active_ || active_->channel != index)) {
       channel.done = true;
       channel.done_known = true;

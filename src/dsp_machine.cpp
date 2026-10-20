@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
@@ -128,6 +129,19 @@ std::optional<DspDmaWord> DspMachine::advance_dma(const DspDmaInputs inputs) {
   } catch (const std::exception &error) {
     const auto context = state_->cpu.state();
     throw Fault("DSP DMA observation pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
+                ": " + error.what());
+  }
+}
+
+void DspMachine::observe_dax(const DspDaxInputs inputs) {
+  if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
+    throw Fault("DAX observation requires a healthy native boundary");
+  }
+  try {
+    state_->bus.observe_dax(inputs);
+  } catch (const std::exception &error) {
+    const auto context = state_->cpu.state();
+    throw Fault("DSP DAX observation pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
                 ": " + error.what());
   }
 }

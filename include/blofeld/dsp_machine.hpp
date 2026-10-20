@@ -3,6 +3,7 @@
 
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
@@ -63,6 +64,7 @@ public:
   // Nominal completion preview only; no instruction, peripheral or clock advance.
   [[nodiscard]] DspStepPlan plan_step() const;
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
+  void observe_dax(DspDaxInputs inputs);
   [[nodiscard]] DspCheckpoint checkpoint() const;
   // Strong exception guarantee; a prior valid checkpoint can recover a fault.
   void restore(const DspCheckpoint &checkpoint);

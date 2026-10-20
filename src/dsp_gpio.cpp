@@ -18,16 +18,19 @@ struct PortSpec {
   std::uint32_t base;
 };
 
-constexpr std::array<PortSpec, 3> specs{{{.space = "X:", .base = 0xffffbd},
+constexpr std::array<PortSpec, 4> specs{{{.space = "X:", .base = 0xffffbd},
                                          {.space = "Y:", .base = 0xffff9d},
-                                         {.space = "Y:", .base = 0xfffff5}}};
+                                         {.space = "Y:", .base = 0xfffff5},
+                                         {.space = "X:", .base = 0xffffd5}}};
 }
 
 DspGpio::DspGpio(const DspPort port) : port_(port) {
   if (static_cast<std::size_t>(port) >= specs.size()) { throw Fault("Invalid DSP GPIO port"); }
+  if (port == DspPort::d) { latch_known_ = pin_mask(); }
 }
 
 std::uint32_t DspGpio::pin_mask() const {
+  if (port_ == DspPort::d) { return 3; }
   return port_ == DspPort::f ? dedicated_mask : serial_mask;
 }
 
@@ -39,6 +42,10 @@ std::string DspGpio::address(const DspGpioRegister reg) const {
 void DspGpio::reset() {
   control_ = 0;
   direction_ = 0;
+  if (port_ == DspPort::d) {
+    latch_ = 0;
+    latch_known_ = pin_mask();
+  }
   // PDR is not reset. Cold latches start unknown; reset does not invent zeros.
 }
 
@@ -85,11 +92,13 @@ std::uint32_t DspGpio::read(const DspGpioRegister reg, const std::uint32_t mask)
       const auto requested = mask & pin_mask();
       const auto gpio = control_ ^ direction_;
       const auto sample = resolve(requested);
-      const auto unknown = requested & ~(sample.known & gpio);
+      const auto disconnected = port_ == DspPort::d ? requested & ~(control_ | direction_) : 0U;
+      const auto retained = disconnected & latch_known_;
+      const auto unknown = requested & ~((sample.known & gpio) | retained);
       if (unknown != 0) {
         throw Fault("Unknown DSP GPIO data read at " + address(reg) + " mask=" + hex(unknown, 6));
       }
-      return sample.levels & requested;
+      return ((sample.levels & gpio) | (latch_ & retained)) & requested;
     }
     default: throw Fault("Invalid DSP GPIO register read");
   }

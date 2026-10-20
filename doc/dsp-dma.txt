@@ -12,9 +12,10 @@ Counter modes A/B/C/D/E, independent source/destination address modes, modular
 24-bit addressing and counter reloads follow tables10-2/3/4/6/7/8/9. Offsets replace
 the ordinary increment at a line/plane boundary. DE clear retains a captured word
 request and an already-read word until its real destination access completes.
-Busy address/counter/offset/configuration changes reject. Word modes1/5 and
-software-triggered block mode3 are supported; other modes, DIE and DCON reject
-when enabled. Unknown preloads, reserved spaces/modes/request sources and missing
+Busy address/counter/offset/configuration changes reject. Word modes1/5,
+request-driven line mode2 and software-triggered block mode3 are supported;
+other modes, DIE and DCON reject when enabled. Unknown preloads, reserved
+spaces/modes/request sources and missing
 inputs fail visibly. Reset DSTR is00003f; DE's DTD clear has the documented three
 additional reference-cycle delay. Repeating-mode DTD lifetime after a block is
 unqualified: reads selecting that bit reject until explicit disable completes.
@@ -35,13 +36,15 @@ phase. External I/O callbacks must fail without side effects; rollback of an
 arbitrary callback's outside state is not provided.
 
 DspBus routes native register accesses and provides explicit advance_dma phases.
-It derives requests12/22 from actual ESAI/ESAI_1 TDE without reading SAISR or
-arming underrun clear. IRQA..IRQD request snapshots may be supplied explicitly;
-other request routes remain unsupported. RAM/ROM accesses use the strict bus;
+It derives requests10/12/22 from actual DAX XADE and ESAI/ESAI_1 TDE without
+reading XSTR/SAISR or arming underrun clear. IRQA..IRQD request snapshots may be
+supplied explicitly; other request routes remain unsupported. RAM/ROM accesses
+use the strict bus;
 peripheral writes currently admit ESAI TX and the three DAX data destinations:
-XNADR at X:ffffd1 and the XADR aliases at X:ffffd2/3. Missing DAX
-still faults at its real address. GPIO, peripheral status/configuration DMA and
-unimplemented peripheral sources reject. Unknown/protected/unmapped memory is
+XNADR at X:ffffd1 and the XADR aliases at X:ffffd2/3. DAX data now enters actual
+buffers/metadata (dsp-dax.txt); a full XADR write fails visibly. GPIO, peripheral
+status/configuration DMA and unimplemented peripheral sources reject.
+Unknown/protected/unmapped memory is
 never supplied as zero or silently discarded. DspMachine adds current native
 PC/OMR to phase errors; trusted owner checkpoints include all DMA state and the
 held source value. Source cursor/receiver state remains caller-owned.
@@ -50,7 +53,7 @@ This is a standalone instruction/peripheral reference experiment. Automatic
 clocked native execution rejects an active DMA channel: core/DMA bank contention,
 per-cycle instruction bus accesses, request synchronization and dynamic internal
 deadlines still need integration. Explicit phases do not establish those facts.
-No physical HCKT/core frequency, original DMA execution, DAX output, PCM transport,
+No physical HCKT/core frequency, original DMA execution, physical DAX output, PCM transport,
 full original boot or hardware equivalence is established.
 
   cmake --build --preset strict --target blofeld-dma-test
@@ -66,8 +69,10 @@ both ESAI maps and DMA registers. Explicit HCKT observations and DMA grants feed
 an opposite-edge receiver;66 complete serial words and every actual RAM/TX transfer
 match independent expectations, including ring wrap. A checkpoint between the
 first source read and destination write reproduces that stream. A separate same-
-edge DMA0/DMA3 test proves a real ESAI refill cannot swallow missing DAX. An
+edge DMA0/DMA3 test proves a real ESAI refill cannot swallow a full-XADR failure. An
 independent map test distinguishes all three DAX data addresses from forbidden
 status/control DMA. A real
 clocked native DE write faults instead of bypassing unsupported bus arbitration.
 These bounds and explicit reference phases do not qualify original firmware audio.
+The DAX fixture independently checks native two/three-register line transfers,
+per-line requests, destination rewind and DE clear before/after a line starts.

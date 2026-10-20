@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_gpio.hpp"
@@ -82,6 +83,8 @@ public:
   [[nodiscard]] DspEsaiClockOutputs esai_clock_outputs(DspEsaiInstance instance) const;
   // Explicit standalone reference phases; automatic native DMA bus timing rejects.
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
+  void observe_dax(DspDaxInputs inputs);
+  [[nodiscard]] DspDaxOutput dax_output() const;
 
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
@@ -107,6 +110,7 @@ private:
   [[nodiscard]] DspEsai *esai_register(DspAddress access);
   [[nodiscard]] DspEsai &sync_esai(DspEsaiInstance instance);
   void sync_esai_port(DspPort changed);
+  void sync_dax();
   std::array<Memory, 3> ram_;
   std::array<Memory, 3> rom_;
   DspShi shi_;
@@ -114,9 +118,11 @@ private:
   DspTimers timers_;
   DspInterrupts interrupts_;
   DspDma dma_;
+  DspDax dax_;
   std::array<DspEsai, 2> esai_{DspEsai(DspEsaiInstance::primary),
                                DspEsai(DspEsaiInstance::secondary)};
-  std::array<DspGpio, 3> gpio_{DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f)};
+  std::array<DspGpio, 4> gpio_{
+      DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f), DspGpio(DspPort::d)};
   std::uint32_t bus_control_ = 0;
   DspCodeChanges changes_;
   bool switched_ = false;

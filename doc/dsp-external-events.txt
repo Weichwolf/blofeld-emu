@@ -69,7 +69,8 @@ sources, a serial PCM receiver, host audio/WAV transport and actual firmware
 audio remain pending. The source project's static analysis reports HCKT-fed
 clock, word-length frame sync and DMA intent. The separate DMA experiment in
 dsp-dma.txt covers native register setup, counters and explicitly granted bus
-phases. Automatic native DMA arbitration, DAX, the missing physical input
+phases. DAX now has a separate buffered reference transmitter (dsp-dax.txt).
+Automatic native DMA arbitration, physical DAX clock/routing, the missing ESAI input
 frequency and incoming control/mask state remain unqualified. No physical rate,
 codec route, Desktop/Keyboard topology or complete original boot is established.
 Unknown/reserved memory accesses remain strict.

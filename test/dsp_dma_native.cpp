@@ -172,11 +172,15 @@ void serial_refill(const bool second) {
   }
 }
 
-void dax_failure() {
+void dax_fifo_failure() {
   DspMachine machine;
   DspProgram code;
   const auto count = program(code, true, true);
   initialize(machine, DspEsaiInstance::secondary, code, count);
+  // Actual disabled DAX storage: A, B, then the single pending XADR word.
+  for (unsigned value = 0; value < 3; ++value) {
+    machine.bus().write({.space = DspSpace::x, .address = dax, .value = first_value + value});
+  }
   Stream stream;
   constexpr unsigned before_dax_write = 10;
   while (stream.edge < before_dax_write) { stream.step(machine, DspEsaiInstance::secondary); }
@@ -188,7 +192,7 @@ void dax_failure() {
   });
   require(error.contains("channel=3") && error.contains("0xffffd2") &&
               error.contains("pc=" + hex(machine.cpu().state().pc, 6)),
-          "A latched same-edge DMA3 request survives TDE clear and visibly faults on missing DAX");
+          "A latched same-edge DMA3 request survives TDE clear and visibly faults on full XADR");
   const auto again = rejects([&] {
     static_cast<void>(
         machine.advance_dma({.cycle = stream.edge, .timing = timing, .grant = grant}));
@@ -285,7 +289,8 @@ void dax_data_map() {
     machine.cpu().reset_spi_boot();
     static_cast<void>(
         machine.advance_dma({.cycle = 0, .known_requests = 1, .timing = timing, .grant = grant}));
-    machine.bus().write({.space = DspSpace::x, .address = ring_start, .value = first_value});
+    constexpr unsigned payload = 0x400; // Valid XNADR fields and a known audio word.
+    machine.bus().write({.space = DspSpace::x, .address = ring_start, .value = payload});
     for (const auto [address, value] : {std::pair{source0, ring_start},
                                         std::pair{destination0, target},
                                         std::pair{counter0, 0U},
@@ -294,17 +299,22 @@ void dax_data_map() {
     }
     static_cast<void>(machine.advance_dma(
         {.cycle = 1, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant}));
-    const auto error = rejects([&] {
-      static_cast<void>(machine.advance_dma(
-          {.cycle = 2, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant}));
-    });
     const bool data_register = target >= non_audio && target <= audio_b;
-    require(
-        error.contains(data_register ? "Unimplemented DSP peripheral write"
-                                     : "Unsupported DSP DMA peripheral write") &&
-            error.contains(hex(target, 6)) &&
-            machine.bus().read({.space = DspSpace::x, .address = control0}) == x_word_copy,
-        "Both XADR aliases and XNADR reach strict missing DAX; status/control DMA is forbidden");
+    const DspDmaInputs write_cycle{
+        .cycle = 2, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant};
+    if (data_register) {
+      const auto word = machine.advance_dma(write_cycle);
+      require(word && word->value == payload &&
+                  machine.bus().read({.space = DspSpace::x, .address = control0}) ==
+                      (x_word_copy & ~enable),
+              "Both XADR aliases and XNADR accept their actual data-register transfer");
+    } else {
+      const auto error = rejects([&] { static_cast<void>(machine.advance_dma(write_cycle)); });
+      require(error.contains("Unsupported DSP DMA peripheral write") &&
+                  error.contains(hex(target, 6)) &&
+                  machine.bus().read({.space = DspSpace::x, .address = control0}) == x_word_copy,
+              "DMA cannot write DAX status or configure its control register");
+    }
   }
 }
 }
@@ -312,7 +322,7 @@ void dax_data_map() {
 void native_checks() {
   serial_refill(false);
   serial_refill(true);
-  dax_failure();
+  dax_fifo_failure();
   automatic_timing_rejects();
   memory_failures();
   dax_data_map();

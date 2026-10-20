@@ -1,0 +1,69 @@
+DSP56371 DAX reference transmitter
+
+Sources: DSP56371UM Rev.2.1 chapter10 and DSP56371E ED55, pinned in
+doc/hardware/sources.json. This is a digital peripheral model, with no host
+synthesizer, implicit clock, codec route or original firmware audio claim.
+
+X:ffffd0 is XCTR; ffffd1 is write-only XNADR; ffffd2/3 are write-only aliases
+of the same alternating A/B audio input; ffffd4 is XSTR. Known XADR data moves
+through separate A/B buffers and the pending input register into the shift state.
+Writes to a full pending XADR fail visibly; they do not discard a DMA word.
+Hardware/software reset clears XCTR/XSTR and audio paths. Individual reset clears
+audio paths/status while retaining control. XNADR survives every reset and starts
+unknown on cold construction. Undefined fields, read/write directions and IRQ
+enables reject. No uninitialized non-audio data or retained audio becomes zero.
+
+Output subframes contain manual X/Y/Z preambles,24 audio bits least-significant
+first, V/U/C and even parity in biphase mark form. Channel B non-audio bits are
+snapshotted at frame start. A block has192 frames; XBLK is raised on frame191,
+and a complete input pair clears XADE/XBLK. XSB starts the next frame with Z and
+self-clears. Empty whole frames retain the previous A/B audio pair; master XAUR
+clears only after a status read with the error set followed by a complete pair.
+The insufficiently specified partial-pair underrun remains a visible unsupported
+case. Slave XAUR reliability is unqualified under ED55: selecting that status bit
+rejects while slave mode is active. Masked XADE/XBLK accesses remain usable.
+
+DspDaxInputs explicitly supplies core/ACI levels, declared core/ACI rates and
+reference_rising_edges timing. No native instruction or elapsed CPU chunk creates
+missing edges. The selected rising-edge divider produces one128*Fs biphase unit
+per8 core input cycles or2/3/4 ACI input cycles for256/384/512*Fs modes. Declared
+rates must satisfy the manual's minimum core/bit-clock ratio. Rates are frozen
+during active observations. These declarations do not measure physical clocks.
+The reference starts the divider at zero and ADO high, with the first preamble
+unit after a complete divider period. This startup phase is an explicit reference
+convention, not measured silicon synchronization latency. Inactive/reset input
+observations survive without retroactively consuming edges. Missing baselines,
+rates and timing fail visibly before an output or active status is returned.
+
+Port D uses X:ffffd5/d6/d7 for data/direction/control, with two implemented pins.
+Its data latch has a documented zero reset, unlike the other modeled DSP ports;
+that register knowledge does not qualify disconnected physical pad voltages.
+Per-pin PC/PDC values select disconnected/input/output/peripheral functions.
+Any selected DAX peripheral pin releases individual reset. External ACI requires
+PD0's peripheral selection; ADO drives only when PD1 is selected. Opposed known
+external ADO drivers fail before the candidate clock/upload state commits.
+DspMachine::observe_dax adds native PC/OMR to errors; owner checkpoints include
+pending input, buffers, retained samples, non-audio snapshot, bit/divider/block
+phase and error-clear history. External source/receiver state remains caller-owned.
+
+DMA request10 derives from actual XADE without reading XSTR or arming error clear.
+The DMA line mode2 uses one request per DCOL line, permits word-boundary priority
+arbitration and stops at a line boundary until the next request. DE clear cancels
+an unstarted line, or completes only its already-read word. The manual's two-
+register audio and three-register non-audio/audio lines exercise actual DAX writes
+and DOR destination rewind. All DMA phases/grants remain explicit; automatic
+native DMA timing still rejects until core bus occupancy/arbitration is qualified.
+
+  cmake --build --preset strict --target blofeld-dax-test blofeld-dma-test
+  ctest --test-dir build/strict -R '^(dsp_dax|dsp_dma|dsp_gpio)$' --output-on-failure
+
+Tests pin literal zero/all-ones and low/high audio-bit waveforms, independently
+decode BMC boundaries/parity/payloads, cover all four dividers and the full block,
+and check XSB, non-audio snapshots, underrun recovery, unknown priming, reset,
+Port D modes and rejected contention. Own native MOVEP programs exercise the
+actual MMIO map and a real missing-clock fault/recovery. Two/three-register DMA
+lines feed an independent receiver for three complete frames, with exact source/
+destination/value expectations and replay between source read and destination
+write. The source value is changed after capture to test the held DMA word.
+These are component/native reference tests. Original initialization, physical
+clock/routing/chip mask, whole MCU/DSP boot and host audio remain unqualified.

@@ -84,6 +84,8 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
   const auto word = *active_;
   auto &channel = channels_.at(word.channel);
   const bool last = complete(channel);
+  const auto low_mask = (1U << layout(channel).low) - 1;
+  const bool line_finished = (channel.counter & low_mask) == 0;
   update_addresses(channel);
   if (!io.write) { throw Fault("Missing DSP DMA destination callback"); }
   io.write(word.destination, word.value);
@@ -99,7 +101,9 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
     // Do not turn that unspecified interval into a successful hardware read.
     channel.done_known = disabled || mode(channel) != 5;
   }
-  if (!last && !disabled && mode(channel) == 3) { channel.pending = true; }
+  if (!last && !disabled && (mode(channel) == 3 || (mode(channel) == 2 && !line_finished))) {
+    channel.pending = true;
+  }
   return word;
 }
 

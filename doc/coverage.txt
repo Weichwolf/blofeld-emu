@@ -273,7 +273,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           Explicit DMA register/counter/request
                                           phases now feed native-configured ESAI
                                           with literal ring/serial expectations;
-                                          automatic native DMA bus timing, DAX,
+                                          DAX now has buffered digital output,
+                                          Port D, explicit input dividers, VUC/
+                                          parity/block checks and actual DMA
+                                          line refills (dsp-dax.txt).
+                                          Automatic native DMA bus timing,
+                                          physical DAX clock/routing,
                                           RX, FOSC clocks, audio IRQ and
                                           chip profile remain pending;
                                           no combined MCU/DSP board boot.

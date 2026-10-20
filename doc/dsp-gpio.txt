@@ -1,12 +1,13 @@
-DSP56371 GPIO ports C, E and F
+DSP56371 GPIO ports C, D, E and F
 
 Primary references
-DSP56371UM chapter 6, sections 8.5 and 9.5, and register maps in Appendix C.
+DSP56371UM chapter 6, sections 8.5, 9.5 and 10.7, and register maps in Appendix C.
 DSP56300FM sections 2.3.3 and 9.6.2 for the core BCR reset fields.
 Both reference PDFs are pinned in hardware/sources.json and remain local inputs.
 
 Register map (DSP word addresses)
   Port C, 12 pins: X:ffffbd PDR, X:ffffbe PRR, X:ffffbf PCR
+  Port D,  2 pins: X:ffffd5 PDR, X:ffffd6 PRR, X:ffffd7 PCR
   Port E, 12 pins: Y:ffff9d PDR, Y:ffff9e PRR, Y:ffff9f PCR
   Port F, 11 pins: Y:fffff5 PDR, Y:fffff6 PRR, Y:fffff7 PCR
 
@@ -14,15 +15,17 @@ PCR/PRR select each pin independently:
   PRR=0, PCR=0: disconnected
   PRR=0, PCR=1: GPIO input
   PRR=1, PCR=0: GPIO output
-  PRR=1, PCR=1: ESAI (C), ESAI_1 (E), reserved (F)
-RESET and external reset clear PCR/PRR, preserving nonreset PDR latches and
-observed external drives. Cold PDR contents are unknown. Disconnected PDR reads
-remain undefined even if an old output latch was known before disconnection.
+  PRR=1, PCR=1: ESAI (C), DAX (D), ESAI_1 (E), reserved (F)
+RESET and external reset clear PCR/PRR and preserve observed external drives.
+C/E/F preserve nonreset PDR latches; their cold contents and disconnected reads
+remain unknown. Port D explicitly resets PDR to zero. Its disconnected register
+reads use retained known latch bits, which do not qualify physical pad voltages.
 
 GPIO data and pins
 Input reads require explicit external drive observations. Output values require
-an explicit PDR write while configured output. No pull-up, NAND-ready level,
-initial output zero or peripheral waveform is fabricated. The documented PDR
+an explicit PDR write while configured output or the documented Port D reset.
+No pull-up, NAND-ready level or unqualified peripheral waveform is fabricated.
+The PDR
 behavior does not qualify a future output latch after a write in a non-output
 mode; those bits are conservatively marked unknown. Subsequent output-mode
 writes qualify them. Silicon behavior for input/disconnected preload still
@@ -42,7 +45,9 @@ GPIO configuration bits use the same hook and retain neighboring bits.
 The hook models architectural GPIO state without inserting guessed pad levels.
 It does not expose separate read/write bus phases or establish cycle timing.
 Timer TCSR uses a separate full writable-word RMW path, including its W1C effects
-(dsp-timers.txt). Other peripherals decline the hook without side effects and
+(dsp-timers.txt). DMA and DAX also expose field-qualified bit accesses; their
+unqualified status fields still fail. Other peripherals decline the hook without
+side effects and
 retain normal word accesses. A SHI FIFO bit test performs exactly one destructive
 read; no preliminary read is used to construct a masked writeback.
 
@@ -63,7 +68,7 @@ Core BCR state is restored on external reset; peripheral RESET clears GPIO modes
 This gate qualifies the documented logical setup, not measured BIU cycle timing.
 
 Checks
-  ctest --test-dir build/strict -R '^(dsp_gpio|native_dsp|original_dsp_boot)$' --output-on-failure
+  ctest --test-dir build/strict -R '^(dsp_gpio|dsp_dax|native_dsp|original_dsp_boot)$' --output-on-failure
 Tests exercise every implemented pin as input/output, reset/disconnected data,
 latched outputs, masked/whole reads, contention and rejected-state preservation,
 both serial-port mux tables, reserved F functions, register-space separation and
@@ -72,12 +77,14 @@ inputs through the strict bus, then executes RESET and re-enables C outputs to
 verify their nonreset latch. Native mixed-state tests check C (qq and EA) and F
 (pp), previous-bit Carry for all four operations, postincrement once, BRCLR/JSET
 on observed inputs, RAM short/EA fallback, FIFO read count, highest bit 23 and a
-rejected bit-24 encoding. Model fuzzing includes external pads, masked GPIO
-reads/writes, bit requests and resets.
+rejected bit-24 encoding. The DAX tests cover Port D's different reset latch,
+per-pin mux, real native setup and peripheral output contention (dsp-dax.txt).
+The optional offline fuzzer covers pads, masked GPIO, bits and resets; run it
+only on an explicit user request.
 
 Limits and original-firmware execution
-No board pin wiring, NAND device, ESAI stream, electrical/synchronizer latency or
-stock-device equivalence is established. Port D remains pending; mode-zero TIO
+No board pin wiring, NAND device, original ESAI stream, electrical/synchronizer
+latency or stock-device equivalence is established. Mode-zero TIO
 GPIO and timer clocks have separate coverage in dsp-timers.txt.
 The original DSP still stops before reserved Y:002000 during its RAM-clear loop;
 no loop is skipped or reserved memory write discarded to reach these GPIOs.

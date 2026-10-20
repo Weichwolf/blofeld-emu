@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
+#include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_esai.hpp"
+#include "blofeld/dsp_gpio.hpp"
 
 #include <optional>
 #include <string>
@@ -42,12 +44,18 @@ std::optional<DspDmaWord> DspBus::advance_dma(DspDmaInputs inputs) {
   constexpr unsigned external = 15;
   constexpr unsigned primary = 1U << 12U;
   constexpr unsigned secondary = 1U << 22U;
+  constexpr unsigned dax_request = 1U << 10U;
   if (((inputs.known_requests | inputs.requests) & ~external) != 0) {
     throw Fault("External DSP DMA requests may drive only IRQA..IRQD, not internal status");
   }
   const auto required = dma_.requested_sources();
-  if ((required & ~(external | primary | secondary)) != 0) {
+  if ((required & ~(external | primary | secondary | dax_request)) != 0) {
     throw Fault("Unsupported/unobserved DSP DMA request source at X:0xfffff4");
+  }
+  if ((required & dax_request) != 0 || gpio(DspPort::d).outputs().peripheral == 0) {
+    sync_dax();
+    inputs.known_requests |= dax_request;
+    if (dax_.request()) { inputs.requests |= dax_request; }
   }
   for (const auto instance : {DspEsaiInstance::primary, DspEsaiInstance::secondary}) {
     const auto bit = instance == DspEsaiInstance::primary ? primary : secondary;
