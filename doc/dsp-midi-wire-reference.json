@@ -1,0 +1,64 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "blocks": [
+    {
+      "name": "timer-vectors",
+      "record": 120,
+      "space": 0,
+      "address": 84,
+      "words": 4,
+      "sha256": "24a28ae259a867f6e4306f763fdca400e8c44ab1bc28b7e9b26638bbad0de685"
+    },
+    {
+      "name": "input-producer",
+      "record": 121,
+      "space": 0,
+      "address": 11481,
+      "words": 154,
+      "sha256": "90b0d716d7cecc9bcca55ff9a1862604be52cdea508facc41efc5c0ef3ce2298"
+    },
+    {
+      "name": "midi-parameters",
+      "record": 50,
+      "space": 0,
+      "address": 2056,
+      "words": 351,
+      "sha256": "d89ff1a134a3a9684fdc3c8b66bd44fb81ad8621e3f3188ef5064f10a67fc288"
+    },
+    {
+      "name": "midi-messages",
+      "record": 52,
+      "space": 0,
+      "address": 2407,
+      "words": 1092,
+      "sha256": "603cd0a98101a15a7994a2d9f2d946f39890865ebf566f84161a7d9cf0a2dc5f"
+    }
+  ],
+  "scopes": {
+    "bytes": {
+      "bytes": 256,
+      "original-irq": 2304,
+      "original-rti": 2304,
+      "ring-wraps": 4,
+      "timestamps": 1,
+      "producer-instructions": 23554
+    },
+    "pitch": {
+      "wire-bytes": 32772,
+      "original-irq": 294948,
+      "original-rti": 294948,
+      "ring-wraps": 512,
+      "clocks": 3,
+      "pitch-values": 16384,
+      "producer-instructions": 3015030
+    },
+    "checkpoint": {
+      "inside-original-isr-snapshots": 1,
+      "identical-suffixes": 2,
+      "changed-suffixes": 1,
+      "original-callbacks": 3,
+      "data-sample-irqs-entered": 3
+    }
+  },
+  "qualification": "Isolated unchanged original TIO0 producer/vector/parser/callback with explicit ordered3249-edge8N1 CLK2 input. Native instructions/IRQ service add no timer clocks. No physical baud, connector routing, pipeline, full boot/audio or hardware-equivalence proof."
+}

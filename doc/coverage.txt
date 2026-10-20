@@ -492,13 +492,17 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           is an explicit RAM producer fixture;
                                           actual transport remains unqualified
                                           (dsp-midi-replay.txt).
-                                          Local logical-TIO0 fixtures execute the
+                                          original_dsp_wire_* CTest cases execute
+                                          logical-TIO0 input through the
                                           original producer through real IRQ/RTI
                                           for all 256 bytes, then its actual queue
                                           through the original parser/callback for
                                           all 16384 pitch values. Caller-supplied
-                                          ordered clocks are uncalibrated; these
-                                          fixtures are not yet public CTest cases.
+                                          ordered clocks are uncalibrated.
+                                          A live third-bit ISR checkpoint replays
+                                          two identical and one changed wire
+                                          suffix through the genuine callback,
+                                          preserving CPU and watched RAM/timers.
                                           No virtual/physical MIDI port, complete
                                           message/controller processing or DSP
                                           voice/audio integration yet.

@@ -39,7 +39,7 @@ Missing first cells on either empty ring expose genuine speculative reads at
 P:0c5a / P:0c6a and X:2f80 / X:2d00 with PC/OMR. They fail before consumption,
 field mutation or retirement; further execution and checkpoint capture reject.
 
-Additional local producer integration executes unchanged original configuration,
+The original_dsp_wire_bytes/pitch/checkpoint CTest cases execute unchanged original configuration,
 vectors and input handlers from the complete P:2cd9 component through the actual
 MS111 physical RAM alias. Logical TIO0 input and explicit CLK/2 edges supply
 fixed 3249-edge 8-N-1 frames; native instruction/IRQ execution inserts no timer
@@ -52,8 +52,22 @@ interleaved clock messages: 32772 wire bytes, 294948 original IRQ entries/RTIs,
 512 complete ring wraps and 16384 genuine pitch callbacks. Every sampled partial
 byte, actual produced word/cursor, field update, foreground register restoration,
 guard and reset-defined Timer2 clock timestamp is checked independently.
-These ignored local fixtures are not yet part of the public CTest inventory.
-Their source/record identities and run evidence remain in doc/local/.
+The checkpoint case captures inside the third data-sample ISR after its actual
+vector and first handler instruction, with a live long-IRQ frame and incomplete
+original MIDI message. Two identical remaining-bit suffixes reproduce the whole
+CPU and watched RAM/timer state. Changing a later bit gives the independently
+expected different value through the genuine callback; no queue or CPU state is
+patched to manufacture the continuation. All three suffixes execute real RTI.
+
+doc/dsp-midi-wire-reference.json pins the four original program/vector records
+and exact fixed-case counts. The wrapper verifies the official archive, decoded
+MID and records before native execution, and checks complete trace counters.
+Missing private firmware is explicit skip77. Manufacturer bytes and run traces
+remain local; the public fixture supplies only own setup and declared inputs.
+
+Reproduce with the separately supplied official firmware archive:
+  cmake --build --preset strict --target blofeld-original-dsp-wire-test
+  ctest --test-dir build/strict -R '^original_dsp_wire_' --output-on-failure
 
 This qualifies isolated producer and parser/callback fixtures. Physical DIN/USB assignment,
 actual MCU/connector routing, interrupt/clock calibration, other MIDI
