@@ -3,14 +3,15 @@ Native DSP56371 reference execution
 The pinned C++ dsp56300 interpreter is integrated through DspCore and DspBus.
 Its JIT is disabled in this reference path. No host synthesizer or host bootstrap
 loader supplies executed DSP program words. Original chip data remain external
-local inputs. The headless CLI is still MCU-only; combined board scheduling and
-host MIDI/audio are not implemented by this library integration.
+local inputs. The default headless CLI runs the MCU; its optional reference-board
+profile coordinates MCU/DSP under explicit reference inputs and scheduling
+(reference-board.txt). Complete board boot and host audio remain unimplemented.
 
 Native adaptation
 patches/dsp56300-reference-bus.patch adds unconditional board-owned memory hooks,
 a custom peripheral dispatcher and a bounded execReference entry. Each DO body
 instruction yields independently. Positive REP counts also yield per body
-instruction, retaining the latched opcode/extension until repetition ends. A
+instruction, retaining its legal single-word opcode until repetition ends. A
 normal revisit sees subsequent code changes. Normal-mode zero REP annuls a valid
 one-word target, while zero DO retains its frame writes (dsp-zero-loops.txt).
 Compatibility-zero/nested REP, unqualified targets, unsupported repeat control
@@ -118,8 +119,17 @@ reaches reserved Y:002000 and fails visibly with PC/OMR context. The manual give
 the reserved map but does not establish that a write there is safely discarded or
 cannot alias another block. Actual reserved/ROM write behavior requires stronger
 evidence; no broad RAM allocation, dropped-write shortcut or loop skip is used.
-The public regression stops before that access, without requiring an unsupported
-access to remain unsupported. GPIO/NAND startup has not yet been reached natively.
+The main regression trace stops before that access. Additional isolated checkpoint
+branches exercise native access continuation on the last mapped long store and
+the next current strict-map boundary. They admit X, capture pending Y and restore
+twice. A deliberate outside X mutation survives Y admission without a repeated X
+write; a successful pair retires R4/LC once and matches the legacy native state.
+At Y:002000, actual admission fails with PC/OMR/ordinal, preserves the completed
+prefix and rejects further execution/capture until trusted restore. This qualifies
+the implemented strict-map failure, not the chip's reserved-write behavior; future
+hardware evidence may change that map contract. The private sidecar is
+Testing/original-dsp-boot.trace.reference-access.trace; the original main trace
+is unchanged. GPIO/NAND startup has not yet been reached natively.
 
 The host supplies pin events with explicit instruction interleaving. The original
 MCU is not the sender in this fixture, no elapsed DSP/MCU clock ratio is

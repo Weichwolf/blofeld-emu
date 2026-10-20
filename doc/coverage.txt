@@ -651,6 +651,14 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           Semantic order is not pipeline timing;
                                           IRQ entry and real-time bounds remain
                                           open (dsp-reference-execution.txt).
+                                          Original SPI-loaded stage: final mapped
+                                          long-store REP and next strict Y:002000
+                                          effect suspend between X/Y, restore
+                                          twice, retain completed X and retire
+                                          R4/LC once or reject actual Y admission.
+                                          Legacy trace remains unchanged; these
+                                          branches do not qualify chip writes
+                                          or pipeline phases (dsp-core.txt).
                                           Immutable native DSP/bus checkpoints
                                           retain registers, full stack, REP/DO,
                                           IRQ continuation, RAM/ROM knowledge,

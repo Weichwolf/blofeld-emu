@@ -460,7 +460,8 @@ if(BUILD_TESTING)
   add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_corpus_bounds.py"
     $<TARGET_FILE:blofeld-dsp-corpus-test>)
-  add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp)
+  add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp
+    test/original_dsp_reference.cpp)
   target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dsp)
   add_test(NAME original_dsp_boot COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"

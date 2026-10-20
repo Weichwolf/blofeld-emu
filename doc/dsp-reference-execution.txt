@@ -51,6 +51,21 @@ Explicit bank arbitration combines real pending native stores/loads with a held
 DMA word: a later source overwrite must not replace its already captured value,
 and two coordinated restores must deliver that value to the actual native load.
 
+The optional original_dsp_boot regression also loads the unmodified 94-word
+first stage through the executing SPI ROM. Isolated branches suspend its loaded
+single-word long-memory REP between the actual X/Y effects, both at the last
+mapped pair and the next strict Y:002000 boundary. Two restores retain the real
+completed X store without repeating it; the mapped Y store retires once with
+independent R4/LC/zero expectations and the complete legacy native state. The
+current unmapped Y effect fails only on actual admission, without retiring or
+silently discarding the write; trusted restore recovers its captured prefix.
+The unchanged main boot trace and an additional private access sidecar distinguish
+legacy execution from these deliberate semantic-boundary mutations. This tests
+the current strict map, not the physical chip's reserved-write or pipeline behavior.
+
+  cmake --build --preset strict --target blofeld-dsp-boot-test
+  ctest --test-dir build/strict -R '^original_dsp_boot$' --output-on-failure
+
 The public project headers and library must match when adopting this API. This
 increment does not change the prepared native SDK interface or its source patch.
 Existing frozen consumer bundles remain frozen until deliberately rebuilt.

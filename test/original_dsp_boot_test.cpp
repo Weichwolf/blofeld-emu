@@ -2,8 +2,10 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_machine.hpp"
 #include "blofeld/firmware.hpp"
 #include "dsp_boot_reference.hpp"
+#include "original_dsp_reference.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -79,10 +81,12 @@ struct Inputs {
 int run(const Inputs &inputs) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
   const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
-  blofeld::DspBus bus;
+  blofeld::DspMachine machine;
+  auto &bus = machine.bus();
   bus.install_rom({.start = bootstrap_base, .words = rom});
   bus.shi().observe_spi({.mosi = false});
-  blofeld::DspCore cpu(bus);
+  auto &cpu = machine.cpu();
+  cpu.reset_spi_boot();
   std::ofstream trace(inputs.trace);
   require(trace.is_open(), "Cannot create private DSP bootstrap trace");
   trace.exceptions(std::ios::failbit | std::ios::badbit);
@@ -120,7 +124,9 @@ int run(const Inputs &inputs) {
   runner.step();
   require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count,
           "Fractional short immediate X0 supplies the full 24-bit REP count, not integer two");
-  while (cpu.state().r[4] != known_long_ram_end) { runner.step(); }
+  while (cpu.state().r[4] != known_long_ram_end - 1) { runner.step(); }
+  const auto last_pair = machine.checkpoint();
+  runner.step();
   require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count - known_long_ram_end,
           "Bounded native REP yields at the first reserved Y address without skipping iterations");
   for (const auto space : {blofeld::DspSpace::x, blofeld::DspSpace::y}) {
@@ -129,10 +135,14 @@ int run(const Inputs &inputs) {
               "Original REP and long-memory stores clear every mapped low X/Y word pair");
     }
   }
+  std::ofstream access_trace(inputs.trace.string() + ".reference-access.trace");
+  access_trace.exceptions(std::ios::failbit | std::ios::badbit);
+  blofeld::test::verify_original_reference_access(last_pair, machine, access_trace);
   std::cout << "Documented NXP SPI bootstrap loaded all original 94 DSP words through pin events; "
             << runner.completed() << " completed reference steps. Original first stage programmed "
             << "PCTL and cleared 8192 X/Y word pairs; reserved-address write behavior remains "
-            << "unverified. No complete DSP/board boot is proven.\n";
+            << "unverified. Original last-pair suspension and strict-frontier recovery also pass. "
+            << "No complete DSP/board boot is proven.\n";
   return 0;
 }
 }
