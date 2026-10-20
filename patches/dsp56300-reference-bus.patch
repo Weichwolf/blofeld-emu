@@ -886,41 +886,55 @@
 -		sr_toggle(CCR_V, overflow);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, overflow);
-@@ -199,4 +197,2 @@
+@@ -119 +117 @@
+-				d64 = -d64Signed;
++				d64 = uint64_t(0) - d64;
+@@ -123 +121 @@
+-				val = -valSigned;
++				val = uint64_t(0) - val;
+@@ -134 +132 @@
+-		// V as for SUB. CMPM compares magnitudes and leaves V clear, which sim56300 confirms.
++		// Table5-1: signed56 result overflow. CMPM's |min56|-0 exceeds the positive rail.
+@@ -136 +134,3 @@
+-		sr_toggle(CCR_V, !_magnitude && ((d64 ^ val) & (d64 ^ res) & signBit) != 0);
++		const bool overflow = _magnitude ? d64 >= val && (res & signBit) != 0
++			: ((d64 ^ val) & (d64 ^ res) & signBit) != 0;
++		sr_toggle(CCR_V, overflow);
+@@ -199,4 +199,2 @@
 -		sr_toggle(CCR_V, overflow);
 -		sr_l_update_by_v();
 -
 -		sr_z_update(d);
 +		finishArithmeticResult(d, overflow);
 +
-@@ -210,0 +207,5 @@
+@@ -210,0 +209,5 @@
 +		// FM 13-16 leaves larger ASR counts undefined. Check before host bit shifts.
 +		const int referenceLimit = isSixteenBitArithmetic() ? 40 : 55;
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > referenceLimit))
 +			throw std::runtime_error("Undefined DSP reference ASR shift count=" + std::to_string(_shiftAmount));
 +
-@@ -236,0 +238,4 @@
+@@ -236,0 +240,4 @@
 +		// Counts outside the qualified 56-bit range must not reach host shifts.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 55))
 +			throw std::runtime_error("Unqualified DSP reference ASL shift count=" + std::to_string(_shiftAmount));
 +
-@@ -271,0 +277,3 @@
+@@ -271,0 +279,3 @@
 +		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
 +			throw std::runtime_error("Unqualified DSP reference LSL count " + std::to_string(_shiftAmount));
-@@ -276 +284 @@
+@@ -276 +286 @@
 -		const int res = (d.var << _shiftAmount) & 0x00ffffff;
 +		const auto res = (static_cast<uint32_t>(d.var) << _shiftAmount) & 0x00ffffff;
-@@ -296,0 +305,3 @@
+@@ -296,0 +307,3 @@
 +		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
 +			throw std::runtime_error("Unqualified DSP reference LSR count " + std::to_string(_shiftAmount));
-@@ -338,3 +349 @@
+@@ -338,3 +351 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, overflow);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, overflow);
-@@ -347,18 +356,12 @@
+@@ -347,18 +358,12 @@
 -		TReg56& d = ab ? reg.b : reg.a;
 -		const TReg56& s = ab ? reg.a : reg.b;
 -
@@ -951,7 +965,7 @@
 +		d.var = static_cast<TInt64>(sum & bits);
 +		sr_toggle(CCR_C, sum < half);
 +		finishArithmeticResult(d, overflow);
-@@ -414,159 +417,37 @@
+@@ -414,159 +419,37 @@
 -	void DSP::alu_mpy( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate )
 -	{
 -	//	assert( sr_test(SR_S0) == 0 && sr_test(SR_S1) == 0 );
@@ -1148,7 +1162,7 @@
 +		commitArithmeticValue(ab, value, rounded, !bothUnsigned);
 +	}
 +
-@@ -575,30 +456,3 @@
+@@ -575,30 +458,3 @@
 -		TReg56& _alu = ab ? reg.b : reg.a;
 -
 -		int64_t rounder = 0x800000ll << g_aluShift;	// the rounding position moves up with the ALU
@@ -1182,7 +1196,7 @@
 +		commitArithmeticValue(ab, (ab ? reg.b : reg.a).var >> g_aluShift, true);
 +	}
 +
-@@ -617,6 +471 @@
+@@ -617,6 +473 @@
 -		alu_mpy(ab, s1, s2, negative, mulAcc);
 -
 -		if(round)
@@ -1190,54 +1204,54 @@
 -			alu_rnd(ab);
 -		}
 +		alu_mpy(ab, s1, s2, negative, mulAcc, round != 0);
-@@ -712,0 +562 @@
+@@ -712,0 +564 @@
 +		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
-@@ -713,0 +564 @@
+@@ -713,0 +566 @@
 +		finishSingleShift(D, previousLimit);
-@@ -716,0 +568 @@
+@@ -716,0 +570 @@
 +		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
-@@ -717,0 +570 @@
+@@ -717,0 +572 @@
 +		finishSingleShift(D, previousLimit);
-@@ -740,0 +594 @@
+@@ -740,0 +596 @@
 +		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
-@@ -741,0 +596 @@
+@@ -741,0 +598 @@
 +		finishSingleShift(D, previousLimit);
-@@ -959,0 +815,4 @@
+@@ -959,0 +817,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACT width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -985,0 +845,4 @@
+@@ -985,0 +847,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACTU width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -1064,0 +928,4 @@
+@@ -1064,0 +930,4 @@
 +		// FM13-78: normal source width <= 24 and offset + width <= 56.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && (widthField > 24 || widthField + offsetField > 56))
 +			throw std::runtime_error("Unqualified DSP reference INSERT width=" + std::to_string(widthField) +
 +				" offset=" + std::to_string(offsetField));
-@@ -1072 +939 @@
+@@ -1072 +941 @@
 -		else
 +		else if(widthField)
-@@ -1179,4 +1046 @@
+@@ -1179,4 +1048 @@
 -		alu_mpy( ab, reg, s, negate, _accumulate );
 -
 -		if(_round)
 -			alu_rnd( ab );
 +		alu_mpy(ab, reg, s, negate, _accumulate, _round);
-@@ -1198 +1062 @@
+@@ -1198 +1064 @@
 -		alu_mac( ab, s1, s2, negate, uu );
 +		alu_mpysuuu(ab, s1, s2, negate, true, uu);
-@@ -1214,2 +1078 @@
+@@ -1214,2 +1080 @@
 -		alu_mac( ab, s1, s2, negate, false );
 -		alu_rnd( ab );
 +		alu_mac(ab, s1, s2, negate, false, true);
-@@ -1340,2 +1203 @@
+@@ -1340,2 +1205 @@
 -		alu_mpy( ab, s1, s2, negate, false );
 -		alu_rnd( ab );
 +		alu_mpy(ab, s1, s2, negate, false, true);
-@@ -1450,7 +1312,14 @@
+@@ -1450,7 +1314,14 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -1259,7 +1273,7 @@
 +		// C uses the subtraction's borrow. Shift-overflow C remains unqualified.
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1458,5 +1327,2 @@
+@@ -1458,5 +1329,2 @@
 -		// Carry bit note: "The Carry bit (C) is set correctly if the source operand does not overflow as a result of the left shift operation.", we do not care at the moment
 -		sr_toggle(CCR_V, bittest(old, 55 + g_aluShift) != bittest(d, 55 + g_aluShift));
 -		sr_z_update(d);
@@ -1267,7 +1281,7 @@
 -		sr_c_update_arithmetic(old, d);
 +		finishArithmeticResult(d, overflow);
 +		sr_toggle(CCR_C, borrow);
-@@ -1468,7 +1334,12 @@
+@@ -1468,7 +1336,12 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -1287,13 +1301,13 @@
 +		const bool overflow = ((shifted ^ source) & (shifted ^ res) & signBit) != 0;
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1476,3 +1347,2 @@
+@@ -1476,3 +1349,2 @@
 -		sr_z_update(d);
 -		//sr_l_update_by_v();
 -		sr_c_update_arithmetic(old, d);
 +		finishArithmeticResult(d, overflow);
 +		sr_toggle(CCR_C, borrow);
-@@ -1493,0 +1364,12 @@
+@@ -1493,0 +1366,12 @@
 +		if(m_referenceMode) {
 +			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
 +			const auto source = getFieldValue<Vsl, Field_S>(op);
@@ -1306,7 +1320,7 @@
 +			memWrite(MemArea_Y, address, low);
 +			return;
 +		}
-@@ -1495,2 +1377 @@
+@@ -1495,2 +1379 @@
 -	}
 -}
 +	}}

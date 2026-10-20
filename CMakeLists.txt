@@ -458,6 +458,12 @@ if(BUILD_TESTING)
     add_test(NAME dsp_saturation_${scope} COMMAND blofeld-dsp-saturation-test ${scope})
     set_tests_properties(dsp_saturation_${scope} PROPERTIES TIMEOUT 120)
   endforeach()
+  add_executable(blofeld-dsp-cmpm-test test/dsp_cmpm_test.cpp)
+  target_link_libraries(blofeld-dsp-cmpm-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_cmpm_accumulators COMMAND blofeld-dsp-cmpm-test --full)
+  add_test(NAME dsp_cmpm_words COMMAND blofeld-dsp-cmpm-test --word)
+  add_test(NAME dsp_cmpm_minimum COMMAND blofeld-dsp-cmpm-test --minimum)
+  set_tests_properties(dsp_cmpm_accumulators dsp_cmpm_words dsp_cmpm_minimum PROPERTIES TIMEOUT 120)
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
@@ -717,6 +723,7 @@ add_custom_target(quality
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-shifted-subtract-test blofeld-dsp-vsl-test
     blofeld-dsp-saturation-test
+    blofeld-dsp-cmpm-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-scheduled-coupling-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test

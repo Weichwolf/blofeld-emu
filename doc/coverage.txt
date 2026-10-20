@@ -218,6 +218,13 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           a saved legal MAC host-overflow input
                                           (dsp-saturation.txt). SA, SM compare/test
                                           behavior and pipeline timing remain open.
+                                          Normal CMPM uses defined unsigned host
+                                          magnitudes and signed56 result-overflow
+                                          flags; 16902 own cases check operands,
+                                          whole state and 9506 qualified C values
+                                          (dsp-cmpm.txt). Minimum-operand V follows
+                                          the declared manual rule, with no new
+                                          minimum-case silicon qualification.
                                           Bounded native instruction fixture checks
                                           independent arithmetic/memory outcomes,
                                           REP progress and strict faults. Five

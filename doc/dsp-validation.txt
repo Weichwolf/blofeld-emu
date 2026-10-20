@@ -134,6 +134,11 @@ rounding and host-arithmetic corrections and 81687 own cases (dsp-saturation.txt
 It adds 748 observed register values; unrecorded memory/stack values are excluded.
 Other banks remain unqualified. Captures remain MCPX evidence, not Blofeld silicon proof.
 
+Normal CMPM separately checks 16902 own magnitude/result/state cases and
+preserves these adopted comparisons. Its full56-bit minimum flags use the
+declared manual-derived reference interpretation, not a newly captured
+silicon expectation (dsp-cmpm.txt).
+
 Fixed b8/b11 inputs that exposed undefined host shifts are separately pinned in
 dsp-operand-regressions.json. Their test expects contextual rejection before UB;
 it does not adopt their undefined-range MCPX results as a hardware oracle. See

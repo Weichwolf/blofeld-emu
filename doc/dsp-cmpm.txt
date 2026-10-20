@@ -1,0 +1,49 @@
+Normal CMPM magnitude comparison and host arithmetic
+
+DSP56300FM Rev.5 page13-47 defines CMPM as |S2|-|S1| on 56-bit operands.
+The difference updates condition codes without replacing either operand.
+Table5-1 defines N/Z/E/U from the internal result, V from signed56 overflow
+and L as sticky on V. CMPM's separate carry qualification requires S2 to be
+properly sign-extended; the test asserts C only for those destinations.
+
+The architectural minimum -2^55 occupies INT64_MIN in the native interpreter's
+padded host representation. Both destination and source magnitude negations
+previously invoked signed-host undefined behavior. Actual own fixed inputs
+reproduce both UBSan sites. The native patch now forms magnitudes and subtracts
+in unsigned host arithmetic, preserving every accumulator bit and cached
+comparison-result flags without signed negation overflow.
+
+The mathematical magnitude difference ranges from -2^55 through +2^55.
+Under Table5-1's representability rule, |min56|-0 is positive overflow: the
+wrapped result has N=1 and V=1, with L set. In contrast, 0-|min56| is representable
+with N=1,V=0; two minima compare equal. This is the declared manual-derived
+reference interpretation. Those minimum-operand flags have not been separately
+verified on MCPX or DSP56371 silicon. Ordinary captured CMPM inputs do not
+establish that boundary, and no new physical observation is claimed.
+
+Deterministic checks (no fuzz or physical-device traffic)
+  cmake --build --preset strict --target blofeld-dsp-cmpm-test blofeld-dsp-corpus-test
+  ctest --test-dir build/strict -R '^dsp_(cmpm_.*|hardware_corpus)$' --output-on-failure
+
+Three groups check 16902 own fixed cases: 6144 other-accumulator operands,
+10752 word operands from X0/Y0/X1/Y1, and six literal minimum regressions.
+Sixteen destination values cross signed56 and fractional48 endpoints, distinct
+word sources, A/B destinations, three scaling modes and four CCR seeds.
+C is independently checked in 9506 properly sign-extended destination cases.
+Unqualified C is observed without a silicon expectation; all other state remains
+checked. Actual native setup supplies all operands/status. The documented
+CMPM opcode fields are emitted directly, avoiding an assembler-derived oracle.
+
+An independent model uses right-aligned signed64 magnitudes, mathematical
+subtraction and range overflow rather than the native padded unsigned formula.
+Checks cover E/U/N/Z/V, sticky S/L, every qualified C, PC/retirement, unchanged
+operands/data registers/control state and all stack slots. Each old-interpreter
+group aborts UBSan. The private corrected candidate passes all three groups
+and all adopted external comparisons (dsp-validation.txt). Reference recordings
+and their declared observation scopes remain unchanged.
+
+This increment qualifies the declared SA=SM=0 reference path. Sixteen-bit
+arithmetic, SM-specific compare/test behavior, reserved scaling, physical
+minimum-operand flags, pipeline timing and complete ISA behavior remain open.
+The strict original Y:002000 frontier, missing board/ROM/assets, MIDI/audio and
+complete-device update/recovery/hardware requirements are not resolved here.
