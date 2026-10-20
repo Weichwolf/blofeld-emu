@@ -293,8 +293,15 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           RTI and DSP-loop tests cover both source
                                           routes, TIM gates, frame reuse and joint
                                           idle restore under explicit edge ordering.
-                                          Combined CLI and physical wake latency
-                                          remain pending.
+                                          Opt-in standalone reference CLI connects
+                                          both owners with explicit clock/reset/
+                                          pin inputs and bounded native WAI time
+                                          (reference-board.txt). Physical wake
+                                          latency remains pending. Original reset
+                                          through the CLI transfers all 97 SPI
+                                          words before the strict Y:002000 fault;
+                                          an independent decoder compares the wire
+                                          payload with the pinned MCU image.
                                           MISO/HREQ/PU0 linkage, actual routing,
                                           reset, physical elapsed clocks and full
                                           scheduling remain unqualified.

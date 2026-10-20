@@ -1,0 +1,112 @@
+Standalone MCU/DSP reference experiment
+
+blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip \
+  --reference-board scenario.bfboard --dsp-rom private-rom.bin \
+  --instructions 2000000 --trace doc/local/reference.trace
+
+The reference mode executes the existing native MCU and DSP owners through
+McuDspSchedule. It is a caller-supplied timing/wiring experiment, not a verified
+Desktop/Keyboard profile. The default invocation retains its untimed MCU behavior.
+No firmware PC selects external inputs, bypasses instructions or copies DSP code.
+DSP execution uses the interpreter and a supplied ROM starting at P:ff0000.
+The ROM file contains 1..65536 packed big-endian 24-bit words. Missing words stay
+unknown. Manufacturer ROM and firmware remain private local inputs.
+
+Configuration format (ASCII tokens, decimal numbers except hexadecimal bytes):
+
+blofeld-reference-board 1
+clock 12000000 0 12000000 540000000 reference-boundaries
+ordering dsp-before-mcu dsp-before-mcu 16
+spi-b 02 04 10 clock-before-select
+dsp-release 450 low
+operations 23
+initial drive B 16 02 00
+initial drive E 03 03 00
+
+This example only declares a reference clock and initial SPI signals; it does not
+provide the other inputs required by original firmware. It can accompany own
+MCU NVM/DSP ROM programs. Never interpret it as a physical board preset.
+
+All five settings are required exactly once:
+- clock: MCU OSC Hz, initial phase in the MCU timebase, DSP EXTAL Hz, common Hz,
+  and the literal reference-boundaries. This selects normal MCU bus-cycle
+  switching/internal Flash byte timing and nominal native DSP cycle estimates
+  with instruction-boundary switching and completion-boundary observations.
+  The common timebase must be an exact positive integer multiple of the MCU
+  timebase. These contracts do not establish physical PLL/pipeline timing.
+- ordering: shared-write tie order (dsp-before-mcu, mcu-before-dsp or reject),
+  committed WAI-period order (dsp-before-mcu), maximum DSP steps per MCU period.
+  A reject tie policy fails at an actual coincident shared write.
+- spi-b: distinct one-bit masks on MCU port B for active-low SS, SCK and MOSI,
+  followed by clock-before-select, select-before-clock or reject. Simultaneous
+  SS/SCK changes use that explicit order; incompatible SHI transitions fail.
+  Only native one-byte port-B data writes are qualified shared transfers.
+  A different GPIO control register changing these pads fails visibly.
+- dsp-release: requested common tick and observed PINIT level (low or high).
+  The DSP remains unexecuted until release, with native SPI-reset PC ff0000.
+  Release requires known MCU SPI pads and deasserted SS; its actual boundary
+  becomes the DSP epoch. This is a supplied reset experiment, not reset routing.
+- operations: positive owner-operation budget, including IRQ entries and single
+  native WAI idle periods. --instructions additionally limits retired MCU
+  instructions; either budget can stop execution without establishing boot.
+
+Optional loopback setting (one directional logical route):
+loopback E 04 E 08
+
+It samples the declared source pad after every native MCU write and external
+input change, then updates only the destination external bit. An unknown source
+leaves the destination unknown: high impedance is not inferred, and a receiver
+pull cannot validate an unknown source driver. A required unresolved input fails.
+This is explicit test wiring, not a physical circuit model.
+
+External inputs:
+initial drive E fb 03 00
+at 10000 drive U 3f 01 00
+at 11000 phy-window 15
+at 12000 usb-decoder 08
+at 13000 timer-inputs 01
+
+initial applies at the completed native MCU reset boundary, before the first
+instruction. at applies at the first completed MCU instruction/IRQ/idle-period
+boundary at or after the requested common tick. Equal requested ticks preserve
+file order. All due inputs apply before a due DSP release at that boundary.
+Events/release before completed MCU reset reject. Events are never applied
+retroactively inside an already executed instruction. A DSP completion already
+consumed at the boundary sees the preceding inputs. Trace records requested
+and actual times. No external input or ready/HREQ routing is inferred from PCs.
+
+- drive: port A/B/E/T/M/J/P/Q/R/S/U, drive mask, levels, floating mask. Replaces
+  that port's external drive; unlisted bits remain unknown. Levels must fit the
+  mask and driven/floating masks must not overlap. Loopback updates its own bit.
+- phy-window: explicitly observed PHY edges over three oscillator periods; it
+  does not fabricate a LOCK register or infer analog startup.
+- usb-decoder: post-decoder flags, bit0 reset, bit1 suspended, bit2 enumerated,
+  bit3 full-speed. Raw USB wire decoding is not supplied by this experiment.
+- timer-inputs: mask sampled by the native MCU owner, including during WAI.
+
+Blank lines and # comments are allowed. Unknown/duplicate settings, extra tokens,
+invalid/overflowing numbers, unsorted events, NUL bytes and configuration files
+larger than 65536 bytes reject. Inputs must be bounded regular files. Config/ROM
+paths participate in trace/NVM output collision checks, including hardlinks and
+symlinks, before outputs open. --reference-board and --dsp-rom are paired and
+conflict with --inspect/--port-e-input. Existing .bfnvm input/output remains MCU
+nonvolatile memory only: no DSP, clocks, wiring or whole-board snapshot is saved.
+
+Exit 0 means a budget ended, 1 means setup/input/output failure, and 2 means a
+visible native/reference execution fault. Final diagnostics include both PCs,
+completed clocks/steps, MCU idle periods, SPI writes/frames and ordering counts.
+A trace's DSP row is an attempted step observation; a failing step is not added
+to completed counters. Partial fault effects are retained, never silently fixed.
+
+Coverage: test_reference_cli.py runs the actual CLI with own native MCU/DSP code,
+independent clock/step expectations, WAI/RTI, quantized inputs, shared-write/pad
+order rejections, strict missing pads/ROM and output-alias checks.
+original_reference_cli.py pins private original 1.25/ROM inputs, supplies explicit
+boundary observations, and verifies native cold reset through all 7275 serial GPIO
+writes/97 frames into the same strict Y:002000 write fault as the library fixture.
+An independent Python GPIO decoder compares every transmitted word with the
+original MCU image. The fault occurs in the MCU's real final boot delay after
+59286 completed DSP steps; no loop is skipped or memory silently extended.
+This scenario uses reference input/ready times, not measured board signals.
+Physical reset/pad/HREQ routing, complete DSP ROM, original DSP main boot,
+MIDI/audio and hardware equivalence remain pending.

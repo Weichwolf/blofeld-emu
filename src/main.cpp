@@ -6,6 +6,7 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
+#include "reference_board.hpp"
 
 #include <charconv>
 #include <cstdint>
@@ -17,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace {
 
@@ -26,6 +28,8 @@ struct Options {
   std::filesystem::path trace;
   std::filesystem::path flash_in;
   std::filesystem::path flash_out;
+  std::filesystem::path reference_board;
+  std::filesystem::path dsp_rom;
   std::uint64_t instructions = 1000000;
   bool inspect = false;
   std::optional<blofeld::PinDrive> port_e_input;
@@ -49,6 +53,24 @@ blofeld::PinDrive pin_drive(const std::string_view value) {
   return {.mask = hex_byte(value.substr(0, 2)), .levels = hex_byte(value.substr(3, 2))};
 }
 
+void validate_options(const Options &config) {
+  if (config.firmware.empty()) {
+    throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
+                         "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS] "
+                         "[--flash-in state.bfnvm] [--flash-out state.bfnvm] "
+                         "[--reference-board scenario.bfboard --dsp-rom packed24.bin]");
+  }
+  if (config.inspect && (!config.flash_in.empty() || !config.flash_out.empty())) {
+    throw blofeld::Fault("--inspect cannot be combined with MCU NVM execution inputs/outputs");
+  }
+  if (config.reference_board.empty() != config.dsp_rom.empty()) {
+    throw blofeld::Fault("--reference-board and --dsp-rom must be supplied together");
+  }
+  if (!config.reference_board.empty() && (config.inspect || config.port_e_input)) {
+    throw blofeld::Fault("--reference-board conflicts with --inspect or --port-e-input");
+  }
+}
+
 Options options(const int count, char **values) {
   Options result;
   for (int index = 1; index < count; ++index) {
@@ -69,6 +91,10 @@ Options options(const int count, char **values) {
       result.flash_in = value;
     } else if (argument == "--flash-out") {
       result.flash_out = value;
+    } else if (argument == "--reference-board") {
+      result.reference_board = value;
+    } else if (argument == "--dsp-rom") {
+      result.dsp_rom = value;
     } else if (argument == "--port-e-input") {
       result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
@@ -81,14 +107,7 @@ Options options(const int count, char **values) {
       throw blofeld::Fault("Unknown argument: " + std::string(argument));
     }
   }
-  if (result.firmware.empty()) {
-    throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
-                         "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS] "
-                         "[--flash-in state.bfnvm] [--flash-out state.bfnvm]");
-  }
-  if (result.inspect && (!result.flash_in.empty() || !result.flash_out.empty())) {
-    throw blofeld::Fault("--inspect cannot be combined with MCU NVM execution inputs/outputs");
-  }
+  validate_options(result);
   return result;
 }
 
@@ -114,10 +133,16 @@ void validate_files(const Options &config, const std::filesystem::path &specific
       throw blofeld::Fault("MCU NVM files require the private .bfnvm extension");
     }
   }
-  for (const auto &input : {config.firmware, specification, config.flash_in, config.flash_out}) {
+  for (const auto &input : {config.firmware,
+                            specification,
+                            config.flash_in,
+                            config.flash_out,
+                            config.reference_board,
+                            config.dsp_rom}) {
     distinct_files({.first = config.trace, .second = input});
   }
-  for (const auto &input : {config.firmware, specification}) {
+  for (const auto &input :
+       {config.firmware, specification, config.reference_board, config.dsp_rom}) {
     distinct_files({.first = config.flash_out, .second = input});
   }
 }
@@ -163,22 +188,10 @@ void trace_interrupt(std::ofstream &trace, const blofeld::CpuStep result) {
         << " stack-reused=" << result.stack_reused << '\n';
 }
 
-int run(const Options &config) {
-  const auto specification =
-      config.specification.empty() ? default_specification() : config.specification;
-  validate_files(config, specification);
-  const auto firmware = blofeld::Firmware::load(config.firmware);
-  std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
-            << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
-  if (config.inspect) { return 0; }
-  std::ofstream trace;
-  if (!config.trace.empty()) {
-    trace.open(config.trace);
-    if (!trace) { throw blofeld::Fault("Cannot create trace file"); }
-    trace.exceptions(std::ios::failbit | std::ios::badbit);
-  }
-  const auto image = config.flash_in.empty() ? blofeld::McuFlashImage::from_known(firmware.mcu)
-                                             : blofeld::load_flash_image(config.flash_in);
+int run_mcu(const Options &config,
+            const blofeld::McuFlashImage &image,
+            const std::filesystem::path &specification,
+            std::ofstream &trace) {
   blofeld::McuBus bus(image);
   if (config.port_e_input) {
     bus.set_pin_drive(blofeld::McuPort::e, *config.port_e_input);
@@ -234,6 +247,40 @@ int run(const Options &config) {
   std::cout << '\n';
   persist_flash(config, bus);
   return 0;
+}
+
+int run(const Options &config) {
+  const auto specification =
+      config.specification.empty() ? default_specification() : config.specification;
+  validate_files(config, specification);
+  const auto board = config.reference_board.empty()
+                         ? std::optional<blofeld::reference::Config>{}
+                         : blofeld::reference::load_config(config.reference_board);
+  const auto rom =
+      board ? blofeld::reference::load_rom(config.dsp_rom) : std::vector<std::uint32_t>{};
+  const auto firmware = blofeld::Firmware::load(config.firmware);
+  std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
+            << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
+  if (config.inspect) { return 0; }
+  std::ofstream trace;
+  if (!config.trace.empty()) {
+    trace.open(config.trace);
+    if (!trace) { throw blofeld::Fault("Cannot create trace file"); }
+    trace.exceptions(std::ios::failbit | std::ios::badbit);
+  }
+  const auto image = config.flash_in.empty() ? blofeld::McuFlashImage::from_known(firmware.mcu)
+                                             : blofeld::load_flash_image(config.flash_in);
+  if (board) {
+    const blofeld::reference::Execution execution{.image = image,
+                                                  .rom = rom,
+                                                  .specification = specification,
+                                                  .flash_out = config.flash_out,
+                                                  .trace = trace.is_open() ? &trace : nullptr,
+                                                  .instructions = config.instructions};
+    blofeld::reference::Board machine(*board, execution);
+    return machine.run();
+  }
+  return run_mcu(config, image, specification, trace);
 }
 
 } // namespace

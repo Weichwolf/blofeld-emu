@@ -129,8 +129,9 @@ target_compile_definitions(blofeld_core PUBLIC
 add_library(blofeld_mcu_dsp src/mcu_dsp_schedule.cpp)
 target_include_directories(blofeld_mcu_dsp PUBLIC include)
 target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
-add_executable(blofeld-headless src/main.cpp)
-target_link_libraries(blofeld-headless PRIVATE blofeld_core)
+add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
+  src/reference_board.cpp src/reference_wiring.cpp)
+target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files)
 
 if(BUILD_TESTING)
   add_executable(blofeld-mcu-dsp-schedule-test test/mcu_dsp_schedule_test.cpp)
@@ -422,6 +423,13 @@ if(BUILD_TESTING)
     test/original_owned_clock_fixture.cpp)
   target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp blofeld_mcu_dsp
     blofeld_dsp_native blofeld_lcd_fixture)
+  add_test(NAME original_reference_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reference_cli.py"
+    $<TARGET_FILE:blofeld-headless>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-reference-cli.trace")
+  set_tests_properties(original_reference_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_test(NAME original_scheduled_coupling COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_scheduled_coupling.py"
     $<TARGET_FILE:blofeld-scheduled-coupling-test>
