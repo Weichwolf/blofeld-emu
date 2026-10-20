@@ -506,6 +506,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-boot.trace")
   set_tests_properties(original_dsp_boot PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-dsp-midi-test test/original_dsp_midi_test.cpp)
+  target_link_libraries(blofeld-original-dsp-midi-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_midi COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-dsp-midi-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-midi.trace")
+  set_tests_properties(original_dsp_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-coupled-boot-test test/original_coupled_boot_test.cpp
     test/coupled_boot_fixture.cpp)
   target_link_libraries(blofeld-coupled-boot-test PRIVATE blofeld_core blofeld_dsp)
@@ -707,6 +716,7 @@ add_custom_target(quality
     blofeld-dsp-run-clock-test
     blofeld-dsp-scheduled-run-test
     blofeld-original-dsp-clock-test
+    blofeld-original-dsp-midi-test
     blofeld-mcu-clock-checkpoint-test
     blofeld-mcu-wait-clock-test
     blofeld-original-cycle-boot-test

@@ -477,6 +477,15 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           backpressure and partial-frame replay
                                           checked (midi-input.txt). Explicit clock
                                           and routing remain fixture assumptions.
+                                          Original DSP ring consumers and actual
+                                          pitch callback: all 16384 values per
+                                          ring, running status, selected channels,
+                                          partial-message snapshots and strict
+                                          missing-ring failures checked against
+                                          independent MIDI expectations. Input
+                                          is an explicit RAM producer fixture;
+                                          actual transport remains unqualified
+                                          (dsp-midi-replay.txt).
                                           No virtual/physical MIDI port, complete
                                           message/controller processing or DSP
                                           voice/audio integration yet.

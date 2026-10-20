@@ -1,0 +1,46 @@
+Original DSP MIDI ring/parser and pitch callback replay
+
+  cmake --build --preset strict --target blofeld-original-dsp-midi-test
+  ctest --test-dir build/strict -R '^original_dsp_midi$' --output-on-failure
+
+The optional original_firmware.py wrapper verifies the official ZIP identity in
+downloads.json before execution; absent local firmware returns explicit skip 77.
+The firmware, extracted records and run traces remain local. The test loads
+the unchanged complete original P:0808 and P:0967 components and stored low X/Y
+initial data into strict RAM. It does not execute original boot or its producer.
+Component word-image SHA-256 identities:
+  P:0808 / 351 words
+    d89ff1a134a3a9684fdc3c8b66bd44fb81ad8621e3f3188ef5064f10a67fc288
+  P:0967 / 1092 words
+    603cd0a98101a15a7994a2d9f2d946f39890865ebf566f84161a7d9cf0a2dc5f
+
+Declared caller context: OMR=5, SR=c00300, linear M0..7, single block, omni or
+one selected MIDI channel, clock ignored by the original setting. An own native
+JSR harness calls both genuine ring consumers and the actual nested pitch-bend
+callback; no host PC/register patch or successful callback stub is supplied.
+Own input bytes are packed into the two original 64/128-word RAM rings. Their
+otherwise unknown cells and adjacent guards are explicitly initialized, without
+changing the board model's unknown-memory policy.
+
+Independent MIDI 1.0 expectations use E0..EF, low seven bits then high seven bits,
+center 8192 and the original field's fixed-point scale 1024. Protocol reference:
+  https://midi.org/summary-of-midi-1-0-messages
+All 16384 values per ring, running status, 256 orphan bytes, status replacement,
+partial-message/clock interleaving and selected channels produce 34576 calls,
+32873 genuine callbacks and 70430 input bytes. Matrix execution retires exactly
+3101868 native instructions. Every field update, both five-word parser contexts,
+ring consumption/wrapping, guards, nested return and final empty stack are
+checked. These are fixed deterministic tests; no fuzzer runs.
+
+Coordinated snapshots retain two partial messages. Two identical continuations
+match whole CPU and all permitted mutable RAM; a changed continuation must use
+the saved first byte and changed second byte. Six original callbacks complete.
+Missing first cells on either empty ring expose genuine speculative reads at
+P:0c5a / P:0c6a and X:2f80 / X:2d00 with PC/OMR. They fail before consumption,
+field mutation or retirement; further execution and checkpoint capture reject.
+
+This qualifies an isolated parser/callback fixture. Physical DIN/USB assignment,
+actual MCU/GPIO/timer producer routing, interrupt/clock calibration, other MIDI
+messages, controller mapping, voices and audio remain required. The complete
+original DSP boot still fails at strict Y:002000. This test establishes neither
+Desktop/Keyboard equivalence nor update/recovery or physical-device safety.
