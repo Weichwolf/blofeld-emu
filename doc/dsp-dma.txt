@@ -53,6 +53,8 @@ This is a standalone instruction/peripheral reference experiment. Automatic
 clocked native execution rejects an active DMA channel: core/DMA bank contention,
 per-cycle instruction bus accesses, request synchronization and dynamic internal
 deadlines still need integration. Explicit phases do not establish those facts.
+Native semantic bus observations are available (dsp-native-access.txt); they do
+not yet supply arbitration timestamps or stalls.
 No physical HCKT/core frequency, original DMA execution, physical DAX output, PCM transport,
 full original boot or hardware equivalence is established.
 

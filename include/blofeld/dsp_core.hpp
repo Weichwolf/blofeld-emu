@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/dsp_bus.hpp"
+#include "blofeld/dsp_native_access.hpp"
 
 #include <array>
 #include <cstdint>
@@ -74,6 +75,7 @@ public:
   [[nodiscard]] DspState state() const;
   [[nodiscard]] DspDebugState debug_state() const;
   void step();
+  void step(DspNativeAccessObserver observer);
 
 private:
   friend class DspMachine;

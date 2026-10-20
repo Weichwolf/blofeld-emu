@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_interrupts.hpp"
+#include "blofeld/dsp_native_access.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
@@ -11,6 +12,7 @@
 #include "dsp56kEmu/peripherals.h"
 #include "dsp56kEmu/registers.h"
 #include "dsp56kEmu/types.h"
+#include "dsp_native_access.hpp"
 
 #include <bit>
 #include <cstddef>
@@ -70,7 +72,7 @@ DspBitOperation bit_operation(const dsp56k::PeripheralBitOp operation) {
 
 class MemoryAccess final : public dsp56k::IMemoryValidator {
 public:
-  explicit MemoryAccess(DspBus &bus) : bus_(bus) {}
+  MemoryAccess(DspBus &bus, DspNativeBus &native) : bus_(bus), native_(native) {}
 
   [[nodiscard]] bool memValidateAccess(dsp56k::EMemArea /*area*/,
                                        dsp56k::TWord /*address*/,
@@ -81,23 +83,30 @@ public:
   bool readWord(const dsp56k::EMemArea area,
                 const dsp56k::TWord address,
                 dsp56k::TWord &value) const override {
-    value = bus_.read({.space = space(area), .address = address});
+    value = native_.read({.space = space(area), .address = address});
     return true;
   }
 
   [[nodiscard]] bool writeWord(const dsp56k::EMemArea area,
                                const dsp56k::TWord address,
                                const dsp56k::TWord value) const override {
-    bus_.write({.space = space(area), .address = address, .value = value});
+    native_.write({.space = space(area), .address = address, .value = value});
+    return true;
+  }
+
+  bool readExtension(const dsp56k::TWord address, dsp56k::TWord &value) const override {
+    value = native_.read({.address = address}, DspNativeAccessKind::extension);
     return true;
   }
 
   bool readOpcode(const dsp56k::TWord address,
                   dsp56k::TWord &first,
                   dsp56k::TWord &second) const override {
-    first = bus_.read({.address = address});
-    if (interrupt_ && address == interrupt_->address) {
-      second = bus_.read({.address = address + 1});
+    const bool vector = interrupt_ && address == interrupt_->address;
+    first = native_.read({.address = address},
+                         vector ? DspNativeAccessKind::vector : DspNativeAccessKind::opcode);
+    if (vector) {
+      second = native_.read({.address = address + 1}, DspNativeAccessKind::vector);
       bus_.acknowledge_interrupt(interrupt_->request);
       interrupt_.reset();
     } else {
@@ -124,23 +133,27 @@ private:
   };
 
   DspBus &bus_;
+  DspNativeBus &native_;
   mutable std::optional<VectorFetch> interrupt_;
 };
 
 class Peripherals final : public dsp56k::IPeripherals {
 public:
-  Peripherals(DspBus &bus, const DspSpace area)
-      : IPeripherals(dsp56k::PeripheralType::PeripheralsCustom), bus_(bus), area_(area) {}
+  Peripherals(DspBus &bus, DspNativeBus &native, const DspSpace area)
+      : IPeripherals(dsp56k::PeripheralType::PeripheralsCustom),
+        bus_(bus),
+        native_(native),
+        area_(area) {}
 
   dsp56k::TWord read(const dsp56k::TWord address, dsp56k::Instruction /*instruction*/) override {
-    return bus_.read({.space = area_, .address = address});
+    return native_.read({.space = area_, .address = address});
   }
 
   bool bitAccess(const dsp56k::TWord address,
                  const dsp56k::TWord bit,
                  const dsp56k::PeripheralBitOp operation,
                  bool &old) override {
-    const auto result = bus_.access_peripheral_bit(
+    const auto result = native_.bit(
         {.space = area_, .address = address, .bit = bit, .operation = bit_operation(operation)});
     if (!result.has_value()) { return false; }
     old = *result;
@@ -153,7 +166,7 @@ public:
   }
 
   void write(const dsp56k::TWord address, const dsp56k::TWord value) override {
-    bus_.write({.space = area_, .address = address, .value = value});
+    native_.write({.space = area_, .address = address, .value = value});
   }
 
   std::uint32_t exec() override { return MaxDelayCycles; }
@@ -168,6 +181,7 @@ public:
 
 private:
   DspBus &bus_;
+  DspNativeBus &native_;
   DspSpace area_;
 };
 
@@ -197,10 +211,11 @@ class DspCore::Impl {
 public:
   explicit Impl(DspBus &board)
       : bus(board),
-        access(board),
+        native(board),
+        access(board, native),
         memory(access, address_space, native_xy_words, 0),
-        peripherals_x(board, DspSpace::x),
-        peripherals_y(board, DspSpace::y),
+        peripherals_x(board, native, DspSpace::x),
+        peripherals_y(board, native, DspSpace::y),
         cpu(memory, &peripherals_x, &peripherals_y) {
     static_assert(!dsp56k::g_useJIT);
   }
@@ -215,6 +230,7 @@ public:
   }
 
   DspBus &bus;
+  DspNativeBus native;
   MemoryAccess access;
   dsp56k::Memory memory;
   Peripherals peripherals_x;
@@ -341,6 +357,10 @@ DspDebugState DspCore::debug_state() const {
 }
 
 void DspCore::step() {
+  step({});
+}
+
+void DspCore::step(DspNativeAccessObserver observer) {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
   const ExecutionGuard guard(impl_->active);
   const auto before = state();
@@ -355,6 +375,8 @@ void DspCore::step() {
       interrupt.reset();
     }
     if (impl_->run.begin) { impl_->run.begin(before, interrupt.has_value()); }
+    const DspNativeAccessScope observed(
+        impl_->native, std::move(observer), {.pc = before.pc, .omr = before.omr});
     if (interrupt) {
       const auto vector = before.vba + interrupt->vector;
       impl_->access.arm_interrupt(*interrupt, vector);

@@ -1,18 +1,29 @@
 --- a/source/dsp56kEmu/memory.h
 +++ b/source/dsp56kEmu/memory.h
-@@ -36,0 +37,4 @@
+@@ -36,0 +37,5 @@
 +		// Optional bus-owned storage; fallback users retain their existing arrays.
 +		virtual bool readWord(EMemArea, TWord, TWord&) const { return false; }
 +		virtual bool writeWord(EMemArea, TWord, TWord) const { return false; }
 +		virtual bool readOpcode(TWord, TWord&, TWord&) const { return false; }
++		virtual bool readExtension(TWord, TWord&) const { return false; }
+@@ -101,0 +107 @@
++		TWord getExtension(TWord offset) const;
 --- a/source/dsp56kEmu/memory.cpp
 +++ b/source/dsp56kEmu/memory.cpp
 @@ -111,0 +112 @@
 +		if(m_memoryMap.writeWord(_area, _offset, _value)) return true;
-@@ -163,0 +165,2 @@
+@@ -161,0 +163,7 @@
++	TWord Memory::getExtension(TWord offset) const
++	{
++		TWord value;
++		if(m_memoryMap.readExtension(offset, value)) return value;
++		return get(MemArea_P, offset);
++	}
++
+@@ -163,0 +172,2 @@
 +		TWord busValue;
 +		if(m_memoryMap.readWord(_area, _offset, busValue)) return busValue;
-@@ -197,0 +201 @@
+@@ -197,0 +208 @@
 +		if(m_memoryMap.readOpcode(_offset, _wordA, _wordB)) return;
 --- a/source/dsp56kEmu/peripherals.h
 +++ b/source/dsp56kEmu/peripherals.h
@@ -81,30 +92,41 @@
 @@ -189 +220 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +239,9 @@
+@@ -208 +239,11 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
++		uint32_t referenceNextCycles() const;
 +		bool referenceInterruptible(TWord nextOpcode) const;
 +		void execReferenceInterrupt(TWord vector, unsigned level);
 +	private:
++		uint32_t referenceCycleCost(TWord pc, TWord opcode) const;
 +		void execReferenceVectorWord(TWord address, TWord opcode, unsigned available);
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411 +450 @@
+@@ -411,2 +452,13 @@
 -		TWord	fetchOpWordB()
+-		{
++		TWord memReadExtension(TWord offset) const
++		{
++			aarTranslate(MemArea_P, offset);
++			return mem.getExtension(offset);
++		}
++
 +		TWord fetchOpWordB()
-@@ -412,0 +452,2 @@
-+			const auto extension = m_referenceRepeat.loaded
-+				? m_referenceRepeat.extension : memRead(MemArea_P, pcCurrentInstruction + 1);
-@@ -416 +457 @@
++		{
++			TWord extension = m_opWordB;
++			if(m_referenceRepeat.loaded)
++				extension = m_referenceRepeat.extension;
++			else if(!m_referenceVectorActive)
++				extension = memReadExtension(pcCurrentInstruction + 1);
+@@ -416 +468 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523 +564 @@
+@@ -523,15 +575,8 @@
 -		void	sr_s_update				()
-+		void sr_s_update(const TReg56& _source)
-@@ -525,13 +566,6 @@
+-		{
 -			if( sr_test_noCache(CCR_S) )
 -				return;
 -
@@ -118,21 +140,23 @@
 -			if	(	(bitvalue(a,bitA) != bitvalue(a,bitB))
 -				|	(bitvalue(b,bitA) != bitvalue(b,bitB)) )
 -				sr_set( CCR_S );
++		void sr_s_update(const TReg56& _source)
++		{
 +			if(sr_test_noCache(CCR_S)) return;
 +			// Only the accumulator actually driving a data bus contributes growth.
 +			const int offset = sr_val_noCache(SRB_S1) - sr_val_noCache(SRB_S0);
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -726,0 +761 @@
+@@ -726,0 +772 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +771 @@
+@@ -735,0 +782 @@
 +			sr_s_update(reg.b);
-@@ -975,0 +1012 @@
+@@ -975,0 +1023 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1042 @@
+@@ -1004,0 +1053 @@
 +			sr_s_update(_src);
-@@ -1468,0 +1507 @@
+@@ -1468,0 +1518 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -144,15 +168,15 @@
 @@ -52 +53 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept
 +	void dspExecInterrupts(DSP* _dsp)
-@@ -67,0 +69,8 @@
+@@ -65,0 +67,8 @@
++	}
++
 +	void dspExecCustomPeripherals(DSP* dsp)
 +	{
 +		const auto x = dsp->getPeriph(0)->exec();
 +		const auto y = dsp->getPeriph(1)->exec();
 +		dsp->getPeriph(0)->resetDelayCycles(dsp->getInstructionCounter(), std::min(x, y));
 +		dsp->processExternalInterrupts();
-+	}
-+
 @@ -74,2 +83 @@
 -		assert(false && "Peripherals configuration is not supported");
 -		return nullptr;
@@ -173,7 +197,7 @@
 @@ -264 +279 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +340,162 @@
+@@ -324,0 +340,182 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -227,6 +251,26 @@
 +		m_referenceLongEntry = state.longEntry;
 +		m_referenceRepeatCompleted = state.repeatCompleted;
 +		for(size_t i = 0; i < perif.size(); ++i) perif[i]->resetDelayCycles(state.peripheralTargets[i], 0);
++	}
++
++	uint32_t DSP::referenceCycleCost(const TWord pc, const TWord opcode) const
++	{
++		Instruction a, b;
++		if(!m_opcodes.getInstructionTypes(opcode, a, b))
++			throw std::runtime_error("Undefined DSP reference cycle-preview opcode");
++		return dsp56k::calcCycles(a, b, pc, opcode, mem.getBridgedMemoryAddress(), 1);
++	}
++
++	uint32_t DSP::referenceNextCycles() const
++	{
++		verifyReferenceCheckpoint();
++		const auto pc = reg.pc.toWord();
++		TWord opcode, extension;
++		if(m_referenceRepeat.remaining && m_referenceRepeat.loaded)
++			opcode = m_referenceRepeat.opcode;
++		else
++			mem.getOpcode(pc, opcode, extension);
++		return referenceCycleCost(pc, opcode);
 +	}
 +
 +	void DSP::execReference()
@@ -336,13 +380,16 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -413,0 +591,5 @@
+@@ -341 +538 @@
+-				m_cycles += getOpcodeCycles(currentOp);
++				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
+@@ -413,0 +611,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +674,8 @@
+@@ -491,0 +694,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -351,10 +398,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +716,2 @@
+@@ -525,0 +736,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +796,31 @@
+@@ -603,0 +816,31 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -386,16 +433,16 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1374,0 @@
+@@ -1152,2 +1394,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1377 @@
+@@ -1156 +1397 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1570,0 +1792,2 @@
+@@ -1570,0 +1812,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +1906,2 @@
+@@ -1682,0 +1926,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl
@@ -630,35 +677,3 @@
 -		OpcodeCycles{Movep_eaqq,		2, 1, 1, 0},
 +		OpcodeCycles{Movep_eapp,		6, 1, 1, 0},
 +		OpcodeCycles{Movep_eaqq,		6, 1, 1, 0},
---- a/source/dsp56kEmu/dsp.cpp
-+++ b/source/dsp56kEmu/dsp.cpp
-@@ -392,0 +393,20 @@
-+	}
-+
-+	uint32_t DSP::referenceCycleCost(const TWord pc, const TWord opcode) const
-+	{
-+		Instruction a, b;
-+		if(!m_opcodes.getInstructionTypes(opcode, a, b))
-+			throw std::runtime_error("Undefined DSP reference cycle-preview opcode");
-+		return dsp56k::calcCycles(a, b, pc, opcode, mem.getBridgedMemoryAddress(), 1);
-+	}
-+
-+	uint32_t DSP::referenceNextCycles() const
-+	{
-+		verifyReferenceCheckpoint();
-+		const auto pc = reg.pc.toWord();
-+		TWord opcode, extension;
-+		if(m_referenceRepeat.remaining && m_referenceRepeat.loaded)
-+			opcode = m_referenceRepeat.opcode;
-+		else
-+			mem.getOpcode(pc, opcode, extension);
-+		return referenceCycleCost(pc, opcode);
-@@ -518 +538 @@
--				m_cycles += getOpcodeCycles(currentOp);
-+				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
---- a/source/dsp56kEmu/dsp.h
-+++ b/source/dsp56kEmu/dsp.h
-@@ -240,0 +241 @@
-+		uint32_t referenceNextCycles() const;
-@@ -243,0 +245 @@
-+		uint32_t referenceCycleCost(TWord pc, TWord opcode) const;

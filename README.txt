@@ -123,6 +123,8 @@ doc/dsp-dma.txt describes DMA register/address/count logic and explicit read/wri
 reference phases with actual ESAI refills; automatic native DMA timing remains open.
 doc/dsp-dax.txt describes buffered DAX biphase output, explicit clock inputs,
 Port D and native DMA line experiments; it does not establish original audio.
+doc/dsp-native-access.txt describes actual interpreter bus observations, failure
+prefixes and the distinction from pending native DMA pipeline timing.
 doc/dsp-external-events.txt describes timed external peripheral observations
 between native DSP completions, including MCU shared-write and WAI ordering.
 doc/nand-persistence.txt describes private NAND images, durable write-ahead

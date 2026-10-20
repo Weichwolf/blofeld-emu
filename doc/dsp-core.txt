@@ -65,6 +65,9 @@ DSP56371 memory and peripheral scope
   reference time, timers and switch delays; see dsp-run-clock.txt.
   Native power-up register undefined-state tracking and full derivative reset,
   interrupt, pipeline and instruction-cycle fidelity need further validation.
+- An optional per-step access observer distinguishes actual opcode/vector/extension,
+  data and peripheral-bit operations and retains failure prefixes. This supplies
+  semantic access evidence, not pipeline timestamps (dsp-native-access.txt).
 
 Independent synthetic tests
   build/strict/blofeld-dsp-test

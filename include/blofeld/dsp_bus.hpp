@@ -60,6 +60,7 @@ public:
   [[nodiscard]] std::uint32_t read(DspAddress access);
   void write(DspStore access);
   [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
+  [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);

@@ -131,6 +131,13 @@ DspGpio &DspBus::gpio(const DspPort port) {
   return gpio_.at(index);
 }
 
+bool DspBus::handles_peripheral_bit(const DspAddress access) {
+  return (access.space == DspSpace::x &&
+          (DspDax::handles(access.address) || DspDma::handles(access.address) ||
+           DspTimers::is_control(access.address))) ||
+         gpio_register(access).has_value();
+}
+
 std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   constexpr unsigned word_bits = 24;
   const DspAddress target{.space = access.space, .address = access.address};
@@ -139,6 +146,7 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
       static_cast<unsigned>(access.operation) > static_cast<unsigned>(DspBitOperation::change)) {
     throw Fault("Invalid DSP bit access at " + address_text(target));
   }
+  if (!handles_peripheral_bit(target)) { return std::nullopt; }
   const auto mask = 1U << access.bit;
   if (access.space == DspSpace::x && DspDax::handles(access.address)) {
     sync_dax();
