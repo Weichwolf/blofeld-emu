@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace blofeld {
@@ -221,6 +222,8 @@ public:
         peripherals_y(native, DspSpace::y),
         cpu(memory, &peripherals_x, &peripherals_y) {
     static_assert(!dsp56k::g_useJIT);
+    static_assert(std::is_trivially_copyable_v<dsp56k::DSP::ReferenceAttemptState>);
+    static_assert(sizeof(dsp56k::DSP::ReferenceAttemptState) <= 1024);
   }
 
   void invalidate() {
@@ -243,7 +246,7 @@ public:
   void restore_reference_base() {
     if (!reference_base) { throw Fault("Native reference instruction lost its base state"); }
     const DspReferenceScope restoring(native.reference(), DspReferenceMode::restoring);
-    cpu.restoreReferenceState(*reference_base);
+    cpu.restoreReferenceAttempt(*reference_base);
   }
 
   void resume_reference() {
@@ -252,7 +255,7 @@ public:
     reference.rewind();
     try {
       const DspReferenceScope attempting(reference, DspReferenceMode::attempt);
-      cpu.execReference();
+      cpu.execReferenceAttempt();
       reference.verify_complete();
     } catch (const DspReferenceYield &) {
       access.reset();
@@ -260,7 +263,7 @@ public:
       return;
     }
     // Validate native continuation constraints without publishing a partial step.
-    static_cast<void>(cpu.referenceState());
+    static_cast<void>(cpu.referenceAttemptState());
     bus.observe_omr(word(cpu.regs().omr));
     reference.clear();
     reference_base.reset();
@@ -276,7 +279,7 @@ public:
   bool faulted = false;
   bool active = false;
   RunHooks run;
-  std::shared_ptr<const dsp56k::DSP::ReferenceState> reference_base;
+  std::optional<dsp56k::DSP::ReferenceAttemptState> reference_base;
   std::shared_ptr<const bool> reference_owner;
   std::uint64_t generation = 0;
 };
@@ -362,8 +365,7 @@ void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
   impl_->native.reference().restore(checkpoint.storage_->reference);
   impl_->generation = checkpoint.storage_->generation;
   if (checkpoint.storage_->reference.active) {
-    impl_->reference_base = std::shared_ptr<const dsp56k::DSP::ReferenceState>(
-        checkpoint.storage_, &checkpoint.storage_->cpu);
+    impl_->reference_base = impl_->cpu.referenceAttemptState();
   }
   impl_->access.reset();
   impl_->faulted = false;
@@ -416,8 +418,7 @@ DspReferenceProgress DspCore::begin_reference_instruction(const DspReferenceExec
   try {
     impl_->invalidate();
     impl_->access.verify_interrupt_fetch();
-    impl_->reference_base =
-        std::make_shared<const dsp56k::DSP::ReferenceState>(impl_->cpu.referenceState());
+    impl_->reference_base = impl_->cpu.referenceAttemptState();
     ++impl_->generation;
     impl_->native.reference().begin({.pc = before.pc, .omr = before.omr});
     impl_->resume_reference();

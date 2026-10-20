@@ -35,6 +35,10 @@ costs and peripheral pacing deadlines are retained. Native counters and pacing
 are not calibrated elapsed clocks. The optional run contract retains reference
 time, odd CLK/2 residue, ratio latching and fault status; see dsp-run-clock.txt.
 It does not establish a calibrated board scheduler.
+The internal access-attempt rollback uses a separate fixed raw register/context
+state and cold dispatch at the current instruction. It leaves these explicit
+full snapshots and their per-PC diagnostic cycle vector intact; it does not turn
+checkpoint capture/restore into a bounded real-time operation.
 The API rejects native JIT, debugger/trace/external-bus contexts and SDK interrupt
 queues/callbacks, which are outside this custom-bus reference path.
 

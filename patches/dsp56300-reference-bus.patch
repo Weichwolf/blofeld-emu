@@ -59,7 +59,8 @@
 @@ -86 +87 @@
 -		typedef void (*TInterruptFunc)(DSP*) noexcept;
 +		typedef void (*TInterruptFunc)(DSP*);
-@@ -162,0 +164,31 @@
+@@ -162,0 +164,59 @@
++		bool m_referenceAttempt = false;
 +		bool m_referenceMode = false;
 +		bool m_referenceVectorActive = false;
 +		bool m_referenceLongEntry = false;
@@ -87,14 +88,41 @@
 +			std::array<uint64_t, 2> peripheralTargets{};
 +			std::vector<uint8_t> opcodeCycleCache;
 +		};
++		// Bounded internal rollback; host dispatch/cycle memoization is not architectural state.
++		struct ReferenceAttemptState {
++			struct {
++				TInt64 x = 0, y = 0, a = 0, b = 0;
++				std::array<TInt32, 8> r{}, n{}, m{};
++				std::array<TWord, 8> mMask{}, mModulo{};
++				TInt32 sr = 0, omr = 0, pc = 0, la = 0, lc = 0, sp = 0;
++				TInt32 sz = 0, vba = 0, ep = 0;
++				uint8_t sc = 0;
++				std::array<TInt64, 16> ss{};
++			} registers;
++			struct {
++				TWord remaining = 0, body = 0, opcode = 0, extension = 0, next = 0;
++				TInt32 savedLC = 0;
++				bool loaded = false;
++			} repeat;
++			uint64_t instructions = 0, cycles = 0;
++			ProcessingMode mode = Default;
++			TInterruptFunc interruptFunc = nullptr;
++			TWord currentPC = 0, currentSR = 0, extension = 0;
++			uint32_t opLength = 0;
++			bool referenceMode = false, longEntry = false, repeatCompleted = false;
++			std::array<uint64_t, 2> peripheralTargets{};
++		};
++		ReferenceAttemptState referenceAttemptState() const;
++		void restoreReferenceAttempt(const ReferenceAttemptState& state);
++		void execReferenceAttempt();
 +		ReferenceState referenceState() const;
 +		void restoreReferenceState(const ReferenceState& state);
 +	private:
 +		void verifyReferenceCheckpoint() const;
-@@ -189 +221 @@
+@@ -189 +249 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +240,12 @@
+@@ -208 +268,12 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
@@ -108,7 +136,7 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +454,13 @@
+@@ -411,2 +482,13 @@
 -		TWord	fetchOpWordB()
 -		{
 +		TWord memReadExtension(TWord offset) const
@@ -124,10 +152,10 @@
 +				throw std::runtime_error("Unexpected extension in single-word reference REP");
 +			if(!m_referenceVectorActive)
 +				extension = memReadExtension(pcCurrentInstruction + 1);
-@@ -416 +470 @@
+@@ -416 +498 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523,15 +577,8 @@
+@@ -523,15 +605,8 @@
 -		void	sr_s_update				()
 -		{
 -			if( sr_test_noCache(CCR_S) )
@@ -151,15 +179,15 @@
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -726,0 +774 @@
+@@ -726,0 +802 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +784 @@
+@@ -735,0 +812 @@
 +			sr_s_update(reg.b);
-@@ -975,0 +1025 @@
+@@ -975,0 +1053 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1055 @@
+@@ -1004,0 +1083 @@
 +			sr_s_update(_src);
-@@ -1468,0 +1520 @@
+@@ -1468,0 +1548 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -200,10 +228,10 @@
 @@ -264 +279 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +340,197 @@
+@@ -324,0 +340,306 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
-+		if(g_useJIT || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
++		if(g_useJIT || m_referenceAttempt || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
 +			m_trace != Disabled || m_terminate.load(std::memory_order_relaxed) ||
 +			!m_pendingInterrupts.empty() || !m_pendingExternalInterrupts.empty() || !m_customInterrupts.empty() ||
 +			perif[0]->getType() != PeripheralType::PeripheralsCustom ||
@@ -254,6 +282,115 @@
 +		m_referenceLongEntry = state.longEntry;
 +		m_referenceRepeatCompleted = state.repeatCompleted;
 +		for(size_t i = 0; i < perif.size(); ++i) perif[i]->resetDelayCycles(state.peripheralTargets[i], 0);
++	}
++
++	DSP::ReferenceAttemptState DSP::referenceAttemptState() const
++	{
++		verifyReferenceCheckpoint();
++		getSR(); // Canonicalize deferred CCR updates just as the reference adapter's state observation does.
++		ReferenceAttemptState state;
++		state.registers.x = reg.x.var;
++		state.registers.y = reg.y.var;
++		state.registers.a = reg.a.var;
++		state.registers.b = reg.b.var;
++		state.registers.sr = reg.sr.var;
++		state.registers.omr = reg.omr.var;
++		state.registers.pc = reg.pc.var;
++		state.registers.la = reg.la.var;
++		state.registers.lc = reg.lc.var;
++		state.registers.sp = reg.sp.var;
++		state.registers.sz = reg.sz.var;
++		state.registers.vba = reg.vba.var;
++		state.registers.ep = reg.ep.var;
++		state.registers.sc = reg.sc.var;
++		for(size_t i = 0; i < reg.r.size(); ++i) {
++			state.registers.r[i] = reg.r[i].var;
++			state.registers.n[i] = reg.n[i].var;
++			state.registers.m[i] = reg.m[i].var;
++			state.registers.mMask[i] = reg.mMask[i];
++			state.registers.mModulo[i] = reg.mModulo[i];
++		}
++		for(size_t i = 0; i < reg.ss.size(); ++i) state.registers.ss[i] = reg.ss[i].var;
++		state.repeat.remaining = m_referenceRepeat.remaining;
++		state.repeat.body = m_referenceRepeat.body;
++		state.repeat.opcode = m_referenceRepeat.opcode;
++		state.repeat.extension = m_referenceRepeat.extension;
++		state.repeat.next = m_referenceRepeat.next;
++		state.repeat.loaded = m_referenceRepeat.loaded;
++		state.repeat.savedLC = m_referenceRepeat.savedLC.var;
++		state.instructions = m_instructions;
++		state.cycles = m_cycles;
++		state.mode = m_processingMode;
++		state.interruptFunc = m_interruptFunc;
++		state.currentPC = pcCurrentInstruction;
++		state.currentSR = m_srCurrentInstruction;
++		state.extension = m_opWordB;
++		state.opLength = m_currentOpLen;
++		state.referenceMode = m_referenceMode;
++		state.longEntry = m_referenceLongEntry;
++		state.repeatCompleted = m_referenceRepeatCompleted;
++		for(size_t i = 0; i < perif.size(); ++i) state.peripheralTargets[i] = perif[i]->getTargetClock();
++		return state;
++	}
++
++	void DSP::restoreReferenceAttempt(const ReferenceAttemptState& state)
++	{
++		verifyReferenceCheckpoint();
++		reg.x.var = state.registers.x;
++		reg.y.var = state.registers.y;
++		reg.a.var = state.registers.a;
++		reg.b.var = state.registers.b;
++		reg.sr.var = state.registers.sr;
++		reg.omr.var = state.registers.omr;
++		reg.pc.var = state.registers.pc;
++		reg.la.var = state.registers.la;
++		reg.lc.var = state.registers.lc;
++		reg.sp.var = state.registers.sp;
++		reg.sz.var = state.registers.sz;
++		reg.vba.var = state.registers.vba;
++		reg.ep.var = state.registers.ep;
++		reg.sc.var = state.registers.sc;
++		for(size_t i = 0; i < reg.r.size(); ++i) {
++			reg.r[i].var = state.registers.r[i];
++			reg.n[i].var = state.registers.n[i];
++			reg.m[i].var = state.registers.m[i];
++			reg.mMask[i] = state.registers.mMask[i];
++			reg.mModulo[i] = state.registers.mModulo[i];
++		}
++		for(size_t i = 0; i < reg.ss.size(); ++i) reg.ss[i].var = state.registers.ss[i];
++		resetCCRCache();
++		m_referenceRepeat.remaining = state.repeat.remaining;
++		m_referenceRepeat.body = state.repeat.body;
++		m_referenceRepeat.opcode = state.repeat.opcode;
++		m_referenceRepeat.extension = state.repeat.extension;
++		m_referenceRepeat.next = state.repeat.next;
++		m_referenceRepeat.loaded = state.repeat.loaded;
++		m_referenceRepeat.savedLC.var = state.repeat.savedLC;
++		m_instructions = state.instructions;
++		m_cycles = state.cycles;
++		m_processingMode = state.mode;
++		m_interruptFunc = state.interruptFunc;
++		pcCurrentInstruction = state.currentPC;
++		m_srCurrentInstruction = state.currentSR;
++		m_opWordB = state.extension;
++		m_currentOpLen = state.opLength;
++		m_referenceMode = state.referenceMode;
++		m_referenceLongEntry = state.longEntry;
++		m_referenceRepeatCompleted = state.repeatCompleted;
++		for(size_t i = 0; i < perif.size(); ++i) perif[i]->resetDelayCycles(state.peripheralTargets[i], 0);
++	}
++
++	void DSP::execReferenceAttempt()
++	{
++		verifyReferenceCheckpoint();
++		m_referenceAttempt = true;
++		try {
++			execReference();
++		} catch(...) {
++			m_referenceAttempt = false;
++			throw;
++		}
++		m_referenceAttempt = false;
 +	}
 +
 +	uint32_t DSP::referenceCycleCost(const TWord pc, const TWord opcode) const
@@ -398,16 +535,28 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -341 +553 @@
+@@ -331,0 +653,11 @@
++		if(m_referenceAttempt) {
++			if(Opcodes::isNonParallelOpcode(op)) {
++				const auto* info = m_opcodes.findNonParallelOpcodeInfo(op);
++				const auto inst = info ? info->m_instruction : Invalid;
++				if(inst == Pflush || inst == Pflushun || inst == Pfree || inst == Plock ||
++					inst == Plockr || inst == Punlock || inst == Punlockr)
++					throw std::runtime_error("Unqualified instruction-cache control in native reference attempt");
++			}
++			// Always decode the captured word, including loaded REP. Never reuse partial dispatch.
++			m_opcodeCache.at(currentOp) = {&DSP::op_ResolveCache};
++		}
+@@ -341 +673 @@
 -				m_cycles += getOpcodeCycles(currentOp);
 +				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
-@@ -413,0 +626,5 @@
+@@ -413,0 +746,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +709,8 @@
+@@ -491,0 +829,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -416,10 +565,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +751,2 @@
+@@ -525,0 +871,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +831,26 @@
+@@ -603,0 +951,26 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -446,16 +595,16 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1404,0 @@
+@@ -1152,2 +1524,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1407 @@
+@@ -1156 +1527 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1570,0 +1822,2 @@
+@@ -1570,0 +1942,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +1936,2 @@
+@@ -1682,0 +2056,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl

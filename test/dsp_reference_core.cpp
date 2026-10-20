@@ -12,6 +12,7 @@
 #include "reference_execution_fixture.hpp"
 
 #include <array>
+#include <cstdint>
 #include <variant>
 
 namespace blofeld::test::reference {
@@ -86,6 +87,81 @@ void protected_destination() {
               machine.bus().read({.space = DspSpace::x, .address = writable}) == first &&
               machine.bus().read({.space = DspSpace::x, .address = rom}) == second,
           "Repair before actual extension consumption redirects only the resumed real store");
+}
+
+void parallel_alu_and_modulo() {
+  constexpr unsigned address = 7;
+  constexpr std::uint64_t accumulator_unit = std::uint64_t{1} << word_bits;
+  constexpr unsigned ccr_mask = 0xff;
+  DspMachine machine;
+  DspProgram code;
+  code.immediate("r0", address);
+  code.immediate("m0", address);
+  code.immediate("x1", 2);
+  code.immediate("a1", 1);
+  code.immediate("sr", masked_status | carry | overflow | zero | negative);
+  const auto body = code.pc();
+  code.emit("add x1,a x:(r0)+,x0");
+  code.emit("move x:(r0)+,x0");
+  code.install(machine.bus());
+  machine.bus().write({.space = DspSpace::x, .address = address, .value = first});
+  machine.bus().write({.space = DspSpace::x, .address = 0, .value = third});
+  for (unsigned index = 0; index < 5; ++index) { machine.cpu().step(); }
+  const auto before = machine.cpu().debug_state();
+  auto progress = machine.begin_reference_instruction(boundaries);
+  progress = machine.advance_reference_access(ticket(progress));
+  expect(progress,
+         {.kind = DspNativeAccessKind::read,
+          .target = {.space = DspSpace::x, .address = address},
+          .ordinal = 1,
+          .pc = body});
+  require(machine.cpu().debug_state() == before,
+          "A suspended parallel load restores the already computed ALU/CCR and AGU state");
+  const auto saved = machine.checkpoint();
+  for (const auto value : {first, second}) {
+    machine.restore(saved);
+    machine.bus().write({.space = DspSpace::x, .address = address, .value = value});
+    progress = machine.advance_reference_access(ticket(machine));
+    const auto after = machine.cpu().debug_state();
+    require(progress.retired && after.cpu.a == 3U * accumulator_unit &&
+                after.cpu.x == (std::uint64_t{2} << word_bits) + value &&
+                (after.cpu.sr & ccr_mask) == unnormalized && after.cpu.r[0] == 0 &&
+                after.cpu.m[0] == address &&
+                after.native_instructions == before.native_instructions + 1,
+            "Independent ADD value/flags and modulo-eight update retire exactly once");
+    execute(machine);
+    require(machine.cpu().state().r[0] == 1 &&
+                machine.cpu().state().x == (std::uint64_t{2} << word_bits) + third,
+            "Restored derived AGU state also selects the next real modulo data word");
+  }
+}
+
+void unqualified_cache_controls() {
+  // FM13-156..159: absolute EA extension (MMM=110/RRR=000), and PC-relative forms.
+  constexpr unsigned plock_absolute = 0x0bf081;
+  constexpr unsigned punlock_absolute = 0x0af081;
+  for (const auto opcode : {3U, 1U, 2U, plock_absolute, 15U, punlock_absolute, 14U}) {
+    DspMachine machine;
+    DspProgram code;
+    code.word(opcode);
+    code.install(machine.bus());
+    auto progress = machine.begin_reference_instruction(boundaries);
+    const auto saved = machine.checkpoint();
+    const auto before = machine.cpu().debug_state();
+    const auto error =
+        fault([&] { static_cast<void>(machine.advance_reference_access(ticket(progress))); });
+    require(error.contains("Unqualified instruction-cache control") &&
+                error.contains("pc=0xff0000") &&
+                machine.cpu().debug_state().native_instructions == before.native_instructions,
+            "Uncheckpointed physical instruction-cache controls reject before retirement");
+    static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
+    machine.restore(saved);
+    const std::array nop{0U};
+    machine.bus().install_rom({.start = boot, .words = nop});
+    progress = machine.advance_reference_access(ticket(machine));
+    require(progress.retired && machine.cpu().state().pc == boot + 1,
+            "A trusted prefetch snapshot recovers after replacing the unqualified own opcode");
+  }
 }
 
 void bit_admission() {
@@ -272,6 +348,8 @@ void interrupt_entry_guard() {
 void core_checks() {
   unknown_read_and_recovery();
   protected_destination();
+  parallel_alu_and_modulo();
+  unqualified_cache_controls();
   bit_admission();
   software_reset();
   loaded_repeat();

@@ -3,16 +3,19 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_machine.hpp"
+#include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/firmware.hpp"
 #include "dsp_boot_reference.hpp"
 #include "original_dsp_reference.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <span>
 #include <string>
 
@@ -28,6 +31,7 @@ constexpr unsigned clear_pc = 0x72;
 constexpr unsigned known_long_ram_end = 0x2000;
 constexpr unsigned clear_count = 0x20000;
 constexpr unsigned word_bits = 24;
+enum class Execution : std::uint8_t { instruction, access };
 
 void require(const bool condition, const std::string &message) {
   if (!condition) { throw blofeld::Fault(message); }
@@ -35,40 +39,55 @@ void require(const bool condition, const std::string &message) {
 
 class Runner {
 public:
-  Runner(blofeld::DspBus &bus, blofeld::DspCore &cpu, std::ostream &trace)
-      : bus_(bus), cpu_(cpu), trace_(trace) {}
+  Runner(blofeld::DspMachine &machine, std::ostream &trace, const Execution execution)
+      : machine_(machine), trace_(trace), execution_(execution) {}
 
   void step() {
     require(completed_ < instruction_limit, "DSP bootstrap instruction budget exhausted");
-    const auto before = cpu_.state();
+    const auto before = machine_.cpu().state();
     trace_ << completed_ << " pc=" << blofeld::hex(before.pc, 6)
            << " sr=" << blofeld::hex(before.sr, 6) << " omr=" << blofeld::hex(before.omr, 6)
            << " r0=" << blofeld::hex(before.r[0], 6) << " r1=" << blofeld::hex(before.r[1], 6)
            << " lc=" << blofeld::hex(before.lc, 6) << '\n';
-    cpu_.step();
+    if (execution_ == Execution::instruction) {
+      machine_.cpu().step();
+    } else {
+      auto progress =
+          machine_.begin_reference_instruction(blofeld::DspReferenceExecution::access_boundaries);
+      constexpr unsigned maximum_accesses = 16;
+      for (unsigned accesses = 0; !progress.retired && accesses < maximum_accesses; ++accesses) {
+        if (!progress.pending) {
+          throw blofeld::Fault("Original instruction lost its pending access");
+        }
+        progress = machine_.advance_reference_access(progress.pending->ticket);
+      }
+      require(progress.retired && !progress.pending,
+              "Each original reference instruction retires within its access bound");
+    }
     ++completed_;
   }
 
   void send(const std::uint32_t value) {
-    bus_.shi().observe_spi({.selected = true, .mosi = false});
+    auto &shi = machine_.bus().shi();
+    shi.observe_spi({.selected = true, .mosi = false});
     step();
     for (unsigned bit = 0; bit < word_bits; ++bit) {
       const bool level = ((value >> (word_bits - 1 - bit)) & 1U) != 0;
-      bus_.shi().observe_spi({.selected = true, .clock = true, .mosi = level});
+      shi.observe_spi({.selected = true, .clock = true, .mosi = level});
       step();
-      bus_.shi().observe_spi({.selected = true, .mosi = level});
+      shi.observe_spi({.selected = true, .mosi = level});
       step();
     }
-    bus_.shi().observe_spi({.mosi = false});
+    shi.observe_spi({.mosi = false});
     step();
   }
 
   [[nodiscard]] unsigned completed() const { return completed_; }
 
 private:
-  blofeld::DspBus &bus_;
-  blofeld::DspCore &cpu_;
+  blofeld::DspMachine &machine_;
   std::ostream &trace_;
+  Execution execution_;
   unsigned completed_ = 0;
 };
 
@@ -78,7 +97,7 @@ struct Inputs {
   std::filesystem::path trace;
 };
 
-int run(const Inputs &inputs) {
+blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
   const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
   blofeld::DspMachine machine;
@@ -90,7 +109,7 @@ int run(const Inputs &inputs) {
   std::ofstream trace(inputs.trace);
   require(trace.is_open(), "Cannot create private DSP bootstrap trace");
   trace.exceptions(std::ios::failbit | std::ios::badbit);
-  Runner runner(bus, cpu, trace);
+  Runner runner(machine, trace, execution);
   while ((bus.shi().read(hcsr) & 1U) == 0) { runner.step(); }
   require(bus.once_latch() == 0,
           "Documented bootstrap performs its own OnCE GDB initialization write");
@@ -135,15 +154,31 @@ int run(const Inputs &inputs) {
               "Original REP and long-memory stores clear every mapped low X/Y word pair");
     }
   }
-  std::ofstream access_trace(inputs.trace.string() + ".reference-access.trace");
-  access_trace.exceptions(std::ios::failbit | std::ios::badbit);
-  blofeld::test::verify_original_reference_access(last_pair, machine, access_trace);
-  std::cout << "Documented NXP SPI bootstrap loaded all original 94 DSP words through pin events; "
+  if (execution == Execution::instruction) {
+    std::ofstream access_trace(inputs.trace.string() + ".reference-access.trace");
+    access_trace.exceptions(std::ios::failbit | std::ios::badbit);
+    blofeld::test::verify_original_reference_access(last_pair, machine, access_trace);
+  }
+  std::cout << (execution == Execution::instruction ? "Instruction" : "Access")
+            << " boundaries: documented NXP SPI bootstrap loaded all original 94 DSP words; "
             << runner.completed() << " completed reference steps. Original first stage programmed "
             << "PCTL and cleared 8192 X/Y word pairs; reserved-address write behavior remains "
-            << "unverified. Original last-pair suspension and strict-frontier recovery also pass. "
+            << "unverified. "
             << "No complete DSP/board boot is proven.\n";
-  return 0;
+  return cpu.debug_state();
+}
+
+void compare_traces(const Inputs &legacy, const Inputs &reference) {
+  std::ifstream first(legacy.trace, std::ios::binary);
+  std::ifstream second(reference.trace, std::ios::binary);
+  require(first.is_open() && second.is_open(), "Cannot compare both original execution traces");
+  first.exceptions(std::ios::badbit);
+  second.exceptions(std::ios::badbit);
+  require(std::equal(std::istreambuf_iterator<char>(first),
+                     std::istreambuf_iterator<char>(),
+                     std::istreambuf_iterator<char>(second),
+                     std::istreambuf_iterator<char>()),
+          "Every original pre-instruction trace byte matches across both execution profiles");
 }
 }
 
@@ -152,7 +187,15 @@ int main(const int count, char **arguments) {
     if (count != 4) {
       throw blofeld::Fault("Usage: dsp-boot-test firmware.zip private-rom.bin private.trace");
     }
-    return run({.firmware = arguments[1], .rom = arguments[2], .trace = arguments[3]});
+    const Inputs legacy{.firmware = arguments[1], .rom = arguments[2], .trace = arguments[3]};
+    auto reference = legacy;
+    reference.trace += ".continuation.trace";
+    const auto legacy_state = run(legacy, Execution::instruction);
+    const auto reference_state = run(reference, Execution::access);
+    require(legacy_state == reference_state,
+            "Both complete original prefixes retain identical native counters/registers/stack");
+    compare_traces(legacy, reference);
+    return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

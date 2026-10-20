@@ -22,8 +22,16 @@ pending effect. Reset and coordinated restore invalidate previously issued
 tickets; query the restored machine for a fresh ticket. Tickets are process-local
 capabilities, not serialized inputs or externally supplied arbitration proofs.
 
-The adapter retains an immutable instruction-start native state and at most 64
-records of admitted effects and decoder lookahead. It recomputes native arithmetic
+The adapter retains a fixed instruction-start native state and at most 64
+records of admitted effects and decoder lookahead. Internal rollback stores raw
+register values, derived AGU state, all sixteen stack cells, native REP/IRQ
+continuation, counters and peripheral pacing targets. Compile-time checks require
+trivial copying and at most 1 KiB; this build uses 464 bytes. It does not copy the
+per-PC cycle vector or reconstruct the entire host dispatch cache per access.
+Each attempt decodes its captured opcode afresh, including a loaded REP body;
+partial/warm host dispatch cannot select a different instruction. Pure host cache
+invalidations may remain; nominal reference costs use the captured opcode.
+The adapter recomputes native arithmetic
 from that state until the next unadmitted effect, checking the completed prefix
 without repeating real bus I/O. Real reads retain their actual captured values;
 real writes and resets execute once. Decoder lookahead retains its prior metadata
@@ -40,6 +48,11 @@ core; a failed instruction cannot be captured or retried. Recovery requires a
 previous trusted coordinated checkpoint. Observer callbacks remain read-only,
 are not retained in these snapshots, and cannot act as admission callbacks.
 
+Physical instruction-cache controls are outside the captured reference context.
+PFLUSH/PFLUSHUN/PFREE/PLOCK/PLOCKR/PUNLOCK/PUNLOCKR reject in an access attempt
+before their cache mutation or consumed address extension. The ordinary atomic
+path retains its existing scope; this profile does not model a hardware ICache.
+
   cmake --build --preset strict --target blofeld-reference-access-test
   ctest --test-dir build/strict -R '^dsp_reference_access$' --output-on-failure
 
@@ -51,8 +64,13 @@ Explicit bank arbitration combines real pending native stores/loads with a held
 DMA word: a later source overwrite must not replace its already captured value,
 and two coordinated restores must deliver that value to the actual native load.
 
-The optional original_dsp_boot regression also loads the unmodified 94-word
-first stage through the executing SPI ROM. Isolated branches suspend its loaded
+The optional original_dsp_boot regression executes the entire currently reached
+13,015-instruction ROM/stage prefix using both ordinary steps and access
+continuations under the same explicit pin interleaving. It compares every byte
+of both pre-instruction traces and the final native counters/registers/stack;
+all 94 stage words and every cleared mapped RAM pair have independent expected
+values. The program remains unmodified and the executing SPI ROM supplies its
+stage stores. Isolated branches suspend its loaded
 single-word long-memory REP between the actual X/Y effects, both at the last
 mapped pair and the next strict Y:002000 boundary. Two restores retain the real
 completed X store without repeating it; the mapped Y store retires once with
@@ -66,11 +84,14 @@ the current strict map, not the physical chip's reserved-write or pipeline behav
   cmake --build --preset strict --target blofeld-dsp-boot-test
   ctest --test-dir build/strict -R '^original_dsp_boot$' --output-on-failure
 
-The public project headers and library must match when adopting this API. This
-increment does not change the prepared native SDK interface or its source patch.
-Existing frozen consumer bundles remain frozen until deliberately rebuilt.
+Adopting consumers need matching project and prepared native SDK headers/libraries.
+The SDK adds fixed internal rollback/attempt methods and an active-attempt guard;
+the existing full ReferenceState snapshot layout is retained. Existing frozen
+consumer bundles remain frozen until deliberately rebuilt.
 
-Limits: native state/cache copies allocate and yielding uses exceptions. This
-path does not belong in a real-time audio callback. IRQ-entry suspension, physical
+Limits: trusted full checkpoints and code-map storage still allocate, native host
+caches remain large, and yielding uses exceptions. Fixed internal rollback does
+not establish allocation-free execution or real-time bounds. This path does not
+belong in a real-time audio callback. IRQ-entry suspension, physical
 pipeline/grouping/interlocks, elapsed stall clocks, dynamic deadline placement,
 original full boot and audio, and real-device equivalence remain unqualified.

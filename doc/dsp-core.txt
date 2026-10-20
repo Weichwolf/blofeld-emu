@@ -21,7 +21,8 @@ Program fetches and actually used extensions are checked through the strict bus.
 Lookahead may inspect unknown bytes without granting execution permission. Native
 program stores no longer perform a synthetic read of their previously unknown
 target. Native exceptions can propagate to an address/PC/OMR diagnostic; a rejected
-CPU state requires reset. Native reset/interrupt entry incorrectly cast full SR
+CPU state requires reset or a prior coordinated trusted restore. Native
+reset/interrupt entry incorrectly cast full SR
 masks into the smaller CCR enum; UBSan caught this during reset. The patch selects
 the correct SR-mask overloads, with instrumentation retained.
 
@@ -130,6 +131,16 @@ the implemented strict-map failure, not the chip's reserved-write behavior; futu
 hardware evidence may change that map contract. The private sidecar is
 Testing/original-dsp-boot.trace.reference-access.trace; the original main trace
 is unchanged. GPIO/NAND startup has not yet been reached natively.
+
+The same fixture also executes all 13,015 currently reached ROM/stage instructions
+through the explicit access-continuation profile. Its separate
+Testing/original-dsp-boot.trace.continuation.trace is byte-identical to the
+ordinary main trace, and the complete final native debug state matches. Each
+declared SPI edge still follows one retired instruction; this is an untimed
+interleaving, not a physical pipeline or clock comparison. Internal attempt
+rollback now uses fixed raw state instead of full native cache copies; actual
+bus effects, loaded REP and strict failures retain their existing contracts
+(dsp-reference-execution.txt).
 
 The host supplies pin events with explicit instruction interleaving. The original
 MCU is not the sender in this fixture, no elapsed DSP/MCU clock ratio is
