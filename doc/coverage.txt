@@ -192,9 +192,11 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           zero-DO frames checked with 36 source/flag
                                           vectors and nested/IRQ/failure cases
                                           (dsp-zero-loops.txt).
-                                          External MCPX silicon banks b0/b1/b2/b4
-                                          check 241 native cases: architectural registers,
-                                          fifteen stack pairs and operand memory.
+                                          External MCPX silicon banks b0/b1/b2/b4/b9
+                                          check 258 native cases: 241 include
+                                          registers, fifteen stack pairs and operand
+                                          memory; b9 adds17 register-only cases.
+                                          Unrecorded b9 memory/stack is unobserved.
                                           Derivative and broader-corpus limits,
                                           including compatibility/pipeline behavior,
                                           remain explicit
@@ -206,8 +208,16 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           ten literal parallel pre-read cases and
                                           a saved legal SUBR host-overflow input
                                           checked (dsp-shifted-subtract.txt).
-                                          SUBL C after shift overflow and SA/SM
+                                          SUBL C after shift overflow and SA
                                           arithmetic remain unqualified.
+                                          SM saturation follows table3-1 after
+                                          rounding, with documented instruction
+                                          exceptions and post-limit result flags.
+                                          81687 independent arithmetic/product/
+                                          rounding/exception/state cases include
+                                          a saved legal MAC host-overflow input
+                                          (dsp-saturation.txt). SA, SM compare/test
+                                          behavior and pipeline timing remain open.
                                           Bounded native instruction fixture checks
                                           independent arithmetic/memory outcomes,
                                           REP progress and strict faults. Five

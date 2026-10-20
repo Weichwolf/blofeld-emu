@@ -1,0 +1,50 @@
+DSP arithmetic saturation and defined host arithmetic
+
+DSP56300FM Rev.5 sections 3.1.5, 3.2.2/3 and the instruction tables define
+arithmetic saturation (SR.SM, bit20). Table3-1 selects saturation from EXT7,
+EXT0 and MSP23 of the 56-bit result after rounding. The other extension bits
+do not participate. Positive/negative rails are 007fffffffffff/ff800000000000;
+rounded positive saturation is 007fffff000000, independent of scaling mode.
+V reports saturation, L is sticky, and E/U/N/Z describe the limited result.
+Transfer saturation on the data buses is a separate operation.
+
+The native reference patch applies this rule before result flags are cached.
+Single-bit ALU ASL/ASR and NORM participate; counted ASL/ASR use the BFU and
+remain exempt even for count1. TFR/Tcc, mixed/unsigned MPY/MAC/DMAC and other
+BFU operations also retain their documented exceptions. Products, accumulation
+and rounding use unpadded signed host integers with enough headroom for the
+mathematical result. This removes a legal MAC signed-host overflow. Rounding
+precedes saturation atomically for MPYR/MACR and immediate/power forms.
+
+Deterministic checks (no fuzz or physical-device traffic)
+  cmake --build --preset strict --target blofeld-dsp-saturation-test blofeld-dsp-corpus-test
+  ctest --test-dir build/strict -R '^dsp_(saturation_.*|hardware_corpus)$' --output-on-failure
+
+Seven groups contain 81687 fixed cases: eight named regressions, 24330 arithmetic,
+11448 multiply, 24948 accumulate, 6912 rounding, 14040 exception/transfer cases,
+and one preserved legal MAC host-overflow input. Cases cross A/B, SM off/on,
+three scaling modes and CCR seeds, with RM off/on for rounded instructions.
+The first six groups cover both signed endpoints, all table3-1 selector rows,
+unused extension bits, carry/borrow, sticky flags, rounding ties and signedness.
+Power coefficients use the explicitly documented n=1,8,22 encodings.
+
+An independent oracle uses signed integer range/division/remainders and a
+literal eight-row saturation table. Real native setup instructions supply all
+operands and status. Checks include the entire CPU state, stack, instruction
+length and retirement. C after ADDL/SUBL shift overflow has no asserted silicon
+oracle under the manual's qualification; all other fields remain checked.
+Handwritten documented product and counted-shift words avoid ambiguous or
+unsupported helper-assembler aliases. No manufacturer program bytes are added.
+
+Before the correction, all seven groups failed, including UBSan for the legal
+MAC input D=7fffffffffffff, X0=Y0=7fffff. The private corrected native candidate
+passes every case. All 17 unchanged b9 MCPX capture cases match 748 observed
+register values, alongside the four previously adopted banks. Memory and stack
+are unobserved in b9 and are not inferred as zero (dsp-validation.txt). These are selected
+MCPX observations, not a Blofeld/DSP56371 measurement or a full-ISA proof.
+
+Sixteen-bit arithmetic SA, SM-specific compare/test behavior, pipeline timing,
+reserved scaling and other derivatives remain unqualified. The independent
+SA=0 vectors do not establish the virtual 40-bit SA arithmetic paths. Full
+original DSP boot still stops on reserved Y:002000; original board assets,
+MIDI/audio and hardware validation remain separate outstanding requirements.

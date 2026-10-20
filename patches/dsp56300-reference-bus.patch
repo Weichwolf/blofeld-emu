@@ -180,15 +180,102 @@
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -726,0 +803 @@
+@@ -610,11 +686,37 @@
+-		void sr_v_update( const int64_t& _notLimitedResult, TReg56& _result )
+-		{
+-			if( sr_test_noCache(SR_SM) )
+-			{
+-				const unsigned int test=static_cast<unsigned int>(_result.var>>(47 + g_aluShift))&0x13;
+-				if (!(test ^ 0x13) || !(test)) sr_set(CCR_V);
+-			}
+-			else
+-			{
+-				sr_toggle( CCR_V, ((_notLimitedResult>>(48 + g_aluShift))^(_result.var>>(48 + g_aluShift)))&255);
+-			}
++		// FM3.2.2: round in the unpadded domain, with headroom for a full product plus accumulator.
++		TInt64 roundArithmeticValue(TInt64 value) const
++		{
++			TInt64 bias = 0x800000;
++			if(sr_test_noCache(SR_S1)) bias >>= 1;
++			else if(sr_test_noCache(SR_S0)) bias <<= 1;
++			const auto mask = (bias << 1) - 1;
++			value += bias;
++			if(!sr_test_noCache(SR_RM) && !(value & mask)) value &= ~(bias << 1);
++			return value & ~mask;
++		}
++
++		void finishArithmeticResult(TReg56& value, bool overflow, const bool saturationAllowed = true, const bool rounded = false)
++		{
++			if(saturationAllowed && sr_test_noCache(SR_SM)) overflow = limit_arithmeticSaturation(value, rounded);
++			sr_toggle(CCR_V, overflow);
++			sr_l_update_by_v();
++			sr_z_update(value);
++		}
++
++		void commitArithmeticValue(const bool ab, TInt64 value, const bool rounded, const bool saturationAllowed = true)
++		{
++			if(rounded) value = roundArithmeticValue(value);
++			const bool overflow = value < -0x80000000000000ll || value > 0x7fffffffffffffll;
++			auto& result = ab ? reg.b : reg.a;
++			result.var = static_cast<TInt64>((static_cast<uint64_t>(value) & 0xffffffffffffffull) << g_aluShift);
++			finishArithmeticResult(result, overflow, saturationAllowed, rounded);
++			setCCRDirty(ab, result, CCR_E | CCR_U | CCR_N);
++		}
++
++		void finishSingleShift(const bool ab, const bool previousLimit)
++		{
++			if(!sr_test_noCache(SR_SM)) return;
++			sr_toggle(CCR_L, previousLimit);
++			auto& result = ab ? reg.b : reg.a;
++			finishArithmeticResult(result, false);
++			setCCRDirty(ab, result, CCR_E | CCR_U | CCR_N);
+@@ -726,0 +829 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +813 @@
+@@ -735,0 +839 @@
 +			sr_s_update(reg.b);
-@@ -975,0 +1054 @@
+@@ -809,19 +913,12 @@
+-		void limit_arithmeticSaturation( TReg56& _dst )
+-		{
+-			if( !sr_test_noCache(SR_SM) )
+-				return;
+-
+-			const auto v = (bitvalue( _dst, 55 + g_aluShift ).bit << 2) | (bitvalue( _dst, 48 + g_aluShift ).bit << 1) | bitvalue(_dst, 47 + g_aluShift).bit;
+-
+-			switch( v )
+-			{
+-			case 0:
+-			case 7:	/* do nothing */								break;
+-			case 1:
+-			case 2:
+-			case 3:	_dst.var = 0x007fffffffffffll << g_aluShift;	sr_set(CCR_V);	break;
+-			case 4:
+-			case 5:
+-			case 6: _dst.var = static_cast<TReg56::MyType>(0xff800000000000ull << g_aluShift);	sr_set(CCR_V);	break;
+-			default: assert( 0 && "impossible" );
+-			}
++		bool limit_arithmeticSaturation(TReg56& result, const bool rounded = false)
++		{
++			// FM3.2.3 table3-1: EXT7, EXT0 and MSP23 select the physical limiter.
++			const auto raw = static_cast<uint64_t>(result.var) >> g_aluShift;
++			const auto selector = ((raw >> 53) & 4) | ((raw >> 47) & 3);
++			if(selector == 0 || selector == 7) return false;
++			const bool sixteen = isSixteenBitArithmetic();
++			uint64_t limit = 0xff800000000000ull;
++			if(selector < 4) limit = sixteen ? 0x007fff00ffff00ull : 0x007fffffffffffull;
++			if(rounded && selector < 4) limit = sixteen ? 0x007fff00000000ull : 0x007fffff000000ull;
++			result.var = static_cast<TInt64>(limit << g_aluShift);
++			return true;
+@@ -975,0 +1073 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1084 @@
+@@ -1004,0 +1103 @@
 +			sr_s_update(_src);
-@@ -1468,0 +1549 @@
+@@ -1098 +1197 @@
+-		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate );
++		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate, bool _round = false );
+@@ -1101 +1200 @@
+-		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu );
++		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu, bool _round = false );
+@@ -1468,0 +1568 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -617,10 +704,20 @@
 @@ -1156 +1542 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1570,0 +1957,2 @@
+@@ -1306,3 +1692 @@
+-		sr_z_update(d);
+-		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
+-		sr_l_update_by_v();
++		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
+@@ -1341,3 +1725 @@
+-		sr_z_update(d);
+-		sr_toggle(CCR_V, value == minimum);
+-		sr_l_update_by_v();
++		finishArithmeticResult(d, value == minimum);
+@@ -1570,0 +1953,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2071,2 @@
+@@ -1682,0 +2067,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl
@@ -709,7 +806,9 @@
 @@ -351,0 +416,2 @@
 +		else if(m_referenceMode)
 +			throw std::runtime_error("Unsupported native DSP opcode");
-@@ -448,0 +515,9 @@
+@@ -434,0 +501 @@
++		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
+@@ -448,0 +516,10 @@
 +		else
 +		{
 +			// NORM updates E/U/N/Z/V even when its input flags select no shift
@@ -719,10 +818,11 @@
 +			sr_clear(CCR_V);
 +			setCCRDirty(D, value, CCR_E | CCR_U | CCR_N);
 +		}
-@@ -548,0 +624,2 @@
++		finishSingleShift(D, previousLimit);
+@@ -548,0 +626,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference STOP clock state");
-@@ -591,0 +669,2 @@
+@@ -591,0 +671,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference TRAP exception");
 --- a/source/dsp56kEmu/dsp_ops_helper.inl
@@ -780,47 +880,364 @@
 +		case 0x10:	reg.vba.var = m_referenceMode ? (_val.toWord() & 0xffff00) : _val.toWord();				return;
 --- a/source/dsp56kEmu/dsp_ops_alu.inl
 +++ b/source/dsp56kEmu/dsp_ops_alu.inl
-@@ -210,0 +211,5 @@
+@@ -87 +86,0 @@
+-		sr_z_update(d);
+@@ -89,2 +88 @@
+-		sr_toggle(CCR_V, overflow);
+-		sr_l_update_by_v();
++		finishArithmeticResult(d, overflow);
+@@ -199,4 +197,2 @@
+-		sr_toggle(CCR_V, overflow);
+-		sr_l_update_by_v();
+-
+-		sr_z_update(d);
++		finishArithmeticResult(d, overflow);
++
+@@ -210,0 +207,5 @@
 +		// FM 13-16 leaves larger ASR counts undefined. Check before host bit shifts.
 +		const int referenceLimit = isSixteenBitArithmetic() ? 40 : 55;
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > referenceLimit))
 +			throw std::runtime_error("Undefined DSP reference ASR shift count=" + std::to_string(_shiftAmount));
 +
-@@ -236,0 +242,4 @@
+@@ -236,0 +238,4 @@
 +		// Counts outside the qualified 56-bit range must not reach host shifts.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 55))
 +			throw std::runtime_error("Unqualified DSP reference ASL shift count=" + std::to_string(_shiftAmount));
 +
-@@ -271,0 +281,3 @@
+@@ -271,0 +277,3 @@
 +		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
 +			throw std::runtime_error("Unqualified DSP reference LSL count " + std::to_string(_shiftAmount));
-@@ -276 +288 @@
+@@ -276 +284 @@
 -		const int res = (d.var << _shiftAmount) & 0x00ffffff;
 +		const auto res = (static_cast<uint32_t>(d.var) << _shiftAmount) & 0x00ffffff;
-@@ -296,0 +309,3 @@
+@@ -296,0 +305,3 @@
 +		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
 +			throw std::runtime_error("Unqualified DSP reference LSR count " + std::to_string(_shiftAmount));
-@@ -959,0 +975,4 @@
+@@ -338,3 +349 @@
+-		sr_z_update(d);
+-		sr_toggle(CCR_V, overflow);
+-		sr_l_update_by_v();
++		finishArithmeticResult(d, overflow);
+@@ -347,18 +356,12 @@
+-		TReg56& d = ab ? reg.b : reg.a;
+-		const TReg56& s = ab ? reg.a : reg.b;
+-
+-		uint64_t res = static_cast<uint64_t>(d.var) >> 1;
+-		res |= static_cast<uint64_t>(d.var) & (1ull<<(55 + g_aluShift));
+-
+-		const uint64_t halved = res;
+-		res += static_cast<uint64_t>(s.var);
+-
+-		const auto carry = res < halved;	// carry out of the accumulator
+-
+-		d.var = res;
+-		aluMask(d);
+-
+-		sr_z_update(d);
+-		sr_v_update(res, d);
+-		sr_l_update_by_v();
+-		sr_toggle(CCR_C, carry);
++		auto& d = ab ? reg.b : reg.a;
++		const auto& s = ab ? reg.a : reg.b;
++		constexpr auto sign = uint64_t(1) << (55 + g_aluShift);
++		constexpr auto bits = uint64_t(0xffffffffffffffull) << g_aluShift;
++		const auto old = static_cast<uint64_t>(d.var);
++		const auto source = static_cast<uint64_t>(s.var);
++		const auto half = ((old >> 1) | (old & sign)) & bits;
++		const auto sum = half + source;
++		const bool overflow = ((sum ^ half) & (sum ^ source) & sign) != 0;
++		d.var = static_cast<TInt64>(sum & bits);
++		sr_toggle(CCR_C, sum < half);
++		finishArithmeticResult(d, overflow);
+@@ -414,159 +417,37 @@
+-	void DSP::alu_mpy( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate )
+-	{
+-	//	assert( sr_test(SR_S0) == 0 && sr_test(SR_S1) == 0 );
+-
+-		const int64_t s1 = _s1.signextend<int64_t>();
+-		const int64_t s2 = _s2.signextend<int64_t>();
+-
+-		auto res = s1 * s2;
+-
+-		// fractional multiplication requires one post-shift; the same shift scales the product
+-		// into the left-aligned ALU domain before it meets the accumulator
+-		res <<= (1 + g_aluShift);
+-
+-		if( _negate )
+-			res = -res;
+-
+-		TReg56& d = ab ? reg.b : reg.a;
+-
+-		if( _accumulate )
+-			res += aluSignextend(d);
+-
+-		d.var = res;
+-		aluMask(d);
+-
+-		// Update SR
+-		sr_z_update(d);
+-		sr_v_update(res,d);
+-
+-		sr_l_update_by_v();
+-
+-//		sr_s_update();
+-//		sr_e_update(d);
+-//		sr_u_update(d);
+-//		sr_n_update(d);
+-
+-		setCCRDirty(ab, d, CCR_E | CCR_U | CCR_N);
+-	}
+-	// _____________________________________________________________________________
+-	// alu_mpysuuu
+-	//
+-	void DSP::alu_mpysuuu( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _accumulate, bool _suuu )
+-	{
+-	//	assert( sr_test(SR_S0) == 0 && sr_test(SR_S1) == 0 );
+-
+-		TInt64 res;
+-
+-		if( _suuu )
+-			res = TInt64( TUInt64(_s1.var) * TUInt64(_s2.var) );
+-		else
+-			res = _s1.signextend<TInt64>() * TUInt64(_s2.var);
+-
+-		// fractional multiplication requires one post-shift; the same shift scales the product
+-		// into the left-aligned ALU domain before it meets the accumulator
+-		res <<= (1 + g_aluShift);
+-
+-		if( _negate )
+-			res = -res;
+-
+-		TReg56& d = ab ? reg.b : reg.a;
+-
+-		const TReg56 old = d;
+-
+-		if( _accumulate )
+-			res += aluSignextend(d);
+-
+-		d.var = res;
+-		aluMask(d);
+-
+-		// Update SR
+-		sr_z_update( d );
+-		sr_v_update(res,d);
+-
+-		sr_l_update_by_v();
+-		setCCRDirty(ab, d, CCR_E | CCR_U | CCR_N);
+-	}
+-	// _____________________________________________________________________________
+-	// alu_dmac
+-	//
+-	void DSP::alu_dmac( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool srcUnsigned, bool dstUnsigned )
+-	{
+-		assert( sr_test(SR_S0) == 0 && sr_test(SR_S1) == 0 );
+-
+-		TInt64 res;
+-
+-		if( srcUnsigned && dstUnsigned )	res = TInt64( TUInt64(_s1.var) * TUInt64(_s2.var) );
+-		else if( srcUnsigned )				res = TUInt64(_s1.var) * _s2.signextend<TInt64>();
+-		else if( dstUnsigned )				res = TUInt64(_s2.var) * _s1.signextend<TInt64>();
+-		else								res = _s2.signextend<TInt64>() * _s1.signextend<TInt64>();
+-
+-		// fractional multiplication requires one post-shift; the same shift scales the product
+-		// into the left-aligned ALU domain before it meets the accumulator
+-		res <<= (1 + g_aluShift);
+-
+-		if( _negate )
+-			res = -res;
+-
+-		TReg56& d = ab ? reg.b : reg.a;
+-
+-		const TReg56 old = d;
+-
+-		TInt64 dShifted = aluSignextend(d) >> 24;
+-
+-		res += dShifted;
+-
+-	//	LOG( "DMAC  " << std::hex << old.var << std::hex << " + " << _s1.var << " * " << std::hex << _s2.var << " = " << std::hex << res );
+-
+-		d.var = res;
+-		aluMask(d);
+-
+-		// Update SR
+-		sr_z_update( d );
+-		sr_v_update(res,d);
+-
+-		sr_l_update_by_v();
+-		setCCRDirty(ab, d, CCR_E | CCR_U | CCR_N);
+-	}
+-
+-	// _____________________________________________________________________________
+-	// alu_mac
+-	//
+-	void DSP::alu_mac( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu )
+-	{
+-		assert( sr_test(SR_S0) == 0 && sr_test(SR_S1) == 0 );
+-
+-		TInt64 res;
+-
+-		if( _uu )
+-			res = TInt64( TUInt64(_s1.var) * TUInt64(_s2.var) );
+-		else
+-			res = _s1.signextend<TInt64>() * TUInt64(_s2.var);
+-
+-		// fractional multiplication requires one post-shift; the same shift scales the product
+-		// into the left-aligned ALU domain before it meets the accumulator
+-		res <<= (1 + g_aluShift);
+-
+-		if( _negate )
+-			res = -res;
+-
+-		TReg56& d = ab ? reg.b : reg.a;
+-
+-		res += d.var;
+-
+-		const TReg56 old = d;
+-
+-		d.var = res;
+-
+-		aluMask(d);
+-
+-		// Update SR
+-		sr_z_update( d );
+-		sr_v_update(res,d);
+-
+-		sr_l_update_by_v();
+-		setCCRDirty(ab, d, CCR_E | CCR_U | CCR_N);
+-	}
+-
+-	// _____________________________________________________________________________
+-	// alu_rnd
+-	//
++	void DSP::alu_mpy(bool ab, const TReg24& s1, const TReg24& s2, bool negative, bool accumulate, bool rounded)
++	{
++		const TInt64 product = s1.signextend<TInt64>() * s2.signextend<TInt64>() * 2;
++		TInt64 value = negative ? -product : product;
++		if(accumulate) value += (ab ? reg.b : reg.a).var >> g_aluShift;
++		commitArithmeticValue(ab, value, rounded);
++	}
++
++	void DSP::alu_mpysuuu(bool ab, TReg24 s1, TReg24 s2, bool negative, bool accumulate, bool bothUnsigned)
++	{
++		const TInt64 first = bothUnsigned ? static_cast<TInt64>(s1.var & 0xffffff) : s1.signextend<TInt64>();
++		const TInt64 second = s2.var & 0xffffff;
++		const TInt64 product = first * second * 2;
++		TInt64 value = negative ? -product : product;
++		if(accumulate) value += (ab ? reg.b : reg.a).var >> g_aluShift;
++		commitArithmeticValue(ab, value, false, false);
++	}
++
++	void DSP::alu_dmac(bool ab, TReg24 s1, TReg24 s2, bool negative, bool firstUnsigned, bool secondUnsigned)
++	{
++		const TInt64 first = firstUnsigned ? static_cast<TInt64>(s1.var & 0xffffff) : s1.signextend<TInt64>();
++		const TInt64 second = secondUnsigned ? static_cast<TInt64>(s2.var & 0xffffff) : s2.signextend<TInt64>();
++		const TInt64 product = first * second * 2;
++		const auto accumulator = (ab ? reg.b : reg.a).var >> g_aluShift;
++		const TInt64 value = (accumulator >> 24) + (negative ? -product : product);
++		commitArithmeticValue(ab, value, false, !firstUnsigned && !secondUnsigned);
++	}
++
++	void DSP::alu_mac(bool ab, TReg24 s1, TReg24 s2, bool negative, bool bothUnsigned, bool rounded)
++	{
++		const TInt64 first = bothUnsigned ? static_cast<TInt64>(s1.var & 0xffffff) : s1.signextend<TInt64>();
++		const TInt64 second = s2.var & 0xffffff;
++		const TInt64 product = first * second * 2;
++		const TInt64 value = ((ab ? reg.b : reg.a).var >> g_aluShift) + (negative ? -product : product);
++		commitArithmeticValue(ab, value, rounded, !bothUnsigned);
++	}
++
+@@ -575,30 +456,3 @@
+-		TReg56& _alu = ab ? reg.b : reg.a;
+-
+-		int64_t rounder = 0x800000ll << g_aluShift;	// the rounding position moves up with the ALU
+-
+-		if		(sr_test_noCache(SR_S1)) rounder>>=1;
+-		else if	(sr_test_noCache(SR_S0)) rounder<<=1;
+-		
+-		_alu.var += rounder;
+-
+-		const auto mask = (rounder<<1)-1;		// all the bits to the right of, and including the rounding position
+-
+-		if (!sr_test_noCache(SR_RM))			// convergent rounding. If all mask bits are cleared
+-		{
+-			if (!(_alu.var & mask)) 
+-				_alu.var&=~(rounder<<1);		// then the bit to the left of the rounding position is cleared in the result
+-		}
+-
+-		_alu.var&=~mask;						// all bits to the right of and including the rounding position are cleared.
+-
+-		const auto res = _alu.var;
+-
+-		aluMask(_alu);
+-
+-		sr_z_update(_alu);
+-		sr_v_update(res, _alu);
+-
+-		sr_l_update_by_v();
+-		setCCRDirty(ab, _alu, CCR_E | CCR_U | CCR_N);
+-	}
+-	
++		commitArithmeticValue(ab, (ab ? reg.b : reg.a).var >> g_aluShift, true);
++	}
++
+@@ -617,6 +471 @@
+-		alu_mpy(ab, s1, s2, negative, mulAcc);
+-
+-		if(round)
+-		{
+-			alu_rnd(ab);
+-		}
++		alu_mpy(ab, s1, s2, negative, mulAcc, round != 0);
+@@ -712,0 +562 @@
++		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
+@@ -713,0 +564 @@
++		finishSingleShift(D, previousLimit);
+@@ -716,0 +568 @@
++		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
+@@ -717,0 +570 @@
++		finishSingleShift(D, previousLimit);
+@@ -740,0 +594 @@
++		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
+@@ -741,0 +596 @@
++		finishSingleShift(D, previousLimit);
+@@ -959,0 +815,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACT width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -985,0 +1005,4 @@
+@@ -985,0 +845,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACTU width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -1064,0 +1088,4 @@
+@@ -1064,0 +928,4 @@
 +		// FM13-78: normal source width <= 24 and offset + width <= 56.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && (widthField > 24 || widthField + offsetField > 56))
 +			throw std::runtime_error("Unqualified DSP reference INSERT width=" + std::to_string(widthField) +
 +				" offset=" + std::to_string(offsetField));
-@@ -1072 +1099 @@
+@@ -1072 +939 @@
 -		else
 +		else if(widthField)
-@@ -1450,7 +1477,14 @@
+@@ -1179,4 +1046 @@
+-		alu_mpy( ab, reg, s, negate, _accumulate );
+-
+-		if(_round)
+-			alu_rnd( ab );
++		alu_mpy(ab, reg, s, negate, _accumulate, _round);
+@@ -1198 +1062 @@
+-		alu_mac( ab, s1, s2, negate, uu );
++		alu_mpysuuu(ab, s1, s2, negate, true, uu);
+@@ -1214,2 +1078 @@
+-		alu_mac( ab, s1, s2, negate, false );
+-		alu_rnd( ab );
++		alu_mac(ab, s1, s2, negate, false, true);
+@@ -1340,2 +1203 @@
+-		alu_mpy( ab, s1, s2, negate, false );
+-		alu_rnd( ab );
++		alu_mpy(ab, s1, s2, negate, false, true);
+@@ -1450,7 +1312,14 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -842,16 +1259,15 @@
 +		// C uses the subtraction's borrow. Shift-overflow C remains unqualified.
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1458,2 +1492,3 @@
+@@ -1458,5 +1327,2 @@
 -		// Carry bit note: "The Carry bit (C) is set correctly if the source operand does not overflow as a result of the left shift operation.", we do not care at the moment
 -		sr_toggle(CCR_V, bittest(old, 55 + g_aluShift) != bittest(d, 55 + g_aluShift));
-+		sr_toggle(CCR_V, overflow);
-+		sr_l_update_by_v();
-+		sr_toggle(CCR_C, borrow);
-@@ -1461,2 +1495,0 @@
+-		sr_z_update(d);
 -		//sr_l_update_by_v();
 -		sr_c_update_arithmetic(old, d);
-@@ -1468,7 +1501,12 @@
++		finishArithmeticResult(d, overflow);
++		sr_toggle(CCR_C, borrow);
+@@ -1468,7 +1334,12 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -871,14 +1287,13 @@
 +		const bool overflow = ((shifted ^ source) & (shifted ^ res) & signBit) != 0;
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1475,0 +1514,3 @@
-+		sr_toggle(CCR_V, overflow);
-+		sr_l_update_by_v();
-+		sr_toggle(CCR_C, borrow);
-@@ -1477,2 +1517,0 @@
+@@ -1476,3 +1347,2 @@
+-		sr_z_update(d);
 -		//sr_l_update_by_v();
 -		sr_c_update_arithmetic(old, d);
-@@ -1493,0 +1533,12 @@
++		finishArithmeticResult(d, overflow);
++		sr_toggle(CCR_C, borrow);
+@@ -1493,0 +1364,12 @@
 +		if(m_referenceMode) {
 +			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
 +			const auto source = getFieldValue<Vsl, Field_S>(op);
@@ -891,7 +1306,7 @@
 +			memWrite(MemArea_Y, address, low);
 +			return;
 +		}
-@@ -1495,2 +1546 @@
+@@ -1495,2 +1377 @@
 -	}
 -}
 +	}}

@@ -13,6 +13,9 @@ REGISTERS = {
     "x0", "x1", "y0", "y1", "a0", "a1", "a2", "b0", "b1", "b2",
     *(f"{prefix}{index}" for prefix in "rnm" for index in range(8)),
 }
+STACK_FIELDS = {f"s{half}{slot:02x}" for half in "hl" for slot in range(1, 16)}
+REGISTER_CAPTURE = "registers"
+FULL_CAPTURE = "registers-memory-stack"
 
 
 def sparse_key(key):
@@ -55,13 +58,34 @@ def parse_dump(path):
     return cases
 
 
-def compare(actual, expected):
+def validate_capture(expected, observations):
+    if observations == REGISTER_CAPTURE:
+        if any(key not in REGISTERS for case in expected.values() for key in case):
+            raise ValueError("Register-only capture contains undeclared memory/stack observations")
+    elif observations == FULL_CAPTURE:
+        for prefix in ("xm", "sh"):
+            if not any(key.startswith(prefix) for case in expected.values() for key in case):
+                raise ValueError("Pinned silicon capture lacks promised memory/stack observations")
+    else:
+        raise ValueError(f"Unsupported silicon capture observations: {observations}")
+
+
+def compare(actual, expected, *, observations):
+    if observations not in (REGISTER_CAPTURE, FULL_CAPTURE):
+        raise ValueError(f"Unsupported silicon capture observations: {observations}")
     if list(actual) != list(expected):
         raise AssertionError("Native DSP did not reach every hardware corpus case in order")
     comparisons = 0
     for name, wanted in expected.items():
         observed = actual[name]
-        for key in sorted(wanted.keys() | observed.keys()):
+        keys = wanted.keys() | observed.keys()
+        if observations == REGISTER_CAPTURE:
+            if wanted.keys() - REGISTERS:
+                raise ValueError("Register-only capture contains undeclared memory/stack observations")
+            keys &= REGISTERS
+        elif missing := STACK_FIELDS - observed.keys():
+            raise AssertionError(f"{name}: incomplete native stack observation: {sorted(missing)}")
+        for key in sorted(keys):
             default = 0 if sparse_key(key) else None
             want = wanted.get(key, default)
             got = observed.get(key, default)
@@ -93,11 +117,10 @@ def main():
         actual = parse_dump(target)
         if len(expected) != bank["cases"]:
             raise ValueError("Pinned silicon case count mismatch")
-        for prefix in ("xm", "sh"):
-            if not any(key.startswith(prefix) for case in expected.values() for key in case):
-                raise ValueError("Pinned silicon capture lacks promised memory/stack observations")
-        comparisons = compare(actual, expected)
-        print(f"{bank['name']}: {len(expected)} cases, {comparisons} matching observed values")
+        validate_capture(expected, bank["observations"])
+        comparisons = compare(actual, expected, observations=bank["observations"])
+        print(f"{bank['name']}: {len(expected)} cases, {comparisons} matching observed values "
+              f"({bank['observations']})")
     return 0
 
 

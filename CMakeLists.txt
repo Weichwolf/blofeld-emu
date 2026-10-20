@@ -451,6 +451,13 @@ if(BUILD_TESTING)
   add_test(NAME dsp_subr COMMAND blofeld-dsp-shifted-subtract-test --right)
   add_test(NAME dsp_subr_host_overflow COMMAND blofeld-dsp-shifted-subtract-test --host-overflow)
   set_tests_properties(dsp_subl dsp_subr dsp_subr_host_overflow PROPERTIES TIMEOUT 120)
+  add_executable(blofeld-dsp-saturation-test test/dsp_saturation_test.cpp
+    test/dsp_saturation_oracle.cpp test/dsp_saturation_cases.cpp)
+  target_link_libraries(blofeld-dsp-saturation-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  foreach(scope IN ITEMS regressions arithmetic multiply accumulate rounding exceptions mac-host-overflow)
+    add_test(NAME dsp_saturation_${scope} COMMAND blofeld-dsp-saturation-test ${scope})
+    set_tests_properties(dsp_saturation_${scope} PROPERTIES TIMEOUT 120)
+  endforeach()
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
@@ -709,6 +716,7 @@ add_custom_target(quality
     blofeld-dsp-interrupt-test
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-shifted-subtract-test blofeld-dsp-vsl-test
+    blofeld-dsp-saturation-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-scheduled-coupling-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test

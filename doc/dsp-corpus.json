@@ -29,7 +29,8 @@
           "bytes": 2680,
           "sha256": "297636ae4021a9b0d9a99e70521e511a5c97fdefce8bb9940d638720179b0254"
         }
-      }
+      },
+      "observations": "registers-memory-stack"
     },
     {
       "name": "b1",
@@ -55,7 +56,8 @@
           "bytes": 582,
           "sha256": "c2a68b1dcd27a9a7a852c2145b1d49970b2910a667323ca53761214b83d078ac"
         }
-      }
+      },
+      "observations": "registers-memory-stack"
     },
     {
       "name": "b2",
@@ -81,7 +83,8 @@
           "bytes": 1024,
           "sha256": "eb26a19807caf02f5d7de55fbbfdd52e295c214c90cdc1ca54cadda9b13e5388"
         }
-      }
+      },
+      "observations": "registers-memory-stack"
     },
     {
       "name": "b4",
@@ -107,7 +110,35 @@
           "bytes": 729,
           "sha256": "584492abaf88bfc656f46e33b936be11af569f3e2522de2d0a40aece3628f56a"
         }
-      }
+      },
+      "observations": "registers-memory-stack"
+    },
+    {
+      "name": "b9",
+      "cases": 17,
+      "files": {
+        "results_hw.txt": {
+          "bytes": 8107,
+          "sha256": "f2d08c1aa81f9a19fecbab66cd48f6d35864d78d9b0a1ddc8b9d98c83482907a"
+        },
+        "corpus.meta": {
+          "bytes": 559,
+          "sha256": "8a943813e9c0678a0b6fff6cefd8eb257e3cf6858039121e745ecae757097687"
+        },
+        "corpus.lod": {
+          "bytes": 4978,
+          "sha256": "7b1b2aae56342eaa51fab05860d243964b12c08b7997fda4e7fbb5374d5e6ddd"
+        },
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "ec5d946743090577e96c1ace7537b032712c6ba5aeffe813f19ab20b6bda020c"
+        },
+        "PROVENANCE.md": {
+          "bytes": 1196,
+          "sha256": "87946be69edcc75208e52de9a47067612db68053fe22e6087c5e2cb70d75be20"
+        }
+      },
+      "observations": "registers"
     }
   ]
 }

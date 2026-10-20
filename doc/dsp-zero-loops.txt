@@ -56,7 +56,7 @@ Both missing REP support and omitted DO frame writes have regressions that fail
 against the preceding reference implementation. Expectations use documented bit
 fields, integer addresses and literal frame contents, not SDK loop helpers.
 
-Full pinned b0/b1/b2/b4 silicon comparisons cover 241 cases and all captured fields
+Pinned b0/b1/b2/b4/b9 silicon comparisons cover 258 cases and all captured fields
 (doc/dsp-validation.txt). b2 programs and all 71 metadata records remain unchanged.
 Its supplier uses conservative 70000-step limits for zero-loop cases. The trusted
 corpus parser now separates its 4096-word program bound from a 100000-step case
