@@ -13,6 +13,12 @@ Standard sample library           partial  Official MIDI/WPC download and contai
                                           transport observations and unresolved
                                           NAND/ROM/runtime mapping are explicit
                                           (sample-library.txt).
+                                          Private native preparation checks all
+                                          1488 groups/47616 pages; ten actual
+                                          request-queue boundaries reject missing
+                                          TIO1. Conditional fixtures supply no
+                                          NAND completion or actual boot ABI;
+                                          routine CTest adoption remains pending.
 Update container extraction       partial  Python offline framing/object checks;
                                           native ZIP/MIDI and runtime parser.
 Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
