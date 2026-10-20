@@ -1,0 +1,31 @@
+{
+  "qualification": "Only the fixed official distribution and declared isolated RAM preparation fixture; no receiver/NAND outcome/boot or hardware claim.",
+  "helper": {
+    "header_index": 2,
+    "mode": 0,
+    "address_words": 11776,
+    "bytes": 399,
+    "sha256": "c3604de672778f46913dbc06f77916fe4411cc4532760d60ee8476d8b59690d0"
+  },
+  "frames": {
+    "bytes": 25182912,
+    "sha256": "6c42685cbc7ed9e0d3eeca4c0aa9f91da778e2b5af919a351f6594eb7cc85cb6"
+  },
+  "counts": {
+    "groups": 1488,
+    "pages": 47616,
+    "independent_byte_comparisons": 25141248
+  },
+  "group_bytes": 16920,
+  "packets_per_group": 54,
+  "packet_lengths": [
+    368,
+    272
+  ],
+  "staging_addresses": [
+    65536,
+    71184,
+    76832,
+    82480
+  ]
+}

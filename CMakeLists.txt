@@ -538,6 +538,14 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-wire-${scope}.trace" ${scope})
     set_tests_properties(original_dsp_wire_${scope} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   endforeach()
+  add_executable(blofeld-original-sample-preparation-test test/original_sample_preparation_test.cpp)
+  target_link_libraries(blofeld-original-sample-preparation-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_sample_preparation COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_sample_preparation.py"
+    $<TARGET_FILE:blofeld-original-sample-preparation-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/library/Standard_Factory_Sample_Content_V1.0_for_License_SL_as_MID_File.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-sample-preparation.trace")
+  set_tests_properties(original_sample_preparation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-coupled-boot-test test/original_coupled_boot_test.cpp
     test/coupled_boot_fixture.cpp)
   target_link_libraries(blofeld-coupled-boot-test PRIVATE blofeld_core blofeld_dsp)
@@ -769,6 +777,7 @@ add_custom_target(quality
     blofeld-dsp-cmpm-test
     blofeld-original-dsp-filters-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
+    blofeld-original-sample-preparation-test
     blofeld-scheduled-coupling-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
     blofeld-timer-test blofeld-interrupt-test blofeld-rti-test

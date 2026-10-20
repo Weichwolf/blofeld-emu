@@ -37,23 +37,20 @@ The firmware-only container parser explicitly rejects command 0x75. Its bounded
 OS-firmware input limits are retained; the larger sample member is a separate
 reference. No sample transfer to a physical device is part of these checks.
 
-Separate private diagnostics, outside the routine CTest inventory, execute the
-unchanged 399-byte DSP helper's installer and preparation routines. Its word-image
-SHA-256 is c3604de672778f46913dbc06f77916fe4411cc4532760d60ee8476d8b59690d0.
-All 1488 original scans and 47616 page preparations pass 25141248 independent
-byte comparisons. The conditional caller uses raw descriptor field0=4,
-linear/unscaled state and a RAM output buffer. Original installer relocations
-and native calls execute. A test observation landing pad begins another case;
-it never supplies completion or invokes the original continuation. The original
-completion counter remains zero; the actual poller rejects missing status.
+The routine original_sample_preparation regression executes the unchanged
+399-byte DSP helper's installer, scanner and byte copier with declared RAM
+preconditions. It checks all 1488 groups/47616 pages and 25141248 independent
+bytes, with native calls and original installer relocations. Original completion
+remains unsupplied; the actual poller rejects missing status. Exact helper/frame
+identities, reproducible commands and limits are in sample-preparation.txt.
 
-Ten further helper-to-original-queue cases check actual request fields and
+Ten separate private helper-to-original-queue cases check actual request fields and
 producer/consumer state for all four staging slots, both sides of the row gap
 and the final frame. The gap is already among the first four frames, yielding
 five unique frames, each checked through scanner and complete byte copier.
 Every request then rejects unobserved Timer 1 TIO1 at the original ready poll.
 Explicit laboratory bus-cycle observations settle the native memory switch;
-no timer clocks or physical timing are inferred. These checks use immutable
+no timer clocks or physical timing are inferred. These private checks use immutable
 verified 6ff07ec native/runtime archives, not a differently linked current build.
 Helper/frame/source identities, strict compile/tidy/format, sanitizer execution,
 ELF hardening and terminal run evidence remain under ignored doc/local/.

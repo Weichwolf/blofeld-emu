@@ -1,0 +1,45 @@
+Original standard sample preparation regression
+
+  cmake --build --preset strict --target blofeld-original-sample-preparation-test
+  ctest --test-dir build/strict -R '^original_sample_preparation$' --output-on-failure
+
+The optional local sample ZIP is pinned in library/sources.json, including its
+contained MID identity. An absent archive returns explicit skip 77; changed size
+or SHA-256 rejects before native execution. No download or device access occurs.
+The reference-specific wrapper handles the larger sample MID without increasing
+the production OS-firmware parser's input limit or accepting command 0x75 there.
+
+The wrapper checks all fixed message/header/packet counts, sequences, XORs,
+duplicate headers, packet lengths and staging addresses. Existing offline word
+unpacking yields the complete original 399-byte preparation helper and all 1488
+bulk frames. sample-preparation-reference.json pins those complete byte images;
+no manufacturer program or sample bytes are embedded in source or redistributed.
+
+The unchanged helper executes its own installer, scanner and byte copier in the
+strict native interpreter. Own setup/JSR instructions supply raw descriptor
+field0=4, linear modifiers, unscaled state and a RAM output buffer. Executed
+memory switching exposes the actual backing X RAM as P RAM. One explicit
+laboratory bus-cycle observation per instruction settles that switch; timer
+CLK/2 clocks and physical instruction/peripheral timing are not inferred.
+
+The original installer performs four operand relocations and copies its hook.
+Every helper word is guarded against other modifications before/after each
+group. All 1488 scanner calls consume their actual markers and advance the
+four-slot source ring. All 47616 page preparations compare 25141248 independent
+big-endian bytes, adjacent output guards, source cursors and original request
+registers against the complete fixed distribution.
+
+The supplied service address is an own observation landing pad. It begins a
+new independent unit case through native instructions, with explicit register
+setup; it never returns a hardware result or invokes the original continuation.
+The original completion count remains zero. After all cases, the actual original
+poller reads an unobserved status cell and must fail with its address, PC and OMR.
+The trace records that failure, exact coverage counts and the restricted scope.
+
+This is a routine preparation regression under declared caller/RAM preconditions.
+It does not execute the MIDI receiver, actual boot descriptor producer, resident
+NAND service, erase/program/status completion or original recovery. Separate
+private queue/GPIO diagnostics and their unqualified boundaries are described in
+sample-library.txt. Physical addressing, bad blocks/ECC, WPC equivalence, missing
+ROM/wavetable/device contents, full Desktop/Keyboard boot, voices/audio and
+hardware validation remain required. The strict boot frontier remains Y:002000.
