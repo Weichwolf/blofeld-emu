@@ -27,6 +27,11 @@ BLOFELD_ZLIB_ARCHIVE can select another copy of the same verified archive.
   cmake --build --preset strict
   cmake --build build/strict --target quality
 
+When installed, ccache is enabled automatically for C and C++, including native
+dependencies. Explicit compiler launchers are preserved. Disable automatic use
+with -DBLOFELD_USE_CCACHE=OFF. Compiler flags and mandatory clang-tidy checks remain
+unchanged; ccache only caches compiler results.
+
 clang-tidy runs as a mandatory build step on every project C++ translation unit;
 format-check checks formatting without changing files. All diagnostics are
 errors, including the 120-line function limit. ASan/UBSan and additional integer
