@@ -225,6 +225,13 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           (dsp-cmpm.txt). Minimum-operand V follows
                                           the declared manual rule, with no new
                                           minimum-case silicon qualification.
+                                          A separate pinned producer fixture runs
+                                          unchanged original non-FM 12/24 dB
+                                          filter blocks: 159744 calls, 3833856
+                                          independently checked section samples
+                                          and 387 instruction starts. It is not
+                                          a routine CTest or complete runtime/
+                                          audio proof (dsp-filter-replay.txt).
                                           Bounded native instruction fixture checks
                                           independent arithmetic/memory outcomes,
                                           REP progress and strict faults. Five
