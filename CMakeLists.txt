@@ -445,6 +445,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-transfer-test test/dsp_transfer_test.cpp)
   target_link_libraries(blofeld-dsp-transfer-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_transfers COMMAND blofeld-dsp-transfer-test)
+  add_executable(blofeld-dsp-shifted-subtract-test test/dsp_shifted_subtract_test.cpp)
+  target_link_libraries(blofeld-dsp-shifted-subtract-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_subl COMMAND blofeld-dsp-shifted-subtract-test --left)
+  add_test(NAME dsp_subr COMMAND blofeld-dsp-shifted-subtract-test --right)
+  add_test(NAME dsp_subr_host_overflow COMMAND blofeld-dsp-shifted-subtract-test --host-overflow)
+  set_tests_properties(dsp_subl dsp_subr dsp_subr_host_overflow PROPERTIES TIMEOUT 120)
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
@@ -702,7 +708,7 @@ add_custom_target(quality
     blofeld-dsp-capture-test
     blofeld-dsp-interrupt-test
     blofeld-dsp-norm-test
-    blofeld-dsp-transfer-test blofeld-dsp-vsl-test
+    blofeld-dsp-transfer-test blofeld-dsp-shifted-subtract-test blofeld-dsp-vsl-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-scheduled-coupling-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test

@@ -1,0 +1,47 @@
+Normal SUBL/SUBR arithmetic and flags
+
+DSP56300FM Rev. 5 pages 13-174/175 define SUBL as 2*D-S and SUBR as
+arithmetic-floor(D/2)-S, stored in the destination accumulator. SUBL V includes
+overflow in either the shift or subtraction, including cancellation of signs.
+SUBR refreshes V from subtraction alone. Section 5.4.1.2 defines C as subtraction
+borrow and L as sticky on arithmetic overflow. N/Z/E/U describe the result;
+S changes only for an actual full-accumulator data-bus read. The normal-mode
+reference interpreter now uses unsigned host operations on its padded accumulator,
+so a legal SUBR source -2^55 cannot overflow signed 64-bit host subtraction.
+
+The SUBL instruction caveat only qualifies C when the left shift did not
+overflow. This profile calculates subtraction borrow, but does not claim a
+DSP56371 silicon C result after shift overflow. Tests apply an independent C
+oracle only where the manual qualifies it; all other CPU/flag/stack fields stay
+checked in those cases. This declared limit is independent of observed mismatch
+values. Normal scaling modes are covered; SA/FV arithmetic, pipeline timing,
+all derivative behavior and real-time audio remain unqualified.
+
+Deterministic checks (no fuzz or physical-device traffic)
+  cmake --build --preset strict --target blofeld-dsp-shifted-subtract-test blofeld-dsp-corpus-test
+  ctest --test-dir build/strict -R '^dsp_(subl|subr|subr_host_overflow|hardware_corpus)$' --output-on-failure
+
+Each direction checks 3456 independent cases: twelve full 56-bit input values
+crossed for source/destination, A/B destinations, three scaling modes and four
+CCR seeds. Setup runs actual native instructions; no host register assignment
+supplies the test result. A signed integer oracle has room for the mathematical
+result and computes range overflow, explicit negative-odd floor division and
+borrow separately from the SDK's bitwise implementation. Exact program progress,
+retirement, all qualified flags, unselected registers and stack are checked.
+SUBL has 1440 left-shift-overflow cases whose C bit is observed without a silicon
+expectation. SUBR checks C in every case. Ten separate literal parallel-transfer
+cases check old-value reads, growth, limiting and sticky S/L before ALU updates.
+
+The saved own legal SUBR D=0,S=-2^55 regression previously aborted UBSan on
+0-INT64_MIN in the native padded representation. The instruction must produce
+wrapped -2^55 with V/L/C and its result flags. Independent SUBL D=0,S=1 also
+caught spurious V; SUBR D=S=0 caught stale incoming V. Regression inputs contain
+no manufacturer program bytes.
+
+All 38 unchanged b4 capture cases now match, including the formerly mismatched
+SUBL SR/Y1. The pinned manifest explicitly adds b4 to b0/b1/b2, totaling 241 cases
+and 20745 matching observed values (dsp-validation.txt). Captures are MCPX APU GP
+evidence, not a Blofeld/DSP56371 measurement or a proof outside those vectors.
+Original firmware, raw analysis and run artifacts remain local. Full original
+DSP boot still requires resolving the strict reserved-Y:002000 frontier; this
+arithmetic correction does not qualify the missing board/ROM/audio behavior.

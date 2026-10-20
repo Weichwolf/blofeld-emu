@@ -41,5 +41,5 @@ regression verifies every input hash and expects an explicit contextual fault
 without a sanitizer report. It skips only when the external directory is absent;
 an incomplete or changed checkout fails. Generated diagnostics stay in build/.
 Success is safe rejection of these controls, not agreement with MCPX's results
-for undefined behavior. Only b0/b1/b2 remain adopted hardware comparison banks;
+for undefined behavior. The adopted hardware comparison banks are b0/b1/b2/b4;
 these bounds are not a DSP56371/Blofeld hardware measurement or full ISA proof.

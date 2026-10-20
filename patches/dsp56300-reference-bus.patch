@@ -820,7 +820,65 @@
 @@ -1072 +1099 @@
 -		else
 +		else if(widthField)
-@@ -1493,0 +1521,12 @@
+@@ -1450,7 +1477,14 @@
+-
+-		TReg56&			d = ab ? reg.b : reg.a;
+-		const TReg56&	s = ab ? reg.a : reg.b;
+-
+-		const TReg56 old = d;
+-		const TInt64 res = (aluSignextend(d) << 1) - aluSignextend(s);
+-		d.var = res;
++		TReg56& d = ab ? reg.b : reg.a;
++		const TReg56& s = ab ? reg.a : reg.b;
++		constexpr auto signBit = static_cast<uint64_t>(1) << (55 + g_aluShift);
++		constexpr auto aluBits = static_cast<uint64_t>(0x00ffffffffffffffull) << g_aluShift;
++		const auto old = static_cast<uint64_t>(d.var);
++		const auto source = static_cast<uint64_t>(s.var);
++		const auto shifted = (old << 1) & aluBits;
++		const auto res = (shifted - source) & aluBits;
++		// FM13-174: V includes both the shift and subtraction, even if signs cancel.
++		const bool overflow = ((old ^ shifted) & signBit) != 0 ||
++			((shifted ^ source) & (shifted ^ res) & signBit) != 0;
++		// C uses the subtraction's borrow. Shift-overflow C remains unqualified.
++		const bool borrow = shifted < source;
++		d.var = static_cast<TReg56::MyType>(res);
+@@ -1458,2 +1492,3 @@
+-		// Carry bit note: "The Carry bit (C) is set correctly if the source operand does not overflow as a result of the left shift operation.", we do not care at the moment
+-		sr_toggle(CCR_V, bittest(old, 55 + g_aluShift) != bittest(d, 55 + g_aluShift));
++		sr_toggle(CCR_V, overflow);
++		sr_l_update_by_v();
++		sr_toggle(CCR_C, borrow);
+@@ -1461,2 +1495,0 @@
+-		//sr_l_update_by_v();
+-		sr_c_update_arithmetic(old, d);
+@@ -1468,7 +1501,12 @@
+-
+-		TReg56&			d = ab ? reg.b : reg.a;
+-		const TReg56&	s = ab ? reg.a : reg.b;
+-
+-		const TReg56 old = d;
+-		const TInt64 res = (aluSignextend(d) >> 1) - aluSignextend(s);
+-		d.var = res;
++		TReg56& d = ab ? reg.b : reg.a;
++		const TReg56& s = ab ? reg.a : reg.b;
++		constexpr auto signBit = static_cast<uint64_t>(1) << (55 + g_aluShift);
++		constexpr auto aluBits = static_cast<uint64_t>(0x00ffffffffffffffull) << g_aluShift;
++		const auto old = static_cast<uint64_t>(d.var);
++		const auto source = static_cast<uint64_t>(s.var);
++		// FM13-175: arithmetic halving; remove the shifted-out accumulator bit.
++		const auto shifted = ((old >> 1) | (old & signBit)) & aluBits;
++		const auto res = (shifted - source) & aluBits;
++		const bool overflow = ((shifted ^ source) & (shifted ^ res) & signBit) != 0;
++		const bool borrow = shifted < source;
++		d.var = static_cast<TReg56::MyType>(res);
+@@ -1475,0 +1514,3 @@
++		sr_toggle(CCR_V, overflow);
++		sr_l_update_by_v();
++		sr_toggle(CCR_C, borrow);
+@@ -1477,2 +1517,0 @@
+-		//sr_l_update_by_v();
+-		sr_c_update_arithmetic(old, d);
+@@ -1493,0 +1533,12 @@
 +		if(m_referenceMode) {
 +			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
 +			const auto source = getFieldValue<Vsl, Field_S>(op);
@@ -833,7 +891,7 @@
 +			memWrite(MemArea_Y, address, low);
 +			return;
 +		}
-@@ -1495,2 +1534 @@
+@@ -1495,2 +1546 @@
 -	}
 -}
 +	}}

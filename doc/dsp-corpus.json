@@ -82,6 +82,32 @@
           "sha256": "eb26a19807caf02f5d7de55fbbfdd52e295c214c90cdc1ca54cadda9b13e5388"
         }
       }
+    },
+    {
+      "name": "b4",
+      "cases": 38,
+      "files": {
+        "results_hw.txt": {
+          "bytes": 26618,
+          "sha256": "1ac8d24eb865acd37e75771a9bf18506b5bd75b9dd2043b8a4467f74fc827679"
+        },
+        "corpus.meta": {
+          "bytes": 1288,
+          "sha256": "03ed0c5625be163df9ded45fe628442077980906fe84e63e27a21a67fb21ee6f"
+        },
+        "corpus.lod": {
+          "bytes": 8290,
+          "sha256": "84827436c589ad613de54dd4e53b061c769c4b7d47fbc6bc63f6bc36666c5088"
+        },
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "679110209ff5c777b4d282fa3e48cbb45abbc8e3d2a72f3d0565e89f537d2fd6"
+        },
+        "PROVENANCE.md": {
+          "bytes": 729,
+          "sha256": "584492abaf88bfc656f46e33b936be11af569f3e2522de2d0a40aece3628f56a"
+        }
+      }
     }
   ]
 }

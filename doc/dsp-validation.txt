@@ -80,7 +80,7 @@ performed unrelated unknown reads and hid the original missing instruction.
 PFLUSH checks this fault path without pretending to implement cache behavior.
 
 Published hardware corpus
-doc/dsp-corpus.json pins banks b0/b1/b2 from Matt Borgerson's MIT-licensed DSP56300
+doc/dsp-corpus.json pins banks b0/b1/b2/b4 from Matt Borgerson's MIT-licensed DSP56300
 project, including programs, metadata, results, provenance and manifest hashes:
   https://github.com/mborgerson/dsp56300
   revision 82fb25a6917a36ac66212ae31f02aab62211f979
@@ -94,7 +94,7 @@ and jump from reset; zeros are not new device defaults. Original corpus words
 then execute unchanged, including NOP gaps. No host writes CPU registers or
 substitutes instruction results.
 
-The three banks contain 65, 67 and 71 cases. All 46 architectural register fields are
+The four banks contain 65, 67, 71 and 38 cases. All 46 architectural register fields are
 checked, including EP/SZ/SC. Empty-stack SSH/SSL remain explicitly unobserved;
 the native diagnostic does not perform destructive pops. All fifteen observed
 stack-slot pairs and the captured X/Y/P windows are compared against their zero
@@ -108,7 +108,7 @@ Reproduce (external corpus is not included in published source)
   git -C doc/local/dsp56300-tools checkout 82fb25a6917a36ac66212ae31f02aab62211f979
   cmake --preset strict
   cmake --build --preset strict
-  ctest --test-dir build/strict -R '^(dsp_norm|dsp_transfers|dsp_vsl|dsp_zero_loops|dsp_hardware_corpus|dsp_corpus_bounds)$' --output-on-failure
+  ctest --test-dir build/strict -R '^(dsp_norm|dsp_transfers|dsp_vsl|dsp_zero_loops|dsp_subl|dsp_subr|dsp_subr_host_overflow|dsp_hardware_corpus|dsp_corpus_bounds)$' --output-on-failure
 
 The hardware-corpus test skips if the external reference directory is absent;
 an existing but incomplete or changed reference fails. Native dumps are written
@@ -120,9 +120,10 @@ Remaining scope
 The complete b2 bank is now included after normal-mode zero REP and retained
 zero-DO stack writes were implemented. See dsp-zero-loops.txt for the primary
 manual sections, its internal REP inconsistency, independent failure regressions
-and remaining compatibility/pipeline limits. All 17484 observed values across
-the three banks match without a discrepancy baseline. Banks beyond b0/b1/b2
-remain unqualified. Captures remain MCPX evidence, not Blofeld silicon proof.
+and remaining compatibility/pipeline limits. All 20745 observed values across
+the four banks match without a discrepancy baseline. The b4 adoption follows
+independent SUBL/SUBR value/flag/host-overflow corrections documented in
+dsp-shifted-subtract.txt. Other banks remain unqualified. Captures remain MCPX evidence, not Blofeld silicon proof.
 
 Fixed b8/b11 inputs that exposed undefined host shifts are separately pinned in
 dsp-operand-regressions.json. Their test expects contextual rejection before UB;
