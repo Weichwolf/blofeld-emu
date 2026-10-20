@@ -67,10 +67,11 @@ generated bit/word frame sync and preserved startup/reset input levels under a
 separate reference reset-edge contract (dsp-esai.txt). Production board clock
 sources, a serial PCM receiver, host audio/WAV transport and actual firmware
 audio remain pending. The source project's static analysis reports HCKT-fed
-clock, word-length frame sync and DMA intent; DMA/DAX and its missing physical
-input frequency and incoming control/mask state remain unqualified.
-No physical rate, codec route,
-Desktop/Keyboard topology or complete original boot is established.
+clock, word-length frame sync and DMA intent. The separate DMA experiment in
+dsp-dma.txt covers native register setup, counters and explicitly granted bus
+phases. Automatic native DMA arbitration, DAX, the missing physical input
+frequency and incoming control/mask state remain unqualified. No physical rate,
+codec route, Desktop/Keyboard topology or complete original boot is established.
 Unknown/reserved memory accesses remain strict.
 The callbacks and diagnostics can allocate/throw; they are not a real-time audio
 callback. Existing no-source schedules keep their previous timing and failures.

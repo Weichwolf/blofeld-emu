@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_gpio.hpp"
 #include "blofeld/dsp_interrupts.hpp"
@@ -79,6 +80,8 @@ public:
   void observe_esai_transmit(DspEsaiInstance instance, DspEsaiInputs inputs);
   [[nodiscard]] DspEsaiOutputs esai_transmit_outputs(DspEsaiInstance instance) const;
   [[nodiscard]] DspEsaiClockOutputs esai_clock_outputs(DspEsaiInstance instance) const;
+  // Explicit standalone reference phases; automatic native DMA bus timing rejects.
+  [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
 
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
@@ -110,6 +113,7 @@ private:
   DspPll pll_;
   DspTimers timers_;
   DspInterrupts interrupts_;
+  DspDma dma_;
   std::array<DspEsai, 2> esai_{DspEsai(DspEsaiInstance::primary),
                                DspEsai(DspEsaiInstance::secondary)};
   std::array<DspGpio, 3> gpio_{DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f)};

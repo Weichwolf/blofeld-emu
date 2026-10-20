@@ -80,12 +80,17 @@ buffers, shifts, pin phase, pending sync, mask versions and error-clear history.
 
 Receiver enable/configuration, FOSC-derived clocks, external word-length/relative
 frame sync, generated relative frame sync, AC97/on-demand modes, serial flag
-outputs/external buffer controls, DMA and interrupt enables remain unsupported
-and reject. Receiver-disabled reset
-controls/masks can be inspected without fabricating received data. In particular,
+outputs/external buffer controls and interrupt enables remain unsupported and
+reject. Receiver-disabled reset controls/masks can be inspected without
+fabricating received data. In particular,
 word-length external frame-sync behavior affected by ES140 is not qualified.
 No board route, codec, host PCM sink, real-time callback or original audio is
 provided by this transmitter component.
+
+The separate DMA reference component can refill TX through the strict bus using
+actual TDE requests (doc/dsp-dma.txt). It requires explicitly granted read/write
+phases; automatic clocked native DMA arbitration remains unsupported and rejects.
+These reference transfers do not establish original firmware audio.
 
 Verification
   cmake --build --preset strict --target blofeld-esai-test

@@ -3,6 +3,7 @@
 
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
 #include <cstdint>
@@ -61,6 +62,7 @@ public:
   [[nodiscard]] bool timing_faulted() const;
   // Nominal completion preview only; no instruction, peripheral or clock advance.
   [[nodiscard]] DspStepPlan plan_step() const;
+  [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
   [[nodiscard]] DspCheckpoint checkpoint() const;
   // Strong exception guarantee; a prior valid checkpoint can recover a fault.
   void restore(const DspCheckpoint &checkpoint);

@@ -117,6 +117,7 @@ void DspBus::reset_peripherals() {
   interrupts_.reset();
   shi_.reset();
   timers_.reset();
+  dma_.reset();
   for (auto &port : gpio_) { port.reset(); }
   for (auto &serial : esai_) { serial.reset(); }
 }
@@ -136,6 +137,13 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
     throw Fault("Invalid DSP bit access at " + address_text(target));
   }
   const auto mask = 1U << access.bit;
+  if (access.space == DspSpace::x && DspDma::handles(access.address)) {
+    const bool old = (dma_.read(access.address, mask) & mask) != 0;
+    if (access.operation != DspBitOperation::test) {
+      dma_.write(access.address, change_bit(dma_.read(access.address), mask, access.operation));
+    }
+    return old;
+  }
   if (access.space == DspSpace::x && DspTimers::is_control(access.address)) {
     constexpr unsigned timer_input = 0x1000;
     const bool old = (timers_.read(access.address, mask) & mask) != 0;
@@ -277,6 +285,10 @@ void DspBus::observe_omr(const std::uint32_t value) {
 }
 
 void DspBus::advance_instruction_cycles(const unsigned cycles) {
+  if (dma_.active()) {
+    throw Fault("Unqualified automatic DSP DMA bus timing at X:0xfffff4: "
+                "explicit standalone phases do not establish native bus arbitration");
+  }
   shi_.advance_instruction_cycles(cycles);
   if (switch_delay_ == 0) { return; }
   if (cycles < switch_delay_) {
@@ -316,6 +328,9 @@ void DspBus::acknowledge_interrupt(const DspInterruptRequest request) {
 }
 
 std::uint32_t DspBus::read_peripheral(const DspAddress access) {
+  if (access.space == DspSpace::x && DspDma::handles(access.address)) {
+    return dma_.read(access.address);
+  }
   if (auto *const serial = esai_register(access)) {
     return serial->read(access.address & esai_offset_mask);
   }
@@ -350,6 +365,10 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
 }
 
 void DspBus::write_peripheral(const DspStore access) {
+  if (access.space == DspSpace::x && DspDma::handles(access.address)) {
+    dma_.write(access.address, access.value);
+    return;
+  }
   if (auto *const serial = esai_register({.space = access.space, .address = access.address})) {
     serial->write(access.address & esai_offset_mask, access.value);
     return;

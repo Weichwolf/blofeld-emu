@@ -48,6 +48,7 @@ public:
   [[nodiscard]] DspEsaiOutputs outputs() const;
   [[nodiscard]] DspEsaiClockOutputs clock_outputs() const;
   [[nodiscard]] unsigned required_clock_pads() const;
+  [[nodiscard]] bool transmit_request() const;
 
   [[nodiscard]] bool needs_transmit_clock() const;
 

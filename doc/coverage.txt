@@ -270,7 +270,11 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           reference, continuous clock/late-enable
                                           tests and native opposite-edge capture
                                           with partial-divider/word replay.
-                                          RX, FOSC clocks, audio DMA/IRQ and
+                                          Explicit DMA register/counter/request
+                                          phases now feed native-configured ESAI
+                                          with literal ring/serial expectations;
+                                          automatic native DMA bus timing, DAX,
+                                          RX, FOSC clocks, audio IRQ and
                                           chip profile remain pending;
                                           no combined MCU/DSP board boot.
 MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges exact

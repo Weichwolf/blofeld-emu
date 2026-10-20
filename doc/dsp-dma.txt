@@ -1,0 +1,73 @@
+DSP56371 DMA reference phases
+
+Sources: DSP56300FM Rev.5 chapter10, DSP56371UM Rev.2.1 tables3-7/4-7,
+and NXP APR23 sections1/2. Local PDFs stay ignored; sizes/URLs/SHA-256 are in
+doc/hardware/sources.json. APR23's explicit linear-copy example resolves the
+ambiguous dash before1 in Family Manual table10-6: DAM101 increments by one.
+
+The component implements six channels, four shared offsets, documented register
+addresses, known/unknown preloads, regular request edges, priority/round-robin
+selection, separate source-read/destination-write phases and explicit wait grants.
+Counter modes A/B/C/D/E, independent source/destination address modes, modular
+24-bit addressing and counter reloads follow tables10-2/3/4/6/7/8/9. Offsets replace
+the ordinary increment at a line/plane boundary. DE clear retains a captured word
+request and an already-read word until its real destination access completes.
+Busy address/counter/offset/configuration changes reject. Word modes1/5 and
+software-triggered block mode3 are supported; other modes, DIE and DCON reject
+when enabled. Unknown preloads, reserved spaces/modes/request sources and missing
+inputs fail visibly. Reset DSTR is00003f; DE's DTD clear has the documented three
+additional reference-cycle delay. Repeating-mode DTD lifetime after a block is
+unqualified: reads selecting that bit reject until explicit disable completes.
+Qualified masked status-bit reads still work without inventing the unknown bit.
+
+DspDma::advance requires reference_sampled_cycles, consecutive caller-owned cycle
+indices, explicitly known request levels and an available/wait bus grant. External
+edges require a known baseline. APR23 section5.6 permits either initialization
+order: a peripheral's held request also survives late DMA enable and is captured
+on its first explicitly known sample. No unknown input becomes an asserted request.
+Regular requests cannot silently queue a second word before the first is served.
+Only one channel occupies a word transfer, including wait cycles. A higher-priority
+request waits for its predecessor's destination phase. No CPU instruction, PLL
+value or elapsed host time supplies missing cycles/grants. Initial round-robin
+choice and sampled-edge phase are reference conventions, not measured silicon
+pipeline/arbitration latency. Controller state commits only after a successful
+phase. External I/O callbacks must fail without side effects; rollback of an
+arbitrary callback's outside state is not provided.
+
+DspBus routes native register accesses and provides explicit advance_dma phases.
+It derives requests12/22 from actual ESAI/ESAI_1 TDE without reading SAISR or
+arming underrun clear. IRQA..IRQD request snapshots may be supplied explicitly;
+other request routes remain unsupported. RAM/ROM accesses use the strict bus;
+peripheral writes currently admit ESAI TX and the three DAX data destinations:
+XNADR at X:ffffd1 and the XADR aliases at X:ffffd2/3. Missing DAX
+still faults at its real address. GPIO, peripheral status/configuration DMA and
+unimplemented peripheral sources reject. Unknown/protected/unmapped memory is
+never supplied as zero or silently discarded. DspMachine adds current native
+PC/OMR to phase errors; trusted owner checkpoints include all DMA state and the
+held source value. Source cursor/receiver state remains caller-owned.
+
+This is a standalone instruction/peripheral reference experiment. Automatic
+clocked native execution rejects an active DMA channel: core/DMA bank contention,
+per-cycle instruction bus accesses, request synchronization and dynamic internal
+deadlines still need integration. Explicit phases do not establish those facts.
+No physical HCKT/core frequency, original DMA execution, DAX output, PCM transport,
+full original boot or hardware equivalence is established.
+
+  cmake --build --preset strict --target blofeld-dma-test
+  ctest --test-dir build/strict -R '^dsp_dma$' --output-on-failure
+
+Literal manual tables check every pre-transfer counter/address in all three
+triple layouts on both endpoints, dual/linear modes and24-bit wrap. Sixty-five
+real source reads check the64-word ring, reload and first reused word. Separate
+tests cover all six equal priorities, higher-priority arrival between phases,
+held-data replay, denied grants, DE clear before/after source read, faults and
+strict input/configuration rejection. Own unclocked native MOVEP programs configure
+both ESAI maps and DMA registers. Explicit HCKT observations and DMA grants feed
+an opposite-edge receiver;66 complete serial words and every actual RAM/TX transfer
+match independent expectations, including ring wrap. A checkpoint between the
+first source read and destination write reproduces that stream. A separate same-
+edge DMA0/DMA3 test proves a real ESAI refill cannot swallow missing DAX. An
+independent map test distinguishes all three DAX data addresses from forbidden
+status/control DMA. A real
+clocked native DE write faults instead of bypassing unsupported bus arbitration.
+These bounds and explicit reference phases do not qualify original firmware audio.

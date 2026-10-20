@@ -124,6 +124,11 @@ bool DspEsai::needs_transmit_clock() const {
   return active_ && (control_ & esai::personal_reset) == 0 && (enabled() != 0 || running_ != 0);
 }
 
+bool DspEsai::transmit_request() const {
+  require_observed_clock();
+  return (status_ & esai::empty) != 0;
+}
+
 void DspEsai::require_observed_clock() const {
   if (needs_transmit_clock() && (clock_generator() || frame_generator()) &&
       observed_.timing != DspEsaiClockTiming::reference_reset_edges) {

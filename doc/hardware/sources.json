@@ -82,5 +82,11 @@
     "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FMAD.pdf",
     "bytes": 77434,
     "sha256": "bde1abf48cbb7e944589dd62e2199ed70b95dd8398c0c1a3e709fd7d61ee1ac7"
+  },
+  {
+    "file": "APR23.pdf",
+    "source": "https://www.nxp.com/docs/en/application-note/APR23.pdf",
+    "bytes": 772785,
+    "sha256": "f56db665a183fbf2d9deea52fdfaf0f6cc781578bc976adbc0362633b1b32c1b"
   }
 ]

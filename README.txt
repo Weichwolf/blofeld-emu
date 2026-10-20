@@ -119,6 +119,8 @@ doc/dsp-esai.txt describes externally clocked ESAI/ESAI_1 transmission from nati
 DSP registers, serial-format/slot/error tests and the remaining audio-path limits.
 It includes an explicit HCKT-fed divider/generated-frame experiment with native
 opposite-edge bit capture; the physical audio clock and original audio remain open.
+doc/dsp-dma.txt describes DMA register/address/count logic and explicit read/write
+reference phases with actual ESAI refills; automatic native DMA timing remains open.
 doc/dsp-external-events.txt describes timed external peripheral observations
 between native DSP completions, including MCU shared-write and WAI ordering.
 doc/nand-persistence.txt describes private NAND images, durable write-ahead

@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
 #include <exception>
@@ -116,6 +117,19 @@ const DspRunClock &DspMachine::run_clock() const {
 bool DspMachine::timing_faulted() const {
   const auto &clock = state_->run.clock;
   return clock && (clock->faulted() || state_->cpu.faulted());
+}
+
+std::optional<DspDmaWord> DspMachine::advance_dma(const DspDmaInputs inputs) {
+  if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
+    throw Fault("DSP DMA observation requires a healthy native boundary");
+  }
+  try {
+    return state_->bus.advance_dma(inputs);
+  } catch (const std::exception &error) {
+    const auto context = state_->cpu.state();
+    throw Fault("DSP DMA observation pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
+                ": " + error.what());
+  }
 }
 
 DspStepPlan DspMachine::plan_step() const {
