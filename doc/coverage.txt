@@ -206,7 +206,7 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           ten literal parallel pre-read cases and
                                           a saved legal SUBR host-overflow input
                                           checked (dsp-shifted-subtract.txt).
-                                          SUBL C after shift overflow and SA/FV
+                                          SUBL C after shift overflow and SA/SM
                                           arithmetic remain unqualified.
                                           Bounded native instruction fixture checks
                                           independent arithmetic/memory outcomes,

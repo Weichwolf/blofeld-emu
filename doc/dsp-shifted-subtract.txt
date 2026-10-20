@@ -14,8 +14,10 @@ overflow. This profile calculates subtraction borrow, but does not claim a
 DSP56371 silicon C result after shift overflow. Tests apply an independent C
 oracle only where the manual qualifies it; all other CPU/flag/stack fields stay
 checked in those cases. This declared limit is independent of observed mismatch
-values. Normal scaling modes are covered; SA/FV arithmetic, pipeline timing,
-all derivative behavior and real-time audio remain unqualified.
+values. The tested path has SA=0 and SM=0, with three normal scaling modes.
+Sixteen-bit arithmetic (SA), saturation (SM), pipeline timing,
+all derivative behavior and real-time audio remain unqualified. FV is the
+DO FOREVER loop flag; it is separate from the arithmetic mode bits.
 
 Deterministic checks (no fuzz or physical-device traffic)
   cmake --build --preset strict --target blofeld-dsp-shifted-subtract-test blofeld-dsp-corpus-test
