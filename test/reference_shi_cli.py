@@ -13,7 +13,8 @@ import unittest
 
 from test_reference_cli import CONFIG, ROM, WAIT, image, replay_sections
 
-BINARY, FIXTURE, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:])
+BINARY, FIXTURE, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
+GROUP = sys.argv[5] if len(sys.argv) == 6 else "all"
 ROOT = Path(__file__).resolve().parents[1]
 OUTBOUND = 0xa15c37
 INBOUND = 0x123456
@@ -55,12 +56,70 @@ def irq_image(code):
     return result
 
 
+def echo_exchange(words, wire_words=None):
+    """Own three-wire CPU program; expected MISO comes from the preceding input word."""
+    code = store(1, 2) + store(3, 0x16) + store(0x25c, 1) + store(0x27c, 1)
+    failures = []
+    response = OUTBOUND
+    for expected, outgoing in zip(words, words if wire_words is None else wire_words, strict=True):
+        code += check_pin(0x278, 1) + store(1, 0)
+        frame = []
+        for bit in range(23, -1, -1):
+            mosi = 16 if outgoing & (1 << bit) else 0
+            code += store(1, mosi | 4)
+            frame.append(0x9000 + len(code) + 7)
+            code += check_pin(0x258, (response >> bit) & 1)
+            code += store(1, mosi)
+        code += store(1, 2) + check_pin(0x278, 1)
+        failures.append(frame)
+        response = expected
+    code += check_pin(0x260, 1)
+    return code, failures
+
+
+def spi_words(trace):
+    """Independent rising-edge GPIO decoder, including exact word lengths."""
+    previous, bits, words = 2, [], []
+    for raw in re.findall(r"^SPI .*?value=(0x[0-9a-f]+) ", trace, re.MULTILINE):
+        value = int(raw, 16)
+        if not value & 2 and not previous & 4 and value & 4:
+            bits.append(1 if value & 16 else 0)
+        if not previous & 2 and value & 2:
+            assert len(bits) == 24
+            word = 0
+            for bit in bits:
+                word = word * 2 + bit
+            words.append(word)
+            bits = []
+        previous = value
+    assert not bits
+    return words
+
+
+def echo_counts():
+    """Manual-cycle ledger for the declared reference clocks and DSP-before-MCU ties."""
+    # MCU: reset5, four LDAA1/STAA3 pairs, then three frames, final GPIO check.
+    # Each frame: ready LDAA3/CMPA1/BEQ3, SS4, 24*(SCK4+check7+SCK4), SS4, ready7.
+    frame_cycles = 7 + 4 + 24 * 15 + 4 + 7
+    mcu_cycles = 5 + 16 + 3 * frame_cycles + 7
+    # DSP56300FM native estimates: immediate MOVEP/MOVE2, JCLR4, register MOVEP1,
+    # memory MOVE1, absolute JMP4. Data arrives on each last leading clock edge.
+    cursor, polls = 450 + 8 * 45, 0
+    for frame in range(3):
+        capture = (5 + 16 + frame * frame_cycles + 7 + 4 + 23 * 15 + 4) * 90
+        count = (capture - cursor) // (4 * 45) + 1
+        polls += count  # A completion tied to capture still sees the preceding empty FIFO.
+        cursor += (4 * count + 7) * 45
+    polls += (mcu_cycles * 90 - cursor) // (4 * 45)
+    return mcu_cycles, 4 + polls + 3 * 4, 8 + polls * 4 + 3 * 7
+
+
 class ShiReturnCli(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         ARTIFACTS.mkdir(parents=True, exist_ok=True)
         cls.roms = {"disabled": ROM}
-        for mode in ("transmit", "unknown-transmit", "delayed-request", "short-request"):
+        for mode in ("transmit", "unknown-transmit", "delayed-request", "short-request", "echo"):
             path = ARTIFACTS / f"own-{mode}.bin"
             subprocess.run([FIXTURE, mode, path], check=True, capture_output=True, timeout=30)
             cls.roms[mode] = path.read_bytes()
@@ -111,6 +170,71 @@ class ShiReturnCli(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("0x3000", result.stderr)
         self.assertIn("pc=0x9007", result.stderr)
+
+    def test_echo_replays_both_shift_directions_between_real_cpu_reads(self):
+        base = self.serial_config() + "initial drive Q ff 00 00\nat 20000 drive Q ff 01 00\n"
+        mcu_cycles, dsp_steps, dsp_units = echo_counts()
+        self.assertEqual((mcu_cycles, dsp_steps, dsp_units), (1174, 593, 2337))
+        for first in (0x123456, 0xfedcba):
+            words = (first, 0x654321, 0x0f0f0f)
+            code, _ = echo_exchange(words)
+            instructions = 8 + 178 * len(words) + 3
+            result, baseline = self.run_cli(f"echo-{first:x}", base, code, mode="echo",
+                                             instructions=instructions)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(spi_words(baseline), list(words))
+            self.assertIn("spi-writes=151 frames=3", result.stdout)
+            self.assertIn("r4=259 lc=0", result.stdout)
+            self.assertIn(f"instructions=545 operations=545 interrupts=0 cycles={mcu_cycles} "
+                          f"idle=0 ticks={mcu_cycles * 10}", result.stdout)
+            self.assertIn(f"completed-steps={dsp_steps} units={dsp_units} ticks={dsp_units * 45}",
+                          result.stdout)
+            self.assertIn(f"pc=0x{0x9000 + len(code):04x}", result.stdout)
+            for point, frame, high in ((71, 0, True), (72, 0, True), (76, 0, False),
+                                       (249, 1, True), (250, 1, True), (427, 2, True)):
+                with self.subTest(first=first, checkpoint=point):
+                    result, trace = self.run_cli(f"echo-{first:x}-cp{point}",
+                                                 base + f"checkpoint {point} 2\n", code,
+                                                 mode="echo", instructions=instructions)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("r4=259 lc=0", result.stdout)
+                    self.assertIn(f"cycles={mcu_cycles} idle=0 ticks={mcu_cycles * 10}", result.stdout)
+                    self.assertIn(f"completed-steps={dsp_steps} units={dsp_units} "
+                                  f"ticks={dsp_units * 45}", result.stdout)
+                    prefix, branches = replay_sections(trace)
+                    self.assertEqual(len(branches), 3)
+                    self.assertEqual(branches, [branches[0]] * 3)
+                    self.assertEqual(prefix + branches[0], baseline)
+                    last = [row for row in prefix.splitlines() if row.startswith("SPI ")][-1]
+                    value = int(re.search(r"value=(0x[0-9a-f]+)", last)[1], 16)
+                    self.assertFalse(value & 2, last)
+                    self.assertEqual(bool(value & 4), high, last)
+                    self.assertIn(f"frames={frame}", last)
+                    self.assertIn(f"operations={point} idle=0", prefix.splitlines()[-1])
+                    self.assertEqual(prefix.count("INPUT requested=20000"), int(frame != 0))
+                    self.assertEqual(branches[0].count("INPUT requested=20000"), int(frame == 0))
+
+    def test_echo_changed_mosi_bit_changes_native_dsp_reply_and_replays_the_actual_fault(self):
+        words = (0x123456, 0x654321, 0x0f0f0f)
+        code, failures = echo_exchange(words, (words[0] ^ 0x800000, *words[1:]))
+        config = (self.serial_config() + "initial drive Q ff 00 00\n"
+                  "at 20000 drive Q ff 01 00\ncheckpoint 71 2\n")
+        result, trace = self.run_cli("echo-changed-bit", config, code, mode="echo",
+                                     instructions=8 + 178 * len(words) + 3)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("0x3000", result.stderr)
+        self.assertIn(f"pc=0x{failures[1][0]:04x}", result.stderr)
+        prefix, branches = replay_sections(trace)
+        self.assertEqual(len(branches), 3)
+        self.assertEqual(branches, [branches[0]] * 3)
+        # The first native received word must alter the next frame's first MISO bit.
+        self.assertIn("r4=257 lc=0", result.stderr)
+        first_frame = prefix + branches[0]
+        rows = first_frame.splitlines()
+        last_release = next(i for i, row in enumerate(rows) if row.startswith("SPI ") and
+                            "frames=1" in row)
+        self.assertEqual(spi_words("\n".join(rows[:last_release + 1]) + "\n"),
+                         [words[0] ^ 0x800000])
 
     def test_htx_completion_tied_to_select_respects_both_shared_write_orders(self):
         base = CONFIG.replace("operations 23", "operations 40")
@@ -258,4 +382,11 @@ if __name__ == "__main__":
     expected = next(row["sha256"] for row in manifest["files"] if row["file"] == FIRMWARE.name)
     if hashlib.sha256(FIRMWARE.read_bytes()).hexdigest() != expected:
         raise ValueError("Original firmware identity mismatch")
-    unittest.main(argv=[sys.argv[0]], verbosity=2)
+    if GROUP not in ("all", "signals", "echo"):
+        raise ValueError("Unknown SHI CLI test group")
+    names = unittest.defaultTestLoader.getTestCaseNames(ShiReturnCli)
+    selected = [f"ShiReturnCli.{name}" for name in names
+                if GROUP == "all" or name.startswith("test_echo_") == (GROUP == "echo")]
+    if not selected:
+        raise ValueError("Empty SHI CLI test group")
+    unittest.main(argv=[sys.argv[0]], defaultTest=selected, verbosity=2)

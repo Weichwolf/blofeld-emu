@@ -625,6 +625,11 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           recovery and failed-preparation guards;
                                           CLI WAI/IRQ/event and original mid-SPI
                                           suffix replays (reference-board.txt).
+                                          Three-frame native DSP HRX/RAM/HTX echo
+                                          checks all 72 MCU response bits, both
+                                          shift directions across six checkpoints,
+                                          independent clocks/wire words and a
+                                          changed-input failure (reference-board.txt).
                                           Persistent full-state format/fuzzing,
                                           physical scheduler and complete-board replay
                                           remain pending.

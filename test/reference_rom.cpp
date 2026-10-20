@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <string_view>
 
 namespace {
@@ -27,9 +28,22 @@ void write_rom(const std::filesystem::path &path, const blofeld::test::DspProgra
   stream.close();
 }
 
+void echo_loop(blofeld::test::DspProgram &result) {
+  // Own polling diagnostic: actual HRX -> RAM -> HTX, never host word injection.
+  result.immediate("r4", 0x100);
+  const auto loop = result.pc();
+  result.emit("jclr #17,x:<<$ffff91," + blofeld::test::number(loop));
+  result.emit("movep x:<<$ffff94,x0");
+  result.emit("move x0,x:(r4)+");
+  result.emit("movep x0,x:<<$ffff93");
+  constexpr unsigned absolute_jump = 0x0af080;
+  result.word(absolute_jump);
+  result.word(loop);
+}
+
 blofeld::test::DspProgram program(const std::string_view mode) {
   if (mode != "transmit" && mode != "unknown-transmit" && mode != "delayed-request" &&
-      mode != "short-request") {
+      mode != "short-request" && mode != "echo") {
     throw blofeld::Fault("Unknown own SHI ROM scenario");
   }
   blofeld::test::DspProgram result;
@@ -41,8 +55,12 @@ blofeld::test::DspProgram program(const std::string_view mode) {
   }
   // Own mode-0, 24-bit single-word receive request. DSP56371UM chapter 7.
   result.emit("movep #>0,x:<<$ffff90");
-  result.emit("movep #>$89,x:<<$ffff91");
-  if (mode == "transmit") { result.emit("movep #>$a15c37,x:<<$ffff93"); }
+  result.emit(mode == "echo" ? "movep #>$189,x:<<$ffff91" : "movep #>$89,x:<<$ffff91");
+  if (mode == "transmit" || mode == "echo") { result.emit("movep #>$a15c37,x:<<$ffff93"); }
+  if (mode == "echo") {
+    echo_loop(result);
+    return result;
+  }
   if (mode == "delayed-request" || mode == "short-request") {
     const unsigned pulse = mode == "delayed-request" ? 16 : 0;
     for (unsigned i = 0; i < pulse; ++i) { result.emit("nop"); }

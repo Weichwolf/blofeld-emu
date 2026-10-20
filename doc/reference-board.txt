@@ -172,6 +172,16 @@ original firmware inside a selected, partly clocked SPI word and compares three
 complete suffix traces through the unchanged reserved-Y failure. Rejoining the
 prefix and first suffix must preserve the pinned original baseline trace hash;
 the independent word decoder still checks all 97 frames against the MCU image.
+reference_echo_cli runs a separate own DSP polling program: real HRX reads store
+three received words in DSP RAM and supply HTX for subsequent MCU frames. The
+MCU checks all 72 returned bits, receive/transmit readiness and a later external
+input. Two input patterns and six checkpoints cover both SCK levels, before/after
+a native MISO load, and all three words; each produces three identical suffixes.
+A changed MOSI bit changes the next native DSP reply and repeats the actual MCU
+unmapped-read failure. Independent GPIO decoding and a manual cycle ledger check
+545 MCU operations/1174 cycles and 593 DSP steps/2337 nominal units. HREQ requires
+both receive capacity and fresh transmit data in this explicit logical fixture.
+Run: ctest --test-dir build/strict -R '^reference_(shi|echo)_cli$' --output-on-failure
 original_shi_routes.py constrains three simple HREQ-to-PU0 hypotheses under the
 same explicitly supplied clocks: an earlier inverted release contends with the
 MCU's still-low PU0 output; a release at its first poll leaves a required input
