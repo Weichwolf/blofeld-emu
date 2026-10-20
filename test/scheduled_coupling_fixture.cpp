@@ -12,6 +12,7 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_run_clock.hpp"
@@ -62,11 +63,12 @@ ClockedLink::ClockedLink(McuMachine &mcu,
       phases_(phases),
       trace_(trace),
       experiment_(experiment),
-      release_tick_(release_tick),
-      scheduler_({.epoch_ticks = release_tick,
-                  .observation = DspStepObservation::reference_completion_boundary},
-                 dsp),
-      end_tick_(common_ticks(mcu)) {
+      scheduler_({.dsp = {.epoch_ticks = release_tick,
+                          .observation = DspStepObservation::reference_completion_boundary},
+                  .shared_write_order = experiment.tie,
+                  .maximum_dsp_steps_per_cycle = 16},
+                 mcu,
+                 dsp) {
   require(dsp.run_clock().timebase_hz() == common_hz, "DSP must use the declared common timebase");
   require(experiment.tie == TieOrder::unqualified || experiment.tie == TieOrder::dsp_before_mcu ||
               experiment.tie == TieOrder::mcu_before_dsp,
@@ -103,18 +105,11 @@ void ClockedLink::detach() {
 }
 
 void ClockedLink::after_mcu_step() {
-  require(common_ticks(mcu_) == end_tick_, "Every offered MCU period must actually complete");
+  scheduler_.end_instruction();
   const auto pins = sample();
   require(pins.selected == previous_.selected && pins.clock == previous_.clock &&
               pins.mosi == previous_.mosi,
           "Unobserved MCU serial-pad change during the completed instruction");
-  if (end_tick_ >= release_tick_) {
-    require(scheduler_.horizon_ticks() == end_tick_ &&
-                release_tick_ + dsp_.run_clock().elapsed_ticks() <= end_tick_ &&
-                scheduler_.next_completion_ticks(dsp_) > end_tick_,
-            "Native DSP time stays within the MCU horizon and retains its unfinished next step");
-  }
-  offered_ = false;
 }
 
 void ClockedLink::on_dsp_step(const DspScheduledStep &step) {
@@ -141,56 +136,17 @@ void ClockedLink::on_dsp_step(const DspScheduledStep &step) {
          << " ticks=" << step.plan.duration_ticks << " r4=" << before.r[4] << '\n';
 }
 
-void ClockedLink::advance(const std::uint64_t end, const DspScheduleBoundary boundary) {
-  if (end < release_tick_) { return; }
-  constexpr unsigned cycle_budget = 16;
-  try {
-    scheduler_.advance_to(
-        dsp_, end, boundary, cycle_budget, [this](const auto &step) { on_dsp_step(step); });
-  } catch (const Fault &fault) {
-    throw Fault("Scheduled peer execution mcu-pc=" + hex(context_.pc) + " dsp-pc=" +
-                hex(dsp_.cpu().state().pc, 6) + " mcu-cycle-kind=" + std::string(1, cycle_.kind) +
-                " mcu-address=" + (cycle_.address ? hex(*cycle_.address) : "none") +
-                " mcu-end=" + std::to_string(end) + ": " + fault.what());
-  }
-}
-
 void ClockedLink::on_cycle(const Hc12BusCycle cycle) {
-  require(common_ticks(mcu_) == end_tick_, "A preceding MCU duration offer was not consumed");
   const auto pins = sample();
   require(pins.selected == previous_.selected && pins.clock == previous_.clock &&
               pins.mosi == previous_.mosi,
           "Unobserved MCU serial-pad change before the next clock boundary");
   phases_.observe(cycle, mcu_.run_clock().bus_cycles());
   context_ = cycle.context;
-  cycle_ = cycle;
-  const auto factor = common_hz / mcu_.run_clock().timebase_hz();
-  const auto offered = mcu_.run_clock().next_cycle_ticks(mcu_.bus());
-  require(offered <= (std::numeric_limits<std::uint64_t>::max() - end_tick_) / factor,
-          "MCU next-period offer must fit the common timebase");
-  end_tick_ += offered * factor;
-  offered_ = true;
   const bool write = cycle.kind == 'w' || cycle.kind == 'W';
   const bool shared = write && cycle.address && *cycle.address <= coupled::port_b &&
                       coupled::port_b - *cycle.address < cycle.size;
-  if (!shared) {
-    advance(end_tick_, DspScheduleBoundary::through);
-    return;
-  }
-  require(cycle.size == 1, "Unqualified wide MCU shared-port write timing");
-  advance(end_tick_, DspScheduleBoundary::before);
-  const bool tie =
-      end_tick_ >= release_tick_ && scheduler_.next_completion_ticks(dsp_) == end_tick_;
-  if (tie) {
-    ++ties_;
-    if (experiment_.tie == TieOrder::unqualified) {
-      throw Fault("Unqualified simultaneous DSP completion and MCU PORTB write mcu-pc=" +
-                  hex(context_.pc) + " dsp-pc=" + hex(dsp_.cpu().state().pc, 6));
-    }
-  }
-  if (experiment_.tie != TieOrder::mcu_before_dsp || !tie) {
-    advance(end_tick_, DspScheduleBoundary::through);
-  }
+  scheduler_.begin_cycle(cycle, shared, [this](const auto &step) { on_dsp_step(step); });
 }
 
 void ClockedLink::deliver(SpiInputs pins) {
@@ -236,33 +192,33 @@ void ClockedLink::on_bus_event(const BusEvent &event) {
             "Unsupported MCU serial-pad control change at write=" + hex(event.address));
     return;
   }
-  require(offered_ && common_ticks(mcu_) == end_tick_,
-          "MCU serial observation must follow its owned write cycle");
-  try {
-    transition(pins);
-  } catch (const Fault &fault) {
-    throw Fault("Scheduled MCU write at " + hex(event.address) + " mcu-pc=" + hex(context_.pc) +
-                " dsp-pc=" + hex(dsp_.cpu().state().pc, 6) + ": " + fault.what());
-  }
-  ++writes_;
-  if (previous_.selected && !pins.selected) { ++frames_; }
-  previous_ = pins;
-  trace_ << "MCU-WIRE end=" << end_tick_ << " pc=" << hex(context_.pc)
-         << " value=" << hex(event.value, 2) << " frame=" << frames_ << '\n';
-  advance(end_tick_, DspScheduleBoundary::through);
+  scheduler_.observe_write(
+      event,
+      [&] {
+        try {
+          transition(pins);
+        } catch (const Fault &fault) {
+          throw Fault("Scheduled MCU write at " + hex(event.address) +
+                      " mcu-pc=" + hex(context_.pc) + " dsp-pc=" + hex(dsp_.cpu().state().pc, 6) +
+                      ": " + fault.what());
+        }
+        ++writes_;
+        if (previous_.selected && !pins.selected) { ++frames_; }
+        previous_ = pins;
+        trace_ << "MCU-WIRE end=" << scheduler_.end_ticks() << " pc=" << hex(context_.pc)
+               << " value=" << hex(event.value, 2) << " frame=" << frames_ << '\n';
+      },
+      [this](const auto &step) { on_dsp_step(step); });
 }
 
 LinkCheckpoint ClockedLink::checkpoint() const {
-  require(!offered_ && common_ticks(mcu_) == end_tick_,
-          "Scheduled link checkpoint requires a completed MCU instruction");
-  return {.schedule = scheduler_.checkpoint(dsp_),
+  return {.schedule = scheduler_.checkpoint(),
           .previous = previous_,
           .census = census_,
-          .end_tick = end_tick_,
+          .end_tick = scheduler_.end_ticks(),
           .writes = writes_,
           .frames = frames_,
           .ordered_pairs = ordered_pairs_,
-          .ties = ties_,
           .injected = injected_};
 }
 
@@ -272,16 +228,13 @@ void ClockedLink::restore(const LinkCheckpoint &checkpoint) {
               pins.selected == checkpoint.previous.selected &&
               pins.clock == checkpoint.previous.clock && pins.mosi == checkpoint.previous.mosi,
           "Scheduled link restore must match restored native time and source pads");
-  scheduler_.restore(checkpoint.schedule, dsp_);
+  scheduler_.restore(checkpoint.schedule);
   previous_ = checkpoint.previous;
   census_ = checkpoint.census;
-  end_tick_ = checkpoint.end_tick;
   writes_ = checkpoint.writes;
   frames_ = checkpoint.frames;
   ordered_pairs_ = checkpoint.ordered_pairs;
-  ties_ = checkpoint.ties;
   injected_ = checkpoint.injected;
-  offered_ = false;
 }
 
 void ClockedLink::write_census(const std::filesystem::path &path) const {

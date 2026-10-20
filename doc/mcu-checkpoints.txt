@@ -62,6 +62,10 @@ recovered only by replacing the coordinated state. Timed/untimed or differing
 run contracts reject before replacement. References to run_clock() also expire
 on restore. The handle is trusted in-process state, not a persistent clock format.
 
+validate_run_boundary() checks an inactive clocked CPU/bus and healthy native
+cycle accounting without copying memory. McuDspSchedule uses this after each
+instruction; SLA byte identity remains checked when creating/restoring snapshots.
+
 set_cycle_observer supplies optional pre-cycle external observations. It is
 excluded from checkpoints, as is the ordinary bus observer, and must be explicitly
 reattached after restore. Neither callback can replace/capture its executing owner

@@ -126,10 +126,16 @@ target_include_directories(blofeld_core PUBLIC include)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh blofeld_hc12_cycles)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
+add_library(blofeld_mcu_dsp src/mcu_dsp_schedule.cpp)
+target_include_directories(blofeld_mcu_dsp PUBLIC include)
+target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_executable(blofeld-headless src/main.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_core)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-mcu-dsp-schedule-test test/mcu_dsp_schedule_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME mcu_dsp_schedule COMMAND blofeld-mcu-dsp-schedule-test)
   add_executable(blofeld-hc12-cycle-test test/hc12_cycle_test.cpp)
   target_link_libraries(blofeld-hc12-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_cycles COMMAND blofeld-hc12-cycle-test)
@@ -411,7 +417,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-scheduled-coupling-test test/original_scheduled_coupling_test.cpp
     test/scheduled_coupling_fixture.cpp test/scheduled_frontier_fixture.cpp
     test/original_owned_clock_fixture.cpp)
-  target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp
+  target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp blofeld_mcu_dsp
     blofeld_dsp_native blofeld_lcd_fixture)
   add_test(NAME original_scheduled_coupling COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_scheduled_coupling.py"
@@ -560,6 +566,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+    blofeld-mcu-dsp-schedule-test
     blofeld-hc12-cycle-test
     blofeld-hc12-cycle-extended-test
     blofeld-hc12-compare-stack-test

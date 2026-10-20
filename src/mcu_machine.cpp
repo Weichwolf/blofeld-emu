@@ -220,6 +220,11 @@ bool McuMachine::timing_faulted() const {
          (!clock || state_->timed->faulted() || clock->faulted() || state_->run.wait_faulted);
 }
 
+void McuMachine::validate_run_boundary() const {
+  state_->check_inactive();
+  state_->check_clock_boundary();
+}
+
 void McuMachine::set_cycle_observer(std::function<void(Hc12BusCycle)> observer) {
   state_->check_inactive();
   state_->observer = std::move(observer);

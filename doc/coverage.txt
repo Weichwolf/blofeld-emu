@@ -281,6 +281,14 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           Joint near-fault recovery repeats the
                                           exact partial native state/error/time;
                                           failed duration is not charged or skipped.
+                                          Production McuDspSchedule now supplies
+                                          this reference ordering independently of
+                                          the caller's board routes/reset policy.
+                                          Own native fault/recovery tests cover
+                                          zero/one/two consumed DBNE slots and both
+                                          exact native GPIO-write tie orders
+                                          (mcu-dsp-schedule.txt). Combined CLI and
+                                          scheduled WAI idle/wakeup remain pending.
                                           MISO/HREQ/PU0 linkage, actual routing,
                                           reset, physical elapsed clocks and full
                                           scheduling remain unqualified.

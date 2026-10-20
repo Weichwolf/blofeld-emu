@@ -17,6 +17,9 @@ an external board model choose which observation wins a simultaneous event.
 A pending duration is checked again before execution, including after callbacks.
 McuRunClock::next_cycle_ticks() offers its native source/divider period without
 consuming it; actual MCU execution must subsequently complete that period.
+McuDspSchedule now owns this common-time accounting and shared-write ordering in
+the production blofeld_mcu_dsp component (mcu-dsp-schedule.txt). The original test
+retains only its explicit board observations, native ledgers and wire delivery.
 
 Unknown code, changed pending durations, reversed time, callback mutations,
 exhausted time/budgets and unilateral clock restore fail visibly. Completed

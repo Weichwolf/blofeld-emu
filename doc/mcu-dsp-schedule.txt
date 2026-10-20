@@ -1,0 +1,76 @@
+MCU/DSP reference schedule
+
+McuDspSchedule in blofeld_mcu_dsp supplies the common nominal ordering previously
+held by the original-firmware test fixture. It references two native clocked
+owners but retains no GPIO routes, observers, transport, reset logic or firmware
+PC policy. DspStepObservation::reference_completion_boundary, an explicit DSP
+epoch and a positive per-cycle instruction budget are required. The DSP owner's
+timebase must be an exact positive integer multiple of the MCU owner's timebase.
+No physical instruction pipeline or analog clock transition is inferred.
+
+Integration order
+1. Construct/configure the native machines and explicitly establish external
+   reset/clock/pad observations. Construct McuDspSchedule with the chosen epoch,
+   completion contract, shared-write tie experiment and DSP instruction budget.
+2. From the MCU owner's pre-cycle observer, call begin_cycle(cycle, shared_write,
+   before_dsp). The board must identify every write that can change shared inputs.
+   Each offered period comes from the actual MCU clock source/divider. DSP native
+   completions stop at that exact common-time boundary.
+3. In the corresponding native bus-write observer, call observe_write(event,
+   observe_signals, before_dsp). It first checks the actual completed one-byte
+   write address and time. observe_signals then samples/delivers board signals.
+   The remaining simultaneous DSP completion runs in the selected order.
+4. After cpu().step() has returned, call end_instruction(). This checks inactive
+   native MCU accounting, every consumed offered period, delivered shared writes
+   and the next unfinished DSP deadline. It executes no MCU instruction itself.
+
+Exact shared-write ties require an explicit DSP-before-MCU or MCU-before-DSP
+experiment. Unqualified ties fail with the write address and both PCs. Unknown
+geometry, a missing native signal observation, unconsumed/extra MCU periods,
+time overflow and exhausted DSP budgets reject. Signals and diagnostic callbacks
+are caller-owned and must not advance either native CPU secretly. Reentrant
+schedule calls/captures reject; a failed operation leaves the schedule faulted.
+Native operand errors retain MCU cycle kind/address, both PCs and attempted DSP
+completion versus last completed DSP time/units. There is no automatic rollback.
+
+Snapshots
+A trusted McuDspScheduleCheckpoint retains the observation contract, common-time
+boundary, MCU visible registers/cycle count, tie count and pending DSP schedule.
+Capture requires healthy inactive owners and a completed instruction observation.
+The caller separately checkpoints both native machines and external wiring.
+Restore the owners/wiring first, then restore the schedule. Compatible inputs and
+restored MCU registers/time are checked before changing the schedule; the DSP
+schedule checks its restored native state and unfinished plan. External observers
+are not checkpointed and must be reattached after native MCU restore.
+These are process-local trusted checkpoints, not portable files, authenticated
+owner identities or an atomic restore of an entire board and host transport.
+
+Verification
+  cmake --build --preset strict --target blofeld-mcu-dsp-schedule-test blofeld-scheduled-coupling-test
+  ctest --test-dir build/strict -R '^(mcu_dsp_schedule|original_scheduled_coupling)$' --output-on-failure
+
+Own native programs use independent HCS12 LDX immediate/DBNE IX cycle sequences
+and DSP long-immediate/MOVE costs. Controlled DSP reset epochs place a real
+reserved-operand fault after zero, one or two consumed MCU DBNE slots. Only those
+consumed MCU periods and completed DSP instructions advance their respective
+clocks. Coordinated owner/schedule restore reproduces the interrupted-slot error;
+unilateral restore and faulted capture reject. Both explicit exact-time orders
+are checked at an actual native GPIO write, including observed output pads.
+Dropping that signal observation rejects with the simultaneous DSP step still
+unfinished; active observer callbacks cannot become trusted checkpoints.
+
+The unchanged original-firmware experiment now uses this production component.
+Its four phase/tie cases retain all native serial stores, frame contents, CPU
+cost/timestamp ledgers, mid-frame replay and actual reserved-write recovery
+(scheduled-coupling.txt). Its pin-order and ready observations stay in the caller.
+Own partial-slot tests do not establish physical bus phases or turn the original
+four cases' first-slot failures into hardware-verified coverage of every cut.
+
+Scope
+This is single-threaded normal-run reference scheduling. WAI idle/wakeup time,
+physical reset/clock/routing, bidirectional host signals, complete mask ROM/assets,
+Desktop/Keyboard board profiles and the headless CLI's combined execution path
+remain pending. The CLI still runs MCU only. No future real-time audio callback
+may inherit these allocating/throwing diagnostic and snapshot facilities.
+Original full boot, MIDI/voices/audio, full update/recovery/persistence/stress and
+stock-hardware equivalence remain unproven. Unknown hardware is not substituted.

@@ -194,14 +194,14 @@ void record(const std::string &name,
         << " ties=" << link.ties() << '\n';
 }
 
-unsigned experiment(McuMachine &mcu,
-                    const std::span<const std::uint8_t> image,
-                    const std::span<const std::uint32_t> rom,
-                    const Progress &cold,
-                    const Experiment input,
-                    const std::filesystem::path &path,
-                    const std::string &name,
-                    std::ostream &summary) {
+std::uint64_t experiment(McuMachine &mcu,
+                         const std::span<const std::uint8_t> image,
+                         const std::span<const std::uint32_t> rom,
+                         const Progress &cold,
+                         const Experiment input,
+                         const std::filesystem::path &path,
+                         const std::string &name,
+                         std::ostream &summary) {
   DspMachine dsp(
       DspRunContract{.clock = {.extal_hz = oscillator_hz,
                                .timebase_hz = common_hz,

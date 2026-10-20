@@ -64,6 +64,8 @@ public:
   [[nodiscard]] bool clocked() const;
   [[nodiscard]] const McuRunClock &run_clock() const;
   [[nodiscard]] bool timing_faulted() const;
+  // Validate a healthy inactive native clock boundary without copying state.
+  void validate_run_boundary() const;
   // Explicit pre-cycle pad observations; external callbacks are never checkpointed.
   void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
   void set_wait_observer(std::function<void(McuWaitCycle)> observer);
