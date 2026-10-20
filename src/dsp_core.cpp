@@ -5,6 +5,7 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_native_access.hpp"
+#include "blofeld/dsp_reference_execution.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
@@ -13,6 +14,7 @@
 #include "dsp56kEmu/registers.h"
 #include "dsp56kEmu/types.h"
 #include "dsp_native_access.hpp"
+#include "dsp_reference_execution.hpp"
 
 #include <bit>
 #include <cstddef>
@@ -110,7 +112,7 @@ public:
       bus_.acknowledge_interrupt(interrupt_->request);
       interrupt_.reset();
     } else {
-      second = bus_.peek_program(address + 1);
+      second = native_.peek_program(address + 1);
     }
     return true;
   }
@@ -139,11 +141,8 @@ private:
 
 class Peripherals final : public dsp56k::IPeripherals {
 public:
-  Peripherals(DspBus &bus, DspNativeBus &native, const DspSpace area)
-      : IPeripherals(dsp56k::PeripheralType::PeripheralsCustom),
-        bus_(bus),
-        native_(native),
-        area_(area) {}
+  Peripherals(DspNativeBus &native, const DspSpace area)
+      : IPeripherals(dsp56k::PeripheralType::PeripheralsCustom), native_(native), area_(area) {}
 
   dsp56k::TWord read(const dsp56k::TWord address, dsp56k::Instruction /*instruction*/) override {
     return native_.read({.space = area_, .address = address});
@@ -172,7 +171,7 @@ public:
   std::uint32_t exec() override { return MaxDelayCycles; }
 
   void reset() override {
-    if (area_ == DspSpace::x) { bus_.reset_peripherals(); }
+    if (area_ == DspSpace::x) { native_.reset_peripherals(); }
   }
 
   void setSymbols(dsp56k::Disassembler & /*disassembler*/) const override {}
@@ -180,7 +179,6 @@ public:
   void terminate() override {}
 
 private:
-  DspBus &bus_;
   DspNativeBus &native_;
   DspSpace area_;
 };
@@ -197,9 +195,14 @@ std::uint64_t register_value(const dsp56k::DSP &cpu, const dsp56k::EReg reg) {
 }
 
 struct DspCoreCheckpoint::Storage {
-  explicit Storage(dsp56k::DSP::ReferenceState state) : cpu(std::move(state)) {}
+  Storage(dsp56k::DSP::ReferenceState state,
+          const DspReferenceState &reference_state,
+          const std::uint64_t serial)
+      : cpu(std::move(state)), reference(reference_state), generation(serial) {}
 
   const dsp56k::DSP::ReferenceState cpu;
+  const DspReferenceState reference;
+  const std::uint64_t generation;
 };
 
 DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
@@ -214,8 +217,8 @@ public:
         native(board),
         access(board, native),
         memory(access, address_space, native_xy_words, 0),
-        peripherals_x(board, native, DspSpace::x),
-        peripherals_y(board, native, DspSpace::y),
+        peripherals_x(native, DspSpace::x),
+        peripherals_y(native, DspSpace::y),
         cpu(memory, &peripherals_x, &peripherals_y) {
     static_assert(!dsp56k::g_useJIT);
   }
@@ -229,6 +232,40 @@ public:
     }
   }
 
+  void reset_reference() {
+    auto next_owner = std::make_shared<const bool>(true);
+    native.reference().clear();
+    reference_base.reset();
+    reference_owner = std::move(next_owner);
+    generation = 0;
+  }
+
+  void restore_reference_base() {
+    if (!reference_base) { throw Fault("Native reference instruction lost its base state"); }
+    const DspReferenceScope restoring(native.reference(), DspReferenceMode::restoring);
+    cpu.restoreReferenceState(*reference_base);
+  }
+
+  void resume_reference() {
+    restore_reference_base();
+    auto &reference = native.reference();
+    reference.rewind();
+    try {
+      const DspReferenceScope attempting(reference, DspReferenceMode::attempt);
+      cpu.execReference();
+      reference.verify_complete();
+    } catch (const DspReferenceYield &) {
+      access.reset();
+      restore_reference_base();
+      return;
+    }
+    // Validate native continuation constraints without publishing a partial step.
+    static_cast<void>(cpu.referenceState());
+    bus.observe_omr(word(cpu.regs().omr));
+    reference.clear();
+    reference_base.reset();
+  }
+
   DspBus &bus;
   DspNativeBus native;
   MemoryAccess access;
@@ -239,6 +276,9 @@ public:
   bool faulted = false;
   bool active = false;
   RunHooks run;
+  std::shared_ptr<const dsp56k::DSP::ReferenceState> reference_base;
+  std::shared_ptr<const bool> reference_owner;
+  std::uint64_t generation = 0;
 };
 
 DspCore::DspCore(DspBus &bus) : impl_(std::make_unique<Impl>(bus)) {
@@ -251,6 +291,7 @@ void DspCore::reset_spi_boot() {
   const ExecutionGuard guard(impl_->active);
   if (impl_->run.reset) { impl_->run.reset(); }
   impl_->faulted = true;
+  impl_->reset_reference();
   impl_->bus.reset();
   impl_->cpu.resetHW();
   impl_->cpu.regs().omr.var = spi_mode;
@@ -261,7 +302,9 @@ void DspCore::reset_spi_boot() {
 }
 
 void DspCore::set_run_hooks(RunHooks hooks) {
-  if (impl_->active) { throw Fault("Cannot configure an active DSP run"); }
+  if (impl_->active || impl_->native.reference().active()) {
+    throw Fault("Cannot configure an active DSP run");
+  }
   impl_->run = std::move(hooks);
 }
 
@@ -274,7 +317,7 @@ std::uint64_t DspCore::native_cycles() const {
 }
 
 unsigned DspCore::next_step_cycles() const {
-  if (impl_->active || impl_->faulted) {
+  if (impl_->active || impl_->faulted || impl_->native.reference().active()) {
     throw Fault("DSP cycle preview requires a healthy completed step");
   }
   const auto before = state();
@@ -303,17 +346,115 @@ DspCoreCheckpoint DspCore::checkpoint() const {
     throw Fault("DSP checkpoint requires a completed reference step or reset");
   }
   impl_->access.verify_interrupt_fetch();
-  return DspCoreCheckpoint(
-      std::make_shared<const DspCoreCheckpoint::Storage>(impl_->cpu.referenceState()));
+  return DspCoreCheckpoint(std::make_shared<const DspCoreCheckpoint::Storage>(
+      impl_->cpu.referenceState(), impl_->native.reference().snapshot(), impl_->generation));
 }
 
 void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
   const ExecutionGuard guard(impl_->active);
   if (!checkpoint.storage_) { throw Fault("Cannot restore an empty native DSP checkpoint"); }
   impl_->faulted = true;
-  impl_->cpu.restoreReferenceState(checkpoint.storage_->cpu);
+  impl_->reset_reference();
+  {
+    const DspReferenceScope restoring(impl_->native.reference(), DspReferenceMode::restoring);
+    impl_->cpu.restoreReferenceState(checkpoint.storage_->cpu);
+  }
+  impl_->native.reference().restore(checkpoint.storage_->reference);
+  impl_->generation = checkpoint.storage_->generation;
+  if (checkpoint.storage_->reference.active) {
+    impl_->reference_base = std::shared_ptr<const dsp56k::DSP::ReferenceState>(
+        checkpoint.storage_, &checkpoint.storage_->cpu);
+  }
   impl_->access.reset();
   impl_->faulted = false;
+}
+
+std::optional<DspReferencePending> DspCore::reference_pending_unchecked() const {
+  const auto &reference = impl_->native.reference();
+  const auto &pending = reference.pending();
+  if (!pending) { return std::nullopt; }
+  return DspReferencePending{.effect = *pending,
+                             .ticket = DspReferenceTicket(impl_->reference_owner,
+                                                          {.generation = impl_->generation,
+                                                           .record = reference.pending_index()})};
+}
+
+std::optional<DspReferencePending> DspCore::reference_pending() const {
+  if (impl_->active || impl_->faulted) {
+    throw Fault("Native reference inspection requires a healthy suspension boundary");
+  }
+  return reference_pending_unchecked();
+}
+
+DspReferenceProgress
+DspCore::reference_progress(std::optional<DspReferenceEffect> completed) const {
+  return {.completed = completed,
+          .pending = reference_pending_unchecked(),
+          .retired = !impl_->native.reference().active()};
+}
+
+DspReferenceProgress DspCore::begin_reference_instruction(const DspReferenceExecution contract) {
+  if (impl_->active || impl_->faulted || impl_->native.reference().active() ||
+      contract != DspReferenceExecution::access_boundaries || impl_->run.begin ||
+      impl_->run.complete || impl_->run.failed || impl_->run.reset) {
+    throw Fault(
+        "Native access suspension requires an explicit healthy unclocked instruction boundary");
+  }
+  const auto before = state();
+  constexpr unsigned mask_shift = 8;
+  constexpr unsigned interrupt_mask = 3;
+  const auto interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
+  if (interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc))) {
+    throw Fault("Unqualified native reference interrupt entry pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6) + " vector=" + hex(before.vba + interrupt->vector, 6) +
+                " level=" + std::to_string(interrupt->level));
+  }
+  if (impl_->generation == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("Native reference owner exhausted its instruction generations");
+  }
+  const ExecutionGuard guard(impl_->active);
+  try {
+    impl_->invalidate();
+    impl_->access.verify_interrupt_fetch();
+    impl_->reference_base =
+        std::make_shared<const dsp56k::DSP::ReferenceState>(impl_->cpu.referenceState());
+    ++impl_->generation;
+    impl_->native.reference().begin({.pc = before.pc, .omr = before.omr});
+    impl_->resume_reference();
+    return reference_progress();
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault("DSP reference instruction pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) +
+                ": " + error.what());
+  } catch (...) {
+    impl_->faulted = true;
+    throw Fault("Non-standard DSP reference instruction failure pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6));
+  }
+}
+
+DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
+  const auto &reference = impl_->native.reference();
+  if (impl_->active || impl_->faulted || !reference.pending() ||
+      ticket.owner_ != impl_->reference_owner || ticket.position_.generation != impl_->generation ||
+      ticket.position_.record != reference.pending_index()) {
+    throw Fault("Stale, foreign or unavailable native reference access ticket");
+  }
+  const auto before = state();
+  const ExecutionGuard guard(impl_->active);
+  try {
+    auto completed = impl_->native.reference().commit();
+    impl_->resume_reference();
+    return reference_progress(completed);
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault("DSP reference admission pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) +
+                ": " + error.what());
+  } catch (...) {
+    impl_->faulted = true;
+    throw Fault("Non-standard DSP reference admission failure pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6));
+  }
 }
 
 DspState DspCore::state() const {
@@ -362,6 +503,9 @@ void DspCore::step() {
 
 void DspCore::step(DspNativeAccessObserver observer) {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
+  if (impl_->native.reference().active()) {
+    throw Fault("Cannot execute an atomic DSP step while a reference access is pending");
+  }
   const ExecutionGuard guard(impl_->active);
   const auto before = state();
   const auto before_cycles = impl_->cpu.getCycles();

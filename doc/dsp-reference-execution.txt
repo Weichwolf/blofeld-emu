@@ -1,0 +1,61 @@
+Native DSP reference access continuation
+
+DspMachine::begin_reference_instruction(DspReferenceExecution::access_boundaries)
+starts one ordinary native interpreter instruction and returns its first pending
+effect. advance_reference_access(ticket) performs that effect on the strict bus
+once, then returns the next pending effect or retirement. reference_pending()
+only inspects a healthy boundary. A loaded REP body without memory accesses can
+retire during begin. Opcode, consumed extension, data read/write, specialized
+peripheral bit operation and software peripheral reset are explicit effects.
+
+This is a single-threaded, unclocked reference execution contract. Access ordinals
+describe interpreter order; they are not silicon clocks or pipeline stages. In
+particular, serial X/Y effects do not establish separate hardware cycles. The
+existing clocked owner and automatic active-DMA timing rejection remain intact.
+Accepted interrupt entry rejects before vector fetch or acknowledgement; callers
+can explicitly use the established atomic step path for entry. Masked/deferred
+interrupts do not prevent an ordinary instruction from using this contract.
+
+The owner supplies an opaque ticket for the current effect. Default, foreign,
+already consumed and old-generation tickets reject without consuming the real
+pending effect. Reset and coordinated restore invalidate previously issued
+tickets; query the restored machine for a fresh ticket. Tickets are process-local
+capabilities, not serialized inputs or externally supplied arbitration proofs.
+
+The adapter retains an immutable instruction-start native state and at most 64
+records of admitted effects and decoder lookahead. It recomputes native arithmetic
+from that state until the next unadmitted effect, checking the completed prefix
+without repeating real bus I/O. Real reads retain their actual captured values;
+real writes and resets execute once. Decoder lookahead retains its prior metadata
+view, but a later consumed extension reads the then-current actual bus word.
+Register state and native counters remain at the instruction start while paused;
+all architected updates publish together at retirement. Completed bus effects
+remain visible between admissions. Reset aborts continuation through the existing
+real reset path. Bounds, prefix mismatches and unsupported accesses fail visibly.
+
+An immutable DspCheckpoint captures the native base, admitted prefix, pending
+effect and actual bus/peripheral state together. Restore creates a replacement
+owner and never replays already completed I/O. Admission failure quarantines the
+core; a failed instruction cannot be captured or retried. Recovery requires a
+previous trusted coordinated checkpoint. Observer callbacks remain read-only,
+are not retained in these snapshots, and cannot act as admission callbacks.
+
+  cmake --build --preset strict --target blofeld-reference-access-test
+  ctest --test-dir build/strict -R '^dsp_reference_access$' --output-on-failure
+
+Own programs check actual FIFO consumption with its next word externally drained,
+extension/code mutation, two restores of a pending store, exact postincrements,
+bit-operation prior values, software reset, strict unknown/ROM faults and recovery,
+ticket ownership, loaded legal REP bodies and interrupt/clocked-owner guards.
+Explicit bank arbitration combines real pending native stores/loads with a held
+DMA word: a later source overwrite must not replace its already captured value,
+and two coordinated restores must deliver that value to the actual native load.
+
+The public project headers and library must match when adopting this API. This
+increment does not change the prepared native SDK interface or its source patch.
+Existing frozen consumer bundles remain frozen until deliberately rebuilt.
+
+Limits: native state/cache copies allocate and yielding uses exceptions. This
+path does not belong in a real-time audio callback. IRQ-entry suspension, physical
+pipeline/grouping/interlocks, elapsed stall clocks, dynamic deadline placement,
+original full boot and audio, and real-device equivalence remain unqualified.

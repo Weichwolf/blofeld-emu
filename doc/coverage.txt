@@ -641,6 +641,16 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           reads, REP and IRQ acknowledgement.
                                           Semantic order is not DMA/core bus
                                           timing (dsp-native-access.txt).
+                                          Explicit unclocked native continuation
+                                          suspends before actual effects, retains
+                                          captured FIFO/extension values and
+                                          admits each effect once. Trusted pending
+                                          snapshots retain real held-DMA/core
+                                          loads; two restores preserve the old
+                                          sampled word despite source overwrite.
+                                          Semantic order is not pipeline timing;
+                                          IRQ entry and real-time bounds remain
+                                          open (dsp-reference-execution.txt).
                                           Immutable native DSP/bus checkpoints
                                           retain registers, full stack, REP/DO,
                                           IRQ continuation, RAM/ROM knowledge,

@@ -1,7 +1,8 @@
 DSP in-process checkpoints
 
 DspMachine owns a native DspCore and its strict DspBus. checkpoint() captures an
-immutable trusted instruction-boundary state; restore() constructs a replacement
+immutable trusted instruction-boundary or healthy reference-access suspension
+state; restore() constructs a replacement
 machine before publishing it. Allocation or validation failure leaves the live
 machine untouched. A prior valid checkpoint can recover a rejected core, but a
 failed step itself cannot be captured. Restore invalidates bus/CPU references;
@@ -23,6 +24,10 @@ Captured state
   flags and reset/interrupt delays; PLL command/PINIT knowledge; GPIO controls,
   latches and external observations; timer counts, phases, capture state and
   interrupt-priority/controller state.
+- For the explicit unclocked access-continuation profile: instruction-start native
+  state, captured admitted effects/lookahead and the pending real effect. The bus
+  snapshot includes already completed side effects. Restore invalidates old access
+  tickets; query a fresh ticket before admission (dsp-reference-execution.txt).
 
 The native adapter canonicalizes deferred CCR updates, as existing architectural
 state reads already do. Opcode dispatch is rebuilt; cached diagnostic cycle

@@ -47,6 +47,10 @@ reentry, loaded REP checkpoint replay and fast-vector acknowledgement/recovery.
 These observations are prerequisites for native DMA bus integration, not a
 grant/stall/enable-latency model or evidence of original firmware audio.
 
+The separate unclocked owner API in dsp-reference-execution.txt can suspend before
+actual effects and admit them explicitly. It preserves these observer rules and
+does not infer hardware cycle placement from semantic access order.
+
 Consumers adopting the new prepared SDK must rebuild with matching headers and
 native libraries: IMemoryValidator has an additional virtual hook. The pinned
 SDK checkout and existing frozen consumer bundles are not modified. All source

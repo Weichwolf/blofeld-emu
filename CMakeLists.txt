@@ -117,7 +117,8 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
   src/dsp_run_clock.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
-add_library(blofeld_dsp src/dsp_core.cpp src/dsp_native_access.cpp src/dsp_machine.cpp src/dsp_scheduled_run.cpp
+add_library(blofeld_dsp src/dsp_core.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
+  src/dsp_machine.cpp src/dsp_scheduled_run.cpp
   src/dsp_scheduled_events.cpp)
 target_include_directories(blofeld_dsp PUBLIC include)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
@@ -153,6 +154,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-repeat-test test/dsp_repeat_test.cpp)
   target_link_libraries(blofeld-repeat-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_repeat_restrictions COMMAND blofeld-repeat-test)
+  add_executable(blofeld-reference-access-test test/dsp_reference_test.cpp
+    test/dsp_reference_core.cpp test/dsp_reference_dma.cpp)
+  target_link_libraries(blofeld-reference-access-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_reference_access COMMAND blofeld-reference-access-test)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
@@ -648,6 +653,7 @@ add_custom_target(quality
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-bank-test
     blofeld-repeat-test
+    blofeld-reference-access-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test

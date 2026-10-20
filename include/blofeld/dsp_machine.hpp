@@ -5,6 +5,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
+#include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
 #include <cstdint>
@@ -63,6 +64,10 @@ public:
   [[nodiscard]] bool timing_faulted() const;
   // Nominal completion preview only; no instruction, peripheral or clock advance.
   [[nodiscard]] DspStepPlan plan_step() const;
+  // Untimed owner-controlled access suspension; no automatic IRQ entry or clocking.
+  [[nodiscard]] DspReferenceProgress begin_reference_instruction(DspReferenceExecution contract);
+  [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
+  [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
   [[nodiscard]] DspDmaBusResult advance_dma(DspDmaInputs inputs, DspCoreBusUse core);
   void observe_dax(DspDaxInputs inputs);

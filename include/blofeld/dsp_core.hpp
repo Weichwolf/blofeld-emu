@@ -3,11 +3,13 @@
 
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_native_access.hpp"
+#include "blofeld/dsp_reference_execution.hpp"
 
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace blofeld {
 
@@ -94,6 +96,12 @@ private:
   [[nodiscard]] DspCoreCheckpoint checkpoint() const;
   void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
   [[nodiscard]] bool executing() const;
+  [[nodiscard]] DspReferenceProgress begin_reference_instruction(DspReferenceExecution contract);
+  [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
+  [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
+  [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;
+  [[nodiscard]] DspReferenceProgress
+  reference_progress(std::optional<DspReferenceEffect> completed = std::nullopt) const;
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

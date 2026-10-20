@@ -6,6 +6,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
+#include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
 #include <exception>
@@ -173,6 +174,20 @@ DspStepPlan DspMachine::plan_step() const {
     throw Fault("DSP run plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
                 ": " + error.what());
   }
+}
+
+DspReferenceProgress DspMachine::begin_reference_instruction(const DspReferenceExecution contract) {
+  if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
+  return state_->cpu.begin_reference_instruction(contract);
+}
+
+DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTicket &ticket) {
+  if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
+  return state_->cpu.advance_reference_access(ticket);
+}
+
+std::optional<DspReferencePending> DspMachine::reference_pending() const {
+  return state_->cpu.reference_pending();
 }
 
 DspCheckpoint DspMachine::checkpoint() const {

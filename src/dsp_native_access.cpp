@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_native_access.hpp"
+#include "dsp_reference_execution.hpp"
 
 #include <array>
 #include <cstdint>
@@ -63,6 +64,7 @@ void DspNativeBus::after(DspNativeAccess access, const std::uint32_t value) cons
 }
 
 std::uint32_t DspNativeBus::read(const DspAddress target, const DspNativeAccessKind kind) {
+  if (reference_.intercepting()) { return reference_.read(target, kind); }
   if (!observer_.observe) { return bus_.read(target); }
   const auto access = before({.kind = kind, .target = target});
   const auto value = bus_.read(target);
@@ -71,6 +73,10 @@ std::uint32_t DspNativeBus::read(const DspAddress target, const DspNativeAccessK
 }
 
 void DspNativeBus::write(const DspStore target) {
+  if (reference_.intercepting()) {
+    reference_.write(target);
+    return;
+  }
   if (!observer_.observe) {
     bus_.write(target);
     return;
@@ -84,6 +90,10 @@ void DspNativeBus::write(const DspStore target) {
 
 std::optional<bool> DspNativeBus::bit(const DspBitAccess target) {
   const DspAddress address{.space = target.space, .address = target.address};
+  if (reference_.intercepting()) {
+    if (!DspBus::handles_peripheral_bit(address)) { return std::nullopt; }
+    return reference_.bit(target);
+  }
   if (!observer_.observe || !DspBus::handles_peripheral_bit(address)) {
     return bus_.access_peripheral_bit(target);
   }
@@ -95,6 +105,18 @@ std::optional<bool> DspNativeBus::bit(const DspBitAccess target) {
   if (!value) { throw Fault("DSP peripheral bit route changed during native observation"); }
   after(access, *value ? 1U : 0U);
   return value;
+}
+
+std::uint32_t DspNativeBus::peek_program(const std::uint32_t address) {
+  return reference_.intercepting() ? reference_.peek_program(address) : bus_.peek_program(address);
+}
+
+void DspNativeBus::reset_peripherals() {
+  if (reference_.intercepting()) {
+    reference_.reset_peripherals();
+  } else {
+    bus_.reset_peripherals();
+  }
 }
 
 DspNativeAccessScope::DspNativeAccessScope(DspNativeBus &bus,
