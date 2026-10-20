@@ -174,6 +174,16 @@ void serial(Config &config, std::istringstream &line) {
   }
 }
 
+ReturnRoute return_route(std::istringstream &line) {
+  ReturnRoute result{.destination = port(line), .mask = pin(line)};
+  const auto polarity = token(line);
+  if (polarity != "direct" && polarity != "inverted") {
+    throw Fault("SHI return polarity must be direct or inverted");
+  }
+  result.inverted = polarity == "inverted";
+  return result;
+}
+
 void setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "clock") {
     clocks(config, line);
@@ -192,6 +202,10 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
     if (config.operations == 0) {
       throw Fault("Reference-board operation budget must be positive");
     }
+  } else if (key == "shi-hreq") {
+    config.hreq = return_route(line);
+  } else if (key == "shi-miso") {
+    config.miso = return_route(line);
   } else if (key == "loopback") {
     const Loopback route{.source = port(line),
                          .source_mask = pin(line),
@@ -264,6 +278,7 @@ Config parse(const std::string &text) {
     }
   }
   parser.complete();
+  validate_returns(parser.result);
   return parser.result;
 }
 }

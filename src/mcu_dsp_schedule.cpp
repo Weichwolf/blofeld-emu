@@ -101,11 +101,13 @@ void McuDspSchedule::consumed() const {
   }
 }
 
-void McuDspSchedule::advance(const DspScheduleBoundary boundary, const DspObserver &before_dsp) {
+void McuDspSchedule::advance(const DspScheduleBoundary boundary,
+                             const DspObserver &before_dsp,
+                             const DspCompletionObserver &after_dsp) {
   if (end_ticks_ < inputs_.dsp.epoch_ticks) { return; }
   try {
     dsp_schedule_.advance_to(
-        dsp_, end_ticks_, boundary, inputs_.maximum_dsp_steps_per_cycle, before_dsp);
+        dsp_, end_ticks_, boundary, inputs_.maximum_dsp_steps_per_cycle, before_dsp, after_dsp);
   } catch (const Fault &fault) {
     if (wait_context_) {
       throw Fault("Scheduled idle peer execution mcu-pc=" + hex(wait_context_->pc) +
@@ -133,7 +135,8 @@ void McuDspSchedule::offer_period() {
 
 void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
                                  const bool shared_write,
-                                 const DspObserver &before_dsp) {
+                                 const DspObserver &before_dsp,
+                                 const DspCompletionObserver &after_dsp) {
   healthy();
   const Guard guard(*this);
   consumed();
@@ -148,10 +151,10 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
   offered_ = true;
   shared_write_ = shared_write;
   if (!shared_write) {
-    advance(DspScheduleBoundary::through, before_dsp);
+    advance(DspScheduleBoundary::through, before_dsp, after_dsp);
     return;
   }
-  advance(DspScheduleBoundary::before, before_dsp);
+  advance(DspScheduleBoundary::before, before_dsp, after_dsp);
   const bool tie = end_ticks_ >= inputs_.dsp.epoch_ticks &&
                    dsp_schedule_.next_completion_ticks(dsp_) == end_ticks_;
   if (tie) {
@@ -166,13 +169,14 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
     }
   }
   if (!tie || inputs_.shared_write_order != McuDspTieOrder::mcu_before_dsp) {
-    advance(DspScheduleBoundary::through, before_dsp);
+    advance(DspScheduleBoundary::through, before_dsp, after_dsp);
   }
 }
 
 void McuDspSchedule::observe_write(const BusEvent &event,
                                    const std::function<void()> &observe_signals,
-                                   const DspObserver &before_dsp) {
+                                   const DspObserver &before_dsp,
+                                   const DspCompletionObserver &after_dsp) {
   healthy();
   const Guard guard(*this);
   consumed();
@@ -182,7 +186,7 @@ void McuDspSchedule::observe_write(const BusEvent &event,
   }
   observe_signals();
   consumed();
-  advance(DspScheduleBoundary::through, before_dsp);
+  advance(DspScheduleBoundary::through, before_dsp, after_dsp);
   shared_write_ = false;
 }
 
@@ -193,7 +197,9 @@ void McuDspSchedule::end_instruction() {
   finish_boundary();
 }
 
-void McuDspSchedule::begin_wait_period(const McuWaitPeriod period, const DspObserver &before_dsp) {
+void McuDspSchedule::begin_wait_period(const McuWaitPeriod period,
+                                       const DspObserver &before_dsp,
+                                       const DspCompletionObserver &after_dsp) {
   healthy();
   const Guard guard(*this);
   consumed();
@@ -209,7 +215,7 @@ void McuDspSchedule::begin_wait_period(const McuWaitPeriod period, const DspObse
   wait_context_ = period.context;
   offer_period();
   ++expected_idle_cycles_;
-  advance(DspScheduleBoundary::through, before_dsp);
+  advance(DspScheduleBoundary::through, before_dsp, after_dsp);
   wait_context_.reset();
 }
 

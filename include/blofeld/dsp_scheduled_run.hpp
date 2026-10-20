@@ -41,6 +41,12 @@ struct DspScheduledStep {
   DspStepPlan plan;
 };
 
+// Distinct from the pre-step callback: runs only after native CPU/clock effects
+// and completed-step accounting commit. Callback failures quarantine the schedule.
+struct DspCompletionObserver {
+  std::function<void(const DspScheduledStep &)> observe;
+};
+
 // Single-threaded nominal completion experiment. Instruction reads/effects are
 // observed at their declared completion boundary, not physical pipeline phases.
 // No MCU reference, pin policy or external clock advance is retained here.
@@ -53,7 +59,8 @@ public:
                       std::uint64_t horizon,
                       DspScheduleBoundary boundary,
                       unsigned maximum_steps,
-                      const std::function<void(const DspScheduledStep &)> &before_step = {});
+                      const std::function<void(const DspScheduledStep &)> &before_step = {},
+                      const DspCompletionObserver &after_step = {});
   [[nodiscard]] DspScheduleCheckpoint checkpoint(const DspMachine &machine) const;
   [[nodiscard]] std::uint64_t next_completion_ticks(const DspMachine &machine) const;
   void restore(const DspScheduleCheckpoint &checkpoint, const DspMachine &machine);
@@ -68,7 +75,11 @@ private:
   static void verify(const DspScheduleCheckpoint &state, const DspMachine &machine);
   [[nodiscard]] std::uint64_t deadline(const DspStepPlan &plan) const;
   void complete(DspMachine &machine,
-                const std::function<void(const DspScheduledStep &)> &before_step);
+                const std::function<void(const DspScheduledStep &)> &before_step,
+                const DspCompletionObserver &after_step);
+  void notify_completion(DspMachine &machine,
+                         const DspScheduledStep &step,
+                         const DspCompletionObserver &observer);
   DspScheduleCheckpoint state_;
   bool active_ = false;
   bool faulted_ = false;

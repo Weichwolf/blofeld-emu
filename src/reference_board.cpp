@@ -40,12 +40,14 @@ Board::Board(const Config &config, const Execution &execution)
   dsp_.bus().pll().observe_pinit(config.pinit);
   dsp_.cpu().reset_spi_boot();
   for (const auto &entry : config.initial) { apply(entry); }
-  update_loopback();
+  update_wiring();
   mcu_.set_cycle_observer([this](const auto cycle) { on_cycle(cycle); });
   mcu_.set_wait_period_observer([this](const auto period) {
     check_signals();
     if (schedule_) {
-      schedule_->begin_wait_period(period, [this](const auto &step) { before_dsp(step); });
+      schedule_->begin_wait_period(
+          period, [this](const auto &step) { before_dsp(step); }, return_observer());
+      update_wiring();
     }
   });
   mcu_.bus().set_observer([this](const auto &event) { on_write(event); });
@@ -83,6 +85,7 @@ void Board::release() {
   auto inputs = config_.schedule;
   inputs.dsp.epoch_ticks = ticks();
   schedule_ = std::make_unique<McuDspSchedule>(inputs, mcu_, dsp_);
+  update_wiring();
   if (execution_.trace != nullptr) {
     *execution_.trace << "DSP-RELEASE requested=" << config_.release_ticks << " actual=" << ticks()
                       << " pc=" << hex(dsp_.cpu().state().pc, 6) << '\n';
@@ -95,7 +98,7 @@ void Board::boundary() {
   while (next_event_ < config_.events.size() && config_.events[next_event_].ticks <= ticks()) {
     const auto &event = config_.events[next_event_];
     apply(event);
-    update_loopback();
+    update_wiring();
     if (execution_.trace != nullptr) {
       *execution_.trace << "INPUT requested=" << event.ticks << " actual=" << ticks()
                         << " kind=" << static_cast<unsigned>(event.kind)
@@ -116,7 +119,9 @@ void Board::on_cycle(const Hc12BusCycle cycle) {
   const bool write = cycle.kind == 'w' || cycle.kind == 'W';
   const bool shared =
       write && cycle.address && *cycle.address <= port_b && port_b - *cycle.address < cycle.size;
-  schedule_->begin_cycle(cycle, shared, [this](const auto &step) { before_dsp(step); });
+  schedule_->begin_cycle(
+      cycle, shared, [this](const auto &step) { before_dsp(step); }, return_observer());
+  update_wiring();
 }
 
 void Board::before_dsp(const DspScheduledStep &step) const {

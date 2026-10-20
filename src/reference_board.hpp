@@ -17,6 +17,7 @@
 #include <iosfwd>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace blofeld::reference {
@@ -38,6 +39,12 @@ struct Loopback {
   std::uint8_t destination_mask = 0;
 };
 
+struct ReturnRoute {
+  McuPort destination = McuPort::a;
+  std::uint8_t mask = 0;
+  bool inverted = false;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunContract dsp;
@@ -50,9 +57,13 @@ struct Config {
   std::uint8_t mosi = 0;
   PadOrder pad_order = PadOrder::reject;
   std::optional<Loopback> loopback;
+  std::optional<ReturnRoute> hreq;
+  std::optional<ReturnRoute> miso;
   std::vector<Input> initial;
   std::vector<Input> events;
 };
+
+void validate_returns(const Config &config);
 
 [[nodiscard]] Config load_config(const std::filesystem::path &path);
 [[nodiscard]] std::vector<std::uint32_t> load_rom(const std::filesystem::path &path);
@@ -78,6 +89,11 @@ private:
   void check_signals() const;
   void transition(SpiInputs pins);
   void update_loopback();
+  void update_wiring();
+  void update_return(const std::optional<ReturnRoute> &route,
+                     ShiOutput output,
+                     std::optional<ShiOutput> &previous,
+                     std::string_view name);
   void apply(const Input &input);
   void boundary();
   void step();
@@ -85,6 +101,7 @@ private:
   void on_cycle(Hc12BusCycle cycle);
   void on_write(const BusEvent &event);
   void before_dsp(const DspScheduledStep &step) const;
+  [[nodiscard]] DspCompletionObserver return_observer();
   void report(std::ostream &stream) const;
   void persist() const;
   const Config &config_;
@@ -94,6 +111,9 @@ private:
   std::unique_ptr<McuDspSchedule> schedule_;
   SpiInputs previous_;
   ExecutionContext context_;
+  std::optional<std::uint64_t> return_boundary_;
+  std::optional<ShiOutput> hreq_observed_;
+  std::optional<ShiOutput> miso_observed_;
   std::uint64_t scale_ = 0;
   std::uint64_t instructions_ = 0;
   std::uint64_t operations_ = 0;

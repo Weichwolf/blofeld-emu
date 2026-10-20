@@ -98,3 +98,16 @@ remain pending. The CLI still runs MCU only. No future real-time audio callback
 may inherit these allocating/throwing diagnostic and snapshot facilities.
 Original full boot, MIDI/voices/audio, full update/recovery/persistence/stress and
 stock-hardware equivalence remain unproven. Unknown hardware is not substituted.
+
+Native DSP output delivery
+
+The optional typed DspCompletionObserver is forwarded by begin_cycle,
+observe_write and begin_wait_period. Outputs can therefore reach board-owned
+GPIO after each committed native DSP step, including multiple DSP transitions
+within a single MCU period. Both shared-write tie orders retain their order:
+DSP-before-MCU delivers completion outputs first; MCU-before-DSP delivers the
+actual shared pin change first. Committed WAI still consumes its offered period
+when the completion observer supplies an IRQ. Cancelled pre-input WAI offers
+never call a DSP observer. The scheduler owns no output routing or callbacks.
+Observer failures preserve completed DSP counters and quarantine the schedule.
+A match between CPU/clock/schedule checkpoints is still required for recovery.

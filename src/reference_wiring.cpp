@@ -74,13 +74,14 @@ void Board::transition(const SpiInputs pins) {
     }
   }
   dsp_.bus().shi().observe_spi(pins);
+  update_wiring();
   if (previous_.selected && !pins.selected) { ++frames_; }
   previous_ = pins;
 }
 
 void Board::on_write(const BusEvent &event) {
   if (!event.write) { return; }
-  update_loopback();
+  update_wiring();
   if (execution_.trace != nullptr) {
     *execution_.trace << "WRITE cycle=" << mcu_.run_clock().bus_cycles()
                       << " address=" << hex(event.address) << " value=" << hex(event.value, 2)
@@ -108,6 +109,8 @@ void Board::on_write(const BusEvent &event) {
                             << " frames=" << frames_ << '\n';
         }
       },
-      [this](const auto &step) { before_dsp(step); });
+      [this](const auto &step) { before_dsp(step); },
+      return_observer());
+  update_wiring();
 }
 }

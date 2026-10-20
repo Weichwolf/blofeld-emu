@@ -130,10 +130,21 @@ add_library(blofeld_mcu_dsp src/mcu_dsp_schedule.cpp)
 target_include_directories(blofeld_mcu_dsp PUBLIC include)
 target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
-  src/reference_board.cpp src/reference_wiring.cpp)
+  src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-completion-observer-test test/dsp_completion_observer.cpp)
+  target_link_libraries(blofeld-dsp-completion-observer-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_completion_observer COMMAND blofeld-dsp-completion-observer-test)
+  add_executable(blofeld-reference-rom-fixture test/reference_rom.cpp)
+  target_link_libraries(blofeld-reference-rom-fixture PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME reference_shi_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_shi_cli.py"
+    $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-rom-fixture>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-shi-cli")
+  set_tests_properties(reference_shi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-mcu-dsp-schedule-test test/mcu_dsp_schedule_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_schedule COMMAND blofeld-mcu-dsp-schedule-test)
@@ -423,6 +434,13 @@ if(BUILD_TESTING)
     test/original_owned_clock_fixture.cpp)
   target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp blofeld_mcu_dsp
     blofeld_dsp_native blofeld_lcd_fixture)
+  add_test(NAME original_shi_routes COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_shi_routes.py"
+    $<TARGET_FILE:blofeld-headless>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-shi-routes")
+  set_tests_properties(original_shi_routes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_test(NAME original_reference_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reference_cli.py"
     $<TARGET_FILE:blofeld-headless>
@@ -576,7 +594,8 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+  DEPENDS format-check blofeld-headless blofeld-reference-rom-fixture
+    blofeld-dsp-completion-observer-test blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test
     blofeld-mcu-dsp-wait-test
     blofeld-hc12-cycle-test

@@ -302,6 +302,13 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           words before the strict Y:002000 fault;
                                           an independent decoder compares the wire
                                           payload with the pinned MCU image.
+                                          Native SHI HREQ/MISO return routes keep
+                                          driven/unknown/Hi-Z states distinct;
+                                          real MCU bit reads and sub-period HREQ
+                                          edge IRQ/WAI wake checked. Original PU0
+                                          candidate routes expose contention,
+                                          missing readiness or a bounded wait
+                                          (reference-board.txt).
                                           MISO/HREQ/PU0 linkage, actual routing,
                                           reset, physical elapsed clocks and full
                                           scheduling remain unqualified.

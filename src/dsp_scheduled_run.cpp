@@ -51,7 +51,8 @@ std::uint64_t DspScheduledRun::deadline(const DspStepPlan &plan) const {
 }
 
 void DspScheduledRun::complete(DspMachine &machine,
-                               const std::function<void(const DspScheduledStep &)> &before_step) {
+                               const std::function<void(const DspScheduledStep &)> &before_step,
+                               const DspCompletionObserver &after_step) {
   if (!state_.pending_) { throw Fault("DSP scheduler has no prepared instruction"); }
   const auto plan = *state_.pending_;
   const auto completion = deadline(plan);
@@ -70,6 +71,25 @@ void DspScheduledRun::complete(DspMachine &machine,
   state_.completed_cycles_ = clock.native_cycle_units();
   ++state_.steps_;
   state_.pending_.reset();
+  notify_completion(machine, {.completion_ticks = completion, .plan = plan}, after_step);
+}
+
+void DspScheduledRun::notify_completion(DspMachine &machine,
+                                        const DspScheduledStep &step,
+                                        const DspCompletionObserver &observer) {
+  const auto observe = observer.observe;
+  if (!observe) { return; }
+  const auto expected = machine.cpu().debug_state();
+  try {
+    observe(step);
+    verify(state_, machine);
+    if (machine.cpu().debug_state() != expected) {
+      throw Fault("Post-completion callback changed the native CPU state");
+    }
+  } catch (const std::exception &error) {
+    throw Fault("DSP post-completion observation at=" + std::to_string(step.completion_ticks) +
+                " completed-steps=" + std::to_string(state_.steps_) + ": " + error.what());
+  }
 }
 
 unsigned
@@ -77,7 +97,8 @@ DspScheduledRun::advance_to(DspMachine &machine,
                             const std::uint64_t horizon,
                             const DspScheduleBoundary boundary,
                             const unsigned maximum_steps,
-                            const std::function<void(const DspScheduledStep &)> &before_step) {
+                            const std::function<void(const DspScheduledStep &)> &before_step,
+                            const DspCompletionObserver &after_step) {
   if (active_ || faulted_) { throw Fault("DSP scheduler requires a healthy inactive boundary"); }
   active_ = true;
   unsigned completed = 0;
@@ -98,7 +119,7 @@ DspScheduledRun::advance_to(DspMachine &machine,
       if (end > horizon || (end == horizon && boundary == DspScheduleBoundary::before)) { break; }
       if (completed == maximum_steps) { throw Fault("DSP scheduled instruction budget exhausted"); }
       attempted_completion = end;
-      complete(machine, before_step);
+      complete(machine, before_step, after_step);
       attempted_completion.reset();
       ++completed;
     }

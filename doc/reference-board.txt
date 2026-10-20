@@ -59,6 +59,34 @@ leaves the destination unknown: high impedance is not inferred, and a receiver
 pull cannot validate an unknown source driver. A required unresolved input fails.
 This is explicit test wiring, not a physical circuit model.
 
+Optional native SHI return routes:
+shi-hreq U 01 inverted
+shi-miso P 01 direct
+
+These declare destination port/one-bit mask and polarity (direct or inverted).
+They are logical caller experiments, not a physical HREQ/PU0/MISO pin map.
+Known driven levels propagate with the selected polarity. Disabled drivers are
+high impedance and permit actual MCU receiver pulls to resolve the pad. Driven
+unknown levels stay unknown even with a receiver pull. Polarity affects known
+driven levels; high impedance stays high impedance. External board pull circuits,
+open-drain buffers, propagation delay and synchronizers are not inferred.
+
+Each completed native DSP instruction supplies its outputs at the declared DSP
+completion tick, before any later DSP instruction or MCU endpoint. Every completed
+SPI pin transition also supplies outputs in the selected shared-write order.
+Native IRQ edge history therefore sees pulses entirely within one MCU period;
+WAI still consumes a committed period when that period's DSP execution supplies
+an IRQ. MCU TIM sampling retains its existing run/wait gates and sampling order.
+Initial reset-disabled outputs are observed after the completed MCU reset.
+
+Routes own only their destination bit. Other explicit external drive bits survive
+all updates. An explicit initial/timed drive or floating declaration on the same
+bit rejects; duplicate return destinations and loopback destination conflicts
+reject. Return destinations cannot feed SS/SCK/MOSI; SPI input loopbacks together
+with return routes are unqualified. MCU output contention fails with both PCs.
+An unconnected unknown SHI output does not become a required MCU input.
+A loopback may forward a return destination to a distinct non-SPI destination.
+
 External inputs:
 initial drive E fb 03 00
 at 10000 drive U 3f 01 00
@@ -107,6 +135,17 @@ writes/97 frames into the same strict Y:002000 write fault as the library fixtur
 An independent Python GPIO decoder compares every transmitted word with the
 original MCU image. The fault occurs in the MCU's real final boot delay after
 59286 completed DSP steps; no loop is skipped or memory silently extended.
-This scenario uses reference input/ready times, not measured board signals.
+This baseline scenario uses reference input/ready times, not measured signals.
+reference_shi_cli.py additionally verifies actual native transmit/receive-ready
+signals, 24 individual MCU MISO reads, both HTX/select tie orders,
+driven-unknown/Hi-Z/pull distinctions,
+output contention and native WAI/IRQ entry/RTI, including an 18-common-tick HREQ
+pulse wholly inside one 90-tick MCU idle period.
+original_shi_routes.py constrains three simple HREQ-to-PU0 hypotheses under the
+same explicitly supplied clocks: an earlier inverted release contends with the
+MCU's still-low PU0 output; a release at its first poll leaves a required input
+unknown; the earlier direct route stays not-ready until the explicit budget.
+No forced ready event occurs in these cases. These are reference observations,
+not proof of physical pin roles or the missing electrical/reset topology.
 Physical reset/pad/HREQ routing, complete DSP ROM, original DSP main boot,
 MIDI/audio and hardware equivalence remain pending.

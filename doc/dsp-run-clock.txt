@@ -80,3 +80,18 @@ time, original audio, reset timing and hardware equivalence remain pending.
 The separate completion scheduler and original MCU/DSP common-time experiment
 are documented in scheduled-coupling.txt. plan_step() is a pure nominal preview;
 reference accounting uses the executed/latched word even after code mutation.
+
+Post-completion observations
+
+DspScheduledRun::advance_to optionally accepts a typed DspCompletionObserver
+after the existing pre-step callback. It runs only after native CPU/clock effects
+and completed-step accounting commit, at the same DspScheduledStep deadline.
+It may observe outputs and deliver external board signals; it must not advance
+or restore the DSP owner. Active schedule capture/restore/reentry rejects.
+An observation failure quarantines the schedule while retaining the completed
+native prefix; diagnostics distinguish that prefix from the attempted deadline.
+Coordinated trusted owner/schedule recovery is required. The active completion callback is value-copied before invocation, so clearing
+its source cannot destroy the running callable. Callback objects are not
+checkpoint state. Existing callers with no completion observer retain their
+previous nominal timing, deadlines and fault boundaries. Public C++ call
+signatures changed: rebuild scheduler consumers with the matching headers/libs.
