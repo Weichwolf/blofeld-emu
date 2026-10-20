@@ -27,11 +27,17 @@ struct DspReferenceLookahead {
 using DspReferenceEntry = std::variant<DspReferenceRecord, DspReferenceLookahead>;
 inline constexpr std::size_t dsp_reference_capacity = 64;
 
+struct DspReferenceInterrupt {
+  DspInterruptRequest request;
+  std::uint32_t address = 0;
+};
+
 struct DspReferenceState {
   std::array<DspReferenceEntry, dsp_reference_capacity> entries{};
   std::size_t used = 0;
   std::optional<DspReferenceEffect> pending = std::nullopt;
   DspNativeAccess context{};
+  std::optional<DspReferenceInterrupt> interrupt;
   bool active = false;
 };
 
@@ -43,7 +49,8 @@ class DspReferenceTape {
 public:
   explicit DspReferenceTape(DspBus &bus) : bus_(bus) {}
 
-  void begin(DspNativeAccess context);
+  void begin(DspNativeAccess context,
+             std::optional<DspReferenceInterrupt> interrupt = std::nullopt);
   void clear();
   void rewind();
   void verify_complete() const;
@@ -53,6 +60,10 @@ public:
   [[nodiscard]] bool intercepting() const { return mode_ != DspReferenceMode::ordinary; }
 
   [[nodiscard]] DspReferenceMode mode() const { return mode_; }
+
+  [[nodiscard]] const std::optional<DspReferenceInterrupt> &interrupt() const {
+    return state_.interrupt;
+  }
 
   void set_mode(DspReferenceMode mode) noexcept { mode_ = mode; }
 
@@ -69,6 +80,7 @@ public:
   void write(DspStore target);
   [[nodiscard]] bool bit(DspBitAccess target);
   void reset_peripherals();
+  void acknowledge_interrupt(DspInterruptRequest request);
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address);
 
 private:

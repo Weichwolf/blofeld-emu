@@ -298,6 +298,8 @@ void profile_guards() {
   const auto before = clocked.cpu().debug_state();
   static_cast<void>(
       fault([&] { static_cast<void>(clocked.begin_reference_instruction(boundaries)); }));
+  static_cast<void>(
+      fault([&] { static_cast<void>(clocked.begin_reference_interrupt(boundaries)); }));
   require(clocked.cpu().debug_state() == before && clocked.run_clock().elapsed_ticks() == 0,
           "Access suspension cannot silently change the existing clocked completion contract");
   clocked.cpu().step();

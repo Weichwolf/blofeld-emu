@@ -154,6 +154,7 @@ int main() {
     ticket_ownership();
     core_checks();
     dma_checks();
+    interrupt_checks();
     std::cout
         << "Native reference access suspension, exact effects and coordinated replay passed.\n";
     return 0;

@@ -181,6 +181,11 @@ DspReferenceProgress DspMachine::begin_reference_instruction(const DspReferenceE
   return state_->cpu.begin_reference_instruction(contract);
 }
 
+DspReferenceProgress DspMachine::begin_reference_interrupt(const DspReferenceExecution contract) {
+  if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
+  return state_->cpu.begin_reference_interrupt(contract);
+}
+
 DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTicket &ticket) {
   if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
   return state_->cpu.advance_reference_access(ticket);

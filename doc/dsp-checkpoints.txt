@@ -28,6 +28,9 @@ Captured state
   state, captured admitted effects/lookahead and the pending real effect. The bus
   snapshot includes already completed side effects. Restore invalidates old access
   tickets; query a fresh ticket before admission (dsp-reference-execution.txt).
+  Explicit interrupt entry also retains its chosen request/priority, both vector
+  words and actual acknowledgement prefix. A newer source is not substituted
+  during restore/recomputation; the native base remains pre-entry while paused.
 
 The native adapter canonicalizes deferred CCR updates, as existing architectural
 state reads already do. Opcode dispatch is rebuilt; cached diagnostic cycle

@@ -128,6 +128,8 @@ public:
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
 private:
+  friend class DspReferenceTape;
+  void acknowledge_latched_interrupt(DspInterruptRequest request);
   enum class Operation : std::uint8_t { read, write };
 
   struct Memory {

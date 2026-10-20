@@ -30,7 +30,10 @@ peripheral's actual read/write sequence. No generic host interrupt FIFO is used.
 
 Both vector words are latched before either executes. A first-slot P store
 cannot replace the second instruction in the same entry. One DspCore step
-executes at most the two vector words atomically. A fast vector
+executes at most the two vector words atomically. The separate explicit unclocked
+begin_reference_interrupt API can suspend before their actual accesses and
+acknowledgement, including a trusted pending checkpoint; see
+dsp-reference-execution.txt. A fast vector
 executes either two single-word instructions or one double-word instruction,
 without advancing foreground PC or implicitly saving SR. A JSR in the first or
 second slot enters a long interrupt using the native JSR stack operation. Its
@@ -70,7 +73,8 @@ Limits
 This is an instruction-boundary architectural reference, not a physical DSP
 pipeline. Interrupt synchronization, recognition/fetch latency, mask-change
 latency, DO endpoint pipeline restrictions and entry-cycle accounting remain
-unqualified. Atomic vector execution provides no sub-instruction pin timing.
+unqualified. Neither atomic entry nor semantic access suspension supplies physical
+sub-instruction pin timing.
 Peripheral clocks still require explicit board inputs; no automatic timer/SHI
 clock ratio is inferred. Other core/peripheral sources, DMA, cache behavior,
 stack extension and full ISA/derivative reset validation remain outstanding.

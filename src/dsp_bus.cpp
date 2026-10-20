@@ -6,6 +6,7 @@
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_timers.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -396,6 +397,22 @@ void DspBus::acknowledge_interrupt(const DspInterruptRequest request) {
   }
   constexpr unsigned first_timer = 0x54;
   if (request.vector >= first_timer) { timers_.acknowledge_interrupt(request.vector); }
+}
+
+void DspBus::acknowledge_latched_interrupt(const DspInterruptRequest request) {
+  const auto priority = interrupts_.priority(request.vector);
+  if (!priority || *priority != request.level) {
+    throw Fault("DSP latched interrupt priority changed before acknowledgement");
+  }
+  constexpr unsigned first_timer = 0x54;
+  if (request.vector >= first_timer) {
+    timers_.acknowledge_interrupt(request.vector);
+  } else {
+    const auto pending = shi_.interrupt_vectors();
+    if (std::ranges::find(pending, request.vector) == pending.end()) {
+      throw Fault("DSP latched interrupt source withdrew before acknowledgement");
+    }
+  }
 }
 
 std::uint32_t DspBus::read_peripheral(const DspAddress access) {

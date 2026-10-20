@@ -59,7 +59,7 @@
 @@ -86 +87 @@
 -		typedef void (*TInterruptFunc)(DSP*) noexcept;
 +		typedef void (*TInterruptFunc)(DSP*);
-@@ -162,0 +164,59 @@
+@@ -162,0 +164,60 @@
 +		bool m_referenceAttempt = false;
 +		bool m_referenceMode = false;
 +		bool m_referenceVectorActive = false;
@@ -115,14 +115,15 @@
 +		ReferenceAttemptState referenceAttemptState() const;
 +		void restoreReferenceAttempt(const ReferenceAttemptState& state);
 +		void execReferenceAttempt();
++		void execReferenceInterruptAttempt(TWord vector, unsigned level);
 +		ReferenceState referenceState() const;
 +		void restoreReferenceState(const ReferenceState& state);
 +	private:
 +		void verifyReferenceCheckpoint() const;
-@@ -189 +249 @@
+@@ -189 +250 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +268,12 @@
+@@ -208 +269,12 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
@@ -136,7 +137,7 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +482,13 @@
+@@ -411,2 +483,13 @@
 -		TWord	fetchOpWordB()
 -		{
 +		TWord memReadExtension(TWord offset) const
@@ -152,10 +153,10 @@
 +				throw std::runtime_error("Unexpected extension in single-word reference REP");
 +			if(!m_referenceVectorActive)
 +				extension = memReadExtension(pcCurrentInstruction + 1);
-@@ -416 +498 @@
+@@ -416 +499 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523,15 +605,8 @@
+@@ -523,15 +606,8 @@
 -		void	sr_s_update				()
 -		{
 -			if( sr_test_noCache(CCR_S) )
@@ -179,15 +180,15 @@
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -726,0 +802 @@
+@@ -726,0 +803 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +812 @@
+@@ -735,0 +813 @@
 +			sr_s_update(reg.b);
-@@ -975,0 +1053 @@
+@@ -975,0 +1054 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1083 @@
+@@ -1004,0 +1084 @@
 +			sr_s_update(_src);
-@@ -1468,0 +1548 @@
+@@ -1468,0 +1549 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -228,7 +229,7 @@
 @@ -264 +279 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +340,306 @@
+@@ -324,0 +340,321 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceAttempt || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -393,6 +394,21 @@
 +		m_referenceAttempt = false;
 +	}
 +
++
++	void DSP::execReferenceInterruptAttempt(const TWord vector, const unsigned level)
++	{
++		verifyReferenceCheckpoint();
++		m_referenceAttempt = true;
++		try {
++			execReferenceInterrupt(vector, level);
++		} catch(...) {
++			m_referenceVectorActive = false;
++			m_referenceAttempt = false;
++			throw;
++		}
++		m_referenceAttempt = false;
++	}
++
 +	uint32_t DSP::referenceCycleCost(const TWord pc, const TWord opcode) const
 +	{
 +		Instruction a, b;
@@ -535,7 +551,7 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -331,0 +653,11 @@
+@@ -331,0 +668,11 @@
 +		if(m_referenceAttempt) {
 +			if(Opcodes::isNonParallelOpcode(op)) {
 +				const auto* info = m_opcodes.findNonParallelOpcodeInfo(op);
@@ -547,16 +563,16 @@
 +			// Always decode the captured word, including loaded REP. Never reuse partial dispatch.
 +			m_opcodeCache.at(currentOp) = {&DSP::op_ResolveCache};
 +		}
-@@ -341 +673 @@
+@@ -341 +688 @@
 -				m_cycles += getOpcodeCycles(currentOp);
 +				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
-@@ -413,0 +746,5 @@
+@@ -413,0 +761,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +829,8 @@
+@@ -491,0 +844,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -565,10 +581,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +871,2 @@
+@@ -525,0 +886,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +951,26 @@
+@@ -603,0 +966,26 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -595,16 +611,16 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1524,0 @@
+@@ -1152,2 +1539,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1527 @@
+@@ -1156 +1542 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1570,0 +1942,2 @@
+@@ -1570,0 +1957,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2056,2 @@
+@@ -1682,0 +2071,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl

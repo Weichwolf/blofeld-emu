@@ -8,13 +8,21 @@ only inspects a healthy boundary. A loaded REP body without memory accesses can
 retire during begin. Opcode, consumed extension, data read/write, specialized
 peripheral bit operation and software peripheral reset are explicit effects.
 
+begin_reference_interrupt uses the same explicit contract for an already eligible
+interrupt. It separately admits both vector words and DspInterruptAcknowledge,
+then the native vector instructions' actual effects. The request/priority and
+absolute vector are retained at entry. Both words are latched before execution;
+an absolute JSR consumes the captured second word as its extension. Entry retires
+the existing fast/long vector operation, possibly two native instructions, rather
+than a foreground instruction. It does not invent an interrupt latency.
+
 This is a single-threaded, unclocked reference execution contract. Access ordinals
 describe interpreter order; they are not silicon clocks or pipeline stages. In
 particular, serial X/Y effects do not establish separate hardware cycles. The
 existing clocked owner and automatic active-DMA timing rejection remain intact.
-Accepted interrupt entry rejects before vector fetch or acknowledgement; callers
-can explicitly use the established atomic step path for entry. Masked/deferred
-interrupts do not prevent an ordinary instruction from using this contract.
+The ordinary instruction call still rejects eligible interrupt entry before any
+fetch or acknowledgement. The separate interrupt call rejects absent, masked and
+REP-deferred requests. The established atomic step path remains available.
 
 The owner supplies an opaque ticket for the current effect. Default, foreign,
 already consumed and old-generation tickets reject without consuming the real
@@ -34,9 +42,14 @@ invalidations may remain; nominal reference costs use the captured opcode.
 The adapter recomputes native arithmetic
 from that state until the next unadmitted effect, checking the completed prefix
 without repeating real bus I/O. Real reads retain their actual captured values;
-real writes and resets execute once. Decoder lookahead retains its prior metadata
+real writes, resets and interrupt acknowledgements execute once. A source that
+reasserts after its admitted acknowledgement is not cleared by recomputation.
+A newer higher-priority source does not replace the chosen entry or get
+acknowledged with it (FM2.3.2.6). A withdrawn source or changed priority rejects
+at actual acknowledgement; dynamic cancellation after acceptance is unqualified.
+Decoder lookahead retains its prior metadata
 view, but a later consumed extension reads the then-current actual bus word.
-Register state and native counters remain at the instruction start while paused;
+Register state and native counters remain at the instruction or entry start while paused;
 all architected updates publish together at retirement. Completed bus effects
 remain visible between admissions. Reset aborts continuation through the existing
 real reset path. Bounds, prefix mismatches and unsupported accesses fail visibly.
@@ -60,6 +73,16 @@ Own programs check actual FIFO consumption with its next word externally drained
 extension/code mutation, two restores of a pending store, exact postincrements,
 bit-operation prior values, software reset, strict unknown/ROM faults and recovery,
 ticket ownership, loaded legal REP bodies and interrupt/clocked-owner guards.
+Separate interrupt tests hold the actual vector reads, acknowledgement and both
+fast-vector stores. Two restores retain completed writes and FIFO data across
+the two native instructions. Independent expectations cover relocated VBA,
+first/second-slot and extended JSR, stack/PC/SR and actual RTI; missing second
+words and withdrawn sources quarantine on actual admission and recover only
+through a trusted checkpoint. Masked and REP-deferred entry remains rejected.
+Later higher-priority SHI arrival preserves the selected timer and its separate
+acknowledgement; an actual subsequent SHI entry leaves FIFO consumption to its
+handler. Invalid native vector execution retains the acknowledged prefix and
+requires a trusted prefetch restore before repair.
 Explicit bank arbitration combines real pending native stores/loads with a held
 DMA word: a later source overwrite must not replace its already captured value,
 and two coordinated restores must deliver that value to the actual native load.
@@ -85,13 +108,16 @@ the current strict map, not the physical chip's reserved-write or pipeline behav
   ctest --test-dir build/strict -R '^original_dsp_boot$' --output-on-failure
 
 Adopting consumers need matching project and prepared native SDK headers/libraries.
-The SDK adds fixed internal rollback/attempt methods and an active-attempt guard;
-the existing full ReferenceState snapshot layout is retained. Existing frozen
-consumer bundles remain frozen until deliberately rebuilt.
+The SDK adds an interrupt-attempt wrapper using the existing fixed rollback and
+cold dispatch. Both attempt/vector-active guards unwind on a yield or failure;
+no partial native frame becomes a snapshot. The full ReferenceState declaration
+is retained. The public effect variant now includes acknowledgement; rebuild
+matching project and native SDK headers/libraries. Existing frozen consumer
+bundles remain frozen until deliberately rebuilt.
 
 Limits: trusted full checkpoints and code-map storage still allocate, native host
 caches remain large, and yielding uses exceptions. Fixed internal rollback does
 not establish allocation-free execution or real-time bounds. This path does not
-belong in a real-time audio callback. IRQ-entry suspension, physical
+belong in a real-time audio callback. IRQ-entry clocking, physical
 pipeline/grouping/interlocks, elapsed stall clocks, dynamic deadline placement,
 original full boot and audio, and real-device equivalence remain unqualified.

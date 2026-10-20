@@ -156,7 +156,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-repeat-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_repeat_restrictions COMMAND blofeld-repeat-test)
   add_executable(blofeld-reference-access-test test/dsp_reference_test.cpp
-    test/dsp_reference_core.cpp test/dsp_reference_dma.cpp)
+    test/dsp_reference_core.cpp test/dsp_reference_dma.cpp test/dsp_reference_interrupts.cpp)
   target_link_libraries(blofeld-reference-access-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_reference_access COMMAND blofeld-reference-access-test)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)

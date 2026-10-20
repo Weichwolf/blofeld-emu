@@ -121,7 +121,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           native fast/long and nested entry,
                                           exact JSR/RTI frames, VBA relocation and
                                           DO/REP interaction checked
-                                          (dsp-interrupts.txt). Other sources,
+                                          (dsp-interrupts.txt). Separate unclocked
+                                          access continuation admits vector words,
+                                          acknowledgement and native effects once;
+                                          later higher-priority sources retain
+                                          their own pending state. Other sources,
                                           stack extension and full latency pending.
                                           Conditional native CPU-cycle SCI/TIM
                                           execution now includes live reception,
@@ -649,8 +653,17 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           loads; two restores preserve the old
                                           sampled word despite source overwrite.
                                           Semantic order is not pipeline timing;
-                                          IRQ entry and real-time bounds remain
+                                          IRQ clocks and real-time bounds remain
                                           open (dsp-reference-execution.txt).
+                                          Explicit untimed interrupt continuation
+                                          retains both actual vector reads and
+                                          admits acknowledgement once. Fast
+                                          stores/FIFO and three relocated long
+                                          JSR forms retain expected registers,
+                                          stack and RTI across two restores;
+                                          missing vectors/withdrawn sources fail
+                                          on admission with trusted recovery.
+                                          Masked/REP-deferred entry rejects.
                                           Internal attempt rollback is trivially
                                           copied and bounded to 1 KiB; full
                                           checkpoints remain allocating. New

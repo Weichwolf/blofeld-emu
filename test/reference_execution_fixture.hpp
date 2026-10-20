@@ -100,4 +100,5 @@ inline void execute(DspMachine &machine) {
 
 void core_checks();
 void dma_checks();
+void interrupt_checks();
 }

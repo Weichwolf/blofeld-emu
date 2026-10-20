@@ -110,7 +110,11 @@ public:
                          vector ? DspNativeAccessKind::vector : DspNativeAccessKind::opcode);
     if (vector) {
       second = native_.read({.address = address + 1}, DspNativeAccessKind::vector);
-      bus_.acknowledge_interrupt(interrupt_->request);
+      if (native_.reference().intercepting()) {
+        native_.reference().acknowledge_interrupt(interrupt_->request);
+      } else {
+        bus_.acknowledge_interrupt(interrupt_->request);
+      }
       interrupt_.reset();
     } else {
       second = native_.peek_program(address + 1);
@@ -255,7 +259,13 @@ public:
     reference.rewind();
     try {
       const DspReferenceScope attempting(reference, DspReferenceMode::attempt);
-      cpu.execReferenceAttempt();
+      if (const auto &interrupt = reference.interrupt()) {
+        access.arm_interrupt(interrupt->request, interrupt->address);
+        cpu.execReferenceInterruptAttempt(interrupt->address, interrupt->request.level);
+        access.verify_interrupt_fetch();
+      } else {
+        cpu.execReferenceAttempt();
+      }
       reference.verify_complete();
     } catch (const DspReferenceYield &) {
       access.reset();
@@ -396,6 +406,15 @@ DspCore::reference_progress(std::optional<DspReferenceEffect> completed) const {
 }
 
 DspReferenceProgress DspCore::begin_reference_instruction(const DspReferenceExecution contract) {
+  return begin_reference_step(contract, false);
+}
+
+DspReferenceProgress DspCore::begin_reference_interrupt(const DspReferenceExecution contract) {
+  return begin_reference_step(contract, true);
+}
+
+DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution contract,
+                                                   const bool interrupt_entry) {
   if (impl_->active || impl_->faulted || impl_->native.reference().active() ||
       contract != DspReferenceExecution::access_boundaries || impl_->run.begin ||
       impl_->run.complete || impl_->run.failed || impl_->run.reset) {
@@ -406,7 +425,13 @@ DspReferenceProgress DspCore::begin_reference_instruction(const DspReferenceExec
   constexpr unsigned mask_shift = 8;
   constexpr unsigned interrupt_mask = 3;
   const auto interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
-  if (interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc))) {
+  const bool accepted =
+      interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc));
+  if (interrupt_entry && !accepted) {
+    throw Fault("No admissible native reference interrupt pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6));
+  }
+  if (!interrupt_entry && accepted) {
     throw Fault("Unqualified native reference interrupt entry pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6) + " vector=" + hex(before.vba + interrupt->vector, 6) +
                 " level=" + std::to_string(interrupt->level));
@@ -420,7 +445,12 @@ DspReferenceProgress DspCore::begin_reference_instruction(const DspReferenceExec
     impl_->access.verify_interrupt_fetch();
     impl_->reference_base = impl_->cpu.referenceAttemptState();
     ++impl_->generation;
-    impl_->native.reference().begin({.pc = before.pc, .omr = before.omr});
+    std::optional<DspReferenceInterrupt> entry;
+    if (interrupt_entry) {
+      entry =
+          DspReferenceInterrupt{.request = *interrupt, .address = before.vba + interrupt->vector};
+    }
+    impl_->native.reference().begin({.pc = before.pc, .omr = before.omr}, entry);
     impl_->resume_reference();
     return reference_progress();
   } catch (const std::exception &error) {

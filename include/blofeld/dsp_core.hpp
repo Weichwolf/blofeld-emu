@@ -97,6 +97,9 @@ private:
   void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
   [[nodiscard]] bool executing() const;
   [[nodiscard]] DspReferenceProgress begin_reference_instruction(DspReferenceExecution contract);
+  [[nodiscard]] DspReferenceProgress begin_reference_interrupt(DspReferenceExecution contract);
+  [[nodiscard]] DspReferenceProgress begin_reference_step(DspReferenceExecution contract,
+                                                          bool interrupt_entry);
   [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;

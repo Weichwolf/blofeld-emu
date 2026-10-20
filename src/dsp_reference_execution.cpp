@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <exception>
+#include <optional>
 #include <string>
 #include <variant>
 
@@ -22,11 +23,19 @@ bool same_access(const DspNativeAccess &a, const DspNativeAccess &b) {
 
 bool same_effect(const DspReferenceEffect &a, const DspReferenceEffect &b) {
   if (a.index() != b.index()) { return false; }
+  if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&a)) {
+    const auto other = std::get<DspInterruptAcknowledge>(b).request;
+    return ack->request.vector == other.vector && ack->request.level == other.level;
+  }
   const auto *access = std::get_if<DspNativeAccess>(&a);
   return access == nullptr || same_access(*access, std::get<DspNativeAccess>(b));
 }
 
 std::string effect_context(const DspReferenceEffect &effect) {
+  if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&effect)) {
+    return "interrupt-acknowledge vector=" + hex(ack->request.vector, 6) +
+           " level=" + std::to_string(ack->request.level);
+  }
   const auto *access = std::get_if<DspNativeAccess>(&effect);
   if (access == nullptr) { return "peripheral-reset"; }
   constexpr std::array names{"opcode", "extension", "read", "write", "bit", "vector"};
@@ -37,10 +46,12 @@ std::string effect_context(const DspReferenceEffect &effect) {
 }
 }
 
-void DspReferenceTape::begin(const DspNativeAccess context) {
+void DspReferenceTape::begin(const DspNativeAccess context,
+                             const std::optional<DspReferenceInterrupt> interrupt) {
   if (state_.active) { throw Fault("Native reference instruction is already pending"); }
   clear();
   state_.context = context;
+  state_.interrupt = interrupt;
   state_.active = true;
 }
 
@@ -109,7 +120,7 @@ std::uint32_t DspReferenceTape::sample(const DspReferenceEffect &effect) {
 }
 
 std::uint32_t DspReferenceTape::read(const DspAddress target, const DspNativeAccessKind kind) {
-  if (kind == DspNativeAccessKind::vector) {
+  if (kind == DspNativeAccessKind::vector && !state_.interrupt) {
     throw Fault("Unqualified native reference interrupt-vector read at P:" +
                 hex(target.address, 6));
   }
@@ -133,6 +144,10 @@ void DspReferenceTape::reset_peripherals() {
   static_cast<void>(sample(DspPeripheralReset{}));
 }
 
+void DspReferenceTape::acknowledge_interrupt(const DspInterruptRequest request) {
+  static_cast<void>(sample(DspInterruptAcknowledge{.request = request}));
+}
+
 std::uint32_t DspReferenceTape::peek_program(const std::uint32_t address) {
   if (!state_.active || mode_ != DspReferenceMode::attempt) {
     throw Fault("Unexpected native decoder lookahead at P:" + hex(address, 6) +
@@ -153,6 +168,10 @@ std::uint32_t DspReferenceTape::peek_program(const std::uint32_t address) {
 }
 
 std::uint32_t DspReferenceTape::perform(const DspReferenceEffect &effect) {
+  if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&effect)) {
+    bus_.acknowledge_latched_interrupt(ack->request);
+    return 0;
+  }
   const auto *access = std::get_if<DspNativeAccess>(&effect);
   if (access == nullptr) {
     bus_.reset_peripherals();

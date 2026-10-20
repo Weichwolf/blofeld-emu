@@ -66,6 +66,8 @@ public:
   [[nodiscard]] DspStepPlan plan_step() const;
   // Untimed owner-controlled access suspension; no automatic IRQ entry or clocking.
   [[nodiscard]] DspReferenceProgress begin_reference_instruction(DspReferenceExecution contract);
+  // Explicit untimed interrupt entry, including both vector fetches and acknowledgement.
+  [[nodiscard]] DspReferenceProgress begin_reference_interrupt(DspReferenceExecution contract);
   [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
