@@ -146,6 +146,19 @@ void DspMachine::observe_dax(const DspDaxInputs inputs) {
   }
 }
 
+DspDmaBusResult DspMachine::advance_dma(const DspDmaInputs inputs, const DspCoreBusUse core) {
+  if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
+    throw Fault("DSP DMA arbitration requires a healthy native boundary");
+  }
+  try {
+    return state_->bus.advance_dma(inputs, core);
+  } catch (const std::exception &error) {
+    const auto context = state_->cpu.state();
+    throw Fault("DSP DMA arbitration pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
+                ": " + error.what());
+  }
+}
+
 DspStepPlan DspMachine::plan_step() const {
   const auto &clock = run_clock();
   state_->check_boundary();

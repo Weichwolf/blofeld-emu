@@ -121,6 +121,8 @@ It includes an explicit HCKT-fed divider/generated-frame experiment with native
 opposite-edge bit capture; the physical audio clock and original audio remain open.
 doc/dsp-dma.txt describes DMA register/address/count logic and explicit read/write
 reference phases with actual ESAI refills; automatic native DMA timing remains open.
+doc/dsp-bank-arbitration.txt covers physical bank identities, OMR aliases and
+selected DMA phase admission against explicitly declared core occupancy.
 doc/dsp-dax.txt describes buffered DAX biphase output, explicit clock inputs,
 Port D and native DMA line experiments; it does not establish original audio.
 doc/dsp-native-access.txt describes actual interpreter bus observations, failure

@@ -10,6 +10,7 @@ namespace blofeld {
 enum class DspDmaSpace : std::uint8_t { x, y, p };
 enum class DspDmaTiming : std::uint8_t { unqualified, reference_sampled_cycles };
 enum class DspDmaGrant : std::uint8_t { unknown, available, wait };
+enum class DspDmaPhaseKind : std::uint8_t { source_read, destination_write };
 
 struct DspDmaAddress {
   DspDmaSpace space = DspDmaSpace::x;
@@ -25,10 +26,25 @@ struct DspDmaInputs {
   DspDmaGrant grant = DspDmaGrant::unknown;
 };
 
+struct DspDmaPhase {
+  DspDmaPhaseKind kind = DspDmaPhaseKind::source_read;
+  unsigned channel = 0;
+  DspDmaAddress source{};
+  DspDmaAddress destination{};
+  std::optional<std::uint32_t> value = std::nullopt;
+};
+
+// Called after real requests are sampled and the non-preemptible phase selected.
+// It must not mutate the controller or perform I/O. A copy is invoked synchronously;
+// no callback is retained or checkpointed. Global wait still samples/adjudicates
+// the phase, but prevents its actual I/O even when admission returns available.
+using DspDmaAdmission = std::function<DspDmaGrant(const DspDmaPhase &)>;
+
 // Callbacks are invoked synchronously and never retained; no real-time guarantee.
 struct DspDmaIo {
   std::function<std::uint32_t(DspDmaAddress)> read;
   std::function<void(DspDmaAddress, std::uint32_t)> write;
+  DspDmaAdmission admit = nullptr;
 };
 
 struct DspDmaWord {
@@ -89,6 +105,8 @@ private:
   void sample(DspDmaInputs inputs);
   void sample_channel(unsigned index, DspDmaInputs inputs);
   [[nodiscard]] std::optional<unsigned> select() const;
+  [[nodiscard]] static bool
+  admitted(DspDmaGrant grant, const DspDmaPhase &phase, const DspDmaAdmission &admission);
   [[nodiscard]] std::optional<DspDmaWord> advance_checked(DspDmaInputs inputs, const DspDmaIo &io);
 
   std::array<Channel, 6> channels_;

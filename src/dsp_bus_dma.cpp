@@ -6,6 +6,7 @@
 #include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_gpio.hpp"
 
+#include <array>
 #include <optional>
 #include <string>
 
@@ -18,6 +19,11 @@ DspSpace space(const DspDmaSpace value) {
     case DspDmaSpace::p: return DspSpace::p;
     default: throw Fault("Invalid DSP DMA memory space");
   }
+}
+
+std::string describe(const DspAddress address) {
+  constexpr std::array names{"P:", "X:", "Y:"};
+  return std::string(names.at(static_cast<unsigned>(address.space))) + hex(address.address, 6);
 }
 
 void check_access(const DspDmaAddress address, const bool write) {
@@ -41,6 +47,11 @@ void check_access(const DspDmaAddress address, const bool write) {
 }
 
 std::optional<DspDmaWord> DspBus::advance_dma(DspDmaInputs inputs) {
+  return advance_dma_with_admission(inputs, {});
+}
+
+std::optional<DspDmaWord> DspBus::advance_dma_with_admission(DspDmaInputs inputs,
+                                                             const DspDmaAdmission &admission) {
   constexpr unsigned external = 15;
   constexpr unsigned primary = 1U << 12U;
   constexpr unsigned secondary = 1U << 22U;
@@ -77,6 +88,37 @@ std::optional<DspDmaWord> DspBus::advance_dma(DspDmaInputs inputs) {
            [this](const DspDmaAddress address, const auto value) {
              check_access(address, true);
              write({.space = space(address.space), .address = address.address, .value = value});
-           }});
+           },
+       .admit = admission});
+}
+
+DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusUse core) {
+  if (core.knowledge != DspCoreBusKnowledge::reference_cycle_occupancy) {
+    throw Fault("DSP DMA bank arbitration requires explicitly known core-cycle occupancy");
+  }
+  for (const auto access : core.accesses) { static_cast<void>(memory_resource(access)); }
+  DspDmaBusResult result;
+  const DspDmaAdmission admission = [&](const DspDmaPhase &phase) {
+    result.phase = phase;
+    const bool write = phase.kind == DspDmaPhaseKind::destination_write;
+    const auto selected = write ? phase.destination : phase.source;
+    const DspMemoryAccess target{
+        .target = {.space = space(selected.space), .address = selected.address},
+        .operation = write ? DspMemoryOperation::write : DspMemoryOperation::read};
+    bool conflict = false;
+    for (const auto access : core.accesses) {
+      const auto relation = memory_conflict({.core = access, .dma = target});
+      if (relation == DspMemoryConflict::unqualified) {
+        throw Fault("Unqualified DSP core/DMA bank contention at " +
+                    std::string(write ? "destination write " : "source read ") +
+                    describe(target.target) + " core=" + describe(access.target));
+      }
+      conflict = conflict || relation == DspMemoryConflict::protected_partition;
+    }
+    result.core_stall = write && conflict;
+    return !write && conflict ? DspDmaGrant::wait : DspDmaGrant::available;
+  };
+  result.word = advance_dma_with_admission(inputs, admission);
+  return result;
 }
 }

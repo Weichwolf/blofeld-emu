@@ -1,0 +1,62 @@
+DSP memory resources and DMA phase admission
+
+DSP56371UM3.1/3.1.5/3.1.7 and DSP56300FM10.2/10.3 are the primary contracts,
+pinned in hardware/sources.json. This component arbitrates explicitly declared
+reference-cycle occupancy. It does not supply native pipeline phases or infer
+physical clocks from instruction-completion counters or access-observer order.
+Automatic clocked native execution with active DMA still rejects.
+
+DspBus::memory_resource uses the same strict locate path as real reads/writes.
+It returns physical P/X/Y storage identity, RAM/ROM, physical word and qualified
+block size. The switched P:1000..2fff window names the actual X:10000..11fff
+storage, not a new P bank. Map-switch delay, reserved ranges and ROM write
+protection remain strict. Querying a resource never reads or initializes data,
+samples a peripheral, consumes switch cycles or clears status/code observations.
+
+The lower P4K/X12K/Y8K use1K partitions. Upper data RAM uses8K blocks with protected
+contention only in the same1K subsection. Different subsections of the same8K
+block return unqualified, and admission fails visibly instead of inventing a
+safe wait or losing a DMA word. Distinct physical blocks/stores are independent.
+ROM same-bank partition geometry remains unqualified(block_words=0).
+Peripheral bus sharing is also unqualified; resource queries reject it without
+performing I/O. An explicitly empty known core footprint needs no sharing query.
+
+DspDmaIo optionally supplies admit(DspDmaPhase). Requests are sampled once before
+channel selection. The callback sees the actual selected source-read phase with
+no value, or the non-preemptible destination-write phase with its captured value.
+It returns available/wait; unknown and thrown exceptions reject with cycle,
+channel and endpoint context. The invoked callback is copied and never retained.
+It must not mutate the controller or perform I/O. A global wait still exposes
+the selected phase to admission but prevents its real I/O. Older explicit-grant
+calls with no callback retain their behavior. A failed admission commits no
+controller cycle; a successful wait does sample requests and advances that cycle.
+Callbacks observing outside state are caller-owned, not transactional snapshots.
+This reference callback interface does not establish real-time allocation bounds.
+
+The new DspBus/DspMachine::advance_dma(inputs,DspCoreBusUse) overload requires
+reference_cycle_occupancy and explicit core read/write targets. A protected
+conflict delays a fresh DMA source read so core can proceed. For an already-read
+word, the DMA destination has priority: core_stall is set until that write can
+complete, including global wait. The caller must hold its pending core access;
+this method executes no CPU instruction. All declared simultaneous accesses are
+checked without treating them as separate clocks. Unsafe/unqualified conflicts
+fail with addresses/operation and native PC/OMR. Trusted owner checkpoints retain
+pending requests, held values and DMA cycle state; footprints remain caller-owned.
+
+  cmake --build --preset strict --target blofeld-bank-test
+  ctest --test-dir build/strict -R '^dsp_bank_arbitration$' --output-on-failure
+
+Tests use independent literal resource/partition expectations, every lower P/X/Y block
+and upper subsection, real switched storage, unknown/protected accesses, phase
+denial/global wait, priority arrival while held, DE clear and admission failures.
+Real P-to-P copies cover all four lower P blocks, independent neighbors and
+released source versus held destination contention after a source overwrite.
+Own native MOVEP/MOVE/NOP programs configure DMA, overwrite source before/after
+capture, hold a pending destination load and replay a mid-transfer checkpoint.
+Exact values, source/destination, native instruction counts and real load results
+are checked. These native instructions execute untimed; their supplied DMA/core
+occupancy timeline is a declared reference experiment, not silicon phase evidence.
+
+DspDmaIo has an extra callback member. Adopting C++ consumers must rebuild with
+matching project headers/libraries; frozen bundles remain frozen until deliberate
+adoption. This increment does not change the prepared native SDK interface.

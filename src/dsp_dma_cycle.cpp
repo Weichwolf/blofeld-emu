@@ -64,9 +64,26 @@ std::optional<unsigned> DspDma::select() const {
   return std::nullopt;
 }
 
+bool DspDma::admitted(const DspDmaGrant grant,
+                      const DspDmaPhase &phase,
+                      const DspDmaAdmission &admission) {
+  if (!admission) { return grant == DspDmaGrant::available; }
+  const auto callback = admission;
+  DspDmaGrant decision = DspDmaGrant::unknown;
+  try {
+    decision = callback(phase);
+  } catch (const std::exception &) { throw; } catch (...) {
+    throw Fault("Non-standard DSP DMA admission exception");
+  }
+  if (decision != DspDmaGrant::available && decision != DspDmaGrant::wait) {
+    throw Fault("Unknown DSP DMA phase admission");
+  }
+  return grant == DspDmaGrant::available && decision == DspDmaGrant::available;
+}
+
 std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, const DspDmaIo &io) {
   sample(inputs);
-  if (inputs.grant == DspDmaGrant::wait) { return std::nullopt; }
+  if (inputs.grant == DspDmaGrant::wait && !io.admit) { return std::nullopt; }
   if (!active_) {
     const auto selected = select();
     if (!selected) { return std::nullopt; }
@@ -75,6 +92,11 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
     DspDmaWord word{.channel = *selected,
                     .source = endpoint(channel, false),
                     .destination = endpoint(channel, true)};
+    if (!admitted(inputs.grant,
+                  {.channel = word.channel, .source = word.source, .destination = word.destination},
+                  io.admit)) {
+      return std::nullopt;
+    }
     word.value = io.read(word.source);
     if (word.value > dma::word_mask) { throw Fault("DSP DMA read exceeds24 bits"); }
     channel.pending = false;
@@ -82,6 +104,15 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
     return std::nullopt;
   }
   const auto word = *active_;
+  if (!admitted(inputs.grant,
+                {.kind = DspDmaPhaseKind::destination_write,
+                 .channel = word.channel,
+                 .source = word.source,
+                 .destination = word.destination,
+                 .value = word.value},
+                io.admit)) {
+    return std::nullopt;
+  }
   auto &channel = channels_.at(word.channel);
   const bool last = complete(channel);
   const auto low_mask = (1U << layout(channel).low) - 1;

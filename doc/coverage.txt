@@ -277,6 +277,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           Port D, explicit input dividers, VUC/
                                           parity/block checks and actual DMA
                                           line refills (dsp-dax.txt).
+                                          Physical bank/OMR alias resolution
+                                          and selected DMA phase admission
+                                          check explicit reference core
+                                          occupancy, held-word stalls and
+                                          unsafe upper-block conflicts
+                                          (dsp-bank-arbitration.txt).
                                           Automatic native DMA bus timing,
                                           physical DAX clock/routing,
                                           RX, FOSC clocks, audio IRQ and

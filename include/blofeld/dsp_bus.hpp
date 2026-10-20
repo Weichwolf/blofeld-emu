@@ -32,6 +32,41 @@ struct DspStore {
   std::uint32_t value = 0;
 };
 
+enum class DspMemoryOperation : std::uint8_t { read, write };
+enum class DspMemoryConflict : std::uint8_t { independent, protected_partition, unqualified };
+enum class DspCoreBusKnowledge : std::uint8_t { unqualified, reference_cycle_occupancy };
+
+struct DspMemoryAccess {
+  DspAddress target{};
+  DspMemoryOperation operation = DspMemoryOperation::read;
+};
+
+struct DspMemoryPair {
+  DspMemoryAccess core{};
+  DspMemoryAccess dma{};
+};
+
+// Physical storage identity resolved by the strict map, including OMR aliases.
+// block_words=0 means same-bank contention geometry is not qualified.
+struct DspMemoryResource {
+  DspSpace bank = DspSpace::p;
+  bool rom = false;
+  std::uint32_t word = 0;
+  unsigned block_words = 0;
+  bool operator==(const DspMemoryResource &) const = default;
+};
+
+struct DspCoreBusUse {
+  std::span<const DspMemoryAccess> accesses;
+  DspCoreBusKnowledge knowledge = DspCoreBusKnowledge::unqualified;
+};
+
+struct DspDmaBusResult {
+  std::optional<DspDmaWord> word = std::nullopt;
+  std::optional<DspDmaPhase> phase = std::nullopt;
+  bool core_stall = false;
+};
+
 enum class DspBitOperation : std::uint8_t { test, clear, set, change };
 
 struct DspBitAccess {
@@ -61,6 +96,8 @@ public:
   void write(DspStore access);
   [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
   [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
+  [[nodiscard]] DspMemoryResource memory_resource(DspMemoryAccess access) const;
+  [[nodiscard]] DspMemoryConflict memory_conflict(DspMemoryPair pair) const;
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);
@@ -84,6 +121,7 @@ public:
   [[nodiscard]] DspEsaiClockOutputs esai_clock_outputs(DspEsaiInstance instance) const;
   // Explicit standalone reference phases; automatic native DMA bus timing rejects.
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
+  [[nodiscard]] DspDmaBusResult advance_dma(DspDmaInputs inputs, DspCoreBusUse core);
   void observe_dax(DspDaxInputs inputs);
   [[nodiscard]] DspDaxOutput dax_output() const;
 
@@ -112,6 +150,8 @@ private:
   [[nodiscard]] DspEsai &sync_esai(DspEsaiInstance instance);
   void sync_esai_port(DspPort changed);
   void sync_dax();
+  [[nodiscard]] std::optional<DspDmaWord>
+  advance_dma_with_admission(DspDmaInputs inputs, const DspDmaAdmission &admission);
   std::array<Memory, 3> ram_;
   std::array<Memory, 3> rom_;
   DspShi shi_;

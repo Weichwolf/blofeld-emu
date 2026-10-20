@@ -64,6 +64,7 @@ public:
   // Nominal completion preview only; no instruction, peripheral or clock advance.
   [[nodiscard]] DspStepPlan plan_step() const;
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
+  [[nodiscard]] DspDmaBusResult advance_dma(DspDmaInputs inputs, DspCoreBusUse core);
   void observe_dax(DspDaxInputs inputs);
   [[nodiscard]] DspCheckpoint checkpoint() const;
   // Strong exception guarantee; a prior valid checkpoint can recover a fault.

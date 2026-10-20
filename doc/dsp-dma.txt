@@ -53,6 +53,9 @@ This is a standalone instruction/peripheral reference experiment. Automatic
 clocked native execution rejects an active DMA channel: core/DMA bank contention,
 per-cycle instruction bus accesses, request synchronization and dynamic internal
 deadlines still need integration. Explicit phases do not establish those facts.
+The separate bank arbiter resolves real storage/OMR aliases and can admit or
+delay the selected phase against explicitly supplied reference core occupancy;
+it reports held-word core stalls (dsp-bank-arbitration.txt).
 Native semantic bus observations are available (dsp-native-access.txt); they do
 not yet supply arbitration timestamps or stalls.
 No physical HCKT/core frequency, original DMA execution, physical DAX output, PCM transport,

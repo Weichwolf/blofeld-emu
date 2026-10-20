@@ -204,6 +204,57 @@ DspBus::Location DspBus::locate(const DspAddress access, const Operation operati
                                      : locate_data(access, operation);
 }
 
+DspMemoryResource DspBus::memory_resource(const DspMemoryAccess access) const {
+  const auto target = access.target;
+  if (access.operation != DspMemoryOperation::read &&
+      access.operation != DspMemoryOperation::write) {
+    throw Fault("Invalid DSP memory resource operation at " + address_text(target));
+  }
+  const auto operation =
+      access.operation == DspMemoryOperation::read ? Operation::read : Operation::write;
+  if (target.space != DspSpace::p && target.address >= io_base && target.address <= word_mask) {
+    throw Fault("Unqualified DSP peripheral memory resource " +
+                std::string(operation == Operation::read ? "read at " : "write at ") +
+                address_text(target));
+  }
+  const auto location = locate(target, operation);
+  if (location.rom && operation == Operation::write) {
+    throw Fault("Protected DSP ROM write at " + address_text(target));
+  }
+  constexpr std::array banks{DspSpace::p, DspSpace::x, DspSpace::y};
+  const auto physical_bank = banks.at(location.bank);
+  const auto offset = static_cast<std::uint32_t>(location.offset);
+  if (location.rom) {
+    const auto base = physical_bank == DspSpace::p ? program_rom_base : data_rom_base;
+    return {.bank = physical_bank, .rom = true, .word = base + offset};
+  }
+  constexpr unsigned lower_block_words = 1024;
+  constexpr unsigned upper_block_words = 8192;
+  if (physical_bank == DspSpace::p) { return {.word = offset, .block_words = lower_block_words}; }
+  const auto lower_words = physical_bank == DspSpace::x ? x_low_end : y_low_end;
+  if (offset < lower_words) {
+    return {.bank = physical_bank, .word = offset, .block_words = lower_block_words};
+  }
+  return {.bank = physical_bank,
+          .word = data_rom_end + offset - lower_words,
+          .block_words = upper_block_words};
+}
+
+DspMemoryConflict DspBus::memory_conflict(const DspMemoryPair pair) const {
+  const auto a = memory_resource(pair.core);
+  const auto b = memory_resource(pair.dma);
+  if (a.bank != b.bank || a.rom != b.rom) { return DspMemoryConflict::independent; }
+  if (a.block_words == 0 || b.block_words == 0) { return DspMemoryConflict::unqualified; }
+  if (a.block_words != b.block_words || a.word / a.block_words != b.word / b.block_words) {
+    return DspMemoryConflict::independent;
+  }
+  constexpr unsigned protected_words = 1024;
+  if (a.word / protected_words != b.word / protected_words) {
+    return DspMemoryConflict::unqualified; // Same8K block, different unprotected1K subsection.
+  }
+  return DspMemoryConflict::protected_partition;
+}
+
 DspBus::Location DspBus::locate_program(const std::uint32_t address,
                                         const Operation operation) const {
   if (address < program_ram_end) { return {.offset = address}; }
