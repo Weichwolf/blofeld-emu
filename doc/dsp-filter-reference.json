@@ -1,0 +1,48 @@
+{
+  "producer_reference": {
+    "repository": "Weichwolf/blofeld-src",
+    "commit": "ee53815320ca32fe5bc4417a60e469dd68349db1",
+    "fixture_sha256": "0d8b2beb10acc253e0fe819502e76a8578a5b604b14995c504823f3003b02afe"
+  },
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "blocks": [
+    {
+      "name": "signal-kernels",
+      "record": 71,
+      "space": 0,
+      "address": 4715,
+      "words": 926,
+      "sha256": "02e8f150d55a8ee435c8d1bc7888748185567b4e75a85d6393f537e096031bb2"
+    },
+    {
+      "name": "frequency-tables",
+      "record": 41,
+      "space": 2,
+      "address": 2333,
+      "words": 603,
+      "sha256": "f60780abe65f094951065e245847fae8c6f485f34aa7d05308e43af2feb36d3a"
+    }
+  ],
+  "groups": {
+    "single": [
+      79872,
+      6848,
+      416,
+      24576,
+      11776
+    ],
+    "cascade": [
+      79872,
+      6848,
+      1248,
+      24576,
+      11640
+    ]
+  },
+  "coverage": {
+    "instruction_starts": 387,
+    "encoding": "sorted lowercase six-digit hexadecimal PCs, each followed by LF",
+    "sha256": "d1928e53349838fe0489299a3c4fcf88b496c007bb3df131ca5c9460ba0295df"
+  },
+  "qualification": "Directed standalone non-FM callbacks; no full boot, voices, board audio/timing or hardware proof."
+}

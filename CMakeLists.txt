@@ -474,6 +474,15 @@ if(BUILD_TESTING)
   add_test(NAME dsp_cmpm_words COMMAND blofeld-dsp-cmpm-test --word)
   add_test(NAME dsp_cmpm_minimum COMMAND blofeld-dsp-cmpm-test --minimum)
   set_tests_properties(dsp_cmpm_accumulators dsp_cmpm_words dsp_cmpm_minimum PROPERTIES TIMEOUT 120)
+  add_executable(blofeld-original-dsp-filters-test test/original_dsp_filters_test.cpp
+    test/dsp_filter_model.cpp test/dsp_filter_fixture.cpp)
+  target_link_libraries(blofeld-original-dsp-filters-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_filters COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_filters.py"
+    $<TARGET_FILE:blofeld-original-dsp-filters-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-filters.trace")
+  set_tests_properties(original_dsp_filters PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
@@ -758,6 +767,7 @@ add_custom_target(quality
     blofeld-dsp-saturation-test
     blofeld-dsp-power-test
     blofeld-dsp-cmpm-test
+    blofeld-original-dsp-filters-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-scheduled-coupling-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test

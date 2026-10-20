@@ -1,65 +1,50 @@
-Original non-FM filter callbacks: separate producer-fixture replay
+Original non-FM filter callback regression
 
-The native interpreter at source commit
-6ff07ec6039291399f3b716444637908c4176788 executed the unchanged original
-LP/BP/HP/Notch twelve- and twenty-four-decibel filter blocks in a bounded
-standalone fixture. This is separate diagnostic evidence, not a routine CTest
-target, complete firmware boot or an audio-output test.
+original_dsp_filters loads unchanged program/lookup records from the pinned
+private official Blofeld 1.25 archive. It runs standalone LP/BP/HP/Notch
+12/24 dB callbacks under the native interpreter; it does not require a sibling
+source build or replace emulator execution with a host filter.
 
-Inputs and independence
-The fixture and its integer interpolation/coefficient/recurrence expectations
-come from blofeld-src commit ee53815320ca32fe5bc4417a60e469dd68349db1.
-The source-built program and lookup table were independently compared byte for
-byte with records decoded from the pinned official 1.25 MID. The complete
-committed program component was also reassembled locally with the pinned
-assembler; both its output and original listing identity matched. No sibling
-checkout was changed or built. Manufacturer bytes and the detailed listing
-remain under ignored doc/local/.
+Reproduce with the private archive at doc/Blofeld_Firmware_V1.25.zip:
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-original-dsp-filters-test
+  ctest --test-dir build/strict -R '^original_dsp_filters$' --output-on-failure
+The test skips explicitly if the archive is absent. Changed reference bytes or
+missing instruction coverage fail. It writes only private run evidence under
+build/strict/Testing/original-dsp-filters.trace; no manufacturer bytes are tracked.
 
-Input SHA-256 identities:
-  Program, 2778 bytes:
-    02e8f150d55a8ee435c8d1bc7888748185567b4e75a85d6393f537e096031bb2
-  Lookup table, 1809 bytes:
-    f60780abe65f094951065e245847fae8c6f485f34aa7d05308e43af2feb36d3a
-  Producer C++ fixture:
-    0d8b2beb10acc253e0fe819502e76a8578a5b604b14995c504823f3003b02afe
-  Own setup harness, 114 bytes:
-    500a0df56b287a715ba289a1f37a581e70a7d6722437e33c7416ffcbad6da8a5
+The Python driver independently decodes the official MID and checks the exact
+program/table hashes before the C++ firmware parser supplies native words.
+doc/dsp-filter-reference.json pins both blocks, producer-model provenance,
+branch counts and the digest of the 387 expected instruction starts. Coverage
+is checked against the immutable original listing, not inferred from a
+successful return or newly generated emulator output.
 
-The producer fixture initially failed the project's strict compiler because
-its exhaustive enum switch lacked a default. A local adapter adds only an
-explicit invalid-kind failure. Valid-kind formulas and execution logic remain
-unchanged. It compiles with all current project compiler/sanitizer/hardening
-flags and links the current project/native archives. This imported fixture
-has not been adopted or qualified against the project's clang-tidy and
-function-length requirements; no project quality check is disabled for it.
+The direct integer oracle is adapted from the GPL-3.0-only producer fixture at
+blofeld-src ee53815320ca32fe5bc4417a60e469dd68349db1. Interpolation, coefficient
+preparation, fixed-point quantization and the second-order recurrence remain
+separate from native instruction helpers. Named constants, explicit failure
+paths and smaller functions follow the same project checks as other own code.
+All filter results are produced by the original DSP instructions. The test
+model only predicts outcomes; it never writes predicted outputs into the DSP.
 
-Observed execution
-The process exited zero under ASan/UBSan after 159744 genuine callback returns:
-79872 twelve-decibel calls and 79872 two-section twenty-four-decibel calls.
-The independent model checks 3833856 section-output samples, prepared
-coefficients, intermediate/final buffers, distinct histories, guards, retained
-parameters and return/cursor/mode state. The native interpreter retires
-34154467 instructions. All 387 instruction starts in the reviewed 415-word
-range execute, as checked against the immutable locally reassembled listing.
+The directed grid has 79872 single-section and 79872 two-section calls, covering
+all 128 signed cutoff segments at six selected offsets, thirteen resonance
+values, RM=0/1 and four rotating input patterns. It checks 3833856 section-output
+samples, prepared coefficients, intermediate/final buffers, independent paired
+histories, guards, retained parameters and return/cursor/mode state. The harness
+executes its own setup, JSR and genuine returns with N0=1, linear modifiers,
+initially unscaled status and seventeen readable in-place sample words. Native
+per-call retirement is bounded at 512 instructions.
 
-The directed grid covers all 128 signed cutoff segments with six selected
-offsets, thirteen resonance values, RM=0/1 and four rotating sample patterns.
-Setup instructions declare N0=1, linear modifiers, initially unscaled status
-and seventeen readable in-place sample words. Actual native setup/JSR/returns
-execute; no host synthesizer or substituted filter result is used.
+The previous separate producer replay at emulator code commit
+6ff07ec6039291399f3b716444637908c4176788 independently exercised the same grid.
+Its local receipt remains in doc/local/filter-cascades-current/verification.json
+in the original working checkout; that imported fixture was not a routine test.
+The current regression uses the official archive directly and a project-owned
+fixture, without the former private assembler/snapshot dependency.
 
-Local evidence and replay
-  doc/local/filter-cascades-current/verification.json
-  doc/local/filter-cascades-current/execute.log
-The receipt pins the exact compile/link/execute commands, inputs, current
-headers/archives and adapter. With that private fixture snapshot retained:
-  doc/local/filter-cascades-current/dsp-filter-cascades-test \
-    doc/local/filter-cascades-current/harness.bin \
-    doc/local/filter-cascades-current/dsp-runtime-signal-kernels.bin \
-    doc/local/filter-cascades-current/dsp-runtime-frequency-tables.bin ff0023
-
-Qualification remains standalone non-FM callbacks. Wider parameter units,
-arbitrary addressing/modes, FM/comb/PPG, voices, scheduling, physical timing,
-MIDI/audio, complete-device boot and hardware equivalence remain unproven.
-The strict original full-boot frontier is still reserved Y:002000.
+Qualification remains bounded non-FM callbacks. Wider parameter units, arbitrary
+addressing/modes, FM/comb/PPG, voices, scheduling, physical timing, MIDI/audio,
+complete-device boot and hardware equivalence remain unproven. The strict
+original full-boot frontier is still reserved Y:002000.
