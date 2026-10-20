@@ -5,6 +5,10 @@ clock limits in 9S12UF32DGV1/D section 10.1 and appendix A.2. These are members
 of the official archive pinned in hardware/sources.json. Configuration and
 protection windows are described separately in mcu-flash-config.txt.
 
+This is the nominal module reference, not a selected silicon mask. UF32 errata
+change byte-write/protection flags and STOP/BDM behavior on listed masks;
+mcu-flash-errata.txt records their sources and the unqualified target mask.
+
 Scope and explicit transition inputs
 McuFlash implements a normal-mode sequencer with independent executing and
 buffered jobs. An aligned word write latches address/data, FCMD selects the
@@ -34,9 +38,10 @@ qualification, not evidence of the Blofeld board's oscillator, PLL or CPU rate.
 The isolated fixtures supply a 12 MHz oscillator and 24 MHz bus.
 
 Array and interruption behavior
-- Logical aliases share physical flash bytes. CPU byte/misaligned writes set
-  ACCERR. Staging does not change executable code; mutation and reset invalidate
-  cached translations. Diagnostics identify operation, address and CPU context.
+- Logical aliases share physical flash bytes. In the nominal module model, CPU
+  byte/misaligned writes set ACCERR; documented UF32 byte-write anomalies are
+  not implemented. Staging does not change executable code; mutation and reset
+  invalidate cached translations. Diagnostics identify operation, address and CPU context.
 - Array reads/fetches fail while CCIF is clear: the manual specifies invalid data
   during an algorithm. No convenient data value is invented.
 - Programming requires a preceding known emulated erase. Even programming FFFF

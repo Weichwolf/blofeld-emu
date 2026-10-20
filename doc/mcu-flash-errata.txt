@@ -1,0 +1,65 @@
+MC9S12UF32 mask-dependent flash and recovery limits
+
+Primary sources: NXP Mask Set Errata, all Rev. April 17, 2012. The four
+MSE9S12UF32_<mask>.htm files are pinned by URL, size and SHA-256 in
+hardware/sources.json; manufacturer HTML remains ignored and local.
+
+Mask      Relevant listed errata
+0L24N     MUCts00858 byte-write ACCERR; MUCts01007 immediate-FPROT PVIOL;
+          MUCts01000 idle STOP ACCERR.
+1L79R     MUCts01050 byte-write ACCERR; MUCts01008 immediate-FPROT PVIOL;
+          MUCts01051 STOP between physical completion and CCIF.
+0L47S     MUCts01498 BDM unsecure sequence.
+1L47S     MUCts01498 BDM unsecure sequence.
+
+Sources
+  https://www.nxp.com/docs/en/errata/MSE9S12UF32_0L24N.htm
+  https://www.nxp.com/docs/en/errata/MSE9S12UF32_1L79R.htm
+  https://www.nxp.com/docs/en/errata/MSE9S12UF32_0L47S.htm
+  https://www.nxp.com/docs/en/errata/MSE9S12UF32_1L47S.htm
+
+Observed manufacturer statements
+- The byte-write errata describe a MOVB array write starting a command without
+  ACCERR. Word programming follows, but only FDATA's high byte is valid. The
+  low byte is not specified; a guessed complete programmed word is unsupported.
+- An array write immediately following FPROT can omit PVIOL. The errata do not
+  establish that protected contents can be successfully programmed. NXP's
+  workaround inserts a legal register write before the array write.
+- On 0L24N, STOP with FCLKDIV loaded and CCIF set spuriously sets ACCERR.
+  On 1L79R, STOP after physical completion but before CCIF can omit ACCERR.
+  These are distinct conditions requiring qualified internal timing.
+- On 0L47S/1L47S, reset with FF0F.SEC=00/01/11 enables security and the BDM
+  mass-erase/security-byte reprogram sequence cannot unsecure the device: its
+  secure-firmware blank check fails. The documented alternatives depend on
+  SEC=10 before reset or an executable application security-programming path.
+  Neither establishes recovery after arbitrary interrupted firmware writes.
+
+Emulator qualification
+No target MCU mask has been established. The five-character mask marking is
+distinct from its four-digit manufacturing date code. A missing erratum in
+another mask's list is not evidence that its silicon follows nominal behavior.
+
+Current McuFlash checks the S12FTS32KV1 nominal normal-mode reference; it does
+not select a measured UF32 mask or implement these silicon anomalies. In
+particular, byte-write ACCERR and immediate protection-error tests are nominal
+module expectations, not hardware equivalence. STOP/BDM remain unsupported;
+no emulator BDM mass-erase recovery guarantee exists. CPU, timer, SCI, IQUE and
+other entries in these sheets require separate qualification.
+
+The original helper's forced SEC=10 path is tested conditionally on explicit
+successful reference milestones. Unknown interrupted security bytes remain
+unknown. Successful isolated finalization does not prove an intact executable
+application/recovery path after a cut (mcu-flash-commands.txt).
+
+None of these errata resolves idle FSTAT writes with CBEIF=1 and no staged
+command. The visible qualification fault and original initialization frontier
+remain unchanged. Do not infer a no-op, automatic completion or silicon mask
+from the firmware's BSET instruction.
+
+Offline reference verification
+  python3 tools/references.py --verify
+
+Required next evidence: an independently established target mask and qualified
+behavior for each exercised anomaly, including timing and undefined data bits.
+Full original update/recovery and hardware comparison remain open; no physical
+programming experiment is implied by this reference record.

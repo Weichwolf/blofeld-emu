@@ -94,5 +94,29 @@
     "source": "https://www.nxp.com/docs/en/application-note/APR20.pdf",
     "bytes": 1246632,
     "sha256": "4ef9b327763a39259b8096fd25aa152a2711aa4e89a2061cb1a5158858796679"
+  },
+  {
+    "file": "MSE9S12UF32_0L24N.htm",
+    "source": "https://www.nxp.com/docs/en/errata/MSE9S12UF32_0L24N.htm",
+    "bytes": 21489,
+    "sha256": "21825f5c23d426347d75a55e640164d72f05391316338eb850e554ec083bc954"
+  },
+  {
+    "file": "MSE9S12UF32_1L79R.htm",
+    "source": "https://www.nxp.com/docs/en/errata/MSE9S12UF32_1L79R.htm",
+    "bytes": 20217,
+    "sha256": "65c20593f8fd6f97ca9c86bdb4e2416db7a010b2fec79f5be8a36ff78f1f4a23"
+  },
+  {
+    "file": "MSE9S12UF32_0L47S.htm",
+    "source": "https://www.nxp.com/docs/en/errata/MSE9S12UF32_0L47S.htm",
+    "bytes": 17620,
+    "sha256": "16cae32db9bc4ba359a5894b7678ca96912b10810d44266e3f61a169766262e7"
+  },
+  {
+    "file": "MSE9S12UF32_1L47S.htm",
+    "source": "https://www.nxp.com/docs/en/errata/MSE9S12UF32_1L47S.htm",
+    "bytes": 17620,
+    "sha256": "fdc44bdea455cc568df57009196cadcc2d01aafd82781e8391da662ebf6ffc72"
   }
 ]

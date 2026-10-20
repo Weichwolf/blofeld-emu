@@ -80,6 +80,10 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           executing/buffered jobs and interruption
                                           unknownness use explicit reference
                                           milestones (mcu-flash-commands.txt).
+                                          Nominal module expectations only:
+                                          UF32 mask-dependent flash flags and
+                                          STOP/BDM anomalies remain unimplemented;
+                                          target mask unknown (mcu-flash-errata.txt).
                                           Cold MCU NVM files preserve bytes,
                                           knowledge and erase history; see
                                           mcu-flash-persistence.txt. Timed flash
@@ -622,6 +626,11 @@ Original update and recovery      partial  Helpers and recovery entry recovered;
                                           Explicit reference milestones only;
                                           full initialization/transport/recovery
                                           and hardware validation pending.
+                                          Pinned UF32 errata include failed BDM
+                                          unsecure on 0L47S/1L47S; conditional
+                                          SEC=10 finalization is no proof of
+                                          recovery after interrupted programming
+                                          (mcu-flash-errata.txt).
 Damaged updates/transfer loss     partial  Offline parser rejection and original
                                           SCI recovery fixtures: interrupted or
                                           unmatched normal-update data waits;

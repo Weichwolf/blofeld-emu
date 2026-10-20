@@ -6,6 +6,10 @@ official 9S12UF32_ZIP.zip identified in hardware/sources.json. The extracted
 S12FTS32KV1.pdf SHA-256 is:
   ec5d95ac32a63dafa35fd11cb962362837b22610694b6fa605375ba1521bcb02
 
+This is a nominal module reference. Mask-dependent UF32 flash-error and BDM
+security errata are pinned in mcu-flash-errata.txt. No target mask is established;
+the current model does not implement those anomalies or qualify BDM recovery.
+
 Implemented normal-mode configuration
 - FCLKDIV (offset 0100) resets to zero. Its first write sets FDIVLD and latches
   PRDIV8/FDIV; subsequent writes are ignored until reset. The queried oscillator
@@ -41,8 +45,10 @@ Independent and original-code checks
 Synthetic checks cover all divider/security byte values, the independent literal
 64-entry scenario transition table, all 65536 protection-byte writes and size
 locks, every byte in all 256 protection encodings (8388608 combinations), bus
-relocation and nonvolatile reload. Illegal command/byte-write sequences set
-ACCERR without programming data; unqualified command operations fail visibly.
+relocation and nonvolatile reload. In the nominal module model, illegal
+command/byte-write sequences set ACCERR without programming data; UF32 masks
+0L24N/1L79R have documented byte-write exceptions (mcu-flash-errata.txt).
+Unqualified command operations fail visibly.
 
 The optional original-code fixture verifies the private firmware ZIP identity,
 copies its unchanged 632-byte update helper into MCU RAM and selects the isolated

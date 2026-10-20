@@ -15,6 +15,7 @@ doc/local/
 /doc/library/*.pdf
 /doc/hardware/*.pdf
 /doc/hardware/*.zip
+/doc/hardware/*.htm
 /doc/produktbilder/*.jpg
 
 # Private firmware analysis must stay local even when generated outside doc/local/.
