@@ -1,0 +1,33 @@
+Original basic oscillator RAM table generation
+
+The original_dsp_waveforms regression executes the unchanged runtime generator
+from the separately supplied, hash-pinned original 1.25 archive. Its own setup
+calls the original code; no host waveform table or ideal sin() is supplied.
+The separate integer oracle uses mathematical modulo, signed word limiting,
+rounding and term-by-term stored quantization with original scalar coefficients.
+
+The generator builds 1024 permuted recurrence words and seven banks of 256 samples
+with two guards each. All 2830 final words per call and every intermediate
+harmonic sample are compared. Eight cases cover both RM settings, linear and
+bit-reversed incoming M4, and two initial destination/guard patterns. The
+original code overwrites M4 then restores it from declared linear M0. Actual
+nested DO frames, full accumulators, real 257th prefetches, cursors and RTS/SP0
+are checked. Original program/scalar/adjacent cubic records remain unchanged.
+
+Coverage is 792 harmonic stages, 202752 intermediate samples, 22640 final words
+and 42 digest-pinned original instruction starts. There are 1474 per-term-floor
+witnesses per call. These fixed inputs produce no rounding ties or contribution
+limits; they do not newly qualify those arithmetic classes. Native instruction
+counts are diagnostics, not calibrated elapsed or physical pipeline clocks.
+
+These basic Sine/Triangle-related tables are generated in RAM from original
+firmware/scalars. This does not establish every oscillator shape's dependencies
+or locate the additional wavetable/sample/ROM/NAND assets. The isolated caller
+and explicit readable/writable map do not bypass the full-boot Y:002000 frontier.
+Complete boot, voices/MIDI/audio, arbitrary modes and hardware remain unproven.
+Manufacturer bytes and run traces remain local. The manifest pins archive MID,
+three records and coverage; absence of the private archive is explicit skip 77.
+
+Reproduce after placing the official archive under doc/:
+  cmake --build --preset strict --target blofeld-original-dsp-waveforms-test
+  ctest --test-dir build/strict -R '^original_dsp_waveforms$' --output-on-failure

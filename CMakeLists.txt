@@ -483,6 +483,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-filters.trace")
   set_tests_properties(original_dsp_filters PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-waveforms-test test/original_dsp_waveforms_test.cpp)
+  target_link_libraries(blofeld-original-dsp-waveforms-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_waveforms COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_waveforms.py"
+    $<TARGET_FILE:blofeld-original-dsp-waveforms-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-waveforms.trace")
+  set_tests_properties(original_dsp_waveforms PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
@@ -776,6 +785,7 @@ add_custom_target(quality
     blofeld-dsp-power-test
     blofeld-dsp-cmpm-test
     blofeld-original-dsp-filters-test
+    blofeld-original-dsp-waveforms-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test
     blofeld-scheduled-coupling-test

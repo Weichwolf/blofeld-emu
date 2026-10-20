@@ -427,8 +427,13 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           MISO/HREQ/PU0 linkage, actual routing,
                                           reset, physical elapsed clocks and full
                                           scheduling remain unqualified.
-ROM wavetables and other assets   pending  Must establish dependencies from real
-                                          execution accesses; ROM contents unresolved.
+ROM wavetables and other assets   partial  Original basic oscillator table generator
+                                          builds 2830 RAM words from firmware/scalars;
+                                          eight complete calls check 22640 final and
+                                          202752 intermediate values against integer
+                                          expectations (dsp-waveforms.txt). Additional
+                                          wavetable/ROM/NAND dependencies, actual
+                                          startup and hardware remain unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Additional CPU-cycle adapter runs the

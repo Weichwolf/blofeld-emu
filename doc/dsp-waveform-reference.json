@@ -1,0 +1,47 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "source_model_provenance": {
+    "repository": "Weichwolf/blofeld-src",
+    "commit": "4f5f6b24e00bf84c06d90ffc242f7540fd9cca7c",
+    "fixture": "test/dsp_waveform_tables_test.cpp"
+  },
+  "blocks": [
+    {
+      "name": "generator",
+      "record": 123,
+      "space": 0,
+      "address": 11635,
+      "words": 501,
+      "sha256": "c33e37a56e7aef7f9006a92ed94e254a884376f71dae267d2173b65e805f508d"
+    },
+    {
+      "name": "scalars",
+      "record": 42,
+      "space": 2,
+      "address": 3013,
+      "words": 289,
+      "sha256": "cdee38128c8ddfefb106dfcb527ead98e49544cebc8d4c24b4b28b644877ee00"
+    },
+    {
+      "name": "adjacent-cubic",
+      "record": 43,
+      "space": 2,
+      "address": 5108,
+      "words": 258,
+      "sha256": "82fa6da895af44468a424e7426cbabea670035fbbd0a9f359c14e7388534ac94"
+    }
+  ],
+  "counts": {
+    "calls": 8,
+    "harmonic-stages": 792,
+    "final-words": 22640,
+    "intermediate-samples": 202752,
+    "instruction-starts": 42
+  },
+  "coverage": {
+    "instruction_starts": 42,
+    "encoding": "sorted lowercase six-digit hexadecimal PCs, each followed by LF",
+    "sha256": "a65ff52c7733aff3a3edc60827c1f52e6c4994b960b535e2dc69344fe4e86351"
+  },
+  "qualification": "Eight complete isolated original generator calls with independent recurrence/per-term quantization under declared unscaled RM/linear M0/incoming M4 and destination guards. No complete boot, all wavetable/ROM asset, physical timing/audio or hardware proof."
+}
