@@ -30,6 +30,12 @@ struct McuWaitCycle {
   ExecutionContext context;
 };
 
+// After current-boundary IRQ/input checks, before a committed idle period.
+// This is not an executing CPU bus slot. Exceptions quarantine the wait owner.
+struct McuWaitPeriod {
+  ExecutionContext context;
+};
+
 // Immutable trusted in-process state. Not a file format or a whole-board snapshot.
 class McuCheckpoint {
 public:
@@ -69,6 +75,7 @@ public:
   // Explicit pre-cycle pad observations; external callbacks are never checkpointed.
   void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
   void set_wait_observer(std::function<void(McuWaitCycle)> observer);
+  void set_wait_period_observer(std::function<void(McuWaitPeriod)> observer);
   // Explicit test-scenario hypothesis; never selected by native registers.
   void set_sci_receive_reference(std::optional<SciReceiveReference> reference);
   [[nodiscard]] std::optional<SciReceiveReference> sci_receive_reference() const;

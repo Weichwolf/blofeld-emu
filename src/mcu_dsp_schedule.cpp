@@ -56,12 +56,15 @@ McuDspSchedule::McuDspSchedule(const McuDspScheduleInputs inputs, McuMachine &mc
       dsp_schedule_(inputs.dsp, dsp),
       timebase_hz_(dsp.run_clock().timebase_hz()),
       end_ticks_(mcu_ticks()),
-      expected_mcu_cycles_(mcu.run_clock().bus_cycles()) {
+      expected_mcu_cycles_(mcu.run_clock().bus_cycles()),
+      expected_idle_cycles_(mcu.idle_bus_cycles()) {
   mcu_.validate_run_boundary();
   if (inputs.maximum_dsp_steps_per_cycle == 0 ||
       (inputs.shared_write_order != McuDspTieOrder::unqualified &&
        inputs.shared_write_order != McuDspTieOrder::dsp_before_mcu &&
-       inputs.shared_write_order != McuDspTieOrder::mcu_before_dsp)) {
+       inputs.shared_write_order != McuDspTieOrder::mcu_before_dsp) ||
+      (inputs.wait_order != McuDspWaitOrder::unqualified &&
+       inputs.wait_order != McuDspWaitOrder::dsp_before_mcu)) {
     throw Fault("MCU/DSP schedule requires an explicit cycle budget and known tie contract");
   }
   if (dsp_schedule_.horizon_ticks() > end_ticks_ && dsp.run_clock().elapsed_ticks() != 0) {
@@ -92,7 +95,8 @@ std::uint64_t McuDspSchedule::mcu_ticks() const {
 }
 
 void McuDspSchedule::consumed() const {
-  if (mcu_ticks() != end_ticks_ || mcu_.run_clock().bus_cycles() != expected_mcu_cycles_) {
+  if (mcu_ticks() != end_ticks_ || mcu_.run_clock().bus_cycles() != expected_mcu_cycles_ ||
+      mcu_.idle_bus_cycles() != expected_idle_cycles_) {
     throw Fault("MCU/DSP schedule requires every offered native MCU period to be consumed");
   }
 }
@@ -103,11 +107,28 @@ void McuDspSchedule::advance(const DspScheduleBoundary boundary, const DspObserv
     dsp_schedule_.advance_to(
         dsp_, end_ticks_, boundary, inputs_.maximum_dsp_steps_per_cycle, before_dsp);
   } catch (const Fault &fault) {
+    if (wait_context_) {
+      throw Fault("Scheduled idle peer execution mcu-pc=" + hex(wait_context_->pc) +
+                  " dsp-pc=" + hex(dsp_.cpu().state().pc, 6) +
+                  " mcu-idle-period=" + std::to_string(expected_idle_cycles_) +
+                  " mcu-end=" + std::to_string(end_ticks_) + ": " + fault.what());
+    }
     throw Fault("Scheduled peer execution mcu-pc=" + hex(cycle_.context.pc) + " dsp-pc=" +
                 hex(dsp_.cpu().state().pc, 6) + " mcu-cycle-kind=" + std::string(1, cycle_.kind) +
                 " mcu-address=" + (cycle_.address ? hex(*cycle_.address) : "none") +
                 " mcu-end=" + std::to_string(end_ticks_) + ": " + fault.what());
   }
+}
+
+void McuDspSchedule::offer_period() {
+  const auto factor = timebase_hz_ / mcu_.run_clock().timebase_hz();
+  const auto period = mcu_.run_clock().next_cycle_ticks(mcu_.bus());
+  if (expected_mcu_cycles_ == std::numeric_limits<std::uint64_t>::max() ||
+      period > (std::numeric_limits<std::uint64_t>::max() - end_ticks_) / factor) {
+    throw Fault("MCU/DSP next native MCU period exhausted common time");
+  }
+  end_ticks_ += period * factor;
+  ++expected_mcu_cycles_;
 }
 
 void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
@@ -116,20 +137,14 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
   healthy();
   const Guard guard(*this);
   consumed();
+  if (waiting_) { throw Fault("MCU/DSP wait slice requires a completed idle boundary"); }
   if (shared_write_) { throw Fault("MCU/DSP shared write observation was not delivered"); }
   const bool write = cycle.kind == 'w' || cycle.kind == 'W';
   if (shared_write && (!write || !cycle.address || cycle.size != 1)) {
     throw Fault("Unqualified MCU/DSP shared write cycle geometry");
   }
-  const auto factor = timebase_hz_ / mcu_.run_clock().timebase_hz();
-  const auto period = mcu_.run_clock().next_cycle_ticks(mcu_.bus());
-  if (expected_mcu_cycles_ == std::numeric_limits<std::uint64_t>::max() ||
-      period > (std::numeric_limits<std::uint64_t>::max() - end_ticks_) / factor) {
-    throw Fault("MCU/DSP next native MCU period exhausted common time");
-  }
   cycle_ = cycle;
-  end_ticks_ += period * factor;
-  ++expected_mcu_cycles_;
+  offer_period();
   offered_ = true;
   shared_write_ = shared_write;
   if (!shared_write) {
@@ -174,6 +189,42 @@ void McuDspSchedule::observe_write(const BusEvent &event,
 void McuDspSchedule::end_instruction() {
   healthy();
   const Guard guard(*this);
+  if (waiting_) { throw Fault("MCU/DSP wait slice requires an explicit idle completion"); }
+  finish_boundary();
+}
+
+void McuDspSchedule::begin_wait_period(const McuWaitPeriod period, const DspObserver &before_dsp) {
+  healthy();
+  const Guard guard(*this);
+  consumed();
+  const auto state = mcu_.cpu().state();
+  if (inputs_.wait_order != McuDspWaitOrder::dsp_before_mcu || !mcu_.cpu().waiting() || offered_ ||
+      shared_write_ || state.pc != period.context.pc || state.ccr != period.context.ccr) {
+    throw Fault("MCU/DSP idle period requires native WAI and an explicit DSP-before-MCU contract");
+  }
+  if (expected_idle_cycles_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("MCU/DSP idle period counter exhausted");
+  }
+  waiting_ = true;
+  wait_context_ = period.context;
+  offer_period();
+  ++expected_idle_cycles_;
+  advance(DspScheduleBoundary::through, before_dsp);
+  wait_context_.reset();
+}
+
+void McuDspSchedule::end_wait() {
+  healthy();
+  const Guard guard(*this);
+  if (inputs_.wait_order != McuDspWaitOrder::dsp_before_mcu || !mcu_.cpu().waiting() || offered_) {
+    throw Fault(
+        "MCU/DSP idle completion requires native WAI and its explicit observation contract");
+  }
+  finish_boundary();
+  waiting_ = false;
+}
+
+void McuDspSchedule::finish_boundary() {
   mcu_.validate_run_boundary();
   consumed();
   if (shared_write_) { throw Fault("MCU/DSP shared write observation was not delivered"); }
@@ -189,7 +240,7 @@ McuDspScheduleCheckpoint McuDspSchedule::checkpoint() const {
   healthy();
   mcu_.validate_run_boundary();
   consumed();
-  if (offered_ || shared_write_) {
+  if (offered_ || shared_write_ || waiting_) {
     throw Fault("MCU/DSP schedule capture requires a completed instruction observation");
   }
   McuDspScheduleCheckpoint result(dsp_schedule_.checkpoint(dsp_));
@@ -198,6 +249,7 @@ McuDspScheduleCheckpoint McuDspSchedule::checkpoint() const {
   result.timebase_hz_ = timebase_hz_;
   result.end_ticks_ = end_ticks_;
   result.mcu_cycles_ = expected_mcu_cycles_;
+  result.mcu_idle_cycles_ = expected_idle_cycles_;
   result.ties_ = ties_;
   return result;
 }
@@ -208,15 +260,19 @@ void McuDspSchedule::restore(const McuDspScheduleCheckpoint &checkpoint) {
   if (checkpoint.inputs_ != inputs_ || checkpoint.timebase_hz_ != timebase_hz_ ||
       mcu_ticks() != checkpoint.end_ticks_ ||
       mcu_.run_clock().bus_cycles() != checkpoint.mcu_cycles_ ||
+      mcu_.idle_bus_cycles() != checkpoint.mcu_idle_cycles_ ||
       !same_cpu(mcu_.cpu().state(), checkpoint.mcu_)) {
     throw Fault("MCU/DSP schedule restore requires compatible inputs and coordinated native MCU");
   }
   dsp_schedule_.restore(checkpoint.dsp_, dsp_);
   end_ticks_ = checkpoint.end_ticks_;
   expected_mcu_cycles_ = checkpoint.mcu_cycles_;
+  expected_idle_cycles_ = checkpoint.mcu_idle_cycles_;
   ties_ = checkpoint.ties_;
   offered_ = false;
   shared_write_ = false;
+  waiting_ = false;
+  wait_context_.reset();
   faulted_ = false;
 }
 }

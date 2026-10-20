@@ -27,6 +27,14 @@ Trusted restore retains both counts, OSC fraction, CPU waiting state and modeled
 peripherals. set_wait_observer installs a separate pre-idle input callback;
 set_cycle_observer continues to describe actual CPU bus slots. Restore drops both
 observers. Neither is a serialized transport or whole-board snapshot.
+set_wait_period_observer is a separate callback after both pending-IRQ checks and
+timer-input sampling, before one committed idle period. It supplies McuWaitPeriod,
+not a CPU bus slot. A new IRQ raised there cannot cancel that period; exceptions
+still fault the owner before the native clock advances. Restore excludes this
+callback too. Active replacement/capture/restore/execution guards remain in force.
+The paired DSP schedule consumes this hook under an explicit DSP-before-MCU-end
+observation contract (mcu-dsp-schedule.txt); the earlier input hook can still
+cancel offers without advancing either processor.
 
 CPU execution/reset/debug replacement, checkpoint/restore and owner reconfiguration
 are rejected inside an idle callback, including calls through an earlier CPU

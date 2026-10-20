@@ -136,6 +136,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-dsp-schedule-test test/mcu_dsp_schedule_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_schedule COMMAND blofeld-mcu-dsp-schedule-test)
+  add_executable(blofeld-mcu-dsp-wait-test test/mcu_dsp_wait_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-wait-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME mcu_dsp_wait COMMAND blofeld-mcu-dsp-wait-test)
   add_executable(blofeld-hc12-cycle-test test/hc12_cycle_test.cpp)
   target_link_libraries(blofeld-hc12-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_cycles COMMAND blofeld-hc12-cycle-test)
@@ -567,6 +570,7 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test
+    blofeld-mcu-dsp-wait-test
     blofeld-hc12-cycle-test
     blofeld-hc12-cycle-extended-test
     blofeld-hc12-compare-stack-test

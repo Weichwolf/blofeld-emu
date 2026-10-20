@@ -138,6 +138,7 @@ struct McuMachine::State {
     if (cpu.pending_interrupt()) { return false; }
     auto &clock = run.clock;
     if (!clock) { throw Fault("MCU wait cycle has no run clock"); }
+    if (wait_period_observer) { wait_period_observer({.context = context}); }
     clock->advance_wait_cycle(*bus, context);
     ++run.idle_cycles;
     return true;
@@ -164,6 +165,7 @@ struct McuMachine::State {
   std::unique_ptr<Hc12CycleBus> timed;
   std::function<void(Hc12BusCycle)> observer;
   std::function<void(McuWaitCycle)> wait_observer;
+  std::function<void(McuWaitPeriod)> wait_period_observer;
   Hc12 cpu;
 };
 
@@ -233,6 +235,11 @@ void McuMachine::set_cycle_observer(std::function<void(Hc12BusCycle)> observer) 
 void McuMachine::set_wait_observer(std::function<void(McuWaitCycle)> observer) {
   state_->check_inactive();
   state_->wait_observer = std::move(observer);
+}
+
+void McuMachine::set_wait_period_observer(std::function<void(McuWaitPeriod)> observer) {
+  state_->check_inactive();
+  state_->wait_period_observer = std::move(observer);
 }
 
 void McuMachine::set_sci_receive_reference(const std::optional<SciReceiveReference> reference) {

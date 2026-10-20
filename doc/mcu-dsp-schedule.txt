@@ -33,10 +33,24 @@ schedule calls/captures reject; a failed operation leaves the schedule faulted.
 Native operand errors retain MCU cycle kind/address, both PCs and attempted DSP
 completion versus last completed DSP time/units. There is no automatic rollback.
 
+Native WAI periods
+Use McuMachine::set_wait_observer only for current-boundary input observations.
+Its IRQ and timer-input checks can cancel an idle offer without consuming time.
+The separate set_wait_period_observer runs after those checks and before one
+committed idle IPBus period. From that hook call begin_wait_period(period,
+before_dsp). An explicit McuDspWaitOrder::dsp_before_mcu contract is required:
+nominal DSP completions through the endpoint precede that MCU peripheral-clock
+edge. A new IRQ supplied there stops at the next boundary after consuming this
+period. No CPU bus slot is invented. Exceptions still quarantine partial state.
+Call end_wait() after advance_wait() returns, including a zero-period result.
+Do not route the cancellable pre-input hook to begin_wait_period. Unconsumed idle
+offers, missing period hooks and unclosed slices reject at the next boundary.
+Other simultaneous idle-edge orders and physical wake latency remain unqualified.
+
 Snapshots
 A trusted McuDspScheduleCheckpoint retains the observation contract, common-time
-boundary, MCU visible registers/cycle count, tie count and pending DSP schedule.
-Capture requires healthy inactive owners and a completed instruction observation.
+boundary, MCU visible registers/cycle/idle counts, tie count and pending DSP schedule.
+Capture requires healthy inactive owners and a closed instruction or wait slice.
 The caller separately checkpoints both native machines and external wiring.
 Restore the owners/wiring first, then restore the schedule. Compatible inputs and
 restored MCU registers/time are checked before changing the schedule; the DSP
@@ -48,6 +62,8 @@ owner identities or an atomic restore of an entire board and host transport.
 Verification
   cmake --build --preset strict --target blofeld-mcu-dsp-schedule-test blofeld-scheduled-coupling-test
   ctest --test-dir build/strict -R '^(mcu_dsp_schedule|original_scheduled_coupling)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-mcu-dsp-wait-test
+  ctest --test-dir build/strict -R '^mcu_dsp_wait$' --output-on-failure
 
 Own native programs use independent HCS12 LDX immediate/DBNE IX cycle sequences
 and DSP long-immediate/MOVE costs. Controlled DSP reset epochs place a real
@@ -66,9 +82,17 @@ cost/timestamp ledgers, mid-frame replay and actual reserved-write recovery
 Own partial-slot tests do not establish physical bus phases or turn the original
 four cases' first-slot failures into hardware-verified coverage of every cut.
 
+Own WAI/RTI programs and a native DSP NOP/JMP loop independently check all frame
+bytes, source/divider/OSC counts, every nominal DSP deadline, OSC/PHY source and
+TIM wait-gate combinations, mid-wait restore and real six-cycle wake/RTI. Existing,
+pre-observed and timer-sampled IRQs execute no speculative DSP step. A newly
+asserted IRQ within the committed period consumes exactly one period. Actual DSP
+reserved-operand failure leaves the MCU period unconsumed and repeats after
+coordinated native recovery. Unqualified idle ordering rejects before execution.
+
 Scope
-This is single-threaded normal-run reference scheduling. WAI idle/wakeup time,
-physical reset/clock/routing, bidirectional host signals, complete mask ROM/assets,
+This is single-threaded normal-run and explicitly ordered WAI reference scheduling.
+Physical reset/clock/routing, bidirectional host signals, complete mask ROM/assets,
 Desktop/Keyboard board profiles and the headless CLI's combined execution path
 remain pending. The CLI still runs MCU only. No future real-time audio callback
 may inherit these allocating/throwing diagnostic and snapshot facilities.

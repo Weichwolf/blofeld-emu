@@ -368,10 +368,21 @@ void test_active_guards_and_callback_lifetime() {
   const auto frozen = machine.checkpoint();
   auto &held_cpu = machine.cpu();
   unsigned observed = 0;
+  unsigned committed = 0;
+  machine.set_wait_period_observer([&](const auto period) {
+    require(period.context.pc == entry + 1 && period.context.ccr == unmasked,
+            "Committed idle periods retain actual WAI context without inventing CPU slots");
+    static_cast<void>(rejected([&] { machine.set_wait_period_observer({}); }));
+    static_cast<void>(rejected([&] { static_cast<void>(machine.checkpoint()); }));
+    static_cast<void>(rejected([&] { machine.restore(frozen); }));
+    static_cast<void>(rejected([&] { held_cpu.step(); }));
+    ++committed;
+  });
   machine.set_wait_observer([&](auto /*cycle*/) {
     static_cast<void>(rejected([&] { static_cast<void>(machine.checkpoint()); }));
     static_cast<void>(rejected([&] { machine.restore(frozen); }));
     static_cast<void>(rejected([&] { machine.set_wait_observer({}); }));
+    static_cast<void>(rejected([&] { machine.set_wait_period_observer({}); }));
     static_cast<void>(rejected([&] { machine.set_cycle_observer({}); }));
     static_cast<void>(rejected([&] { machine.set_timer_inputs(0); }));
     static_cast<void>(rejected([&] { machine.advance_wait(1); }));
@@ -380,10 +391,11 @@ void test_active_guards_and_callback_lifetime() {
     static_cast<void>(rejected([&] { held_cpu.set_state({}); }));
     ++observed;
   });
-  require(machine.advance_wait(1) == 1 && observed == 1 && !machine.timing_faulted(),
+  require(machine.advance_wait(1) == 1 && observed == 1 && committed == 1 &&
+              !machine.timing_faulted(),
           "Caught active guards preserve a healthy native wait and cannot reenter held CPU refs");
   machine.restore(frozen);
-  require(machine.advance_wait(1) == 1 && observed == 1,
+  require(machine.advance_wait(1) == 1 && observed == 1 && committed == 1,
           "Restore drops caller-owned idle observers rather than retaining captured references");
   check_counts(machine, one_idle_counts);
 }

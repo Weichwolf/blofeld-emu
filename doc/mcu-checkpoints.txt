@@ -65,6 +65,9 @@ on restore. The handle is trusted in-process state, not a persistent clock forma
 validate_run_boundary() checks an inactive clocked CPU/bus and healthy native
 cycle accounting without copying memory. McuDspSchedule uses this after each
 instruction; SLA byte identity remains checked when creating/restoring snapshots.
+The separate committed WAI-period observer is also caller-owned and excluded from
+capture/restore. Paired schedule checkpoints retain the corresponding idle count;
+owners and external signal state must be restored before that schedule.
 
 set_cycle_observer supplies optional pre-cycle external observations. It is
 excluded from checkpoints, as is the ordinary bus observer, and must be explicitly

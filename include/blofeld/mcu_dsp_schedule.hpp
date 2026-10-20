@@ -11,14 +11,17 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 
 namespace blofeld {
 enum class McuDspTieOrder : std::uint8_t { unqualified, dsp_before_mcu, mcu_before_dsp };
+enum class McuDspWaitOrder : std::uint8_t { unqualified, dsp_before_mcu };
 
 struct McuDspScheduleInputs {
   DspScheduleInputs dsp;
   McuDspTieOrder shared_write_order = McuDspTieOrder::unqualified;
   unsigned maximum_dsp_steps_per_cycle = 0;
+  McuDspWaitOrder wait_order = McuDspWaitOrder::unqualified;
   bool operator==(const McuDspScheduleInputs &) const = default;
 };
 
@@ -36,6 +39,7 @@ private:
   std::uint64_t timebase_hz_ = 0;
   std::uint64_t end_ticks_ = 0;
   std::uint64_t mcu_cycles_ = 0;
+  std::uint64_t mcu_idle_cycles_ = 0;
   std::uint64_t ties_ = 0;
 };
 
@@ -53,6 +57,8 @@ public:
                      const std::function<void()> &observe_signals,
                      const DspObserver &before_dsp = {});
   void end_instruction();
+  void begin_wait_period(McuWaitPeriod period, const DspObserver &before_dsp = {});
+  void end_wait();
   [[nodiscard]] McuDspScheduleCheckpoint checkpoint() const;
   void restore(const McuDspScheduleCheckpoint &checkpoint);
   [[nodiscard]] bool faulted() const;
@@ -67,6 +73,8 @@ private:
   class Guard;
   void healthy() const;
   void consumed() const;
+  void offer_period();
+  void finish_boundary();
   [[nodiscard]] std::uint64_t mcu_ticks() const;
   void advance(DspScheduleBoundary boundary, const DspObserver &before_dsp);
   McuDspScheduleInputs inputs_;
@@ -76,10 +84,13 @@ private:
   std::uint64_t timebase_hz_;
   std::uint64_t end_ticks_;
   std::uint64_t expected_mcu_cycles_;
+  std::uint64_t expected_idle_cycles_;
   std::uint64_t ties_ = 0;
   Hc12BusCycle cycle_;
+  std::optional<ExecutionContext> wait_context_;
   bool offered_ = false;
   bool shared_write_ = false;
+  bool waiting_ = false;
   bool active_ = false;
   bool faulted_ = false;
 };
