@@ -252,8 +252,9 @@ void test_unknown_clock_inputs_rejection_and_reset() {
          "Unknown second timer rejects the entire shared-clock batch");
   require(timers.read(csr - 3) == 5,
           "Earlier timers cannot partially advance before another timer rejects time");
-  reject([&timers] { timers.write({.address = csr - 2, .value = 6}); },
-         "Live compare updates require qualification");
+  timers.write({.address = csr - 2, .value = 6});
+  require(timers.read(csr - 3) == 5 && timers.read(csr - 2) == 6,
+          "Live compare updates change TCPR without advancing the counter");
   reject([&timers] { timers.write({.address = csr, .value = te | pce}); },
          "Active prescaler-source changes are unsafe");
   constexpr unsigned external_source = 0x200000;

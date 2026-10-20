@@ -65,33 +65,40 @@ void DspTimers::advance_timer(Timer &timer, const std::size_t index, std::uint64
   }
   const auto load = timer.load.value();
   const auto compare = timer.compare.value();
-  if (timer.first_clock) {
+  const bool reload = (timer.control & trm) != 0;
+  if (timer.first_clock || timer.reload_pending) {
     timer.count = load;
     timer.first_clock = false;
+    timer.reload_pending = reload && load == compare;
     if (load == compare) { timer.flags |= tcf; }
     --edges;
   }
-  if ((timer.control & trm) == 0 || edges == 0) {
+  if (!reload || edges == 0) {
     advance_free(timer, {.compare = compare, .edges = edges});
     return;
   }
-  if (timer.count != compare) {
+  if (!timer.reload_pending) {
     const auto distance = (compare + counter_range - timer.count) % counter_range;
-    const auto advance = edges < distance ? edges : distance;
+    const auto until_compare = distance == 0 ? counter_range : distance;
+    const auto advance = edges < until_compare ? edges : until_compare;
     advance_free(timer, {.compare = compare, .edges = advance});
     edges -= advance;
+    timer.reload_pending = advance == until_compare;
     if (edges == 0) { return; }
   }
   const auto period = ((compare + counter_range - load) % counter_range) + 1;
   if (edges >= period) {
     timer.flags |= tcf;
     if (compare < load) { timer.flags |= tof; }
+    timer.count = compare;
+    timer.reload_pending = true;
     edges %= period;
   }
   if (edges != 0) {
     timer.count = load;
     if (load == compare) { timer.flags |= tcf; }
     advance_free(timer, {.compare = compare, .edges = edges - 1});
+    timer.reload_pending = timer.count == compare;
   }
 }
 

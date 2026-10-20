@@ -46,6 +46,7 @@ private:
     std::optional<std::uint32_t> load;
     std::optional<std::uint32_t> compare;
     bool first_clock = false;
+    bool reload_pending = false;
     std::uint32_t captured = 0;
     std::optional<bool> synchronized;
     bool synchronized_qualified = false;
@@ -58,6 +59,7 @@ private:
   };
 
   void write_checked(DspTimerWrite access);
+  void validate_control(std::size_t index, std::uint32_t value) const;
   void write_control(std::size_t index, std::uint32_t value);
   [[nodiscard]] bool prescaler_enabled() const;
   [[nodiscard]] std::uint64_t advance_prescaler(std::uint64_t edges);

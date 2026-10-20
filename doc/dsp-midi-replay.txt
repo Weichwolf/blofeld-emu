@@ -39,8 +39,24 @@ Missing first cells on either empty ring expose genuine speculative reads at
 P:0c5a / P:0c6a and X:2f80 / X:2d00 with PC/OMR. They fail before consumption,
 field mutation or retirement; further execution and checkpoint capture reject.
 
-This qualifies an isolated parser/callback fixture. Physical DIN/USB assignment,
-actual MCU/GPIO/timer producer routing, interrupt/clock calibration, other MIDI
+Additional local producer integration executes unchanged original configuration,
+vectors and input handlers from the complete P:2cd9 component through the actual
+MS111 physical RAM alias. Logical TIO0 input and explicit CLK/2 edges supply
+fixed 3249-edge 8-N-1 frames; native instruction/IRQ execution inserts no timer
+clocks. This is a declared laboratory ordering, not calibrated baud or latency.
+
+All 256 byte values produce 2304 original interrupt entries/RTIs, four ring wraps
+and one actual clock timestamp. Connecting this actual queue to the original
+parser/callback tests all 16384 pitch values with running status and three
+interleaved clock messages: 32772 wire bytes, 294948 original IRQ entries/RTIs,
+512 complete ring wraps and 16384 genuine pitch callbacks. Every sampled partial
+byte, actual produced word/cursor, field update, foreground register restoration,
+guard and reset-defined Timer2 clock timestamp is checked independently.
+These ignored local fixtures are not yet part of the public CTest inventory.
+Their source/record identities and run evidence remain in doc/local/.
+
+This qualifies isolated producer and parser/callback fixtures. Physical DIN/USB assignment,
+actual MCU/connector routing, interrupt/clock calibration, other MIDI
 messages, controller mapping, voices and audio remain required. The complete
 original DSP boot still fails at strict Y:002000. This test establishes neither
 Desktop/Keyboard equivalence nor update/recovery or physical-device safety.

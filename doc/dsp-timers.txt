@@ -34,6 +34,33 @@ does not itself generate an increment-overflow event. Disabling clears flags
 and freezes the counter; writing TE=1 while already enabled does not restart it.
 Live TLR changes apply on the next load, without immediately replacing TCR.
 
+Ordered live register updates
+Register writes and supplied clock edges are separate, ordered events. A TCSR
+write clearing TE can also change TC: the counter is disabled before another
+mode can observe an edge. Retaining TE still forbids TC/PCE changes. This is a
+logical register-boundary contract; coincident physical write/clock phase and
+silicon pipeline effects are not inferred from original firmware usage.
+
+TCPR writes store the new value without clocking, changing TCR or acknowledging
+flags. They apply to subsequent actual comparisons. A previous clocked match
+requesting reload is retained independently of TCPR and TCF: changing TCPR,
+W1C or IRQ acknowledgement cannot erase that request or create a past match.
+The next edge reloads TLR, then uses the new comparison for following events.
+Explicit pending state also prevents an equal-to-count TCPR write from causing
+a retroactive reload. Reset, disable and fresh enable clear pending reload.
+
+TRM can change between comparison/reload boundaries without restarting the
+counter. A TRM change while reload is pending, or at an already reached compare
+count, still fails explicitly: write/edge ordering at that boundary remains
+unqualified. Setting TRM after first changing TCPR away from a free-running
+match is supported. Capture TRM=1 and active PCE/TC changes stay unsupported.
+
+The fixed dsp_timer_updates diagnostic checks all three timers, ordered
+disable/reconfigure, live TCPR before/after wrap and pending reload, W1C/IRQ
+acknowledgement, one-clock UINT64_MAX batches and retained rejection boundaries.
+Another 2688 comparisons use independent literal preload/increment/match edges
+with fixed live TCPR/TLR/TRM changes; no randomized or fuzz inputs are generated.
+
 The shared 21-bit down-counter is enabled only while a TE+PCE user exists. It
 loads PL on first enable and generates a pulse every PL+1 input clocks. Adding
 a second user preserves its phase. A new PL value applies at the next reload.
@@ -87,7 +114,7 @@ and SHI priority, vector fetch acknowledgement, fast/long entry and native RTI
 effects. DMA event history and physical interrupt timing remain pending.
 
 Checks
-  ctest --test-dir build/strict -R '^(dsp_timers|dsp_capture|native_dsp|original_dsp_boot|original_nand_write)$' --output-on-failure
+  ctest --test-dir build/strict -R '^(dsp_timers|dsp_timer_updates|dsp_capture|native_dsp|original_dsp_boot|original_nand_write)$' --output-on-failure
 Independent register/clock expectations cover reset permissions/unknown values,
 TIO polarity and contention, first preload, M-N+1 compare, reload, live preload,
 wrap/W1C, source acknowledgement, shared/direct clocks, PL changes/maxima,
@@ -101,8 +128,8 @@ The oracle keeps its own pending-reload state and applies each manual clock tran
 
 Unsupported / unqualified
 Other TC modes (pulse/toggle, external counting, width/period, PWM, watchdog),
-external prescaler clocks, active PCE/TRM changes that keep TE enabled, live TCPR
-writes, wait/stop clock gating, electrical/PLL timing and full board scheduling
+external prescaler clocks, active PCE/TC changes that keep TE enabled, TRM changes
+at a compare/pending-reload boundary, wait/stop clock gating, electrical/PLL timing and full board scheduling
 fail or remain outside this interface. Disabling TE may also clear configuration.
 Table 11-1 permits TIO1 as prescaler source 2, whereas Appendix C marks it
 reserved; no external-source assumption is made. Clock batches aggregate sticky

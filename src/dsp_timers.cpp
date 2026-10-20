@@ -112,8 +112,8 @@ std::uint32_t DspTimers::read(const std::uint32_t address, const std::uint32_t m
   }
 }
 
-void DspTimers::write_control(const std::size_t index, const std::uint32_t value) {
-  auto &timer = timers_.at(index);
+void DspTimers::validate_control(const std::size_t index, const std::uint32_t value) const {
+  const auto &timer = timers_.at(index);
   const auto mode = value & mode_mask;
   const auto previous_mode = timer.control & mode_mask;
   if ((value & ~allowed) != 0 || (mode != 0 && mode != capture_mode) ||
@@ -122,7 +122,10 @@ void DspTimers::write_control(const std::size_t index, const std::uint32_t value
     throw Fault("Unsupported DSP timer control write at X:" + hex(last - (index * 4), 6) +
                 " value=" + hex(value, 6));
   }
-  if ((timer.control & te) != 0 && previous_mode != mode) {
+  const bool active = (timer.control & value & te) != 0;
+  // Ordered register writes do not clock the counter. Clearing TE disables it
+  // before another mode can observe an edge; retaining TE cannot change TC.
+  if (active && previous_mode != mode) {
     throw Fault("Unqualified active DSP timer mode change at X:" + hex(last - (index * 4), 6));
   }
   if (mode == capture_mode && (timer.control & value & te) != 0 &&
@@ -130,9 +133,22 @@ void DspTimers::write_control(const std::size_t index, const std::uint32_t value
     throw Fault("Unqualified active DSP timer capture polarity change at X:" +
                 hex(last - (index * 4), 6));
   }
-  if ((timer.control & value & te) != 0 && ((timer.control ^ value) & (pce | trm)) != 0) {
-    throw Fault("Unqualified active DSP timer PCE/TRM write at X:" + hex(last - (index * 4), 6));
+  if (active && ((timer.control ^ value) & pce) != 0) {
+    throw Fault("Unqualified active DSP timer PCE write at X:" + hex(last - (index * 4), 6));
   }
+  if (active && ((timer.control ^ value) & trm) != 0 &&
+      (timer.reload_pending ||
+       (!timer.first_clock && (!timer.compare || timer.count == *timer.compare)))) {
+    throw Fault("Unqualified active DSP timer TRM change at compare/reload boundary X:" +
+                hex(last - (index * 4), 6));
+  }
+}
+
+void DspTimers::write_control(const std::size_t index, const std::uint32_t value) {
+  validate_control(index, value);
+  auto &timer = timers_.at(index);
+  const auto previous_mode = timer.control & mode_mask;
+  const auto mode = value & mode_mask;
   const bool was_prescaled = prescaler_enabled();
   const bool enable = (timer.control & te) == 0 && (value & te) != 0;
   if (previous_mode != mode) {
@@ -143,9 +159,11 @@ void DspTimers::write_control(const std::size_t index, const std::uint32_t value
   if ((value & te) == 0) {
     timer.flags = 0;
     timer.first_clock = false;
+    timer.reload_pending = false;
   } else if (enable) {
     timer.count = 0;
     timer.first_clock = true;
+    timer.reload_pending = false;
     timer.halted = false;
   }
   if (!was_prescaled && prescaler_enabled()) { prescaler_count_ = prescaler_load_; }
@@ -170,12 +188,7 @@ void DspTimers::write_checked(const DspTimerWrite access) {
   auto &timer = timers_.at(index_of(access.address));
   switch (access.address & 3U) {
     case 0: throw Fault("Read-only DSP timer count write at X:" + hex(access.address, 6));
-    case 1:
-      if ((timer.control & te) != 0) {
-        throw Fault("Unqualified live DSP timer compare write at X:" + hex(access.address, 6));
-      }
-      timer.compare = access.value;
-      break;
+    case 1: timer.compare = access.value; break;
     case 2: timer.load = access.value; break;
     case 3: write_control(index_of(access.address), access.value); break;
     default: throw Fault("Invalid DSP timer register write");

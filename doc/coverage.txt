@@ -116,6 +116,12 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
                                           source IRQs tested (dsp-timers.txt).
+                                          Ordered TE-clear/TC changes, live TCPR,
+                                          retained clocked reload requests and
+                                          nonboundary TRM updates checked against
+                                          2688 fixed literal-edge comparisons.
+                                          Compare/reload-boundary TRM changes
+                                          remain explicitly unqualified.
                                           Native ready polls and RESET checked.
                                           SHI/TIM IPRP arbitration, CPU masking,
                                           native fast/long and nested entry,
@@ -486,6 +492,13 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           is an explicit RAM producer fixture;
                                           actual transport remains unqualified
                                           (dsp-midi-replay.txt).
+                                          Local logical-TIO0 fixtures execute the
+                                          original producer through real IRQ/RTI
+                                          for all 256 bytes, then its actual queue
+                                          through the original parser/callback for
+                                          all 16384 pitch values. Caller-supplied
+                                          ordered clocks are uncalibrated; these
+                                          fixtures are not yet public CTest cases.
                                           No virtual/physical MIDI port, complete
                                           message/controller processing or DSP
                                           voice/audio integration yet.

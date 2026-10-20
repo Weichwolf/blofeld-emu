@@ -162,7 +162,8 @@ void test_input_qualification_and_rejections() {
           "Unknown synchronized input rejects the entire capture clock observation");
   require(timers.read(control0, flags) == 0,
           "A rejected unknown previous input does not invent capture");
-  rejects([&] { timers.write({.address = control0, .value = 0}); }, "active DSP timer mode change");
+  rejects([&] { timers.write({.address = control0, .value = enable}); },
+          "active DSP timer mode change");
   rejects([&] { timers.write({.address = control0, .value = capture_mode | enable | inv}); },
           "capture polarity change");
   timers.set_tio_drive(0, false);

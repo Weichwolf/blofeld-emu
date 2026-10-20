@@ -407,6 +407,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-timers-test test/dsp_timers_test.cpp)
   target_link_libraries(blofeld-dsp-timers-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_timers COMMAND blofeld-dsp-timers-test)
+  add_executable(blofeld-dsp-timer-updates-test test/dsp_timer_updates_test.cpp)
+  target_link_libraries(blofeld-dsp-timer-updates-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME dsp_timer_updates COMMAND blofeld-dsp-timer-updates-test)
   add_executable(blofeld-dsp-capture-test test/dsp_capture_test.cpp)
   target_link_libraries(blofeld-dsp-capture-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_capture COMMAND blofeld-dsp-capture-test)
@@ -735,6 +738,7 @@ add_custom_target(quality
     blofeld-dsp-checkpoint-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test
+    blofeld-dsp-timer-updates-test
     blofeld-dsp-capture-test
     blofeld-dsp-interrupt-test
     blofeld-dsp-norm-test
