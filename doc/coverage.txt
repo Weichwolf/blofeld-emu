@@ -265,7 +265,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           native completions, including 625-tick
                                           ESAI half-periods and native MOVEP word
                                           replay (dsp-external-events.txt).
-                                          RX, automatic clocks, audio DMA/IRQ and
+                                          HCKT-fed divider and generated bit/word
+                                          FS now have an explicit reset-edge
+                                          reference, continuous clock/late-enable
+                                          tests and native opposite-edge capture
+                                          with partial-divider/word replay.
+                                          RX, FOSC clocks, audio DMA/IRQ and
                                           chip profile remain pending;
                                           no combined MCU/DSP board boot.
 MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges exact

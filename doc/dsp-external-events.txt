@@ -62,11 +62,14 @@ involved. The native cost ledger is independent of the scheduler's dispatch.
 
 Scope
 The event source and ESAI wire in this test are explicit reference fixtures.
-Production board clock generation, continuous startup/reset input levels, a
-serial PCM receiver, host audio/WAV transport and actual firmware audio remain
-pending. The source project's static analysis reports internal bit-clock,
-word-length frame sync and DMA programming intent; those modes remain outside
-the current external-clock ESAI subset. No physical rate, codec route,
+The ESAI component now supports explicitly observed HCKT-fed clock division,
+generated bit/word frame sync and preserved startup/reset input levels under a
+separate reference reset-edge contract (dsp-esai.txt). Production board clock
+sources, a serial PCM receiver, host audio/WAV transport and actual firmware
+audio remain pending. The source project's static analysis reports HCKT-fed
+clock, word-length frame sync and DMA intent; DMA/DAX and its missing physical
+input frequency and incoming control/mask state remain unqualified.
+No physical rate, codec route,
 Desktop/Keyboard topology or complete original boot is established.
 Unknown/reserved memory accesses remain strict.
 The callbacks and diagnostics can allocate/throw; they are not a real-time audio

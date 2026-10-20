@@ -25,6 +25,38 @@ A known inactive FST baseline is required after startup/reset. No instruction co
 serial clock. Early/inconsistent or multi-bit frame pulses reject. This logical
 observation contract does not establish analog setup/hold or Blofeld sample rate.
 
+HCKT-fed and generated frame clocks
+TCKD=1/THCKD=0 selects the external HCKT input through the fixed divide-by-two,
+TPSR /1-or-8, TPM+1 and TFP+1 divider chain (figures 8-3/9-3). HCKT observations
+are separate from SCKT observations; an output clock cannot also be supplied as
+an external input. The documented TPSR=1/TPM=0 synchronization hazard rejects.
+TFSD=1 generates FST from either external SCKT or the HCKT-fed divider. Bit-length
+FS precedes data by one bit; word-length FS with TFSR=0 spans the first slot and
+starts with its first data bit. A one-slot continuous frame requires bit-length FS.
+TCKP/TFSP select bit-clock/frame polarity; generated output levels have independent
+driven/known masks. Clocks and frame phase continue with all TEx disabled; late
+enable waits for the next complete frame. TFS follows the current generated slot
+when enabled, while empty requests require actual data-register transfers.
+
+Generated modes require an explicit DspEsaiClockTiming::reference_reset_edges
+contract and a known input baseline. This logical experiment starts SCKT low and
+the frame counter at zero after individual/personal reset. It counts rising HCKT
+edges for THCKP=0 and falling edges for THCKP=1; each divider expiry toggles SCKT.
+This is a declared reset-edge phase, not measured silicon synchronization latency
+or a physical HCKT/core setup/hold guarantee. No EXTAL, audio frequency or elapsed
+CPU chunk supplies missing HCKT edges. During TPR, selected clock outputs drive
+zero and data is high impedance. Explicit external pin observations survive
+inactive periods, reset and enabling; they neither consume past edges nor create
+an earlier frame. Missing input/timing, illegal output drive and changed active
+configuration fail visibly. FOSC/THCKD=1 generation remains unsupported.
+
+DspBus::observe_esai_transmit accepts high_clock and timing alongside the existing
+clock/frame_sync snapshot. esai_clock_outputs reports logical SCKT/FST in bits0/1.
+Required input pads must be selected: HCKT=PC/PE5, SCKT=3, FST=4. Generated clock
+outputs qualify only selected pads3/4; opposed known external drivers reject
+before an observation commits its divider, frame or data shift. A native status
+read with an unqualified generator fails with the register address and CPU PC.
+
 Normal mode transfers only in slot 0. Network masks include both 16-bit halves and
 are latched for the next frame. Masked slots do not consume pending TX data.
 TSR creates an intentional high-impedance slot; mixed TX/TSR writes and TSR with
@@ -46,9 +78,10 @@ invalidated; software must reprime it. Hardware/software reset also resets contr
 and restores all slot-mask bits. Native owner checkpoints retain all transmit
 buffers, shifts, pin phase, pending sync, mask versions and error-clear history.
 
-Receiver enable/configuration, internally generated clocks, word-length/relative
-frame sync, AC97/on-demand modes, serial flag outputs/external buffer controls,
-DMA and interrupt enables remain unsupported and reject. Receiver-disabled reset
+Receiver enable/configuration, FOSC-derived clocks, external word-length/relative
+frame sync, generated relative frame sync, AC97/on-demand modes, serial flag
+outputs/external buffer controls, DMA and interrupt enables remain unsupported
+and reject. Receiver-disabled reset
 controls/masks can be inspected without fabricating received data. In particular,
 word-length external frame-sync behavior affected by ES140 is not qualified.
 No board route, codec, host PCM sink, real-time callback or original audio is
@@ -68,3 +101,20 @@ literal old/new words and 12/18 native-cycle-unit expectations supplement replay
 External bit clocks do not advance the CPU. These are instruction/peripheral
 reference tests; full original DSP boot, physical timing, MIDI/audio and hardware
 equivalence remain pending.
+
+  cmake --build --preset strict --target blofeld-esai-clock-test
+  ctest --test-dir build/strict -R '^dsp_esai_clock$' --output-on-failure
+
+Literal divider expectations cover both prescaler ranges, minimum/maximum TPM/TFP
+and repeated observations. Sixteen bit/frame/high-clock polarity and bit/word-FS
+cases check complete literal old/new words, padding and request flags, including
+frame wraps, retained-data underrun and read/refill recovery. They cover late
+enable, personal reset/reprime with both FST polarities, preserved external
+baseline, generated FST with external SCKT, unknown inputs and pad contention.
+Own native MOVEP programs configure both register maps during a free-running
+external HCKT experiment; an independent receiver samples on the opposite SCKT
+edge and checks every bit's literal timestamp. Both explicit native/external tie
+orders and trusted snapshots of partial divider, frame, data, native instruction
+and receiver phase reproduce the full stream. A separate real native missing-
+clock fault/recovery checks its PC/address and independent instruction cost.
+The fixture's frequency and initial phase are assumptions, not Blofeld evidence.

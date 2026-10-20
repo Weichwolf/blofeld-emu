@@ -110,7 +110,7 @@ add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
 add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
-  src/dsp_esai.cpp src/dsp_esai_transmit.cpp src/dsp_bus_esai.cpp
+  src/dsp_esai.cpp src/dsp_esai_transmit.cpp src/dsp_esai_clock.cpp src/dsp_bus_esai.cpp
   src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp
   src/dsp_run_clock.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
@@ -139,6 +139,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-esai-test test/dsp_esai_test.cpp test/dsp_esai_native.cpp)
   target_link_libraries(blofeld-esai-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_esai COMMAND blofeld-esai-test)
+  add_executable(blofeld-esai-clock-test test/dsp_esai_clock_test.cpp test/dsp_esai_clock_native.cpp)
+  target_link_libraries(blofeld-esai-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_esai_clock COMMAND blofeld-esai-clock-test)
   add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp
     src/reference_config.cpp src/reference_board.cpp src/reference_wiring.cpp
     src/reference_returns.cpp src/reference_checkpoint.cpp)
@@ -624,7 +627,8 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
+  DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test
+    blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-dsp-completion-observer-test blofeld-dsp-external-events-test
     blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test

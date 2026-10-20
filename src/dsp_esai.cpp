@@ -44,6 +44,11 @@ void DspEsai::reset_paths() {
   skip_ = false;
   clear_armed_ = false;
   output_ = {};
+  high_phase_ = 0;
+  frame_position_ = 0;
+  generated_clock_ = false;
+  generated_sync_ = false;
+  frame_clocked_ = false;
 }
 
 void DspEsai::reset() {
@@ -62,7 +67,9 @@ void DspEsai::reset() {
 
 void DspEsai::set_active(const bool active) {
   if (active_ && !active) { reset_paths(); }
+  const bool activate = active && !active_;
   active_ = active;
+  if (activate) { rebaseline(); }
 }
 
 bool DspEsai::handles(const unsigned offset) {
@@ -118,6 +125,11 @@ bool DspEsai::needs_transmit_clock() const {
 }
 
 void DspEsai::require_observed_clock() const {
+  if (needs_transmit_clock() && (clock_generator() || frame_generator()) &&
+      observed_.timing != DspEsaiClockTiming::reference_reset_edges) {
+    throw Fault("DSP ESAI generator requires explicit reference reset-edge timing at " +
+                address(esai::tccr));
+  }
   if (needs_transmit_clock() && !baseline_) {
     throw Fault("Unknown DSP ESAI clock/frame observation at " + address(esai::saisr));
   }
@@ -139,8 +151,16 @@ void DspEsai::validate() const {
   if (layout.slot == 0 || ((common_control_ & esai::alignment) != 0 && layout.word > 16)) {
     throw Fault("Reserved/unpredictable DSP ESAI word format at " + address(esai::tcr));
   }
-  if (enabled() != 0 && (control_ & esai::bit_sync) == 0) {
+  constexpr unsigned unsynchronized_divider = 0x1ff;
+  if (clock_generator() && (clock_control_ & unsynchronized_divider) == 0x100) {
+    throw Fault("Unpredictable DSP ESAI TPM0/TPSR1 clock divider at " + address(esai::tccr));
+  }
+  if (enabled() != 0 && (control_ & esai::bit_sync) == 0 && !frame_generator()) {
     throw Fault("Unqualified DSP ESAI word-length frame sync at " + address(esai::tcr));
+  }
+  if ((enabled() != 0 || generator_running()) && (control_ & esai::bit_sync) == 0 &&
+      frame_slots() == 1) {
+    throw Fault("DSP ESAI continuous normal frames require bit sync at " + address(esai::tcr));
   }
   if (enabled() != 0 && (control_ & esai::network) != 0 && frame_slots() == 1) {
     throw Fault("Unimplemented DSP ESAI on-demand mode at " + address(esai::tcr));
@@ -220,8 +240,27 @@ void DspEsai::write_control(const std::uint32_t value) {
       pending_frame_ = false;
       slot_driven_ = false;
       output_ = {};
+      rebaseline();
     }
+    if ((value & esai::personal_reset) == 0 && old == 0 && enabled() == 0) { rebaseline(); }
+    update_frame_flag();
   }
+}
+
+void DspEsai::write_configuration(const Configuration kind, const std::uint32_t value) {
+  constexpr unsigned common_mask = 0x140;
+  constexpr unsigned clock_mask = 0x7fffff;
+  const bool common = kind == Configuration::common;
+  const auto offset = common ? esai::saicr : esai::tccr;
+  const auto allowed = common ? common_mask : clock_mask;
+  auto &target = common ? common_control_ : clock_control_;
+  const bool changed = value != target;
+  if ((value & ~allowed) != 0 || (active_ && (control_ & esai::personal_reset) == 0 && changed)) {
+    throw Fault("Unsupported/active DSP ESAI configuration at " + address(offset));
+  }
+  target = value;
+  validate();
+  if (changed || !active_) { rebaseline(); }
 }
 
 void DspEsai::write_checked(const unsigned offset, const std::uint32_t value) {
@@ -243,20 +282,8 @@ void DspEsai::write_checked(const unsigned offset, const std::uint32_t value) {
       clear_error(esai::channels);
       return;
     case esai::tcr: write_control(value); return;
-    case esai::saicr:
-    case esai::tccr: {
-      constexpr unsigned common_mask = 0x140;
-      constexpr unsigned external_clock_mask = 0x1fffff;
-      const auto allowed = offset == esai::saicr ? common_mask : external_clock_mask;
-      auto &target = offset == esai::saicr ? common_control_ : clock_control_;
-      if ((value & ~allowed) != 0 ||
-          (active_ && (control_ & esai::personal_reset) == 0 && value != target)) {
-        throw Fault("Unsupported/active DSP ESAI configuration at " + address(offset));
-      }
-      target = value;
-      validate();
-      return;
-    }
+    case esai::saicr: write_configuration(Configuration::common, value); return;
+    case esai::tccr: write_configuration(Configuration::transmit_clock, value); return;
     case esai::rcr:
       if (value != 0 && value != esai::personal_reset) {
         throw Fault("Unimplemented DSP ESAI receiver at " + address(offset));

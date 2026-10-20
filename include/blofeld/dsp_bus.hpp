@@ -78,6 +78,7 @@ public:
 
   void observe_esai_transmit(DspEsaiInstance instance, DspEsaiInputs inputs);
   [[nodiscard]] DspEsaiOutputs esai_transmit_outputs(DspEsaiInstance instance) const;
+  [[nodiscard]] DspEsaiClockOutputs esai_clock_outputs(DspEsaiInstance instance) const;
 
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 

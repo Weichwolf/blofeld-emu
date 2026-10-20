@@ -103,37 +103,29 @@ void DspEsai::launch() {
 }
 
 void DspEsai::observe_checked(const DspEsaiInputs inputs) {
-  if (!active_ || (control_ & esai::personal_reset) != 0 || (enabled() == 0 && running_ == 0)) {
-    baseline_ = false;
-    previous_clock_ = inputs.clock;
+  validate();
+  if (inputs.timing != DspEsaiClockTiming::unqualified &&
+      inputs.timing != DspEsaiClockTiming::reference_reset_edges) {
+    throw Fault("Unknown DSP ESAI clock timing contract at " + address(esai::tccr));
+  }
+  if ((clock_generator() && inputs.clock) || (frame_generator() && inputs.frame_sync)) {
+    throw Fault("External drive supplied for DSP ESAI generated clock at " + address(esai::tccr));
+  }
+  if (!generator_running() && !needs_transmit_clock()) {
+    observed_ = inputs;
+    rebaseline();
     output_ = {};
     return;
   }
-  if (!inputs.clock) { throw Fault("Unknown DSP ESAI SCKT at " + address(esai::tccr)); }
-  const bool inverted = (clock_control_ & esai::frame_polarity) != 0;
-  if (!baseline_) {
-    if (!inputs.frame_sync || *inputs.frame_sync != inverted) {
-      throw Fault("DSP ESAI baseline requires known inactive FST at " + address(esai::tccr));
-    }
-    previous_clock_ = inputs.clock;
-    previous_sync_ = false;
-    baseline_ = true;
-    return;
+  if (generator_running() && inputs.timing != DspEsaiClockTiming::reference_reset_edges) {
+    throw Fault("DSP ESAI generator requires explicit reference reset-edge timing at " +
+                address(esai::tccr));
   }
-  if (previous_clock_ == inputs.clock) { return; }
-  previous_clock_ = inputs.clock;
-  const bool launch_edge = *inputs.clock != ((clock_control_ & esai::clock_polarity) != 0);
-  if (launch_edge) {
-    launch();
-    return;
+  if (clock_generator()) {
+    observe_high_clock(inputs);
+  } else {
+    observe_bit_clock(inputs);
   }
-  if (!inputs.frame_sync) { throw Fault("Unknown DSP ESAI FST at " + address(esai::tccr)); }
-  const bool sync = *inputs.frame_sync != inverted;
-  if (sync && previous_sync_) {
-    throw Fault("DSP ESAI bit frame sync spans multiple bits at " + address(esai::tccr));
-  }
-  if (sync) { pending_frame_ = true; }
-  previous_sync_ = sync;
 }
 
 void DspEsai::observe(const DspEsaiInputs inputs) {

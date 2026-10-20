@@ -8,10 +8,21 @@
 
 namespace blofeld {
 enum class DspEsaiInstance : std::uint8_t { primary, secondary };
+enum class DspEsaiClockTiming : std::uint8_t { unqualified, reference_reset_edges };
 
 struct DspEsaiInputs {
-  std::optional<bool> clock;
-  std::optional<bool> frame_sync;
+  std::optional<bool> clock = std::nullopt;
+  std::optional<bool> frame_sync = std::nullopt;
+  std::optional<bool> high_clock = std::nullopt;
+  DspEsaiClockTiming timing = DspEsaiClockTiming::unqualified;
+};
+
+// Bit0 is SCKT, bit1 is FST. Only output directions drive these logical signals.
+struct DspEsaiClockOutputs {
+  unsigned driven = 0;
+  unsigned known = 0;
+  unsigned levels = 0;
+  bool operator==(const DspEsaiClockOutputs &) const = default;
 };
 
 // Bits0..5 identify TX0..TX5, independently of physical port pad numbering.
@@ -22,7 +33,7 @@ struct DspEsaiOutputs {
   bool operator==(const DspEsaiOutputs &) const = default;
 };
 
-// DSP56371UM chapters8/9: externally clocked, bit-sync normal/network transmitter.
+// DSP56371UM chapters8/9: normal/network transmitter with explicit clock inputs.
 // No implicit board clock, RX data, DMA, interrupt delivery or host audio synthesis.
 class DspEsai {
 public:
@@ -35,6 +46,8 @@ public:
   void observe(DspEsaiInputs inputs);
 
   [[nodiscard]] DspEsaiOutputs outputs() const;
+  [[nodiscard]] DspEsaiClockOutputs clock_outputs() const;
+  [[nodiscard]] unsigned required_clock_pads() const;
 
   [[nodiscard]] bool needs_transmit_clock() const;
 
@@ -43,6 +56,8 @@ public:
   [[nodiscard]] std::uint64_t slots_started() const { return slots_; }
 
 private:
+  enum class Configuration : std::uint8_t { common, transmit_clock };
+
   struct Format {
     unsigned slot = 0;
     unsigned word = 0;
@@ -54,9 +69,20 @@ private:
   [[nodiscard]] unsigned frame_slots() const;
   void validate() const;
   void require_observed_clock() const;
+  [[nodiscard]] bool clock_generator() const;
+  [[nodiscard]] bool frame_generator() const;
+  [[nodiscard]] bool generator_running() const;
+  [[nodiscard]] unsigned high_clock_divisor() const;
+  void rebaseline();
+  void observe_high_clock(DspEsaiInputs inputs);
+  void observe_bit_clock(DspEsaiInputs inputs);
+  void clock_edge(bool clock, std::optional<bool> sync);
+  void generate_frame();
+  void update_frame_flag();
   void reset_paths();
   void write_checked(unsigned offset, std::uint32_t value);
   void write_control(std::uint32_t value);
+  void write_configuration(Configuration kind, std::uint32_t value);
   void write_data(unsigned channel, std::uint32_t value);
   void clear_error(unsigned written);
   void observe_checked(DspEsaiInputs inputs);
@@ -87,6 +113,12 @@ private:
   std::uint64_t frames_ = 0;
   std::uint64_t slots_ = 0;
   std::optional<bool> previous_clock_;
+  DspEsaiInputs observed_;
+  unsigned high_phase_ = 0;
+  unsigned frame_position_ = 0;
+  bool generated_clock_ = false;
+  bool generated_sync_ = false;
+  bool frame_clocked_ = false;
   bool previous_sync_ = false;
   bool active_ = false;
   bool baseline_ = false;
