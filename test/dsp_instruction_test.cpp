@@ -3,6 +3,7 @@
 #include "dsp56kEmu/assembler.h"
 #include "dsp_instruction_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "dsp_operand_fixture.hpp"
 
 #include <algorithm>
 #include <array>
@@ -365,6 +366,13 @@ unsigned write_seeds(const std::filesystem::path &directory) {
 
 int main(const int count, char **arguments) {
   try {
+    if (count == 2 && std::string_view(arguments[1]) == "--operand-bounds") {
+      blofeld::test::operands::logical_checks();
+      blofeld::test::operands::bitfield_checks();
+      blofeld::test::operands::rejection_checks();
+      std::cout << "Native operand boundaries, literal results/flags and fault recovery passed.\n";
+      return 0;
+    }
     if (count == 2 && std::string_view(arguments[1]) == "--shift-counts") {
       blofeld::test::test_shift_count_boundaries();
       blofeld::test::test_defined_shift_results();
@@ -384,7 +392,7 @@ int main(const int count, char **arguments) {
     blofeld::test::require(
         count == 1,
         "Usage: dsp-instruction-test [--write-seeds directory | --conditions trap|debug | "
-        "--shift-counts]");
+        "--shift-counts | --operand-bounds]");
     blofeld::test::test_input_bounds_and_literal_values();
     blofeld::test::test_native_arithmetic_and_memory();
     blofeld::test::test_bounded_branches_and_repeat();

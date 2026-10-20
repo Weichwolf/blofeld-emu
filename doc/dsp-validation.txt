@@ -124,6 +124,11 @@ and remaining compatibility/pipeline limits. All 17484 observed values across
 the three banks match without a discrepancy baseline. Banks beyond b0/b1/b2
 remain unqualified. Captures remain MCPX evidence, not Blofeld silicon proof.
 
+Fixed b8/b11 inputs that exposed undefined host shifts are separately pinned in
+dsp-operand-regressions.json. Their test expects contextual rejection before UB;
+it does not adopt their undefined-range MCPX results as a hardware oracle. See
+dsp-operand-bounds.txt for normal-mode limits and independent boundary vectors.
+
 Further ISA/control-flow and native instruction fuzzing, derivative reset/
 stack-error/interrupt/pipeline behavior, the original reserved Y:002000 frontier,
 ROM contents, combined MCU/DSP boot, original audio and measured Desktop/Keyboard

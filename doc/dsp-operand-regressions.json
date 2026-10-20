@@ -1,0 +1,69 @@
+{
+  "source": "https://github.com/mborgerson/dsp56300",
+  "revision": "82fb25a6917a36ac66212ae31f02aab62211f979",
+  "license": "MIT; external inputs and notices remain local",
+  "scope": "Preserved fixed MCPX inputs that previously caused host undefined shifts. Success means visible rejection of unqualified operands, not comparison with MCPX results for undefined behavior or DSP56371 hardware validation.",
+  "issue": "https://github.com/Weichwolf/blofeld-emu/issues/5",
+  "regressions": [
+    {
+      "bank": "b8",
+      "files": {
+        "results_hw.txt": {
+          "bytes": 20257,
+          "sha256": "5d15f887036e38ae7dd5fb60b936af55bf5383396d05492ee5bfac34fa693644"
+        },
+        "corpus.meta": {
+          "bytes": 1203,
+          "sha256": "cc6b70c0ba87a4c87f6f0b26eaa24eaf6d47f8684338612958516911521c52c2"
+        },
+        "corpus.lod": {
+          "bytes": 9544,
+          "sha256": "c803ee5d4bf3f0eb1224509a066b7f77406191ec1e39974369cbeee29c41d8f2"
+        },
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "dcddf8f6dca08f7af52206d5f06ee620be8b96a32fe96e056de83b5db58781e6"
+        },
+        "PROVENANCE.md": {
+          "bytes": 1732,
+          "sha256": "535406ceef1a9b68d75e4d3863235cd0a89fc67f7261325355883d1206af3001"
+        }
+      },
+      "expected_exit": 1,
+      "operation": "LSL",
+      "pc": "0x000118",
+      "omr": "0x00030f",
+      "control": "count 31"
+    },
+    {
+      "bank": "b11",
+      "files": {
+        "results_hw.txt": {
+          "bytes": 19980,
+          "sha256": "e56260ed5194afa91d650b165308cf589407188251a9854373914116b39b7fef"
+        },
+        "corpus.meta": {
+          "bytes": 1346,
+          "sha256": "4a4aa50d0eaa3e91e35f00c2dc93ed94dfc14b8d897f1f4d93925dfa441f8017"
+        },
+        "corpus.lod": {
+          "bytes": 9338,
+          "sha256": "918003f8a056e62734b9fc292037137ad8520e43f99e886a9e823fdd9f3d090f"
+        },
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "bdc4a6731c9dd6285a8c71e7b42d0b0ee9e736ea903837cb5394e1e056ddd079"
+        },
+        "PROVENANCE.md": {
+          "bytes": 2136,
+          "sha256": "95f164c97a5f8b26034099d4b638ab843752e729d68c836d93b415e13b99b3cf"
+        }
+      },
+      "expected_exit": 1,
+      "operation": "EXTRACTU",
+      "pc": "0x00014b",
+      "omr": "0x00030f",
+      "control": "width=8 offset=60"
+    }
+  ]
+}

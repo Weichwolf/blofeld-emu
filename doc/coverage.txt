@@ -215,6 +215,14 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           reference count guards reject undefined
                                           ASR/unqualified ASL ranges before host
                                           shifts (dsp-instructions.txt).
+                                          LSL/LSR counts 0..24 checked in 2400
+                                          independent word/flag/state vectors.
+                                          2304 normal bitfield boundary/alias/flag
+                                          vectors and undefined-control fail-stop/
+                                          trusted recovery checked. Pinned b8/b11
+                                          regressions require contextual rejection
+                                          before host UB, not MCPX undefined-range
+                                          agreement (dsp-operand-bounds.txt).
                                           Original 94-word first stage loads through
                                           executed documented SPI ROM instructions
                                           (dsp-core.txt). Native original MCU/DSP

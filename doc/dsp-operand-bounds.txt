@@ -1,0 +1,45 @@
+Native logical-shift and normal bitfield boundaries
+
+DSP56300FM Rev. 5 instruction pages 13-93/95 define LSL/LSR as 24-bit word
+operations whose count should not exceed 24. Reference execution rejects decoded
+counts outside 0..24 before carry calculation or host shifts. Legal LSL uses an
+unsigned host intermediate. A2/A0 or B2/B0 remain unchanged; N/Z describe the
+word, C is the last shifted-out bit (clear for count 0), and V clears. Bare word
+shifts preserve E/U/L/S. FM 3.2.5 and 5.4.1.2 update S on a full accumulator read
+to a data bus; that event does not occur in these bare instructions.
+
+EXTRACT/EXTRACTU (13-70/72) leave width+offset>56 undefined in normal mode.
+INSERT (13-78) requires width<=24 and width+offset<=56. The reference interpreter
+rejects these unqualified controls before destination/flag mutation or host
+shifts. Normal zero-width INSERT preserves the destination, including offset 56,
+without attempting a host shift by 64. All three operations still clear C/V
+and refresh E/U/N/Z, retaining S/L. No count masking, physical result outside
+these bounds or new sixteen-bit arithmetic qualification is introduced. Existing
+SA bitfield helpers and the normal SDK/JIT qualification scope are unchanged.
+
+Deterministic checks (no fuzz or physical device traffic)
+  cmake --build --preset strict --target blofeld-dsp-instruction-test blofeld-dsp-corpus-test
+  ctest --test-dir build/strict -R '^dsp_(operand_bounds|operand_regressions|shift_counts|hardware_corpus)$' --output-on-failure
+
+The operand-bounds test executes actual register/control setup instructions and
+checks complete CPU state, stack and native retirement against independent bit
+arithmetic. The logical grid contains 2400 cases: counts 0..24, both directions,
+A/B, immediate/X0 controls, four input words and three CCR seeds. The 2304-case
+normal bitfield grid selects individual bits/sign fill and checks source/destination
+aliasing, A/B destinations, immediate/X0 controls, X1/Y1 INSERT sources, width 0,
+last-bit and full-width boundaries. Ninety-six fixed unqualified controls must
+fault with their operation, control and actual PC/OMR, retain data/flags/stack
+and quarantine execution.
+A single native context is reset between negative cases. Five operations also
+check repeatable recovery from a trusted prefetch snapshot.
+
+The external fixed regressions in dsp-operand-regressions.json retain the two
+published MCPX inputs that exposed host UB: b8 LSL count 31 at PC 118 and b11
+EXTRACTU width 8/offset 60 at PC 14b, both OMR 30f. Inputs, notices and results
+remain in the pinned local external checkout documented in dsp-validation.txt. The
+regression verifies every input hash and expects an explicit contextual fault
+without a sanitizer report. It skips only when the external directory is absent;
+an incomplete or changed checkout fails. Generated diagnostics stay in build/.
+Success is safe rejection of these controls, not agreement with MCPX's results
+for undefined behavior. Only b0/b1/b2 remain adopted hardware comparison banks;
+these bounds are not a DSP56371/Blofeld hardware measurement or full ISA proof.

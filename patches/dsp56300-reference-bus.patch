@@ -791,7 +791,36 @@
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 55))
 +			throw std::runtime_error("Unqualified DSP reference ASL shift count=" + std::to_string(_shiftAmount));
 +
-@@ -1493,0 +1503,12 @@
+@@ -271,0 +281,3 @@
++		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
++		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
++			throw std::runtime_error("Unqualified DSP reference LSL count " + std::to_string(_shiftAmount));
+@@ -276 +288 @@
+-		const int res = (d.var << _shiftAmount) & 0x00ffffff;
++		const auto res = (static_cast<uint32_t>(d.var) << _shiftAmount) & 0x00ffffff;
+@@ -296,0 +309,3 @@
++		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
++		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
++			throw std::runtime_error("Unqualified DSP reference LSR count " + std::to_string(_shiftAmount));
+@@ -959,0 +975,4 @@
++		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
++		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
++			throw std::runtime_error("Unqualified DSP reference EXTRACT width=" + std::to_string(width) +
++				" offset=" + std::to_string(offset));
+@@ -985,0 +1005,4 @@
++		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
++		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
++			throw std::runtime_error("Unqualified DSP reference EXTRACTU width=" + std::to_string(width) +
++				" offset=" + std::to_string(offset));
+@@ -1064,0 +1088,4 @@
++		// FM13-78: normal source width <= 24 and offset + width <= 56.
++		if(m_referenceMode && !isSixteenBitArithmetic() && (widthField > 24 || widthField + offsetField > 56))
++			throw std::runtime_error("Unqualified DSP reference INSERT width=" + std::to_string(widthField) +
++				" offset=" + std::to_string(offsetField));
+@@ -1072 +1099 @@
+-		else
++		else if(widthField)
+@@ -1493,0 +1521,12 @@
 +		if(m_referenceMode) {
 +			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
 +			const auto source = getFieldValue<Vsl, Field_S>(op);
@@ -804,7 +833,7 @@
 +			memWrite(MemArea_Y, address, low);
 +			return;
 +		}
-@@ -1495,2 +1516 @@
+@@ -1495,2 +1534 @@
 -	}
 -}
 +	}}

@@ -421,7 +421,8 @@ if(BUILD_TESTING)
   add_test(NAME dsp_pll COMMAND blofeld-dsp-pll-test)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_executable(blofeld-dsp-instruction-test test/dsp_instruction_test.cpp)
+  add_executable(blofeld-dsp-instruction-test test/dsp_instruction_test.cpp
+    test/dsp_logical_boundaries.cpp test/dsp_bitfield_boundaries.cpp test/dsp_operand_rejection.cpp)
   target_link_libraries(blofeld-dsp-instruction-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
   add_test(NAME dsp_instruction_fixture COMMAND blofeld-dsp-instruction-test)
   set_tests_properties(dsp_instruction_fixture PROPERTIES TIMEOUT 60)
@@ -431,6 +432,8 @@ if(BUILD_TESTING)
   endforeach()
   add_test(NAME dsp_shift_counts COMMAND blofeld-dsp-instruction-test --shift-counts)
   set_tests_properties(dsp_shift_counts PROPERTIES TIMEOUT 60)
+  add_test(NAME dsp_operand_bounds COMMAND blofeld-dsp-instruction-test --operand-bounds)
+  set_tests_properties(dsp_operand_bounds PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
   add_executable(blofeld-dsp-checkpoint-test test/dsp_checkpoint_test.cpp
     test/dsp_checkpoint_interrupts.cpp test/dsp_checkpoint_peripherals.cpp)
@@ -457,6 +460,13 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/dsp-corpus.json"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-hardware-corpus")
   set_tests_properties(dsp_hardware_corpus PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME dsp_operand_regressions COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_operand_regressions.py"
+    $<TARGET_FILE:blofeld-dsp-corpus-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/dsp56300-tools/tools/difftest/goldens"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/dsp-operand-regressions.json"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-operand-regressions")
+  set_tests_properties(dsp_operand_regressions PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
   add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_corpus_bounds.py"
     $<TARGET_FILE:blofeld-dsp-corpus-test>)

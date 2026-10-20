@@ -2,7 +2,7 @@ Bounded native DSP instruction fixture
 
 Deterministic regression (no fuzz execution):
   cmake --build --preset strict --target blofeld-dsp-instruction-test
-  ctest --test-dir build/strict -R '^dsp_(instruction_fixture|trap_conditions|debug_conditions|shift_counts)$' --output-on-failure
+  ctest --test-dir build/strict -R '^dsp_(instruction_fixture|trap_conditions|debug_conditions|shift_counts|operand_bounds)$' --output-on-failure
 
 The fixture executes own instructions through DspCore and its strict DSP56371
 bus, using the same patched native interpreter as original-firmware experiments.
@@ -39,6 +39,9 @@ shift vectors check values, carry, overflow, sticky limit, CCR refresh and retai
 state; separate cases check first rejected counts and SA-mode immediate/register
 count sources. The ASL guard is a reference implementation limit, not a measured
 hardware maximum. General sixteen-bit arithmetic fidelity remains unqualified.
+
+Logical word shifts, normal bitfield bounds, independent boundary/flag vectors
+and preserved external host-UB regressions are described in dsp-operand-bounds.txt.
 
 Reference-mode TRAP/ILLEGAL, taken conditional TRAP, DEBUG/taken conditional
 DEBUG and STOP/WAIT reject with their operation and PC/OMR context. Software
