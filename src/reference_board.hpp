@@ -17,6 +17,7 @@
 #include <iosfwd>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -45,6 +46,11 @@ struct ReturnRoute {
   bool inverted = false;
 };
 
+struct ReplayPlan {
+  std::uint64_t operation = 0;
+  unsigned replays = 0;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunContract dsp;
@@ -59,6 +65,7 @@ struct Config {
   std::optional<Loopback> loopback;
   std::optional<ReturnRoute> hreq;
   std::optional<ReturnRoute> miso;
+  std::optional<ReplayPlan> checkpoint;
   std::vector<Input> initial;
   std::vector<Input> events;
 };
@@ -77,13 +84,110 @@ struct Execution {
   std::uint64_t instructions = 0;
 };
 
+class Board;
+
+// Immutable, owner-bound trusted memory snapshot; not a portable state file.
+class Checkpoint {
+public:
+  Checkpoint(const Checkpoint &) = default;
+  Checkpoint &operator=(const Checkpoint &) = default;
+
+private:
+  friend class Board;
+  struct Storage;
+  explicit Checkpoint(std::shared_ptr<const Storage> storage);
+  std::shared_ptr<const Storage> storage_;
+};
+
+struct Status {
+  CpuState mcu;
+  DspDebugState dsp;
+  std::vector<std::uint8_t> cold_nvm;
+  std::uint64_t common_ticks = 0;
+  std::uint64_t mcu_cycles = 0;
+  std::uint64_t mcu_ticks = 0;
+  std::uint64_t oscillator_cycles = 0;
+  std::uint64_t idle_cycles = 0;
+  std::uint64_t dsp_ticks = 0;
+  std::uint64_t dsp_units = 0;
+  std::uint64_t dsp_steps = 0;
+  std::uint64_t instructions = 0;
+  std::uint64_t operations = 0;
+  std::uint64_t interrupts = 0;
+  std::uint64_t writes = 0;
+  std::uint64_t frames = 0;
+  std::uint64_t ties = 0;
+  std::uint64_t ordered_pairs = 0;
+  std::size_t next_event = 0;
+  bool started = false;
+  bool waiting = false;
+  bool held_reset = true;
+  bool faulted = false;
+  bool operator==(const Status &other) const;
+};
+
 // Explicit reference experiment, not a verified physical Desktop/Keyboard profile.
 class Board {
 public:
   Board(const Config &config, const Execution &execution);
+  Board(const Board &) = delete;
+  Board &operator=(const Board &) = delete;
+  Board(Board &&) = delete;
+  Board &operator=(Board &&) = delete;
   int run();
+  void initialize();
+  void advance();
+  [[nodiscard]] bool finished() const;
+  [[nodiscard]] Status status() const;
+  [[nodiscard]] Checkpoint checkpoint() const;
+  // Strong exception guarantee; restores native owners and all wiring together.
+  void restore(const Checkpoint &checkpoint);
 
 private:
+  friend class Checkpoint;
+
+  struct Identity {};
+
+  struct Owners {
+    Owners(const Config &config, const Execution &execution);
+    McuMachine mcu;
+    DspMachine dsp;
+    std::unique_ptr<McuDspSchedule> schedule;
+  };
+  class Busy;
+
+  struct Control {
+    SpiInputs previous;
+    ExecutionContext context;
+    std::optional<std::uint64_t> return_boundary;
+    std::optional<std::uint64_t> release_epoch;
+    std::optional<ShiOutput> hreq_observed;
+    std::optional<ShiOutput> miso_observed;
+    std::uint64_t scale = 0;
+    std::uint64_t instructions = 0;
+    std::uint64_t operations = 0;
+    std::uint64_t interrupts = 0;
+    std::uint64_t writes = 0;
+    std::uint64_t frames = 0;
+    std::uint64_t ordered_pairs = 0;
+    std::size_t next_event = 0;
+    bool started = false;
+    bool faulted = false;
+  };
+
+  struct Outcome {
+    std::optional<std::string> fault;
+    Status state;
+    bool operator==(const Outcome &) const = default;
+  };
+
+  void require_idle() const;
+  void require_healthy() const;
+  void attach(Owners &owners);
+  [[nodiscard]] Outcome finish_branch();
+  [[nodiscard]] Outcome run_replays();
+  void replay_marker(std::string_view phase, unsigned index);
+  void flush_trace();
   [[nodiscard]] std::uint64_t ticks() const;
   [[nodiscard]] SpiInputs sample() const;
   void check_signals() const;
@@ -104,23 +208,11 @@ private:
   [[nodiscard]] DspCompletionObserver return_observer();
   void report(std::ostream &stream) const;
   void persist() const;
-  const Config &config_;
-  const Execution &execution_;
-  McuMachine mcu_;
-  DspMachine dsp_;
-  std::unique_ptr<McuDspSchedule> schedule_;
-  SpiInputs previous_;
-  ExecutionContext context_;
-  std::optional<std::uint64_t> return_boundary_;
-  std::optional<ShiOutput> hreq_observed_;
-  std::optional<ShiOutput> miso_observed_;
-  std::uint64_t scale_ = 0;
-  std::uint64_t instructions_ = 0;
-  std::uint64_t operations_ = 0;
-  std::uint64_t interrupts_ = 0;
-  std::uint64_t writes_ = 0;
-  std::uint64_t frames_ = 0;
-  std::uint64_t ordered_pairs_ = 0;
-  std::size_t next_event_ = 0;
+  const Config config_;
+  const Execution execution_;
+  std::shared_ptr<const Identity> identity_;
+  std::unique_ptr<Owners> native_;
+  Control control_;
+  bool active_ = false;
 };
 }

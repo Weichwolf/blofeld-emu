@@ -11,7 +11,7 @@ import subprocess
 import sys
 import unittest
 
-from test_reference_cli import CONFIG, ROM, WAIT, image
+from test_reference_cli import CONFIG, ROM, WAIT, image, replay_sections
 
 BINARY, FIXTURE, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:])
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +26,7 @@ def store(address, value):
 
 def check_pin(address, expected):
     # Own native GPIO read, CMPA and conditional branch; mismatches access unmapped memory.
-    return bytes((0xb6, address >> 8, address & 255, 0x81, expected, 0x27, 3, 0xb6, 0x70, 0))
+    return bytes((0xb6, address >> 8, address & 255, 0x81, expected, 0x27, 3, 0xb6, 0x30, 0))
 
 
 def transfer(complete_read=False):
@@ -103,6 +103,14 @@ class ShiReturnCli(unittest.TestCase):
         self.assertIn("signal=miso driven=1 level=1", trace)
         self.assertIn("signal=miso driven=1 level=0", trace)
         self.assertIn("signal=miso driven=0 level=unknown", trace)
+
+    def test_wrong_pin_expectation_takes_the_real_unmapped_failure_branch(self):
+        config = CONFIG + "initial drive Q ff 00 00\n"
+        result, _ = self.run_cli("wrong-pin-expectation", config, check_pin(0x260, 1),
+                                 mode="disabled", instructions=4)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("0x3000", result.stderr)
+        self.assertIn("pc=0x9007", result.stderr)
 
     def test_htx_completion_tied_to_select_respects_both_shared_write_orders(self):
         base = CONFIG.replace("operations 23", "operations 40")
@@ -194,6 +202,28 @@ class ShiReturnCli(unittest.TestCase):
         self.assertEqual(events[1][0] // 90, events[2][0] // 90)
         self.assertLess(events[1][0] % 90, events[2][0] % 90)
         self.assertLess(trace.index("SHI-RETURN end=2817"), trace.index("IRQ vector=0xfff2"))
+
+    def test_checkpoint_replays_native_edge_irq_and_future_input_cursor(self):
+        config = CONFIG.replace("operations 23", "operations 200")
+        config = config.replace("12000000 540000000", "60000000 540000000")
+        config = config.replace("initial drive E 03 03", "initial drive E 01 01")
+        config += ("shi-hreq E 02 direct\ninitial drive Q ff 00 00\n"
+                   "at 2799 drive Q ff 01 00\ncheckpoint 10 2\n")
+        code = WAIT[:3] + store(0x1e, 0xc0) + WAIT[3:] + check_pin(0x260, 1)
+        result, trace = self.run_cli("checkpoint-edge-input", config, code, mode="short-request",
+                                     instructions=15, irq=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        _, branches = replay_sections(trace)
+        self.assertEqual(len(branches), 3)
+        self.assertEqual(branches, [branches[0]] * 3)
+        for branch in branches:
+            self.assertIn("SHI-RETURN end=2799 signal=hreq driven=1 level=0", branch)
+            self.assertIn("SHI-RETURN end=2817 signal=hreq driven=0 level=unknown", branch)
+            self.assertIn("INPUT requested=2799 actual=2880", branch)
+            self.assertIn("IRQ vector=0xfff2 stack-reused=1", branch)
+        self.assertIn("interrupts=1", result.stdout)
+        self.assertIn("sp=0x2000", result.stdout)
+        self.assertIn(f"pc=0x{0x9000 + len(code):04x}", result.stdout)
 
     def test_conflicting_drivers_feedback_and_invalid_masks_reject_before_execution(self):
         cases = ["shi-hreq B 02 direct\n", "shi-hreq U 80 direct\n",

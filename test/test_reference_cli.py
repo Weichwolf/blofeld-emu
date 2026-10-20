@@ -40,6 +40,27 @@ def image(code):
     return body + struct.pack("<I", binascii.crc32(body))
 
 
+def replay_sections(text):
+    prefix, branches, current = [], [], None
+    for line in text.splitlines(keepends=True):
+        if line.startswith("REPLAY phase=begin "):
+            assert current is None
+            assert f"index={len(branches)} " in line
+            current = []
+        elif line.startswith("REPLAY phase=end "):
+            assert current is not None
+            assert f"index={len(branches)} " in line
+            branches.append("".join(current))
+            current = None
+        elif current is not None:
+            current.append(line)
+        else:
+            assert not branches
+            prefix.append(line)
+    assert current is None and branches
+    return "".join(prefix), branches
+
+
 class ReferenceCli(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -204,6 +225,51 @@ class ReferenceCli(unittest.TestCase):
                                           code=code, instructions=3)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(f"d=0x{level << 8:04x}", result.stdout)
+
+    def test_joint_checkpoint_replays_real_wait_time_and_future_release(self):
+        for point, release in ((6, 450), (0, 2000)):
+            config = CONFIG.replace("dsp-release 450", f"dsp-release {release}")
+            config += f"checkpoint {point} 2\n"
+            result, trace, saved = self.run_native(config)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            _, branches = replay_sections(trace)
+            self.assertEqual(len(branches), 3)
+            self.assertEqual(branches, [branches[0]] * 3)
+            self.assertIn("operations=23 idle=17", branches[-1])
+            self.assertEqual(saved, image(WAIT))
+            if release == 450:
+                self.assertIn("completed-steps=27 units=66 ticks=2970", result.stdout)
+            else:
+                self.assertIn("DSP-RELEASE requested=2000 actual=2070", branches[0])
+                self.assertIn("completed-steps=12 units=30 ticks=1350", result.stdout)
+
+    def test_joint_checkpoint_recovers_the_same_real_operand_failure(self):
+        code = bytes.fromhex("a7 a7 b63000")
+        result, trace, saved = self.run_native(CONFIG + "checkpoint 2 2\n", code=code)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("0x3000", result.stderr)
+        self.assertIn("pc=0x9002", result.stderr)
+        _, branches = replay_sections(trace)
+        self.assertEqual(len(branches), 3)
+        self.assertEqual(branches, [branches[0]] * 3)
+        self.assertEqual(saved, image(code))
+
+    def test_checkpoint_invalid_plan_and_unreached_boundary_are_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            board, rom, state = self.prepared(root)
+            for directive in ("checkpoint 2 0\n", "checkpoint 24 1\n", "checkpoint -1 1\n"):
+                board.write_text(CONFIG + directive)
+                result = self.invoke("--reference-board", board, "--dsp-rom", rom,
+                                     "--flash-in", state)
+                self.assertEqual(result.returncode, 1, result.stderr)
+            if not self.firmware.is_file():
+                return
+            board.write_text(CONFIG + "checkpoint 3 1\n")
+            result = self.invoke("--reference-board", board, "--dsp-rom", rom,
+                                 "--flash-in", state, "--instructions", 1)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("checkpoint was not reached", result.stderr)
 
     def test_unknown_pad_and_missing_rom_word_fail_visibly(self):
         result, _, saved = self.run_native(CONFIG.replace("initial drive B 16 02 00\n", ""))

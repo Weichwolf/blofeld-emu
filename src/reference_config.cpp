@@ -202,6 +202,13 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
     if (config.operations == 0) {
       throw Fault("Reference-board operation budget must be positive");
     }
+  } else if (key == "checkpoint") {
+    const auto operation = number(line, UINT64_MAX);
+    const auto replays = static_cast<unsigned>(number(line, std::numeric_limits<unsigned>::max()));
+    if (replays == 0) {
+      throw Fault("Reference-board checkpoint requires a positive replay count");
+    }
+    config.checkpoint = {.operation = operation, .replays = replays};
   } else if (key == "shi-hreq") {
     config.hreq = return_route(line);
   } else if (key == "shi-miso") {
@@ -278,6 +285,9 @@ Config parse(const std::string &text) {
     }
   }
   parser.complete();
+  if (parser.result.checkpoint && parser.result.checkpoint->operation > parser.result.operations) {
+    throw Fault("Reference-board checkpoint exceeds the operation budget");
+  }
   validate_returns(parser.result);
   return parser.result;
 }

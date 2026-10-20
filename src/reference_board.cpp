@@ -12,7 +12,9 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ostream>
+#include <string>
 
 namespace blofeld::reference {
 namespace {
@@ -23,103 +25,115 @@ constexpr unsigned decoder_enumerated = 4;
 constexpr unsigned decoder_full_speed = 8;
 }
 
+Board::Owners::Owners(const Config &config, const Execution &execution)
+    : mcu(execution.image, execution.specification, config.mcu), dsp(config.dsp) {}
+
 Board::Board(const Config &config, const Execution &execution)
     : config_(config),
       execution_(execution),
-      mcu_(execution.image, execution.specification, config.mcu),
-      dsp_(config.dsp) {
-  const auto common = dsp_.run_clock().timebase_hz();
-  const auto local = mcu_.run_clock().timebase_hz();
+      identity_(std::make_shared<const Identity>()),
+      native_(std::make_unique<Owners>(config_, execution_)) {
+  const auto common = native_->dsp.run_clock().timebase_hz();
+  const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
-  scale_ = common / local;
+  control_.scale = common / local;
   if (config.release_ticks < ticks() ||
       (!config.events.empty() && config.events.front().ticks < ticks())) {
     throw Fault("Reference-board release/events precede the completed native MCU reset");
   }
-  dsp_.bus().install_rom({.start = bootstrap_base, .words = execution.rom});
-  dsp_.bus().pll().observe_pinit(config.pinit);
-  dsp_.cpu().reset_spi_boot();
+  native_->dsp.bus().install_rom({.start = bootstrap_base, .words = execution.rom});
+  native_->dsp.bus().pll().observe_pinit(config.pinit);
+  native_->dsp.cpu().reset_spi_boot();
   for (const auto &entry : config.initial) { apply(entry); }
   update_wiring();
-  mcu_.set_cycle_observer([this](const auto cycle) { on_cycle(cycle); });
-  mcu_.set_wait_period_observer([this](const auto period) {
+  attach(*native_);
+}
+
+void Board::attach(Owners &owners) {
+  owners.mcu.set_cycle_observer([this](const auto cycle) { on_cycle(cycle); });
+  owners.mcu.set_wait_period_observer([this](const auto period) {
     check_signals();
-    if (schedule_) {
-      schedule_->begin_wait_period(
+    if (native_->schedule) {
+      native_->schedule->begin_wait_period(
           period, [this](const auto &step) { before_dsp(step); }, return_observer());
       update_wiring();
     }
   });
-  mcu_.bus().set_observer([this](const auto &event) { on_write(event); });
+  owners.mcu.bus().set_observer([this](const auto &event) { on_write(event); });
 }
 
 std::uint64_t Board::ticks() const {
-  const auto local = mcu_.run_clock().elapsed_ticks();
-  if (scale_ == 0 || local > std::numeric_limits<std::uint64_t>::max() / scale_) {
+  const auto local = native_->mcu.run_clock().elapsed_ticks();
+  if (control_.scale == 0 || local > std::numeric_limits<std::uint64_t>::max() / control_.scale) {
     throw Fault("Reference-board time overflow");
   }
-  return local * scale_;
+  return local * control_.scale;
 }
 
 void Board::apply(const Input &input) {
   switch (input.kind) {
-    case InputKind::drive: mcu_.bus().set_pin_drive(input.port, input.drive); break;
-    case InputKind::phy_window: mcu_.bus().observe_phy({.edges = input.value}); break;
+    case InputKind::drive: native_->mcu.bus().set_pin_drive(input.port, input.drive); break;
+    case InputKind::phy_window: native_->mcu.bus().observe_phy({.edges = input.value}); break;
     case InputKind::usb_decoder:
-      mcu_.bus().observe_usb_decoder({.reset = (input.value & decoder_reset) != 0,
-                                      .suspended = (input.value & decoder_suspended) != 0,
-                                      .enumerated = (input.value & decoder_enumerated) != 0,
-                                      .full_speed = (input.value & decoder_full_speed) != 0});
+      native_->mcu.bus().observe_usb_decoder(
+          {.reset = (input.value & decoder_reset) != 0,
+           .suspended = (input.value & decoder_suspended) != 0,
+           .enumerated = (input.value & decoder_enumerated) != 0,
+           .full_speed = (input.value & decoder_full_speed) != 0});
       break;
     case InputKind::timer_inputs:
-      mcu_.set_timer_inputs(static_cast<std::uint8_t>(input.value));
+      native_->mcu.set_timer_inputs(static_cast<std::uint8_t>(input.value));
       break;
     default: throw Fault("Invalid reference-board input kind");
   }
 }
 
 void Board::release() {
-  previous_ = sample();
-  if (previous_.selected) { throw Fault("Reference-board DSP release requires deasserted SPI SS"); }
-  dsp_.bus().shi().observe_spi(previous_);
+  control_.previous = sample();
+  if (control_.previous.selected) {
+    throw Fault("Reference-board DSP release requires deasserted SPI SS");
+  }
+  native_->dsp.bus().shi().observe_spi(control_.previous);
   auto inputs = config_.schedule;
   inputs.dsp.epoch_ticks = ticks();
-  schedule_ = std::make_unique<McuDspSchedule>(inputs, mcu_, dsp_);
+  control_.release_epoch = inputs.dsp.epoch_ticks;
+  native_->schedule = std::make_unique<McuDspSchedule>(inputs, native_->mcu, native_->dsp);
   update_wiring();
   if (execution_.trace != nullptr) {
     *execution_.trace << "DSP-RELEASE requested=" << config_.release_ticks << " actual=" << ticks()
-                      << " pc=" << hex(dsp_.cpu().state().pc, 6) << '\n';
+                      << " pc=" << hex(native_->dsp.cpu().state().pc, 6) << '\n';
   }
 }
 
 void Board::boundary() {
-  const auto cpu = mcu_.cpu().state();
-  context_ = {.pc = cpu.pc, .ccr = cpu.ccr};
-  while (next_event_ < config_.events.size() && config_.events[next_event_].ticks <= ticks()) {
-    const auto &event = config_.events[next_event_];
+  const auto cpu = native_->mcu.cpu().state();
+  control_.context = {.pc = cpu.pc, .ccr = cpu.ccr};
+  while (control_.next_event < config_.events.size() &&
+         config_.events[control_.next_event].ticks <= ticks()) {
+    const auto &event = config_.events[control_.next_event];
     apply(event);
     update_wiring();
     if (execution_.trace != nullptr) {
       *execution_.trace << "INPUT requested=" << event.ticks << " actual=" << ticks()
                         << " kind=" << static_cast<unsigned>(event.kind)
-                        << " mcu-pc=" << hex(mcu_.cpu().state().pc) << '\n';
+                        << " mcu-pc=" << hex(native_->mcu.cpu().state().pc) << '\n';
     }
-    if (schedule_) { transition(sample()); }
-    ++next_event_;
+    if (native_->schedule) { transition(sample()); }
+    ++control_.next_event;
   }
-  if (!schedule_ && ticks() >= config_.release_ticks) { release(); }
+  if (!native_->schedule && ticks() >= config_.release_ticks) { release(); }
   check_signals();
 }
 
 void Board::on_cycle(const Hc12BusCycle cycle) {
-  context_ = cycle.context;
+  control_.context = cycle.context;
   check_signals();
-  if (!schedule_) { return; }
+  if (!native_->schedule) { return; }
   constexpr unsigned port_b = 1;
   const bool write = cycle.kind == 'w' || cycle.kind == 'W';
   const bool shared =
       write && cycle.address && *cycle.address <= port_b && port_b - *cycle.address < cycle.size;
-  schedule_->begin_cycle(
+  native_->schedule->begin_cycle(
       cycle, shared, [this](const auto &step) { before_dsp(step); }, return_observer());
   update_wiring();
 }
@@ -135,40 +149,43 @@ void Board::before_dsp(const DspScheduledStep &step) const {
 }
 
 void Board::report(std::ostream &stream) const {
-  const auto cpu = mcu_.cpu().state();
+  const auto cpu = native_->mcu.cpu().state();
   stream << "MCU pc=" << hex(cpu.pc) << " d=" << hex(cpu.d) << " x=" << hex(cpu.x)
          << " y=" << hex(cpu.y) << " sp=" << hex(cpu.sp) << " ccr=" << hex(cpu.ccr, 2)
-         << " instructions=" << instructions_ << " operations=" << operations_
-         << " interrupts=" << interrupts_ << " cycles=" << mcu_.run_clock().bus_cycles()
-         << " idle=" << mcu_.idle_bus_cycles() << " ticks=" << mcu_.run_clock().elapsed_ticks()
-         << " timebase=" << mcu_.run_clock().timebase_hz() << '\n';
-  const auto dsp = dsp_.cpu().state();
+         << " instructions=" << control_.instructions << " operations=" << control_.operations
+         << " interrupts=" << control_.interrupts
+         << " cycles=" << native_->mcu.run_clock().bus_cycles()
+         << " idle=" << native_->mcu.idle_bus_cycles()
+         << " ticks=" << native_->mcu.run_clock().elapsed_ticks()
+         << " timebase=" << native_->mcu.run_clock().timebase_hz() << '\n';
+  const auto dsp = native_->dsp.cpu().state();
   stream << "DSP pc=" << hex(dsp.pc, 6) << " omr=" << hex(dsp.omr, 6) << " r4=" << dsp.r[4]
-         << " lc=" << dsp.lc << " held-reset=" << (schedule_ == nullptr)
-         << " completed-steps=" << (schedule_ ? schedule_->completed_steps() : 0)
-         << " units=" << dsp_.run_clock().native_cycle_units()
-         << " ticks=" << dsp_.run_clock().elapsed_ticks()
-         << " timebase=" << dsp_.run_clock().timebase_hz() << " spi-writes=" << writes_
-         << " frames=" << frames_ << " ordered-pairs=" << ordered_pairs_
-         << " ties=" << (schedule_ ? schedule_->ties() : 0) << '\n';
+         << " lc=" << dsp.lc << " held-reset=" << (native_->schedule == nullptr)
+         << " completed-steps=" << (native_->schedule ? native_->schedule->completed_steps() : 0)
+         << " units=" << native_->dsp.run_clock().native_cycle_units()
+         << " ticks=" << native_->dsp.run_clock().elapsed_ticks()
+         << " timebase=" << native_->dsp.run_clock().timebase_hz()
+         << " spi-writes=" << control_.writes << " frames=" << control_.frames
+         << " ordered-pairs=" << control_.ordered_pairs
+         << " ties=" << (native_->schedule ? native_->schedule->ties() : 0) << '\n';
 }
 
 void Board::persist() const {
   if (execution_.flash_out.empty()) { return; }
-  save_flash_image(execution_.flash_out, mcu_.bus().power_off_flash_image());
+  save_flash_image(execution_.flash_out, native_->mcu.bus().power_off_flash_image());
   std::cout << "Saved private MCU NVM image: " << execution_.flash_out << '\n';
 }
 
 void Board::step() {
-  if (mcu_.cpu().waiting() && !mcu_.cpu().pending_interrupt()) {
-    static_cast<void>(mcu_.advance_wait(1));
-    if (schedule_) { schedule_->end_wait(); }
+  if (native_->mcu.cpu().waiting() && !native_->mcu.cpu().pending_interrupt()) {
+    static_cast<void>(native_->mcu.advance_wait(1));
+    if (native_->schedule) { native_->schedule->end_wait(); }
   } else {
-    const auto result = mcu_.cpu().step();
-    if (schedule_) { schedule_->end_instruction(); }
-    if (result.instruction_executed) { ++instructions_; }
+    const auto result = native_->mcu.cpu().step();
+    if (native_->schedule) { native_->schedule->end_instruction(); }
+    if (result.instruction_executed) { ++control_.instructions; }
     if (result.interrupt_vector) {
-      ++interrupts_;
+      ++control_.interrupts;
       if (execution_.trace != nullptr) {
         *execution_.trace << "IRQ vector=" << hex(*result.interrupt_vector)
                           << " stack-reused=" << result.stack_reused << '\n';
@@ -178,28 +195,24 @@ void Board::step() {
 }
 
 int Board::run() {
+  require_healthy();
   std::cout << "Explicit MCU/DSP reference experiment; physical board wiring and timing "
                "are unverified. Inputs start after native MCU reset.\n";
+  std::optional<std::string> fault;
   try {
-    boundary();
-    while (operations_ < config_.operations && instructions_ < execution_.instructions) {
-      step();
-      ++operations_;
-      if (execution_.trace != nullptr) {
-        *execution_.trace << "MCU end=" << ticks() << " pc=" << hex(mcu_.cpu().state().pc)
-                          << " instructions=" << instructions_ << " operations=" << operations_
-                          << " idle=" << mcu_.idle_bus_cycles() << '\n';
-      }
-      boundary();
-    }
-  } catch (const Fault &fault) {
-    std::cerr << "Reference-board execution stopped: " << fault.what() << '\n';
+    initialize();
+    fault = config_.checkpoint ? run_replays().fault : finish_branch().fault;
+  } catch (const Fault &error) {
+    control_.faulted = true;
+    fault = error.what();
+  }
+  flush_trace();
+  if (fault) {
+    std::cerr << "Reference-board execution stopped: " << *fault << '\n';
     report(std::cerr);
-    if (execution_.trace != nullptr) { execution_.trace->flush(); }
     persist();
     return 2;
   }
-  if (execution_.trace != nullptr) { execution_.trace->flush(); }
   std::cout << "Reference experiment budget reached; boot completion is not established.\n";
   report(std::cout);
   persist();

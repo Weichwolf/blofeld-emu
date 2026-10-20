@@ -90,7 +90,8 @@ doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
 doc/mcu-checkpoints.txt describes immutable in-process MCU checkpoints, native
 WAI/SCI replay, peripheral/flash state and the remaining whole-board snapshot scope.
 doc/reference-board.txt describes the opt-in standalone MCU/DSP reference mode,
-its explicit input file, native WAI time and visible limits.
+its explicit input file, native WAI time, coordinated in-process checkpoints and
+visible limits. Original mid-SPI replay retains the strict DSP memory fault.
 doc/dsp-checkpoints.txt covers native DSP checkpoints, latched REP/IRQ state,
 peripheral phases and coordinated MCU/DSP/link replay during original loading.
 doc/dsp-shi.txt covers the DSP-side SPI slave and native MCU GPIO exchange tests.

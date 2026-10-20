@@ -71,17 +71,18 @@ void Board::update_return(const std::optional<ReturnRoute> &route,
     drive.levels = (*output.level != route->inverted) ? route->mask : 0;
   }
   try {
-    mcu_.bus().update_pin_drive(route->destination, route->mask, drive);
-    static_cast<void>(mcu_.bus().observe_pads(route->destination, route->mask));
+    native_->mcu.bus().update_pin_drive(route->destination, route->mask, drive);
+    static_cast<void>(native_->mcu.bus().observe_pads(route->destination, route->mask));
   } catch (const Fault &fault) {
     throw Fault("SHI " + std::string(name) +
-                " return pad observation mcu-pc=" + hex(mcu_.cpu().state().pc) +
-                " dsp-pc=" + hex(dsp_.cpu().state().pc, 6) + ": " + fault.what());
+                " return pad observation mcu-pc=" + hex(native_->mcu.cpu().state().pc) +
+                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + fault.what());
   }
   if (execution_.trace != nullptr && (!previous || !same(*previous, output))) {
     constexpr std::string_view ports = "ABETMJPQRSU";
     *execution_.trace << "SHI-RETURN end="
-                      << return_boundary_.value_or(schedule_ ? schedule_->end_ticks() : ticks())
+                      << control_.return_boundary.value_or(
+                             native_->schedule ? native_->schedule->end_ticks() : ticks())
                       << " signal=" << name << " driven=" << output.driven << " level=";
     if (output.level) {
       *execution_.trace << (*output.level ? 1 : 0);
@@ -97,17 +98,17 @@ void Board::update_return(const std::optional<ReturnRoute> &route,
 DspCompletionObserver Board::return_observer() {
   if (!config_.hreq && !config_.miso) { return {}; }
   return {.observe = [this](const DspScheduledStep &step) {
-    return_boundary_ = step.completion_ticks;
+    control_.return_boundary = step.completion_ticks;
     update_wiring();
-    return_boundary_.reset();
+    control_.return_boundary.reset();
   }};
 }
 
 void Board::update_wiring() {
   if (config_.hreq || config_.miso) {
-    const auto outputs = dsp_.bus().shi().outputs();
-    update_return(config_.hreq, outputs.request, hreq_observed_, "hreq");
-    update_return(config_.miso, outputs.miso, miso_observed_, "miso");
+    const auto outputs = native_->dsp.bus().shi().outputs();
+    update_return(config_.hreq, outputs.request, control_.hreq_observed, "hreq");
+    update_return(config_.miso, outputs.miso, control_.miso_observed, "miso");
   }
   update_loopback();
 }

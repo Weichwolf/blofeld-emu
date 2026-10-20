@@ -120,6 +120,29 @@ symlinks, before outputs open. --reference-board and --dsp-rom are paired and
 conflict with --inspect/--port-e-input. Existing .bfnvm input/output remains MCU
 nonvolatile memory only: no DSP, clocks, wiring or whole-board snapshot is saved.
 
+Optional trusted in-process replay:
+checkpoint 10 2
+
+After exactly ten completed owner operations, retain a checkpoint, execute the
+remaining budget, then restore and repeat that suffix twice. Operation zero
+captures after initial boundary inputs/release. A positive replay count is
+required; an unreachable checkpoint fails visibly. Native failures remain
+failures, including after successful replay. Visible CPU/register, cold NVM,
+clock, counter and fault outcomes must agree; this comparison alone does not
+prove equality of every RAM cell. The trace appends REPLAY begin/end markers
+around each suffix. Output streams/files are not rewound; final NVM is saved once.
+
+The private Board API composes immutable native MCU/DSP/schedule checkpoints with
+the actual DSP release epoch, pending deadlines, next external-event cursor,
+previous SPI pads, HREQ/MISO observations, wiring context and owner counters.
+Capture requires an inactive healthy operation boundary. Restore prepares both
+native owners, schedule and callbacks separately before a no-throw commit;
+preparation failure leaves the live board unchanged. An earlier checkpoint can
+recover a quarantined board. Foreign board identities and control reentry from
+trace observations reject. Restore does not resample pins or synthesize IRQ edges.
+These checkpoints cover the currently modeled reference experiment, not absent
+physical peripherals, a portable state file, host MIDI/audio or external devices.
+
 Exit 0 means a budget ended, 1 means setup/input/output failure, and 2 means a
 visible native/reference execution fault. Final diagnostics include both PCs,
 completed clocks/steps, MCU idle periods, SPI writes/frames and ordering counts.
@@ -141,6 +164,14 @@ signals, 24 individual MCU MISO reads, both HTX/select tie orders,
 driven-unknown/Hi-Z/pull distinctions,
 output contention and native WAI/IRQ entry/RTI, including an 18-common-tick HREQ
 pulse wholly inside one 90-tick MCU idle period.
+reference_checkpoint.cpp independently checks pending DSP completion, held reset,
+native REP continuation, old/new RAM reads, fault quarantine, failed preparation,
+owner identity and reentry guards. CLI replays additionally cover native WAI/IRQ,
+delayed release and a future external input. original_checkpoint_cli.py captures
+original firmware inside a selected, partly clocked SPI word and compares three
+complete suffix traces through the unchanged reserved-Y failure. Rejoining the
+prefix and first suffix must preserve the pinned original baseline trace hash;
+the independent word decoder still checks all 97 frames against the MCU image.
 original_shi_routes.py constrains three simple HREQ-to-PU0 hypotheses under the
 same explicitly supplied clocks: an earlier inverted release contends with the
 MCU's still-low PU0 output; a release at its first poll leaves a required input

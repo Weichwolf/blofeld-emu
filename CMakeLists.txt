@@ -130,10 +130,18 @@ add_library(blofeld_mcu_dsp src/mcu_dsp_schedule.cpp)
 target_include_directories(blofeld_mcu_dsp PUBLIC include)
 target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
-  src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp)
+  src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp src/reference_checkpoint.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp
+    src/reference_config.cpp src/reference_board.cpp src/reference_wiring.cpp
+    src/reference_returns.cpp src/reference_checkpoint.cpp)
+  target_include_directories(blofeld-reference-checkpoint-test PRIVATE src)
+  target_link_libraries(blofeld-reference-checkpoint-test PRIVATE
+    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native)
+  add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_executable(blofeld-dsp-completion-observer-test test/dsp_completion_observer.cpp)
   target_link_libraries(blofeld-dsp-completion-observer-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_completion_observer COMMAND blofeld-dsp-completion-observer-test)
@@ -441,6 +449,13 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-shi-routes")
   set_tests_properties(original_shi_routes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+  add_test(NAME original_checkpoint_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_checkpoint_cli.py"
+    $<TARGET_FILE:blofeld-headless>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-checkpoint-cli.trace")
+  set_tests_properties(original_checkpoint_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_test(NAME original_reference_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reference_cli.py"
     $<TARGET_FILE:blofeld-headless>
@@ -594,7 +609,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-reference-rom-fixture
+  DEPENDS format-check blofeld-headless blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-dsp-completion-observer-test blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test
     blofeld-mcu-dsp-wait-test
