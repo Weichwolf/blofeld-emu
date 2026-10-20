@@ -44,6 +44,7 @@ public:
   void set_drive(DspGpioDrive drive);
   [[nodiscard]] DspGpioOutputs outputs() const;
   [[nodiscard]] DspGpioSample observe_pads(std::uint32_t mask) const;
+  void validate_peripheral_drive(DspGpioDrive drive) const;
 
 private:
   [[nodiscard]] std::uint32_t pin_mask() const;

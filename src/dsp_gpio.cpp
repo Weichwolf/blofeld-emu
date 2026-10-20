@@ -67,6 +67,15 @@ DspGpioSample DspGpio::observe_pads(const std::uint32_t mask) const {
   return resolve(mask);
 }
 
+void DspGpio::validate_peripheral_drive(const DspGpioDrive drive) const {
+  if ((drive.mask & ~outputs().peripheral) != 0 || (drive.levels & ~drive.mask) != 0) {
+    throw Fault("Invalid DSP peripheral output mask at " + address(DspGpioRegister::data));
+  }
+  if ((drive.mask & external_.mask & (drive.levels ^ external_.levels)) != 0) {
+    throw Fault("DSP peripheral pad contention at " + address(DspGpioRegister::data));
+  }
+}
+
 std::uint32_t DspGpio::read(const DspGpioRegister reg, const std::uint32_t mask) const {
   if ((mask & ~DspGpioWrite::word_mask) != 0) { throw Fault("DSP GPIO read mask exceeds 24 bits"); }
   switch (reg) {

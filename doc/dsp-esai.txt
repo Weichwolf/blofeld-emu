@@ -1,0 +1,70 @@
+DSP56371 ESAI / ESAI_1 transmit reference
+
+Primary inputs: DSP56371UM Rev 2.1 chapters 8/9, tables 8-5/9-5 and Appendix C;
+DSP56371E Rev 1, especially ES139/ES140. URLs/sizes/hashes are recorded in
+hardware/sources.json; manufacturer PDFs remain local. This is original project
+code, separate from the dependency's generic ESAI implementation.
+
+Registers and native access
+ESAI TX0..TX5/TSR are X:ffffa0..ffffa6; SAISR/SAICR/TCR/TCCR/RCR/RCCR are
+X:ffffb3..ffffb8; the four slot-mask halves are X:ffffb9..ffffbc.
+ESAI_1 uses the corresponding Y:ffff80..ffff86 and Y:ffff93..ffff9c locations.
+Native MOVEP, ordinary reads/writes and architectural bit accesses use this bus
+model. Write-only TX/TSR reads, RX data and reserved holes fail visibly.
+
+Six independent transmit registers feed six independent serial shifts. All 20
+documented slot/word encodings support 8/12/16/20/24-bit words in up to 32-bit slots,
+MSB/LSB-first order, left/right slot alignment, zero/edge-bit padding and legal
+ALC alignment. Initial unwritten data stays unknown. Underrun retransmits the
+previous explicitly known TX value; it never invents a zero sample.
+
+Normal and 2..32-slot network modes use explicit external bit clocks and bit-length
+frame sync. Polarity follows TCKP/TFSP. With TCKP=0, output changes on rising SCKT
+and FST is sampled on falling SCKT; TCKP=1 reverses those edges. Status/output observations with enabled transmitters reject an unobserved clock.
+A known inactive FST baseline is required after startup/reset. No instruction count supplies a
+serial clock. Early/inconsistent or multi-bit frame pulses reject. This logical
+observation contract does not establish analog setup/hold or Blofeld sample rate.
+
+Normal mode transfers only in slot 0. Network masks include both 16-bit halves and
+are latched for the next frame. Masked slots do not consume pending TX data.
+TSR creates an intentional high-impedance slot; mixed TX/TSR writes and TSR with
+masked network slots or spaced normal slots remain unqualified and reject.
+TEx changes preserve the current word and gate newly enabled/restarted channels
+until a frame boundary. TDE/TEDE/TODE and TFS follow actual transfers/slot parity.
+All enabled data-register writes are required to clear the empty request. TUE
+clears only after a status read followed by writes to every enabled TX, or TSR.
+
+Mux and reset
+Port C/E PCR and PRR select peripheral ownership. At least one selected ESAI pad
+leaves individual reset; external SCKT/FST observations require pins 3/4 selected.
+TX0..TX5 use physical port bits 11..6. Output observations qualify only selected
+data pads and retain driven/known/level distinctions. Opposed known external
+drivers fail. PDR reads in peripheral mode retain the GPIO model's strict rules.
+Removing all peripheral selections or setting TPR resets serial/status state,
+preserving control programming. Data knowledge after reset is conservatively
+invalidated; software must reprime it. Hardware/software reset also resets control
+and restores all slot-mask bits. Native owner checkpoints retain all transmit
+buffers, shifts, pin phase, pending sync, mask versions and error-clear history.
+
+Receiver enable/configuration, internally generated clocks, word-length/relative
+frame sync, AC97/on-demand modes, serial flag outputs/external buffer controls,
+DMA and interrupt enables remain unsupported and reject. Receiver-disabled reset
+controls/masks can be inspected without fabricating received data. In particular,
+word-length external frame-sync behavior affected by ES140 is not qualified.
+No board route, codec, host PCM sink, real-time callback or original audio is
+provided by this transmitter component.
+
+Verification
+  cmake --build --preset strict --target blofeld-esai-test
+  ctest --test-dir build/strict -R '^dsp_esai$' --output-on-failure
+
+Independent binary-string expectations cover 1120 legal format/polarity/alignment
+cases, all six lanes, both mask halves, high-Z gaps, retained-data underruns,
+multi-channel request/error clearing, reset/reprime and strict input failures.
+Own native DSP programs configure both real register maps and pad muxes, read
+status through MOVEP and replace buffered words while a current word is shifting.
+Seven-bit native-owner checkpoints replay each remaining 24-bit stream exactly;
+literal old/new words and 12/18 native-cycle-unit expectations supplement replay.
+External bit clocks do not advance the CPU. These are instruction/peripheral
+reference tests; full original DSP boot, physical timing, MIDI/audio and hardware
+equivalence remain pending.

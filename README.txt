@@ -115,6 +115,8 @@ establish the target boards' NAND contents or complete original NAND loading.
 doc/nand-write.txt covers explicit program/erase outcomes, interrupted-cell
 knowledge, program limits, native status/failure/readback and unchanged updater
 helper checks. doc/dsp-timers.txt includes explicit mode-six capture and native IRQ.
+doc/dsp-esai.txt describes externally clocked ESAI/ESAI_1 transmission from native
+DSP registers, serial-format/slot/error tests and the remaining audio-path limits.
 doc/nand-persistence.txt describes private NAND images, durable write-ahead
 projections, fail-stop/reload and native original-helper process-death checks.
 CLI/whole-board CPU/peripheral scheduling and complete interrupt latency remain pending.

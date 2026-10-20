@@ -27,6 +27,7 @@ constexpr unsigned x_high_end = 0x12000;
 constexpr unsigned y_high_end = 0x16000;
 constexpr unsigned x_switched_end = 0x10000;
 constexpr unsigned io_base = 0xffff80;
+constexpr unsigned esai_offset_mask = 0x1f;
 constexpr unsigned ms = 0x80;
 constexpr unsigned msw = 0x600000;
 constexpr unsigned switch_cycles = 3;
@@ -117,6 +118,7 @@ void DspBus::reset_peripherals() {
   shi_.reset();
   timers_.reset();
   for (auto &port : gpio_) { port.reset(); }
+  for (auto &serial : esai_) { serial.reset(); }
 }
 
 DspGpio &DspBus::gpio(const DspPort port) {
@@ -157,6 +159,7 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   if (access.operation == DspBitOperation::test) { return old; }
   const auto value = change_bit(old ? mask : 0U, mask, access.operation);
   port.write({.reg = mapping->reg, .value = value, .mask = mask});
+  sync_esai_port(mapping->port);
   return old;
 }
 
@@ -313,6 +316,9 @@ void DspBus::acknowledge_interrupt(const DspInterruptRequest request) {
 }
 
 std::uint32_t DspBus::read_peripheral(const DspAddress access) {
+  if (auto *const serial = esai_register(access)) {
+    return serial->read(access.address & esai_offset_mask);
+  }
   constexpr unsigned first_shi = 0xffff90;
   constexpr unsigned last_shi = 0xffff94;
   constexpr unsigned pll_control = 0xfffffd;
@@ -344,6 +350,10 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
 }
 
 void DspBus::write_peripheral(const DspStore access) {
+  if (auto *const serial = esai_register({.space = access.space, .address = access.address})) {
+    serial->write(access.address & esai_offset_mask, access.value);
+    return;
+  }
   constexpr unsigned first_shi = 0xffff90;
   constexpr unsigned last_shi = 0xffff94;
   constexpr unsigned once_gdb = 0xfffffc;
@@ -360,6 +370,7 @@ void DspBus::write_peripheral(const DspStore access) {
                   ": Port F requires BCR=0x01ffff");
     }
     gpio(target->port).write({.reg = target->reg, .value = access.value});
+    sync_esai_port(target->port);
     return;
   }
   if (access.space == DspSpace::x && access.address == bus_control) {

@@ -257,7 +257,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           source reserved-bit writes still reject;
                                           complete update/physical timing unproven.
                                           PLL timing/lock, remaining GPIO/timer modes,
-                                          ESAI, DMA and chip profile pending;
+                                          ESAI external-clock TX now covers both
+                                          register maps, six lanes, normal/network
+                                          formats/masks/flags, native MOVEP and
+                                          partial-word checkpoints (dsp-esai.txt).
+                                          RX, automatic clocks, audio DMA/IRQ and
+                                          chip profile remain pending;
                                           no combined MCU/DSP board boot.
 MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges exact
                                           words in both directions. Original cold MCU

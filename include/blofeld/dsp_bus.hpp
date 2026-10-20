@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_gpio.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_pll.hpp"
@@ -75,6 +76,9 @@ public:
 
   [[nodiscard]] DspTimers &timers() { return timers_; }
 
+  void observe_esai_transmit(DspEsaiInstance instance, DspEsaiInputs inputs);
+  [[nodiscard]] DspEsaiOutputs esai_transmit_outputs(DspEsaiInstance instance) const;
+
   [[nodiscard]] std::optional<std::uint32_t> once_latch() const { return once_latch_; }
 
 private:
@@ -96,12 +100,17 @@ private:
   [[nodiscard]] Location locate_data(DspAddress access, Operation operation) const;
   [[nodiscard]] std::uint32_t read_peripheral(DspAddress access);
   void write_peripheral(DspStore access);
+  [[nodiscard]] DspEsai *esai_register(DspAddress access);
+  [[nodiscard]] DspEsai &sync_esai(DspEsaiInstance instance);
+  void sync_esai_port(DspPort changed);
   std::array<Memory, 3> ram_;
   std::array<Memory, 3> rom_;
   DspShi shi_;
   DspPll pll_;
   DspTimers timers_;
   DspInterrupts interrupts_;
+  std::array<DspEsai, 2> esai_{DspEsai(DspEsaiInstance::primary),
+                               DspEsai(DspEsaiInstance::secondary)};
   std::array<DspGpio, 3> gpio_{DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f)};
   std::uint32_t bus_control_ = 0;
   DspCodeChanges changes_;
