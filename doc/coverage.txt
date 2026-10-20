@@ -556,7 +556,14 @@ SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity
                                           through the reusable byte-to-wire source
                                           (original-application.txt). See
                                           mcu-sci.txt for unresolved flag timing.
-Voice management and audio        pending  No original audio generation or PCM output.
+Voice management and audio        partial  Original envelope coefficient/state
+                                          machines have independent integer
+                                          expectations and native call/return
+                                          checks, including four-envelope caller
+                                          and initialization prefix; see
+                                          dsp-envelopes.txt. No complete note
+                                          lifecycle, voice allocation, original
+                                          voice rendering or PCM output yet.
 Persistent storage               partial  MCU NVM files preserve mutations,
                                           unknownness and erase history across
                                           reconstruction; native/CLI and real

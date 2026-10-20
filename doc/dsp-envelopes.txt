@@ -1,0 +1,41 @@
+Original envelope state-machine regression
+
+original_dsp_envelopes loads four complete unchanged program/table records from
+the pinned official 1.25 archive. dsp-envelope-reference.json identifies their
+layout and hashes, the independent GPL-3.0-only scalar model's source checkpoint,
+and the digest of all 134 statically identified envelope instruction starts.
+No manufacturer words, listings or generated harness binaries are tracked.
+
+An own native caller selects the declared memory mode, SR=0 and linear modifiers,
+then executes actual JSR/RTS calls. The mutable callback word controls successive
+calls. The four-envelope original caller executes its three indirect calls and
+fourth tail jump; all dispatch frames, original unused prefetch, final return,
+state/parameter/control words, guards and collection flag are checked. A separate
+original initialization window stops before chain construction; it is not a
+completed voice initializer or successful return.
+
+Independent integer models retain fractional products, floor division, limiting
+stores, signed control indexing, strict transition thresholds and reserved mode
+selectors. They read original coefficients and predict state without replacing
+executed routines, patching return values or using native arithmetic helpers.
+No host ADSR, ideal continuous exponential or physical time conversion is used.
+
+Directed scopes
+- 3072 four-slot coefficient refreshes: 0..127 fields and eight corners.
+- 39120 callbacks: rate bins/fractions, signed boundaries, 256 mode bytes,
+  strict sustain thresholds, attack/decay/release and deferred retirement.
+- 768 sixteen-call histories: 12288 calls through actual changed callbacks.
+- 1024 complete original four-envelope calls: 4096 real callback dispatches.
+- 32 original initialization prefixes replace all four old parameter pointers,
+  clear values and execute coefficient refresh before the declared stop.
+- A withdrawn curve word must fail at the actual original read with address,
+  PC and OMR, before producing a value; failed native execution stays latched.
+
+  cmake --build --preset strict --target blofeld-original-dsp-envelopes-test
+  ctest --test-dir build/strict -R '^original_dsp_envelopes$' --output-on-failure
+
+Missing private firmware explicitly skips; changed references fail before native
+execution. Traces and manufacturer materials remain private. These are directed
+offline matrices, not fuzzing. Complete MIDI note-on/off lifecycle, modulation
+provenance, voice allocation, scheduled boot, PCM output, physical envelope times
+and stock-silicon equivalence remain unqualified.

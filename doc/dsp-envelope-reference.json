@@ -1,0 +1,58 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "blocks": [
+    {
+      "name": "dsp-runtime-envelopes",
+      "record": 73,
+      "space": 0,
+      "address": 5641,
+      "words": 148,
+      "sha256": "ae41560b4a0d2255573998f052ab98624d634c251e7f54874153a1761854c1ca"
+    },
+    {
+      "name": "dsp-runtime-envelope-tables",
+      "record": 72,
+      "space": 2,
+      "address": 5696,
+      "words": 266,
+      "sha256": "e6bb2fbb851a68b7ba292630a9664f16d254a162e96c5b86250fa914e17c4cbd"
+    },
+    {
+      "name": "dsp-runtime-entries",
+      "record": 46,
+      "space": 0,
+      "address": 1078,
+      "words": 978,
+      "sha256": "e23105c93a96685a3e78ff79ed9088ab6ae43394eddd2a6d26fdaaccda65cac2"
+    },
+    {
+      "name": "dsp-runtime-entry-setup",
+      "record": 57,
+      "space": 0,
+      "address": 3499,
+      "words": 633,
+      "sha256": "4db121c907430a2d18ec00181295ea8ef8889d41833107ac9dcf82ab016769b2"
+    }
+  ],
+  "coverage": {
+    "instruction_starts": 134,
+    "sha256": "a728284cb10cb5f9b40713ccfa81049e6ec69a77e60fb32ba106da890bdacac8",
+    "encoding": "sorted lowercase six-digit hexadecimal PCs, each followed by LF"
+  },
+  "calls": {
+    "direct": 54480,
+    "chain": 1024,
+    "setup": 32,
+    "refresh": 3072,
+    "callbacks": 39120,
+    "sequences": 12288,
+    "missing_curve": 1
+  },
+  "model_provenance": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "4c977199afb6f03e24efc203b227b321453403aa",
+    "file": "test/dsp_envelopes_test.cpp",
+    "sha256": "e0228d21c19d02cca7f629565ea25a1d054969d647da78fbed1f7c993eb0de73"
+  },
+  "qualification": "Directed standalone original envelopes with SR=0, linear modifiers and explicit raw parameters/controls. Original setup stops before chain construction. No complete MIDI note lifecycle, audio rate, boot or silicon qualification."
+}
