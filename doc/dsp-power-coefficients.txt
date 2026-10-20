@@ -1,0 +1,51 @@
+Native power-of-two multiplication coefficients
+
+DSP56300FM Rev.5 table 12-16 (printed 12-22) lists immediate ALU coefficients
+n=1..22. MPY/MPYR/MAC/MACR describe a positive signed 24-bit fraction 2^-n.
+The reference interpreter now rejects the untabulated encoded values 0 and 23..31
+before source decoding or ALU execution, with instruction/coefficient and
+actual PC/OMR context. Registers, flags, stack and retirement remain unchanged
+apart from the already consumed opcode fetch. Execution/checkpoint capture
+then require reset or a trusted restore.
+
+This is an explicit unsupported-input boundary, not a claim that hardware
+traps on those encodings. In particular, n=23 would give a representable fraction
+but is absent from the table. Selected external MCPX observations of MPY n=0
+differ from the old decoder's negative-one coefficient; they do not establish
+DSP56371 behavior or all four operations. No guessed zero, clamped coefficient,
+accepted discrepancy baseline or new external-corpus adoption is introduced.
+The ordinary SDK and JIT paths retain their existing qualification scope.
+The pinned Rev.6 family-manual addendum does not resolve these table omissions.
+
+Deterministic tests (no fuzz or physical traffic)
+  cmake --build --preset strict --target blofeld-dsp-power-test
+  ctest --test-dir build/strict -R '^dsp_power_' --output-on-failure
+
+Each of four operation groups checks 33792 fixed cases: all 22 table entries,
+all four distinct QQ sources, A/B, both product signs, three normal scales,
+SM=0/1, RM=0/1 and eight directed source/accumulator pairs. Four incoming CCR
+seeds rotate with coefficient; this is not their full Cartesian product.
+All inputs are loaded by genuine native instructions. The independent existing
+arithmetic oracle uses signed mathematical multiplication, quotient/remainder
+rounding and the literal saturation table, separately from the SDK's coefficient
+decoder and padded accumulator representation. Complete CPU/stack/counter state,
+unselected registers, exact PC and one retirement are checked.
+
+The input pairs cover zero, signed-word endpoints, +/-1 and selected odd words;
+accumulator inputs include signed 56-bit endpoints, saturation boundaries and
+rounding ties. This finite grid does not establish every product, mode or tie.
+The shared oracle's documented scope remains in dsp-saturation.txt.
+
+Another 640 cases require contextual rejection of all ten untabulated values
+across four operations, four QQ sources, A/B and both signs. Eight selected
+A-destination cases capture a prior trusted checkpoint, replay their rejection
+twice and recover by replacing only the own diagnostic opcode with NOP. No
+manufacturer program is changed. Rejected B destinations are checked separately.
+
+The manual's instruction bit diagrams have inconsistent field widths for these
+forms, including a malformed MACR field. Tests explicitly use the existing
+five-bit native reference form and independently check its mathematical result;
+they do not present that encoding inference as new chip validation. The pinned
+manual identity is in hardware/sources.json. SA-specific arithmetic,
+untabulated coefficients, pipeline timing, the strict Y:002000 boot frontier,
+complete MIDI/audio/update/recovery and stock-device equivalence remain open.

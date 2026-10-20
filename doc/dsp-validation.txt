@@ -139,6 +139,13 @@ preserves these adopted comparisons. Its full56-bit minimum flags use the
 declared manual-derived reference interpretation, not a newly captured
 silicon expectation (dsp-cmpm.txt).
 
+Power-coefficient tests separately check all 22 tabulated coefficients across
+MPY/MPYR/MAC/MACR, with 135168 fixed result/flag/whole-state cases. All ten
+untabulated coefficients reject explicitly in the native reference path;
+640 directed failures and eight trusted-recovery cases cover that boundary.
+This adds no external capture bank or physical coefficient qualification;
+see dsp-power-coefficients.txt for the manual's encoding inconsistencies.
+
 Fixed b8/b11 inputs that exposed undefined host shifts are separately pinned in
 dsp-operand-regressions.json. Their test expects contextual rejection before UB;
 it does not adopt their undefined-range MCPX results as a hardware oracle. See

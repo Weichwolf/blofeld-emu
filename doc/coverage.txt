@@ -255,6 +255,14 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           regressions require contextual rejection
                                           before host UB, not MCPX undefined-range
                                           agreement (dsp-operand-bounds.txt).
+                                          All 22 tabulated power coefficients in
+                                          MPY/MPYR/MAC/MACR: 135168 fixed product,
+                                          flag and complete-state cases; 640
+                                          untabulated-input failures and eight
+                                          trusted recoveries. Untabulated values
+                                          reject as unsupported; no physical
+                                          outcome is assigned to them
+                                          (dsp-power-coefficients.txt).
                                           Original 94-word first stage loads through
                                           executed documented SPI ROM instructions
                                           (dsp-core.txt). Native original MCU/DSP

@@ -459,6 +459,13 @@ if(BUILD_TESTING)
     set_tests_properties(dsp_saturation_${scope} PROPERTIES TIMEOUT 120)
   endforeach()
   add_executable(blofeld-dsp-cmpm-test test/dsp_cmpm_test.cpp)
+  add_executable(blofeld-dsp-power-test test/dsp_power_test.cpp test/dsp_saturation_oracle.cpp)
+  target_link_libraries(blofeld-dsp-power-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  foreach(scope IN ITEMS mpy mpyr mac macr reject-a-mpy reject-b-mpy reject-a-mpyr reject-b-mpyr
+      reject-a-mac reject-b-mac reject-a-macr reject-b-macr)
+    add_test(NAME dsp_power_${scope} COMMAND blofeld-dsp-power-test ${scope})
+    set_tests_properties(dsp_power_${scope} PROPERTIES TIMEOUT 120)
+  endforeach()
   target_link_libraries(blofeld-dsp-cmpm-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_cmpm_accumulators COMMAND blofeld-dsp-cmpm-test --full)
   add_test(NAME dsp_cmpm_words COMMAND blofeld-dsp-cmpm-test --word)
@@ -723,6 +730,7 @@ add_custom_target(quality
     blofeld-dsp-norm-test
     blofeld-dsp-transfer-test blofeld-dsp-shifted-subtract-test blofeld-dsp-vsl-test
     blofeld-dsp-saturation-test
+    blofeld-dsp-power-test
     blofeld-dsp-cmpm-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-scheduled-coupling-test
