@@ -261,6 +261,10 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           register maps, six lanes, normal/network
                                           formats/masks/flags, native MOVEP and
                                           partial-word checkpoints (dsp-esai.txt).
+                                          Timed external events now merge between
+                                          native completions, including 625-tick
+                                          ESAI half-periods and native MOVEP word
+                                          replay (dsp-external-events.txt).
                                           RX, automatic clocks, audio DMA/IRQ and
                                           chip profile remain pending;
                                           no combined MCU/DSP board boot.
@@ -298,6 +302,10 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           RTI and DSP-loop tests cover both source
                                           routes, TIM gates, frame reuse and joint
                                           idle restore under explicit edge ordering.
+                                          External-only MCU-write ties and close
+                                          mid-idle events have explicit ordering,
+                                          bounded dispatch and coordinated replay;
+                                          cancelled offers dispatch no events.
                                           Opt-in standalone reference CLI connects
                                           both owners with explicit clock/reset/
                                           pin inputs and bounded native WAI time

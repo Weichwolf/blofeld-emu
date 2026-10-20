@@ -1,0 +1,76 @@
+Timed external peripheral events
+
+DspScheduledRun can merge a caller-owned DspExternalEvents source with native
+instruction completions. Both use absolute ticks in the DSP owner's declared
+reference timebase. An event can fall inside an unfinished native instruction;
+it changes peripherals without executing the CPU or charging CPU cycles. Native
+instruction effects still occur at their declared completion boundary. This is
+an explicit nominal experiment, not physical pipeline or Blofeld clock evidence.
+
+Contract
+- Supply both next_ticks and observe on the first advance_to call, with a
+  positive maximum_events budget per call. Keep supplying the source after it
+  returns no next event. Late binding, omission and changed pinned deadlines
+  reject. The scheduler retains no callable or peripheral reference.
+- next_ticks is a pure query returning an absolute timestamp or exhaustion.
+  The initial timestamp may equal the initial horizon; all successors must be
+  strictly later. Only observe advances the caller's event cursor. Queries are
+  checked when binding, after each native completion and after each event.
+- Select reject_tie, dsp_before_external or external_before_dsp explicitly.
+  The order applies to equal external/native deadlines. before excludes both
+  kinds at its endpoint; through includes both. The typed post-completion
+  observer remains part of the committed native effect and follows its order.
+- Callbacks must not execute, restore or change native CPU/clock state. Checks
+  compare native debug state, clock accounting and any pending instruction plan.
+  Unsupported peripheral effects that change the prepared plan fail visibly.
+  Active scheduling, capture, preview and restore cannot reenter the schedule.
+- A failed callback, invalid source, budget or ordering conflict quarantines the
+  schedule. Diagnostics retain PC, horizon, attempted native/external deadline
+  and completed native/external counts. Partially applied peripheral effects
+  are not rolled back or reported as a completed external observation.
+
+next_completion_ticks still previews only the native instruction. next_event_ticks
+returns the earlier pinned external/native deadline. Checkpoints retain source
+binding/order, next and last external timestamps, counters and unfinished native
+plan. They do not copy the caller's cursor or peripheral. Restore native owners,
+peripherals and cursor together, then restore the schedule. A mismatched cursor
+is detected on the next advance, before execution. This is process-local trusted
+state, not a portable state file or authentication of an event-source identity.
+
+McuDspSchedule forwards the same optional source through begin_cycle,
+observe_write and begin_wait_period. A simultaneous shared MCU write uses the
+existing explicit shared-write order for all due peer events. An external-only
+tie also requires qualification and contributes to ties(). A combined native/
+external tie first follows the MCU order, then the DSP/external order within the
+peer group. Committed WAI periods dispatch their events; cancelled pre-input
+offers dispatch none. finish_boundary checks the earliest peer deadline.
+
+Verification
+  cmake --build --preset strict --target blofeld-dsp-external-events-test
+  ctest --test-dir build/strict -R '^dsp_external_events$' --output-on-failure
+
+Independent NOP ledgers check non-grid deadlines, exact orders, exclusive/
+inclusive boundaries, exhaustion, source drift, budgets, callback errors,
+quarantine and coordinated replay. Native MCU LDAB/STAB and LDS/ANDCC/WAI
+programs check external-only shared-write ties, real GPIO levels, mid-period
+IRQ delivery and cancelled idle offers. Both ESAI maps run actual MOVEP writes
+and NOP/JMP loops against an explicit external 625-tick half-period in a
+1.44 GHz timebase (24-bit parallel words, nominal 48 kHz). Literal serial bit
+strings check current/next words and a checkpoint after eight transmitted bits.
+No host synthesizer, manufactured CPU cycle, resampling or silent data fill is
+involved. The native cost ledger is independent of the scheduler's dispatch.
+
+Scope
+The event source and ESAI wire in this test are explicit reference fixtures.
+Production board clock generation, continuous startup/reset input levels, a
+serial PCM receiver, host audio/WAV transport and actual firmware audio remain
+pending. The source project's static analysis reports internal bit-clock,
+word-length frame sync and DMA programming intent; those modes remain outside
+the current external-clock ESAI subset. No physical rate, codec route,
+Desktop/Keyboard topology or complete original boot is established.
+Unknown/reserved memory accesses remain strict.
+The callbacks and diagnostics can allocate/throw; they are not a real-time audio
+callback. Existing no-source schedules keep their previous timing and failures.
+Public C++ signatures and checkpoint layout changed: rebuild consumers using
+matching headers and libraries. Previously frozen source-side bundles remain
+frozen unless their owner deliberately adopts the new interface.

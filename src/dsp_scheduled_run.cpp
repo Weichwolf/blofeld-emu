@@ -6,6 +6,7 @@
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -14,6 +15,15 @@
 #include <string>
 
 namespace blofeld {
+namespace {
+std::optional<std::uint64_t> earlier_deadline(const std::optional<std::uint64_t> native,
+                                              const std::optional<std::uint64_t> external) {
+  if (!native) { return external; }
+  if (!external) { return native; }
+  return std::min(*native, *external);
+}
+}
+
 DspScheduledRun::DspScheduledRun(const DspScheduleInputs inputs, const DspMachine &machine) {
   if (inputs.observation != DspStepObservation::reference_completion_boundary) {
     throw Fault("DSP scheduling requires an explicit nominal completion-observation contract");
@@ -98,49 +108,93 @@ DspScheduledRun::advance_to(DspMachine &machine,
                             const DspScheduleBoundary boundary,
                             const unsigned maximum_steps,
                             const std::function<void(const DspScheduledStep &)> &before_step,
-                            const DspCompletionObserver &after_step) {
+                            const DspCompletionObserver &after_step,
+                            const DspExternalEvents &external) {
   if (active_ || faulted_) { throw Fault("DSP scheduler requires a healthy inactive boundary"); }
   active_ = true;
   unsigned completed = 0;
   std::optional<std::uint64_t> attempted_completion;
+  std::optional<std::uint64_t> attempted_external;
   try {
-    if (boundary != DspScheduleBoundary::before && boundary != DspScheduleBoundary::through) {
-      throw Fault("Unknown DSP schedule boundary policy");
-    }
-    if (horizon < state_.horizon_ ||
-        (horizon == state_.horizon_ && state_.boundary_ == DspScheduleBoundary::through &&
-         boundary == DspScheduleBoundary::before)) {
-      throw Fault("DSP schedule horizon moved backwards");
-    }
+    check_horizon(horizon, boundary);
     verify(state_, machine);
-    while (state_.inputs_.epoch_ticks + state_.completed_ticks_ < horizon || state_.pending_) {
-      if (!state_.pending_) { state_.pending_ = machine.plan_step(); }
-      const auto end = deadline(*state_.pending_);
+    bind_external(machine, external);
+    unsigned external_count = 0;
+    while (true) {
+      const auto native_end = prepare_native(machine, horizon);
+      const auto next = earlier_deadline(native_end, state_.next_external_);
+      if (!next) { break; }
+      const auto end = *next;
       if (end > horizon || (end == horizon && boundary == DspScheduleBoundary::before)) { break; }
+      if (external_first(native_end)) {
+        if (external_count == external.maximum_events) {
+          throw Fault("DSP scheduled external event budget exhausted");
+        }
+        attempted_external = end;
+        complete_external(machine, external);
+        attempted_external.reset();
+        ++external_count;
+        continue;
+      }
       if (completed == maximum_steps) { throw Fault("DSP scheduled instruction budget exhausted"); }
       attempted_completion = end;
       complete(machine, before_step, after_step);
       attempted_completion.reset();
       ++completed;
+      if (state_.external_bound_) { bind_external(machine, external); }
     }
     state_.horizon_ = horizon;
     state_.boundary_ = boundary;
+    state_.advanced_ = true;
     active_ = false;
     return completed;
   } catch (const std::exception &error) {
     active_ = false;
     faulted_ = true;
-    throw Fault("DSP scheduled completion pc=" + hex(machine.cpu().state().pc, 6) +
-                " horizon=" + std::to_string(horizon) + " attempted-completion=" +
-                (attempted_completion ? std::to_string(*attempted_completion) : "none") +
-                " completed-reference-ticks=" + std::to_string(state_.completed_ticks_) +
-                " completed-native-cycle-units=" + std::to_string(state_.completed_cycles_) + ": " +
+    throw Fault(failure_context(machine, horizon, attempted_completion, attempted_external) + ": " +
                 error.what());
   } catch (...) {
     active_ = false;
     faulted_ = true;
     throw;
   }
+}
+
+void DspScheduledRun::check_horizon(const std::uint64_t horizon,
+                                    const DspScheduleBoundary boundary) const {
+  if (boundary != DspScheduleBoundary::before && boundary != DspScheduleBoundary::through) {
+    throw Fault("Unknown DSP schedule boundary policy");
+  }
+  if (horizon < state_.horizon_ ||
+      (horizon == state_.horizon_ && state_.boundary_ == DspScheduleBoundary::through &&
+       boundary == DspScheduleBoundary::before)) {
+    throw Fault("DSP schedule horizon moved backwards");
+  }
+}
+
+std::optional<std::uint64_t> DspScheduledRun::prepare_native(DspMachine &machine,
+                                                             const std::uint64_t horizon) {
+  if (state_.inputs_.epoch_ticks + state_.completed_ticks_ >= horizon && !state_.pending_) {
+    return std::nullopt;
+  }
+  if (!state_.pending_) { state_.pending_ = machine.plan_step(); }
+  return deadline(*state_.pending_);
+}
+
+std::string DspScheduledRun::failure_context(const DspMachine &machine,
+                                             const std::uint64_t horizon,
+                                             const std::optional<std::uint64_t> native,
+                                             const std::optional<std::uint64_t> external) const {
+  auto result = "DSP scheduled completion pc=" + hex(machine.cpu().state().pc, 6) +
+                " horizon=" + std::to_string(horizon) +
+                " attempted-completion=" + (native ? std::to_string(*native) : "none") +
+                " completed-reference-ticks=" + std::to_string(state_.completed_ticks_) +
+                " completed-native-cycle-units=" + std::to_string(state_.completed_cycles_);
+  if (state_.external_bound_) {
+    result += " attempted-external=" + (external ? std::to_string(*external) : "none") +
+              " completed-external-events=" + std::to_string(state_.external_events_);
+  }
+  return result;
 }
 
 DspScheduleCheckpoint DspScheduledRun::checkpoint(const DspMachine &machine) const {
@@ -153,6 +207,11 @@ std::uint64_t DspScheduledRun::next_completion_ticks(const DspMachine &machine) 
   if (active_ || faulted_) { throw Fault("DSP completion preview requires a healthy boundary"); }
   verify(state_, machine);
   return deadline(state_.pending_ ? *state_.pending_ : machine.plan_step());
+}
+
+std::uint64_t DspScheduledRun::next_event_ticks(const DspMachine &machine) const {
+  const auto native = next_completion_ticks(machine);
+  return state_.next_external_ ? std::min(native, *state_.next_external_) : native;
 }
 
 void DspScheduledRun::restore(const DspScheduleCheckpoint &checkpoint, const DspMachine &machine) {

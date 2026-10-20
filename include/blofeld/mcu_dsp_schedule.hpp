@@ -55,15 +55,18 @@ public:
   void begin_cycle(Hc12BusCycle cycle,
                    bool shared_write,
                    const DspObserver &before_dsp = {},
-                   const DspCompletionObserver &after_dsp = {});
+                   const DspCompletionObserver &after_dsp = {},
+                   const DspExternalEvents &external = {});
   void observe_write(const BusEvent &event,
                      const std::function<void()> &observe_signals,
                      const DspObserver &before_dsp = {},
-                     const DspCompletionObserver &after_dsp = {});
+                     const DspCompletionObserver &after_dsp = {},
+                     const DspExternalEvents &external = {});
   void end_instruction();
   void begin_wait_period(McuWaitPeriod period,
                          const DspObserver &before_dsp = {},
-                         const DspCompletionObserver &after_dsp = {});
+                         const DspCompletionObserver &after_dsp = {},
+                         const DspExternalEvents &external = {});
   void end_wait();
   [[nodiscard]] McuDspScheduleCheckpoint checkpoint() const;
   void restore(const McuDspScheduleCheckpoint &checkpoint);
@@ -84,7 +87,8 @@ private:
   [[nodiscard]] std::uint64_t mcu_ticks() const;
   void advance(DspScheduleBoundary boundary,
                const DspObserver &before_dsp,
-               const DspCompletionObserver &after_dsp);
+               const DspCompletionObserver &after_dsp,
+               const DspExternalEvents &external);
   McuDspScheduleInputs inputs_;
   McuMachine &mcu_;
   DspMachine &dsp_;

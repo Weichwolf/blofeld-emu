@@ -115,7 +115,8 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
   src/dsp_run_clock.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
-add_library(blofeld_dsp src/dsp_core.cpp src/dsp_machine.cpp src/dsp_scheduled_run.cpp)
+add_library(blofeld_dsp src/dsp_core.cpp src/dsp_machine.cpp src/dsp_scheduled_run.cpp
+  src/dsp_scheduled_events.cpp)
 target_include_directories(blofeld_dsp PUBLIC include)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
@@ -149,6 +150,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-completion-observer-test test/dsp_completion_observer.cpp)
   target_link_libraries(blofeld-dsp-completion-observer-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_completion_observer COMMAND blofeld-dsp-completion-observer-test)
+  add_executable(blofeld-dsp-external-events-test test/dsp_external_events.cpp
+    test/dsp_external_esai.cpp test/mcu_dsp_external_events.cpp)
+  target_link_libraries(blofeld-dsp-external-events-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME dsp_external_events COMMAND blofeld-dsp-external-events-test)
   add_executable(blofeld-reference-rom-fixture test/reference_rom.cpp)
   target_link_libraries(blofeld-reference-rom-fixture PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME reference_shi_cli COMMAND ${Python3_EXECUTABLE}
@@ -620,7 +625,8 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
-    blofeld-dsp-completion-observer-test blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
+    blofeld-dsp-completion-observer-test blofeld-dsp-external-events-test
+    blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test
     blofeld-mcu-dsp-wait-test
     blofeld-hc12-cycle-test

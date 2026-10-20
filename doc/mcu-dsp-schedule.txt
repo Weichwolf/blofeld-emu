@@ -93,9 +93,10 @@ coordinated native recovery. Unqualified idle ordering rejects before execution.
 Scope
 This is single-threaded normal-run and explicitly ordered WAI reference scheduling.
 Physical reset/clock/routing, bidirectional host signals, complete mask ROM/assets,
-Desktop/Keyboard board profiles and the headless CLI's combined execution path
-remain pending. The CLI still runs MCU only. No future real-time audio callback
-may inherit these allocating/throwing diagnostic and snapshot facilities.
+and Desktop/Keyboard board profiles remain pending. The opt-in headless reference
+driver composes both owners and explicit return routes (reference-board.txt).
+No future real-time audio callback may inherit these allocating/throwing
+diagnostic and snapshot facilities.
 Original full boot, MIDI/voices/audio, full update/recovery/persistence/stress and
 stock-hardware equivalence remain unproven. Unknown hardware is not substituted.
 
@@ -111,3 +112,8 @@ when the completion observer supplies an IRQ. Cancelled pre-input WAI offers
 never call a DSP observer. The scheduler owns no output routing or callbacks.
 Observer failures preserve completed DSP counters and quarantine the schedule.
 A match between CPU/clock/schedule checkpoints is still required for recovery.
+
+Timed external peripheral sources are also forwarded at exact common ticks,
+including between native DSP completions. They participate in shared MCU-write
+ordering and committed WAI periods; cancelled offers dispatch no source event.
+See dsp-external-events.txt for binding, budgets, tie contracts and checkpoints.

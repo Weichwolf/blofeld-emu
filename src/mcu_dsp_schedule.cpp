@@ -103,11 +103,17 @@ void McuDspSchedule::consumed() const {
 
 void McuDspSchedule::advance(const DspScheduleBoundary boundary,
                              const DspObserver &before_dsp,
-                             const DspCompletionObserver &after_dsp) {
+                             const DspCompletionObserver &after_dsp,
+                             const DspExternalEvents &external) {
   if (end_ticks_ < inputs_.dsp.epoch_ticks) { return; }
   try {
-    dsp_schedule_.advance_to(
-        dsp_, end_ticks_, boundary, inputs_.maximum_dsp_steps_per_cycle, before_dsp, after_dsp);
+    dsp_schedule_.advance_to(dsp_,
+                             end_ticks_,
+                             boundary,
+                             inputs_.maximum_dsp_steps_per_cycle,
+                             before_dsp,
+                             after_dsp,
+                             external);
   } catch (const Fault &fault) {
     if (wait_context_) {
       throw Fault("Scheduled idle peer execution mcu-pc=" + hex(wait_context_->pc) +
@@ -136,7 +142,8 @@ void McuDspSchedule::offer_period() {
 void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
                                  const bool shared_write,
                                  const DspObserver &before_dsp,
-                                 const DspCompletionObserver &after_dsp) {
+                                 const DspCompletionObserver &after_dsp,
+                                 const DspExternalEvents &external) {
   healthy();
   const Guard guard(*this);
   consumed();
@@ -151,32 +158,36 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
   offered_ = true;
   shared_write_ = shared_write;
   if (!shared_write) {
-    advance(DspScheduleBoundary::through, before_dsp, after_dsp);
+    advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
     return;
   }
-  advance(DspScheduleBoundary::before, before_dsp, after_dsp);
-  const bool tie = end_ticks_ >= inputs_.dsp.epoch_ticks &&
-                   dsp_schedule_.next_completion_ticks(dsp_) == end_ticks_;
+  advance(DspScheduleBoundary::before, before_dsp, after_dsp, external);
+  const bool tie =
+      end_ticks_ >= inputs_.dsp.epoch_ticks && dsp_schedule_.next_event_ticks(dsp_) == end_ticks_;
   if (tie) {
     if (ties_ == std::numeric_limits<std::uint64_t>::max()) {
       throw Fault("MCU/DSP shared write tie counter exhausted");
     }
     ++ties_;
     if (inputs_.shared_write_order == McuDspTieOrder::unqualified) {
-      throw Fault("Unqualified simultaneous DSP completion and MCU shared write at " +
+      const std::string event = dsp_schedule_.next_completion_ticks(dsp_) == end_ticks_
+                                    ? "DSP completion"
+                                    : "external event";
+      throw Fault("Unqualified simultaneous " + event + " and MCU shared write at " +
                   hex(*cycle.address) + " mcu-pc=" + hex(cycle.context.pc) +
                   " dsp-pc=" + hex(dsp_.cpu().state().pc, 6));
     }
   }
   if (!tie || inputs_.shared_write_order != McuDspTieOrder::mcu_before_dsp) {
-    advance(DspScheduleBoundary::through, before_dsp, after_dsp);
+    advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
   }
 }
 
 void McuDspSchedule::observe_write(const BusEvent &event,
                                    const std::function<void()> &observe_signals,
                                    const DspObserver &before_dsp,
-                                   const DspCompletionObserver &after_dsp) {
+                                   const DspCompletionObserver &after_dsp,
+                                   const DspExternalEvents &external) {
   healthy();
   const Guard guard(*this);
   consumed();
@@ -186,7 +197,7 @@ void McuDspSchedule::observe_write(const BusEvent &event,
   }
   observe_signals();
   consumed();
-  advance(DspScheduleBoundary::through, before_dsp, after_dsp);
+  advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
   shared_write_ = false;
 }
 
@@ -199,7 +210,8 @@ void McuDspSchedule::end_instruction() {
 
 void McuDspSchedule::begin_wait_period(const McuWaitPeriod period,
                                        const DspObserver &before_dsp,
-                                       const DspCompletionObserver &after_dsp) {
+                                       const DspCompletionObserver &after_dsp,
+                                       const DspExternalEvents &external) {
   healthy();
   const Guard guard(*this);
   consumed();
@@ -215,7 +227,7 @@ void McuDspSchedule::begin_wait_period(const McuWaitPeriod period,
   wait_context_ = period.context;
   offer_period();
   ++expected_idle_cycles_;
-  advance(DspScheduleBoundary::through, before_dsp, after_dsp);
+  advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
   wait_context_.reset();
 }
 
@@ -236,7 +248,7 @@ void McuDspSchedule::finish_boundary() {
   if (shared_write_) { throw Fault("MCU/DSP shared write observation was not delivered"); }
   if (end_ticks_ >= inputs_.dsp.epoch_ticks &&
       (dsp_schedule_.horizon_ticks() != end_ticks_ ||
-       dsp_schedule_.next_completion_ticks(dsp_) <= end_ticks_)) {
+       dsp_schedule_.next_event_ticks(dsp_) <= end_ticks_)) {
     throw Fault("MCU/DSP completed instruction lost its pending DSP deadline");
   }
   offered_ = false;
