@@ -18,8 +18,9 @@ Opcode, vector and consumed extension fetches have distinct kinds. Decoder looka
 not an access; unknown lookahead does not fabricate an instruction operand. The
 prepared native dependency has a separate optional readExtension hook. Its array
 fallback still uses ordinary P-memory reads. Real P-data reads remain data, even
-when an instruction also consumes a P-space extension. Latched REP words produce
-no invented fetches. Actual interrupt-vector words are fetched through the strict
+when an instruction also consumes a P-space extension. A legal latched REP opcode
+produces no invented fetches; its data operands are read each iteration. Actual
+interrupt-vector words are fetched through the strict
 bus before acknowledgement; a missing second word leaves the source pending.
 A two-word vector instruction consumes its already fetched extension rather than
 reading that memory word again. An observer failing after the second vector read

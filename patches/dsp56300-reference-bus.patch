@@ -51,13 +51,15 @@
 +		uint32_t exec() noexcept override { return MaxDelayCycles; }
 --- a/source/dsp56kEmu/dsp.h
 +++ b/source/dsp56kEmu/dsp.h
-@@ -40 +40 @@
+@@ -3,0 +4 @@
++#include <stdexcept>
+@@ -40 +41 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept;
 +	void dspExecInterrupts(DSP* _dsp);
-@@ -86 +86 @@
+@@ -86 +87 @@
 -		typedef void (*TInterruptFunc)(DSP*) noexcept;
 +		typedef void (*TInterruptFunc)(DSP*);
-@@ -162,0 +163,31 @@
+@@ -162,0 +164,31 @@
 +		bool m_referenceMode = false;
 +		bool m_referenceVectorActive = false;
 +		bool m_referenceLongEntry = false;
@@ -66,7 +68,7 @@
 +			TWord remaining = 0;
 +			TWord body = 0;
 +			TWord opcode = 0;
-+			TWord extension = 0;
++			TWord extension = 0; // Reserved snapshot slot: a REP body has no extension.
 +			TWord next = 0;
 +			TReg24 savedLC;
 +			bool loaded = false;
@@ -89,10 +91,10 @@
 +		void restoreReferenceState(const ReferenceState& state);
 +	private:
 +		void verifyReferenceCheckpoint() const;
-@@ -189 +220 @@
+@@ -189 +221 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +239,11 @@
+@@ -208 +240,12 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
@@ -101,11 +103,12 @@
 +		void execReferenceInterrupt(TWord vector, unsigned level);
 +	private:
 +		uint32_t referenceCycleCost(TWord pc, TWord opcode) const;
++		bool referenceRepeatTarget(TWord opcode) const;
 +		void execReferenceVectorWord(TWord address, TWord opcode, unsigned available);
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +452,13 @@
+@@ -411,2 +454,13 @@
 -		TWord	fetchOpWordB()
 -		{
 +		TWord memReadExtension(TWord offset) const
@@ -117,14 +120,14 @@
 +		TWord fetchOpWordB()
 +		{
 +			TWord extension = m_opWordB;
-+			if(m_referenceRepeat.loaded)
-+				extension = m_referenceRepeat.extension;
-+			else if(!m_referenceVectorActive)
++			if(m_referenceRepeat.remaining)
++				throw std::runtime_error("Unexpected extension in single-word reference REP");
++			if(!m_referenceVectorActive)
 +				extension = memReadExtension(pcCurrentInstruction + 1);
-@@ -416 +468 @@
+@@ -416 +470 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523,15 +575,8 @@
+@@ -523,15 +577,8 @@
 -		void	sr_s_update				()
 -		{
 -			if( sr_test_noCache(CCR_S) )
@@ -148,15 +151,15 @@
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -726,0 +772 @@
+@@ -726,0 +774 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +782 @@
+@@ -735,0 +784 @@
 +			sr_s_update(reg.b);
-@@ -975,0 +1023 @@
+@@ -975,0 +1025 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1053 @@
+@@ -1004,0 +1055 @@
 +			sr_s_update(_src);
-@@ -1468,0 +1518 @@
+@@ -1468,0 +1520 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -197,7 +200,7 @@
 @@ -264 +279 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +340,182 @@
+@@ -324,0 +340,197 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -261,6 +264,17 @@
 +		return dsp56k::calcCycles(a, b, pc, opcode, mem.getBridgedMemoryAddress(), 1);
 +	}
 +
++	bool DSP::referenceRepeatTarget(const TWord opcode) const
++	{
++		// FM13-160/A.3.8: only a single-word, non-flow instruction may follow REP.
++		Instruction a, b;
++		if(!m_opcodes.getInstructionTypes(opcode, a, b)) return false;
++		const auto forbidden = OpFlagBranch | OpFlagLoop | OpFlagDoLoop | OpFlagPushPC | OpFlagPopPC;
++		return m_opcodes.getOpcodeLength(opcode, a, b) == 1 &&
++			!(m_opcodes.getFlags(a, b) & forbidden) && a != Stop && a != Wait &&
++			a != Trap && a != Trapcc && a != Debug && a != Debugcc && a != Illegal;
++	}
++
 +	uint32_t DSP::referenceNextCycles() const
 +	{
 +		verifyReferenceCheckpoint();
@@ -270,6 +284,8 @@
 +			opcode = m_referenceRepeat.opcode;
 +		else
 +			mem.getOpcode(pc, opcode, extension);
++		if(m_referenceRepeat.remaining && !referenceRepeatTarget(opcode))
++			throw std::runtime_error("Unsupported reference REP target");
 +		return referenceCycleCost(pc, opcode);
 +	}
 +
@@ -284,11 +300,13 @@
 +			reg.pc.var = repeat.body;
 +			if(!repeat.loaded) {
 +				repeat.opcode = fetchPC();
-+				repeat.extension = m_opWordB;
++				repeat.extension = 0;
 +			} else {
 +				++reg.pc.var;
-+				m_opWordB = repeat.extension;
++				m_opWordB = 0;
 +			}
++			if(!referenceRepeatTarget(repeat.opcode))
++				throw std::runtime_error("Unsupported reference REP target");
 +			execOp(repeat.opcode);
 +			notifyProgramMemWrite(repeat.body); // A latched REP must not retain a stale opcode cache entry.
 +			const auto next = repeat.body + m_currentOpLen;
@@ -380,16 +398,16 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -341 +538 @@
+@@ -341 +553 @@
 -				m_cycles += getOpcodeCycles(currentOp);
 +				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
-@@ -413,0 +611,5 @@
+@@ -413,0 +626,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +694,8 @@
+@@ -491,0 +709,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -398,10 +416,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +736,2 @@
+@@ -525,0 +751,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +816,31 @@
+@@ -603,0 +831,26 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -415,12 +433,7 @@
 +					throw std::runtime_error("Forbidden zero REP near DO loop end");
 +				const auto body = reg.pc.toWord();
 +				const auto opcode = memRead(MemArea_P, body);
-+				Instruction a, b;
-+				const auto decoded = m_opcodes.getInstructionTypes(opcode, a, b);
-+				const auto forbidden = OpFlagBranch | OpFlagLoop | OpFlagDoLoop | OpFlagPushPC | OpFlagPopPC;
-+				if(!decoded || m_opcodes.getOpcodeLength(opcode, a, b) != 1 ||
-+					(m_opcodes.getFlags(a, b) & forbidden) || a == Stop || a == Wait ||
-+					a == Trap || a == Trapcc || a == Debug || a == Debugcc || a == Illegal)
++				if(!referenceRepeatTarget(opcode))
 +					throw std::runtime_error("Unsupported reference zero REP target");
 +				setPC((body+1) & 0xffffff);
 +				m_referenceRepeatCompleted = true;
@@ -433,16 +446,16 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1394,0 @@
+@@ -1152,2 +1404,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1397 @@
+@@ -1156 +1407 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1570,0 +1812,2 @@
+@@ -1570,0 +1822,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +1926,2 @@
+@@ -1682,0 +1936,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl

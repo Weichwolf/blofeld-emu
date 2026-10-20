@@ -88,5 +88,11 @@
     "source": "https://www.nxp.com/docs/en/application-note/APR23.pdf",
     "bytes": 772785,
     "sha256": "f56db665a183fbf2d9deea52fdfaf0f6cc781578bc976adbc0362633b1b32c1b"
+  },
+  {
+    "file": "APR20.pdf",
+    "source": "https://www.nxp.com/docs/en/application-note/APR20.pdf",
+    "bytes": 1246632,
+    "sha256": "4ef9b327763a39259b8096fd25aa152a2711aa4e89a2061cb1a5158858796679"
   }
 ]

@@ -14,7 +14,7 @@ callers must rebind external links. The API is single-threaded.
 Captured state
 - Native registers, all sixteen stack slots, AGU modifier-derived state, current
   execution context and diagnostic instruction/cycle counters.
-- Yielded REP count, loaded/unloaded opcode and extension latch, saved LC and
+- Yielded REP count, loaded/unloaded single-word opcode latch, saved LC and
   the completed-REP interrupt-deferral marker; DO/DO FOREVER state in the native
   registers and stack; fast/long/nested interrupt continuation and dispatch.
 - Independent P/X/Y RAM/ROM words and knownness, retained physical aliases,
@@ -36,8 +36,8 @@ queues/callbacks, which are outside this custom-bus reference path.
 Regression evidence
 Own native instructions check ADD value/flags and modulo-eight wrap, unknown RAM,
 immutable branch isolation, REP before/after its first body fetch, latched code
-despite changed P opcode/extension, later coherent normal fetch, nested two-by-two
-DO loops and recovery after a reserved-memory fault. Independent expected values
+despite changed P opcode, actual per-iteration data reads, later coherent normal
+fetch, nested two-by-two DO loops and recovery after a reserved-memory fault. Independent expected values
 supplement complete debug-state comparisons, including stack and native counters.
 Timer vectors check pending/acknowledged sources, nested long entry, native
 priority reconfiguration, INC/RTI frame unwinding and fast-vector continuation.

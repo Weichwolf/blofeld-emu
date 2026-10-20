@@ -109,6 +109,7 @@ derivative limits. doc/dsp-instructions.txt covers the bounded native instructio
 fixture, independent execution-control regressions and opt-in fuzz harness.
 doc/dsp-zero-loops.txt covers normal zero REP annulment, retained
 zero-DO frames, source/stack/IRQ checks and the remaining compatibility limits.
+doc/dsp-repeat.txt covers single-word REP qualification and pre-effect rejection.
 doc/nand-read.txt covers an explicit small-page NAND read candidate, native own
 GPIO reads and isolated original addressing/turnaround frontiers. It does not
 establish the target boards' NAND contents or complete original NAND loading.

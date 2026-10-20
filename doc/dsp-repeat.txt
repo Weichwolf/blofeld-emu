@@ -1,0 +1,39 @@
+Native REP target qualification
+
+DSP56300FM Rev.5 REP13-160 and A.3.8 permit a single-word non-flow instruction
+after REP. The previous reference interpreter accepted extended targets and
+checked control flow only after execution. An untaken conditional branch could
+therefore pass, and invalid targets could already read operands or modify state.
+Three existing positive core/checkpoint/observation fixtures used invalid extended
+REP bodies; they now use legal one-word absolute-short memory loads/stores.
+
+The reference path validates decoded length and control/loop/stack-flow flags
+before executing the body, including the first iteration and nominal previews.
+It rejects unknown words, extended targets, conditional/unconditional flow,
+nested REP, STOP/WAIT and unqualified trap/debug/illegal targets with native
+PC/OMR context. Zero-count target qualification uses the same predicate while
+retaining its existing normal-mode annulment behavior (dsp-zero-loops.txt).
+The extension-fetch path separately rejects an unexpected REP extension.
+
+A legal body is fetched once and retained across iterations and trusted
+checkpoints. Its data operands are accessed each iteration. Later P-memory
+mutation cannot replace the loaded opcode; a subsequent ordinary execution sees
+the changed code. The former extension snapshot slot remains reserved/zero, so
+the prepared ReferenceState layout is preserved. This is an instruction validity
+correction, not a native pipeline clock or physical-mask timing model. Other
+pipeline/DO-end restrictions and automatic native DMA integration remain open.
+
+  cmake --build --preset strict --target blofeld-repeat-test
+  ctest --test-dir build/strict -R '^dsp_repeat_restrictions$' --output-on-failure
+
+The regression first failed against the preceding linked SDK: an own two-word
+MOVE executed where rejection was independently required. Tests cover known and
+unknown extensions without consuming either; untaken branch/call/return, nested
+REP and low-power rejection before body effects; fault quarantine/trusted restore;
+pure-preview rejection and repair; real per-iteration data reads after P/data
+mutation; loaded-body checkpoint replay. Existing native observation/checkpoint
+tests retain legal opcode-latching and coherent later fetch expectations.
+
+Adopting consumers must rebuild the prepared native SDK library for the changed
+reference behavior. No new virtual hook or ReferenceState layout is introduced;
+frozen consumer bundles remain frozen until deliberate adoption.

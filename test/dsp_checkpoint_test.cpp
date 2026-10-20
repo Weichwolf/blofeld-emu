@@ -80,26 +80,28 @@ void test_latched_repeat_and_code_mutation() {
   program.emit("jmp $0");
   program.install(machine.bus());
   ram(machine.bus(), 0, assemble("rep #3"));
-  ram(machine.bus(), 1, assemble("move #>$123456,x0"));
-  ram(machine.bus(), 3, assemble("jmp $1"));
+  ram(machine.bus(), 1, assemble("move x:<$10,x0"));
+  ram(machine.bus(), 2, assemble("jmp $1"));
+  machine.bus().write({.space = DspSpace::x, .address = 0x10, .value = cookie});
+  machine.bus().write({.space = DspSpace::y, .address = 0x10, .value = other_cookie});
   until(machine, 0);
   machine.cpu().step();
   const auto before_body = machine.checkpoint();
   machine.cpu().step();
   require(machine.cpu().state().pc == 1 && machine.cpu().state().lc == 2,
           "One native REP body leaves two repetitions at the latched body address");
-  ram(machine.bus(), 1, assemble("move #>$654321,x1"));
+  ram(machine.bus(), 1, assemble("move y:<$10,x1"));
   const auto latched = machine.checkpoint();
   run(machine, 2);
   require(
-      machine.cpu().state().pc == 3 && machine.cpu().state().lc == 0 &&
+      machine.cpu().state().pc == 2 && machine.cpu().state().lc == 0 &&
           machine.cpu().state().x == cookie,
-      "Remaining repetitions must execute the saved opcode/extension rather than changed P RAM");
+      "Remaining repetitions must execute the saved single-word opcode rather than changed P RAM");
   run(machine, 2);
   const auto completed = machine.cpu().debug_state();
   constexpr std::uint64_t expected_x = (std::uint64_t{other_cookie} << word_bits) | cookie;
-  require(completed.cpu.x == expected_x && completed.cpu.pc == 3,
-          "Normal execution after REP must see the changed opcode and immediate");
+  require(completed.cpu.x == expected_x && completed.cpu.pc == 2,
+          "Normal execution after REP must see the changed opcode and Y-memory source");
   machine.restore(latched);
   run(machine, 4);
   require(machine.cpu().debug_state() == completed,

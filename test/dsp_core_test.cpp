@@ -693,14 +693,14 @@ void test_bounded_do_waits_for_real_spi_words() {
           "Final DO retirement falls through and restores both system-stack frames");
 }
 
-void test_rep_latches_opcode_and_extension_without_stale_cache() {
+void test_rep_latches_single_word_without_stale_cache() {
   blofeld::DspBus bus;
   Program program;
   program.emit("move #>5,x0");
   program.emit("move #>7,x1");
   program.emit("rep #3");
   const auto body = program.pc();
-  program.emit("move x0,x:>$210");
+  program.emit("move x0,x:<$10");
   const auto after = program.pc();
   program.jump(body);
   program.install(bus);
@@ -709,29 +709,30 @@ void test_rep_latches_opcode_and_extension_without_stale_cache() {
   cpu.step();
   cpu.step();
   cpu.step();
-  constexpr unsigned first_target = 0x210;
-  constexpr unsigned changed_target = 0x211;
+  constexpr unsigned first_target = 0x10;
+  constexpr unsigned changed_target = 0x11;
   require(bus.read({.space = blofeld::DspSpace::x, .address = first_target}) == 5,
           "First REP pass writes the independent original operand");
   Program modified;
-  modified.emit("move x1,x:>$211");
+  modified.emit("move x1,x:<$11");
   bus.install_rom({.start = body, .words = modified.words()});
   for (unsigned index = 0; index < 2; ++index) {
     bus.write({.space = blofeld::DspSpace::x, .address = first_target, .value = 0});
     cpu.step();
     require(bus.read({.space = blofeld::DspSpace::x, .address = first_target}) == 5,
-            "Later REP passes use the latched opcode and extension despite changed backing ROM");
+            "Later REP passes use the latched single-word opcode despite changed backing ROM");
     reject(
         [&bus] {
           static_cast<void>(bus.read({.space = blofeld::DspSpace::x, .address = changed_target}));
         },
-        "The modified extension is not consumed during REP");
+        "The modified single-word destination is not consumed during REP");
   }
   require(cpu.state().pc == after, "REP ends after exactly three body executions");
   cpu.step();
   cpu.step();
-  require(bus.read({.space = blofeld::DspSpace::x, .address = changed_target}) == 7,
-          "A normal revisit decodes the changed opcode and extension after REP retires");
+  require(
+      bus.read({.space = blofeld::DspSpace::x, .address = changed_target}) == 7,
+      "A normal revisit decodes the changed single-word register/destination after REP retires");
 }
 }
 
@@ -753,7 +754,7 @@ int main() {
     test_short_immediates_and_register_repeat_count();
     test_bounded_rep_steps();
     test_bounded_do_waits_for_real_spi_words();
-    test_rep_latches_opcode_and_extension_without_stale_cache();
+    test_rep_latches_single_word_without_stale_cache();
     std::cout << "Native DSP reset, strict memory, arithmetic, code mutation and bounded "
                  "DO/REP/SPI checks passed\n";
     return 0;

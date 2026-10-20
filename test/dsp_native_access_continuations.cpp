@@ -16,6 +16,7 @@
 namespace blofeld::test::native_access {
 namespace {
 void repeat_and_preview() {
+  constexpr unsigned absolute_x0 = 0x449000; // FM13-118: W=1, X:aa=$10, X0, MOVE.
   const DspRunContract timing{
       .clock = {.extal_hz = 12000000,
                 .timebase_hz = 540000000,
@@ -25,11 +26,12 @@ void repeat_and_preview() {
   DspProgram code;
   code.emit("rep #3");
   const auto body = code.pc();
-  code.immediate("x0", first);
+  code.emit("move x:<$10,x0");
   code.emit("nop");
   code.install(machine.bus());
   machine.bus().pll().observe_pinit(false);
   machine.cpu().reset_spi_boot();
+  machine.bus().write({.space = DspSpace::x, .address = 0x10, .value = first});
   machine.cpu().step();
   Recorder capture;
   const auto before = machine.cpu().debug_state();
@@ -39,12 +41,12 @@ void repeat_and_preview() {
   capture.step(machine);
   require(capture.rows.size() == 4 && machine.cpu().state().pc == body &&
               machine.cpu().state().lc == 2 && machine.cpu().state().x == first,
-          "The first REP iteration really fetches its two-word body");
+          "The first REP iteration fetches its legal single-word body and reads actual data");
   pair(capture.rows,
-       {.kind = Kind::opcode, .target = {.address = body}, .value = immediate_x0, .pc = body});
+       {.kind = Kind::opcode, .target = {.address = body}, .value = absolute_x0, .pc = body});
   pair(capture.rows,
-       {.kind = Kind::extension,
-        .target = {.address = body + 1},
+       {.kind = Kind::read,
+        .target = {.space = DspSpace::x, .address = 0x10},
         .value = first,
         .offset = 2,
         .ordinal = 1,
@@ -54,16 +56,17 @@ void repeat_and_preview() {
     machine.restore(loaded);
     for (unsigned remaining = 1; remaining <= 2; ++remaining) {
       capture.step(machine);
-      require(capture.rows.empty() && machine.cpu().state().x == first,
-              "Latched REP opcode/extension words create no invented memory transactions");
+      require(capture.rows.size() == 2 && capture.rows.front().kind == Kind::read &&
+                  machine.cpu().state().x == first,
+              "Latched REP opcode creates no invented fetch while actual data is read each time");
     }
-    require(machine.cpu().state().pc == body + 2 && machine.cpu().state().lc == 0 &&
+    require(machine.cpu().state().pc == body + 1 && machine.cpu().state().lc == 0 &&
                 machine.cpu().debug_state().native_instructions == 4,
             "Both restored REP continuations retain the independent three-iteration result");
     capture.step(machine);
     require(capture.rows.size() == 2, "The following NOP starts a fresh native access ordinal");
     pair(capture.rows,
-         {.kind = Kind::opcode, .target = {.address = body + 2}, .value = 0, .pc = body + 2});
+         {.kind = Kind::opcode, .target = {.address = body + 1}, .value = 0, .pc = body + 1});
   }
 }
 

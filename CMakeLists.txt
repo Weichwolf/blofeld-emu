@@ -150,6 +150,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-bank-test test/dsp_bank_test.cpp test/dsp_bank_phase.cpp test/dsp_bank_native.cpp)
   target_link_libraries(blofeld-bank-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_bank_arbitration COMMAND blofeld-bank-test)
+  add_executable(blofeld-repeat-test test/dsp_repeat_test.cpp)
+  target_link_libraries(blofeld-repeat-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_repeat_restrictions COMMAND blofeld-repeat-test)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
@@ -644,6 +647,7 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-bank-test
+    blofeld-repeat-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test

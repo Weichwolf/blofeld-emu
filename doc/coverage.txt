@@ -171,6 +171,10 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,
                                           code mutation and bounded DO/REP tested.
+                                          REP targets reject extended/flow words
+                                          before effects; legal one-word latch,
+                                          per-iteration data reads and preview
+                                          repair checked (dsp-repeat.txt).
                                           NORM no-shift result flags corrected;
                                           4608 independent scalar/scaling/register/
                                           compatibility vectors checked.
