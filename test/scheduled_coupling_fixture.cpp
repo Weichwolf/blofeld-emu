@@ -144,8 +144,15 @@ void ClockedLink::on_dsp_step(const DspScheduledStep &step) {
 void ClockedLink::advance(const std::uint64_t end, const DspScheduleBoundary boundary) {
   if (end < release_tick_) { return; }
   constexpr unsigned cycle_budget = 16;
-  scheduler_.advance_to(
-      dsp_, end, boundary, cycle_budget, [this](const auto &step) { on_dsp_step(step); });
+  try {
+    scheduler_.advance_to(
+        dsp_, end, boundary, cycle_budget, [this](const auto &step) { on_dsp_step(step); });
+  } catch (const Fault &fault) {
+    throw Fault("Scheduled peer execution mcu-pc=" + hex(context_.pc) + " dsp-pc=" +
+                hex(dsp_.cpu().state().pc, 6) + " mcu-cycle-kind=" + std::string(1, cycle_.kind) +
+                " mcu-address=" + (cycle_.address ? hex(*cycle_.address) : "none") +
+                " mcu-end=" + std::to_string(end) + ": " + fault.what());
+  }
 }
 
 void ClockedLink::on_cycle(const Hc12BusCycle cycle) {
@@ -156,6 +163,7 @@ void ClockedLink::on_cycle(const Hc12BusCycle cycle) {
           "Unobserved MCU serial-pad change before the next clock boundary");
   phases_.observe(cycle, mcu_.run_clock().bus_cycles());
   context_ = cycle.context;
+  cycle_ = cycle;
   const auto factor = common_hz / mcu_.run_clock().timebase_hz();
   const auto offered = mcu_.run_clock().next_cycle_ticks(mcu_.bus());
   require(offered <= (std::numeric_limits<std::uint64_t>::max() - end_tick_) / factor,

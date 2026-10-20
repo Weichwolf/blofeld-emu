@@ -8,6 +8,7 @@ import re
 import sys
 
 import original_dsp_boot
+import scheduled_frontier
 from original_dsp_clock import identity, nominal_units
 from original_owned_clock import census, phases
 
@@ -118,7 +119,8 @@ def verify_case(trace, common, line):
     assert units == case["dsp-units"] and ticks == case["dsp-ticks"]
     assert steps == case["dsp-steps"]
     events = verify_events(event_text, {row["pc"]: row for row in rows}, case, ticks_at)
-    return {"observed": case, "mcu_manual_costs": costs, "event_checks": events}
+    return {"observed": case, "mcu_manual_costs": costs, "event_checks": events,
+            "reserved_write_continuation": scheduled_frontier.verify(prefix, case, ticks_at)}
 
 
 def verify(trace):

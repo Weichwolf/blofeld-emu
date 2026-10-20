@@ -409,7 +409,8 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-coupled-boot.trace")
   set_tests_properties(original_coupled_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-scheduled-coupling-test test/original_scheduled_coupling_test.cpp
-    test/scheduled_coupling_fixture.cpp test/original_owned_clock_fixture.cpp)
+    test/scheduled_coupling_fixture.cpp test/scheduled_frontier_fixture.cpp
+    test/original_owned_clock_fixture.cpp)
   target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp
     blofeld_dsp_native blofeld_lcd_fixture)
   add_test(NAME original_scheduled_coupling COMMAND ${Python3_EXECUTABLE}

@@ -10,6 +10,7 @@
 #include <exception>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -80,6 +81,7 @@ DspScheduledRun::advance_to(DspMachine &machine,
   if (active_ || faulted_) { throw Fault("DSP scheduler requires a healthy inactive boundary"); }
   active_ = true;
   unsigned completed = 0;
+  std::optional<std::uint64_t> attempted_completion;
   try {
     if (boundary != DspScheduleBoundary::before && boundary != DspScheduleBoundary::through) {
       throw Fault("Unknown DSP schedule boundary policy");
@@ -95,7 +97,9 @@ DspScheduledRun::advance_to(DspMachine &machine,
       const auto end = deadline(*state_.pending_);
       if (end > horizon || (end == horizon && boundary == DspScheduleBoundary::before)) { break; }
       if (completed == maximum_steps) { throw Fault("DSP scheduled instruction budget exhausted"); }
+      attempted_completion = end;
       complete(machine, before_step);
+      attempted_completion.reset();
       ++completed;
     }
     state_.horizon_ = horizon;
@@ -106,8 +110,11 @@ DspScheduledRun::advance_to(DspMachine &machine,
     active_ = false;
     faulted_ = true;
     throw Fault("DSP scheduled completion pc=" + hex(machine.cpu().state().pc, 6) +
-                " horizon=" + std::to_string(horizon) + " completed-native-cycle-units=" +
-                std::to_string(state_.completed_cycles_) + ": " + error.what());
+                " horizon=" + std::to_string(horizon) + " attempted-completion=" +
+                (attempted_completion ? std::to_string(*attempted_completion) : "none") +
+                " completed-reference-ticks=" + std::to_string(state_.completed_ticks_) +
+                " completed-native-cycle-units=" + std::to_string(state_.completed_cycles_) + ": " +
+                error.what());
   } catch (...) {
     active_ = false;
     faulted_ = true;

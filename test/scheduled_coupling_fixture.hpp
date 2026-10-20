@@ -52,6 +52,14 @@ struct LinkCheckpoint {
   bool injected = false;
 };
 
+struct Progress {
+  owned_clock::Census census;
+  owned_clock::FlashPhases phases;
+  owned_clock::Interrupts interrupts;
+  std::uint64_t ready_tick = 0;
+};
+
+void step(McuMachine &machine, Progress &progress);
 void require(bool condition, const std::string &message);
 [[nodiscard]] std::uint64_t common_ticks(const McuMachine &machine);
 void record_clock_write(const McuMachine &machine, const BusEvent &event, std::ostream &trace);
@@ -105,5 +113,6 @@ private:
   bool offered_ = false;
   bool injected_ = false;
   ExecutionContext context_;
+  Hc12BusCycle cycle_;
 };
 }

@@ -17,6 +17,7 @@
 #include "dsp_boot_reference.hpp"
 #include "original_owned_clock_fixture.hpp"
 #include "scheduled_coupling_fixture.hpp"
+#include "scheduled_frontier_fixture.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -32,14 +33,6 @@
 #include <string>
 
 namespace blofeld::test::scheduled {
-namespace {
-struct Progress {
-  owned_clock::Census census;
-  owned_clock::FlashPhases phases;
-  owned_clock::Interrupts interrupts;
-  std::uint64_t ready_tick = 0;
-};
-
 void step(McuMachine &machine, Progress &progress) {
   const auto before = machine.cpu().state();
   const auto opcode = machine.bus().peek(before.pc);
@@ -51,6 +44,7 @@ void step(McuMachine &machine, Progress &progress) {
   progress.interrupts.observe(before, result, machine.cpu(), opcode);
 }
 
+namespace {
 void cold_start(McuMachine &machine, Progress &progress, std::ostream &trace) {
   constexpr unsigned initial_e = 0xfb;
   constexpr unsigned byte_mask = 0xff;
@@ -156,7 +150,7 @@ void verify_loaded(const McuMachine &mcu,
   require(state.pc == coupled::clear_pc && state.r[4] > 0 && state.r[4] < coupled::long_ram_end &&
               state.omr == original_omr && state.lc == coupled::clear_count - state.r[4] &&
               dsp.bus().pll().read() == first_stage_pctl,
-          "Both real CPUs reach sender return and the unmodified partial mapped clear together");
+          "Both real CPUs reach the end of serial stores and the original partial clear together");
   for (unsigned address = 0; address < state.r[4]; ++address) {
     for (const auto space : {DspSpace::x, DspSpace::y}) {
       require(dsp.bus().read({.space = space, .address = address}) == 0,
@@ -249,6 +243,7 @@ unsigned experiment(McuMachine &mcu,
               mcu.run_clock().elapsed_ticks() == expected_mcu_ticks &&
               dsp.run_clock().elapsed_ticks() == expected_dsp_ticks,
           "Joint native CPU/bus/pin/deadline checkpoint replays the exact timestamped suffix");
+  verify_scheduled_frontier(mcu, dsp, link, progress, trace, path.string() + "." + name, epoch);
   return link.ties();
 }
 
@@ -367,9 +362,9 @@ int main(const int count, char **arguments) {
     }
     blofeld::test::scheduled::run(
         {.firmware = arguments[1], .rom = arguments[2], .trace = arguments[3]});
-    std::cout
-        << "Original MCU/DSP common nominal time, native wire transfer and joint replay passed; "
-           "physical timing/board boot remain unqualified.\n";
+    std::cout << "Original MCU/DSP common nominal time, native transfer, joint replay and strict "
+                 "reserved-write recovery passed; "
+                 "physical timing/board boot remain unqualified.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

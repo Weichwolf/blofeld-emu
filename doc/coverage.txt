@@ -275,6 +275,12 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           Native bus-cycle timestamps, 1466 exact
                                           ties and mid-frame replay have separate
                                           manual ledgers (scheduled-coupling.txt).
+                                          Continuation executes all8192 mapped pairs
+                                          and attempts the next reserved write
+                                          during the original MCU's final delay.
+                                          Joint near-fault recovery repeats the
+                                          exact partial native state/error/time;
+                                          failed duration is not charged or skipped.
                                           MISO/HREQ/PU0 linkage, actual routing,
                                           reset, physical elapsed clocks and full
                                           scheduling remain unqualified.

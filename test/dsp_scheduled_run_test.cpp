@@ -200,7 +200,8 @@ void test_budget_failure_and_coordinated_restore() {
       [&] { runner.advance_to(machine, end, blofeld::DspScheduleBoundary::through, 1); },
       "Insufficient execution budget cannot claim the requested horizon");
   require(runner.faulted() && machine.run_clock().native_cycle_units() == 1 &&
-              error.contains("budget") && error.contains("pc=") && error.contains("horizon="),
+              error.contains("budget") && error.contains("pc=") && error.contains("horizon=") &&
+              error.contains("attempted-completion=none"),
           "Budget failure retains only the completed native prefix and explicit context");
   static_cast<void>(fixture::rejects([&] { runner.restore(schedule, machine); },
                                      "Unilateral scheduler restore must reject changed CPU time"));
@@ -252,7 +253,7 @@ void test_unknown_program_and_epoch_overflow() {
       [&] { runner.advance_to(machine, epoch, blofeld::DspScheduleBoundary::through, 4); },
       "Missing original code must fail during strict cost preparation");
   require(runner.faulted() && machine.run_clock().native_cycle_units() == 0 &&
-              error.contains("0xff0000"),
+              error.contains("0xff0000") && error.contains("attempted-completion=none"),
           "Unknown code never becomes a speculative NOP or guessed duration");
   DspProgram program;
   program.emit("nop");
@@ -270,6 +271,47 @@ void test_unknown_program_and_epoch_overflow() {
   require(exhausted.faulted() && machine.run_clock().native_cycle_units() == 0,
           "Exhausted absolute time rejects before any native step");
 }
+
+void test_operand_fault_deadline_and_native_recovery() {
+  DspProgram program;
+  constexpr unsigned reserved = 0x2000;
+  program.immediate("r0", reserved);
+  program.immediate("x0", 7);
+  program.emit("move x0,y:(r0)");
+  blofeld::DspMachine machine(contract());
+  initialize(machine, program);
+  blofeld::DspScheduledRun runner(schedule_inputs(epoch), machine);
+  constexpr unsigned setup_end = 1180;
+  constexpr unsigned store_end = 1225; // Two long immediates: 2+2; MOVE Y:(Rn): 1.
+  constexpr unsigned setup_ticks = setup_end - epoch;
+  constexpr unsigned store_ticks = store_end - setup_end;
+  constexpr unsigned horizon = store_end + 17;
+  require(runner.advance_to(machine, setup_end, blofeld::DspScheduleBoundary::through, 2) == 2,
+          "Two independent two-unit immediate expectations precede the operand fault");
+  plan(machine, 1, store_ticks);
+  const auto frozen = machine.checkpoint();
+  const auto pending = runner.checkpoint(machine);
+  std::string expected;
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    machine.restore(frozen);
+    runner.restore(pending, machine);
+    const auto error = fixture::rejects(
+        [&] { runner.advance_to(machine, horizon, blofeld::DspScheduleBoundary::through, 2); },
+        "An actual unqualified operand must fail at its scheduled completion");
+    require(error.contains("Unmapped DSP memory write at Y:0x002000") &&
+                error.contains("horizon=1242") && error.contains("attempted-completion=1225") &&
+                error.contains("completed-reference-ticks=180") &&
+                error.contains("completed-native-cycle-units=4") && runner.completed_steps() == 2 &&
+                runner.horizon_ticks() == setup_end && runner.faulted() &&
+                machine.timing_faulted() && machine.run_clock().elapsed_ticks() == setup_ticks,
+            "Failed duration is diagnosed separately from the horizon and completed native time");
+    static_cast<void>(
+        fixture::rejects([&] { static_cast<void>(machine.checkpoint()); },
+                         "A faulted operand cannot become a trusted native snapshot"));
+    if (replay == 0) { expected = error; }
+    require(error == expected, "Coordinated recovery reproduces the actual operand fault exactly");
+  }
+}
 }
 
 int main() {
@@ -280,6 +322,7 @@ int main() {
     test_budget_failure_and_coordinated_restore();
     test_changed_pending_instruction_and_callback();
     test_unknown_program_and_epoch_overflow();
+    test_operand_fault_deadline_and_native_recovery();
     std::cout << "DSP nominal previews, exact completion bounds, REP cost and restore passed.\n";
     return 0;
   } catch (const std::exception &error) {

@@ -65,4 +65,8 @@ complete update/recovery, stress and hardware validation remain pending.
 
 DspScheduledRun separately checkpoints its unfinished nominal completion, epoch
 and observation contract. The common-time original MCU/DSP test restores native
-machines, source pads and scheduler together mid-frame; see scheduled-coupling.txt.
+machines, source pads and scheduler together mid-frame and near the actual next
+reserved-memory write. Recovery after that joint execution fault reproduces the
+remaining events, partial register state, completed clocks and error exactly.
+Faulted captures reject; failed instructions are not automatically rolled back.
+See scheduled-coupling.txt for the declared observation contract and limitations.

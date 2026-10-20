@@ -21,6 +21,10 @@ consuming it; actual MCU execution must subsequently complete that period.
 Unknown code, changed pending durations, reversed time, callback mutations,
 exhausted time/budgets and unilateral clock restore fail visibly. Completed
 native time is a prefix, never a skipped instruction or fabricated deadline.
+Operand-failure diagnostics distinguish the attempted completion, requested
+horizon and last completed reference ticks/units. Preview/budget failures without
+an execution attempt report no attempted completion. A failed native instruction
+may already have changed registers or memory; this is not automatic rollback.
 A trusted DspScheduleCheckpoint retains the pending plan, completed CPU/clock
 counts, horizon, epoch and observation contract. Restoring the native owner and
 schedule together is required. Active/faulted capture and incompatible restore
@@ -60,7 +64,7 @@ Declared inputs, not measured Blofeld hardware:
 
 Each of four phase/order cases performs all 7275 native MCU stores and 97 frames.
 The executing DSP ROM loads all 94 original stage words, jumps to them and runs
-its original RAM clear. At MCU sender return, phases zero/nine have respectively:
+its original RAM clear. At the end of serial stores, phases zero/nine have:
   MCU retired instructions: 1856649 / 1856650
   MCU bus cycles:           5364651 / 5364656
   DSP native steps:         57310 / 57301
@@ -81,11 +85,32 @@ DSP encodings/costs. It checks every DSP completion, every MCU wire timestamp,
 1466 exact tie orderings and both final time totals. Detailed code/census/trace
 artifacts stay ignored beside build/strict/Testing/original-scheduled-coupling.trace.
 
+Continuation and actual failure
+The serial-store endpoint is before the MCU's final delay, not the loading
+function's return. Each case now continues both original CPUs through that delay
+while the DSP finishes all 8192 mapped X/Y pairs. Its next native long-memory
+store actually attempts reserved Y:002000 and fails. The nonzero REP count and
+memory map remain unchanged; no RAM expansion, discarded write or skipped loop
+supplies a later instruction. The diagnostic retains the MCU cycle kind/address,
+both PCs, DSP OMR and exact attempted completion versus MCU offer horizon.
+
+A healthy joint checkpoint within the last 32 mapped pairs restores both CPUs,
+bus/pin state, timer phases and pending DSP completion after this failure. Every
+remaining event, error, partial native register state and completed clock count
+must repeat exactly. Capturing either faulted machine or the link rejects.
+The independent ledger checks each MCU delay iteration, every DSP attempt and
+the uncharged failed duration, including already consumed MCU instruction slots.
+The ignored .frontier.trace/.frontier.replay.trace and census sidecars record
+this separately. DSP rows are before-step observations: the final failed attempt
+is explicitly excluded from completed units/ticks. Failure can leave the last
+completed DSP time ahead of the interrupted MCU period; neither owner resumes
+without coordinated recovery. This is an emulator failure test, not a hardware
+recovery procedure or evidence for reserved-memory write behavior.
+
 Scope
-This proves the declared common-time bootstrap prefix through MCU sender return.
+This proves the declared common-time bootstrap prefix and strict next-write fault.
 The CLI still executes MCU only. MISO/HREQ/PU0 wiring, a physical reset/clock
 profile, complete mask ROM/assets and scheduled Desktop/Keyboard board boot are
-not supplied. The original nonzero clear still reaches unqualified reserved
-Y:002000 if continued; RAM is not enlarged and no store or loop is bypassed.
+not supplied. Reserved Y:002000 write behavior on the actual chip remains unknown.
 Full DSP runtime/NAND loading, voices/audio, complete update/recovery, persistent
 board state, stress/realtime and stock-hardware comparison remain pending.
