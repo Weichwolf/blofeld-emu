@@ -60,6 +60,16 @@ ELF hardening and terminal run evidence remain under ignored doc/local/.
 The actual descriptor producer, later request-address table updates, receiver,
 NAND outcomes and hardware wiring remain unqualified; no flash success is supplied.
 
+A further private extension connects that queue to the existing candidate NAND
+route under explicit laboratory ready/WP/select/block and GPIO preconditions.
+The scanner's first row write and the copier's initial command word set reserved
+Port F bits. All ten original paths fail before any NAND row/data latch or
+write confirmation; the diagnostic exits 2. First-page buffers match 2640 independent bytes;
+component power-off projections retain all NAND bytes, knowledge and history.
+The failed full-confirmation probe remains recorded. DSP56371UM 6.2.4.3/Figure 6-3
+and Appendix C/Figure C-29 request zero reserved-bit writes; they do not establish
+ignoring these nonzero writes. No bit mask or successful hardware result is supplied.
+
 The WPC file is not established as a raw NAND image. The observed transport
 header fields, packet lengths and file sizes do not identify physical page
 addresses, spare/ECC bytes, bad-block handling or flash history. Applying the
