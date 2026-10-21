@@ -1,0 +1,55 @@
+Decoded full-speed USB suspend/resume admission
+
+USB2.0 section9.1.1.6 requires device status, address and configuration to survive
+suspend. S12USB20D6E2FV1 sections3.1.2/4.2.2 describe the corresponding USD/USSC
+observations and suspend/resume block. These facts do not specify raw wire
+detection timing or prove a particular Blofeld's silicon behavior. The original
+USTB/NISOF/configuration-status boundaries in usb-reset.txt remain unchanged.
+
+The existing reference-board decoder input supplies an explicit suspend/resume
+observation on a known full-speed link. Suspend changes USD/USSC but does not
+expire link identity, reset endpoints or discard captured descriptors. Reset,
+speed/enumeration changes, module/PHY control changes, owner changes and board
+restore still retire stale sessions. Only retained configuration observation is
+allowed during suspend; direct USB packet APIs still reject attempted traffic.
+Unknown or inactive links and unsupported high speed still fail visibly.
+
+UsbipRuntime leaves an admitted descriptor probe pending during suspend, with its
+declared common-tick timeout still in force. UsbipTcpServer continues bounded
+TCP framing, management, output, EOF and cancellation while withholding actual
+packet polling on imported channels. Existing output can drain; accepted SETUP,
+guest-prepared bytes, pending data/status phases, DATA PID and FIFO state remain.
+No timeout/NAK/STALL/completion or resume is invented to satisfy a queued request.
+After an explicit decoder resume, actual device packet handshakes continue the
+same request and exclusive import. Normal close and strict recovery rules remain.
+There is no TCP-triggered automatic wakeup or wall-clock bus-idle inference.
+
+Deterministic gates:
+  cmake --build --preset strict --target blofeld-headless blofeld-usbip-suspend-test blofeld-usbip-runtime-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_suspend|usbip_runtime|reference_usb_cli)$'
+
+Own native/TCP cases cover admission before resume, a zero-device DEVLIST before
+capture, retained captured metadata during later suspend, a coalesced import and
+control request, and separate pauses before SETUP, IN data and OUT status. The
+same actual own MCU ISR prepares bytes and returns through RTI; no host result
+appears until resumed device ACKs complete the whole control transfer. UNLINK
+continues while suspended and leaves actual accepted guest data intact, with no
+late cancelled submission reply. USD/USSC, configuration and link revisions are
+checked independently of the final wire payload. The existing reset-pulse and
+restore retirement cases continue to enforce their different lifetimes.
+
+The real headless CLI gate additionally starts with an explicit suspended decoder
+observation and supplies resume at common tick90000. No original firmware bytes
+are embedded: own guest code initializes USB, serves descriptors and handles IRQs.
+All SETUP IRQs/publication must occur after that resume boundary. The structural
+test descriptors are not a complete USB-MIDI class.
+
+This is decoded reference-state support, not electrical suspend/resume, automatic
+PHY clock gating, original firmware resume-handler qualification, remote wakeup,
+kernel USB attachment, USB-MIDI/Spectre functionality or real-time/hardware proof.
+No fuzzing, physical device traffic or system USB/MIDI routing is used.
+
+Primary references (local members and parent archives are hash checked):
+  doc/hardware/sources.json
+  https://www.usb.org/sites/default/files/usb_20_20250603.zip
+  https://www.nxp.com/docs/en/data-sheet/9S12UF32_ZIP.zip

@@ -89,6 +89,7 @@ public:
   void finish_in(bool acknowledged);
   [[nodiscard]] UsbEndpointInfo host_endpoint(std::uint8_t address) const;
   [[nodiscard]] UsbConfigurationInfo host_configuration() const;
+  [[nodiscard]] bool host_suspended() const;
 
   [[nodiscard]] UsbHostEvidence host_evidence() const { return host_evidence_; }
 
@@ -123,6 +124,7 @@ private:
   void acknowledge_configuration(ByteWrite access);
   [[nodiscard]] bool enabled() const;
   void require_observation() const;
+  void require_link() const;
   void require_packet() const;
   void require_control_phase() const;
   [[nodiscard]] bool input_endpoint(unsigned index) const;

@@ -175,6 +175,10 @@ target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_f
   blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library blofeld_usbip_tcp)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-usbip-suspend-test test/usbip_suspend_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_include_directories(blofeld-usbip-suspend-test PRIVATE src)
+  target_link_libraries(blofeld-usbip-suspend-test PRIVATE blofeld_usbip_tcp blofeld_core)
+  add_test(NAME usbip_suspend COMMAND blofeld-usbip-suspend-test)
   add_executable(blofeld-usbip-runtime-test test/usbip_runtime_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_include_directories(blofeld-usbip-runtime-test PRIVATE src)
   target_link_libraries(blofeld-usbip-runtime-test PRIVATE blofeld_usbip_tcp blofeld_core)

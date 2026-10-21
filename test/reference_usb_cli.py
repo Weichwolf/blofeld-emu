@@ -123,14 +123,15 @@ class UsbCli(unittest.TestCase):
             raise ValueError("Original container identity mismatch")
         ARTIFACTS.mkdir(parents=True, exist_ok=True)
 
-    def prepared(self, name, extra=""):
+    def prepared(self, name, extra="", suspended=False):
         root = ARTIFACTS / name
         root.mkdir(exist_ok=True)
         board, rom, flash, trace = [root / p for p in
                                     ("board.bfboard", "rom.bin", "state.bfnvm", "run.trace")]
         config = CONFIG.replace("operations 23", f"operations {OPERATIONS}")
         config = config.replace("dsp-release 450 low", "dsp-release 18446744073709551615 low")
-        board.write_text(config + "initial usb-decoder 0c\nat 4500 phy-window 15\n" + extra)
+        decoder = "0e" if suspended else "0c"
+        board.write_text(config + f"initial usb-decoder {decoder}\nat 4500 phy-window 15\n" + extra)
         rom.write_bytes(ROM)
         flash.write_bytes(own_image())
         command = [str(BINARY), "--firmware", str(FIRMWARE), "--reference-board", str(board),
@@ -139,8 +140,9 @@ class UsbCli(unittest.TestCase):
         before = {p: p.read_bytes() for p in (board, rom, flash)}
         return root, trace, command, before
 
-    def test_actual_cli_guest_descriptors_and_transfer(self):
-        root, trace, command, before = self.prepared("wire")
+    def exercise_wire(self, name, suspended=False):
+        resume = "at 90000 usb-decoder 0c\n" if suspended else ""
+        root, trace, command, before = self.prepared(name, resume, suspended=suspended)
         prefix = b""
         process = subprocess.Popen([*command, *OPTIONS], stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, bufsize=0)
@@ -181,7 +183,13 @@ class UsbCli(unittest.TestCase):
             self.assertIn(b"USBIP descriptors=ready", prefix + stdout)
             text = trace.read_text()
             self.assertIn("USBIP-START actual=54000", text)
-            self.assertIn("USBIP-PUBLISH actual=", text)
+            published = re.search(r"USBIP-PUBLISH actual=(\d+)", text)
+            self.assertIsNotNone(published)
+            if suspended:
+                self.assertGreaterEqual(int(published[1]), 90000)
+                interrupts = re.findall(r"IRQ vector=0xffd2[^\n]*\nMCU end=(\d+)", text)
+                self.assertTrue(interrupts)
+                self.assertTrue(all(int(tick) >= 90000 for tick in interrupts))
             for vector in ("ffd2", "ffce", "ffcc"):
                 self.assertGreaterEqual(text.count(f"IRQ vector=0x{vector}"), 4)
             self.assertRegex(text, r"WRITE cycle=\d+ address=0x030e .*mcu-pc=0x80")
@@ -193,6 +201,12 @@ class UsbCli(unittest.TestCase):
                 process.kill()
             stdout, stderr = process.communicate(timeout=5)
             (root / "cleanup.log").write_bytes(prefix + stdout + stderr)
+
+    def test_actual_cli_guest_descriptors_and_transfer(self):
+        self.exercise_wire("wire")
+
+    def test_actual_cli_probe_waits_for_observed_resume(self):
+        self.exercise_wire("resume", suspended=True)
 
     def test_options_reject_incomplete_or_invalid_contracts(self):
         for options in (("--usbip-port", "0"), ("--usbip-port", "65536"),

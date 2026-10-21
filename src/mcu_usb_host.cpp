@@ -45,7 +45,7 @@ UsbEndpointInfo McuUsb::host_endpoint(const std::uint8_t address) const {
 }
 
 UsbConfigurationInfo McuUsb::host_configuration() const {
-  require_packet();
+  require_link();
   if ((configuration_status_ & usb::configuration_request) != 0) {
     throw Fault("USB configuration is pending firmware completion");
   }
@@ -66,6 +66,11 @@ UsbConfigurationInfo McuUsb::host_configuration() const {
   return {.configuration = static_cast<std::uint8_t>(configuration),
           .interfaces = count,
           .alternatives = alternate_};
+}
+
+bool McuUsb::host_suspended() const {
+  require_link();
+  return decoder_.suspended;
 }
 
 }

@@ -70,7 +70,7 @@ void UsbipRuntime::probe(McuBus &bus, const ExecutionContext context, const std:
     admitted_ = ticks;
     evidence_ = bus.usb_host_evidence();
   }
-  if (publication_) { return; }
+  if (publication_ || bus.usb_host_suspended()) { return; }
   if (probe_.poll(bus, context)) {
     configuration_ = bus.usb_host_configuration();
     publication_ =

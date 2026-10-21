@@ -7,10 +7,10 @@
 #include "usb_device_native_fixture.hpp"
 #include "usb_endpoint_reset_fixture.hpp"
 #include "usb_host_fixture.hpp"
+#include "usbip_runtime_fixture.hpp"
 #include "usbip_session_fixture.hpp"
 #include "usbip_tcp_fixture.hpp"
 
-#include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -18,11 +18,12 @@
 #include <memory>
 #include <sys/poll.h>
 #include <sys/socket.h>
-#include <utility>
 
 namespace {
 using namespace blofeld;
 using namespace blofeld::test::usb_host;
+using blofeld::test::usbip_runtime::Fixture;
+using blofeld::test::usbip_runtime::options;
 namespace native = blofeld::test::usb_device_native;
 namespace reset = blofeld::test::endpoint_reset;
 namespace tcp = blofeld::test::usbip_tcp;
@@ -31,54 +32,6 @@ constexpr unsigned maximum_socket_polls = 1000;
 constexpr unsigned first_management_tick = 20;
 constexpr unsigned slow_poll_period = 100;
 constexpr unsigned alternate_bulk_in = 0x020000d2;
-constexpr unsigned default_probe_budget = 1000;
-
-UsbipRuntimeOptions options() {
-  return {.tcp = {},
-          .location = {.path = "/own/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
-          .after_ticks = 10,
-          .period_ticks = 1,
-          .probe_timeout_ticks = default_probe_budget};
-}
-
-struct Fixture {
-  explicit Fixture(UsbipRuntimeOptions config = options())
-      : firmware(native::firmware()),
-        bus(firmware),
-        cpu(bus, BLOFELD_DEFAULT_SLA),
-        runtime(std::move(config)),
-        boundary{.owner = std::make_shared<const int>(0)} {
-    native::prepare_native(bus);
-    cpu.set_state(native::initial);
-  }
-
-  void poll(const std::uint64_t ticks) {
-    boundary.ticks = ticks;
-    const auto state = cpu.state();
-    static_cast<void>(runtime.poll(bus, {.pc = state.pc, .ccr = state.ccr}, boundary));
-  }
-
-  void capture() {
-    poll(9);
-    require(!runtime.started() && (word(bus, status) & 1U) == 0,
-            "No host SETUP or synthetic initialization precedes explicit admission");
-    for (unsigned stage = 0; stage < 3; ++stage) {
-      poll(10 + (stage * 3));
-      native::interrupt(cpu, {.vector = native::setup_vector}, native::setup_instructions);
-      poll(11 + (stage * 3));
-      native::interrupt(cpu, {.vector = native::input_vector}, 3);
-      poll(12 + (stage * 3));
-      native::interrupt(cpu, {.vector = native::output_vector}, 3);
-    }
-    require(runtime.published(), "Only complete own native control transfers publish descriptors");
-  }
-
-  std::array<std::uint8_t, 32768> firmware;
-  McuBus bus;
-  Hc12 cpu;
-  UsbipRuntime runtime;
-  UsbipRuntimeBoundary boundary;
-};
 
 void test_capture_and_reset_pulse() {
   Fixture f;

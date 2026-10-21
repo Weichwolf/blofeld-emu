@@ -32,7 +32,7 @@ can retain its separate existing pump. Automatic checkpoint replay rejects live
 host input before output files or a listener are created.
 
 Read-only USB evidence revisions are host metadata, not emulated hardware
-registers. Module control changes, decoder changes, functional/endpoint resets
+registers. Module control, decoder reset/speed/enumeration changes and endpoint resets
 expire link evidence. Committed changed endpoint/configuration descriptions
 expire preimport captures; staged or identical writes do not invent a change.
 A reset pulse remains observable even when its final decoder levels equal their
@@ -76,7 +76,9 @@ Remaining requirements
 - An imported peer that half-closes with pending NAK transfers can retain them
   until the enclosing execution budget ends. Wall-clock idle/transfer timeouts
   and recovery/re-attachment policies need separate qualification.
-- Decoder suspend/resume or speed changes conservatively retire the session;
-  continuous suspended operation and remote resume are not qualified.
+- Raw suspend/resume wire timing, PHY clock gating and remote resume remain
+  unqualified. Decoded full-speed packet admission and retained session/guest
+  state are covered separately in usb-suspend.txt. Speed changes still retire
+  the session.
 - Full original boot, hardware timing, real-time behavior and physical device
   equivalence are not established by these own runtime fixtures.

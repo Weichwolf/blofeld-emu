@@ -51,6 +51,9 @@ hardware fault propagates its real context, retires all connections/publication
 and stops the listener; it is never turned into a fake transfer success/STALL.
 Withdrawal also closes live connections without changing guest peripheral state.
 Socket/session state is noncopyable and excluded from board replay/checkpoints.
+Decoded full-speed suspend retains the import and pending phases while the TCP
+server continues management/output/cancellation without device packet polling.
+Actual packets resume only after a supplied decoder resume (usb-suspend.txt).
 
 Explicit runtime CLI/common-clock board binding has own native/actual-process
 tests and capture/session invalidation guards (usb-runtime.txt). There is no

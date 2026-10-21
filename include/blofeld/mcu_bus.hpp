@@ -78,6 +78,8 @@ public:
   [[nodiscard]] UsbEndpointInfo usb_host_endpoint(std::uint8_t address) const;
   [[nodiscard]] UsbConfigurationInfo usb_host_configuration() const;
 
+  [[nodiscard]] bool usb_host_suspended() const { return usb_.host_suspended(); }
+
   [[nodiscard]] UsbHostEvidence usb_host_evidence() const { return usb_.host_evidence(); }
 
   void advance_oscillator(unsigned cycles);

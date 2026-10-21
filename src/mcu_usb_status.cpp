@@ -26,16 +26,23 @@ void McuUsb::require_observation() const {
   if (enabled() && !decoder_known_) { throw Fault("Unknown USB protocol-decoder input state"); }
 }
 
-void McuUsb::require_packet() const {
+void McuUsb::require_link() const {
   require_observation();
   if (!enabled() || (module_control_ & usb::clock_enable) == 0 ||
       (module_control_ & (usb::phy_suspend | usb::disconnect)) != 0) {
     throw Fault("USB decoded transaction while module/link clocks are inactive");
   }
-  if (decoder_.reset || decoder_.suspended || !decoder_.enumerated) {
+  if (decoder_.reset || !decoder_.enumerated) {
     throw Fault("USB decoded transaction before reset/enumeration completion or during suspend");
   }
   if (!decoder_.full_speed) { throw Fault("Unimplemented high-speed USB packet path"); }
+}
+
+void McuUsb::require_packet() const {
+  require_link();
+  if (decoder_.suspended) {
+    throw Fault("USB decoded transaction before reset/enumeration completion or during suspend");
+  }
 }
 
 void McuUsb::observe_decoder(const UsbDecoderState state) {
@@ -49,7 +56,10 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
     }
     require_observation();
   }
-  if (!decoder_known_ || decoder_ != state) {
+  // USB2.0 9.1.1.6 retains device state through suspend. A decoded suspend/
+  // resume transition changes status/IRQs, not the identity of this link session.
+  if (!decoder_known_ || decoder_.reset != state.reset || decoder_.enumerated != state.enumerated ||
+      decoder_.full_speed != state.full_speed) {
     host_evidence_.link = next_host_revision(host_evidence_.link);
   }
   if (enabled()) {

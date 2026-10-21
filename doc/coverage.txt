@@ -283,6 +283,9 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           reference CLI/common-clock binding has
                                           own guest/TCP tests (usb-runtime.txt),
                                           with capture lifetime/restore guards.
+                                          Decoded full-speed suspend retains
+                                          imports and pending native transfers
+                                          through resume (usb-suspend.txt).
                                           Kernel attachment remains pending.
                                           All fixed import/IN splits, truncated
                                           EOFs and partial-reply/fault cases

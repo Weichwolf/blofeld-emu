@@ -137,7 +137,10 @@ std::vector<UsbipConnectionEvent> UsbipTcpServer::poll(McuBus &bus,
       auto budget = impl_->options.write_budget;
       const auto before_events = events.size();
       const bool active = Impl::flush(channel, budget, events) && impl_->receive(channel, events);
-      if (active && !channel.session->closed()) { channel.session->poll(bus, context); }
+      if (active && !channel.session->closed() &&
+          (!channel.session->imported() || !bus.usb_host_suspended())) {
+        channel.session->poll(bus, context);
+      }
       if (active) { static_cast<void>(Impl::flush(channel, budget, events)); }
       if (channel.session->closed()) {
         if (events.size() == before_events) {
