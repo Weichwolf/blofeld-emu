@@ -1,0 +1,41 @@
+{
+  "qualification": "Original event queue, actual callees and USB/scan-inhibited RTI IRQs under explicitly own valid endpoint/RAM/caller/clock inputs. No original initialization, ordinary enumeration, original NISOF acceptance, complete boot, physical timing or hardware equivalence proof. No callee success, host-written runtime ticks or manufactured completion flags.",
+  "source_review": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "488fdf1de1d1ce6be0952757b07dcf94bdf7e220",
+    "document": "doc/usb_midi_output.txt"
+  },
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [
+    {
+      "entry": 48747,
+      "bytes": 15,
+      "name": "usb_midi_in_interrupt",
+      "sha256": "4a4d3cb8568fcc373437ae01b1019b1df96c4ee06c10053f91c151cb7bf1b580"
+    },
+    {
+      "entry": 46592,
+      "bytes": 104,
+      "name": "send_usb_midi_chunk",
+      "sha256": "8a68f9e7964ce30ad43392daacac7dc5ae6da4218b015308c2af6bfbad9ae5a9"
+    },
+    {
+      "entry": 46061,
+      "bytes": 189,
+      "name": "queue_usb_midi_event",
+      "sha256": "b3b9124a1cd40aac6b5273efaf017ea8743172b304b5b8df312d2ef792b25ce8"
+    },
+    {
+      "entry": 45903,
+      "bytes": 3,
+      "name": "read_condition_codes",
+      "sha256": "f508307fccdf9a1a417622f6987743c0504cffbd0d47c39cc23740cbded3fe93"
+    },
+    {
+      "entry": 34981,
+      "bytes": 15,
+      "name": "rti_interrupt_entry",
+      "sha256": "b4b814e00af8c523f7f25ec73d4ea1c64d937d088d6536e68eca3430ab7ab3c3"
+    }
+  ]
+}
