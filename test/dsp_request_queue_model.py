@@ -85,55 +85,70 @@ def queue_model(fmt,command,address,pointer,payload,head,tail,bases):
                 scan=scan,skips=skips,band=tag,translated=translated)
 
 
-def validate(result,cases,caller_return):
-    blocks=re.findall(r'^CASE ([0-9a-f]+)\n([\s\S]*?)(?=^CASE |^VISITED)',result,re.M)
-    if [int(i,16) for i,_ in blocks]!=list(range(len(cases))):raise ValueError('Missing queue cases')
+def validate_case(block,c,caller_return):
     metrics={k:0 for k in ('complete_descriptors','scan_frontiers','head_wraps','old_head_equals_tail',
            'negative_address_extensions','address_advances','headers_band0','headers_band1','headers_band2',
            'scheduler_queue_calls','continuation_queue_calls','header_add_differs_from_or')}
     steps=0
-    for (_,block),c in zip(blocks,cases):
-        rows={k:[int(v,16) for v in text.split()] for k,text in
-              re.findall(r'^(ENTRY|HANDOFF|QUEUE|END|LOW|RING|TABLE|CURSORS) ([^\n]+)',block,re.M)}
-        regs=[c['a'],c['b'],(c['x1']<<24)|c['x0'],(c['y1']<<24)|c['y0']]
-        state(rows['ENTRY'],c,c['target'],1,caller_return,regs,c['r0'],c['target'],0xc500,MASK,'entry')
-        low=initial_ram(scheduler_case(c));payload,fmt=c['x0'],c['x1']
-        address,command,pointer=c['y1'],c['y0'],c['r0'];sp,ret=1,caller_return
-        if c['target']==TAIL:
-            low,regs,_,_=prefix_model(scheduler_case(c));regs[2]=(c['x1']<<24)|c['count']
-            address,command,pointer=0x11e0,0x1c00,CALLBACK;regs[3]=(address<<24)|command
-            sp,ret=2,0x244
-            state(rows['HANDOFF'],c,DEFAULT,sp,ret,regs,pointer,TAIL,0xc500,MASK,'scheduler handoff')
-            metrics['scheduler_queue_calls']+=1
-        elif c['target']==CALLBACK:
-            low[0x19]=0;payload,fmt,address,command,pointer=0x48,0,0x11e0,0x200,0x720
-            regs=[0,c['b'],0x48,(address<<24)|command]
-            state(rows['HANDOFF'],c,DATA,sp,ret,regs,pointer,CALLBACK,0xc500,MASK,'continuation handoff')
-            metrics['continuation_queue_calls']+=1
-        if c['target'] in (DEFAULT,TAIL):
-            payload,fmt=0x210,0;regs=[0,regs[1],payload,(address<<24)|command]
-        state(rows['QUEUE'],c,DATA,sp,ret,regs,pointer,c['target'],0xc500,MASK,'queue entry')
-        model=queue_model(fmt,command,address,pointer,payload,c['head'],c['tail'],c['bases'])
-        if model['scan']!=bool(c['scan']):raise ValueError('Unexpected table domain')
-        state(rows['END'],c,0x186a if model['scan'] else 0x1876,sp,ret,model['registers'],pointer,
-              model['r1'],model['r2'],0x80ff if model['scan'] else c['m0'],'end')
-        ring=[(0x234567+i*0x12345)&MASK for i in range(258)]
-        for at,value in model['writes']:ring[at-0x2700+1]=value
-        if rows['RING']!=ring or rows['LOW']!=low or rows['TABLE']!=[0x345678,*c['bases'],0x456789]:
-            raise ValueError('Queue descriptor or guard memory differs')
-        if rows['CURSORS']!=[model['published'],c['tail']]:raise ValueError('Queue cursor publication differs')
-        if not model['scan'] and bool(rows['END'][7]&4)!=((c['head']^c['tail'])==0):
-            raise ValueError('Old-head XOR flags differ')
-        metrics['scan_frontiers' if model['scan'] else 'complete_descriptors']+=1
-        metrics['head_wraps']+=not model['scan'] and model['r2']<c['head']
-        metrics['old_head_equals_tail']+=c['head']==c['tail']
-        metrics['negative_address_extensions']+=model['translated']<0
-        metrics['address_advances']+=model['skips']
-        metrics[{0:'headers_band0',1:'headers_band1',0x50:'headers_band2'}[model['band']]]+=1
-        metrics['header_add_differs_from_or']+=model['header']!=(((((signed(fmt)-(256 if signed(fmt)>=256 else 0)-(256 if signed(fmt)>=512 else 0))&255)<<16)|(model['band']|command))&MASK)
-        one=re.findall(r'^STEPS (\d+)$',block,re.M)
-        if len(one)!=1 or not 0<int(one[0])<=200:raise ValueError('Queue instruction bound missing')
-        steps+=int(one[0])
+    rows={k:[int(v,16) for v in text.split()] for k,text in
+          re.findall(r'^(ENTRY|HANDOFF|QUEUE|END|LOW|RING|TABLE|CURSORS) ([^\n]+)',block,re.M)}
+    regs=[c['a'],c['b'],(c['x1']<<24)|c['x0'],(c['y1']<<24)|c['y0']]
+    state(rows['ENTRY'],c,c['target'],1,caller_return,regs,c['r0'],c['target'],0xc500,MASK,'entry')
+    low=initial_ram(scheduler_case(c));payload,fmt=c['x0'],c['x1']
+    address,command,pointer=c['y1'],c['y0'],c['r0'];sp,ret=1,caller_return
+    if c['target']==TAIL:
+        low,regs,_,_=prefix_model(scheduler_case(c));regs[2]=(c['x1']<<24)|c['count']
+        address,command,pointer=0x11e0,0x1c00,CALLBACK;regs[3]=(address<<24)|command
+        sp,ret=2,0x244
+        state(rows['HANDOFF'],c,DEFAULT,sp,ret,regs,pointer,TAIL,0xc500,MASK,'scheduler handoff')
+        metrics['scheduler_queue_calls']+=1
+    elif c['target']==CALLBACK:
+        low[0x19]=0;payload,fmt,address,command,pointer=0x48,0,0x11e0,0x200,0x720
+        regs=[0,c['b'],0x48,(address<<24)|command]
+        state(rows['HANDOFF'],c,DATA,sp,ret,regs,pointer,CALLBACK,0xc500,MASK,'continuation handoff')
+        metrics['continuation_queue_calls']+=1
+    if c['target'] in (DEFAULT,TAIL):
+        payload,fmt=0x210,0;regs=[0,regs[1],payload,(address<<24)|command]
+    state(rows['QUEUE'],c,DATA,sp,ret,regs,pointer,c['target'],0xc500,MASK,'queue entry')
+    model=queue_model(fmt,command,address,pointer,payload,c['head'],c['tail'],c['bases'])
+    if model['scan']!=bool(c['scan']):raise ValueError('Unexpected table domain')
+    state(rows['END'],c,0x186a if model['scan'] else 0x1876,sp,ret,model['registers'],pointer,
+          model['r1'],model['r2'],0x80ff if model['scan'] else c['m0'],'end')
+    ring=[(0x234567+i*0x12345)&MASK for i in range(258)]
+    for at,value in model['writes']:ring[at-0x2700+1]=value
+    if rows['RING']!=ring or rows['LOW']!=low or rows['TABLE']!=[0x345678,*c['bases'],0x456789]:
+        raise ValueError('Queue descriptor or guard memory differs')
+    if rows['CURSORS']!=[model['published'],c['tail']]:raise ValueError('Queue cursor publication differs')
+    if not model['scan'] and bool(rows['END'][7]&4)!=((c['head']^c['tail'])==0):
+        raise ValueError('Old-head XOR flags differ')
+    metrics['scan_frontiers' if model['scan'] else 'complete_descriptors']+=1
+    metrics['head_wraps']+=not model['scan'] and model['r2']<c['head']
+    metrics['old_head_equals_tail']+=c['head']==c['tail']
+    metrics['negative_address_extensions']+=model['translated']<0
+    metrics['address_advances']+=model['skips']
+    metrics[{0:'headers_band0',1:'headers_band1',0x50:'headers_band2'}[model['band']]]+=1
+    metrics['header_add_differs_from_or']+=model['header']!=(((((signed(fmt)-(256 if signed(fmt)>=256 else 0)-(256 if signed(fmt)>=512 else 0))&255)<<16)|(model['band']|command))&MASK)
+    one=re.findall(r'^STEPS (\d+)$',block,re.M)
+    if len(one)!=1 or not 0<int(one[0])<=200:raise ValueError('Queue instruction bound missing')
+    steps+=int(one[0])
+    return metrics,steps
+
+def validate_windows(result,cases,caller_return):
+    blocks=re.findall(r'^CASE ([0-9a-f]+)\n([\s\S]*?)(?=^CASE |^VISITED)',result,re.M)
+    if [int(i,16) for i,_ in blocks]!=list(range(len(cases))):
+        raise ValueError('Missing queue cases')
+    totals={}
+    steps=0
+    for (_,block),case in zip(blocks,cases):
+        metrics,count=validate_case(block,case,caller_return)
+        for name,value in metrics.items():
+            totals[name]=totals.get(name,0)+value
+        steps+=count
+    return totals,steps
+
+
+def validate(result,cases,caller_return):
+    metrics,steps=validate_windows(result,cases,caller_return)
     if metrics['complete_descriptors']!=152 or metrics['scan_frontiers']!=4 or any(v==0 for v in metrics.values()):
         raise ValueError('Incomplete queue branches: '+str(metrics))
     return metrics,steps

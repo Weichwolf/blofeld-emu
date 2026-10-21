@@ -640,6 +640,12 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           decisions: 52 raw head/tail aliases take
                                           genuine RTS; 100 cases fail on unknown
                                           TIO1 DI at P:188a (dsp-request-queue.txt).
+                                          Sixteen controlled TIO1 profiles retain
+                                          actual low polling and ready decisions;
+                                          high/low-to-high paths execute original
+                                          flags/header handling then fail on the
+                                          unknown Port C latch at P:1894/P:18a5
+                                          (dsp-request-readiness.txt).
                                           Original peripheral initialization now
                                           establishes DMA preloads through actual
                                           instructions. Four reset/HCKT cases keep
