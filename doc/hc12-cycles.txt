@@ -85,6 +85,11 @@ The separate hc12_indexed regression covers every indexed postbyte with
 independent address/register/flag arithmetic and literal manual bus slots. See
 hc12-indexed.txt for its fixed matrix and strict word-wrap boundary.
 
+The eight page-two unsigned min/max instructions retain one byte/word read,
+mandatory memory writes and the manual HCS12 cycle sequences for all five
+index families. Independent exhaustive byte pairs, word boundaries, timed
+forms and native GPIO snapshot checks are described in hc12-minmax.txt.
+
 Constant-address p-code operands also retain their original byte/word width.
 They can appear directly in unary/binary operations instead of explicit LOAD/
 STORE operations. Routing them through the byte-backed MemoryBank had split

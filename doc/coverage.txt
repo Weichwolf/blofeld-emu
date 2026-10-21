@@ -101,6 +101,14 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           Wrapping words retain contextual faults
                                           (hc12-indexed.txt); this is synthetic
                                           internal memory, not board qualification.
+                                          Eight unsigned min/max instructions now
+                                          retain original subtraction flags, one
+                                          operand sample and mandatory memory writes;
+                                          all five timed index families are admitted.
+                                          Over 1.1 million independent fixed cases,
+                                          changing reads/failures and real GPIO
+                                          snapshots qualify this nominal CPU scope
+                                          (hc12-minmax.txt), not physical timing.
                                           Independent reset/opcode reference:
                                           HCS12COREUG section 3.1 and Appendix A.
 RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tracking,

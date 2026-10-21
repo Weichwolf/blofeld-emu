@@ -1,0 +1,190 @@
+--- HCS_HC12.sinc
++++ HCS_HC12.sinc
+@@ -2933,4 +2933,4 @@
+-	result:4 = zext(D) - zext(indexed2_5);
+-	if (D > indexed2_5) goto <done>;
+-		D = indexed2_5;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:2 = D;
++	right:2 = indexed2_5;
++	result:2 = left - right;
+@@ -2938,4 +2938,9 @@
+-	$(N) = (result:2 s< 0);
+-	$(Z) = (result:2 == 0);
+-	$(V) = (result s> 0x00007FFF) | (result s< 0x00008000);
+-	$(C) = (result > 0x0000FFFF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:2 = left;
++	if (left > right) goto <selected>;
++	chosen = right;
++<selected>
++	D = chosen;
+@@ -2946,4 +2951,4 @@
+-	result:4 = zext(D) - zext(indexed2_5);
+-	if (D > indexed2_5) goto <done>;
+-		indexed2_5 = D;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:2 = D;
++	right:2 = indexed2_5;
++	result:2 = left - right;
+@@ -2951,4 +2956,9 @@
+-	$(N) = (result:2 s< 0);
+-	$(Z) = (result:2 == 0);
+-	$(V) = (result s> 0x00007FFF) | (result s< 0x00008000);
+-	$(C) = (result > 0x0000FFFF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:2 = left;
++	if (left > right) goto <selected>;
++	chosen = right;
++<selected>
++	indexed2_5 = chosen;
+@@ -2959,4 +2969,4 @@
+-	result:4 = zext(D) - zext(indexed2_5);
+-	if (D < indexed2_5) goto <done>;
+-		D = indexed2_5;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:2 = D;
++	right:2 = indexed2_5;
++	result:2 = left - right;
+@@ -2964,4 +2974,9 @@
+-	$(N) = (result:2 s< 0);
+-	$(Z) = (result:2 == 0);
+-	$(V) = (result s> 0x00007FFF) | (result s< 0x00008000);
+-	$(C) = (result > 0x0000FFFF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:2 = left;
++	if (left < right) goto <selected>;
++	chosen = right;
++<selected>
++	D = chosen;
+@@ -2972,4 +2987,4 @@
+-	result:4 = zext(D) - zext(indexed2_5);
+-	if (D < indexed2_5) goto <done>;
+-		indexed2_5 = D;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:2 = D;
++	right:2 = indexed2_5;
++	result:2 = left - right;
+@@ -2977,4 +2992,9 @@
+-	$(N) = (result:2 s< 0);
+-	$(Z) = (result:2 == 0);
+-	$(V) = (result s> 0x00007FFF) | (result s< 0x00008000);
+-	$(C) = (result > 0x0000FFFF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:2 = left;
++	if (left < right) goto <selected>;
++	chosen = right;
++<selected>
++	indexed2_5 = chosen;
+@@ -4170,5 +4190,4 @@
+-	tmp:1 = indexed1_5;
+-	result:2 = zext(A) - zext(tmp);
+-	if (A > tmp) goto <done>;
+-		A = tmp;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:1 = A;
++	right:1 = indexed1_5;
++	result:1 = left - right;
+@@ -4176,4 +4195,9 @@
+-	$(N) = (result:1 s< 0);
+-	$(Z) = (result:1 == 0);
+-	$(V) = (result s> 0x007F) | (result s< 0x0080);
+-	$(C) = (result > 0x00FF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:1 = left;
++	if (left > right) goto <selected>;
++	chosen = right;
++<selected>
++	A = chosen;
+@@ -4184,5 +4208,4 @@
+-	tmp:1 = indexed1_5;
+-	result:4 = zext(A) - zext(tmp);
+-	if (tmp > A) goto <done>;
+-		indexed1_5 = A;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:1 = A;
++	right:1 = indexed1_5;
++	result:1 = left - right;
+@@ -4190,4 +4213,9 @@
+-	$(N) = (result:2 s< 0);
+-	$(Z) = (result:2 == 0);
+-	$(V) = (result s> 0x007F) | (result s< 0x0080);
+-	$(C) = (result > 0x00FF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:1 = left;
++	if (left > right) goto <selected>;
++	chosen = right;
++<selected>
++	indexed1_5 = chosen;
+@@ -4206,5 +4234,4 @@
+-	tmp:1 = indexed1_5;
+-	result:2 = zext(A) - zext(tmp);
+-	if (A < tmp) goto <done>;
+-		A = tmp;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:1 = A;
++	right:1 = indexed1_5;
++	result:1 = left - right;
+@@ -4212,4 +4239,9 @@
+-	$(N) = (result:1 s< 0);
+-	$(Z) = (result:1 == 0);
+-	$(V) = (result s> 0x007F) | (result s< 0x0080);
+-	$(C) = (result > 0x00FF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:1 = left;
++	if (left < right) goto <selected>;
++	chosen = right;
++<selected>
++	A = chosen;
+@@ -4220,5 +4252,4 @@
+-	tmp:1 = indexed1_5;
+-	result:4 = zext(A) - zext(tmp);
+-	if (tmp < A) goto <done>;
+-		indexed1_5 = A;
+-	<done>
++	# Flags describe the original subtraction, before destination replacement.
++	left:1 = A;
++	right:1 = indexed1_5;
++	result:1 = left - right;
+@@ -4226,4 +4257,9 @@
+-	$(N) = (result:2 s< 0);
+-	$(Z) = (result:2 == 0);
+-	$(V) = (result s> 0x007F) | (result s< 0x0080);
+-	$(C) = (result > 0x00FF);
++	$(N) = (result s< 0);
++	$(Z) = (result == 0);
++	V_CMP_flag(left, right);
++	$(C) = (left < right);
++	chosen:1 = left;
++	if (left < right) goto <selected>;
++	chosen = right;
++<selected>
++	indexed1_5 = chosen;
