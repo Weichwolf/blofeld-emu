@@ -322,8 +322,17 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           packet limits, wrap, actual ACK/IRQ/RTI
                                           and X clear with 36 cases/72 restores
                                           (hc12-ccr.txt). This does not qualify
-                                          the original endpoint configuration,
-                                          queue producer or normal enumeration.
+                                          the original endpoint configuration
+                                          or normal enumeration.
+                                          Original queue/callees also have 210
+                                          conditional cases/420 restores for
+                                          headers, deferral, full/busy/alias,
+                                          actual interrupted PSHC/PULC and a
+                                          deadline driven by original timer IRQs,
+                                          including an actually missed sample
+                                          and byte wrap (usb-midi-queue.txt). RAM/caller,
+                                          own valid endpoints and scan inhibition
+                                          remain explicit fixture conditions.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,

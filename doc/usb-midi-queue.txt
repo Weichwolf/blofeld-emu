@@ -1,0 +1,69 @@
+Conditional original MIDI event queue and native interrupt interaction
+
+original_usb_queue executes the unchanged original queue, CCR reader, batch
+sender, MIDI IN ISR and scan-inhibited timer ISR from the locally pinned 1.25
+MCU image. usb-midi-queue-reference.json pins the complete image and all five
+execution spans. Tests contain own input messages and expected state; no
+manufacturer program bytes, return stubs or host-generated reply packets.
+
+The explicit fixture supplies RAM/caller arguments, QRAM mapping and own valid
+full-speed endpoint descriptions. This does not execute the original startup,
+initializer or natural UART/DSP caller. It does not qualify the original
+reserved NISOF endpoint settings or ordinary descriptor enumeration. The earlier
+original sender-only gate is documented separately in hc12-ccr.txt.
+
+192 fixed cases cover 16 message patterns, raw flags 0/4/255, cursors 0/124 and
+free/occupied endpoints. Independent expected headers cover SysEx continuation
+and endings, channel statuses, short messages with a nonzero third byte and raw
+high-bit controls. The original routine always copies all three input bytes;
+later high-bit tests are not rewritten into F7 equality checks. Only flag 4
+defers immediate flushing, while headers 5..7 clear the complete saved flag byte.
+These observations describe this firmware, not general MIDI input validation.
+
+Records are checked after all four native stores, before capacity checking.
+Six full-ring cases prove failure through the real CCR.I reader or progress
+through the real sender despite deferred flags. Raw cursor 128 additionally
+aliases reader/writer storage: the actual overwritten writer reload determines
+the published cursor. No preemptive cursor normalization or rollback occurs.
+
+Eight PSHC/PULC cases deliver an actual earlier IN ACK at the saved-flag boundary.
+The original MIDI IRQ drains old events, clears X and returns through native RTI.
+PULC must restore independently calculated comparison flags without re-enabling
+X from its older stack byte. Empty/full rings and both wrap positions are tested,
+with joint restores both before ACK and after IRQ. Host expected DATA PID and
+actual controller state are preserved together. A separate full/busy case first
+executes three complete wait loops, then progresses only after a real ACK/IRQ.
+
+The deadline case starts its byte tick at FE and inhibits input scanning explicitly.
+RTICTL=0x10 selects 1024 oscillator cycles per timeout (S12CRGUV1 table 3-2).
+Sixteen independently supplied periods raise the actual timer vector. Every
+original ISR executes its real increment, scan-inhibition branch, RTIF W1C and
+RTI. No host writes the running tick or fabricates an interrupt/completion flag.
+The original exact byte deadline wraps to 0E and returns failure without publishing.
+These declared oscillator inputs do not establish physical clock rates, elapsed
+USB wire timing or complete input-scan behavior.
+
+An additional fixed schedule pauses the producer across 17 original timer IRQs.
+Its tick has passed the saved deadline (0F versus 0E), yet the real wait loop
+neither fails nor publishes. It takes another 255 oscillator-triggered original
+IRQs to reach exactly 0E and return failure. The pending USB packet is never
+acknowledged. Two restores after the missed sample reproduce that result;
+the 17 prefix IRQs count once, not again after each restore. This preserves the
+original equality behavior rather than replacing it with an elapsed-time test.
+The supplied schedule is not evidence of physical board timing.
+
+All 210 cases have two joint restores: 420 replays. Independent checks cover raw
+return/ABI state, interrupt masks, ring ownership, staged bytes, actual IN data,
+64-byte batching, ACK-owned DATA PID, bounded stack, unchanged caller/old events/
+unrelated RAM and all NVM bytes/knowledge/erase history. Replay equality also
+covers complete CPU state, all 5120 mapped RAM bytes, USB buffers and native
+peripheral writes. Prefix instructions/IRQs captured before a checkpoint are
+counted once in the measured execution report, not again for every replay.
+
+Whole boot, natural MIDI routing, normal host enumeration, USB-MIDI class binding,
+Wine Spectre, DSP/audio, real-time behavior and physical equivalence remain open.
+The original USTB/NISOF/automatic configuration-status failures remain visible.
+No fuzzing, physical traffic, module loading or system routing is used.
+
+  cmake --build --preset strict --target blofeld-original-usb-queue-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_usb_queue$'
