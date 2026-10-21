@@ -1,0 +1,43 @@
+Original held-note voice regression
+
+original_dsp_voice executes the unchanged P:04df voice function to its real
+RTS/SP0, eight times per stream. Independent integer equations check oscillator
+pitch/phase/sync, noise seed/history, mixer coefficients/samples, both LP24
+cascades and routing, output gain/bus accumulation, default LFOs and envelopes.
+The oracle never supplies intermediate samples, callback results or CPU state.
+
+The 32 streams combine low/high converted held-note inputs, both RM settings,
+Noise Color endpoints, default/asymmetric mixer/filter controls and parallel/
+serial routing. FM and drive are zero; oscillators use basic Triangle/Sine.
+Across 256 complete returns, 224 blocks depend on earlier state. No oscillator,
+noise, filter, LFO, envelope or gain reset occurs between blocks. The native
+caller reloads only declared arguments/modifiers/status. A fixture guard rejects
+host synthesis-state writes during each eight-block rendering sequence.
+
+Numerical checks cover 12288 oscillator samples, 4096 noise samples and 8192
+words at each mixed, filtered, routed and final output stage. Natural envelope
+decay produces 192 falling gain steps and 32 unchanged steps. Filter histories,
+installed callbacks, full declared return registers, real stack frames and
+original executable words remain checked. All 288 pinned executed instruction
+starts match the independent static coverage record; 26 wide-filter starts in
+the declared 314-start windows remain unvisited by these coefficient profiles.
+Their existing independent unit checks are separate evidence.
+
+dsp-voice-reference.json pins all 127 ordered original records, the official MID,
+coverage and the GPL-3.0-only model source checkpoint. The test reads the original
+archive directly; no sibling build, assembler or source-built firmware is needed.
+The actual waveform generator, controller reset and entry initializer execute.
+The earlier register/pointer setup windows stop at P:011d/P:0185 and are followed
+by diagnostic CPU resets; they do not complete boot or establish power-on RAM.
+Raw factory sound fields, readable/zeroed caller workspace, converted note and
+velocity, initial output bus and unused prefetch are explicit fixture inputs.
+
+  cmake --build --preset strict --target blofeld-original-dsp-voice-test
+  ctest --test-dir build/strict -R '^original_dsp_voice$' --output-on-failure
+
+Missing private firmware skips with 77; changed reference inputs fail before
+native execution. Trace and independent numerical report remain under Testing/.
+The original scheduler does not run: its tick remains zero and the bus deliberately
+accumulates across blocks. Full boot, MIDI note-on/off and voice allocation,
+scheduled bus consumption, PCM/audio transport, physical sample rate and hardware
+equivalence remain unqualified. Other synthesis/control modes remain open.

@@ -574,9 +574,25 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           expectations and native call/return
                                           checks, including four-envelope caller
                                           and initialization prefix; see
-                                          dsp-envelopes.txt. No complete note
-                                          lifecycle, voice allocation, original
-                                          voice rendering or PCM output yet.
+                                          dsp-envelopes.txt. Declared original
+                                          voice contexts now retain synthesis
+                                          state across 32 eight-block streams:
+                                          256 real returns with independent
+                                          output/state equations (dsp-voice.txt).
+                                          Original MIDI note dispatch now checks
+                                          packed history/linear velocity and all
+                                          channels: 27 allocation attempts expose
+                                          reserved Y:ffffff at P:04ce; 23 filtered
+                                          or release-only controls return with an
+                                          empty list (dsp-notes.txt).
+                                          Original scheduler primitives check
+                                          seed/tick/timer/countdown arithmetic,
+                                          real conditional-call/RTS frames and
+                                          request arguments across304 cases/35
+                                          starts (dsp-scheduler.txt). Queued paths
+                                          stop before transaction execution.
+                                          No complete note lifecycle/allocation,
+                                          board scheduler or PCM transport yet.
 Persistent storage               partial  MCU NVM files preserve mutations,
                                           unknownness and erase history across
                                           reconstruction; native/CLI and real

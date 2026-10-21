@@ -1,0 +1,40 @@
+Original MIDI note dispatch and allocation boundary
+
+original_dsp_note feeds actual bytes into the original primary input ring. The
+unchanged parser selects the sound block, invokes its actual note handler,
+updates packed note/velocity history, applies the linear velocity transform and
+enters the original allocator. No host writes converted note fields, active-list
+pointers or entry-setup results. All 127 original records are pinned through the
+shared dsp-voice-reference.json identities before native execution.
+
+The 27 allocating cases cover notes 0/64/127, velocities 1/64/127, all sixteen
+matching channel selectors, a three-call fragmented message and running status
+after a genuine zero-velocity message. Incomplete
+messages do not invoke the note handler. Sixteen mismatched-channel messages,
+four zero-velocity Note Ons and three explicit Note Offs return through their
+actual frames with an empty active list. These release-only cases establish no
+release of an allocated voice.
+
+Every allocating case currently fails at P:0004ce on its first parallel read of
+Y:ffffff. The native access observer checks the preceding completed X:c53e read,
+the rejected Y access without a returned value, real SP8/DO25 context and the
+unaltered original program and slot payloads. The original caller has already
+consumed the message and written its independently checked packed history.
+Subsequent execution and checkpoint capture reject the faulted CPU; the next
+case restores a coordinated trusted snapshot. No reserved read is ignored.
+
+DSP56371UM Rev.2.1, table 3-8 (PDF page 72), marks Y:ffffff reserved. The pinned
+manual is recorded in hardware/sources.json. It does not qualify a readable
+value or safe access; section 3.1.1 advises against reserved-space accesses.
+The discarded destination in this allocation loop is
+source evidence, not permission to invent peripheral behavior.
+
+The fixture supplies raw factory sound fields, explicitly empty caller workspace
+and original list/event/controller initializers. Register/pointer prefixes stop
+at P:011d/P:0185 before diagnostic resets. This does not establish boot RAM,
+complete Desktop/Keyboard startup, successful allocation, stealing, live release,
+scheduled rendering, PCM transport, real audio or hardware equivalence. The
+separate held-note voice regression retains its independent numerical scope.
+
+  cmake --build --preset strict --target blofeld-original-dsp-note-test
+  ctest --test-dir build/strict -R '^original_dsp_note$' --output-on-failure

@@ -1,0 +1,75 @@
+{
+  "source_commit": "a3767a696c700a05a8c201e698ed8cbc4de9c213",
+  "model_source": {
+    "bytes": 16296,
+    "sha256": "855964eef9e60746db0287549c959366b444d9921d09be630fa1715d5d80f13b"
+  },
+  "original_record_identities": "dsp-voice-reference.json",
+  "complete_original_program_records": [
+    {
+      "record": 44,
+      "space": 0,
+      "address": 285,
+      "words": 793,
+      "sha256": "1d89ccd829af81c3e1f6ed53f00094f9ad830db6d64d34fe4737a44a2e9f0f64"
+    },
+    {
+      "record": 114,
+      "space": 0,
+      "address": 10008,
+      "words": 1086,
+      "sha256": "2faf9d21168e2566ed128f33ddffa3a0b6249bcdff644f86072746271e295fe2"
+    }
+  ],
+  "windows": [
+    [
+      557,
+      582
+    ],
+    [
+      10482,
+      10506
+    ]
+  ],
+  "words": 49,
+  "instruction_starts": [
+    557,
+    558,
+    559,
+    560,
+    561,
+    563,
+    564,
+    565,
+    566,
+    568,
+    569,
+    570,
+    571,
+    572,
+    573,
+    574,
+    575,
+    576,
+    577,
+    578,
+    580,
+    10482,
+    10484,
+    10485,
+    10486,
+    10488,
+    10490,
+    10492,
+    10494,
+    10496,
+    10498,
+    10500,
+    10502,
+    10503,
+    10504
+  ],
+  "coverage_sha256": "5b1d57a4eb5a1397c3890c901a1bca851ee73fdad14b8f73e1b9a5ee642dab5c",
+  "cases": 304,
+  "qualification": "Original scheduler arithmetic and real countdown service frames. Queued paths stop before the request queue; no asynchronous completion, parameter transition, whole voice scheduling or physical clock/audio claim."
+}

@@ -1,0 +1,40 @@
+Original scheduler arithmetic and countdown requests
+
+original_dsp_scheduler executes unchanged official 1.25 program words in
+P:022d..0245 and P:28f2..2909. The independent signed integer/frame model is
+adapted from GPL-3.0-only blofeld-src checkpoint a3767a696c700a05a8c201e698ed8cbc4de9c213,
+test/check_dsp_scheduler.py. dsp-scheduler-reference.json records its identity,
+two complete original component hashes and the 35 static instruction starts.
+The shared dsp-voice-reference.json pins all 127 ordered original records.
+No reconstructed firmware, sibling build, listing or external assembler is a
+runtime input. Detailed source listings and manufacturer bytes remain local.
+
+The fixed 304-case matrix covers 256 scheduler tails, 32 direct countdown
+services and 16 direct continuation calls in both RM settings. Explicit full
+A/B extension/main/fraction words and X0/Y0/Y1 avoid assuming reset clears data
+registers. All eight modifiers are linear, all eight offsets zero, and scaling
+is off. Independent equations check seed feedback, raw tick wrap, signed timer
+comparison/subtraction before limiting, pending flags and the countdown edge.
+All 64 low X and Y words, caller guards, declared full A/B/X/Y endpoints,
+address registers and original executable words are checked.
+
+The original conditional CLR preserves CCR: JSEQ triggers only for incoming
+countdown1. Zero and negative inputs clamp to zero without triggering. This is
+IFcc, not IFcc.U; DSP56300FM Rev.5 printed pages13-74/75 specify the difference.
+The manufacturer PDF identity is pinned in hardware/sources.json.
+
+Real conditional calls create their P:0244 return frame. Bit9-set services
+actually return through RTS; other paths retain genuine frames and stop before
+P:1853/P:1856 queue execution with independently checked arguments. Direct
+continuations do not establish asynchronous callback provenance. The explicit
+own caller return is P:ff004c; no original callee return is substituted.
+
+Parameter-transition bit7 is clear. Physical time units, complete request-queue
+transactions, original MIDI allocation, bus consumption/clearing, full main-loop
+stack/timing provenance and complete voice/audio scheduling remain open. This
+adds scheduler primitive coverage; the held-note voice streams still keep tick
+zero and accumulate their output buses. Full boot and hardware equivalence are
+not established, and the reserved-read note frontier remains unchanged.
+
+  cmake --build --preset strict --target blofeld-original-dsp-scheduler-test
+  ctest --test-dir build/strict -R '^original_dsp_scheduler$' --output-on-failure

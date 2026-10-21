@@ -501,6 +501,22 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-envelopes.trace")
   set_tests_properties(original_dsp_envelopes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-voice-test test/original_dsp_voice_test.cpp)
+  target_link_libraries(blofeld-original-dsp-voice-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_voice COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice.py"
+    $<TARGET_FILE:blofeld-original-dsp-voice-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice.trace")
+  set_tests_properties(original_dsp_voice PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-scheduler-test test/original_dsp_scheduler_test.cpp)
+  target_link_libraries(blofeld-original-dsp-scheduler-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_scheduler COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_scheduler.py"
+    $<TARGET_FILE:blofeld-original-dsp-scheduler-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
+  set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
@@ -545,6 +561,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-midi.trace")
   set_tests_properties(original_dsp_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-dsp-note-test test/original_dsp_note_test.cpp)
+  target_link_libraries(blofeld-original-dsp-note-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_note COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_note.py"
+    $<TARGET_FILE:blofeld-original-dsp-note-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-note.trace")
+  set_tests_properties(original_dsp_note PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-wire-test test/original_dsp_wire_test.cpp)
   target_link_libraries(blofeld-original-dsp-wire-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
@@ -776,6 +801,8 @@ add_custom_target(quality
     blofeld-dsp-scheduled-run-test
     blofeld-original-dsp-clock-test
     blofeld-original-dsp-midi-test
+    blofeld-original-dsp-note-test
+    blofeld-original-dsp-scheduler-test
     blofeld-original-dsp-wire-test
     blofeld-mcu-clock-checkpoint-test
     blofeld-mcu-wait-clock-test
@@ -806,6 +833,7 @@ add_custom_target(quality
     blofeld-original-dsp-filters-test
     blofeld-original-dsp-waveforms-test
     blofeld-original-dsp-envelopes-test
+    blofeld-original-dsp-voice-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test
     blofeld-scheduled-coupling-test

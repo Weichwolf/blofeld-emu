@@ -1,0 +1,950 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "records": [
+    {
+      "record": 0,
+      "space": 0,
+      "address": 256,
+      "words": 29,
+      "sha256": "c466371ccc9e4a41b7c15b7cf07fed4e55d9fbcd50f4372a49467a42814e7fce"
+    },
+    {
+      "record": 1,
+      "space": 1,
+      "address": 1,
+      "words": 4,
+      "sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+    },
+    {
+      "record": 2,
+      "space": 1,
+      "address": 6,
+      "words": 13,
+      "sha256": "160aab49e2e04bfac504c8481638d3835eac4e8bfff00d259b34b091cbd8586a"
+    },
+    {
+      "record": 3,
+      "space": 1,
+      "address": 21,
+      "words": 9,
+      "sha256": "3e5e3e6572614ece4aff3b6ee07b73ab1b8ce98b411e1bda5caaaae17e59b4fa"
+    },
+    {
+      "record": 4,
+      "space": 1,
+      "address": 32,
+      "words": 1,
+      "sha256": "709e80c88487a2411e1ee4dfb9f22a861492d20c4765150c0c794abd70f8147c"
+    },
+    {
+      "record": 5,
+      "space": 2,
+      "address": 0,
+      "words": 4,
+      "sha256": "15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b"
+    },
+    {
+      "record": 6,
+      "space": 1,
+      "address": 1696,
+      "words": 49,
+      "sha256": "2525de36744c093b3e958b92106eb99c0dcd195e8bafa39514c5c99fdbbd54fe"
+    },
+    {
+      "record": 7,
+      "space": 1,
+      "address": 1824,
+      "words": 1,
+      "sha256": "709e80c88487a2411e1ee4dfb9f22a861492d20c4765150c0c794abd70f8147c"
+    },
+    {
+      "record": 8,
+      "space": 1,
+      "address": 1859,
+      "words": 1,
+      "sha256": "cf7605ed1bc735f6c825554154627467e1cac9df54cee8699218ed434603c568"
+    },
+    {
+      "record": 9,
+      "space": 1,
+      "address": 1862,
+      "words": 4,
+      "sha256": "25e1e7becb066e0bc458817cb62f64a7ea821ca4bb83f89706588be2133101d4"
+    },
+    {
+      "record": 10,
+      "space": 1,
+      "address": 1872,
+      "words": 1,
+      "sha256": "65d27a48dfef406db8f5f437423bfa5f9c83d77bfc12f8a14b8ce3ede5892fb5"
+    },
+    {
+      "record": 11,
+      "space": 1,
+      "address": 1874,
+      "words": 6,
+      "sha256": "7298472e17d628949cebfb8caff4187d706d42713e702a47e1aa0cc84079dcf1"
+    },
+    {
+      "record": 12,
+      "space": 1,
+      "address": 1881,
+      "words": 1,
+      "sha256": "cf7605ed1bc735f6c825554154627467e1cac9df54cee8699218ed434603c568"
+    },
+    {
+      "record": 13,
+      "space": 1,
+      "address": 1900,
+      "words": 4,
+      "sha256": "31b1c883c149049eeb44185a2c25eaaf258f3db6fffd615731f08ebd293134fc"
+    },
+    {
+      "record": 14,
+      "space": 1,
+      "address": 50432,
+      "words": 8,
+      "sha256": "f6a530f7f283c9d3080d14219f2d06e56c181daf3c55a131d523ab61c51d8488"
+    },
+    {
+      "record": 15,
+      "space": 1,
+      "address": 50694,
+      "words": 8,
+      "sha256": "6ca6d69d68036333f2506ccc563f600675da7abc4ef65e444a807dbcb5e79507"
+    },
+    {
+      "record": 16,
+      "space": 1,
+      "address": 50956,
+      "words": 8,
+      "sha256": "399c38623de5cba100ccf3bca6f487c807046f08cb93a75f81842fe98b3093ec"
+    },
+    {
+      "record": 17,
+      "space": 1,
+      "address": 51218,
+      "words": 8,
+      "sha256": "cde0ced0b3fdec856921fd3b3c34ea65734d938b1002d1dfa3fc55d1c7729981"
+    },
+    {
+      "record": 18,
+      "space": 1,
+      "address": 51480,
+      "words": 8,
+      "sha256": "e372b652683f2ba1d0f7cb16b03f110ca5375f7ebcef32a345b3ec1ecddd5998"
+    },
+    {
+      "record": 19,
+      "space": 1,
+      "address": 51742,
+      "words": 8,
+      "sha256": "659b9b1d828ae5d06abb188f5dc4d28de751dbdcd306eec77ab92e38bcc15f1d"
+    },
+    {
+      "record": 20,
+      "space": 1,
+      "address": 52004,
+      "words": 8,
+      "sha256": "f40ad53cc41d1a57ec2874cfb07444cf221b69574c68b454fed8890b7de74d98"
+    },
+    {
+      "record": 21,
+      "space": 1,
+      "address": 52266,
+      "words": 8,
+      "sha256": "8b6909f0e5d187e9f93c475c5144ba2162cef0e740691b96b745c8934521391a"
+    },
+    {
+      "record": 22,
+      "space": 1,
+      "address": 52528,
+      "words": 8,
+      "sha256": "5a80c1ce7937e212537c151067b0e978ccf43687b9e7de998f6cd17ffcade3e1"
+    },
+    {
+      "record": 23,
+      "space": 1,
+      "address": 52790,
+      "words": 8,
+      "sha256": "65576bb66d70e39181381d5509150d0b9cbe621bd16f59881e3c705a1199e40d"
+    },
+    {
+      "record": 24,
+      "space": 1,
+      "address": 53052,
+      "words": 8,
+      "sha256": "f3f72632bd7848d2d47bf877a8f93cafe09c7a28fbbc79a0498aab7fae394d78"
+    },
+    {
+      "record": 25,
+      "space": 1,
+      "address": 53314,
+      "words": 8,
+      "sha256": "9983c290ef4c5818e07b446c306d4de40489a46e42aa523276ee8f243bd0736e"
+    },
+    {
+      "record": 26,
+      "space": 1,
+      "address": 53576,
+      "words": 8,
+      "sha256": "bbbb37309f88213b289e403a8831f9ae56617150830164989c6f3979cb54b662"
+    },
+    {
+      "record": 27,
+      "space": 1,
+      "address": 53838,
+      "words": 8,
+      "sha256": "87b3311dcde3c8f63d6641f957ce54e21d82c5bba66d3f425ff78e17546fe002"
+    },
+    {
+      "record": 28,
+      "space": 1,
+      "address": 54100,
+      "words": 8,
+      "sha256": "cb41792958d8660d5700f62689e7972c7abf9427a675066f9cad947e9cbb15c8"
+    },
+    {
+      "record": 29,
+      "space": 1,
+      "address": 54362,
+      "words": 8,
+      "sha256": "de8b5868ddf12c7bf7c136c85d8a7cc9c4b84f7695840283dd5cb40823e6d135"
+    },
+    {
+      "record": 30,
+      "space": 1,
+      "address": 54624,
+      "words": 8,
+      "sha256": "39fe4f6f2d95e63350b2ed88277782d14f6c7387110157e10b8f62d9467a97ff"
+    },
+    {
+      "record": 31,
+      "space": 1,
+      "address": 54886,
+      "words": 8,
+      "sha256": "c09fb55f5a3e73231d674e281379be9363e3d63db845f3f23e0dc6859a610888"
+    },
+    {
+      "record": 32,
+      "space": 1,
+      "address": 55148,
+      "words": 8,
+      "sha256": "6a8dce644ca1706a8b6ee85ccf5bf635e2716002fe5a0f4896febc1dafaf1f80"
+    },
+    {
+      "record": 33,
+      "space": 1,
+      "address": 55410,
+      "words": 8,
+      "sha256": "e2c7cf485c92c0bfab9d8089055a9b150806cccaab53170960b381dc057f33db"
+    },
+    {
+      "record": 34,
+      "space": 1,
+      "address": 55672,
+      "words": 8,
+      "sha256": "e4d4f399632e5a605a424fd90de5f2e6dfaa331d881baa66785f215c8e2ad475"
+    },
+    {
+      "record": 35,
+      "space": 1,
+      "address": 55934,
+      "words": 8,
+      "sha256": "f11e69ee46ba75ce75074d3ed9f7b8b257caae03eb66c3c46d3a741e5f1045f3"
+    },
+    {
+      "record": 36,
+      "space": 1,
+      "address": 56196,
+      "words": 8,
+      "sha256": "24d31d70e1647610acce7716a0d0482671fd6ae8b18b541677cd96a4be6f0821"
+    },
+    {
+      "record": 37,
+      "space": 1,
+      "address": 56458,
+      "words": 8,
+      "sha256": "ed0b34e47f683a3ac35a2c0bda2149868bb11b009bc7fd2e456f2ac9dcf67ae8"
+    },
+    {
+      "record": 38,
+      "space": 1,
+      "address": 56720,
+      "words": 8,
+      "sha256": "0594fe30c30fcc96c94d8b59ceb9a96939680ce80f0537cefd2cb3cd5ca1a330"
+    },
+    {
+      "record": 39,
+      "space": 1,
+      "address": 56982,
+      "words": 1032,
+      "sha256": "0e0e7b4b7b261286403fc7892e71c29b65b05afeadb4da65a6b88da256be7479"
+    },
+    {
+      "record": 40,
+      "space": 1,
+      "address": 59830,
+      "words": 996,
+      "sha256": "7cc7649579baf592c05405686c616ecea179162722acff0b659235a4a9b045d9"
+    },
+    {
+      "record": 41,
+      "space": 2,
+      "address": 2333,
+      "words": 603,
+      "sha256": "f60780abe65f094951065e245847fae8c6f485f34aa7d05308e43af2feb36d3a"
+    },
+    {
+      "record": 42,
+      "space": 2,
+      "address": 3013,
+      "words": 289,
+      "sha256": "cdee38128c8ddfefb106dfcb527ead98e49544cebc8d4c24b4b28b644877ee00"
+    },
+    {
+      "record": 43,
+      "space": 2,
+      "address": 5108,
+      "words": 258,
+      "sha256": "82fa6da895af44468a424e7426cbabea670035fbbd0a9f359c14e7388534ac94"
+    },
+    {
+      "record": 44,
+      "space": 0,
+      "address": 285,
+      "words": 793,
+      "sha256": "1d89ccd829af81c3e1f6ed53f00094f9ad830db6d64d34fe4737a44a2e9f0f64"
+    },
+    {
+      "record": 45,
+      "space": 1,
+      "address": 33,
+      "words": 1,
+      "sha256": "635d6a9e9befbd6264879e6d71ef66bf90c1f9b3ebb867bd45abbc92d52aea4e"
+    },
+    {
+      "record": 46,
+      "space": 0,
+      "address": 1078,
+      "words": 978,
+      "sha256": "e23105c93a96685a3e78ff79ed9088ab6ae43394eddd2a6d26fdaaccda65cac2"
+    },
+    {
+      "record": 47,
+      "space": 1,
+      "address": 34,
+      "words": 9,
+      "sha256": "f7c518fb71080c2f8f31588660c2b8f41bb3b29f6a05633ebad4a512c06a74a4"
+    },
+    {
+      "record": 48,
+      "space": 1,
+      "address": 1904,
+      "words": 8,
+      "sha256": "c4b6501aea8852c050e59d84ced75db8afaca1c63ce708d11a72568e43eb3902"
+    },
+    {
+      "record": 49,
+      "space": 2,
+      "address": 5366,
+      "words": 5,
+      "sha256": "536bef57ae6af7cff18a85c0a89d7f0a533ce356992d21145a83d22d586e9327"
+    },
+    {
+      "record": 50,
+      "space": 0,
+      "address": 2056,
+      "words": 351,
+      "sha256": "d89ff1a134a3a9684fdc3c8b66bd44fb81ad8621e3f3188ef5064f10a67fc288"
+    },
+    {
+      "record": 51,
+      "space": 1,
+      "address": 2337,
+      "words": 19,
+      "sha256": "bc95436c5480ae41123bb8c8a3a11a228df8562fcef24eebbf5636c009dbf39a"
+    },
+    {
+      "record": 52,
+      "space": 0,
+      "address": 2407,
+      "words": 1092,
+      "sha256": "603cd0a98101a15a7994a2d9f2d946f39890865ebf566f84161a7d9cf0a2dc5f"
+    },
+    {
+      "record": 53,
+      "space": 2,
+      "address": 5371,
+      "words": 128,
+      "sha256": "1fadfe2a00d963ef1143420653582e78d8d9e159a21c02709f5d7b94f431fbeb"
+    },
+    {
+      "record": 54,
+      "space": 1,
+      "address": 2356,
+      "words": 2,
+      "sha256": "205db31e0c960416ec143bed2d83346eae06a996447f8fb2c555ee27d84f6bda"
+    },
+    {
+      "record": 55,
+      "space": 2,
+      "address": 50432,
+      "words": 267,
+      "sha256": "7c9681a9044954ca6327261912f383556a6d9cf16addbf99f15fd041300455e6"
+    },
+    {
+      "record": 56,
+      "space": 2,
+      "address": 5499,
+      "words": 128,
+      "sha256": "4910c57ee78fe052079e54a3c253432665b53e7f86f263213db4f712a20125c0"
+    },
+    {
+      "record": 57,
+      "space": 0,
+      "address": 3499,
+      "words": 633,
+      "sha256": "4db121c907430a2d18ec00181295ea8ef8889d41833107ac9dcf82ab016769b2"
+    },
+    {
+      "record": 58,
+      "space": 2,
+      "address": 5627,
+      "words": 20,
+      "sha256": "a8457c22eb6034e2167f63a6fff8042909281647cd284c396bcee5bfdb21b971"
+    },
+    {
+      "record": 59,
+      "space": 0,
+      "address": 4132,
+      "words": 17,
+      "sha256": "861e931b3e9827db7e6b57dd7d881dff3cd5591e84470a0abacc66dd63e92429"
+    },
+    {
+      "record": 60,
+      "space": 2,
+      "address": 5647,
+      "words": 23,
+      "sha256": "c11262fb78cecf86556ad1d06f006a9981014bb5e8713b7940e208b6b267a6a2"
+    },
+    {
+      "record": 61,
+      "space": 0,
+      "address": 4149,
+      "words": 45,
+      "sha256": "973f01b653527610b1086b3ceb8cb141d645701ba20d2794411179b8b991707d"
+    },
+    {
+      "record": 62,
+      "space": 1,
+      "address": 9206,
+      "words": 18,
+      "sha256": "956216a0e8021ad1d5a0ea2aa13aed39a8ed2583938b08d932c76d4a30506588"
+    },
+    {
+      "record": 63,
+      "space": 0,
+      "address": 4194,
+      "words": 268,
+      "sha256": "f67c843011ef4a9ce2de43edfd54d885eb75a7968b793aeeca5efacb39cd6c15"
+    },
+    {
+      "record": 64,
+      "space": 2,
+      "address": 5670,
+      "words": 20,
+      "sha256": "b78420970900087c315caecb3360e3b6e0c43e8e3fca3e75e7ebbc4b67486397"
+    },
+    {
+      "record": 65,
+      "space": 0,
+      "address": 4462,
+      "words": 49,
+      "sha256": "7c8120917a26bc223c1dd4cd8b5d392ab627242e9b6cbc7bd078a7b332d416fa"
+    },
+    {
+      "record": 66,
+      "space": 2,
+      "address": 5690,
+      "words": 6,
+      "sha256": "6ff6ab1b9a29c13de42a80ac108242f647cc69464d0cc8858ca02a056352c861"
+    },
+    {
+      "record": 67,
+      "space": 0,
+      "address": 4511,
+      "words": 36,
+      "sha256": "7fae09f9d8d6e9ab70cf4b4b45b0c57eea321f262fbfba49d742419001d18788"
+    },
+    {
+      "record": 68,
+      "space": 1,
+      "address": 9224,
+      "words": 257,
+      "sha256": "bb94fb7162c8f9b45e850854294dfe39f37e7b671e7c500df8f4ddfb5d24ada3"
+    },
+    {
+      "record": 69,
+      "space": 0,
+      "address": 4547,
+      "words": 168,
+      "sha256": "f8bb813de0394c0b8fbb82a5f2c2088ff7cc44cc3a895f2f1aa3a29e122f5c39"
+    },
+    {
+      "record": 70,
+      "space": 1,
+      "address": 9481,
+      "words": 9,
+      "sha256": "6528587c865ee6fe4f22e3f9fd46c5a6e6fab140e1f912a91d4482a540544f10"
+    },
+    {
+      "record": 71,
+      "space": 0,
+      "address": 4715,
+      "words": 926,
+      "sha256": "02e8f150d55a8ee435c8d1bc7888748185567b4e75a85d6393f537e096031bb2"
+    },
+    {
+      "record": 72,
+      "space": 2,
+      "address": 5696,
+      "words": 266,
+      "sha256": "e6bb2fbb851a68b7ba292630a9664f16d254a162e96c5b86250fa914e17c4cbd"
+    },
+    {
+      "record": 73,
+      "space": 0,
+      "address": 5641,
+      "words": 148,
+      "sha256": "ae41560b4a0d2255573998f052ab98624d634c251e7f54874153a1761854c1ca"
+    },
+    {
+      "record": 74,
+      "space": 2,
+      "address": 5962,
+      "words": 16,
+      "sha256": "7fe33c4c139f33fbf020de43a20cfb63243f1d6929902535fa8bea1ecc77a8a4"
+    },
+    {
+      "record": 75,
+      "space": 1,
+      "address": 9490,
+      "words": 385,
+      "sha256": "b9acb02e6912e3eda28736aeaa9f87b7e42f1c7ab29a93ffa7cd41e2a7b47f7f"
+    },
+    {
+      "record": 76,
+      "space": 0,
+      "address": 5789,
+      "words": 411,
+      "sha256": "b2e563a3877cd99f6d7e3a48cab0bb747fe3969c12e1510529e5263522872251"
+    },
+    {
+      "record": 77,
+      "space": 1,
+      "address": 9875,
+      "words": 18,
+      "sha256": "787d5b3cb647c382e036d30187f830b59bc55b79684da4b213b3d61b08caeabd"
+    },
+    {
+      "record": 78,
+      "space": 0,
+      "address": 6200,
+      "words": 27,
+      "sha256": "c02ccef7da5ebb5ca24bfb9a59037258e35d4fb235ae6df14ed544c56a480ec9"
+    },
+    {
+      "record": 79,
+      "space": 1,
+      "address": 9893,
+      "words": 16,
+      "sha256": "f65c3a8129a0ecd884f81551095ee8221b65a8a420ff88005f0fd7f4bba2ae05"
+    },
+    {
+      "record": 80,
+      "space": 1,
+      "address": 43,
+      "words": 2,
+      "sha256": "b0f66adc83641586656866813fd9dd0b8ebb63796075661ba45d1aa8089e1d44"
+    },
+    {
+      "record": 81,
+      "space": 1,
+      "address": 10772,
+      "words": 2,
+      "sha256": "f48ccd7a2687c23a9e539d798705dde0d63b315adc1ceccd1266b304bb0c4883"
+    },
+    {
+      "record": 82,
+      "space": 1,
+      "address": 10777,
+      "words": 2,
+      "sha256": "223c2f9b342b66caa8c9dc8b4d66cfb1150409b0c10ddffa6119e865ffc9ca8d"
+    },
+    {
+      "record": 83,
+      "space": 0,
+      "address": 88,
+      "words": 2,
+      "sha256": "0a9fca8673f67ceed96aae565ad461123864934e7bc8c9b35ffe0e766afa2372"
+    },
+    {
+      "record": 84,
+      "space": 0,
+      "address": 6227,
+      "words": 634,
+      "sha256": "f74fd2b7a24b7aa2a2d83fd3c4563a757bcf837c71231eb3529814c5eb926ba3"
+    },
+    {
+      "record": 85,
+      "space": 2,
+      "address": 7389,
+      "words": 8,
+      "sha256": "bd77c4a654104ae488d2d4d30f2288fcfcb86d4e6327c05c28c46c807135bd33"
+    },
+    {
+      "record": 86,
+      "space": 2,
+      "address": 7399,
+      "words": 45,
+      "sha256": "2341e8203448a76e03ae40acbfa1c71acac931791e2060eb0da9cf0e988974ae"
+    },
+    {
+      "record": 87,
+      "space": 1,
+      "address": 10789,
+      "words": 512,
+      "sha256": "286c54df2fba79691d8ed57608baced4d22d80c92fa8dc319b3cf7416db9f87d"
+    },
+    {
+      "record": 88,
+      "space": 0,
+      "address": 6861,
+      "words": 1270,
+      "sha256": "3713c7bdacc651071ba6159bdb4c7b3a87f9d182fb19b74492de0ad0ccd75a4b"
+    },
+    {
+      "record": 89,
+      "space": 2,
+      "address": 7554,
+      "words": 88,
+      "sha256": "668eb1db9f05142ab3edcfc5ba1a736db8b1a695302a81d2d226bba233af9d0d"
+    },
+    {
+      "record": 90,
+      "space": 0,
+      "address": 8131,
+      "words": 805,
+      "sha256": "4c01e5dea905840e66d3d43d340cda7335249b659a49be523f0c1c4207fe98bf"
+    },
+    {
+      "record": 91,
+      "space": 2,
+      "address": 7642,
+      "words": 75,
+      "sha256": "0354b47fcde0b249305a4d8eede8d9ebc113494a9a2df753dd50535397936082"
+    },
+    {
+      "record": 92,
+      "space": 0,
+      "address": 8936,
+      "words": 121,
+      "sha256": "57e089cb484c32f58ac5dfcd6224c0fa8a65356b4649705ada1c91bc5d716258"
+    },
+    {
+      "record": 93,
+      "space": 1,
+      "address": 11301,
+      "words": 12,
+      "sha256": "4bb473b50dbf06203fdca50374262345c04054e7a34c814025ba4ae7a1e0bd80"
+    },
+    {
+      "record": 94,
+      "space": 0,
+      "address": 9057,
+      "words": 126,
+      "sha256": "173b49d404125e71a317ab2203a5926a986e3086fb4e137ec7b1ba572a88e1bf"
+    },
+    {
+      "record": 95,
+      "space": 0,
+      "address": 2,
+      "words": 21,
+      "sha256": "8830ecdd8768d36810cb5494fa2b72875fdd55a80b8956f2ffa6e826d8228c0b"
+    },
+    {
+      "record": 96,
+      "space": 0,
+      "address": 68,
+      "words": 2,
+      "sha256": "5c7fb8d52f8f7a10f0bb3a99d7f731359b440fbb164b12132828de62fdbf6c85"
+    },
+    {
+      "record": 97,
+      "space": 0,
+      "address": 74,
+      "words": 2,
+      "sha256": "5c7fb8d52f8f7a10f0bb3a99d7f731359b440fbb164b12132828de62fdbf6c85"
+    },
+    {
+      "record": 98,
+      "space": 1,
+      "address": 11316,
+      "words": 2,
+      "sha256": "9f47c9ad6c49d1be77994790c9da2d7619d22a110f560ec448c2626f8eefd612"
+    },
+    {
+      "record": 99,
+      "space": 1,
+      "address": 11367,
+      "words": 10,
+      "sha256": "470b4c03a5e40af724ff9b2222429f0a8682c3ae2d7ed4f8bb887a3c79f7c223"
+    },
+    {
+      "record": 100,
+      "space": 0,
+      "address": 9183,
+      "words": 189,
+      "sha256": "51258923cee7ccdb8f360dfa173dce425c339d1a22dcc4963699d07041465021"
+    },
+    {
+      "record": 101,
+      "space": 1,
+      "address": 11456,
+      "words": 18,
+      "sha256": "ea36a899b91573ef7a11e38e763f919d1b10486f3cec0b178a4dd916109cdcb9"
+    },
+    {
+      "record": 102,
+      "space": 0,
+      "address": 9372,
+      "words": 30,
+      "sha256": "48c9cd7c4f709d304d753c1d1ccf2b611654b8b69ccdb8e67b881ca40375d986"
+    },
+    {
+      "record": 103,
+      "space": 1,
+      "address": 11474,
+      "words": 8,
+      "sha256": "1464582b33f091dc582786b2548589e114ccea2cd1c104c067d5f9e88cbf276e"
+    },
+    {
+      "record": 104,
+      "space": 0,
+      "address": 9402,
+      "words": 424,
+      "sha256": "69f8ae91e094e3e23ccba740c4f82e883db412278eca0c89f013b70f906507a8"
+    },
+    {
+      "record": 105,
+      "space": 1,
+      "address": 50,
+      "words": 2,
+      "sha256": "cb4d2c5ca88af1af322c2c70359adcdfb37e9aad30c9cd7db52e0c9696c3b1bf"
+    },
+    {
+      "record": 106,
+      "space": 1,
+      "address": 53,
+      "words": 5,
+      "sha256": "5322fecfc92a5e3248a297a3df3eddfb9bd9049504272e4f572b87fa36d4b3bd"
+    },
+    {
+      "record": 107,
+      "space": 0,
+      "address": 16,
+      "words": 2,
+      "sha256": "22089578d5b848a5f8efb09337f0c7da1853f51d81cd60a906c893b69826ce43"
+    },
+    {
+      "record": 108,
+      "space": 1,
+      "address": 11648,
+      "words": 16,
+      "sha256": "25b68086d03e3e8595a7830aa0c79fa56bd46e5a086f563a8ecb01546929f0cb"
+    },
+    {
+      "record": 109,
+      "space": 0,
+      "address": 9826,
+      "words": 182,
+      "sha256": "88a6198abf9301809729a6e7cfb8134d4a550700b005424968a89895873a98bd"
+    },
+    {
+      "record": 110,
+      "space": 1,
+      "address": 11664,
+      "words": 5,
+      "sha256": "5322fecfc92a5e3248a297a3df3eddfb9bd9049504272e4f572b87fa36d4b3bd"
+    },
+    {
+      "record": 111,
+      "space": 1,
+      "address": 12055,
+      "words": 5,
+      "sha256": "cd8bad0d7a4eb8280923852fbea62f7d94872bc36ce976cadc2255bce1c98c9b"
+    },
+    {
+      "record": 112,
+      "space": 2,
+      "address": 7717,
+      "words": 383,
+      "sha256": "a90f5a94392b67f5d0740ad7a59519ae2552e5a4dffda96a1d9b79717b204de3"
+    },
+    {
+      "record": 113,
+      "space": 1,
+      "address": 58,
+      "words": 1,
+      "sha256": "709e80c88487a2411e1ee4dfb9f22a861492d20c4765150c0c794abd70f8147c"
+    },
+    {
+      "record": 114,
+      "space": 0,
+      "address": 10008,
+      "words": 1086,
+      "sha256": "2faf9d21168e2566ed128f33ddffa3a0b6249bcdff644f86072746271e295fe2"
+    },
+    {
+      "record": 115,
+      "space": 1,
+      "address": 12060,
+      "words": 2,
+      "sha256": "b0f66adc83641586656866813fd9dd0b8ebb63796075661ba45d1aa8089e1d44"
+    },
+    {
+      "record": 116,
+      "space": 0,
+      "address": 11094,
+      "words": 120,
+      "sha256": "3797838d9e9d42b91437126b6b33a9f41f3c1453d78bc0bdf25b15e4eb3c6716"
+    },
+    {
+      "record": 117,
+      "space": 1,
+      "address": 12086,
+      "words": 16,
+      "sha256": "47bcf2d5d4c2e7cf27d050c279fefb789c0e208fe93a2310439e2cba05bbc932"
+    },
+    {
+      "record": 118,
+      "space": 0,
+      "address": 11214,
+      "words": 267,
+      "sha256": "b49fa69ae8f243cdf2d240927b6c880a2000d7a71ef1f69249d412cac1bb4e26"
+    },
+    {
+      "record": 119,
+      "space": 1,
+      "address": 59,
+      "words": 5,
+      "sha256": "9b6e07f9038abb438e1a867538cc38488460dcbdb703f7fd715d182e85083830"
+    },
+    {
+      "record": 120,
+      "space": 0,
+      "address": 84,
+      "words": 4,
+      "sha256": "24a28ae259a867f6e4306f763fdca400e8c44ab1bc28b7e9b26638bbad0de685"
+    },
+    {
+      "record": 121,
+      "space": 0,
+      "address": 11481,
+      "words": 154,
+      "sha256": "90b0d716d7cecc9bcca55ff9a1862604be52cdea508facc41efc5c0ef3ce2298"
+    },
+    {
+      "record": 122,
+      "space": 2,
+      "address": 8100,
+      "words": 4,
+      "sha256": "311f715dd4656e2b1025b0e1de27fb6270b750bb78dd5a1ad00434a2204be6ba"
+    },
+    {
+      "record": 123,
+      "space": 0,
+      "address": 11635,
+      "words": 501,
+      "sha256": "c33e37a56e7aef7f9006a92ed94e254a884376f71dae267d2173b65e805f508d"
+    },
+    {
+      "record": 124,
+      "space": 1,
+      "address": 12228,
+      "words": 1,
+      "sha256": "f78b037f6d1ecfc5a00bc7d96858bdc7af9ac8dbf95fdd5736d0f950ab279b9e"
+    },
+    {
+      "record": 125,
+      "space": 0,
+      "address": 12136,
+      "words": 48,
+      "sha256": "8cd8bdd12d053669eabcd2558e6437862e42c723e5713f9679c6b9c14bf567a5"
+    },
+    {
+      "record": 126,
+      "space": 0,
+      "address": 0,
+      "words": 2,
+      "sha256": "c2c38fd3763ee3cbef8971f325e63afc8ddeec30764fda72222600ed8bdf03bc"
+    }
+  ],
+  "model_provenance": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "4c977199afb6f03e24efc203b227b321453403aa",
+    "inputs": {
+      "test/dsp_entry_streams_test.cpp": {
+        "bytes": 16937,
+        "sha256": "ec2cb1bba1cf77d8346da4cd9bade32016c77f6f395734f0f4a440db8750646a"
+      },
+      "test/check_dsp_entry_streams.py": {
+        "bytes": 28449,
+        "sha256": "a467f642269991be25c92d73116796ef34d9f0c6f42058b3747fecc7a11dd30b"
+      },
+      "test/check_dsp_oscillator_samples.py": {
+        "bytes": 14255,
+        "sha256": "b94de05fc49e80fdd060a8f69a1cdaca0faeea2e721e8c83641df21f3d7a8984"
+      },
+      "test/check_dsp_oscillator_mixer.py": {
+        "bytes": 17248,
+        "sha256": "419256acc2f1548485de2ad432c46e46a5ce8a83350620241e145f583f1b2786"
+      },
+      "test/check_dsp_entry_filters.py": {
+        "bytes": 22717,
+        "sha256": "38226c8dce3ed0435ae42c3f0df20f2ac11df0c2392dd58cd524c898e47c9182"
+      },
+      "test/check_dsp_entry_output.py": {
+        "bytes": 26194,
+        "sha256": "119a7e86f9f8cd12df3a96ae636016e7f55a48edd03c330ede487b6e82f7fce0"
+      },
+      "test/dsp_runtime_entry_output_harness.asm": {
+        "bytes": 790,
+        "sha256": "368c7c05205a0f224f636e563d0ba2414f38ccd5a37f57b917c311046fe66b26"
+      },
+      "doc/dsp_entry_streams.txt": {
+        "bytes": 5052,
+        "sha256": "f87f4742f1cdd396c557e067c058ff175e46fd93abe7490508d0dae9b843ef16"
+      }
+    }
+  },
+  "streams": 32,
+  "blocks_per_stream": 8,
+  "coverage": {
+    "encoding": "sorted lowercase six-digit hexadecimal PCs, each followed by LF",
+    "available": {
+      "instruction_starts": 314,
+      "sha256": "f8cf44d2d1667c142d131d2f73f020865cf348023b34248460ca85221df766cb"
+    },
+    "executed": {
+      "instruction_starts": 288,
+      "sha256": "336ec63f07fd4c2e17be30aaea6bf3fd1c37dbba13fb45300bac2b6b5d3609eb"
+    },
+    "unvisited": {
+      "instruction_starts": 26,
+      "sha256": "f2a81a1ccc5a4a01a87517529f2b0905cdc64d21f83f4e7ef3544d1c4bf36b35"
+    }
+  },
+  "qualification": "Declared static held-note ordinary-output streams, SR RM variants, linear own caller and explicit RAM preconditions. Complete original voice returns and independent state/output equations; no full boot, live MIDI, allocation, scheduled bus consumption, PCM transport or physical timing proof."
+}
