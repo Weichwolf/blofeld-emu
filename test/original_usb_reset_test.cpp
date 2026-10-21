@@ -7,6 +7,7 @@
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_usb.hpp"
+#include "blofeld/usb_device.hpp"
 #include "blofeld/usb_host.hpp"
 #include "blofeld/usb_transfer.hpp"
 #include "blofeld/usbip.hpp"
@@ -426,17 +427,31 @@ std::array<std::uint8_t, 8> setup_request(const unsigned length) {
           static_cast<std::uint8_t>(length >> 8U)};
 }
 
-void start_setup(Session &session, const SetupProfile profile) {
+void start_setup(Session &session,
+                 const SetupProfile profile,
+                 std::optional<blofeld::UsbDeviceProbe> &probe) {
   session.counters = {};
   session.interrupted = registers(session.machine.cpu().state());
   if (profile.overrun) {
     require(session.machine.bus().receive_usb_setup(setup_request(device_descriptor_size)) ==
                 blofeld::UsbResponse::ack,
             "The superseded own GET_DESCRIPTOR is a genuine decoded SETUP");
+    require(session.machine.bus().receive_usb_setup(setup_request(profile.length)) ==
+                blofeld::UsbResponse::ack,
+            "The last own SETUP supplies the actual requested word length");
+  } else {
+    const auto state = session.machine.cpu().state();
+    auto &capture = probe.emplace();
+    require(!capture.poll(session.machine.bus(), {.pc = state.pc, .ccr = state.ccr}) &&
+                !capture.ready(),
+            "The production descriptor probe submits its real first GET_DESCRIPTOR");
+    const auto expected = setup_request(profile.length);
+    for (unsigned byte = 0; byte < expected.size(); ++byte) {
+      require(session.machine.bus().read(static_cast<std::uint16_t>(setup_source + byte)) ==
+                  expected[byte],
+              "Probe-generated SETUP bytes match independent original device-request fields");
+    }
   }
-  require(session.machine.bus().receive_usb_setup(setup_request(profile.length)) ==
-              blofeld::UsbResponse::ack,
-          "The last own SETUP supplies the actual requested word length");
   require(session.word(status_word) == (profile.overrun ? overrun_usb_status : setup_usb_status),
           "One/two actual SETUP events establish their independently expected flags");
 }
@@ -597,6 +612,31 @@ std::optional<Saved> finish_setup(Session &session,
   throw blofeld::Fault("Original SETUP must return or reach its explicit invalid-data boundary");
 }
 
+void check_incomplete_probe(Session &session, std::optional<blofeld::UsbDeviceProbe> &probe) {
+  if (!probe) { return; }
+  auto before = session.outcome();
+  inspect_setup_payload(session, before);
+  const auto state = session.machine.cpu().state();
+  require(!probe->poll(session.machine.bus(), {.pc = state.pc, .ccr = state.ccr}) &&
+              !probe->ready(),
+          "Original USTB failure leaves descriptor capture pending without inventing bytes");
+  bool unavailable = false;
+  try {
+    static_cast<void>(probe->descriptors());
+  } catch (const blofeld::Fault &fault) {
+    require(std::string_view(fault.what()).contains("USB descriptor capture is unavailable"),
+            "No original descriptor metadata can escape the incomplete transfer");
+    unavailable = true;
+  }
+  auto after = session.outcome();
+  inspect_setup_payload(session, after);
+  require(unavailable && before == after,
+          "Incomplete metadata queries preserve every native register, RAM and USB payload bit");
+  session.check_flash();
+  session.trace_ << "DESCRIPTOR_PROBE_UNAVAILABLE " << session.counters.native << ' ' << state.pc
+                 << ' ' << static_cast<unsigned>(state.ccr) << '\n';
+}
+
 void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
   const auto configured = session.save();
   constexpr unsigned maximum_length = 0xffff;
@@ -605,11 +645,14 @@ void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
     const SetupProfile profile{.length = index == 0 ? device_descriptor_size : lengths[index - 1],
                                .overrun = index != 0};
     session.restore(configured);
-    start_setup(session, profile);
+    std::optional<blofeld::UsbDeviceProbe> probe;
+    start_setup(session, profile, probe);
+    const auto pending_probe = probe;
     const auto middle = finish_setup(session, firmware, profile, true);
     if (!middle) {
       throw blofeld::Fault("Each original SETUP branch requires its real pre-read snapshot");
     }
+    check_incomplete_probe(session, probe);
     auto expected = session.outcome();
     inspect_setup_payload(session, expected);
     const auto report = [&](const std::string_view kind) {
@@ -622,7 +665,9 @@ void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
     report("SETUP_CASE");
     for (unsigned replay = 0; replay < 2; ++replay) {
       session.restore(*middle);
+      probe = pending_probe;
       static_cast<void>(finish_setup(session, firmware, profile, false));
+      check_incomplete_probe(session, probe);
       auto actual = session.outcome();
       inspect_setup_payload(session, actual);
       require(actual == expected,

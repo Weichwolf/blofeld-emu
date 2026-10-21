@@ -58,6 +58,10 @@ def validate(text):
             raise ValueError("Missing real original SETUP instructions before the retained fault")
     if setup_replays != [row for row in setup_cases for _ in range(2)]:
         raise ValueError("Missing sixteen joint pre-read SETUP restores")
+    probe = [tuple(map(int, row)) for row in re.findall(
+        r"^DESCRIPTOR_PROBE_UNAVAILABLE (\d+) (\d+) (\d+)$", text, re.M)]
+    if probe != [(9, 0xbc3d, 0x90)] * 3:
+        raise ValueError("Missing original descriptor-probe refusal and two joint restores")
     setup_instructions = sum(row[2] for row in setup_cases + setup_replays)
     reset_instructions = sum(row[-1] for row in resets + replays + configurations)
     return {"setup_profiles": len(setup_cases), "setup_replays": len(setup_replays),
@@ -68,6 +72,7 @@ def validate(text):
             "reset_profiles": len(resets), "replays": len(replays),
             "configuration_irqs": len(configurations), "configuration_replays": 2,
             "configuration_host_faults": len(host),
+            "original_descriptor_probe_refusals": len(probe),
             "reserved_midi_failures": len(frontiers),
             "original_delay_calls": sum(row[2] for row in resets),
             "native_instructions": reset_instructions + setup_instructions}
