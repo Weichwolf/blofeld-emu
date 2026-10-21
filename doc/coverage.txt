@@ -284,6 +284,9 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           All fixed import/IN splits, truncated
                                           EOFs and partial-reply/fault cases
                                           also checked (usbip_session_boundaries).
+                                          Fixed-port restarts retain exclusive
+                                          active binding across real TCP close;
+                                          listener/client descriptors are checked.
                                           Production descriptor probe also reaches
                                           the original USTB failure; no metadata
                                           escapes after two joint restores.

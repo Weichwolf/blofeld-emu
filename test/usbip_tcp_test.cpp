@@ -173,6 +173,42 @@ void test_device_fault_stops_transport() {
   reject([&] { static_cast<void>(server.poll(bus, context)); }, "Faulted/moved");
 }
 
+tcp::Socket complete_management(UsbipTcpServer &server, McuBus &bus) {
+  auto client = tcp::connect(server.port());
+  tcp::send(client, session::list);
+  tcp::Received reply;
+  tcp::until(server, bus, client, reply, [&] { return reply.eof; });
+  constexpr std::array<std::uint8_t, 12> empty{1, 0x11, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0};
+  require(std::ranges::equal(reply.bytes, empty) && server.connections() == 0,
+          "The server actively closes a complete real management connection");
+  return client;
+}
+
+void test_fixed_port_restart_and_exclusion() {
+  McuBus bus(device::descriptor_flash);
+  std::uint16_t port = 0;
+  tcp::Socket retired;
+  {
+    UsbipTcpServer original({});
+    port = original.port();
+    reject([&] { const UsbipTcpServer duplicate({.port = port}); }, "bind/listen");
+    retired = complete_management(original, bus);
+  }
+  {
+    UsbipTcpServer restarted({.port = port});
+    require(restarted.port() == port,
+            "A fixed-port restart succeeds while the old peer retains its received FIN");
+    reject([&] { const UsbipTcpServer duplicate({.port = port}); }, "bind/listen");
+    auto completed = complete_management(restarted, bus);
+    completed.reset();
+    retired.reset();
+  }
+  UsbipTcpServer final_server({.port = port});
+  auto final_client = complete_management(final_server, bus);
+  require(final_server.port() == port,
+          "The same fixed port serves a new connection after both earlier clients close");
+}
+
 std::size_t descriptors() {
   return static_cast<std::size_t>(std::distance(
       std::filesystem::directory_iterator("/proc/self/fd"), std::filesystem::directory_iterator{}));
@@ -186,10 +222,12 @@ int main() {
     test_actual_transfer_and_retired_publication();
     test_malformed_peer_isolation_and_capacity();
     test_device_fault_stops_transport();
+    test_fixed_port_restart_and_exclusion();
     require(descriptors() == before,
             "All listener/client/accepted descriptors are closed after real TCP tests");
     std::cout << "Verified actual bounded loopback TCP discovery/import/MCU transfers, partial "
-                 "output, peer isolation, EOF/retired leases and descriptor ownership. No kernel "
+                 "output, peer isolation, fixed-port restarts, exclusive binding, EOF/retired "
+                 "leases and descriptor ownership. No kernel "
                  "USB attachment claim.\n";
     return 0;
   } catch (const std::exception &error) {
