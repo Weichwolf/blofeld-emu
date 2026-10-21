@@ -61,8 +61,16 @@ Loopback own-fixture tests are not hardware or original-firmware equivalence.
 No fuzzing, physical device traffic, module loading or system routing is used.
 
 Deterministic gates:
-  cmake --build --preset strict --target blofeld-usbip-session-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
-  ctest --test-dir build/strict --output-on-failure -R '^(usbip_session|usbip_tcp|usbip_tcp_native)$'
+  cmake --build --preset strict --target blofeld-usbip-session-test blofeld-usbip-session-boundaries-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_session|usbip_session_boundaries|usbip_tcp|usbip_tcp_native)$'
+
+usbip_session_boundaries supplements the packet/native/TCP cases with all89
+split positions of a coalesced40-byte import and48-byte IN request, all40 truncated
+imports,47 incomplete IN headers and4 partial OUT payloads. It also checks actual
+MCU ACK/NAK bytes, full-queue cancellation, a partially sent reply's reserved
+sequence, malformed coalesced suffixes, half-close/abort after accepted SETUP,
+exclusive import and unchanged context-rich strict controller faults. These fixed
+cases do not qualify original enumeration, board timing or physical USB behavior.
 
 References (protocol facts only; no kernel implementation code is copied):
   https://docs.kernel.org/usb/usbip_protocol.html

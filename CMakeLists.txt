@@ -184,6 +184,9 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-headless> "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-usb")
   set_tests_properties(reference_usb_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_executable(blofeld-usbip-session-boundaries-test test/usbip_session_boundaries_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-usbip-session-boundaries-test PRIVATE blofeld_usbip)
+  add_test(NAME usbip_session_boundaries COMMAND blofeld-usbip-session-boundaries-test)
   add_executable(blofeld-usbip-tcp-native-test test/usbip_tcp_native_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_include_directories(blofeld-usbip-tcp-native-test PRIVATE src)
   target_link_libraries(blofeld-usbip-tcp-native-test PRIVATE blofeld_usbip_tcp blofeld_core)
@@ -1016,6 +1019,7 @@ add_custom_target(quality
     blofeld-usbip-test blofeld-usb-host-test blofeld-usb-host-native-test
     blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test
     blofeld-usbip-session-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
+    blofeld-usbip-session-boundaries-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test
     blofeld-midi-timed-test

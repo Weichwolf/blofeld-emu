@@ -284,6 +284,9 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           own guest/TCP tests (usb-runtime.txt),
                                           with capture lifetime/restore guards.
                                           Kernel attachment remains pending.
+                                          All fixed import/IN splits, truncated
+                                          EOFs and partial-reply/fault cases
+                                          also checked (usbip_session_boundaries).
                                           Fixed-port restarts retain exclusive
                                           active binding across real TCP close;
                                           listener/client descriptors are checked.
