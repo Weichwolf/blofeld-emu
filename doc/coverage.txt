@@ -93,6 +93,14 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           (hc12-cycles.txt). Full ISA,
                                           qualified chip timing and hardware
                                           comparison pending.
+                                          Indexed addressing has an independent
+                                          fixed matrix for every postbyte: complete
+                                          5/9-bit and A/B offsets, auto updates,
+                                          16-bit/D boundaries, real indirect reads,
+                                          exact flags/registers and manual bus slots.
+                                          Wrapping words retain contextual faults
+                                          (hc12-indexed.txt); this is synthetic
+                                          internal memory, not board qualification.
                                           Independent reset/opcode reference:
                                           HCS12COREUG section 3.1 and Appendix A.
 RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tracking,
