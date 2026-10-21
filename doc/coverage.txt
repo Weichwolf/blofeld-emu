@@ -261,6 +261,11 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           backend, complete original enumeration,
                                           bidirectional USB-MIDI or Spectre/Wine
                                           sample-transfer qualification exists.
+                                          MCU-backed control/bulk host queue and
+                                          USB/IP transfer framing have own native
+                                          IRQ/ACK/status and fixed protocol tests
+                                          (usb-host-transfers.txt); no listener or
+                                          host attachment claim.
                                           Transport requirements and current
                                           original frontiers: usb-host.txt.
 Original DSP runtime              partial  127 checked records extracted; DSP56300

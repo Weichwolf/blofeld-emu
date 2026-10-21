@@ -43,6 +43,13 @@ struct UsbInPacket {
   bool data1 = false;
 };
 
+struct UsbEndpointInfo {
+  UsbBuffer buffer = UsbBuffer::control_in;
+  std::uint8_t address = 0;
+  unsigned maximum_packet = 0;
+  unsigned type = 0; // USB transfer type: 0 control, 2 bulk, 3 interrupt.
+};
+
 // USB20D6E2F register/buffer side. Wire decoding, automatic standard requests,
 // high-speed packets and IQUE endpoints remain unsupported.
 class McuUsb {
@@ -63,6 +70,7 @@ public:
   UsbResponse receive_out(UsbOutPacket packet);
   [[nodiscard]] UsbInPacket request_in(UsbBuffer endpoint);
   void finish_in(bool acknowledged);
+  [[nodiscard]] UsbEndpointInfo host_endpoint(std::uint8_t address) const;
   [[nodiscard]] std::uint8_t interrupt_sources() const;
 
 private:
