@@ -25,7 +25,8 @@ case restores a coordinated trusted snapshot. No reserved read is ignored.
 
 DSP56371UM Rev.2.1, table 3-8 (PDF page 72), marks Y:ffffff reserved. The pinned
 manual is recorded in hardware/sources.json. It does not qualify a readable
-value or safe access. The discarded destination in this allocation loop is
+value or safe access; section 3.1.1 advises against reserved-space accesses.
+The discarded destination in this allocation loop is
 source evidence, not permission to invent peripheral behavior.
 
 The fixture supplies raw factory sound fields, explicitly empty caller workspace
