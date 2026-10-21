@@ -325,6 +325,16 @@ std::uint32_t DspBus::peek_program(const std::uint32_t address) const {
   }
 }
 
+std::uint32_t DspBus::inspect_program(const std::uint32_t address) const {
+  const DspAddress target{.address = address};
+  const auto location = locate(target);
+  const auto &memory = (location.rom ? rom_ : ram_).at(location.bank);
+  if (memory.known.at(location.offset) == 0) {
+    throw Fault("Unknown DSP memory read at " + address_text(target));
+  }
+  return memory.words.at(location.offset);
+}
+
 void DspBus::install_rom(const DspRom image) {
   const auto index = bank(image.space);
   const auto base = image.space == DspSpace::p ? program_rom_base : data_rom_base;

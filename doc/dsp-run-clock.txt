@@ -24,9 +24,11 @@ Reference contract
   Timer configuration written by an instruction is visible to the end-of-step
   timer advance. This ordering is an explicit experiment, not hardware evidence.
   Capture modes still require their separately qualified external samples.
-- IRQ entry and SR.SC compatibility timing reject before native dispatch;
-  interrupt acknowledgement/vector fetching is not silently assigned a duration.
-  The untimed owner retains its independently tested native interrupt behavior.
+- IRQ entry rejects by default; SR.SC compatibility timing always rejects before
+  native dispatch. The separate native_vector_estimates interrupt contract
+  accounts only for actually executed vector instructions (dsp-irq-clock.txt),
+  with no claimed physical entry/recognition latency. The untimed owner retains
+  its independently tested native interrupt behavior.
 - A rejected step quarantines CPU/clock state; completed reference time is a
   prefix, not permission to retry the partially executed instruction. Coordinated
   restore recovers the native CPU, bus, timer phase and clock together. A live

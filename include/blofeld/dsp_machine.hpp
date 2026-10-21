@@ -15,10 +15,12 @@
 namespace blofeld {
 
 enum class DspRunTiming : std::uint8_t { unqualified, native_internal_estimates };
+enum class DspInterruptTiming : std::uint8_t { unqualified, native_vector_estimates };
 
 struct DspRunContract {
   DspRunClockInputs clock;
   DspRunTiming timing = DspRunTiming::unqualified;
+  DspInterruptTiming interrupts = DspInterruptTiming::unqualified;
   bool operator==(const DspRunContract &) const = default;
 };
 
@@ -27,6 +29,7 @@ struct DspStepPlan {
   unsigned native_cycle_units = 0;
   std::uint64_t start_ticks = 0;
   std::uint64_t duration_ticks = 0;
+  std::optional<DspInterruptVector> interrupt;
   bool operator==(const DspStepPlan &) const = default;
 };
 

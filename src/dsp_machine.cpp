@@ -26,6 +26,10 @@ RunState initial_run(const std::optional<DspRunContract> contract) {
   if (contract->timing != DspRunTiming::native_internal_estimates) {
     throw Fault("DSP run requires an explicit native-cycle-estimate timing contract");
   }
+  if (contract->interrupts != DspInterruptTiming::unqualified &&
+      contract->interrupts != DspInterruptTiming::native_vector_estimates) {
+    throw Fault("Unsupported DSP interrupt timing contract");
+  }
   return {.contract = contract, .clock = DspRunClock(contract->clock)};
 }
 }
@@ -42,11 +46,14 @@ struct DspCheckpoint::Storage {
 struct DspMachine::State {
   explicit State(const RunState run_state) : run(run_state), cpu(bus) {
     if (run.clock) {
+      if (!run.contract) { throw Fault("Clocked DSP owner lost its timing contract"); }
+      const bool vector_estimates =
+          run.contract.value().interrupts == DspInterruptTiming::native_vector_estimates;
       cpu.set_run_hooks(
           {.begin =
-               [this](const auto state, const bool interrupt) {
+               [this, vector_estimates](const auto state, const bool interrupt) {
                  constexpr unsigned compatibility = 0x2000;
-                 if (interrupt || (state.sr & compatibility) != 0) {
+                 if ((interrupt && !vector_estimates) || (state.sr & compatibility) != 0) {
                    throw Fault("Unqualified DSP interrupt or compatibility-mode timing");
                  }
                  if (cpu.native_cycles() != run.clock->native_cycle_units()) {
@@ -61,7 +68,8 @@ struct DspMachine::State {
                  if (run.clock->faulted() || run.clock->native_cycle_units() != 0) {
                    throw Fault("Clocked DSP reset requires a new epoch or coordinated restore");
                  }
-               }});
+               },
+           .vector_estimates = vector_estimates});
     }
   }
 
@@ -165,11 +173,16 @@ DspStepPlan DspMachine::plan_step() const {
   state_->check_boundary();
   const auto before = state_->cpu.debug_state();
   try {
-    const auto units = state_->cpu.next_step_cycles();
+    const auto run_contract = state_->run.contract;
+    if (!run_contract) { throw Fault("Clocked DSP owner lost its timing contract"); }
+    const bool vector_estimates =
+        run_contract->interrupts == DspInterruptTiming::native_vector_estimates;
+    const auto estimate = state_->cpu.next_step_cycles(vector_estimates);
     return {.before = before,
-            .native_cycle_units = units,
+            .native_cycle_units = estimate.units,
             .start_ticks = clock.elapsed_ticks(),
-            .duration_ticks = clock.next_step_ticks(state_->bus, units)};
+            .duration_ticks = clock.next_step_ticks(state_->bus, estimate.units),
+            .interrupt = estimate.interrupt};
   } catch (const std::exception &error) {
     throw Fault("DSP run plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
                 ": " + error.what());

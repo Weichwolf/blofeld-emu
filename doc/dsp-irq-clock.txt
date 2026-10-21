@@ -1,0 +1,54 @@
+Nominal DSP interrupt-vector execution
+
+DspRunContract.interrupts defaults to unqualified. Existing clocked callers
+continue to reject an accepted IRQ before vector fetch or acknowledgement. The
+separately selected native_vector_estimates contract accounts only for the
+nominal instruction costs of the vector words actually executed. It adds no
+invented recognition, pipeline-fill, arbitration or acknowledgement delay.
+DSP56300FM Rev5 sections 2.3.2.6..8, tables 2-7/2-8 and A.3.7 distinguish
+vector execution from the physical interrupt pipeline. This contract is an
+explicit instruction-boundary experiment, not calibrated Blofeld IRQ timing.
+
+The strict const DspBus::inspect_program previews both actual vector words
+without native accesses, source acknowledgement, timer advancement or CPU
+effects. Even an unused word after a first-word JSR must be present, because
+the native entry fetches both. Only executed words contribute instruction
+costs: two one-word fast instructions, one two-word instruction, or
+instructions through a first/second-word JSR. An unavailable/unsupported
+vector rejects before native entry. A.3.7 stack/loop register restrictions and
+ANDI/ORI on MR/CCR are checked before effects. SR.SC timing remains
+unsupported. Native REP eligibility, priority selection, VBA, JSR frames and
+RTI remain authoritative; no host ISR replaces them.
+
+DspStepPlan carries the selected request, relocated vector address and both
+words. A scheduled mutation of either word, including a same-cost replacement,
+invalidates the prepared completion. At dispatch the actual fetched words are
+checked before acknowledgement; the completed native cycle delta must match
+the preview. A failure quarantines execution; trusted coordinated restore is
+needed.
+
+The existing clock contract applies the prior PLL rate for the complete atomic
+vector step, and advances peripheral units and retained CLK/2 phase only after
+native completion. Individual vector fetches have no physical timestamps.
+Snapshots retain this IRQ timing choice, CPU/stack/REP continuation, pending
+sources, timer state and clock phase. External schedules still require their
+own coordinated checkpoint. This does not provide portable whole-board state.
+Rebuild C++ consumers after the DspRunContract/DspStepPlan layout changes.
+
+  cmake --build --preset strict --target blofeld-dsp-irq-clock-test
+  ctest --test-dir build/strict -R '^dsp_irq_clock$' --output-on-failure
+
+The independent nominal expectations use literal FM costs, not the SDK cost
+calculator: NOP/short MOVE 1, long immediate MOVE 2, short/indirect JSR 3,
+absolute/pre-update JSR 4 and RTI 3. Checks exercise both CLK/2 residues and
+two PLL rates and an actual vector PCTL command; they observe actual reads,
+source flags, executed instruction counts, register/stack results and timer
+advancement. Additional cases cover unknown words, unsupported/overlong
+vectors, relocation, same-cost mutation, snapshots, nested sources, adjacent
+REP deferral and incompatible timing contracts.
+
+Full original boot, physical clocks/IRQ latency, the original serial sampler
+under CPU-derived time, host MIDI ports, original audio and hardware
+equivalence remain unqualified. In particular, no oscillator is fitted to a
+serial fixture, no reserved RAM writes are discarded, and no physical traffic
+is generated.

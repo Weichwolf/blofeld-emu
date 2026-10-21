@@ -130,8 +130,16 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Original ROM/stage prefix has an
                                           independent nominal timing ledger and
                                           mid-REP replay (dsp-run-clock.txt).
-                                          IRQ/SC timing rejects explicitly; physical
-                                          pipeline/PLL/board timing remains open.
+                                          Default IRQ and SR.SC timing reject.
+                                          Explicit nominal vector estimates retain
+                                          both real words in pure previews, check
+                                          actual native costs/acknowledgement,
+                                          JSR/RTI/nesting, CLK2 residue, snapshots,
+                                          same-cost mutation and adjacent REP
+                                          deferral (dsp-irq-clock.txt). This does
+                                          not qualify physical IRQ latency or
+                                          CPU-clocked original serial reception.
+                                          Physical pipeline/PLL/board timing open.
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
                                           source IRQs tested (dsp-timers.txt).

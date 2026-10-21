@@ -9,13 +9,16 @@
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
+#include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
 #include "dsp56kEmu/peripherals.h"
 #include "dsp56kEmu/registers.h"
 #include "dsp56kEmu/types.h"
+#include "dsp_interrupt_timing.hpp"
 #include "dsp_native_access.hpp"
 #include "dsp_reference_execution.hpp"
 
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -110,6 +113,9 @@ public:
                          vector ? DspNativeAccessKind::vector : DspNativeAccessKind::opcode);
     if (vector) {
       second = native_.read({.address = address + 1}, DspNativeAccessKind::vector);
+      if (interrupt_->expected && *interrupt_->expected != std::array{first, second}) {
+        throw Fault("DSP interrupt vector changed after timing preview read P:" + hex(address, 6));
+      }
       if (native_.reference().intercepting()) {
         native_.reference().acknowledge_interrupt(interrupt_->request);
       } else {
@@ -122,9 +128,11 @@ public:
     return true;
   }
 
-  void arm_interrupt(const DspInterruptRequest request, const std::uint32_t address) {
+  void arm_interrupt(const DspInterruptRequest request,
+                     const std::uint32_t address,
+                     const std::optional<std::array<std::uint32_t, 2>> expected = std::nullopt) {
     if (interrupt_) { throw Fault("DSP interrupt vector fetch is already armed"); }
-    interrupt_ = VectorFetch{.request = request, .address = address};
+    interrupt_ = VectorFetch{.request = request, .address = address, .expected = expected};
   }
 
   void verify_interrupt_fetch() const {
@@ -137,6 +145,7 @@ private:
   struct VectorFetch {
     DspInterruptRequest request;
     std::uint32_t address = 0;
+    std::optional<std::array<std::uint32_t, 2>> expected;
   };
 
   DspBus &bus_;
@@ -239,6 +248,17 @@ public:
     }
   }
 
+  [[nodiscard]] StepEstimate interrupt_estimate(const DspState &before,
+                                                const DspInterruptRequest request) const {
+    const auto address = before.vba + request.vector;
+    const DspInterruptVector vector{
+        .request = request,
+        .address = address,
+        .words = {bus.inspect_program(address), bus.inspect_program(address + 1)}};
+    return {.units = nominal_vector_cycles(vector, opcodes, memory.getBridgedMemoryAddress()),
+            .interrupt = vector};
+  }
+
   void reset_reference() {
     auto next_owner = std::make_shared<const bool>(true);
     native.reference().clear();
@@ -286,6 +306,7 @@ public:
   Peripherals peripherals_x;
   Peripherals peripherals_y;
   dsp56k::DSP cpu;
+  const dsp56k::Opcodes opcodes;
   bool faulted = false;
   bool active = false;
   RunHooks run;
@@ -329,7 +350,7 @@ std::uint64_t DspCore::native_cycles() const {
   return impl_->cpu.getCycles();
 }
 
-unsigned DspCore::next_step_cycles() const {
+DspCore::StepEstimate DspCore::next_step_cycles(const bool vector_estimates) const {
   if (impl_->active || impl_->faulted || impl_->native.reference().active()) {
     throw Fault("DSP cycle preview requires a healthy completed step");
   }
@@ -339,11 +360,13 @@ unsigned DspCore::next_step_cycles() const {
     constexpr unsigned mask_shift = 8;
     constexpr unsigned interrupt_mask = 3;
     const auto interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
-    if ((before.sr & compatibility) != 0 ||
-        (interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc)))) {
+    const bool accepted =
+        interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc));
+    if ((before.sr & compatibility) != 0 || (accepted && !vector_estimates)) {
       throw Fault("Unqualified DSP interrupt or compatibility-mode timing preview");
     }
-    return impl_->cpu.referenceNextCycles();
+    if (accepted) { return impl_->interrupt_estimate(before, *interrupt); }
+    return {.units = impl_->cpu.referenceNextCycles(), .interrupt = std::nullopt};
   } catch (const std::exception &error) {
     throw Fault("DSP cycle preview pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) + ": " +
                 error.what());
@@ -541,6 +564,7 @@ void DspCore::step(DspNativeAccessObserver observer) {
   const auto before = state();
   const auto before_cycles = impl_->cpu.getCycles();
   std::optional<DspInterruptRequest> interrupt;
+  StepEstimate estimate;
   try {
     impl_->invalidate();
     constexpr unsigned mask_shift = 8;
@@ -550,11 +574,17 @@ void DspCore::step(DspNativeAccessObserver observer) {
       interrupt.reset();
     }
     if (impl_->run.begin) { impl_->run.begin(before, interrupt.has_value()); }
+    if (interrupt && impl_->run.vector_estimates) {
+      estimate = impl_->interrupt_estimate(before, *interrupt);
+    }
     const DspNativeAccessScope observed(
         impl_->native, std::move(observer), {.pc = before.pc, .omr = before.omr});
     if (interrupt) {
       const auto vector = before.vba + interrupt->vector;
-      impl_->access.arm_interrupt(*interrupt, vector);
+      impl_->access.arm_interrupt(*interrupt,
+                                  vector,
+                                  estimate.interrupt ? std::optional(estimate.interrupt->words)
+                                                     : std::nullopt);
       impl_->cpu.execReferenceInterrupt(vector, interrupt->level);
       impl_->access.verify_interrupt_fetch();
     } else {
@@ -566,6 +596,9 @@ void DspCore::step(DspNativeAccessObserver observer) {
       if (after_cycles < before_cycles ||
           after_cycles - before_cycles > std::numeric_limits<unsigned>::max()) {
         throw Fault("Invalid native DSP cycle-estimate delta");
+      }
+      if (estimate.interrupt && after_cycles - before_cycles != estimate.units) {
+        throw Fault("DSP native interrupt cost differs from its vector timing preview");
       }
       impl_->run.complete(static_cast<unsigned>(after_cycles - before_cycles));
     }

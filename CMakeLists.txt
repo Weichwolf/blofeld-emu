@@ -119,6 +119,7 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
 add_library(blofeld_dsp src/dsp_core.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
+  src/dsp_interrupt_timing.cpp
   src/dsp_machine.cpp src/dsp_scheduled_run.cpp
   src/dsp_scheduled_events.cpp)
 target_include_directories(blofeld_dsp PUBLIC include)
@@ -641,6 +642,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
   target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
+  add_executable(blofeld-dsp-irq-clock-test test/dsp_irq_clock_test.cpp)
+  target_link_libraries(blofeld-dsp-irq-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_irq_clock COMMAND blofeld-dsp-irq-clock-test)
+  set_tests_properties(dsp_irq_clock PROPERTIES TIMEOUT 120)
   add_executable(blofeld-dsp-scheduled-run-test test/dsp_scheduled_run_test.cpp)
   target_link_libraries(blofeld-dsp-scheduled-run-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_scheduled_run COMMAND blofeld-dsp-scheduled-run-test)
@@ -762,6 +767,7 @@ add_custom_target(quality
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
     blofeld-dsp-run-clock-test
+    blofeld-dsp-irq-clock-test
     blofeld-dsp-scheduled-run-test
     blofeld-original-dsp-clock-test
     blofeld-original-dsp-midi-test

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/dsp_bus.hpp"
+#include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_native_access.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 
@@ -48,6 +49,15 @@ struct DspDebugState {
   bool operator==(const DspDebugState &) const = default;
 };
 
+// Both real vector words are required, including a word not executed after JSR.
+// Pure preview identity; neither a fetch nor an interrupt acknowledgement.
+struct DspInterruptVector {
+  DspInterruptRequest request;
+  std::uint32_t address = 0;
+  std::array<std::uint32_t, 2> words{};
+  bool operator==(const DspInterruptVector &) const = default;
+};
+
 // Opaque native state; only DspMachine can pair it with matching bus contents.
 class DspCoreCheckpoint {
 public:
@@ -87,12 +97,18 @@ private:
     std::function<void(unsigned)> complete;
     std::function<void()> failed;
     std::function<void()> reset;
+    bool vector_estimates = false;
+  };
+
+  struct StepEstimate {
+    unsigned units = 0;
+    std::optional<DspInterruptVector> interrupt;
   };
 
   void set_run_hooks(RunHooks hooks);
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] std::uint64_t native_cycles() const;
-  [[nodiscard]] unsigned next_step_cycles() const;
+  [[nodiscard]] StepEstimate next_step_cycles(bool vector_estimates) const;
   [[nodiscard]] DspCoreCheckpoint checkpoint() const;
   void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
   [[nodiscard]] bool executing() const;

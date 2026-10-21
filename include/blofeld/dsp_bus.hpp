@@ -98,7 +98,10 @@ public:
   [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
   [[nodiscard]] DspMemoryResource memory_resource(DspMemoryAccess access) const;
   [[nodiscard]] DspMemoryConflict memory_conflict(DspMemoryPair pair) const;
+  // Decoder lookahead may substitute an unknown word; never use it to admit execution.
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
+  // Strict, side-effect-free P-space observation, including map/knowledge checks.
+  [[nodiscard]] std::uint32_t inspect_program(std::uint32_t address) const;
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);
   void advance_instruction_cycles(unsigned cycles);

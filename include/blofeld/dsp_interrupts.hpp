@@ -9,6 +9,7 @@ namespace blofeld {
 struct DspInterruptRequest {
   std::uint32_t vector = 0;
   unsigned level = 0;
+  bool operator==(const DspInterruptRequest &) const = default;
 };
 
 // DSP56371 SHI/TIM priorities. Other enabled core/peripheral sources fail.
