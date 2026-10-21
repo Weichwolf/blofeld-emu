@@ -81,6 +81,10 @@ target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB
 add_library(blofeld_private_files src/private_file.cpp)
 target_include_directories(blofeld_private_files PUBLIC include)
 target_link_libraries(blofeld_private_files PUBLIC blofeld_firmware)
+add_library(blofeld_sample_library src/sample_library.cpp src/sample_xml_reader.cpp
+  src/sample_xml_values.cpp src/sample_xml_codec.cpp src/sample_xml_file.cpp src/sample_client.cpp)
+target_include_directories(blofeld_sample_library PUBLIC include)
+target_link_libraries(blofeld_sample_library PUBLIC blofeld_private_files)
 add_library(blofeld_storage src/flash_image.cpp src/flash_file.cpp)
 target_include_directories(blofeld_storage PUBLIC include)
 target_link_libraries(blofeld_storage PUBLIC blofeld_firmware PRIVATE blofeld_private_files ZLIB::ZLIB)
@@ -151,9 +155,14 @@ add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
   src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
   src/reference_midi.cpp src/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport
-  blofeld_mcu_midi blofeld_host_midi)
+  blofeld_mcu_midi blofeld_host_midi blofeld_sample_library)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-sample-library-test test/sample_library_test.cpp)
+  target_link_libraries(blofeld-sample-library-test PRIVATE blofeld_sample_library)
+  add_test(NAME sample_library COMMAND blofeld-sample-library-test)
+  add_test(NAME sample_library_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/sample_library_cli.py" $<TARGET_FILE:blofeld-headless>)
   add_executable(blofeld-host-midi-test test/host_midi_test.cpp)
   target_link_libraries(blofeld-host-midi-test PRIVATE blofeld_host_midi blofeld_firmware)
   add_test(NAME host_midi COMMAND blofeld-host-midi-test
@@ -929,6 +938,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-sample-library-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test
     blofeld-original-host-midi-test

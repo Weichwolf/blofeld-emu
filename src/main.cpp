@@ -10,6 +10,7 @@
 #include "blofeld/pcm_recording.hpp"
 #include "host_midi_runner.hpp"
 #include "reference_board.hpp"
+#include "sample_client.hpp"
 
 #include <charconv>
 #include <cstddef>
@@ -20,6 +21,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -376,6 +378,10 @@ int run(const Options &config) {
 
 int main(const int argc, char **argv) {
   try {
+    if (argc > 1 && std::string_view(argv[1]) == "samples") {
+      return blofeld::samples::run_client(std::span(argv + 2, static_cast<std::size_t>(argc - 2)),
+                                          std::cout);
+    }
     return run(options(argc, argv));
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
