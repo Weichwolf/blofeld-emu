@@ -1,7 +1,9 @@
 MC9S12UF32 timer: normal-mode model and remaining limits
 
-The TIM16B8C block is mapped at 0x0040..0x006f. It is driven by explicit bus
-cycles, independently of the as-yet missing CPU/peripheral clock scheduler.
+The TIM16B8C block is mapped at 0x0040..0x006f. Explicit bus cycles drive it
+from McuRunClock or direct module fixtures. The optional owned CPU clock and
+its nominal timing contracts are described in mcu-run-clock.txt and
+mcu-wait-clock.txt; physical clock switching and pad timing remain unqualified.
 Run build/strict/blofeld-timer-test for synthetic checks.
 
 Counting and registers
@@ -18,7 +20,8 @@ Counting and registers
 - Capture-register writes have no effect. Compare registers accept high/low-byte
   writes. No extra atomic latch is invented for TCNT or TCn: separate byte
   accesses can observe different values when explicitly separated by clock or
-  capture events. CPU word-access bus timing remains to be integrated.
+  capture events. Native CPU word-access reference schedules and remaining
+  physical timing limits are described in hc12-cycles.txt.
 
 Capture and compare
 - Each channel has disabled, rising, falling and either-edge capture selection.
