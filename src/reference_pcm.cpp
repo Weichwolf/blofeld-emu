@@ -4,6 +4,7 @@
 #include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_gpio.hpp"
 #include "blofeld/hc12.hpp"
+#include "blofeld/pcm_wave.hpp"
 #include "blofeld/serial_pcm.hpp"
 #include "reference_board.hpp"
 
@@ -81,7 +82,10 @@ void Board::observe_pcm(const std::uint64_t at, const std::string_view source) {
     const auto pins = pcm_pins();
     const auto frame = control_.pcm->observe_ordered(stamp, pins);
     control_.pcm_stamp = stamp;
-    if (frame) { control_.last_pcm = frame; }
+    if (frame) {
+      if (control_.recording) { control_.recording.append(*frame); }
+      control_.last_pcm = frame;
+    }
     trace_pcm(stamp, pins, source, frame);
   } catch (const Fault &error) {
     const auto route = *config_.pcm;
@@ -96,5 +100,14 @@ void Board::observe_pcm(const std::uint64_t at, const std::string_view source) {
                 " mcu-pc=" + hex(native_->mcu.cpu().state().pc) +
                 " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + error.what());
   }
+}
+
+void Board::save_audio() const {
+  if (!execution_.audio) { return; }
+  if (!control_.recording) { throw Fault("WAV output has no PCM recording"); }
+  save_pcm_wave(execution_.audio->path,
+                control_.recording,
+                {.timebase_hz = native_->dsp.run_clock().timebase_hz(),
+                 .sample_rate = execution_.audio->sample_rate});
 }
 }

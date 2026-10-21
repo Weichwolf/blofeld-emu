@@ -110,6 +110,9 @@ target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
 add_library(blofeld_serial_pcm src/serial_pcm.cpp)
 target_include_directories(blofeld_serial_pcm PUBLIC include)
 target_link_libraries(blofeld_serial_pcm PUBLIC blofeld_firmware)
+add_library(blofeld_pcm_transport src/pcm_recording.cpp src/pcm_wave.cpp src/pcm_wave_file.cpp)
+target_include_directories(blofeld_pcm_transport PUBLIC include)
+target_link_libraries(blofeld_pcm_transport PUBLIC blofeld_serial_pcm PRIVATE blofeld_private_files)
 add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
@@ -142,9 +145,13 @@ target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
   src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp src/reference_checkpoint.cpp
   src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp)
-target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_serial_pcm)
+target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-pcm-transport-test test/pcm_transport_test.cpp test/pcm_wave_test.cpp)
+  target_link_libraries(blofeld-pcm-transport-test PRIVATE blofeld_pcm_transport blofeld_private_files)
+  add_test(NAME pcm_transport COMMAND blofeld-pcm-transport-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/pcm-transport")
   add_executable(blofeld-serial-pcm-test test/serial_pcm_test.cpp test/serial_pcm_native.cpp)
   target_link_libraries(blofeld-serial-pcm-test PRIVATE blofeld_serial_pcm blofeld_dsp blofeld_dsp_native)
   add_test(NAME serial_pcm COMMAND blofeld-serial-pcm-test)
@@ -175,7 +182,7 @@ if(BUILD_TESTING)
     src/reference_returns.cpp src/reference_checkpoint.cpp src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp)
   target_include_directories(blofeld-reference-checkpoint-test PRIVATE src)
   target_link_libraries(blofeld-reference-checkpoint-test PRIVATE
-    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_serial_pcm)
+    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}
@@ -196,6 +203,12 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-pcm")
   set_tests_properties(reference_pcm_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  add_test(NAME reference_wave_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_wave_cli.py"
+    $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-rom-fixture>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-wave")
+  set_tests_properties(reference_wave_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-dsp-completion-observer-test test/dsp_completion_observer.cpp)
   target_link_libraries(blofeld-dsp-completion-observer-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_completion_observer COMMAND blofeld-dsp-completion-observer-test)
@@ -844,6 +857,7 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-serial-pcm-test
+    blofeld-pcm-transport-test
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test

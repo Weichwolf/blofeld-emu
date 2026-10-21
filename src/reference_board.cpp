@@ -7,6 +7,7 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/pcm_recording.hpp"
 
 #include <cstdint>
 #include <iostream>
@@ -51,6 +52,10 @@ Board::Board(const Config &config, const Execution &execution)
       throw Fault("Invalid PCM output route");
     }
     control_.pcm.emplace(config.pcm->format);
+  }
+  if (execution.audio) {
+    if (!config.pcm) { throw Fault("WAV output requires pcm-receive in the reference board"); }
+    control_.recording = PcmRecording(config.pcm->format, execution.audio->maximum_frames);
   }
   for (const auto &entry : config.initial) { apply(entry); }
   for (const auto &entry : config.dsp_initial) { apply_dsp(entry); }
@@ -199,6 +204,10 @@ void Board::report(std::ostream &stream) const {
            << " started=" << control_.pcm_stamp.has_value() << " locked=" << control_.pcm->locked()
            << " faulted=" << control_.pcm->faulted() << '\n';
   }
+  if (control_.recording) {
+    stream << "AUDIO recorded=" << control_.recording.frames().size()
+           << " limit=" << control_.recording.capacity() << '\n';
+  }
 }
 
 void Board::persist() const {
@@ -247,6 +256,7 @@ int Board::run() {
   std::cout << "Reference experiment budget reached; boot completion is not established.\n";
   report(std::cout);
   persist();
+  save_audio();
   return 0;
 }
 }

@@ -27,8 +27,10 @@ declared slot position. Early, late or missing frame boundaries fail visibly.
 Only all slot_bits * channels observations complete a frame, including padding.
 Incomplete frames produce no output. Each result contains its channel count,
 right-justified signed int32 samples at the declared word precision, and actual
-first/last sampling ticks and ordinals. Unused array entries are outside the
-channel count.
+first/last sampling ticks and ordinals, first inter-sample tick interval and an
+all-intervals-uniform flag. This includes padding/sample edges and retains jitter
+that can be invisible in the overall frame span. Unused array entries are outside
+the channel count.
 
 A fault includes ticks, completed-frame count, slot and bit, and quarantines the
 receiver. Reset explicitly discards alignment, partial data and counters. Trusted
@@ -63,7 +65,8 @@ ESAI signals and emits delimited PCM trace frames (reference-board.txt). Native
 completion and external-input observations retain causal order within a tick;
 joint snapshots retain receiver and logical external-clock input state. Tests
 compare the complete non-PCM trace against a run with the receiver disabled.
-Host/WAV transport, codec routing, a physical sample rate, complete original boot,
+Bounded recording and offline WAV transport are described in pcm-wave.txt.
+Host audio, codec routing, a physical sample rate, complete original boot,
 automatic DMA, original active-voice audio and device equivalence remain open.
 No firmware result, missing word, TPR setting, physical clock or bus grant is
 manufactured to obtain the native test frame.

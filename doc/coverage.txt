@@ -641,8 +641,9 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           two-slot frame before the reserved write
                                           (dsp-peripheral-init.txt). No complete
                                           startup, DMA progress or note audio.
-                                          No complete note lifecycle/allocation,
-                                          board scheduler or PCM transport yet.
+                                          Complete note lifecycle/allocation and
+                                          original scheduled note-to-PCM remain
+                                          pending.
                                           A separate bounded serial PCM receiver
                                           checks literal signed words, strict FS,
                                           unknown pins and joint mid-word replay
@@ -656,9 +657,21 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           external SCKT/generated FST, late joining
                                           and native
                                           mux-loss failures are checked
-                                          (reference-board.txt). Host/WAV output
+                                          (reference-board.txt). Host audio
                                           and original active-voice audio remain
                                           pending.
+                                          Optional bounded PCM recording now
+                                          retains full output history across
+                                          joint snapshots/replays. Standalone
+                                          WAV output validates every sampled-bit
+                                          interval and inter-frame gap against
+                                          explicit common time/rate, with no
+                                          resampling or silence fill. Literal
+                                          file bytes, native outputs on both maps,
+                                          an independent reader and publication/
+                                          capacity failures are checked
+                                          (pcm-wave.txt). Original active voices,
+                                          host audio and physical rate remain open.
 Persistent storage               partial  MCU NVM files preserve mutations,
                                           unknownness and erase history across
                                           reconstruction; native/CLI and real

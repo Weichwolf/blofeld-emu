@@ -41,7 +41,7 @@ struct Checkpoint::Storage {
           DspCheckpoint dsp_state,
           std::optional<McuDspScheduleCheckpoint> schedule_state)
       : identity(std::move(owner)),
-        control(state),
+        control(std::move(state)),
         mcu(std::move(mcu_state)),
         dsp(std::move(dsp_state)),
         schedule(schedule_state) {}
@@ -171,6 +171,7 @@ Status Board::status() const {
           .pcm = control_.pcm,
           .pcm_stamp = control_.pcm_stamp,
           .last_pcm = control_.last_pcm,
+          .recording = control_.recording,
           .started = control_.started,
           .waiting = native_->mcu.cpu().waiting(),
           .held_reset = native_->schedule == nullptr,
@@ -210,6 +211,7 @@ bool Status::operator==(const Status &other) const {
                   pcm,
                   pcm_stamp,
                   last_pcm,
+                  recording,
                   started,
                   waiting,
                   held_reset,
@@ -237,6 +239,7 @@ bool Status::operator==(const Status &other) const {
                                        other.pcm,
                                        other.pcm_stamp,
                                        other.last_pcm,
+                                       other.recording,
                                        other.started,
                                        other.waiting,
                                        other.held_reset,
@@ -253,7 +256,10 @@ Board::Outcome Board::finish_branch() {
 
 void Board::flush_trace() {
   const Busy guard(*this);
-  if (execution_.trace != nullptr) { execution_.trace->flush(); }
+  if (execution_.trace != nullptr) {
+    execution_.trace->flush();
+    if (!*execution_.trace) { throw Fault("Reference-board trace output failed"); }
+  }
 }
 
 void Board::replay_marker(const std::string_view phase, const unsigned index) {

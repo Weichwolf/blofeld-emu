@@ -1,0 +1,76 @@
+Bounded PCM recording and standalone WAV output
+
+Add all three options to a reference-board invocation with pcm-receive configured:
+
+  --audio-out doc/local/capture.wav --audio-rate 48000 --audio-max-frames 4096
+
+Rate and capacity are explicit positive inputs. Capacity is at most 1048576 frames;
+exhaustion stops execution visibly instead of dropping/replacing a frame. Without
+these options the board retains its diagnostic PCM behavior and does not record
+an unbounded audio history. This is offline file output, not a host audio callback.
+The destination directory must already exist.
+
+PcmRecording keeps complete signed frames and their actual sampling metadata.
+Copies share history; append detaches shared storage before mutation. Checkpoints
+and replay outcomes therefore retain/compare the entire recorded prefix, including
+earlier frames when last frame and count match. Control copies remain nonthrowing;
+native-owner preparation still completes before a joint restore commits. Recording
+append and file encoding allocate and can throw; do not use them in an RT callback.
+
+The receiver now records the first sample interval and whether every sampled bit
+interval, including slot padding, matches it. First/last ticks alone cannot prove
+uniform sampling. WAV encoding requires an integral positive bit interval:
+
+  bit_ticks = timebase_hz / (sample_rate * slot_bits * channels)
+
+Every complete frame must have that observed interval, its exact full-frame span
+and a one-bit-interval gap from the previous frame. Jitter, missing timing evidence,
+gaps and inconsistent declared rates reject. No oscillator, rate, time, sample,
+silence or interpolation is inferred/generated. A partial frame is never filled.
+The file begins with the first complete captured frame; it does not prepend silence
+for startup or an explicitly selected late capture threshold. Absolute timestamps
+remain in the recording/trace, not in a fabricated WAV time reference.
+
+The encoder writes RIFF/WAVEFORMATEXTENSIBLE integer PCM in little-endian 32-bit
+containers, retaining the declared 1..32 valid payload bits left-aligned with zero
+container padding. Samples are interleaved in declared serial-slot order. Channel
+mask 0 means direct-out with no asserted physical speaker assignment. RIFF/data
+length and byte-rate bounds are checked. There is no floating-point conversion,
+quantization, dither or clipping.
+
+Only a successful completed board run/replay publishes WAV, once, from its restored
+recording. Diagnostic REPLAY suffixes are not concatenated as additional audio.
+Execution, capacity, unknown-pin, rate or trace-write failures leave an existing
+audio destination intact. Empty recordings reject instead of producing silent files.
+Output must use .wav and cannot alias trace, firmware, ROM, board, SLA or NVM inputs/
+outputs. The existing private-file publisher writes 0600 temporary files, syncs and
+closes them, renames and syncs the directory. Pre-publication failures preserve the
+old destination and clean the temporary file. A failure after rename may already
+expose the complete new file; it reports failure and does not claim rollback or
+completed directory durability. Audio and NVM files are independent publications.
+
+Verification
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-pcm-transport-test blofeld-headless blofeld-reference-rom-fixture
+  ctest --test-dir build/strict -R '^(pcm_transport|serial_pcm|reference_wave_cli)$' --output-on-failure
+
+Literal full-file bytes and signed32 extrema independently check storage layout.
+Tests cover shared/detached histories, changed earlier-frame detection, capacity,
+precision, timing, gaps, UINT64_MAX endpoints, private file phases and failures.
+The real CLI runs own native DSP senders on both ESAI maps, with declared nominal
+138240000000-Hz common time and 5625-tick HCKT half-periods. Actual sample intervals
+are 45000 ticks; the declared 48000-Hz rate follows exactly from those inputs, not a
+hardware measurement. Python's independent wave reader and literal payload bytes
+check both generated files. Snapshots before, during and after recorded frames,
+overflow, rate mismatch, unknown data, file aliases/symlinks and trace-write errors
+are checked. All generated ROM/NVM/trace/WAV files remain ignored local artifacts.
+
+Complete original boot, original active voices, codec topology, physical rate,
+host MIDI/audio ports, sustained realtime and device equivalence remain open.
+
+Format references (protocol facts only; no copied encoder implementation):
+https://learn.microsoft.com/en-us/windows/win32/api/mmreg/ns-mmreg-waveformatextensible
+https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-waveformatextensible
+https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/dsspeaker-directout-speaker-configuration
+https://learn.microsoft.com/en-us/windows/win32/xaudio2/resource-interchange-file-format--riff-

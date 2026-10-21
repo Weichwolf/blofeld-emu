@@ -52,7 +52,16 @@ std::optional<SerialPcmFrame> SerialPcmReceiver::sample(const SerialPcmStamp sta
   if (slot_ == 0 && bit_ == 0) {
     frame_.first_tick = stamp.ticks;
     frame_.first_order = stamp.order;
+  } else {
+    const auto delta = stamp.ticks - frame_.last_tick;
+    if (!frame_.bit_ticks) {
+      frame_.bit_ticks = delta;
+    } else if (*frame_.bit_ticks != delta) {
+      frame_.uniform_clock = false;
+    }
   }
+  frame_.last_tick = stamp.ticks;
+  frame_.last_order = stamp.order;
   if (bit_ < format_.word_bits) {
     if (!data) { fail(stamp, "Unknown or undriven payload bit"); }
     word_ = (word_ << 1U) | static_cast<unsigned>(*data);

@@ -69,8 +69,9 @@ board now supplies explicit snapshots and compact finite HCKT inputs through
 this scheduler (reference-board.txt). A separate serial PCM receiver is tested
 against actual native ESAI output (serial-pcm.txt). The standalone reference
 board binds it to actual output/input clocks and selected TX data, preserving
-native/external observation order and partial-word snapshots. Host audio/WAV
-transport and actual firmware audio remain pending. The source
+native/external observation order and partial-word snapshots. Optional bounded
+recording and offline WAV output are in pcm-wave.txt. Host audio and actual
+firmware audio remain pending. The source
 project's static analysis reports HCKT-fed
 clock, word-length frame sync and DMA intent. The separate DMA experiment in
 dsp-dma.txt covers native register setup, counters and explicitly granted bus

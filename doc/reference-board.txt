@@ -244,20 +244,24 @@ PCM-PINS rows show end/order/source, resolved clock/FS/data and both PCs.
 PCM-FRAME rows contain the completed-frame index, first/end ticks and ordinals,
 channel count and comma-separated signed samples at the declared payload width.
 PCM summary counts only complete frames; zero frames does not prove audio output.
-These rows form a diagnostic PCM event stream, not a WAV file or host audio port.
+These rows form a diagnostic PCM event stream. Optional bounded recording and
+separate WAV publication use --audio-out/--audio-rate/--audio-max-frames; see
+pcm-wave.txt. No host audio port is supplied.
 The joint board snapshot retains partial receiver state, external clock levels,
 last observation and last completed frame. Replay sections repeat their own trace
 suffixes under the existing REPLAY markers; consumers must select one branch,
 not concatenate duplicate suffixes as new audio. The emulator does not internally
-retain an unbounded sample queue or claim that its final-state comparison checks
-every earlier output frame. CLI regression tests compare the full replay suffix.
+retain an unbounded sample queue. With audio recording enabled, its final-state
+comparison additionally checks the entire recorded frame history. Without it,
+the diagnostic-only comparison checks receiver state and the last frame. CLI
+regression tests compare the full replay suffix in both cases.
 
   ctest --test-dir build/strict -R '^reference_pcm_cli$' --output-on-failure
 
 Own native tests check both maps, exact signed samples/ticks, unchanged CPU traces,
 known retained-data underrun, late joining, external SCKT with generated FST, qualified payload
 ties, partial/completed-frame copies and strict failures. Full original voice
-audio, host/WAV transport, codec routing and physical sample-rate qualification
+audio, host audio ports, codec routing and physical sample-rate qualification
 remain open. Fully external word-length FST remains unqualified in the ESAI
 model and rejects before a PCM frame; this binding does not relax that check.
 

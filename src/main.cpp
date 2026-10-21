@@ -6,14 +6,17 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
+#include "blofeld/pcm_recording.hpp"
 #include "reference_board.hpp"
 
 #include <charconv>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -30,6 +33,9 @@ struct Options {
   std::filesystem::path flash_out;
   std::filesystem::path reference_board;
   std::filesystem::path dsp_rom;
+  std::filesystem::path audio_out;
+  std::optional<std::uint32_t> audio_rate;
+  std::optional<std::size_t> audio_max_frames;
   std::uint64_t instructions = 1000000;
   bool inspect = false;
   std::optional<blofeld::PinDrive> port_e_input;
@@ -53,12 +59,23 @@ blofeld::PinDrive pin_drive(const std::string_view value) {
   return {.mask = hex_byte(value.substr(0, 2)), .levels = hex_byte(value.substr(3, 2))};
 }
 
+std::uint64_t positive(const std::string_view value, const std::uint64_t maximum) {
+  std::uint64_t result = 0;
+  const auto converted = std::from_chars(value.data(), value.data() + value.size(), result);
+  if (converted.ec != std::errc{} || converted.ptr != value.data() + value.size() || result == 0 ||
+      result > maximum) {
+    throw blofeld::Fault("Invalid audio limit/rate");
+  }
+  return result;
+}
+
 void validate_options(const Options &config) {
   if (config.firmware.empty()) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
                          "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS] "
                          "[--flash-in state.bfnvm] [--flash-out state.bfnvm] "
-                         "[--reference-board scenario.bfboard --dsp-rom packed24.bin]");
+                         "[--reference-board scenario.bfboard --dsp-rom packed24.bin] "
+                         "[--audio-out capture.wav --audio-rate HZ --audio-max-frames N]");
   }
   if (config.inspect && (!config.flash_in.empty() || !config.flash_out.empty())) {
     throw blofeld::Fault("--inspect cannot be combined with MCU NVM execution inputs/outputs");
@@ -68,6 +85,12 @@ void validate_options(const Options &config) {
   }
   if (!config.reference_board.empty() && (config.inspect || config.port_e_input)) {
     throw blofeld::Fault("--reference-board conflicts with --inspect or --port-e-input");
+  }
+  const bool audio = !config.audio_out.empty();
+  if (audio != config.audio_rate.has_value() || audio != config.audio_max_frames.has_value() ||
+      (audio && (config.reference_board.empty() || config.inspect))) {
+    throw blofeld::Fault("Audio output requires a reference board, --audio-out, --audio-rate and "
+                         "--audio-max-frames together");
   }
 }
 
@@ -95,6 +118,14 @@ Options options(const int count, char **values) {
       result.reference_board = value;
     } else if (argument == "--dsp-rom") {
       result.dsp_rom = value;
+    } else if (argument == "--audio-out") {
+      result.audio_out = value;
+    } else if (argument == "--audio-rate") {
+      result.audio_rate =
+          static_cast<std::uint32_t>(positive(value, std::numeric_limits<std::uint32_t>::max()));
+    } else if (argument == "--audio-max-frames") {
+      result.audio_max_frames =
+          static_cast<std::size_t>(positive(value, blofeld::PcmRecording::maximum_capacity));
     } else if (argument == "--port-e-input") {
       result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
@@ -128,6 +159,9 @@ void distinct_files(const FilePair &files) {
 }
 
 void validate_files(const Options &config, const std::filesystem::path &specification) {
+  if (!config.audio_out.empty() && config.audio_out.extension() != ".wav") {
+    throw blofeld::Fault("Audio output requires the .wav extension");
+  }
   for (const auto &path : {config.flash_in, config.flash_out}) {
     if (!path.empty() && path.extension() != ".bfnvm") {
       throw blofeld::Fault("MCU NVM files require the private .bfnvm extension");
@@ -140,7 +174,9 @@ void validate_files(const Options &config, const std::filesystem::path &specific
                             config.reference_board,
                             config.dsp_rom}) {
     distinct_files({.first = config.trace, .second = input});
+    distinct_files({.first = config.audio_out, .second = input});
   }
+  distinct_files({.first = config.audio_out, .second = config.trace});
   for (const auto &input :
        {config.firmware, specification, config.reference_board, config.dsp_rom}) {
     distinct_files({.first = config.flash_out, .second = input});
@@ -259,6 +295,9 @@ int run(const Options &config) {
   const auto rom =
       board ? blofeld::reference::load_rom(config.dsp_rom) : std::vector<std::uint32_t>{};
   const auto firmware = blofeld::Firmware::load(config.firmware);
+  if (!config.audio_out.empty() && (!board || !board->pcm)) {
+    throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
+  }
   std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
             << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
   if (config.inspect) { return 0; }
@@ -271,12 +310,19 @@ int run(const Options &config) {
   const auto image = config.flash_in.empty() ? blofeld::McuFlashImage::from_known(firmware.mcu)
                                              : blofeld::load_flash_image(config.flash_in);
   if (board) {
+    std::optional<blofeld::reference::AudioOutput> audio;
+    if (!config.audio_out.empty() && config.audio_rate && config.audio_max_frames) {
+      audio = blofeld::reference::AudioOutput{.path = config.audio_out,
+                                              .sample_rate = *config.audio_rate,
+                                              .maximum_frames = *config.audio_max_frames};
+    }
     const blofeld::reference::Execution execution{.image = image,
                                                   .rom = rom,
                                                   .specification = specification,
                                                   .flash_out = config.flash_out,
                                                   .trace = trace.is_open() ? &trace : nullptr,
-                                                  .instructions = config.instructions};
+                                                  .instructions = config.instructions,
+                                                  .audio = audio};
     blofeld::reference::Board machine(*board, execution);
     return machine.run();
   }

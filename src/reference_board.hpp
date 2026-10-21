@@ -12,9 +12,11 @@
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/pcm_recording.hpp"
 #include "blofeld/serial_pcm.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
@@ -109,6 +111,12 @@ void validate_returns(const Config &config);
 [[nodiscard]] Config load_config(const std::filesystem::path &path);
 [[nodiscard]] std::vector<std::uint32_t> load_rom(const std::filesystem::path &path);
 
+struct AudioOutput {
+  std::filesystem::path path;
+  std::uint32_t sample_rate = 0;
+  std::size_t maximum_frames = 0;
+};
+
 struct Execution {
   const McuFlashImage &image;
   const std::vector<std::uint32_t> &rom;
@@ -116,6 +124,7 @@ struct Execution {
   std::filesystem::path flash_out;
   std::ostream *trace = nullptr;
   std::uint64_t instructions = 0;
+  std::optional<AudioOutput> audio = std::nullopt;
 };
 
 class Board;
@@ -159,6 +168,7 @@ struct Status {
   std::optional<SerialPcmReceiver> pcm;
   std::optional<SerialPcmStamp> pcm_stamp;
   std::optional<SerialPcmFrame> last_pcm;
+  PcmRecording recording;
   bool started = false;
   bool waiting = false;
   bool held_reset = true;
@@ -217,6 +227,7 @@ private:
     std::optional<SerialPcmReceiver> pcm;
     std::optional<SerialPcmStamp> pcm_stamp;
     std::optional<SerialPcmFrame> last_pcm;
+    PcmRecording recording;
     bool started = false;
     bool faulted = false;
   };
@@ -272,6 +283,7 @@ private:
   [[nodiscard]] DspCompletionObserver return_observer();
   void report(std::ostream &stream) const;
   void persist() const;
+  void save_audio() const;
   const Config config_;
   const Execution execution_;
   std::shared_ptr<const Identity> identity_;

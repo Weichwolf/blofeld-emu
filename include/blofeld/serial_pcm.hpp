@@ -43,6 +43,8 @@ struct SerialPcmFrame {
   std::uint64_t last_tick = 0;
   std::uint64_t first_order = 0;
   std::uint64_t last_order = 0;
+  std::optional<std::uint64_t> bit_ticks = std::nullopt;
+  bool uniform_clock = true;
   bool operator==(const SerialPcmFrame &) const = default;
 };
 

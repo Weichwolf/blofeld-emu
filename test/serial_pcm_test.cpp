@@ -21,7 +21,8 @@ void literal_words_and_edges() {
               "Exactly one complete two-slot frame is delivered");
       const auto &frame = wire.frames.front();
       require(frame.channels == 2 && frame.samples[0] == -6 && frame.samples[1] == 6 &&
-                  frame.first_tick == 2 && frame.last_tick == 32,
+                  frame.first_tick == 2 && frame.last_tick == 32 && frame.bit_ticks == 2 &&
+                  frame.uniform_clock,
               "Literal MSB-first signed words ignore padding and retain actual sample times");
       wire.feed("0111111110000000", "1111111100000000");
       constexpr unsigned second_frame_tick = 34;
@@ -217,6 +218,25 @@ void explicitly_ordered_observations() {
           }).find("Non-increasing") != std::string::npos,
           "An ordinal never permits absolute time to move backwards");
 }
+
+void sampling_jitter_evidence() {
+  SerialPcmReceiver receiver({.slot_bits = 2, .word_bits = 2});
+  (void)receiver.observe(0, {.clock = false, .frame_sync = false});
+  (void)receiver.observe(10, {.clock = true, .frame_sync = true, .data = false});
+  (void)receiver.observe(11, {.clock = false, .frame_sync = true});
+  constexpr unsigned third_sample = 31;
+  constexpr unsigned final_sample = 40;
+  constexpr unsigned second_sample = 20;
+  (void)receiver.observe(second_sample, {.clock = true, .frame_sync = true, .data = false});
+  (void)receiver.observe(second_sample + 1, {.clock = false, .frame_sync = false});
+  (void)receiver.observe(third_sample, {.clock = true, .frame_sync = false, .data = false});
+  (void)receiver.observe(32, {.clock = false, .frame_sync = false});
+  const auto frame =
+      receiver.observe(final_sample, {.clock = true, .frame_sync = false, .data = false});
+  require(frame && frame->first_tick == 10 && frame->last_tick == final_sample &&
+              frame->bit_ticks == 10 && !frame->uniform_clock,
+          "Sample intervals10/11/9 retain jitter even when first/last ticks suggest uniform10");
+}
 }
 }
 
@@ -230,6 +250,7 @@ int main() {
     strict_signal_and_frame_failures();
     formats_times_and_nonedges();
     explicitly_ordered_observations();
+    sampling_jitter_evidence();
     native_serial_pcm();
     std::cout << "Serial PCM literals, signed widths, framing, quarantine, snapshots and native "
                  "ESAI passed\n";
