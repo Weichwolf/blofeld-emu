@@ -41,3 +41,7 @@ The original scheduler does not run: its tick remains zero and the bus deliberat
 accumulates across blocks. Full boot, MIDI note-on/off and voice allocation,
 scheduled bus consumption, PCM/audio transport, physical sample rate and hardware
 equivalence remain unqualified. Other synthesis/control modes remain open.
+
+The shared native implementation is test/dsp_voice_fixture.cpp. The separate
+nonzero-Drive variant keeps these baseline checks and adds the original filter
+callbacks and their live caller state; see dsp-drive-voice.txt.

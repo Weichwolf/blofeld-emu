@@ -614,6 +614,13 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           state across 32 eight-block streams:
                                           256 real returns with independent
                                           output/state equations (dsp-voice.txt).
+                                          Nonzero Drive adds64 four-block streams
+                                          through all13 curves/3 reserved slots,
+                                          both RM modes and serial/parallel LP24:
+                                          512 real callback returns, neighboring
+                                          words/live registers and dependent
+                                          voice/bus state have independent
+                                          expectations (dsp-drive-voice.txt).
                                           Original MIDI note dispatch now checks
                                           packed history/linear velocity and all
                                           channels: 27 allocation attempts expose

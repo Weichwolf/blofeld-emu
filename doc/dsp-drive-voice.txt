@@ -1,0 +1,47 @@
+Original nonzero-Drive voice streams
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-original-dsp-voice-test blofeld-original-dsp-drive-voice-test
+  ctest --test-dir build/strict -j1 -R '^original_dsp_(voice|drive_voice)$' --output-on-failure
+
+Both tests use the same native fixture and unchanged official 1.25 program.
+The baseline keeps its 32 eight-block streams and original coverage assertion.
+The Drive matrix declares 64 four-block streams: all thirteen manual selectors
+and three reserved RTS slots, both rounding modes and serial/parallel routing.
+The two filter selectors differ by five modulo sixteen. Declared raw Drive
+levels are 1, 17, 64 and 127, supplied before the original entry initializer.
+Original parameter refresh and chain setup must supply the cached values and
+actual callback pointers. No host supplies converted parameters, callback
+results, filter state or inter-block output repairs.
+
+dsp-drive-voice-reference.json pins the complete 267-word Drive component and
+sixteen-word callback table through the shared original 127-record identities.
+The official archive/MID and every ordered record are checked before execution;
+absence skips with 77, while changed contents fail. Manufacturer bytes, listings
+and reference assets remain local. The independent integer curve equations have
+pinned source-side provenance; the unlisted quadratic routine has no callback
+table binding and is excluded from this whole-voice matrix.
+
+For every original callback, the test observes its real entry, incoming cached
+Drive/condition flags, buffer and pending stack frame. It records original input
+and oscillator-1 words, neighboring lookahead words and incoming X1, then waits
+for the actual RTS to the original caller. Live R0/X1/R5 are checked independently;
+serial and parallel callers retain different parts of that callee state.
+The sixteen returned words are checked against independently generated waveform,
+noise, filter and Drive equations. Each manual curve must affect checked words;
+reserved selectors must preserve them. The oracle retains full-fraction first-
+sample Rectifier behavior, raw wrapping and explicit integer rounding.
+
+Drive 1 is applied after filter 1, before the serial sum feeding filter 2.
+Drive 2 follows filter 2. The shared voice checks still cover intermediate
+biquad inputs/coefficients, histories, oscillators/sync/noise, parameter caches,
+LFOs/envelopes, routing, gain ramp, output-bus accumulation and complete voice
+returns. Dependent blocks retain the synthesis and bus state without host
+correction. No waveform or numerical oracle output enters the native CPU.
+
+These are declared held-note LP24 contexts with static parameters. They do not
+establish cold boot, the upstream positive-note allocator, general modulation
+or all filter types, live MIDI-to-PCM, hardware timing, full Drive instruction/
+CCR coverage or device equivalence. Actual callback PCs are reported without
+inventing a runtime-derived coverage baseline. The baseline's separate static
+coverage hash remains mandatory. No fuzzing or physical traffic is performed.

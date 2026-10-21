@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Independent integer models for declared original held-note voice streams."""
 
+from dsp_drive_model import drive_block, drive_live_state
+
 W = 1 << 24
 H = 1 << 23
 WORD_MASK = W - 1
@@ -81,12 +83,17 @@ def balance(value):
     result = value * 131072 - H
     return qword((result + (8257536 if result == 8257536 else 0)) * W)
 
-def filter_parameters(data, varied):
+def filter_parameters(data, varied, drives=None):
     sound = {i: data[7717 + i] & 255 for i in range(383)}
     if varied:
         sound.update({78: 29, 80: 117, 98: 101, 100: 85, 93: 23, 113: 105})
     if any((sound[i] != 0 for i in (81, 91, 92, 101, 111, 112))) or any((sound[i] != 64 for i in (86, 106))):
         raise ValueError('Changed declared zero-drive/FM and centered cutoff-keytrack inputs')
+    if drives is not None:
+        if len(drives) != 2 or any(curve not in range(16) or level not in range(128)
+                                  for curve, level in drives):
+            raise ValueError('Unsupported declared Drive sound fields')
+        sound[81], sound[101] = drives[0][1], drives[1][1]
     params = []
     for offset in (0, 20):
         params.extend((sound[78 + offset] * 131072 - H, signed(data[5499 + sound[80 + offset]]), 512 * sound[92 + offset] ** 2, sound[81 + offset] * 65536, balance(sound[93 + offset])))
@@ -144,10 +151,11 @@ def initial_bus(varied):
 class Voice:
     """Static held-note parameters, with all inter-block histories retained."""
 
-    def __init__(self, xdata, ydata, table, high, twos, color, varied, serial):
+    def __init__(self, xdata, ydata, table, high, twos, color, varied, serial, drives=None):
         self.xdata, self.data, self.table = (xdata, ydata, table)
         self.high, self.twos, self.color, self.serial = (high, twos, color, serial)
-        self.parameters = filter_parameters(ydata, varied)
+        self.drives = drives
+        self.parameters = filter_parameters(ydata, varied, drives)
         self.gains = [v & WORD_MASK for pair in controls(ydata, varied) for v in pair]
         self.coefficients = coefficient_model(controls(ydata, varied))
         self.bus = initial_bus(varied)
@@ -288,7 +296,12 @@ class Voice:
             history[:] = (history[1], value, history[3], word)
         return output
 
-    def filters(self, mixed):
+    def filters(self, mixed, oscillators=None):
+        if self.drives is not None and (oscillators is None or len(oscillators) != 3
+                                       or any(len(channel) != 16 for channel in oscillators)):
+            raise ValueError('Drive requires independently generated oscillator-1 samples')
+        self.drive_inputs, self.drive_outputs = [], []
+        self.drive_lookahead = [list(mixed[1424][:2]), list(self.bus[:2])]
         work = {at: list(row) for at, row in mixed.items()}
         coefficients, inputs = ([], [])
         for index, at in enumerate((1408, 1424)):
@@ -298,6 +311,24 @@ class Voice:
                 coefficients.append(c)
                 inputs.append(list(work[at]))
                 work[at] = self.biquad(work[at], c, self.histories[index][section])
+            self.drive_inputs.append(list(work[at]))
+            if self.drives is not None:
+                work[at] = drive_block(self.drives[index][0], max(0, self.parameters[5 * index + 3]),
+                                       self.twos, work[at], oscillators[0])
+            self.drive_outputs.append(list(work[at]))
+        self.filter_return_r0, self.filter_return_x1 = 11214, self.bus[1] if self.serial else self.bus[0]
+        self.filter_return_r5 = 1424 if self.serial else 2145
+        if self.drives is not None:
+            curve = self.drives[1][0]
+            r0, x1, r5 = drive_live_state(curve, max(0, self.parameters[8]),
+                                      self.drive_inputs[1] + self.drive_lookahead[1],
+                                      oscillators[0] + [oscillators[1][0]],
+                                      self.bus[0], self.xdata[0x2f36 + curve], buffer=1424)
+            self.filter_return_r0 = r0
+            if self.serial:
+                self.filter_return_r5 = r5
+            else:
+                self.filter_return_x1 = x1
         gain = max(0, self.parameters[10])
 
         def pair(p):

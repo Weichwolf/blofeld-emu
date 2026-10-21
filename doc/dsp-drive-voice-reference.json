@@ -1,0 +1,53 @@
+{
+  "runtime_reference": {
+    "path": "doc/dsp-voice-reference.json",
+    "sha256": "edcfacf65e2092be4d793f4b86d8cd8dab48f48671dc472b52f35c0f3def9ee9"
+  },
+  "program": {
+    "record": 118,
+    "space": 0,
+    "address": 11214,
+    "words": 267,
+    "sha256": "b49fa69ae8f243cdf2d240927b6c880a2000d7a71ef1f69249d412cac1bb4e26"
+  },
+  "callbacks": {
+    "record": 117,
+    "space": 1,
+    "address": 12086,
+    "words": 16,
+    "sha256": "47bcf2d5d4c2e7cf27d050c279fefb789c0e208fe93a2310439e2cba05bbc932"
+  },
+  "model_provenance": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "8d7cdd313b1051b83b98721dc933162ea6def845",
+    "source_model_sha256": "730d2e2c36e0ba61a7d3379d6dc4f23b5f47b5c255fc93d2bf05902bef3f9553",
+    "source_review_sha256": "b2ec73a044617f7ac9f9dd25732fab22d39841cd3ed5fdefb403a6f1e24b596c",
+    "caller_source_sha256": {
+      "src/dsp/runtime_entries.asm": "4da292eca18544bfa4e4b44e0d9356744d2d9d32df5c9e241beecd9f54fadc08",
+      "src/dsp/runtime_entry_refresh.asm": "97e6fd2dcd1a9d2a15615ec7e488ce84b459d4daaba35c5e3d0be8286dcdd2a4"
+    }
+  },
+  "streams": 64,
+  "blocks_per_stream": 4,
+  "selectors": 16,
+  "drive_levels": [
+    1,
+    17,
+    64,
+    127
+  ],
+  "second_selector_offset": 5,
+  "qualification": "Declared original held-note voices with nonzero raw Drive sound fields, all13 manual/3 reserved selectors, both RM modes and serial/parallel filters. Independent complete voice/control/history/output equations and actual Drive call/input/output/return contexts; no full boot, positive note allocation, live MIDI/PCM transport, physical timing, arbitrary modulation or complete Drive instruction/CCR coverage proof.",
+  "caller": {
+    "record": 46,
+    "space": 0,
+    "address": 1078,
+    "words": 978,
+    "sha256": "e23105c93a96685a3e78ff79ed9088ab6ae43394eddd2a6d26fdaaccda65cac2"
+  },
+  "caller_returns": {
+    "first": 1481,
+    "serial_second": 1508,
+    "parallel_second": 1535
+  }
+}
