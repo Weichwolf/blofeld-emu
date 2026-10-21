@@ -54,8 +54,11 @@ private:
   void reject_sequence(std::uint8_t flag);
   void write_command(std::uint8_t value);
   void write_status(std::uint8_t value);
+  void write_key_configuration(std::uint8_t value);
+  void write_key(MemoryWrite physical_word);
   void transfer();
   void complete();
+  static constexpr unsigned key_access = 0x20;
   McuMemory &memory_;
   McuFlashConfig config_;
   Job buffered_;
@@ -65,6 +68,8 @@ private:
   std::uint8_t command_ = 0;
   std::uint8_t errors_ = 0;
   bool blank_ = false;
+  unsigned key_words_ = 0;
+  bool key_locked_ = false;
   std::optional<FlashClockRates> clock_;
 };
 

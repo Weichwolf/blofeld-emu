@@ -1,0 +1,63 @@
+Nominal FTS32K key-access security recovery
+
+  cmake --build --preset strict --target blofeld-flash-backdoor-test
+  ctest --test-dir build/strict -R '^(flash_backdoor|flash_config|flash_commands)$' --output-on-failure
+
+References: S12FTS32KV1/D V01.03 sections 3.3.2, 3.3.4 and 4.5.1; UF32
+integration in 9S12UF32DGV1/D section 4.4.3.1. AN2880 Rev1.0 pages2..4 describes
+the same sequence and its RAM-execution requirement:
+  https://www.nxp.com/docs/en/application-note/AN2880.pdf
+The official archive/AN2880 URL, sizes and hashes are in hardware/sources.json.
+Reference PDFs stay local. This is the nominal normal-mode module model;
+actual Blofeld silicon masks, BDM and physical recovery remain unqualified.
+
+Supported sequence
+With FSEC.KEYEN=10, FCNFG.KEYACC gates four aligned 16-bit comparisons against
+the known physical Flash key words corresponding to FF00..FF07. Writes must
+follow that order; keys cannot be zero or FFFF. A valid KEYACC close after all
+four matches establishes volatile FSEC.SEC=10. The exact pre-close SEC value
+following four matches is unqualified and reads fail visibly; no intermediate
+value or physical comparison latency is inferred. All remaining FSEC fields, FPROT,
+array bytes/knowledge/erase history and command flags remain unchanged. No flash
+divider, programming clock or successful erase/program milestone is supplied.
+Reads/fetches from Flash while KEYACC is set fail with address and CPU context
+instead of returning the invalid data described by the module guide. Code and
+its operands must therefore execute from initialized RAM.
+
+A mismatched, forbidden, repeated/out-of-order or fifth key word locks further
+attempts until reset. Clearing KEYACC after one to three matched words also
+locks that incomplete attempt. Writing an already set KEYACC retains progress;
+ordinary interrupt-enable bits remain independently writable. Reset/power cycle
+clears the comparator/lock and reloads the unchanged nonvolatile security byte.
+A successful comparison does not establish persistent unsecuring or bypass write
+protection. Cold MCU NVM exports contain no temporary unlock or comparator state.
+Trusted joint owner snapshots retain the exact partial comparison and lock.
+
+Unqualified combinations
+An empty KEYACC set/clear, disabled-KEYEN key writes, byte/misaligned/non-key
+operands, command/protection/divider writes during key access and entry while a
+word/command is staged, launched or executing reject before inventing outcomes.
+Unknown stored key bytes also fail visibly. These boundaries are not assigned
+guessed ACCERR, lock, completion or successful-transfer results. BDM/external
+access restrictions and special-mode mass erase remain unsupported. The original
+updater's independent idle-CBEIF boundary is unchanged (mcu-flash-commands.txt).
+
+Independent checks
+Directed cases cover all64 enabled-KEYEN security values, all24 key-word
+permutations, each of64 single-bit key mismatches, every forbidden-word position,
+partial/extra/repeated-enable attempts, reset release of locks and cuts after
+zero..four comparisons and after unlock. Entire persistent bytes, knownness and
+erase history are compared. Separate controls check unknown keys, invalid reads,
+unsupported interleavings and retention of every existing Flash command owner.
+
+Own HC12 LDAA/STAA and LDD/STD instructions execute the complete sequence from
+RAM; literal PC/register/CCR/security endpoints are independent expectations.
+A joint snapshot after two real stores reproduces success, a changed unexecuted
+own operand produces a genuine mismatch/lock, and restore recovers the original
+success. Separate native locked and successfully unlocked snapshots preserve
+those distinct volatile states; cold NVM reconstruction remains secured. A real
+Flash instruction fetch in KEYACC mode, including a previously executed opcode,
+must fail without PC advance. No manufacturer program bytes or host-written comparison results exist
+in this test. This does not execute an original update/recovery routine or prove
+complete image recovery, physical cut timing, stock hardware or brick safety.
+No fuzzing or physical traffic is part of these deterministic checks.

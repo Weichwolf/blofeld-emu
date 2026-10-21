@@ -63,10 +63,13 @@ not validated by these tests.
 
 Qualification boundaries
 Idle FSTAT writes containing CBEIF=1 without a staged command, duplicate/full
-launched-buffer writes, active protection changes, backdoor transactions and
-STOP/BDM paths remain explicit qualification faults or unimplemented CPU
+launched-buffer writes, active protection changes and STOP/BDM paths remain
+explicit qualification faults or unimplemented CPU
 paths. CPU WAI/frame handling does not qualify flash-clock or algorithm timing
 in wait mode; those remain separate from the reference milestones.
+Nominal four-word key comparisons have a separate transaction model and strict
+remaining combinations (mcu-flash-backdoor.txt); they do not supply command
+completion, persistent unsecuring or original updater success.
 The original initialization's BSET FSTAT,30 reads back other flags; its idle
 CBEIF write is not guessed. The earlier initialization fixture still stops
 before that instruction. Full initialization and end-to-end update/recovery

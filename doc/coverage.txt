@@ -791,6 +791,14 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           These are component cuts, not full
                                           original update or physical power-loss
                                           validation.
+MCU security key access           partial  Nominal enabled-KEYEN four-word comparison,
+                                          temporary SEC=10, lock/reset and partial
+                                          owner snapshots (mcu-flash-backdoor.txt).
+                                          Own native RAM instructions and independent
+                                          key/order/cut/protection checks. Empty or
+                                          unsupported access combinations fail.
+                                          Original recovery, BDM, physical mask and
+                                          persistent unsecuring remain unqualified.
 Original update and recovery      partial  Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an

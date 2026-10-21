@@ -78,6 +78,10 @@ void McuFlashConfig::write(const ByteWrite access) {
   }
 }
 
+void McuFlashConfig::unsecure() {
+  options_.security = static_cast<std::uint8_t>((options_.security & ~3U) | 2U);
+}
+
 void McuFlashConfig::write_protection(const std::uint8_t value) {
   const auto previous = options_.protection;
   if (!allowed_scenario({.before = previous, .after = value})) { return; }

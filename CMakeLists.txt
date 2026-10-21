@@ -98,7 +98,7 @@ add_library(blofeld_nand_store src/nand_file.cpp src/nand_store.cpp)
 target_include_directories(blofeld_nand_store PUBLIC include)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
-  src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
+  src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_backdoor.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
   src/mcu_clock.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp
   src/mcu_usb_ique_control.cpp src/mcu_usb_reset.cpp src/mcu_usb_host.cpp)
@@ -444,6 +444,9 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/flash_cli.py"
     $<TARGET_FILE:blofeld-headless>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip")
+  add_executable(blofeld-flash-backdoor-test test/flash_backdoor_test.cpp test/flash_backdoor_native.cpp)
+  target_link_libraries(blofeld-flash-backdoor-test PRIVATE blofeld_core)
+  add_test(NAME flash_backdoor COMMAND blofeld-flash-backdoor-test)
   add_executable(blofeld-flash-test test/mcu_flash_test.cpp)
   target_link_libraries(blofeld-flash-test PRIVATE blofeld_core)
   add_test(NAME flash_commands COMMAND blofeld-flash-test)
@@ -1050,6 +1053,7 @@ add_custom_target(quality
     blofeld-mcu-sender-test
     blofeld-flash-config-test blofeld-original-flash-config-test
     blofeld-flash-test
+    blofeld-flash-backdoor-test
     blofeld-original-flash-test
     blofeld-original-flash-restart-test
     blofeld-original-parallel-update-test
