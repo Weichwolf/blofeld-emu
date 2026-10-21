@@ -87,6 +87,33 @@
       "observations": "registers-memory-stack"
     },
     {
+      "name": "b3",
+      "cases": 13,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "ac6f923b823da364875d6cde07b7560042cfe32bc24cf48ed77e64b0555e13aa"
+        },
+        "PROVENANCE.md": {
+          "bytes": 355,
+          "sha256": "59a35c653b25f997bb93ca13253dabfca3aa42a3b08ec6fa57c5ff73d07550fe"
+        },
+        "corpus.lod": {
+          "bytes": 2020,
+          "sha256": "38fff341969bf65a4c146a3dcfb49e43f8629bb92447c35e22c9ad7e8bce7cb1"
+        },
+        "corpus.meta": {
+          "bytes": 445,
+          "sha256": "6ed69945cd0fd8374fd75fbb56aef20e80de78565a7598bcb241b068846688a7"
+        },
+        "results_hw.txt": {
+          "bytes": 6457,
+          "sha256": "90d0de57cebe480942c91434888e038a85c57a95532ca6c5fbec5d345a2fe08c"
+        }
+      },
+      "observations": "registers-stack"
+    },
+    {
       "name": "b4",
       "cases": 38,
       "files": {
@@ -114,6 +141,87 @@
       "observations": "registers-memory-stack"
     },
     {
+      "name": "b5",
+      "cases": 21,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "d46139219f79ebd4b19753f84bfce3052c8b3d8151dc2449a8bad82acaa0a202"
+        },
+        "PROVENANCE.md": {
+          "bytes": 398,
+          "sha256": "f4f54ad6009d93ac15164052135fe4430b4fe77e1a15d2ade81ff5fcad63d794"
+        },
+        "corpus.lod": {
+          "bytes": 9702,
+          "sha256": "64dcb3687eddc6c52d5312fd41642781909bfd3dc8f6a7f2126e1454997f4f59"
+        },
+        "corpus.meta": {
+          "bytes": 651,
+          "sha256": "919e0b1cfff977e3abe1da72ccbdfa4a00edf88dcbfb52ef27d97fa6096b0430"
+        },
+        "results_hw.txt": {
+          "bytes": 9975,
+          "sha256": "10d76b637b726cc8cfa6925d35a762bc020d4a93aca697c52142c814c9032600"
+        }
+      },
+      "observations": "registers"
+    },
+    {
+      "name": "b6",
+      "cases": 14,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "69fff5136ad0b1c2eb57cc21d3259012b66e9739e34799efb46e3c37cd65c922"
+        },
+        "PROVENANCE.md": {
+          "bytes": 788,
+          "sha256": "de2f428c8169587dafe435819af5100c52ca5b717714a4a681776c25c8c25f11"
+        },
+        "corpus.lod": {
+          "bytes": 2735,
+          "sha256": "d608bf5935867ec6977c522bd6e4e6c220f66ac27cb3f798b8cdc4b961fd7747"
+        },
+        "corpus.meta": {
+          "bytes": 473,
+          "sha256": "020dbc65b96a8ad19587794c4d089883a5ceecf789895a8f7f4a3514a34116c4"
+        },
+        "results_hw.txt": {
+          "bytes": 9967,
+          "sha256": "97ea94507678c6212d8e08dfe6f215f64f05cb6f57bb9bafee24279c996e99de"
+        }
+      },
+      "observations": "registers-memory-stack"
+    },
+    {
+      "name": "b7",
+      "cases": 7,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "6397573162f0f10242631448fef81b47e4aa40a2dd56a633de5545c7600baa86"
+        },
+        "PROVENANCE.md": {
+          "bytes": 714,
+          "sha256": "de6b9bbbcc109b8792190d4b5e6a1bbd87caf4279b0de9dd0822cdd671966ffe"
+        },
+        "corpus.lod": {
+          "bytes": 1946,
+          "sha256": "bc2d0c6789226bdcfcb645d3eeba017e9ce1a37e587270b18ddd2ad2a9e3725b"
+        },
+        "corpus.meta": {
+          "bytes": 235,
+          "sha256": "0f1ed258775b9aa082e4d5ed67e6f2637638788614f9ff654927090702561c44"
+        },
+        "results_hw.txt": {
+          "bytes": 4155,
+          "sha256": "d7af0b7ba0f9a764a1e8e8efaa2d291592ed41d750ed30fd32d96a5f7ad4db23"
+        }
+      },
+      "observations": "registers-memory"
+    },
+    {
       "name": "b9",
       "cases": 17,
       "files": {
@@ -139,6 +247,219 @@
         }
       },
       "observations": "registers"
+    },
+    {
+      "name": "b13",
+      "cases": 4,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "0d0ff34bc9ac74f648e293d3cbd27be6b54180547fafb2d724aa6bb2efbe710b"
+        },
+        "PROVENANCE.md": {
+          "bytes": 1046,
+          "sha256": "be045a4ae956e67fc0598bb0025ad507a6067c8d19c141423cc04702cec455cb"
+        },
+        "corpus.lod": {
+          "bytes": 860,
+          "sha256": "34ee356e91e7e6ad6b685dfb302d510a9b02c55258aeadf46883bfa9d9521408"
+        },
+        "corpus.meta": {
+          "bytes": 152,
+          "sha256": "1452e5ce1a879f89587415f6b15d26e4c779591ab2d08bdc47f68ecf7ae06ba3"
+        },
+        "results_hw.txt": {
+          "bytes": 2144,
+          "sha256": "144c2e4f8040cff0b78893f5eff673cd29fbbc033e92432ce878eda94290ed0e"
+        }
+      },
+      "observations": "registers-memory-stack"
+    },
+    {
+      "name": "b14",
+      "cases": 4,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "c9ad3e8a0f70aea29c315200f4224979b59a4ddd074ecd32baaf9abf7889f83f"
+        },
+        "PROVENANCE.md": {
+          "bytes": 1408,
+          "sha256": "1138de9e4ef9702bcd7542798f3acbf0f7612b7b23388657420644f7d3714ac1"
+        },
+        "corpus.lod": {
+          "bytes": 754,
+          "sha256": "a93152727657e801a1f43920e82ca5a03657b2a655bd4ef19c8364ac15aa2b69"
+        },
+        "corpus.meta": {
+          "bytes": 152,
+          "sha256": "ae03d50420bf353f8ef38eb122e013af9f2641de2a8e7d3856b4f2e1bfcefcb1"
+        },
+        "results_hw.txt": {
+          "bytes": 2066,
+          "sha256": "2db5d1e86a02d70ed6254c249b132893e8bedba82e79135bf5f9638a455182d4"
+        }
+      },
+      "observations": "registers-stack"
+    },
+    {
+      "name": "b15",
+      "cases": 13,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "f5c18fcf2c6683d1369e77b4163082dec4d5cab1b61f3bcab809b6c87c6c243d"
+        },
+        "PROVENANCE.md": {
+          "bytes": 2180,
+          "sha256": "ee47e7b1f9c71f72bb0dbfe3b4b7433bc02f755cb88e8aea3a174c85ef03e0ae"
+        },
+        "corpus.lod": {
+          "bytes": 1529,
+          "sha256": "bbcc833e8dd0804596b64966854f84385ed43bb99c71c341f29c327c557ff8c5"
+        },
+        "corpus.meta": {
+          "bytes": 499,
+          "sha256": "f92c7766d377692c2ae5ca6af12b20bd488892341c3c8a0b6d44d5c67c271eaf"
+        },
+        "results_hw.txt": {
+          "bytes": 6751,
+          "sha256": "a62aeaf32dfd7d6358f0e4bede5db48582502e6fc666dc3052c2739de95be312"
+        }
+      },
+      "observations": "registers-memory-stack",
+      "fill": [
+        42253,
+        202110,
+        50089,
+        2821273,
+        160,
+        192
+      ]
+    },
+    {
+      "name": "b16",
+      "cases": 1,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "b9ed8b1c8bec15282f65ebbbdf98ea807c75b88e5896267f077634061b0abd19"
+        },
+        "PROVENANCE.md": {
+          "bytes": 1088,
+          "sha256": "b481d648be2d034ba0a9089e83c3d234ac4b1fcbec7d5cae82bea23e91df0274"
+        },
+        "corpus.lod": {
+          "bytes": 224,
+          "sha256": "6eb75db0c9aea7279451b90c337c929b132208b7a3c1be86eccc5e657f0ebff7"
+        },
+        "corpus.meta": {
+          "bytes": 84,
+          "sha256": "81f05dcc5f4b6bcb9e25c23234330b402a2368de55b4ea02bf89b2f391213035"
+        },
+        "results_hw.txt": {
+          "bytes": 528,
+          "sha256": "a205681e6460f876aecdde7150cad349e4aa88880522d00e4d4d3b46501ab2fd"
+        }
+      },
+      "observations": "registers",
+      "fill": [
+        42253,
+        202110,
+        50089,
+        2821273,
+        160,
+        192
+      ]
+    },
+    {
+      "name": "b18",
+      "cases": 1,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "134513da7b5bdb2f874ca6ed94ee3d37bb2c989e1a5f1cc1651c3931ed884a88"
+        },
+        "PROVENANCE.md": {
+          "bytes": 969,
+          "sha256": "676f28f5dee606103993ee36605ac62dc139de5ca666d0941f219052aa0c0503"
+        },
+        "corpus.lod": {
+          "bytes": 199,
+          "sha256": "27c234ee485ba004e0ba9c767853ac55aac92bdd1c178c505fc65aad13596fdf"
+        },
+        "corpus.meta": {
+          "bytes": 39,
+          "sha256": "3fabd7c6a24a26baa3ff13b2d9a7d1170f8c856e9105a3c6326e3a1997f01560"
+        },
+        "results_hw.txt": {
+          "bytes": 533,
+          "sha256": "1638d551af9287e0caa7445a7160e1d2a8e06a5bba4fffe6c5d07b2f455a8b76"
+        }
+      },
+      "observations": "registers-memory-stack"
+    },
+    {
+      "name": "b20",
+      "cases": 1,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "e25fd19ae149e2bc50ca5e6e7cb99f12519e4e88ff121582b6711553aa5eaf00"
+        },
+        "PROVENANCE.md": {
+          "bytes": 953,
+          "sha256": "f37be0872e97d6cdba62a215d565aa0aba28906410a0782e6684e703dea58ad8"
+        },
+        "corpus.lod": {
+          "bytes": 294,
+          "sha256": "6dff8f27b265fe631020ceac31e533ea2e3c0fc16b0a747855151efa6f956521"
+        },
+        "corpus.meta": {
+          "bytes": 42,
+          "sha256": "71704c2d7ff264fcf525d5a6e445c286ff9c7e5744305f640544d9545cb3e957"
+        },
+        "results_hw.txt": {
+          "bytes": 500,
+          "sha256": "ec2455f07b647b876605f08282699cc9742034aa12e0796e27c249ffa5730a41"
+        }
+      },
+      "observations": "registers-memory"
+    },
+    {
+      "name": "b22",
+      "cases": 6,
+      "files": {
+        "MANIFEST.sha256": {
+          "bytes": 236,
+          "sha256": "e994bc1881fa0ba9f2e522cadc130b4af0b32565877015e870580051cc306b73"
+        },
+        "PROVENANCE.md": {
+          "bytes": 1720,
+          "sha256": "f922a9b32fd8ee3be14ec3d6e2f7f7e6d4a54342ee657437da1ded20c3169e64"
+        },
+        "corpus.lod": {
+          "bytes": 1761,
+          "sha256": "1118268a81bb06c0e25148323d811d3aea02ba6ba8113dd1eea4672e5a415918"
+        },
+        "corpus.meta": {
+          "bytes": 270,
+          "sha256": "829831b0df3d68b8a7d1bba3167e962ad9412b0239042c016c2cf8a1f7b13fc5"
+        },
+        "results_hw.txt": {
+          "bytes": 4066,
+          "sha256": "28f9c24ce34502e701c0f2ada16a4fc24f45e963c7cb476cba1d029b891b5f5f"
+        }
+      },
+      "observations": "registers-memory-stack",
+      "fill": [
+        46877,
+        333731,
+        55781,
+        2050855,
+        80,
+        128
+      ]
     }
   ]
 }

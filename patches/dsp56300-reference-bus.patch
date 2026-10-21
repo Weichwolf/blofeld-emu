@@ -698,26 +698,44 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -1152,2 +1539,0 @@
+@@ -684,0 +1073,2 @@
++		if(m_referenceMode && ssIndex() == 0)
++			throw std::runtime_error("Unqualified DSP reference stack pop at SP=" + std::to_string(reg.sp.var));
+@@ -687 +1077,4 @@
+-		--reg.sc.var;
++		if(m_referenceMode)
++			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 0x1fu) & 0x1fu);
++		else
++			--reg.sc.var;
+@@ -691,0 +1085,2 @@
++		if(m_referenceMode && ssIndex() >= reg.ss.size()-1)
++			throw std::runtime_error("Unqualified DSP reference stack push at SP=" + std::to_string(reg.sp.var));
+@@ -694 +1089,4 @@
+-		++reg.sc.var;
++		if(m_referenceMode)
++			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 1u) & 0x1fu);
++		else
++			++reg.sc.var;
+@@ -1152,2 +1549,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1542 @@
+@@ -1156 +1552 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1306,3 +1692 @@
+@@ -1306,3 +1702 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
-@@ -1341,3 +1725 @@
+@@ -1341,3 +1735 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, value == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, value == minimum);
-@@ -1570,0 +1953,2 @@
+@@ -1570,0 +1963,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2067,2 @@
+@@ -1682,0 +2077,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl

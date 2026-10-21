@@ -5,7 +5,8 @@ import tempfile
 import unittest
 
 from dsp_hardware_corpus import (
-    FULL_CAPTURE, REGISTER_CAPTURE, STACK_FIELDS, compare, parse_dump, validate_capture,
+    FULL_CAPTURE, REGISTER_CAPTURE, MEMORY_CAPTURE, STACK_CAPTURE, STACK_FIELDS,
+    compare, parse_dump, validate_capture, sparse_default,
 )
 
 
@@ -89,6 +90,54 @@ class SiliconComparatorTest(unittest.TestCase):
             validate_capture(expected, REGISTER_CAPTURE)
         with self.assertRaises(ValueError):
             compare(native_case({}), expected, observations=REGISTER_CAPTURE)
+
+    def test_partial_recordings_cannot_hide_fields_or_claim_other_spaces(self):
+        stack = {"own_diagnostic": {"sh01": 2}}
+        memory = {"own_diagnostic": {"xm0001": 7}}
+        validate_capture(stack, STACK_CAPTURE)
+        validate_capture(memory, MEMORY_CAPTURE)
+        for fields, scope in ((stack, MEMORY_CAPTURE), (memory, STACK_CAPTURE)):
+            with self.assertRaises(ValueError):
+                validate_capture(fields, scope)
+            with self.assertRaises(ValueError):
+                compare(native_case({}), fields, observations=scope)
+        with self.assertRaisesRegex(AssertionError, "sh01"):
+            compare(native_case({}), stack, observations=STACK_CAPTURE)
+        with self.assertRaisesRegex(AssertionError, "xm0001"):
+            compare(native_case({}), memory, observations=MEMORY_CAPTURE)
+
+    def test_fill_profile_is_explicit_unique_bounded_and_first(self):
+        fill = (3, 1, 5, 2, 0xa0, 0xc0)
+        header = "fill 000003 000001 000005 000002 0000a0 0000c0\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "seeded.txt"
+            path.write_text(header + dump_text())
+            self.assertEqual(list(parse_dump(path, fill=fill)), ["own_diagnostic"])
+            for text, expected in ((header + dump_text(), None), (dump_text(), fill),
+                                   (header + header + dump_text(), fill),
+                                   (dump_text() + header, fill),
+                                   (header.replace("000003", "000002") + dump_text(), fill),
+                                   (header.replace("0000a0", "0000f2") + dump_text(), fill),
+                                   (header.replace("000003", "1000003") + dump_text(), fill)):
+                path.write_text(text)
+                with self.assertRaises(ValueError):
+                    parse_dump(path, fill=expected)
+
+    def test_seeded_sparse_defaults_retain_zero_writes_and_space_identity(self):
+        fill = (3, 1, 5, 2, 0xa0, 0xc0)
+        for key, value in (("xm0001", 4), ("ym0001", 7), ("sh01", 0xa0), ("sl0f", 0xce)):
+            self.assertEqual(sparse_default(key, fill), value)
+        slots = {key: sparse_default(key, fill) for key in STACK_FIELDS}
+        actual = {"own_diagnostic": slots}
+        expected = {"own_diagnostic": {"xm0001": 4}}
+        self.assertEqual(compare(actual, expected, observations=FULL_CAPTURE, fill=fill),
+                         len(STACK_FIELDS) + 1)
+        for key in ("xm0001", "ym0001", "sh01", "sl0f"):
+            with self.assertRaisesRegex(AssertionError, key):
+                compare(actual, {"own_diagnostic": {key: 0}}, observations=FULL_CAPTURE, fill=fill)
+        with self.assertRaisesRegex(AssertionError, "xm0001"):
+            compare({"own_diagnostic": {**slots, "xm0001": 0}},
+                    {"own_diagnostic": {}}, observations=FULL_CAPTURE, fill=fill)
 
     def test_full_capture_requires_promised_recording_and_known_profile(self):
         for fields in ({}, {"xm0001": 1}, {"sh01": 1}):

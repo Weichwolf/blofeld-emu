@@ -80,7 +80,7 @@ performed unrelated unknown reads and hid the original missing instruction.
 PFLUSH checks this fault path without pretending to implement cache behavior.
 
 Published hardware corpus
-doc/dsp-corpus.json pins banks b0/b1/b2/b4/b9 from Matt Borgerson's MIT-licensed DSP56300
+doc/dsp-corpus.json pins sixteen banks from Matt Borgerson's MIT-licensed DSP56300
 project, including programs, metadata, results, provenance and manifest hashes:
   https://github.com/mborgerson/dsp56300
   revision 82fb25a6917a36ac66212ae31f02aab62211f979
@@ -94,14 +94,25 @@ and jump from reset; zeros are not new device defaults. Original corpus words
 then execute unchanged, including NOP gaps. No host writes CPU registers or
 substitutes instruction results.
 
-The five banks contain 65, 67, 71, 38 and 17 cases. All 46 architectural register
-fields are checked, including EP/SZ/SC. Empty-stack SSH/SSL remain explicitly
-unobserved; the native diagnostic does not perform destructive pops.
-The manifest declares each bank's observation scope. b0/b1/b2/b4 compare all
-fifteen observed stack-slot pairs and captured X/Y/P windows against their zero
-seed, including sparse implicit-zero entries. b9 supplies register observations
-only: its absent memory/stack fields do not establish zero values. Extra native
-memory/stack observations are not claimed as hardware comparisons for b9.
+The sixteen banks contain 343 cases. All 46 architectural register fields are
+checked, including EP/SZ/SC. Empty-stack SSH/SSL remain explicitly unobserved;
+the native diagnostic does not perform destructive pops. Observation scopes are
+pinned per bank:279 cases include memory and all fifteen stack-slot pairs;
+17 include stack slots only, 8 include memory only, and 39 include registers only.
+No missing recording becomes a zero-memory or zero-stack equivalence claim.
+For an observed domain, sparse deviations are checked against its declared seed.
+Unknown fields, scope changes and missing native stack slots fail comparison.
+
+Banks b15/b16/b22 declare address-unique affine X/Y fills and fifteen SSH/SSL
+ramp pairs. These are explicit fixture inputs, not hardware reset defaults. The
+same native preamble initializes registers and stack; no host writes CPU state.
+Fill constants, placement and widths are checked in metadata and both dumps.
+Memory zero writes remain explicit deviations from nonzero seeds; absent cells
+retain their per-space expected value. Comparator regressions reject wrong-space
+values, suppressed zero stores, changed/missing/duplicate seeds and undeclared
+memory/stack observations. Existing zero-seed banks retain their original inputs
+and comparison contracts.
+
 Cycle counts are absent from the
 captures and are not timing evidence. The comparator rejects missing registers/
 cases, duplication/truncation, unknown fields, reordered cases and mismatched
@@ -126,13 +137,16 @@ Remaining scope
 The complete b2 bank is now included after normal-mode zero REP and retained
 zero-DO stack writes were implemented. See dsp-zero-loops.txt for the primary
 manual sections, its internal REP inconsistency, independent failure regressions
-and remaining compatibility/pipeline limits. All 21493 observed values across
-the five banks match without a discrepancy baseline. The b4 adoption follows
+and remaining compatibility/pipeline limits. All 27231 observed values across
+the sixteen banks match without a discrepancy baseline. The b4 adoption follows
 independent SUBL/SUBR value/flag/host-overflow corrections documented in
 dsp-shifted-subtract.txt. The b9 adoption follows independent SM saturation,
 rounding and host-arithmetic corrections and 81687 own cases (dsp-saturation.txt).
 It adds 748 observed register values; unrecorded memory/stack values are excluded.
-Other banks remain unqualified. Captures remain MCPX evidence, not Blofeld silicon proof.
+The eight remaining banks still reach unqualified large shifts, untabulated
+power coefficients, out-of-range bit fields or unsupported stack/ILLEGAL
+exceptions. Their failures are not accepted as successful hardware comparisons.
+Captures remain MCPX evidence, not Blofeld silicon proof.
 
 Normal CMPM separately checks 16902 own magnitude/result/state cases and
 preserves these adopted comparisons. Its full56-bit minimum flags use the
@@ -155,3 +169,24 @@ Further ISA/control-flow and native instruction fuzzing, derivative reset/
 stack-error/interrupt/pipeline behavior, the original reserved Y:002000 frontier,
 ROM contents, combined MCU/DSP boot, original audio and measured Desktop/Keyboard
 validation remain open.
+
+Five-bit stack counter and strict stack failures
+DSP56300FM5.4.3.2 defines SC as five bits. The dirty b15 stack walk exposed an
+actual native-state error: three SSH pops from SC=0 left 253 rather than the
+captured 29. The reference interpreter now wraps each implicit increment and
+decrement modulo 32, before any MOVEC read or snapshot. This changes execution
+state, not only diagnostic formatting. The normal interpreter/JIT is unchanged.
+
+Fifteen own native cases pop one through fifteen known stack slots, inspect SC
+through genuine MOVEC instructions, push back across 31->0 and replay the pushes
+from trusted snapshots. Independent integer expectations check the physical
+slot/data, SP, SC and whole restored native state. The same fixture fails with
+the preceding native archive. The pinned b15 capture also fails before the fix
+and matches all 986 recorded values afterward.
+
+Fault banks additionally exposed native assertions on unsupported stack
+underflow/overflow. Reference-mode stack pop/push now reject before those
+assertions with SP and the adapter's PC/OMR context. Own positive/negative
+checkpoint cases check rejection, quarantine and trusted recovery. This does
+not implement the hardware's stack exception/vector, stack extension or SP-view
+pipeline shadow. No fuzz generation or physical device traffic is involved.

@@ -24,6 +24,26 @@ def check_case(binary, directory, start, end, limit, accepted):
         raise AssertionError(f"Invalid DSP corpus range/bound accepted: {start}/{end}/{limit}")
 
 
+def check_fills(binary, directory):
+    header = "fill 00a50d 03157e 00c3a9 2b0c99 0000a0 0000c0\n"
+    case = "case own 0100 0101 1\n"
+    (directory / "corpus.lod").write_text("P 0100 000000\n")
+    invalid = [header + header + case, case + header, header,
+               header.replace("00a50d", "00a50c") + case,
+               header.replace("00c3a9", "00c3a8") + case,
+               header.replace("0000a0", "0000f2") + case,
+               header.replace("0000c0", "0000ff") + case,
+               header.replace("00a50d", "1000000") + case,
+               header.replace("0000c0", "") + case,
+               header.rstrip() + " 00\n" + case]
+    for metadata in invalid:
+        (directory / "corpus.meta").write_text(metadata)
+        result = subprocess.run([str(binary), str(directory), str(directory / "rejected.txt")],
+                                capture_output=True, text=True, check=False)
+        if result.returncode == 0 or "DSP corpus" not in result.stderr:
+            raise AssertionError(f"Invalid seeded metadata did not fail visibly: {metadata!r}")
+
+
 def main():
     binary = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix="blofeld-corpus-bounds-") as name:
@@ -33,7 +53,8 @@ def main():
         for start, end, limit in ((0x100, 0x101, 0), (0x100, 0x101, 100001),
                                   (0x100, 0x100, 1), (0x1000, 0x1001, 1)):
             check_case(binary, directory, start, end, limit, False)
-    print("DSP corpus program/dynamic-step bounds: four positive and four negative cases passed")
+        check_fills(binary, directory)
+    print("DSP corpus program/dynamic-step bounds: four range positives, four range negatives and ten fill negatives passed")
 
 
 if __name__ == "__main__":

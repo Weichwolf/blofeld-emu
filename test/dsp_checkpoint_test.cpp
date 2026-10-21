@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_machine.hpp"
@@ -69,6 +70,101 @@ void test_registers_memory_and_branch_isolation() {
   run(branch, 2);
   require(branch.cpu().debug_state() == first,
           "A trusted checkpoint must support an independent machine branch");
+}
+
+void test_five_bit_stack_counter() {
+  constexpr unsigned stack_slots = 15;
+  constexpr unsigned counter_modulus = 32;
+  constexpr unsigned ordinary_omr = 5;
+  for (unsigned pops = 1; pops <= stack_slots; ++pops) {
+    DspMachine machine;
+    DspProgram program;
+    program.immediate("omr", ordinary_omr);
+    program.immediate("sr", masked_status);
+    program.immediate("sp", 0);
+    for (unsigned slot = 1; slot <= pops; ++slot) {
+      program.immediate("ssh", cookie + slot);
+      program.immediate("ssl", other_cookie + slot);
+    }
+    program.immediate("sc", 0);
+    const auto pop_begin = program.pc();
+    for (unsigned index = 0; index < pops; ++index) {
+      program.emit("move ssh,x0");
+      program.emit("move sc,x1");
+    }
+    for (unsigned index = 0; index < pops; ++index) {
+      program.immediate("ssh", cookie);
+      program.emit("move sc,y1");
+    }
+    program.install(machine.bus());
+    until(machine, pop_begin);
+    for (unsigned count = 1; count <= pops; ++count) {
+      run(machine, 2);
+      const auto state = machine.cpu().debug_state();
+      const auto expected = counter_modulus - count;
+      require(state.cpu.sp == pops - count && state.sc == expected &&
+                  (state.cpu.x >> word_bits) == expected &&
+                  (state.cpu.x & word_mask) == cookie + pops - count + 1,
+              "Actual SSH pops and MOVEC SC expose the five-bit count and correct physical slot");
+    }
+    const auto saved = machine.checkpoint();
+    for (unsigned count = 1; count <= pops; ++count) {
+      run(machine, 2);
+      const auto state = machine.cpu().debug_state();
+      const auto expected = (counter_modulus - pops + count) % counter_modulus;
+      require(state.cpu.sp == count && state.sc == expected &&
+                  (state.cpu.y >> word_bits) == expected && state.cpu.stack_pc == cookie,
+              "Actual SSH pushes wrap SC from31 to0 without masking only its debug output");
+    }
+    const auto completed = machine.cpu().debug_state();
+    machine.restore(saved);
+    run(machine, 2 * pops);
+    require(machine.cpu().debug_state() == completed,
+            "A checkpoint preserves the wrapped native counter and every stack/register field");
+  }
+}
+
+void test_unqualified_stack_boundaries() {
+  constexpr unsigned stack_slots = 15;
+  constexpr unsigned ordinary_omr = 5;
+  for (const bool push : {false, true}) {
+    DspMachine machine;
+    DspProgram program;
+    program.immediate("omr", ordinary_omr);
+    program.immediate("sr", masked_status);
+    program.immediate("sp", 0);
+    for (unsigned slot = 1; slot <= stack_slots; ++slot) {
+      program.immediate("ssh", cookie + slot);
+      program.immediate("ssl", other_cookie + slot);
+    }
+    program.immediate("sp", push ? stack_slots : 0);
+    program.immediate("sc", 0);
+    const auto boundary = program.pc();
+    if (push) {
+      program.immediate("ssh", other_cookie);
+    } else {
+      program.emit("move ssh,x0");
+    }
+    program.install(machine.bus());
+    until(machine, boundary);
+    const auto saved = machine.checkpoint();
+    const auto before = machine.cpu().debug_state();
+    const auto reason = rejects([&machine] { machine.cpu().step(); },
+                                "Unsupported stack exception must fail visibly");
+    require(reason.contains("pc=" + blofeld::hex(boundary, 6)) && reason.contains("omr=0x000005") &&
+                reason.contains(push ? "stack push at SP=15" : "stack pop at SP=0"),
+            "An unsupported stack transition names its real operation, SP, PC and OMR");
+    static_cast<void>(rejects([&machine] { machine.cpu().step(); },
+                              "A rejected stack instruction cannot resume without recovery"));
+    static_cast<void>(rejects([&machine] { static_cast<void>(machine.checkpoint()); },
+                              "A rejected stack instruction cannot become a trusted snapshot"));
+    machine.restore(saved);
+    require(machine.cpu().debug_state() == before,
+            "Trusted recovery preserves all original pre-failure stack and CPU fields");
+    require(rejects([&machine] { machine.cpu().step(); }, "Replay must retain its stack failure") ==
+                reason,
+            "Recovered execution repeats its actual failure rather than inventing a stack result");
+  }
 }
 
 void test_latched_repeat_and_code_mutation() {
@@ -167,6 +263,8 @@ void test_nested_do_and_fault_recovery() {
 int main() {
   try {
     blofeld::test::checkpoint::test_registers_memory_and_branch_isolation();
+    blofeld::test::checkpoint::test_five_bit_stack_counter();
+    blofeld::test::checkpoint::test_unqualified_stack_boundaries();
     blofeld::test::checkpoint::test_latched_repeat_and_code_mutation();
     blofeld::test::checkpoint::test_nested_do_and_fault_recovery();
     blofeld::test::checkpoint::test_checkpoint_interrupts();
