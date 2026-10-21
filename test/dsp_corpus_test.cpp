@@ -31,7 +31,7 @@ std::string memory_key(const std::string &prefix, const unsigned address) {
   return name.str();
 }
 
-void dump_memory(DspBus &bus, std::ostream &output) {
+void dump_memory(DspBus &bus, std::ostream &output, const CorpusFill &fill) {
   for (const auto area : {DspSpace::x, DspSpace::y, DspSpace::p}) {
     unsigned begin = 0;
     unsigned end = y_words;
@@ -49,12 +49,18 @@ void dump_memory(DspBus &bus, std::ostream &output) {
         continue;
       }
       const auto value = bus.read({.space = area, .address = address});
-      if (value != 0) { field(output, memory_key(prefix, address), value); }
+      if (value != fill.memory(area, address)) {
+        field(output, memory_key(prefix, address), value);
+      }
     }
   }
 }
 
-void dump(const CorpusCase &item, DspBus &bus, const DspCore &cpu, std::ostream &output) {
+void dump(const CorpusCase &item,
+          DspBus &bus,
+          const DspCore &cpu,
+          std::ostream &output,
+          const CorpusFill &fill) {
   const auto observation = cpu.debug_state();
   const auto &state = observation.cpu;
   output << "case " << item.name << '\n';
@@ -93,16 +99,24 @@ void dump(const CorpusCase &item, DspBus &bus, const DspCore &cpu, std::ostream 
     field(output, "sh" + suffix.str(), observation.stack_high[index]);
     field(output, "sl" + suffix.str(), observation.stack_low[index]);
   }
-  dump_memory(bus, output);
+  dump_memory(bus, output, fill);
   output << "end\n";
 }
 
 void run_corpus(const std::filesystem::path &directory, std::ostream &output) {
-  const auto cases = read_cases(directory / "corpus.meta");
+  const auto metadata = read_cases(directory / "corpus.meta");
+  const auto &cases = metadata.cases;
+  if (metadata.fill.enabled) {
+    output << "fill";
+    for (const auto value : metadata.fill.values) {
+      output << ' ' << std::hex << std::setfill('0') << std::setw(6) << value;
+    }
+    output << '\n';
+  }
   DspBus bus;
-  initialize_memory(bus);
+  initialize_memory(bus, metadata.fill);
   load_corpus(bus, directory / "corpus.lod");
-  install_preamble(bus, cases.front().start);
+  install_preamble(bus, cases.front().start, metadata.fill);
   DspCore cpu(bus);
   unsigned preamble = 0;
   while (cpu.state().pc != cases.front().start) {
@@ -122,7 +136,7 @@ void run_corpus(const std::filesystem::path &directory, std::ostream &output) {
       corpus_require(++count <= item.limit, "DSP corpus instruction limit: " + item.name);
       cpu.step();
     }
-    dump(item, bus, cpu, output);
+    dump(item, bus, cpu, output, metadata.fill);
   }
 }
 }

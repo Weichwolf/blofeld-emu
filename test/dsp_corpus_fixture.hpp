@@ -5,6 +5,7 @@
 #include "blofeld/dsp_bus.hpp"
 #include "dsp56kEmu/assembler.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -27,11 +28,34 @@ inline constexpr unsigned snapshot_ram_begin = 0x400;
 inline constexpr unsigned snapshot_ram_end = 0x500;
 inline constexpr unsigned program_dump_begin = 0x7c0;
 
+struct CorpusFill {
+  bool enabled = false;
+  // X multiplier/addend, Y multiplier/addend, SSH/SSL ramp bases.
+  std::array<unsigned, 6> values{};
+
+  [[nodiscard]] unsigned memory(const DspSpace area, const unsigned address) const {
+    if (!enabled || area == DspSpace::p) { return 0; }
+    const unsigned index = area == DspSpace::x ? 0 : 2;
+    return static_cast<unsigned>(
+        (static_cast<std::uint64_t>(values.at(index)) * address + values.at(index + 1)) &
+        corpus_word_mask);
+  }
+
+  [[nodiscard]] unsigned stack(const bool high, const unsigned slot) const {
+    return enabled ? values.at(high ? 4U : 5U) + slot - 1U : 0;
+  }
+};
+
 struct CorpusCase {
   std::string name;
   unsigned start = 0;
   unsigned end = 0;
   unsigned limit = 0;
+};
+
+struct CorpusMetadata {
+  CorpusFill fill;
+  std::vector<CorpusCase> cases;
 };
 
 inline void corpus_require(const bool condition, const std::string &message) {
@@ -52,17 +76,37 @@ inline std::ifstream corpus_input(const std::filesystem::path &path) {
   return input;
 }
 
-inline std::vector<CorpusCase> read_cases(const std::filesystem::path &path) {
+inline void read_fill(std::istringstream &fields, CorpusFill &fill) {
+  constexpr unsigned maximum_stack_base = 0xf1;
+  corpus_require(!fill.enabled, "Duplicate DSP corpus fill");
+  for (auto &value : fill.values) {
+    corpus_require(static_cast<bool>(fields >> std::hex >> value) && value <= corpus_word_mask,
+                   "Malformed DSP corpus fill");
+  }
+  fields >> std::ws;
+  corpus_require(fields.eof() && (fill.values[0] & 1U) != 0 && (fill.values[2] & 1U) != 0 &&
+                     fill.values[4] <= maximum_stack_base && fill.values[5] <= maximum_stack_base,
+                 "Unsupported DSP corpus fill");
+  fill.enabled = true;
+}
+
+inline CorpusMetadata read_cases(const std::filesystem::path &path) {
   constexpr unsigned maximum_name = 80;
   auto input = corpus_input(path);
-  std::vector<CorpusCase> cases;
+  CorpusMetadata metadata;
   std::string line;
   while (std::getline(input, line)) {
     std::istringstream fields(line);
     std::string tag;
+    corpus_require(static_cast<bool>(fields >> tag), "Malformed DSP corpus metadata");
+    if (tag == "fill") {
+      corpus_require(metadata.cases.empty(), "Misplaced DSP corpus fill");
+      read_fill(fields, metadata.fill);
+      continue;
+    }
     CorpusCase item;
-    corpus_require(static_cast<bool>(fields >> tag >> item.name >> std::hex >> item.start >>
-                                     item.end >> std::dec >> item.limit),
+    corpus_require(static_cast<bool>(fields >> item.name >> std::hex >> item.start >> item.end >>
+                                     std::dec >> item.limit),
                    "Malformed DSP corpus metadata");
     corpus_require(tag == "case" && item.start < item.end && item.end <= program_words &&
                        item.limit != 0 && item.limit <= maximum_case_steps &&
@@ -70,21 +114,21 @@ inline std::vector<CorpusCase> read_cases(const std::filesystem::path &path) {
                    "Unsupported DSP corpus case");
     fields >> std::ws;
     corpus_require(fields.eof(), "Trailing DSP corpus metadata");
-    corpus_require(cases.empty() || cases.back().end <= item.start,
+    corpus_require(metadata.cases.empty() || metadata.cases.back().end <= item.start,
                    "Overlapping or reordered DSP corpus cases");
-    cases.push_back(item);
+    metadata.cases.push_back(item);
   }
-  corpus_require(input.eof() && !cases.empty(), "Incomplete DSP corpus metadata");
-  return cases;
+  corpus_require(input.eof() && !metadata.cases.empty(), "Incomplete DSP corpus metadata");
+  return metadata;
 }
 
-inline void initialize_memory(DspBus &bus) {
+inline void initialize_memory(DspBus &bus, const CorpusFill &fill) {
   for (const auto area : {DspSpace::p, DspSpace::x, DspSpace::y}) {
     unsigned end = program_words;
     if (area == DspSpace::x) { end = x_words; }
     if (area == DspSpace::y) { end = y_words; }
     for (unsigned address = 0; address < end; ++address) {
-      bus.write({.space = area, .address = address, .value = 0});
+      bus.write({.space = area, .address = address, .value = fill.memory(area, address)});
     }
   }
 }
@@ -156,7 +200,7 @@ private:
   std::vector<std::uint32_t> words_;
 };
 
-inline void install_preamble(DspBus &bus, const unsigned entry) {
+inline void install_preamble(DspBus &bus, const unsigned entry, const CorpusFill &fill) {
   CorpusPreamble preamble;
   for (const auto *name : {"a0", "a1", "a2", "b0", "b1", "b2", "x0", "x1", "y0", "y1"}) {
     preamble.immediate(name, 0);
@@ -170,8 +214,8 @@ inline void install_preamble(DspBus &bus, const unsigned entry) {
   preamble.immediate("ep", 0);
   preamble.immediate("sp", 0);
   for (unsigned index = 0; index < 15; ++index) {
-    preamble.immediate("ssh", 0);
-    preamble.immediate("ssl", 0);
+    preamble.immediate("ssh", fill.stack(true, index + 1));
+    preamble.immediate("ssl", fill.stack(false, index + 1));
   }
   preamble.immediate("sp", 0);
   preamble.immediate("sc", 0);

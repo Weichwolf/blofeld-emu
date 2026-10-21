@@ -65,6 +65,12 @@ resumes its captured machine state, including partially shifted SHI data and
 native loop continuation. The existing complete trace stays unchanged
 (coupled-boot.txt).
 
+Fifteen native counter cases additionally retain five-bit SC through one to
+fifteen real SSH pops, MOVEC reads, pushes across 31->0 and a repeated suffix.
+Own unsupported stack-pop/push cases reject with operation/SP/PC/OMR, quarantine
+execution/capture and reproduce the failure after trusted restore. These checks
+establish no hardware exception/vector or stack-extension implementation.
+
 Scope
 These are process-local snapshots of the implemented reference models, not a
 portable/persistent state codec, a stock DSP dump or a complete Blofeld snapshot.
