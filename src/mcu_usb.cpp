@@ -37,6 +37,8 @@ std::string_view McuUsb::register_name(const std::uint16_t offset) {
   if (offset >= usb::endpoint_begin && offset < usb::endpoint_end) {
     return "UEPCSR local endpoint";
   }
+  if ((offset & ~1U) == usb::ique_out_control) { return "UEPCSR4A unconfigured IQUE endpoint"; }
+  if ((offset & ~1U) == usb::ique_in_control) { return "UEPCSR5A unconfigured IQUE endpoint"; }
   if (offset >= usb::setup_begin && offset < usb::setup_end) { return "USTB setup buffer"; }
   if (offset >= usb::buffer_begin && offset < usb::buffer_end) {
     return "UEPLB local endpoint buffer";

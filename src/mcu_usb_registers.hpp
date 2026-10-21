@@ -47,4 +47,14 @@ inline constexpr unsigned nibble_mask = 15;
 inline constexpr unsigned buffer_bytes = 64;
 inline constexpr unsigned maximum_packet_shift = 19;
 inline constexpr unsigned input_direction = 0x10;
+inline constexpr unsigned ique_out_control = 0x31c;
+inline constexpr unsigned ique_in_control = 0x320;
+inline constexpr unsigned ique_send_nak = 0x4000;
+inline constexpr unsigned ique_continue_error = 0x800;
+inline constexpr unsigned ique_writable =
+    stall | ique_send_nak | transfer_enable | ique_continue_error | frame_mask;
+
+constexpr bool ique_control(const unsigned offset) {
+  return (offset & ~1U) == ique_out_control || (offset & ~1U) == ique_in_control;
+}
 }

@@ -49,6 +49,17 @@ byte first, without synthetic prereads. Reset/IRQ vector reads and stack word
 writes preserve those widths too. The local SLEIGH RTI correction restores B:A
 as one word. These are logical operand sizes, not completed CPU/bus-cycle timing.
 
+Unconfigured IQUE endpoint controls
+UEPCSR4A at 0x031c and UEPCSR5A at 0x0320 implement the documented reset-zero
+STALL/SNAK/TCIE/CTERR and eleven-bit size fields, with byte-preserving updates
+and W1C TFRC. CPU writes do not create a completed transfer. Functional USB and
+external MCU reset clear both controls; native-owner copies retain them.
+These accesses require an all-zero physical endpoint4/5 description. A configured
+IQUE endpoint rejects instead of inventing queue ownership, counts or completion.
+UEPCSR4B/5B, IQUE transfers and their interrupts remain unsupported. The original
+reset handler can now perform its real 0x3800 acknowledgements of both controls;
+see usb-reset.txt for the actual startup/IRQ/replay scope and next MIDI boundary.
+
 Buffers and transactions
 - USTB at 0x0338..0x033f stores the eight-byte application SETUP request in wire
   order and is valid only while SETUP=1. GET_DESCRIPTOR, class/vendor requests

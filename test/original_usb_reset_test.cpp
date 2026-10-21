@@ -1,0 +1,378 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#include "application_fixture.hpp"
+#include "blofeld/bus.hpp"
+#include "blofeld/firmware.hpp"
+#include "blofeld/flash_image.hpp"
+#include "blofeld/hc12.hpp"
+#include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_machine.hpp"
+#include "blofeld/mcu_usb.hpp"
+#include "lcd_fixture.hpp"
+
+#include <array>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace {
+constexpr unsigned reset_vector = 0xffd4;
+constexpr unsigned configuration_vector = 0xffd0;
+constexpr unsigned reset_poll = 0xbdf9;
+constexpr unsigned reset_delay = 0xbdf1;
+constexpr unsigned reset_return = 0xbe10;
+constexpr unsigned configuration_return = 0xbe4f;
+constexpr unsigned split_controls = 0xbf0c;
+constexpr unsigned main_wait = 0x8314;
+constexpr unsigned main_resume = 0x8315;
+constexpr unsigned main_stack = 0x25f3;
+constexpr unsigned wait_stack = 0x25ea;
+constexpr unsigned ram_begin = 0x1200;
+constexpr unsigned ram_bytes = 5120;
+constexpr unsigned byte_mask = 0xff;
+constexpr unsigned instruction_limit = 100000;
+constexpr unsigned out_control = 0x31c;
+constexpr unsigned in_control = 0x320;
+constexpr unsigned retained_control = 0x1800;
+constexpr unsigned select = 0x30e;
+constexpr unsigned config_data = 0x310;
+constexpr unsigned configuration_status = 0x30c;
+constexpr unsigned in_description = 0x820008d1;
+constexpr unsigned out_description = 0x820008c1;
+using Registers = std::array<unsigned, 6>;
+using Writes = std::vector<std::pair<unsigned, unsigned>>;
+
+void require(const bool condition, const std::string_view message) {
+  if (!condition) { throw blofeld::Fault(std::string(message)); }
+}
+
+Registers registers(const blofeld::CpuState s) {
+  return {s.pc, s.d, s.x, s.y, s.sp, s.ccr};
+}
+
+struct Profile {
+  unsigned id = 0;
+  unsigned release_poll = 0; // Zero retains reset through the actual counter timeout.
+};
+
+struct Counters {
+  unsigned polls = 0;
+  unsigned delays = 0;
+  unsigned entries = 0;
+  unsigned returns = 0;
+  unsigned native = 0;
+  Writes writes;
+  bool operator==(const Counters &) const = default;
+};
+
+struct Saved {
+  blofeld::McuCheckpoint machine;
+  blofeld::test::LcdFixture display;
+  Profile profile;
+  Counters counters;
+  Registers interrupted;
+};
+
+struct Outcome {
+  Registers cpu;
+  std::vector<unsigned> ram;
+  std::vector<unsigned> usb;
+  Counters counters;
+  bool operator==(const Outcome &) const = default;
+};
+
+struct Session {
+  Session(const blofeld::Firmware &firmware, std::ostream &trace)
+      : machine(blofeld::McuFlashImage::from_known(firmware.mcu), BLOFELD_DEFAULT_SLA),
+        display(std::make_unique<blofeld::test::LcdFixture>(machine.bus())),
+        trace_(trace),
+        initial_(machine.bus().power_off_flash_image()) {
+    static_cast<void>(
+        blofeld::test::start_application(machine.bus(), machine.cpu(), *display, trace, false));
+    bind();
+  }
+
+  [[nodiscard]] Saved save() const {
+    return {.machine = machine.checkpoint(),
+            .display = *display,
+            .profile = profile,
+            .counters = counters,
+            .interrupted = interrupted};
+  }
+
+  void restore(const Saved &saved) {
+    machine.restore(saved.machine);
+    display = std::make_unique<blofeld::test::LcdFixture>(machine.bus(), saved.display);
+    profile = saved.profile;
+    counters = saved.counters;
+    interrupted = saved.interrupted;
+    bind();
+  }
+
+  void bind() {
+    machine.bus().set_observer([this](const blofeld::BusEvent &event) {
+      require(event.write, "The USB scenario observer accepts actual MCU writes");
+      counters.writes.emplace_back(event.address, event.value);
+      display->observe(event);
+    });
+  }
+
+  void start(const Profile input) {
+    profile = input;
+    counters = {};
+    interrupted = registers(machine.cpu().state());
+    machine.bus().observe_usb_decoder({.reset = true});
+  }
+
+  void step(unsigned vector);
+
+  void check_flash() const {
+    const auto now = machine.bus().power_off_flash_image();
+    require(now.bytes == initial_.bytes && now.known == initial_.known &&
+                now.fresh == initial_.fresh,
+            "Original USB execution preserves every MCU NVM byte, knowledge and erase history");
+  }
+
+  Outcome outcome();
+
+  unsigned word(unsigned address) {
+    return static_cast<unsigned>(
+        machine.bus().read_memory({.address = static_cast<std::uint16_t>(address), .size = 2}));
+  }
+
+  void finish_configuration();
+  void reject_midi();
+
+  void report(std::string_view kind) const {
+    trace_ << kind << ' ' << profile.id << ' ' << counters.polls << ' ' << counters.delays << ' '
+           << counters.entries << ' ' << counters.returns << ' ' << counters.native << '\n';
+  }
+
+  blofeld::McuMachine machine;
+  std::unique_ptr<blofeld::test::LcdFixture> display;
+  Profile profile;
+  Counters counters;
+  Registers interrupted{};
+
+  std::ostream &trace_;
+  blofeld::McuFlashImage initial_;
+};
+
+void Session::step(const unsigned vector) {
+  const auto before = machine.cpu().state();
+  if (vector == reset_vector && before.pc == reset_poll) {
+    ++counters.polls;
+    require((before.d & byte_mask) == ((counters.delays + 1) & byte_mask),
+            "The original reset counter increments once per genuine byte-delay call");
+    if (profile.release_poll == counters.polls) { machine.bus().observe_usb_decoder({}); }
+  }
+  if (vector == reset_vector && before.pc == reset_delay) { ++counters.delays; }
+  const auto result = machine.cpu().step();
+  if (result.interrupt_vector) {
+    require(*result.interrupt_vector == vector && !result.instruction_executed &&
+                result.stack_reused && counters.entries == 0 && before.pc == main_resume &&
+                before.sp == wait_stack,
+            "The original USB interrupt must enter through its real vector and existing WAI frame");
+    ++counters.entries;
+  }
+  if (result.instruction_executed) { ++counters.native; }
+  if (before.pc == main_wait) {
+    const auto after = machine.cpu().state();
+    constexpr unsigned interrupt_mask = 0x10;
+    require(result.instruction_executed && before.sp == main_stack && after.pc == main_resume &&
+                after.sp == wait_stack && machine.cpu().waiting() &&
+                (after.ccr & interrupt_mask) == 0,
+            "Actual original WAI saves a fresh enabled-interrupt foreground frame");
+    const std::array<unsigned, 9> frame{before.ccr,
+                                        before.d & byte_mask,
+                                        static_cast<unsigned>(before.d) >> 8U,
+                                        static_cast<unsigned>(before.x) >> 8U,
+                                        before.x & byte_mask,
+                                        static_cast<unsigned>(before.y) >> 8U,
+                                        before.y & byte_mask,
+                                        main_resume >> 8U,
+                                        main_resume & byte_mask};
+    for (unsigned i = 0; i < frame.size(); ++i) {
+      require(machine.bus().read(static_cast<std::uint16_t>(wait_stack + i)) == frame[i],
+              "Every real WAI frame byte matches the independent NXP register order");
+    }
+  }
+  if (before.pc == (vector == reset_vector ? reset_return : configuration_return)) {
+    auto expected = interrupted;
+    expected[4] = main_stack;
+    require(result.instruction_executed && registers(machine.cpu().state()) == expected &&
+                !machine.cpu().waiting(),
+            "The actual original RTI restores every interrupted CPU register before foreground "
+            "resumes");
+    ++counters.returns;
+  }
+}
+
+Outcome Session::outcome() {
+  Outcome result{
+      .cpu = registers(machine.cpu().state()), .ram = {}, .usb = {}, .counters = counters};
+  for (unsigned i = 0; i < ram_bytes; ++i) {
+    result.ram.push_back(machine.bus().read(static_cast<std::uint16_t>(ram_begin + i)));
+  }
+  // Inspect a detached board copy: no host selector/control write reaches native execution.
+  auto copy = machine.bus().clone();
+  constexpr std::array<unsigned, 11> controls{
+      0x300, 0x302, 0x304, 0x30c, 0x30e, 0x314, 0x316, 0x318, 0x31a, out_control, in_control};
+  for (const auto at : controls) {
+    result.usb.push_back(static_cast<unsigned>(
+        copy->read_memory({.address = static_cast<std::uint16_t>(at), .size = 2})));
+  }
+  for (const auto bank : {1U, 2U, 3U, 4U, 5U, 8U, 9U}) {
+    copy->write(select, static_cast<std::uint8_t>(bank));
+    result.usb.push_back(
+        static_cast<unsigned>(copy->read_memory({.address = config_data, .size = 2})));
+    result.usb.push_back(
+        static_cast<unsigned>(copy->read_memory({.address = config_data + 2, .size = 2})));
+  }
+  check_flash();
+  return result;
+}
+
+std::optional<Saved> finish_reset(Session &session, const bool capture) {
+  std::optional<Saved> middle;
+  do {
+    require(session.counters.native < instruction_limit,
+            "Original reset processing must return or fail visibly");
+    if (capture && session.machine.cpu().state().pc == split_controls) {
+      require(!middle && session.word(out_control) == retained_control &&
+                  session.word(in_control) == 0,
+              "Snapshot follows actual UEPCSR4A acknowledgement before original UEPCSR5A write");
+      middle.emplace(session.save());
+    }
+    session.step(reset_vector);
+  } while (!session.machine.cpu().waiting() || session.machine.cpu().pending_interrupt());
+  const unsigned polls = session.profile.release_poll == 0 ? 256 : session.profile.release_poll;
+  require(session.counters.polls == polls && session.counters.delays == polls - 1 &&
+              session.counters.entries == 1 && session.counters.returns == 1 &&
+              session.machine.cpu().state().pc == main_resume &&
+              session.word(out_control) == retained_control &&
+              session.word(in_control) == retained_control,
+          "Actual reset polling/reconfiguration/RTI and foreground must reach original main WAI");
+  Writes actual;
+  for (const auto write : session.counters.writes) {
+    if ((write.first >= out_control && write.first <= out_control + 1) ||
+        (write.first >= in_control && write.first <= in_control + 1)) {
+      actual.push_back(write);
+    }
+  }
+  const Writes expected{
+      {out_control, 0x38}, {out_control + 1, 0}, {in_control, 0x38}, {in_control + 1, 0}};
+  require(actual == expected,
+          "The genuine original STD instructions write both exact control words in order");
+  session.check_flash();
+  return middle;
+}
+
+void Session::finish_configuration() {
+  counters = {};
+  interrupted = registers(machine.cpu().state());
+  machine.bus().observe_usb_decoder({.enumerated = true});
+  machine.bus().observe_usb_configuration({.configuration = 1});
+  do {
+    require(counters.native < instruction_limit,
+            "Original configuration acknowledgement must return");
+    step(configuration_vector);
+  } while (!machine.cpu().waiting() || machine.cpu().pending_interrupt());
+  constexpr unsigned requested = 0x2000;
+  constexpr unsigned valid_configuration = 0x8100;
+  require(
+      counters.entries == 1 && counters.returns == 1 &&
+          (word(configuration_status) & (requested | valid_configuration)) == valid_configuration,
+      "The actual configuration IRQ acknowledges SETECR while retaining CFGVALID/configuration1");
+  report("CONFIGURATION");
+}
+
+void Session::reject_midi() {
+  const auto before = outcome();
+  const std::array<std::uint8_t, 4> note_on{9, 0x90, 64, 127};
+  for (const bool input : {false, true}) {
+    bool rejected = false;
+    try {
+      if (input) {
+        static_cast<void>(machine.bus().request_usb_in(blofeld::UsbBuffer::endpoint2));
+      } else {
+        static_cast<void>(machine.bus().receive_usb_out(
+            {.buffer = blofeld::UsbBuffer::endpoint3, .data = std::span{note_on}}));
+      }
+    } catch (const blofeld::Fault &fault) {
+      const std::string_view text(fault.what());
+      require(text.contains("Reserved USB local endpoint NISOF field") &&
+                  text.contains(input ? "physical-endpoint=2" : "physical-endpoint=3") &&
+                  text.contains(blofeld::hex(input ? in_description : out_description, 8)),
+              "Original MIDI endpoint descriptors retain the documented NISOF failure");
+      trace_ << "MIDI_FRONTIER " << (input ? "IN " : "OUT ") << text << '\n';
+      rejected = true;
+    }
+    require(
+        rejected && outcome() == before && !machine.cpu().pending_interrupt(),
+        "Rejected decoded MIDI transactions cannot mutate CPU/RAM/USB/NVM or invent completion");
+  }
+}
+
+struct Inputs {
+  std::filesystem::path firmware;
+  std::filesystem::path trace;
+};
+
+void run(const Inputs &inputs) {
+  const auto firmware = blofeld::Firmware::load(inputs.firmware);
+  std::ofstream trace(inputs.trace);
+  trace.exceptions(std::ios::failbit | std::ios::badbit);
+  Session session(firmware, trace);
+  const auto cold = session.save();
+  std::optional<Saved> delayed;
+  for (const auto profile : {Profile{.id = 0, .release_poll = 1},
+                             Profile{.id = 1, .release_poll = 3},
+                             Profile{.id = 2}}) {
+    session.restore(cold);
+    session.start(profile);
+    auto middle = finish_reset(session, profile.id == 1);
+    const auto expected = session.outcome();
+    session.report("RESET");
+    if (profile.id == 1) { delayed.emplace(session.save()); }
+    if (middle) {
+      for (unsigned replay = 0; replay < 2; ++replay) {
+        session.restore(*middle);
+        static_cast<void>(finish_reset(session, false));
+        require(session.outcome() == expected,
+                "Mid-ISR native/RAM/register/write-prefix replay must match completely");
+        session.report("REPLAY");
+      }
+    }
+  }
+  if (!delayed) { throw blofeld::Fault("Released-reset checkpoint must be present"); }
+  session.restore(*delayed);
+  session.finish_configuration();
+  session.reject_midi();
+  std::cout << "Original cold MCU -> USB reset IRQ/configuration -> native RTI/main WAI verified; "
+               "three real poll profiles, two mid-ISR replays and unchanged NVM. Original MIDI "
+               "transactions still reject their reserved NISOF descriptor fields. No full board, "
+               "physical USB timing, host USB or fuzzing claim.\n";
+}
+}
+
+int main(const int count, char **arguments) {
+  try {
+    if (count != 3) {
+      throw blofeld::Fault("Usage: original-usb-reset original.zip private.trace");
+    }
+    run({.firmware = arguments[1], .trace = arguments[2]});
+    return 0;
+  } catch (const std::exception &error) {
+    std::cerr << error.what() << '\n';
+    return 1;
+  }
+}

@@ -46,6 +46,10 @@ std::optional<std::uint8_t> McuUsb::read_live(const std::uint16_t offset) const 
     const auto value = buffers_data_.at((offset - usb::endpoint_begin) / 2).control;
     return static_cast<std::uint8_t>((offset % 2 == 0 ? value >> 8U : value) & usb::byte_mask);
   }
+  if (usb::ique_control(offset)) {
+    require_observation();
+    return read_ique_control(offset);
+  }
   if (offset >= usb::setup_begin && offset < usb::setup_end) {
     if ((status_ & usb::setup) == 0) { throw Fault("USB setup-buffer contents are not valid"); }
     return setup_.at(offset - usb::setup_begin);
@@ -138,6 +142,10 @@ bool McuUsb::write_live(const ByteWrite access) {
   }
   if (offset >= usb::endpoint_begin && offset < usb::endpoint_end) {
     write_endpoint(access);
+    return true;
+  }
+  if (usb::ique_control(offset)) {
+    write_ique_control(access);
     return true;
   }
   if (offset >= usb::setup_begin && offset < usb::setup_end) {

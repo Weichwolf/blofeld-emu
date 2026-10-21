@@ -218,6 +218,16 @@ USB device/transport              partial  PHY control and register/data-side en
                                           buffers, setup/overrun, W1C/IRQs, SOF and
                                           DATA0/DATA1 retries checked. Real HC12
                                           setup/IN/OUT ISRs and priority chaining.
+                                          Original cold-start reset/configuration
+                                          IRQs now return through native RTI/WAI.
+                                          Three observed reset profiles include
+                                          255 genuine delay calls on timeout;
+                                          two mid-ISR replays retain CPU/RAM and
+                                          declared USB registers/write prefix.
+                                          Unconfigured UEPCSR4A/5A controls have
+                                          independent word/byte/reset checks.
+                                          Original MIDI descriptors retain their
+                                          reserved NISOF=2 failure (usb-reset.txt).
                                           Wire decoding, automatic standard requests,
                                           IQUE/reset commands and host ports pending.
 Original DSP runtime              partial  127 checked records extracted; DSP56300

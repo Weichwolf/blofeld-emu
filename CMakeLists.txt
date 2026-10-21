@@ -94,7 +94,8 @@ target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_pri
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
   src/mcu_clock.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
-  src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp)
+  src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp
+  src/mcu_usb_ique_control.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
 add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
@@ -441,6 +442,17 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-mcu-scan.trace")
   set_tests_properties(original_mcu_scan PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  add_executable(blofeld-usb-ique-control-test test/usb_ique_control_test.cpp)
+  target_link_libraries(blofeld-usb-ique-control-test PRIVATE blofeld_mcu)
+  add_test(NAME usb_ique_control COMMAND blofeld-usb-ique-control-test)
+  add_executable(blofeld-original-usb-reset-test test/original_usb_reset_test.cpp)
+  target_link_libraries(blofeld-original-usb-reset-test PRIVATE blofeld_application_fixture)
+  add_test(NAME original_usb_reset COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_usb_reset.py"
+    $<TARGET_FILE:blofeld-original-usb-reset-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-usb-reset.trace")
+  set_tests_properties(original_usb_reset PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-original-application-test test/original_application_test.cpp)
   target_link_libraries(blofeld-original-application-test PRIVATE blofeld_application_fixture)
   add_test(NAME original_application COMMAND ${Python3_EXECUTABLE}
@@ -965,6 +977,8 @@ add_custom_target(quality
     blofeld-original-parallel-update-test
     blofeld-original-lcd-helper-test
     blofeld-original-mcu-scan-test
+    blofeld-usb-ique-control-test
+    blofeld-original-usb-reset-test
     blofeld-original-application-test
     blofeld-wai-test
     blofeld-st7565-test

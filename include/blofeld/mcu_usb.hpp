@@ -83,6 +83,9 @@ private:
   [[nodiscard]] std::optional<std::uint8_t> read_live(std::uint16_t offset) const;
   bool write_live(ByteWrite access);
   void write_endpoint(ByteWrite access);
+  [[nodiscard]] std::uint8_t read_ique_control(std::uint16_t offset) const;
+  void write_ique_control(ByteWrite access);
+  void require_unconfigured_ique(unsigned index) const;
   void acknowledge_configuration(ByteWrite access);
   [[nodiscard]] bool enabled() const;
   void require_observation() const;
@@ -103,6 +106,7 @@ private:
   std::uint16_t configuration_status_ = 0;
   std::array<std::uint8_t, 8> setup_{};
   std::array<Buffer, 4> buffers_data_{};
+  std::array<std::uint16_t, 2> ique_controls_{};
   std::optional<PendingIn> pending_in_;
   UsbDecoderState decoder_{};
   bool decoder_known_ = false;
