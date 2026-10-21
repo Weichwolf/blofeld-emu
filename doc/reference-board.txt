@@ -383,6 +383,15 @@ Optional host MIDI/SCI route
   midi-transfer-reference 12 0
 
 The second setting is optional and explicitly experimental; the default retains
-the strict unresolved SCI transfer edge. --midi-file/--midi-device require this
-route and reject automatic checkpoint replay. See host-midi.txt for source
+the strict unresolved SCI transfer edge. --midi-file/--midi-device reject
+automatic checkpoint replay. See host-midi.txt for source
 formats, native clock ownership, snapshots, polling and untested live timing.
+
+Alternative DSP MIDI route
+  midi-dsp-tio 0 after 10000000 synchronized
+
+This selects the fixed 31250-baud bit grid on DSP TIO0; TIO1 and raw observation
+are also explicit options. Require dsp-input-order and its event budget. The
+SCI route must be absent. dsp-host-midi.txt describes independent wire timing,
+the separate optional midi-dsp-reference experiment and remaining original
+boot/physical MIDI/audio limits.

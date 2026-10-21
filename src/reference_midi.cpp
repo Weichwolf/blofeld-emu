@@ -6,6 +6,7 @@
 #include "blofeld/midi_serial.hpp"
 #include "reference_board.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <ostream>
@@ -28,6 +29,7 @@ Pad pad(const SciReceivePin pin) {
 }
 
 void validate_midi(const Config &config) {
+  validate_dsp_midi(config);
   if (config.midi_reference) {
     if (!config.midi) { throw Fault("MIDI transfer reference requires midi-sci"); }
     McuSci validator;
@@ -91,21 +93,37 @@ void Board::synchronize_midi() {
 
 MidiInputWindow Board::midi_window() const {
   require_healthy();
+  if (control_.midi_dsp) {
+    return {.ticks = ticks(),
+            .available = control_.started
+                             ? MidiSerialInput::capacity - control_.midi_dsp->queued_bytes()
+                             : 0,
+            .started = control_.started};
+  }
   return {.ticks = ticks(),
           .available =
               control_.midi ? MidiSerialInput::capacity - control_.midi->queued_bytes() : 0,
           .started = control_.midi.has_value()};
 }
 
+std::size_t Board::midi_queue_size() const {
+  if (control_.midi_dsp) { return control_.midi_dsp->queued_bytes(); }
+  return control_.midi ? control_.midi->queued_bytes() : 0;
+}
+
 void Board::enqueue_midi(const std::span<const std::uint8_t> bytes) {
   require_healthy();
-  if (!control_.midi) {
+  if (!control_.midi && (!control_.midi_dsp || !control_.started)) {
     throw Fault("Reference MIDI input precedes its configured start boundary");
   }
   if (bytes.size() > std::numeric_limits<std::uint64_t>::max() - control_.midi_bytes) {
     throw Fault("Reference MIDI byte counter exhausted");
   }
-  control_.midi->enqueue(bytes);
+  if (control_.midi_dsp) {
+    control_.midi_dsp->enqueue(bytes);
+  } else {
+    control_.midi->enqueue(bytes);
+  }
   control_.midi_bytes += bytes.size();
   try {
     if (execution_.trace != nullptr && !bytes.empty()) {

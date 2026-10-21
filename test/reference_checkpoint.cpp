@@ -79,7 +79,8 @@ blofeld::McuFlashImage image(const bool fault) {
 }
 
 reference::Config config(const std::uint64_t release,
-                         const std::optional<reference::MidiRoute> midi = std::nullopt) {
+                         const std::optional<reference::MidiRoute> midi = std::nullopt,
+                         const std::optional<reference::DspMidiRoute> dsp_midi = std::nullopt) {
   reference::Config result;
   result.mcu = {.clock = {.oscillator_hz = oscillator,
                           .switch_timing = blofeld::McuRunClockSwitch::reference_cycle_boundary},
@@ -94,7 +95,12 @@ reference::Config config(const std::uint64_t release,
       .maximum_dsp_steps_per_cycle = 16,
       .wait_order = blofeld::McuDspWaitOrder::dsp_before_mcu};
   result.release_ticks = release;
-  result.operations = midi ? midi_operations : 32;
+  result.operations = (midi || dsp_midi) ? midi_operations : 32;
+  result.midi_dsp = dsp_midi;
+  if (dsp_midi) {
+    result.dsp_input_order = blofeld::DspExternalOrder::external_before_dsp;
+    result.maximum_dsp_inputs_per_advance = 4;
+  }
   result.midi = midi;
   result.select_n = 2;
   result.clock = 4;
@@ -109,10 +115,11 @@ struct Fixture {
           const bool fault = true,
           const std::uint64_t release = epoch,
           std::vector<std::uint32_t> program = {0, absolute_jump, blofeld::test::boot},
-          const std::optional<reference::MidiRoute> midi = std::nullopt)
+          const std::optional<reference::MidiRoute> midi = std::nullopt,
+          const std::optional<reference::DspMidiRoute> dsp_midi = std::nullopt)
       : flash(image(fault)),
         rom(std::move(program)),
-        configuration(config(release, midi)),
+        configuration(config(release, midi, dsp_midi)),
         execution{.image = flash,
                   .rom = rom,
                   .specification = specification,
@@ -457,6 +464,57 @@ void test_midi_trace_failure(const std::filesystem::path &specification) {
           "Trusted joint restore removes the failed unrecorded input prefix before retry");
 }
 
+void test_dsp_midi_idle_deadline_and_joint_restore(const std::filesystem::path &specification) {
+  constexpr std::uint64_t first = 1000;
+  constexpr unsigned partial = 600;
+  constexpr unsigned idle_operations = 20;
+  constexpr unsigned complete = 6000;
+  constexpr unsigned bit_ticks = 17280;
+  constexpr unsigned expected_dsp_steps = 4800;
+  Fixture f(specification,
+            false,
+            epoch,
+            {0, absolute_jump, blofeld::test::boot},
+            std::nullopt,
+            reference::DspMidiRoute{.after_ticks = first});
+  static_cast<void>(rejects([&] { f.board.enqueue_midi({}); }));
+  f.board.initialize();
+  const auto initial = f.board.status();
+  for (unsigned op = 0; op < idle_operations; ++op) { f.board.advance(); }
+  require(f.board.status().midi_dsp_events == 1 && f.board.status().midi_dsp_frames == 0,
+          "The bound DSP source observes idle even before host bytes arrive");
+  const std::array<std::uint8_t, 2> prefix{0xe0, 0};
+  f.board.enqueue_midi(prefix);
+  for (unsigned op = idle_operations; op < partial; ++op) { f.board.advance(); }
+  const auto saved = f.board.checkpoint();
+  const std::array<std::uint8_t, 1> suffix{0x40};
+  std::optional<reference::Status> expected;
+  std::string expected_trace;
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    f.board.restore(saved);
+    f.trace.str({});
+    f.trace.clear();
+    f.board.enqueue_midi(suffix);
+    for (unsigned op = partial; op < complete; ++op) { f.board.advance(); }
+    const auto observed = f.board.status();
+    const auto end = (5 + complete) * mcu_period;
+    require(
+        observed.midi_bytes == 3 && observed.midi_queued == 0 && observed.midi_dsp_frames == 3 &&
+            observed.midi_dsp_events == ((end - first) / bit_ticks) + 1 &&
+            observed.mcu_cycles == 5 + complete && observed.common_ticks == end &&
+            observed.dsp_units == std::uint64_t{2} * complete &&
+            observed.dsp_steps == expected_dsp_steps && observed.cold_nvm == initial.cold_nvm,
+        "Independent MCU NOP/DSP NOP1-JMP4 clocks and 31250-baud grid retain all three frames/NVM");
+    if (expected) {
+      require(observed == *expected && f.trace.str() == expected_trace,
+              "Partial DSP byte/source/schedule snapshots reproduce actual CPU and full trace");
+    } else {
+      expected = observed;
+      expected_trace = f.trace.str();
+    }
+  }
+}
+
 }
 
 int main(const int argc, char **argv) {
@@ -477,6 +535,7 @@ int main(const int argc, char **argv) {
     test_midi_wire_checkpoint_and_capacity(specification);
     test_midi_rate_failure(specification);
     test_midi_trace_failure(specification);
+    test_dsp_midi_idle_deadline_and_joint_restore(specification);
     std::cout
         << "Joint reference-board checkpoints, atomic restore, real REP/RAM and guards passed.\n";
     return 0;

@@ -306,7 +306,40 @@ MidiRoute midi_route(std::istringstream &line) {
           .after_ticks = number(line, UINT64_MAX)};
 }
 
+DspMidiRoute dsp_midi_route(std::istringstream &line) {
+  const auto index = static_cast<unsigned>(number(line, 1));
+  literal(line, "after");
+  const auto when = number(line, UINT64_MAX);
+  const auto timing = token(line);
+  if (timing != "raw" && timing != "synchronized") {
+    throw Fault("DSP MIDI input timing must be raw or synchronized");
+  }
+  return {.after_ticks = when, .index = index, .synchronized = timing == "synchronized"};
+}
+
+bool midi_setting(Config &config, const std::string_view key, std::istringstream &line) {
+  if (key == "midi-sci") {
+    config.midi = midi_route(line);
+  } else if (key == "midi-transfer-reference") {
+    const auto divisor = static_cast<unsigned>(number(line, UINT32_MAX));
+    config.midi_reference = {.baud_divisor = divisor,
+                             .transfer_delay_bus_cycles =
+                                 static_cast<unsigned>(number(line, UINT32_MAX))};
+  } else if (key == "midi-dsp-tio") {
+    config.midi_dsp = dsp_midi_route(line);
+  } else if (key == "midi-dsp-reference") {
+    const auto period = number(line, UINT64_MAX);
+    config.midi_dsp_reference = {.bit_ticks = period,
+                                 .idle_bits = static_cast<unsigned>(number(line, 16))};
+
+  } else {
+    return false;
+  }
+  return true;
+}
+
 void setting(Config &config, const std::string_view key, std::istringstream &line) {
+  if (midi_setting(config, key, line)) { return; }
   if (key == "clock") {
     clocks(config, line);
   } else if (key == "ordering") {
@@ -317,13 +350,6 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
     dsp_order(config, line);
   } else if (key == "pcm-receive") {
     config.pcm = pcm_route(line);
-  } else if (key == "midi-sci") {
-    config.midi = midi_route(line);
-  } else if (key == "midi-transfer-reference") {
-    const auto divisor = static_cast<unsigned>(number(line, UINT32_MAX));
-    config.midi_reference = {.baud_divisor = divisor,
-                             .transfer_delay_bus_cycles =
-                                 static_cast<unsigned>(number(line, UINT32_MAX))};
   } else if (key == "spi-b") {
     serial(config, line);
   } else if (key == "dsp-release") {

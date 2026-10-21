@@ -16,6 +16,10 @@ An explicit reference-board route is required, for example:
 
   midi-sci PR2 6000000 after 54000
 
+The alternative midi-dsp-tio route supplies the same host bytes to a DSP timer
+input and original receiver/parser components; see dsp-host-midi.txt. Select
+one route explicitly. Actual Blofeld MIDI wiring remains unqualified.
+
 These are own-program values, not Blofeld clock/wiring calibration. Fields select
 PR2 or PS4, fixed native bus Hz and earliest common tick. Arming rounds forward
 to an MCU operation boundary. If startup enables SCI before arming, supply an
