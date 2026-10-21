@@ -7,7 +7,11 @@
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_usb.hpp"
+#include "blofeld/usb_host.hpp"
+#include "blofeld/usb_transfer.hpp"
+#include "blofeld/usbip.hpp"
 #include "lcd_fixture.hpp"
+#include "usbip_fixture.hpp"
 
 #include <algorithm>
 #include <array>
@@ -23,6 +27,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -283,17 +288,42 @@ void Session::finish_configuration() {
   interrupted = registers(machine.cpu().state());
   machine.bus().observe_usb_decoder({.enumerated = true});
   constexpr std::array<std::uint8_t, 8> request{0, 9, 1, 0, 0, 0, 0, 0};
-  require(machine.bus().receive_usb_setup(request) == blofeld::UsbResponse::ack &&
-              machine.bus().request_usb_in(blofeld::UsbBuffer::control_in).response ==
-                  blofeld::UsbResponse::nak,
-          "Actual SET_CONFIGURATION SETUP must ACK and NAK status before original firmware runs");
+  const blofeld::UsbTransferRequest transfer{.sequence = 7,
+                                             .address = 0,
+                                             .length = 0,
+                                             .setup = request,
+                                             .output = {},
+                                             .short_not_ok = false,
+                                             .zero_packet = false};
+  blofeld::UsbipDecoder decoder(blofeld::test::usbip_fixture::device);
+  decoder.feed(blofeld::test::usbip_fixture::submit(transfer));
+  const auto command = decoder.next();
+  if (!command || !std::holds_alternative<blofeld::UsbTransferRequest>(*command)) {
+    throw blofeld::Fault("Complete own USB/IP configuration submission must decode");
+  }
+  blofeld::UsbHostQueue queue;
+  queue.submit(std::get<blofeld::UsbTransferRequest>(*command));
+  const auto context = [this] {
+    const auto state = machine.cpu().state();
+    return blofeld::ExecutionContext{.pc = state.pc, .ccr = state.ccr};
+  };
+  constexpr unsigned pending_configuration = 0xa100;
+  require(queue.poll(machine.bus(), context()).empty() &&
+              queue.poll(machine.bus(), context()).empty() && queue.pending() == 1 &&
+              !queue.faulted() && word(configuration_status) == pending_configuration,
+          "USB/IP configuration SUBMIT must reach SETECR and pending status NAK before the MCU");
+  decoder.finish();
   trace_ << "CONFIGURATION_SETUP ACK NAK\n";
   const auto pending = save();
+  const auto pending_queue = queue;
   std::optional<Outcome> expected;
   constexpr unsigned requested = 0x2000;
   constexpr unsigned valid_configuration = 0x8100;
   for (unsigned replay = 0; replay < 3; ++replay) {
-    if (replay != 0) { restore(pending); }
+    if (replay != 0) {
+      restore(pending);
+      queue = pending_queue;
+    }
     do {
       require(counters.native < instruction_limit,
               "Original configuration acknowledgement must return");
@@ -309,12 +339,19 @@ void Session::finish_configuration() {
             "Pending configuration snapshot replays CPU/RAM/USB/write prefix through native RTI");
     bool rejected = false;
     try {
-      static_cast<void>(machine.bus().request_usb_in(blofeld::UsbBuffer::control_in));
+      static_cast<void>(queue.poll(machine.bus(), context()));
     } catch (const blofeld::Fault &fault) {
       require(std::string_view(fault.what())
                   .contains("automatic configuration status completion after DONEECRU"),
               "Automatic status completion retains its specific unresolved boundary");
-      trace_ << "CONFIGURATION_STATUS_FRONTIER " << fault.what() << '\n';
+      const std::string_view reason = fault.what();
+      require(reason.contains("seq=7 endpoint=0x00 phase=status") &&
+                  reason.contains("mcu-pc=" + blofeld::hex(machine.cpu().state().pc)) &&
+                  queue.faulted() && queue.pending() == 1,
+              "Host transfer preserves sequence/phase/actual MCU context and poisons on fault");
+      trace_ << "CONFIGURATION_HOST_FRONTIER " << reason << '\n';
+      trace_ << "CONFIGURATION_STATUS_FRONTIER "
+             << reason.substr(reason.find("Unqualified USB automatic configuration")) << '\n';
       rejected = true;
     }
     require(rejected && outcome() == actual,

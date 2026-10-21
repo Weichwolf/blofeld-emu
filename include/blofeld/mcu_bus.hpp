@@ -75,6 +75,7 @@ public:
   UsbResponse receive_usb_out(UsbOutPacket packet);
   [[nodiscard]] UsbInPacket request_usb_in(UsbBuffer buffer);
   void finish_usb_in(bool acknowledged);
+  [[nodiscard]] UsbEndpointInfo usb_host_endpoint(std::uint8_t address) const;
   void advance_oscillator(unsigned cycles);
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   void advance_sci(unsigned bus_cycles);

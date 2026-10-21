@@ -34,4 +34,8 @@ UsbInPacket McuBus::request_usb_in(const UsbBuffer buffer) {
 void McuBus::finish_usb_in(const bool acknowledged) {
   usb_.finish_in(acknowledged);
 }
+
+UsbEndpointInfo McuBus::usb_host_endpoint(const std::uint8_t address) const {
+  return usb_.host_endpoint(address);
+}
 }

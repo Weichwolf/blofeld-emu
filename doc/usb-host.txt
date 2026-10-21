@@ -11,6 +11,9 @@ Current state
 McuUsb models registers, buffers and explicit decoded transactions. Native own
 CPU/ISR/endpoint tests and conditional original reset/configuration/descriptor
 tests exist. There is no host USB backend or functioning USB-MIDI device today.
+The MCU-backed transfer queue and USB/IP transfer-stage framing are implemented
+and tested with own native IRQ/descriptor fixtures (usb-host-transfers.txt).
+Discovery/import, a listener and host USB attachment are not implemented yet.
 Actual SET_CONFIGURATION/SET_INTERFACE SETUP decoding and pending-status NAK are
 modeled; the former executes the original configuration ISR and replays through
 RTI/WAI. Automatic status completion after DONEECRU is still an explicit failure
@@ -49,6 +52,8 @@ the importing host runs the device's normal driver. Raw Gadget exposes requests
 to userspace but is documented as a debugging interface, not a production
 backend. Reset/address/configuration semantics must be qualified before selecting
 and exposing a usable Blofeld backend. No such backend is implemented yet.
+The controller's ENUMD flag means completed PHY chirp/speed negotiation; it does
+not establish successful host descriptor/address/configuration enumeration.
 
 In Wine 10 the ALSA MIDI driver handles MIDI and SysEx via the ALSA sequencer.
 For host USB-MIDI, this yields the intended path: Spectre -> Wine MIDI -> host

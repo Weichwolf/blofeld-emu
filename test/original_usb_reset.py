@@ -30,6 +30,11 @@ def validate(text):
     completion = "Unqualified USB automatic configuration status completion after DONEECRU"
     if re.findall(r"^CONFIGURATION_STATUS_FRONTIER (.+)$", text, re.M) != [completion] * 3:
         raise ValueError("Missing automatic configuration completion boundary and replays")
+    host = re.findall(r"^CONFIGURATION_HOST_FRONTIER (.+)$", text, re.M)
+    if (len(host) != 3 or len(set(host)) != 1 or not re.fullmatch(
+            r"USB host request seq=7 endpoint=0x00 phase=status mcu-pc=0x8315 "
+            r"ccr=0x[0-9a-f]{2}: " + re.escape(completion), host[0])):
+        raise ValueError("Missing poisoned host request with original native context and replays")
     frontiers = re.findall(r"^MIDI_FRONTIER (IN|OUT) (.+)$", text, re.M)
     if len(frontiers) != 2 or {kind for kind, _ in frontiers} != {"IN", "OUT"}:
         raise ValueError("Missing original MIDI descriptor failure evidence")
@@ -62,6 +67,7 @@ def validate(text):
             "reset_configuration_instructions": reset_instructions,
             "reset_profiles": len(resets), "replays": len(replays),
             "configuration_irqs": len(configurations), "configuration_replays": 2,
+            "configuration_host_faults": len(host),
             "reserved_midi_failures": len(frontiers),
             "original_delay_calls": sum(row[2] for row in resets),
             "native_instructions": reset_instructions + setup_instructions}

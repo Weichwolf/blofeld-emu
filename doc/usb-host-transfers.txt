@@ -1,0 +1,73 @@
+MCU-backed host transfer queue and USB/IP transfer framing
+
+This component is the transfer boundary for a future host-visible USB device.
+It does not expose a USB device, start a listener, synthesize Blofeld descriptors
+or establish original enumeration. The complete host requirement is usb-host.txt.
+
+UsbHostQueue accepts bounded control/bulk requests and polls actual McuBus USB
+callbacks. Endpoint addresses, directions, types and maximum packet sizes are
+resolved from the MCU-programmed controller descriptions. Unsupported, ambiguous
+or reserved descriptions retain their visible failure. The queue never programs
+these descriptions, changes readiness or executes/replaces guest firmware.
+
+One poll attempts at most one packet per logical endpoint. Both EP0 directions
+share FIFO order. The board scheduler must run the real MCU between polls.
+NAK/no response keeps a request pending. OUT bytes advance only on device ACK;
+IN bytes become host data only after the controller supplies known data and its
+real ACK callback completes. DATA PID state is retained separately per endpoint.
+Control setup/data/status phases stay distinct, including DATA1 zero-length
+status and no-data requests. Bulk short packets, SHORT_NOT_OK, explicit extra
+zero packets and real STALL outcomes have separate completion behavior.
+
+Cancellation removes the pending request without undoing already acknowledged
+device effects. It creates no later successful completion. Reset clears only
+host queue/toggle state; the caller must separately supply qualified controller
+reset/PHY observations. It cannot repair unknown EPRST PID state or original
+reserved fields. Queue/controller copies retain pending phases, accepted prefixes
+and toggles for joint replay. No TCP socket or durable whole-board snapshot is
+claimed. Limits are 32 pending requests and 1 MiB per request.
+
+Hardware/model faults poison the queue and include sequence, endpoint, phase and
+the caller's actual MCU PC/CCR. They are not converted to USB success or a fake
+device STALL. IN buffer overrun/PID discrepancies, automatic standard requests,
+high speed, interrupt/isochronous scheduling and active IQUE remain unsupported
+where the underlying controller or this adapter lacks qualified behavior.
+
+UsbipDecoder handles CMD_SUBMIT/CMD_UNLINK only after a separately established
+import. It reconstructs fragmented/coalesced TCP input with a bounded one-frame
+buffer, checks target identity/length/direction/flags and retains all eight setup
+bytes in USB order. Complete headers and OUT payloads are required before a
+request is delivered. Invalid input or truncated EOF fails the connection.
+The implementation consumes ordinary non-ISO zero or all-ones scheduling fields;
+host-memory flags carry no guest DMA meaning. Unknown flags and ISO requests fail.
+RET_SUBMIT has network-order fields, real accepted lengths and IN bytes only.
+RET_UNLINK distinguishes cancellation (-ECONNRESET) from an absent/already
+completed target (zero). Short-not-OK and device STALL map to Linux wire errors.
+No kernel implementation code is copied; project sources remain GPL-3.0-only.
+
+Reproduce deterministic sanitizer/native gates:
+  cmake --build --preset strict --target blofeld-usbip-test blofeld-usb-host-test blofeld-usb-host-native-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_protocol|usb_host_transfers|usb_host_native)$'
+
+usbip_protocol checks independent wire words/replies, every fixed split/EOF
+boundary of an own OUT fixture, coalesced IN/OUT/unlink, limits and fixed invalid
+fields. usb_host_transfers checks actual MCU buffers, ACK/NAK, multi-packet control
+and bulk, status, short/error/zero outcomes, FIFO, cancellation, queue capacity,
+joint replay and strict NISOF/EPRST/standard-request faults. usb_host_native feeds
+an own wire request through the real SETUP IRQ and 25 own HC12 ISR instructions;
+the guest reads setup bytes and copies its own ROM descriptor into USB RAM. Real
+IN/OUT status completion IRQs and RTI restore every supplied CPU register before
+the wire reply is checked. These are independent own fixtures, not an original
+Blofeld responder or a host-enumeration claim. No fuzzing or physical traffic runs.
+
+Remaining integration: device discovery/import and descriptor provenance, TCP
+session lifecycle, reset/address/configuration semantics, common-clock scheduler
+and CLI binding, live host/controller provisioning and actual USB-MIDI class
+binding. Original setup-buffer/NISOF conflicts, full boot/MIDI/audio, Spectre
+sample transfer/cancellation, timing and hardware equivalence remain open.
+
+Protocol references:
+  https://docs.kernel.org/usb/usbip_protocol.html
+  https://github.com/torvalds/linux/blob/v6.12/include/uapi/linux/usbip.h
+  https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/usbip_common.c
+  https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/stub_rx.c
