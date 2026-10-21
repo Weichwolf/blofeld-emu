@@ -15,6 +15,11 @@ The MCU-backed transfer queue and USB/IP transfer-stage framing are implemented
 and tested with own native IRQ/descriptor fixtures (usb-host-transfers.txt).
 MCU-backed descriptor capture and USB/IP discovery/import framing are implemented
 separately (usb-discovery.txt). A listener and host USB attachment remain absent.
+Actual SET_CONFIGURATION/SET_INTERFACE SETUP decoding and pending-status NAK are
+modeled; the former executes the original configuration ISR and replays through
+RTI/WAI. Automatic status completion after DONEECRU is still an explicit failure
+until its endpoint register/interrupt effects are qualified. No host status
+success follows merely from firmware acknowledging the configuration interrupt.
 --midi-device is a read-only legacy RawMIDI input, with no output or USB-device
 enumeration. The editor's XML/WAV commands are offline functionality.
 

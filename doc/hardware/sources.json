@@ -124,5 +124,17 @@
     "source": "https://www.nxp.com/docs/en/application-note/AN2880.pdf",
     "bytes": 89463,
     "sha256": "6c32276a00c190c1d5aaadc57185049b27532675476291b16a34240030363d3a"
+  },
+  {
+    "file": "DRM062.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DRM062.pdf",
+    "bytes": 476942,
+    "sha256": "691de4bc350851cb233e797ceec7b9108f347ee6e697484b8abe05f2c8df8a2a"
+  },
+  {
+    "file": "M68EVB912UF32UM.pdf",
+    "source": "https://www.nxp.com/docs/en/user-guide/M68EVB912UF32UM.pdf",
+    "bytes": 624895,
+    "sha256": "15dcf4a21d4e8f28e172756e8634307822542c852e35fa9390af7ce2dd186836"
   }
 ]

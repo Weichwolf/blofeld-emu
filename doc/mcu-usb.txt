@@ -30,6 +30,17 @@ Registers and interrupts
   SETECR. DONEECRU acknowledges SETECR and self-clears. UNCIR/UNASR bound decoded
   requests. The guide's inclusive interface-count wording remains ambiguous at
   the upper boundary; that case and overlapping configuration requests fail.
+- Actual standard SET_CONFIGURATION/SET_INTERFACE SETUP packets now decode into
+  that same register/IRQ path. Direction/recipient, complete little-endian fields,
+  zero data length, selection bounds and configured-interface prerequisites are
+  checked without truncation. Automatic requests never populate USTB or set
+  application SETUP/SETOVR. Class/vendor request numbers still reach firmware.
+  Status IN returns the documented NAK while SETECR remains set, even if firmware
+  sets DVALID. A NAK creates no packet ownership or completion. After DONEECRU,
+  automatic status completion fails visibly: exact endpoint register/interrupt
+  effects remain unqualified. No successful status packet is synthesized.
+  Replacing an unresolved configuration request, or a pending firmware SETUP/
+  SETOVR, also remains unqualified. Rejected overlap preserves USTB and UCCSR.
 - Status, application SETUP, configuration update and SOF use vectors 0xffd4,
   0xffd2, 0xffd0 and 0xffbe. Local endpoint completions use 0xffce, 0xffcc,
   0xffca, 0xffc8. Flags and their enables feed the real MCU priority controller;
@@ -114,3 +125,7 @@ S12USB20D6E2FV1 sections 3.1.2..3.1.19 and 4.1 define registers, buffers and sou
 flags; 9S12UF32DGV1 table 5-1 defines vectors. USB 2.0 sections 8.6.2..8.6.4 define
 retry/toggle behavior. doc/hardware/sources.json pins both official NXP and USB-IF
 reference archives. Native exception/operand definitions use S12CPUV2 7.5/7.8.
+USB 2.0 sections 9.4.7/9.4.10 define the configuration/interface request fields.
+The additionally pinned NXP DRM062 reference design and M68EVB912UF32UM board
+guide do not resolve USTB-after-ack retention, reserved NISOF or automatic status
+completion effects. Their firmware listings are not part of this implementation.

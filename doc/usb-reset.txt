@@ -42,8 +42,13 @@ after the real UEPCSR4A write, before UEPCSR5A, reproduce complete architectural
 CPU state, all 5120 mapped RAM bytes, declared USB registers/descriptions and the
 actual write prefix. All MCU NVM bytes, knowledge and erase history stay intact.
 Register inspection uses detached board copies; it does not reconfigure the CPU's
-board. The same continued CPU also executes the original FFD0 configuration
-acknowledgement and RTI/WAI after a decoded configuration 1 request.
+board. The same continued CPU receives an actual SET_CONFIGURATION SETUP for
+configuration 1. Hardware ACKs the SETUP and NAKs status IN before CPU execution.
+Its original FFD0 ISR writes DONEECRU, returns through RTI and reaches main WAI.
+Two pending-request snapshot restores repeat the complete CPU/RAM/register/write
+prefix and unchanged NVM result. Automatic status IN after DONEECRU still fails
+explicitly: its endpoint register/interrupt effects remain unqualified. There
+is no synthesized zero-length success, TFRC or completed host configuration.
 
 The next original MIDI boundary is retained explicitly. Native initialization
 stores 0x820008d1 and 0x820008c1 for physical endpoints 2/3. Their NISOF field is 2;

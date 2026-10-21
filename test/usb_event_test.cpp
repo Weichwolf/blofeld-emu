@@ -231,6 +231,178 @@ void test_setup_buffers_overrun_and_explicit_limits() {
           "A new SETUP ends the old stall and NAKs until firmware supplies real data");
 }
 
+constexpr unsigned pending_configuration = 0xa100;
+constexpr unsigned completed_configuration = 0x8100;
+constexpr unsigned pending_input_control = 0x5000;
+constexpr unsigned pending_interface = 0xe100;
+constexpr unsigned pending_deconfiguration = 0xa000;
+
+void reject_configuration_completion(blofeld::McuUsb &usb) {
+  try {
+    static_cast<void>(usb.request_in(blofeld::UsbBuffer::control_in));
+  } catch (const blofeld::Fault &fault) {
+    require(std::string(fault.what()).contains("automatic configuration status completion"),
+            "Automatic status completion retains its specific unqualified boundary");
+    return;
+  }
+  throw blofeld::Fault("DONEECRU cannot manufacture a qualified automatic status packet");
+}
+
+void test_configuration_setup_and_pending_status() {
+  blofeld::McuUsb usb;
+  start(usb);
+  constexpr unsigned configuration_and_setup_enable = 0x2003;
+  write_word(usb, mask, configuration_and_setup_enable);
+  constexpr std::array<std::uint8_t, 8> select_configuration{0, 9, 1, 0, 0, 0, 0, 0};
+  require(usb.receive_setup(select_configuration, false) == blofeld::UsbResponse::none &&
+              word(usb, configuration_status) == 0 && usb.interrupt_sources() == 0,
+          "Bad-CRC SET_CONFIGURATION does not select configuration or raise an interrupt");
+  require(usb.receive_setup(select_configuration) == blofeld::UsbResponse::ack &&
+              word(usb, configuration_status) == pending_configuration &&
+              usb.interrupt_sources() == 4 && (word(usb, status) & setup_mask) == 0,
+          "Literal SET_CONFIGURATION decodes to SETECR/CFGVALID/config1, never firmware SETUP");
+  reject([&usb] { static_cast<void>(usb.read(setup_buffer)); },
+         "Automatic configuration cannot expose a fabricated firmware setup buffer");
+  const auto pending = usb;
+  reject([&usb] { static_cast<void>(usb.receive_out({.data = {}})); },
+         "A no-data configuration request cannot accept an OUT data/status stage");
+  for (unsigned retry = 0; retry < 3; ++retry) {
+    require(usb.request_in(blofeld::UsbBuffer::control_in).response == blofeld::UsbResponse::nak &&
+                word(usb, configuration_status) == pending_configuration &&
+                usb.interrupt_sources() == 4,
+            "Status IN retries NAK until real firmware acknowledges SETECR");
+    reject([&usb] { usb.finish_in(true); }, "A NAK does not create an ACK-owned data packet");
+  }
+  reject([&usb] { static_cast<void>(usb.receive_setup(descriptor_request)); },
+         "Replacement of an unresolved configuration request remains explicitly unqualified");
+  const auto firmware_pending = [&usb] {
+    constexpr unsigned endpoint0 = 0x314;
+    usb.write({.address = endpoint0, .value = endpoint_dv_ie});
+    require(usb.request_in(blofeld::UsbBuffer::control_in).response == blofeld::UsbResponse::nak,
+            "Firmware DVALID cannot bypass the hardware configuration-status NAK");
+    usb.write({.address = configuration_status, .value = 0});
+    require(word(usb, configuration_status) == pending_configuration,
+            "DONEECRU=0 leaves status pending");
+    usb.write({.address = configuration_status, .value = endpoint_ie});
+    require(word(usb, configuration_status) == completed_configuration &&
+                usb.interrupt_sources() == 0,
+            "Actual DONEECRU write acknowledges only the configuration request");
+    reject_configuration_completion(usb);
+    require(word(usb, endpoint0) == pending_input_control,
+            "Unknown automatic completion does not consume DVALID or set TFRC");
+  };
+  firmware_pending();
+  usb = pending;
+  firmware_pending();
+  constexpr std::array<std::uint8_t, 8> select_interface{1, 11, 0, 0, 0, 0, 0, 0};
+  require(usb.receive_setup(select_interface) == blofeld::UsbResponse::ack &&
+              word(usb, configuration_status) == pending_interface &&
+              usb.interrupt_sources() == 4 &&
+              usb.request_in(blofeld::UsbBuffer::control_in).response == blofeld::UsbResponse::nak,
+          "SET_INTERFACE decodes its own INTFVALID/SETECR without a synthetic host decoder call");
+  usb.write({.address = configuration_status, .value = endpoint_ie});
+  reject_configuration_completion(usb);
+  constexpr std::array<std::uint8_t, 8> unconfigure{0, 9, 0, 0, 0, 0, 0, 0};
+  require(usb.receive_setup(unconfigure) == blofeld::UsbResponse::ack &&
+              word(usb, configuration_status) == pending_deconfiguration,
+          "Configuration zero is a real deconfiguration request, not a configured interface");
+  usb.write({.address = configuration_status, .value = endpoint_ie});
+  reject_configuration_completion(usb);
+  usb.receive_setup(descriptor_request);
+  require(usb.request_in(blofeld::UsbBuffer::control_in).response == blofeld::UsbResponse::nak &&
+              usb.interrupt_sources() == 2,
+          "New GET_DESCRIPTOR starts a fresh firmware-owned request with no invented payload");
+}
+
+void test_configuration_setup_rejections_and_reset() {
+  blofeld::McuUsb usb;
+  start(usb);
+  constexpr std::array<std::uint8_t, 8> select_configuration{0, 9, 1, 0, 0, 0, 0, 0};
+  constexpr std::array<std::array<std::uint8_t, 8>, 11> invalid{{{0x80, 9, 1, 0, 0, 0, 0, 0},
+                                                                 {1, 9, 1, 0, 0, 0, 0, 0},
+                                                                 {0, 9, 1, 1, 0, 0, 0, 0},
+                                                                 {0, 9, 1, 0, 1, 0, 0, 0},
+                                                                 {0, 9, 1, 0, 0, 1, 0, 0},
+                                                                 {0, 9, 1, 0, 0, 0, 1, 0},
+                                                                 {0, 9, 1, 0, 0, 0, 0, 1},
+                                                                 {0, 9, 2, 0, 0, 0, 0, 0},
+                                                                 {0, 9, 3, 0, 0, 0, 0, 0},
+                                                                 {1, 11, 0, 0, 0, 0, 0, 0},
+                                                                 {0x81, 11, 0, 0, 0, 0, 0, 0}}};
+  for (const auto &request : invalid) {
+    reject([&usb, &request] { static_cast<void>(usb.receive_setup(request)); },
+           "Malformed/unsupported fixed configuration requests fail without truncation");
+    require(word(usb, configuration_status) == 0 && (word(usb, status) & setup_mask) == 0,
+            "Rejected configuration cannot fabricate request registers or firmware SETUP");
+  }
+  usb.receive_setup(select_configuration);
+  const auto pending = usb;
+  usb.reset_endpoints();
+  reject([&usb] { static_cast<void>(usb.request_in(blofeld::UsbBuffer::control_in)); },
+         "EPRST cannot fabricate a known pending control phase");
+  require(word(usb, configuration_status) == pending_configuration,
+          "Endpoint reset retains UCCSR outside its documented reset domain");
+  usb = pending;
+  usb.observe_decoder({.reset = true});
+  usb.observe_decoder({.enumerated = true});
+  require(word(usb, configuration_status) == 0 &&
+              usb.request_in(blofeld::UsbBuffer::control_in).response == blofeld::UsbResponse::nak,
+          "Bus reset aborts the automatic phase, clears selection and creates no completion");
+  constexpr std::array<std::uint8_t, 8> vendor_interface{0x41, 11, 0, 0, 0, 0, 0, 0};
+  require(usb.receive_setup(vendor_interface) == blofeld::UsbResponse::ack &&
+              usb.read(setup_buffer) == vendor_interface[0] && word(usb, configuration_status) == 0,
+          "Vendor bRequest=11 still reaches firmware and cannot configure the device");
+  reject(
+      [&usb, &select_configuration] { static_cast<void>(usb.receive_setup(select_configuration)); },
+      "Automatic configuration cannot guess how a pending firmware SETUP buffer is replaced");
+  require(usb.read(setup_buffer) == vendor_interface[0] && word(usb, configuration_status) == 0,
+          "Rejected automatic overlap preserves the old request and does not raise SETECR");
+  usb.receive_setup(vendor_interface);
+  usb.write({.address = status + 1, .value = setup_flag});
+  reject(
+      [&usb, &select_configuration] { static_cast<void>(usb.receive_setup(select_configuration)); },
+      "A remaining SETOVR also retains the unqualified overlap boundary");
+  usb.write({.address = status + 1, .value = overrun_flag});
+  require(usb.receive_setup(select_configuration) == blofeld::UsbResponse::ack &&
+              word(usb, configuration_status) == pending_configuration,
+          "After real firmware clears both flags, the automatic configuration request decodes");
+}
+
+void test_configuration_setup_nonzero_interface_and_alternate() {
+  blofeld::McuUsb usb;
+  start(usb);
+  usb.set_control(0);
+  constexpr unsigned two_configurations_two_interfaces = 0x222;
+  constexpr unsigned three_alternates = 0x33333333;
+  configure(usb, {.select = 8, .value = two_configurations_two_interfaces});
+  configure(usb, {.select = 9, .value = three_alternates});
+  usb.set_control(enabled_control);
+  constexpr std::array<std::uint8_t, 8> second_configuration{0, 9, 2, 0, 0, 0, 0, 0};
+  constexpr std::array<std::uint8_t, 8> alternate_two_interface_one{1, 11, 2, 0, 1, 0, 0, 0};
+  constexpr unsigned requested_second_configuration = 0xa200;
+  constexpr unsigned requested_interface = 0xe212;
+  constexpr unsigned completed_interface = 0xc212;
+  require(usb.receive_setup(second_configuration) == blofeld::UsbResponse::ack &&
+              word(usb, configuration_status) == requested_second_configuration,
+          "SET_CONFIGURATION decodes the complete independently supplied configuration two");
+  usb.write({.address = configuration_status, .value = endpoint_ie});
+  require(usb.receive_setup(alternate_two_interface_one) == blofeld::UsbResponse::ack &&
+              word(usb, configuration_status) == requested_interface,
+          "Distinct nonzero interface and alternate bytes occupy the literal E212 UCCSR fields");
+  usb.write({.address = configuration_status, .value = endpoint_ie});
+  require(word(usb, configuration_status) == completed_interface,
+          "DONEECRU retains the actual configuration/interface/alternate fields");
+  reject_configuration_completion(usb);
+  constexpr std::array<std::array<std::uint8_t, 8>, 3> unsupported_interface{
+      {{1, 11, 3, 0, 1, 0, 0, 0}, {1, 11, 2, 0, 2, 0, 0, 0}, {1, 11, 2, 0, 1, 1, 0, 0}}};
+  for (const auto &request : unsupported_interface) {
+    reject([&usb, &request] { static_cast<void>(usb.receive_setup(request)); },
+           "Alternate limit, ambiguous interface boundary and full-width index fail visibly");
+    require(word(usb, configuration_status) == completed_interface,
+            "Rejected SET_INTERFACE preserves independently checked selected fields");
+  }
+}
+
 void test_buffer_aliases_and_out_retries() {
   blofeld::McuUsb usb;
   start(usb);
@@ -407,6 +579,9 @@ int main() {
     test_reset_flags_status_and_resume_level();
     test_sof_and_configuration_sources();
     test_setup_buffers_overrun_and_explicit_limits();
+    test_configuration_setup_and_pending_status();
+    test_configuration_setup_rejections_and_reset();
+    test_configuration_setup_nonzero_interface_and_alternate();
     test_buffer_aliases_and_out_retries();
     test_in_ack_loss_and_ownership();
     test_packet_boundaries_and_reset_during_in();

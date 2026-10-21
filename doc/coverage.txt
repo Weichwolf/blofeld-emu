@@ -232,6 +232,13 @@ USB device/transport              partial  PHY control and register/data-side en
                                           setup/IN/OUT ISRs and priority chaining.
                                           Original cold-start reset/configuration
                                           IRQs now return through native RTI/WAI.
+                                          Actual configuration SETUP decodes
+                                          into SETECR and pending status NAK;
+                                          original FFD0/DONEECRU/RTI/WAI replayed
+                                          twice from the pending request.
+                                          Automatic status completion after
+                                          DONEECRU remains explicitly unqualified;
+                                          no host configuration success claimed.
                                           Three observed reset profiles include
                                           255 genuine delay calls on timeout;
                                           two mid-ISR replays retain CPU/RAM and

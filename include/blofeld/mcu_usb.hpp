@@ -56,8 +56,9 @@ struct UsbEndpointInfo {
   unsigned type = 0; // USB transfer type: 0 control, 2 bulk, 3 interrupt.
 };
 
-// USB20D6E2F register/buffer side. Wire decoding, automatic standard requests,
-// high-speed packets and IQUE endpoints remain unsupported.
+// USB20D6E2F register/buffer side, with configuration SETUP decoding/pending NAK.
+// Wire decoding, automatic status completion, other automatic standard requests,
+// high-speed packets and IQUE data remain unsupported.
 class McuUsb {
 public:
   void reset();
@@ -111,6 +112,8 @@ private:
   void require_control_phase() const;
   [[nodiscard]] bool input_endpoint(unsigned index) const;
   [[nodiscard]] unsigned maximum_packet(unsigned index) const;
+  [[nodiscard]] std::optional<UsbConfigurationRequest>
+  decode_configuration_setup(const std::array<std::uint8_t, 8> &data) const;
   UsbResponse stall_response(unsigned index);
   std::array<std::uint32_t, 7> configuration_{};
   std::uint8_t selector_ = 0;
@@ -131,6 +134,7 @@ private:
   bool decoder_known_ = false;
   bool setup_stall_ = false;
   bool control_phase_known_ = true;
+  bool configuration_control_ = false;
   std::array<std::uint8_t, 4> alternate_{};
 };
 
