@@ -296,6 +296,11 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           Production descriptor probe also reaches
                                           the original USTB failure; no metadata
                                           escapes after two joint restores.
+                                          Original producer also runs through
+                                          UsbipRuntime: three exact zero-device
+                                          TCP lists, retained USTB faults and
+                                          restore-revision retirement with native
+                                          RAM/USB/NVM guards (usb-reset.txt).
                                           Transport requirements and current
                                           original frontiers: usb-host.txt.
 Original DSP runtime              partial  127 checked records extracted; DSP56300

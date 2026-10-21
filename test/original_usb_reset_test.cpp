@@ -11,8 +11,11 @@
 #include "blofeld/usb_host.hpp"
 #include "blofeld/usb_transfer.hpp"
 #include "blofeld/usbip.hpp"
+#include "blofeld/usbip_runtime.hpp"
 #include "lcd_fixture.hpp"
 #include "usbip_fixture.hpp"
+#include "usbip_session_fixture.hpp"
+#include "usbip_tcp_fixture.hpp"
 
 #include <algorithm>
 #include <array>
@@ -27,6 +30,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <sys/poll.h>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -637,6 +641,146 @@ void check_incomplete_probe(Session &session, std::optional<blofeld::UsbDevicePr
                  << ' ' << static_cast<unsigned>(state.ccr) << '\n';
 }
 
+void poll_runtime(Session &session,
+                  blofeld::UsbipRuntime &runtime,
+                  blofeld::UsbipRuntimeBoundary &boundary) {
+  const auto cpu = session.machine.cpu().state();
+  static_cast<void>(runtime.poll(session.machine.bus(), {.pc = cpu.pc, .ccr = cpu.ccr}, boundary));
+  // Explicit operation-count reference, not a clocked board/USB timing claim.
+  ++boundary.ticks;
+}
+
+Saved runtime_setup_fault(Session &session,
+                          blofeld::UsbipRuntime &runtime,
+                          blofeld::UsbipRuntimeBoundary &boundary) {
+  std::optional<Saved> before_fault;
+  constexpr unsigned maximum_operations = 16;
+  for (unsigned operation = 0; operation < maximum_operations; ++operation) {
+    poll_runtime(session, runtime, boundary);
+    if (operation == 0) {
+      const auto expected = setup_request(device_descriptor_size);
+      for (unsigned i = 0; i < expected.size(); ++i) {
+        require(session.machine.bus().read(static_cast<std::uint16_t>(setup_source + i)) ==
+                    expected[i],
+                "The runtime submits every independently specified ordinary SETUP byte");
+      }
+      require(session.word(status_word) == setup_usb_status,
+              "Runtime admission establishes the real original SETUP flag");
+    }
+    const auto before = session.machine.cpu().state();
+    if (before.pc == setup_fault_pc) { before_fault.emplace(session.save()); }
+    try {
+      check_setup_step(session, before, session.machine.cpu().step());
+    } catch (const blofeld::Fault &fault) {
+      const std::string_view reason(fault.what());
+      if (!before_fault) {
+        throw blofeld::Fault("Original runtime fault lacks its pre-read state");
+      }
+      require(before.pc == setup_fault_pc && session.counters.native == 9 &&
+                  session.counters.entries == 1 && before.ccr == fault_ccr &&
+                  registers(session.machine.cpu().state()) == registers(before) &&
+                  reason.contains("MCU read at 0x033f") && reason.contains("pc=0xbc3d ccr=0x90") &&
+                  reason.contains("USB setup-buffer contents are not valid"),
+              "Only the unchanged original nine-instruction USTB frontier qualifies this runtime");
+      return *before_fault;
+    }
+  }
+  throw blofeld::Fault("Original runtime SETUP did not reach its independently expected failure");
+}
+
+void runtime_empty_list(Session &session,
+                        blofeld::UsbipRuntime &runtime,
+                        blofeld::UsbipRuntimeBoundary &boundary) {
+  namespace tcp = blofeld::test::usbip_tcp;
+  auto client = tcp::connect(runtime.port());
+  tcp::send(client, blofeld::test::usbip_session::list);
+  tcp::Received received;
+  constexpr unsigned maximum_polls = 64;
+  for (unsigned attempt = 0; !received.eof && attempt < maximum_polls; ++attempt) {
+    poll_runtime(session, runtime, boundary);
+    tcp::read(client, received);
+    if (!received.eof) {
+      pollfd ready{.fd = client.get(), .events = POLLIN, .revents = 0};
+      static_cast<void>(::poll(&ready, 1, 1));
+    }
+  }
+  constexpr std::array<std::uint8_t, 12> empty_list{1, 0x11, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0};
+  require(
+      received.eof && std::ranges::equal(received.bytes, empty_list) && runtime.started() &&
+          !runtime.published() && !runtime.faulted(),
+      "A real TCP DEVLIST after the original fault returns exactly zero devices and no identity");
+}
+
+void check_runtime_paths(Session &session, const Saved &configured) {
+  namespace tcp = blofeld::test::usbip_tcp;
+  std::optional<Outcome> expected;
+  for (unsigned replay = 0; replay < 3; ++replay) {
+    session.restore(configured);
+    session.counters = {};
+    session.interrupted = registers(session.machine.cpu().state());
+    const blofeld::UsbipRuntimeOptions options{
+        .tcp = {},
+        .location = {.path = "/blofeld-emu/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
+        .after_ticks = 0,
+        .period_ticks = 1,
+        .probe_timeout_ticks = instruction_limit};
+    blofeld::UsbipRuntime runtime(options);
+    blofeld::UsbipRuntimeBoundary boundary{.owner = std::make_shared<const int>(0),
+                                           .restore_revision = replay};
+    const auto middle = runtime_setup_fault(session, runtime, boundary);
+    auto before = session.outcome();
+    inspect_setup_payload(session, before);
+    const auto evidence = session.machine.bus().usb_host_evidence();
+    runtime_empty_list(session, runtime, boundary);
+    auto after = session.outcome();
+    inspect_setup_payload(session, after);
+    require(
+        before == after && session.machine.bus().usb_host_evidence() == evidence,
+        "Post-fault TCP/probe polling preserves CPU, all RAM, USB payload knowledge and evidence");
+    if (expected) {
+      require(after == *expected,
+              "Three fresh runtime attempts reproduce the complete original failure state");
+    } else {
+      expected = after;
+    }
+    auto pending = tcp::connect(runtime.port());
+    poll_runtime(session, runtime, boundary);
+    session.restore(middle);
+    ++boundary.restore_revision;
+    bool retired = false;
+    try {
+      poll_runtime(session, runtime, boundary);
+    } catch (const blofeld::Fault &fault) {
+      const std::string_view reason(fault.what());
+      require(
+          reason.contains("board owner/restore/time changed") &&
+              reason.contains("mcu-pc=0xbc3d ccr=0x90"),
+          "A trusted native restore invalidates its old live transport with actual MCU context");
+      retired = true;
+    }
+    tcp::Received closed;
+    constexpr unsigned maximum_close_polls = 64;
+    for (unsigned attempt = 0; !closed.eof && attempt < maximum_close_polls; ++attempt) {
+      tcp::read(pending, closed);
+      if (!closed.eof) {
+        pollfd ready{.fd = pending.get(), .events = POLLIN, .revents = 0};
+        static_cast<void>(::poll(&ready, 1, 1));
+      }
+    }
+    require(retired && runtime.faulted() && !runtime.published() && closed.eof &&
+                closed.bytes.empty(),
+            "Restore retirement closes an accepted idle TCP peer without publishing any bytes");
+    auto restored = session.outcome();
+    inspect_setup_payload(session, restored);
+    require(restored == after && session.machine.bus().usb_host_evidence() == evidence,
+            "Transport retirement cannot mutate the restored native/peripheral state");
+    session.check_flash();
+    session.trace_ << "USBIP_RUNTIME_REFUSAL " << replay << ' ' << session.counters.native << ' '
+                   << session.machine.cpu().state().pc << ' '
+                   << static_cast<unsigned>(session.machine.cpu().state().ccr) << " 12 1\n";
+  }
+}
+
 void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
   const auto configured = session.save();
   constexpr unsigned maximum_length = 0xffff;
@@ -676,6 +820,7 @@ void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
       report("SETUP_REPLAY");
     }
   }
+  check_runtime_paths(session, configured);
 }
 
 struct Inputs {

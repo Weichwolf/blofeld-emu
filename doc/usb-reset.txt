@@ -100,3 +100,18 @@ USB-window instruction totals still exclude the shared original cold start.
 USB wire decoding, automatic enumeration/standard-request handling, active IQUE,
 host USB ports, original USB-MIDI delivery, DSP boot/audio, physical timing and
 stock-hardware equivalence remain open. No fuzzing or physical traffic runs.
+
+Production runtime refusal
+The same configured original MCU snapshot now starts three fresh UsbipRuntime
+adapters. Their ordinary GET_DESCRIPTOR reaches the unchanged nine-instruction
+USTB fault. Each real loopback DEVLIST returns exactly the12-byte zero-device
+reply and closes; no captured descriptor or export identity exists. Subsequent
+runtime polls preserve native registers, all watched RAM, USB payload knowledge,
+read-only evidence revisions and every NVM byte/knowledge/erase-history bit.
+Trusted pre-read restore increments the caller's transport revision; polling the
+old adapter then retires its listener and accepted idle TCP peer before any new
+USB callback. The three complete native/peripheral failure outcomes must agree.
+The wrapper checks all three USBIP_RUNTIME_REFUSAL rows and counts27 additional
+original instructions. This isolated fixture uses declared operation-count ticks,
+not a clocked-board or physical USB timing profile. The own-program live CLI test
+is separate (usb-runtime.txt); neither establishes normal original enumeration.

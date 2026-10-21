@@ -82,3 +82,12 @@ Remaining requirements
   the session.
 - Full original boot, hardware timing, real-time behavior and physical device
   equivalence are not established by these own runtime fixtures.
+
+Original producer regression
+original_usb_reset also feeds the unmodified1.25 SETUP path through this runtime.
+Three fresh adapters after trusted native restores retain the exact USTB fault;
+real loopback DEVLIST returns only zero-device replies. A pre-read restore retires
+the old transport and closes its accepted peer without changing native/peripheral
+state. These declared operation-count observations are not a common-clock or
+physical-timing qualification; details and reference hashes are in usb-reset.txt
+and usb-reset-reference.json. No original identity can bypass failed discovery.
