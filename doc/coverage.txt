@@ -228,13 +228,13 @@ USB device/transport              partial  PHY control and register/data-side en
                                           independent word/byte/reset checks.
                                           Original MIDI descriptors retain their
                                           reserved NISOF=2 failure (usb-reset.txt).
-                                          Wire decoding, automatic standard requests,
                                           EPRST clears its documented register/flag
                                           domain, retaining payloads and static
                                           descriptions; native STD and joint
                                           replays checked (usb-endpoint-reset.txt).
                                           Post-EPRST DATA PID/control phase stays
                                           unknown until qualified events.
+                                          Wire decoding, automatic standard requests,
                                           IQUE, module/PHY reset, remote resume
                                           and host ports pending.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
