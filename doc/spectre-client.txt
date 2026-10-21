@@ -1,0 +1,69 @@
+Spectre functions in the headless client
+
+Requested scope
+The existing blofeld-headless CLI must gain the functional scope of Waldorf
+Spectre sample management. A graphical client was explicitly not requested.
+Keep this requirement in addition to the complete emulator objective; installing
+the reference application or inspecting factory samples does not complete it.
+
+Reference: Spectre_Manual.pdf, revision 0.9 June 2009, pages 4..9 (German) and
+11..16 (English). doc/downloads.json pins the official download, size and hash.
+The official Windows 1.00 application is a local compatibility reference only.
+Its installer, binaries, manual and factory samples must not be committed.
+
+Required capabilities and current evidence
+- Program collections: create, list, rename, reorder, remove, save all as XML
+  and export a selected program. Format compatibility and CLI remain open.
+- Import XML, Korg KMP, read-only WPC presets and the legacy Spectre TXT format.
+  The factory WPC/MIDI downloads are pinned; their complete interchange/receiver
+  contracts remain unresolved. Do not invent a compatible schema or map them
+  directly to physical NAND.
+- WAV samples: add/remove references, preserve source files, decode loop/root
+  metadata, convert stereo to mono, detect pitch for automatic initial root and
+  key ranges. Input/conversion behavior needs independent reference vectors.
+- Mapping: fractional root keys, highest key, note-name/MIDI-number input,
+  relative/all-sample transposition, automatic ordering and range inspection.
+- Gain: individual/all-sample level in dB, per-sample normalization and program
+  normalization preserving relative levels and respecting individually
+  normalized samples. Silence, clipping and stereo conversion need checks.
+- Audition: mapped/pitched/looped samples, held notes, reference sawtooth tone,
+  file or MIDI note input, audio device/channels/rate/latency selection.
+  This separate editor preview must not replace original emulator synthesis.
+  Fixed pitch is an editor option that the manual marks unsupported by Blofeld.
+- Capacity: report the declared 60 MB sample budget; allow oversize collections
+  to be edited/saved while refusing MIDI export/transmission above capacity.
+  Exact byte accounting and transport packing need qualification.
+- Save sample content as Standard MIDI File; explicit transport with progress,
+  cancellation and visible errors; firmware/sound-file Upgrade functionality.
+  Existing OS parsing and native update tests are partial prerequisites, not a
+  working Spectre export/upload implementation. No physical programming is a
+  routine check; original update/recovery requirements still apply.
+
+Observed reference interchange
+One own 440 Hz mono PCM16 WAV (44100 Hz, 11025 frames) was imported and saved
+by the actual Windows application. XML uses WaldorfSampleSet Version="0.5",
+SampleProgram(Name, Normalize), and Sample(Filename, Path, RelativePath, Pitch,
+HighKey, Normalize, FixedPitch, Level). The own export records pitch 69.05 and
+highest key 127. Absolute DOS paths and a separate relative path are retained.
+Its actual MIDI export contains 513 SysEx messages: eight command 0x73 headers
+and 505 command 0x74 packets. This differs from the pinned factory distribution's
+0x75 bulk profile; do not assume equivalent framing or receiver behavior.
+These are observations of one original application/input, not full format or
+conversion qualification. The own inputs, original exports and hashes remain
+ignored under doc/local/spectre-reference/ for independent comparison.
+
+CLI and library implementation are pending. Maintain each requirement and its
+validation evidence as implementation proceeds. Reuse bounded file handling,
+strict builds/sanitizers and independent expected sample/transport vectors.
+Fuzzing remains opt-in by explicit user request.
+
+Local reference installation
+  WINEPREFIX="$HOME/.local/share/blofeld-emu/wine-spectre" \
+    wine 'C:\Program Files\Waldorf\Spectre\Spectre.exe'
+
+The dedicated 32-bit prefix follows the repository naming used by blofeld-src.
+The application's installer-generated Wine/Programs/Spectre menu contains the
+application, manual and uninstaller. Menu entries must retain this prefix.
+No Desktop shortcut is wanted. Do not modify the separate CodeWarrior prefix.
+Reference experiments use own small WAV files and local exports; do not select
+physical MIDI outputs or redistribute factory sample/descriptor payloads.

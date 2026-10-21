@@ -383,8 +383,8 @@ Optional host MIDI/SCI route
   midi-transfer-reference 12 0
 
 The second setting is optional and explicitly experimental; the default retains
-the strict unresolved SCI transfer edge. --midi-file/--midi-device require this
-route and reject automatic checkpoint replay. See host-midi.txt for source
+the strict unresolved SCI transfer edge. --midi-file/--midi-device reject
+automatic checkpoint replay. See host-midi.txt for source
 formats, native clock ownership, snapshots, polling and untested live timing.
 
 Alternative DSP MIDI route

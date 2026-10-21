@@ -7,6 +7,12 @@ only its named behavior. No hardware equivalence or brick-safety claim is made.
 Requirement                       State    Evidence / remaining work
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.
+Spectre functions in CLI          missing  Full Spectre sample-management scope
+                                          requested for blofeld-headless, including
+                                          interchange, mapping/gain, audition,
+                                          MIDI export and transfer (spectre-client.txt).
+                                          Reference app installed in repo-named
+                                          Wine prefix; no CLI compatibility claim.
 Standard sample library           partial  Official MIDI/WPC download and contained
                                           MIDI identities are size/hash pinned in
                                           library/sources.json. Fixed 0x75 bulk
@@ -224,17 +230,24 @@ USB device/transport              partial  PHY control and register/data-side en
                                           255 genuine delay calls on timeout;
                                           two mid-ISR replays retain CPU/RAM and
                                           declared USB registers/write prefix.
+                                          Original ordinary SETUP retains its
+                                          post-ack invalid-USTB read boundary.
+                                          Seven overrun lengths first queue real
+                                          ROM descriptor bytes, then RTI chains
+                                          into the same retained-SETUP failure.
+                                          Sixteen pre-read restores also compare
+                                          all local payload bytes/knowledge.
                                           Unconfigured UEPCSR4A/5A controls have
                                           independent word/byte/reset checks.
                                           Original MIDI descriptors retain their
                                           reserved NISOF=2 failure (usb-reset.txt).
-                                          Wire decoding, automatic standard requests,
                                           EPRST clears its documented register/flag
                                           domain, retaining payloads and static
                                           descriptions; native STD and joint
                                           replays checked (usb-endpoint-reset.txt).
                                           Post-EPRST DATA PID/control phase stays
                                           unknown until qualified events.
+                                          Wire decoding, automatic standard requests,
                                           IQUE, module/PHY reset, remote resume
                                           and host ports pending.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
