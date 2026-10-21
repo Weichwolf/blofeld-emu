@@ -60,8 +60,8 @@ IN/OUT status completion IRQs and RTI restore every supplied CPU register before
 the wire reply is checked. These are independent own fixtures, not an original
 Blofeld responder or a host-enumeration claim. No fuzzing or physical traffic runs.
 
-Remaining integration: device discovery/import and descriptor provenance, TCP
-session lifecycle, reset/address/configuration semantics, common-clock scheduler
+Descriptor capture and USB/IP discovery/import framing are specified separately
+in usb-discovery.txt. Remaining integration: TCP session lifecycle, reset/address/configuration semantics, common-clock scheduler
 and CLI binding, live host/controller provisioning and actual USB-MIDI class
 binding. Original setup-buffer/NISOF conflicts, full boot/MIDI/audio, Spectre
 sample transfer/cancellation, timing and hardware equivalence remain open.

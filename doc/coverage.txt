@@ -266,6 +266,11 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           IRQ/ACK/status and fixed protocol tests
                                           (usb-host-transfers.txt); no listener or
                                           host attachment claim.
+                                          MCU descriptor capture and USB/IP
+                                          DEVLIST/IMPORT framing also have own
+                                          register/native tests (usb-discovery.txt).
+                                          Current configuration/alternates come
+                                          from read-only controller state.
                                           Transport requirements and current
                                           original frontiers: usb-host.txt.
 Original DSP runtime              partial  127 checked records extracted; DSP56300

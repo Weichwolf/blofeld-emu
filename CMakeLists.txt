@@ -104,10 +104,12 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cp
   src/mcu_usb_ique_control.cpp src/mcu_usb_reset.cpp src/mcu_usb_host.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
-add_library(blofeld_usb_host src/usb_transfer.cpp src/usb_host.cpp src/usb_host_packets.cpp)
+add_library(blofeld_usb_host src/usb_transfer.cpp src/usb_host.cpp src/usb_host_packets.cpp
+  src/usb_device_probe.cpp src/usb_descriptors.cpp)
 target_include_directories(blofeld_usb_host PUBLIC include)
 target_link_libraries(blofeld_usb_host PUBLIC blofeld_mcu)
-add_library(blofeld_usbip src/usbip_decode.cpp src/usbip_encode.cpp)
+add_library(blofeld_usbip src/usbip_decode.cpp src/usbip_encode.cpp
+  src/usbip_management.cpp src/usbip_export.cpp)
 target_include_directories(blofeld_usbip PUBLIC include)
 target_link_libraries(blofeld_usbip PUBLIC blofeld_usb_host)
 add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
@@ -169,6 +171,15 @@ target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_f
   blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-usb-device-native-test test/usb_device_native_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-usb-device-native-test PRIVATE blofeld_usbip blofeld_core)
+  add_test(NAME usb_device_native COMMAND blofeld-usb-device-native-test)
+  add_executable(blofeld-usb-device-test test/usb_device_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-usb-device-test PRIVATE blofeld_usb_host)
+  add_test(NAME usb_device_probe COMMAND blofeld-usb-device-test)
+  add_executable(blofeld-usbip-management-test test/usbip_management_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-usbip-management-test PRIVATE blofeld_usbip)
+  add_test(NAME usbip_management COMMAND blofeld-usbip-management-test)
   add_executable(blofeld-usbip-test test/usbip_test.cpp)
   target_link_libraries(blofeld-usbip-test PRIVATE blofeld_usbip)
   add_test(NAME usbip_protocol COMMAND blofeld-usbip-test)
@@ -979,6 +990,7 @@ add_custom_target(quality
     blofeld-sample-library-test
     blofeld-sample-wave-test
     blofeld-usbip-test blofeld-usb-host-test blofeld-usb-host-native-test
+    blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test
     blofeld-midi-timed-test

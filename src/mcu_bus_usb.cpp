@@ -38,4 +38,9 @@ void McuBus::finish_usb_in(const bool acknowledged) {
 UsbEndpointInfo McuBus::usb_host_endpoint(const std::uint8_t address) const {
   return usb_.host_endpoint(address);
 }
+
+UsbConfigurationInfo McuBus::usb_host_configuration() const {
+  return usb_.host_configuration();
+}
+
 }

@@ -13,7 +13,8 @@ CPU/ISR/endpoint tests and conditional original reset/configuration/descriptor
 tests exist. There is no host USB backend or functioning USB-MIDI device today.
 The MCU-backed transfer queue and USB/IP transfer-stage framing are implemented
 and tested with own native IRQ/descriptor fixtures (usb-host-transfers.txt).
-Discovery/import, a listener and host USB attachment are not implemented yet.
+MCU-backed descriptor capture and USB/IP discovery/import framing are implemented
+separately (usb-discovery.txt). A listener and host USB attachment remain absent.
 --midi-device is a read-only legacy RawMIDI input, with no output or USB-device
 enumeration. The editor's XML/WAV commands are offline functionality.
 
@@ -56,7 +57,16 @@ USB-MIDI driver -> virtual USB transport -> MCU peripheral/original firmware,
 and back. Wine does not need a physical device for that eventual virtual path.
 This architecture is not evidence that current Spectre/emulator transfers work.
 
+For a connected keyboard, the target route is keyboard MIDI output -> host MIDI
+routing -> the virtual device MIDI input. Once Linux USB-MIDI exposes the device
+as ALSA sequencer ports, PipeWire can bridge and connect these ports. A separate
+emulator-owned MIDI hub is not required. This routing is not yet qualified here:
+the emulator has no host-visible USB-MIDI port today. MIDI traffic still follows
+the modeled peripheral/original firmware rather than a host synthesizer.
+
 References
   https://docs.kernel.org/usb/usbip_protocol.html
   https://docs.kernel.org/usb/raw-gadget.html
   https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winealsa.drv/alsamidi.c
+  https://docs.pipewire.org/page_midi.html
+  https://docs.pipewire.org/page_man_pw-link_1.html

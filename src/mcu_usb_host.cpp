@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
 #include "blofeld/mcu_usb.hpp"
+#include "mcu_usb_registers.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -35,4 +36,29 @@ UsbEndpointInfo McuUsb::host_endpoint(const std::uint8_t address) const {
   if (result) { return *result; }
   throw Fault("Unconfigured or unsupported USB host endpoint address=" + hex(address, 2));
 }
+
+UsbConfigurationInfo McuUsb::host_configuration() const {
+  require_packet();
+  if ((configuration_status_ & usb::configuration_request) != 0) {
+    throw Fault("USB configuration is pending firmware completion");
+  }
+  const auto configuration = (configuration_status_ >> 8U) & usb::nibble_mask;
+  unsigned count = 0;
+  if (configuration != 0) {
+    if (configuration > 2 || (configuration_status_ & usb::configuration_valid) == 0) {
+      throw Fault("Unqualified USB current configuration status");
+    }
+    constexpr unsigned counts_index = 5;
+    constexpr unsigned second_configuration_shift = 8;
+    const auto shift = configuration == 1 ? 4U : second_configuration_shift;
+    count = (configuration_[counts_index] >> shift) & 7U;
+    if (count == 0 || count > alternate_.size()) {
+      throw Fault("Unsupported or ambiguous USB active interface count");
+    }
+  }
+  return {.configuration = static_cast<std::uint8_t>(configuration),
+          .interfaces = count,
+          .alternatives = alternate_};
+}
+
 }

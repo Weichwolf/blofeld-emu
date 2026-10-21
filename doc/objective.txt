@@ -43,7 +43,9 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    firmware descriptors/control behavior and bidirectional endpoint traffic.
    A standalone virtual ALSA port is not a substitute. Qualify host USB/MIDI
    enumeration and original Spectre under Wine, including SysEx/sample transfer,
-   cancellation and errors through the emulator. Keep host transport separate
+   cancellation and errors through the emulator. Permit ordinary host MIDI
+   routing, including PipeWire, from a connected keyboard to the virtual device.
+   Keep host transport separate
    from the board model and original firmware; never fabricate enumeration or
    transfer success to bypass unsupported peripheral/firmware behavior.
 

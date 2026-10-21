@@ -43,6 +43,12 @@ struct UsbInPacket {
   bool data1 = false;
 };
 
+struct UsbConfigurationInfo {
+  std::uint8_t configuration = 0;
+  unsigned interfaces = 0;
+  std::array<std::uint8_t, 4> alternatives{};
+};
+
 struct UsbEndpointInfo {
   UsbBuffer buffer = UsbBuffer::control_in;
   std::uint8_t address = 0;
@@ -71,6 +77,7 @@ public:
   [[nodiscard]] UsbInPacket request_in(UsbBuffer endpoint);
   void finish_in(bool acknowledged);
   [[nodiscard]] UsbEndpointInfo host_endpoint(std::uint8_t address) const;
+  [[nodiscard]] UsbConfigurationInfo host_configuration() const;
   [[nodiscard]] std::uint8_t interrupt_sources() const;
 
 private:

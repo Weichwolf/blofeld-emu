@@ -1,0 +1,67 @@
+MCU-backed descriptor capture and USB/IP discovery/import records
+
+UsbDeviceProbe obtains a complete 18-byte device descriptor, the nine-byte
+configuration header and the declared complete configuration through its private
+UsbHostQueue. The caller runs the actual MCU between polls. Every capture needs
+real setup/data/status completion; NAK remains pending, and STALL, short transfer,
+unknown controller data or malformed descriptors fail visibly with stage/PC/CCR.
+The probe never programs guest readiness, buffers or controller descriptions.
+Only the probe constructs UsbDeviceDescriptors; bytes are exposed as const spans.
+
+Scope: full-speed USB1.0/1.1/2.0, one configuration, at most32 interfaces and1024
+descriptors including the configuration header, with a 16-bit configuration-length bound. Device/controller
+EP0 sizes must agree. Header/body must agree exactly. TLV lengths, interface
+numbers/alternates, default alternatives and endpoint-list counts/addresses are
+checked. Opaque class/vendor descriptors are preserved, not interpreted or claimed
+as complete USB-MIDI class validation. Multiple configurations and other speeds
+remain unsupported rather than silently reduced to the first usable function.
+
+UsbipExport reads current configuration, interface count and selected alternatives
+from the MCU model through read-only queries. Pending firmware configuration
+completion, ambiguous/unsupported interface counts, unready controllers and
+selected alternatives absent from the captured descriptors reject export. No
+active configuration or alternate zero is inferred from capability descriptors.
+Observed configuration zero has no active interface records. The current controller has four active alternate slots; ambiguous zero
+interface counts reject. This query does not
+qualify new silicon behavior or complete automatic standard requests.
+
+USB/IP v1.1.1 DEVLIST and IMPORT replies retain actual captured vendor/product/
+revision/class fields. Administrative virtual path/busid/bus/device numbers are
+separate explicit inputs, not manufacturer identity or physical sysfs claims.
+DEVLIST appends active interface class records; IMPORT contains only the fixed
+312-byte device record. A wrong or already leased busid returns an error without
+identity. A leased device is absent from the available list. release() changes
+lease bookkeeping only; it never supplies guest reset/configuration success.
+
+UsbipManagementDecoder buffers at most40 bytes, checks version/operation/status
+and NUL/padded busid, and consumes only one management request. Coalesced URB bytes
+remain with the caller for UsbipDecoder after successful import. Truncated EOF,
+malformed requests and poisoned/closed connections cannot produce a new request.
+
+The caller owns descriptor/configuration evidence lifetime and must discard the
+export after reset, descriptor/configuration changes or loss of qualified state.
+No TCP listener/session, live CLI binding, kernel attachment, host class binding,
+original enumeration, original MIDI/sample exchange or Spectre connection exists
+yet. Import success here reserves an existing qualified export; it is not a
+simulated successful device reset or proof of host attachment. The original USTB
+and NISOF boundaries remain strict. Full objective and gaps: objective.txt and
+coverage.txt. No fuzzing, physical traffic, modules or system routing are used.
+
+Deterministic gates:
+  cmake --build --preset strict --target blofeld-usb-device-test blofeld-usb-device-native-test blofeld-usbip-management-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usb_device_probe|usb_device_native|usbip_management)$'
+
+usb_device_probe checks independently specified setup bytes, all three actual
+control transfers, unavailable metadata before status, pending-status replay,
+malformed descriptors and resource limits. usbip_management checks fixed wire
+positions, all import/list split boundaries, truncated EOF, coalesced transfer
+handoff, actual pending/selected/reset configuration and exclusive leases.
+usb_device_native executes three sets of80 own HC12 SETUP ISR instructions plus
+actual IN/OUT completion IRQs/RTIs. Guest ROM loads and USB RAM stores produce
+all captured bytes before an import record can exist. These own fixtures do not
+establish original Blofeld descriptor or host enumeration behavior.
+
+References:
+  https://docs.kernel.org/usb/usbip_protocol.html
+  https://github.com/torvalds/linux/blob/v6.12/tools/usb/usbip/configure.ac
+  https://www.usb.org/document-library/usb-20-specification

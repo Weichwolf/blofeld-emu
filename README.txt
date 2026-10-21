@@ -98,7 +98,8 @@ doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requ
 doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.
 doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts and CPU operand widths.
 doc/usb-host-transfers.txt covers the MCU-backed host control/bulk queue and USB/IP
-transfer framing; actual host USB-MIDI attachment remains required and unimplemented.
+transfer framing; doc/usb-discovery.txt covers MCU descriptor capture and USB/IP
+discovery/import records. Actual host USB-MIDI attachment remains required and unimplemented.
 doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
 doc/mcu-checkpoints.txt describes immutable in-process MCU checkpoints, native
 WAI/SCI replay, peripheral/flash state and the remaining whole-board snapshot scope.
