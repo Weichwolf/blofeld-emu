@@ -39,6 +39,13 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    firmware. Detection is not validation. Establish a separate recovery procedure
    before physical update/programming experiments; never transmit malformed
    fuzz inputs to hardware or flash experimental firmware as a routine test.
+8. Expose the emulator as an actual host-visible USB-MIDI device, with original
+   firmware descriptors/control behavior and bidirectional endpoint traffic.
+   A standalone virtual ALSA port is not a substitute. Qualify host USB/MIDI
+   enumeration and original Spectre under Wine, including SysEx/sample transfer,
+   cancellation and errors through the emulator. Keep host transport separate
+   from the board model and original firmware; never fabricate enumeration or
+   transfer success to bypass unsupported peripheral/firmware behavior.
 
 Completion requires evidence for the whole emulator and both profiles, original
 MIDI/audio, full update/recovery behavior, reproducible failure/performance tests

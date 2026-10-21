@@ -13,19 +13,27 @@ Its installer, binaries, manual and factory samples must not be committed.
 
 Required capabilities and current evidence
 - Program collections: create, list, rename, reorder, remove, save all as XML
-  and export a selected program. Format compatibility and CLI remain open.
+  and export a selected program are implemented for Spectre XML 0.5. Collections
+  can be appended with sample references rebased to the new output directory.
 - Import XML, Korg KMP, read-only WPC presets and the legacy Spectre TXT format.
   The factory WPC/MIDI downloads are pinned; their complete interchange/receiver
   contracts remain unresolved. Do not invent a compatible schema or map them
   directly to physical NAND.
 - WAV samples: add/remove references, preserve source files, decode loop/root
   metadata, convert stereo to mono, detect pitch for automatic initial root and
-  key ranges. Input/conversion behavior needs independent reference vectors.
+  key ranges. Bounded WAV decoding/import, stereo analysis, declared metadata
+  and a separate offline pitch estimate are implemented (sample-wave.txt).
+  Automatic ranges, audition and final export conversion remain open.
 - Mapping: fractional root keys, highest key, note-name/MIDI-number input,
   relative/all-sample transposition, automatic ordering and range inspection.
+  Numeric root/highest-key editing, stable highest-key ordering and all-sample
+  root transposition are implemented. Note names, range qualification and
+  highest-key transposition remain open.
 - Gain: individual/all-sample level in dB, per-sample normalization and program
   normalization preserving relative levels and respecting individually
   normalized samples. Silence, clipping and stereo conversion need checks.
+  Individual dB values and sample/program normalization flags can be edited;
+  applying normalization or gain to audio is not implemented.
 - Audition: mapped/pitched/looped samples, held notes, reference sawtooth tone,
   file or MIDI note input, audio device/channels/rate/latency selection.
   This separate editor preview must not replace original emulator synthesis.
@@ -52,10 +60,54 @@ These are observations of one original application/input, not full format or
 conversion qualification. The own inputs, original exports and hashes remain
 ignored under doc/local/spectre-reference/ for independent comparison.
 
-CLI and library implementation are pending. Maintain each requirement and its
-validation evidence as implementation proceeds. Reuse bounded file handling,
-strict builds/sanitizers and independent expected sample/transport vectors.
-Fuzzing remains opt-in by explicit user request.
+The actual application also loads the CLI's rebased XML and retains the own WAV,
+root 60.25, highest key 127 and level -6.50 dB when saving it again. Its Windows
+1.00 build under Wine changes a program-name Omega to two Latin-1 code points
+on XML save, for both literal UTF-8 and a numeric character reference as input.
+The CLI preserves valid Unicode XML; complete original-app Unicode interchange
+is not qualified. This experiment establishes metadata/path compatibility for
+one own sample, not WAV conversion or device sample playback.
+
+Implemented CLI
+The samples subcommand works without firmware or emulated hardware. Indices
+start at 1. Use samples --help for the complete command syntax. For example:
+
+  build/strict/blofeld-headless samples new doc/local/set.xml
+  build/strict/blofeld-headless samples append doc/local/set.xml doc/local/set.xml own.xml
+  build/strict/blofeld-headless samples list doc/local/set.xml
+  build/strict/blofeld-headless samples rename-program doc/local/set.xml doc/local/set.xml 1 Piano
+  build/strict/blofeld-headless samples set-sample doc/local/set.xml doc/local/set.xml 1 1 pitch 60.25
+  build/strict/blofeld-headless samples transpose-roots doc/local/set.xml doc/local/set.xml 1 12
+
+Other commands add/move/remove/export programs, remove sample references, edit
+sample filename/highest/level/normalize/fixed-pitch metadata and program
+normalization flags. Fixed-pitch remains an editor flag, not Blofeld support.
+Numbers are written with Spectre's two decimal places. Listing produces JSON
+with resolved paths and highest keys; it does not infer unqualified key ranges.
+wave-info reports decoded WAV format/root/loops and a separate pitch estimate.
+add-sample takes explicit highest key and numeric, auto or metadata root input;
+source audio stays unchanged. Original Spectre's pitch/metadata behavior differs
+on a tagged own signal, documented in sample-wave.txt; no algorithm parity claim.
+
+XML input is bounded to 16 MiB, 1024 programs, 65536 total samples and 4096 UTF-8
+bytes per text field. These are editor resource limits, not hardware capacities.
+The nonrecursive reader accepts the observed version/element/attribute vocabulary
+and rejects unknown structures, DTDs, external entities, nonfinite values and
+invalid text/keys. RelativePath resolves against the actual XML location; foreign
+absolute paths without a portable relative path fail visibly. XML metadata edits
+do not open audio; add-sample separately validates/decodes WAV. Save rebases
+references and atomically publishes a private regular file; collision with a
+referenced source or hardlink is rejected. Other
+formats, MIDI export and transmission have no command yet and fail visibly.
+
+  ctest --test-dir build/strict --output-on-failure -R '^sample_library(_cli)?$'
+
+sample_library checks independent metadata/entity/path/order expectations and
+fixed invalid XML cases. sample_library_cli invokes the actual binary for
+collection edits, in-place/relocated saves, JSON/XML results and source/output
+preservation on failure. These are deterministic sanitizer tests, not fuzzing.
+Final WAV/audio processing, audition, other import formats, capacity accounting,
+MIDI export/transfer and Upgrade remain open. Fuzzing is opt-in only.
 
 Local reference installation
   WINEPREFIX="$HOME/.local/share/blofeld-emu/wine-spectre" \

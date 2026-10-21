@@ -1,0 +1,85 @@
+Offline sample WAV import and analysis
+
+The existing headless samples command loads regular RIFF/WAVE files without
+firmware, devices or changes to the original MCU/DSP synthesis path:
+
+  build/strict/blofeld-headless samples wave-info own.wav
+  build/strict/blofeld-headless samples add-sample set.xml set.xml 1 own.wav auto 127
+  build/strict/blofeld-headless samples add-sample set.xml set.xml 1 own.wav metadata 127
+  build/strict/blofeld-headless samples add-sample set.xml set.xml 1 own.wav 60.25 127
+
+wave-info emits JSON for rate/channels/precision/frame count, unclipped mono peak,
+instrument/root/loop metadata and a separate optional periodicity estimate.
+add-sample validates and decodes the audio before adding its unchanged source
+reference. ROOT is numeric, auto for signal-based estimation, or metadata for
+the declared sampler/instrument root. Missing/uncertain roots fail before save.
+The highest MIDI key is explicit; automatic multi-sample ranges remain open.
+Import starts with zero dB and disabled normalization/fixed-pitch flags. Suggested
+inst gain is reported separately; set-sample can apply a chosen level later.
+Existing atomic-save, reference rebasing and source/hardlink protection apply.
+
+Decoder contract
+Supported: mono/stereo PCM8 unsigned, PCM16/24/32 signed, IEEE Float32/64 and
+their WAVEFORMATEXTENSIBLE forms. The declared rate is retained, up to 384000 Hz.
+Finite float amplitudes above full scale are retained. Stereo analysis uses the
+arithmetic channel mean, without gain, clipping, resampling or source rewriting.
+This is not a qualification of Spectre's final stereo export/gain quantization.
+
+The RIFF extent must match the file. Chunks have bounded complete payloads and
+word padding; fmt/data may appear in either order. Unknown ancillary chunks are
+skipped. Duplicate known chunks, compressed/RF64/RIFX/multichannel inputs,
+inconsistent rate/alignment/precision/GUID/mask, nonfinite samples, incomplete
+frames and inconsistent fact counts fail visibly. Reduced PCM precision is
+left-aligned and requires zero unused low bits. fact is optional for accepted
+uncompressed files; its sample count is checked when present.
+
+smpl root fractions and loop fields are decoded; endpoints are inclusive and
+must remain within the decoded frames. Forward/alternating/backward types and
+fraction/play counts are retained; playback is not implemented here. inst signed
+correction, gain, note and velocity ranges are reported. A positive correction
+raises the sound to its nominal note, so its source root is note minus cents/100.
+Explicit metadata-root selection prefers smpl when both chunks exist; inst stays
+visible independently. No metadata is injected into proprietary transfer data.
+
+Resource limits: 256 MiB input, 33554432 decoded frames, 16384 chunks and 1024
+sampler loops. These are offline editor limits, not hardware capacity accounting.
+
+Pitch estimation
+The implementation derives an offline periodicity estimate from YIN's squared
+difference, cumulative mean threshold and raw-difference parabolic interpolation.
+It uses threshold 0.1 and no uncertain global-minimum fallback. Before analysis,
+bounded channel-mean data is scaled by its peak and box-averaged to at most
+12000 samples/s. At most the first 16384 reduced samples are considered, with
+an integration window of at most 8192 and lag bound min(frames/2, rate/8).
+Silence, DC, short and nonperiodic inputs can have no estimate. Attack, noise,
+polyphony, aliasing and octave ambiguity remain limitations; a manual root is
+available. This is a separate editor algorithm, not recovered Spectre code or
+a replacement for the original synthesizer.
+
+Independent evidence and compatibility limits
+sample_wave checks literal signed/unsigned extrema, Float32/64, stereo mean,
+20-in-24 precision, instrument correction, fractional root, inclusive loops,
+fixed malformed inputs and a 440 Hz fundamental with a stronger second harmonic.
+sample_wave_cli checks the actual executable using independent Python struct/wave
+files: auto/manual/metadata import, JSON/XML and rebased paths, unknown pitch,
+invalid input and source/output preservation. Fuzzing remains explicitly opt-in.
+
+The unchanged own 440 Hz reference imported by Spectre Windows 1.00 under Wine
+has original XML root 69.05. A second file with identical PCM plus smpl root 60.5,
+inst nominal 64/correction -25 cents/gain -6 dB and loop 100..1000 instead yields
+original XML pitch 81.00 and level 0.00. These observations do not establish its
+pitch/loop algorithm; auto detection and explicit metadata selection are distinct.
+Own inputs, original exports and hashes stay under ignored doc/local/.
+WAV import/analysis does not establish preview, normalization, capacity, MIDI
+export/transfer, device playback or complete Spectre parity. Full scope remains
+in spectre-client.txt and coverage.txt.
+
+Format and algorithm references
+- Microsoft RIFF chunk boundaries/padding:
+  https://learn.microsoft.com/en-us/windows/win32/xaudio2/resource-interchange-file-format--riff-
+- Microsoft WAVEFORMATEXTENSIBLE precision/container rules:
+  https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-waveformatextensible
+- Multimedia Data Standards Update, revision 3.0, 15 April 1994, pages 16..18:
+  https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/Docs/RIFFNEW.pdf
+- de Cheveigne and Kawahara, YIN, JASA 111(4), 2002, DOI 10.1121/1.1458024:
+  https://www.ee.columbia.edu/~dpwe/papers/deChevK02-yin.pdf

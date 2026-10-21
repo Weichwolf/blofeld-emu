@@ -155,6 +155,17 @@ The execution command must stop visibly on unsupported hardware. An instruction
 budget being exhausted does not establish successful boot. Downloading firmware
 and extracting its contents does not exercise the real update/recovery path.
 
+Spectre sample editing in the CLI
+The samples subcommand creates and edits Spectre XML 0.5 program collections
+without firmware or hardware. It supports program ordering/export, rebased sample
+references, numeric root/highest-key and gain/normalization metadata.
+wave-info and add-sample decode/import WAV with explicit or estimated roots;
+doc/sample-wave.txt records formats, independent vectors and compatibility limits.
+Run build/strict/blofeld-headless samples --help for commands; doc/spectre-client.txt
+records actual original-app compatibility evidence and the complete remaining
+scope. Final audio processing, preview, other import formats and MIDI export/transfer
+are still pending.
+
 Offline parser fuzzing
 Run fuzz tests only at the user's explicit request, never as an automatic part of
 routine development, validation or quality checks. Manual example:
