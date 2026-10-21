@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -16,21 +17,31 @@
 #include <vector>
 
 namespace blofeld {
-bool UsbipTcpServer::Impl::expire(Connection &connection,
-                                  const Time now,
-                                  std::vector<UsbipConnectionEvent> &events) {
-  if (!connection.frame_deadline || now < *connection.frame_deadline) { return true; }
+bool usbip_tcp::expire(Connection &connection,
+                       const Time now,
+                       std::vector<UsbipConnectionEvent> &events) {
+  const bool frame_expired = connection.frame_deadline && now >= *connection.frame_deadline;
+  const bool output_expired = connection.output_deadline && now >= *connection.output_deadline;
+  if (!frame_expired && !output_expired) { return true; }
   events.push_back({.connection = connection.id,
                     .error = true,
                     .requires_board_reset = connection.session->imported(),
-                    .reason = "USB/IP incomplete input frame deadline expired"});
+                    .reason = frame_expired ? "USB/IP incomplete input frame deadline expired"
+                                            : "USB/IP pending output progress deadline expired"});
   connection.session->abort();
   return false;
 }
 
-bool UsbipTcpServer::Impl::flush(Connection &connection,
-                                 std::size_t &budget,
-                                 std::vector<UsbipConnectionEvent> &events) {
+bool usbip_tcp::flush(Connection &connection,
+                      std::size_t &budget,
+                      const Time now,
+                      const std::chrono::milliseconds timeout,
+                      std::vector<UsbipConnectionEvent> &events) {
+  if (connection.session->output().empty()) {
+    connection.output_deadline.reset();
+    return true;
+  }
+  if (!connection.output_deadline) { connection.output_deadline = now + timeout; }
   constexpr unsigned syscall_budget = 16;
   for (unsigned attempt = 0;
        attempt < syscall_budget && budget != 0 && !connection.session->output().empty();
@@ -52,6 +63,11 @@ bool UsbipTcpServer::Impl::flush(Connection &connection,
     const auto count = static_cast<std::size_t>(sent);
     connection.session->consume_output(count);
     budget -= count;
+    if (connection.session->output().empty()) {
+      connection.output_deadline.reset();
+    } else {
+      connection.output_deadline = now + timeout;
+    }
   }
   return true;
 }

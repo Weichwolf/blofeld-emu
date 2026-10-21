@@ -204,6 +204,11 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-midi-forward.log")
   set_tests_properties(original_midi_forward PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  add_executable(blofeld-usbip-output-timeout-test test/usbip_output_timeout_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_include_directories(blofeld-usbip-output-timeout-test PRIVATE src)
+  target_link_libraries(blofeld-usbip-output-timeout-test PRIVATE blofeld_usbip_tcp blofeld_core)
+  add_test(NAME usbip_output_timeout COMMAND blofeld-usbip-output-timeout-test)
+  set_tests_properties(usbip_output_timeout PROPERTIES TIMEOUT 30)
   add_executable(blofeld-usbip-frame-timeout-test test/usbip_frame_timeout_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_include_directories(blofeld-usbip-frame-timeout-test PRIVATE src)
   target_link_libraries(blofeld-usbip-frame-timeout-test PRIVATE blofeld_usbip_tcp blofeld_core)
@@ -1060,6 +1065,7 @@ add_custom_target(quality
     blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test
     blofeld-usbip-session-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
     blofeld-usbip-frame-timeout-test
+    blofeld-usbip-output-timeout-test
     blofeld-usbip-session-boundaries-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test

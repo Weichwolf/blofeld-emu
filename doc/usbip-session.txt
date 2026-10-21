@@ -74,8 +74,33 @@ Deterministic own TCP/native tests inject the host clock, check idle management,
 byte trickles, partial headers/payloads, coalesced boundaries and an IN request
 still pending after two simulated host hours. Actual own HC12 ISR execution
 after expiry retains the already accepted SETUP. No sleep or fuzzing is used.
-Output-stall and valid-half-close drain deadlines remain unqualified separately;
-the pure session itself has no clock or timeout policy.
+The pure session itself has no clock or timeout policy.
+
+Output progress deadlines
+UsbipTcpOptions also has a separate output_timeout, default 30 seconds and bounded
+to positive milliseconds through 24 hours. Pending userspace reply bytes arm it,
+including when the poll's byte budget was already exhausted. Only a positive
+send result renews it while bytes remain. EAGAIN/EWOULDBLOCK/EINTR, more incoming
+requests and additional queued replies do not renew it. Draining all output
+clears the deadline; a later reply starts a new one. A successful send means the
+kernel accepted that prefix, not that the remote application consumed it.
+
+Expiry is checked before I/O at the next caller poll. A long caller pause can
+therefore expire output even if the socket is writable when polling resumes.
+The affected peer closes with an explicit output-progress error; an imported
+capture retains its lease and requires board-owned recovery. Previously accepted
+USB/IRQ/RAM effects and byte prefixes sent to the socket are not rolled back.
+The deadline covers partial management/import replies and replies draining after
+a valid input half-close. Fully framed MIDI IN requests without queued reply
+bytes retain their existing indefinite NAK/idle behavior. A valid half-close
+waiting only for device data has no separate whole-drain deadline.
+
+Fixed tests use real local stream sockets for deterministic kernel EAGAIN and
+actual loopback TCP for partial management/import replies and native SETUP
+ownership across input half-close. Positive-byte renewal, blocked retries,
+deadline clearing, independent peers, bounds and host-clock overflow are checked.
+Actual own HC12 execution still completes an accepted SETUP after transport
+retirement. These fixtures do not qualify original enumeration or physical timing.
 
 Explicit runtime CLI/common-clock board binding has own native/actual-process
 tests and capture/session invalidation guards (usb-runtime.txt). There is no
@@ -86,8 +111,8 @@ Loopback own-fixture tests are not hardware or original-firmware equivalence.
 No fuzzing, physical device traffic, module loading or system routing is used.
 
 Deterministic gates:
-  cmake --build --preset strict --target blofeld-usbip-session-test blofeld-usbip-session-boundaries-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test blofeld-usbip-frame-timeout-test
-  ctest --test-dir build/strict --output-on-failure -R '^(usbip_session|usbip_session_boundaries|usbip_tcp|usbip_tcp_native|usbip_frame_timeout)$'
+  cmake --build --preset strict --target blofeld-usbip-session-test blofeld-usbip-session-boundaries-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test blofeld-usbip-frame-timeout-test blofeld-usbip-output-timeout-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_session|usbip_session_boundaries|usbip_tcp|usbip_tcp_native|usbip_frame_timeout|usbip_output_timeout)$'
 
 usbip_session_boundaries supplements the packet/native/TCP cases with all89
 split positions of a coalesced40-byte import and48-byte IN request, all40 truncated
@@ -102,3 +127,4 @@ References (protocol facts only; no kernel implementation code is copied):
   https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/stub_rx.c
   https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/vhci_hcd.c
   https://man7.org/linux/man-pages/man7/socket.7.html
+  https://man7.org/linux/man-pages/man2/send.2.html

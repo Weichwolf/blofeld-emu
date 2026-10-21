@@ -7,28 +7,40 @@
 #include "usbip_socket.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
 
 namespace blofeld {
-struct UsbipTcpServer::Impl {
-  using Time = std::chrono::steady_clock::time_point;
+namespace usbip_tcp {
+using Time = std::chrono::steady_clock::time_point;
 
-  struct Connection {
-    usbip_tcp::Socket socket;
-    std::unique_ptr<UsbipSession> session;
-    std::uint64_t id = 0;
-    std::optional<Time> frame_deadline;
-  };
+struct Connection {
+  usbip_tcp::Socket socket;
+  std::unique_ptr<UsbipSession> session;
+  std::uint64_t id = 0;
+  std::optional<Time> frame_deadline;
+  std::optional<Time> output_deadline;
+};
+
+[[nodiscard]] bool
+expire(Connection &connection, Time now, std::vector<UsbipConnectionEvent> &events);
+// The owner validates monotonic time and representable positive deadlines.
+[[nodiscard]] bool flush(Connection &connection,
+                         std::size_t &budget,
+                         Time now,
+                         std::chrono::milliseconds timeout,
+                         std::vector<UsbipConnectionEvent> &events);
+}
+
+struct UsbipTcpServer::Impl {
+  using Time = usbip_tcp::Time;
+  using Connection = usbip_tcp::Connection;
 
   explicit Impl(UsbipTcpOptions requested);
   void accept(Time now, std::vector<UsbipConnectionEvent> &events);
-  [[nodiscard]] static bool
-  expire(Connection &connection, Time now, std::vector<UsbipConnectionEvent> &events);
-  [[nodiscard]] static bool
-  flush(Connection &connection, std::size_t &budget, std::vector<UsbipConnectionEvent> &events);
   [[nodiscard]] bool
   receive(Connection &connection, Time now, std::vector<UsbipConnectionEvent> &events) const;
   UsbipTcpOptions options;

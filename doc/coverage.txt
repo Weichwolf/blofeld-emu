@@ -306,6 +306,12 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           beyond the deadline. Expiry retains
                                           actual native SETUP/IRQ/RAM ownership
                                           (usbip_frame_timeout).
+                                          Queued reply progress has a separate
+                                          host deadline, renewed only by actual
+                                          accepted socket bytes. Real stream
+                                          EAGAIN and TCP/native half-close tests
+                                          retain SETUP ownership and import leases
+                                          on expiry (usbip_output_timeout).
                                           Production descriptor probe also reaches
                                           the original USTB failure; no metadata
                                           escapes after two joint restores.
