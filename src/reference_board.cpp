@@ -46,6 +46,12 @@ Board::Board(const Config &config, const Execution &execution)
   native_->dsp.bus().install_rom({.start = bootstrap_base, .words = execution.rom});
   native_->dsp.bus().pll().observe_pinit(config.pinit);
   native_->dsp.cpu().reset_spi_boot();
+  if (config.pcm) {
+    if (config.pcm->instance > 1 || config.pcm->lane > 5) {
+      throw Fault("Invalid PCM output route");
+    }
+    control_.pcm.emplace(config.pcm->format);
+  }
   for (const auto &entry : config.initial) { apply(entry); }
   for (const auto &entry : config.dsp_initial) { apply_dsp(entry); }
   update_wiring();
@@ -187,6 +193,11 @@ void Board::report(std::ostream &stream) const {
     stream << "DSP-ESAI-CLOCK instance=" << clock.index
            << " observed=" << control_.next_esai_edge.at(clock.index)
            << " configured=" << clock.edges << '\n';
+  }
+  if (control_.pcm) {
+    stream << "PCM frames=" << control_.pcm->completed_frames()
+           << " started=" << control_.pcm_stamp.has_value() << " locked=" << control_.pcm->locked()
+           << " faulted=" << control_.pcm->faulted() << '\n';
   }
 }
 

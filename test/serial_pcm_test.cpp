@@ -179,6 +179,44 @@ void formats_times_and_nonedges() {
             "Sync changes without a sample edge deliver no sample");
   }
 }
+
+void explicitly_ordered_observations() {
+  SerialPcmReceiver receiver({.slot_bits = 1, .word_bits = 1});
+  (void)receiver.observe_ordered({.ticks = 10}, {.clock = false, .frame_sync = false});
+  require(!receiver.observe_ordered({.ticks = 10, .order = 1},
+                                    {.clock = true, .frame_sync = true, .data = true}),
+          "Explicit order can capture a first slot without moving absolute time");
+  const auto saved = receiver;
+  (void)receiver.observe_ordered({.ticks = 10, .order = 2}, {.clock = false, .frame_sync = false});
+  const auto frame = receiver.observe_ordered({.ticks = 10, .order = 3},
+                                              {.clock = true, .frame_sync = false, .data = false});
+  require(frame && frame->samples[0] == -1 && frame->samples[1] == 0 && frame->first_tick == 10 &&
+              frame->last_tick == 10 && frame->first_order == 1 && frame->last_order == 3,
+          "Literal same-tick slots retain their actual causal stamps, not invented time");
+  const auto completed = receiver;
+  receiver = saved;
+  (void)receiver.observe_ordered({.ticks = 10, .order = 2}, {.clock = false, .frame_sync = false});
+  require(receiver.observe_ordered({.ticks = 10, .order = 3},
+                                   {.clock = true, .frame_sync = false, .data = false}) == frame &&
+              receiver == completed,
+          "A trusted copy retains ordinal, partial word and all receiver state");
+  require(rejects([&] {
+            (void)receiver.observe_ordered({.ticks = 10, .order = 3},
+                                           {.clock = false, .frame_sync = false});
+          }).find("Non-increasing") != std::string::npos,
+          "An identical ordinal cannot replay an observation as a new edge");
+  SerialPcmReceiver boundary({});
+  (void)boundary.observe_ordered({.ticks = 10, .order = std::numeric_limits<std::uint64_t>::max()},
+                                 {.clock = false, .frame_sync = false});
+  require(!boundary.observe_ordered({.ticks = 11}, {.clock = false, .frame_sync = false}),
+          "A later absolute tick starts its own ordinal without arithmetic carry");
+  require(rejects([&] {
+            (void)boundary.observe_ordered(
+                {.ticks = 10, .order = std::numeric_limits<std::uint64_t>::max()},
+                {.clock = false, .frame_sync = false});
+          }).find("Non-increasing") != std::string::npos,
+          "An ordinal never permits absolute time to move backwards");
+}
 }
 }
 
@@ -191,6 +229,7 @@ int main() {
     snapshots_and_failure_recovery();
     strict_signal_and_frame_failures();
     formats_times_and_nonedges();
+    explicitly_ordered_observations();
     native_serial_pcm();
     std::cout << "Serial PCM literals, signed widths, framing, quarantine, snapshots and native "
                  "ESAI passed\n";

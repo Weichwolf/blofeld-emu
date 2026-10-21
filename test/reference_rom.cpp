@@ -94,20 +94,29 @@ blofeld::test::DspProgram esai_program(const std::string_view mode) {
     put(port_control, mux);
     put(port_direction, mux);
   }
-  put(clock_control, mode.ends_with("external") ? external_clock : hckt_clock);
+  const bool external = mode.ends_with("external") || mode.ends_with("external-word");
+  constexpr unsigned external_sckt_generated_frame = 0x400200;
+  auto selected_clock = external ? external_clock : hckt_clock;
+  if (mode.ends_with("external-sckt")) { selected_clock = external_sckt_generated_frame; }
+  put(clock_control, selected_clock);
   if (!mode.ends_with("active")) {
     put(port_control, mux);
     put(port_direction, mux);
   }
   put(0, first);
   put(transmit_control, format | 1U);
-  if (mode.ends_with("refill")) {
+  if (mode.ends_with("refill") || mode.ends_with("drop-sckt")) {
     constexpr unsigned ordinary_delay = 64;
     constexpr unsigned tied_delay = 154;
     const auto refill_delay = mode.ends_with("tied-refill") ? tied_delay : ordinary_delay;
     for (unsigned index = 0; index < refill_delay; ++index) { result.emit("nop"); }
     constexpr unsigned next = 0x123456;
-    put(0, next);
+    if (mode.ends_with("drop-sckt")) {
+      constexpr unsigned sckt_mux = 8;
+      put(port_control, mux & ~sckt_mux);
+    } else {
+      put(0, next);
+    }
   }
   const auto loop = result.pc();
   result.emit("nop");
@@ -120,7 +129,8 @@ blofeld::test::DspProgram esai_program(const std::string_view mode) {
 blofeld::test::DspProgram program(const std::string_view mode) {
   if (mode == "esai0" || mode == "esai1" || mode == "esai0-refill" || mode == "esai1-refill" ||
       mode == "esai1-external" || mode == "esai1-tied-refill" || mode == "esai1-missing-hckt" ||
-      mode == "esai1-active") {
+      mode == "esai1-active" || mode == "esai1-external-word" || mode == "esai1-external-sckt" ||
+      mode == "esai1-drop-sckt") {
     return esai_program(mode);
   }
   if (mode == "capture-irq") { return capture_program(); }

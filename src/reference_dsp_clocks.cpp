@@ -44,6 +44,7 @@ void Board::observe_dsp_input(const std::uint64_t at) {
   }
   apply_dsp(next->input);
   trace_dsp_input(next->input, at);
+  observe_pcm(at, "external");
   if (next->clock_index.has_value()) {
     ++control_.next_esai_edge.at(next->clock_index.value());
   } else {

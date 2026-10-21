@@ -18,12 +18,21 @@ struct SerialPcmFormat {
   unsigned channels = 2;
   SerialPcmEdge sample_edge = SerialPcmEdge::rising;
   bool frame_sync_high = true;
+  bool operator==(const SerialPcmFormat &) const = default;
 };
 
 struct SerialPcmPins {
   std::optional<bool> clock = std::nullopt;
   std::optional<bool> frame_sync = std::nullopt;
   std::optional<bool> data = std::nullopt;
+  bool operator==(const SerialPcmPins &) const = default;
+};
+
+// Order is a caller-declared causal ordinal within the same absolute tick.
+struct SerialPcmStamp {
+  std::uint64_t ticks = 0;
+  std::uint64_t order = 0;
+  bool operator==(const SerialPcmStamp &) const = default;
 };
 
 struct SerialPcmFrame {
@@ -32,6 +41,8 @@ struct SerialPcmFrame {
   unsigned channels = 0;
   std::uint64_t first_tick = 0;
   std::uint64_t last_tick = 0;
+  std::uint64_t first_order = 0;
+  std::uint64_t last_order = 0;
   bool operator==(const SerialPcmFrame &) const = default;
 };
 
@@ -41,7 +52,10 @@ class SerialPcmReceiver {
 public:
   explicit SerialPcmReceiver(SerialPcmFormat format);
   [[nodiscard]] std::optional<SerialPcmFrame> observe(std::uint64_t ticks, SerialPcmPins pins);
+  [[nodiscard]] std::optional<SerialPcmFrame> observe_ordered(SerialPcmStamp stamp,
+                                                              SerialPcmPins pins);
   void reset();
+  bool operator==(const SerialPcmReceiver &) const = default;
 
   [[nodiscard]] std::uint64_t completed_frames() const { return frames_; }
 
@@ -50,14 +64,14 @@ public:
   [[nodiscard]] bool faulted() const { return faulted_; }
 
 private:
-  [[noreturn]] void fail(std::uint64_t ticks, std::string_view reason);
+  [[noreturn]] void fail(SerialPcmStamp stamp, std::string_view reason);
   [[nodiscard]] std::optional<SerialPcmFrame>
-  sample(std::uint64_t ticks, bool active, std::optional<bool> data);
+  sample(SerialPcmStamp stamp, bool active, std::optional<bool> data);
   [[nodiscard]] std::int32_t signed_word() const;
   SerialPcmFormat format_;
   SerialPcmFrame frame_;
   std::optional<bool> previous_clock_;
-  std::optional<std::uint64_t> previous_tick_;
+  std::optional<SerialPcmStamp> previous_stamp_;
   std::uint64_t frames_ = 0;
   std::int64_t word_modulus_ = 0;
   std::uint32_t word_sign_ = 0;

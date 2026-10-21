@@ -12,6 +12,7 @@
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/serial_pcm.hpp"
 
 #include <array>
 #include <cstdint>
@@ -71,6 +72,13 @@ struct DspEsaiClock {
   unsigned index = 0;
 };
 
+struct PcmRoute {
+  unsigned instance = 0;
+  unsigned lane = 0;
+  std::uint64_t after_ticks = 0;
+  SerialPcmFormat format;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunContract dsp;
@@ -93,6 +101,7 @@ struct Config {
   std::vector<DspInput> dsp_initial;
   std::vector<DspInput> dsp_events;
   std::vector<DspEsaiClock> dsp_clocks;
+  std::optional<PcmRoute> pcm;
 };
 
 void validate_returns(const Config &config);
@@ -146,6 +155,10 @@ struct Status {
   std::size_t next_event = 0;
   std::size_t next_dsp_event = 0;
   std::array<std::uint64_t, 2> next_esai_edge{};
+  std::array<SerialPcmPins, 2> esai_inputs{};
+  std::optional<SerialPcmReceiver> pcm;
+  std::optional<SerialPcmStamp> pcm_stamp;
+  std::optional<SerialPcmFrame> last_pcm;
   bool started = false;
   bool waiting = false;
   bool held_reset = true;
@@ -200,6 +213,10 @@ private:
     std::size_t next_event = 0;
     std::size_t next_dsp_event = 0;
     std::array<std::uint64_t, 2> next_esai_edge{};
+    std::array<SerialPcmPins, 2> esai_inputs{};
+    std::optional<SerialPcmReceiver> pcm;
+    std::optional<SerialPcmStamp> pcm_stamp;
+    std::optional<SerialPcmFrame> last_pcm;
     bool started = false;
     bool faulted = false;
   };
@@ -239,6 +256,12 @@ private:
   void observe_dsp_input(std::uint64_t at);
   void apply_dsp(const DspInput &input);
   void trace_dsp_input(const DspInput &input, std::uint64_t at);
+  void observe_pcm(std::uint64_t at, std::string_view source);
+  [[nodiscard]] SerialPcmPins pcm_pins() const;
+  void trace_pcm(SerialPcmStamp stamp,
+                 SerialPcmPins pins,
+                 std::string_view source,
+                 const std::optional<SerialPcmFrame> &frame) const;
   [[nodiscard]] DspExternalEvents dsp_inputs();
   void boundary();
   void step();

@@ -9,8 +9,11 @@ bit-pulse sync, I2S delay, right justification and LSB-first formats are not
 supported by this contract. This does not configure or infer an ESAI format.
 
 observe accepts strictly increasing absolute integer ticks and optional logical
-clock, frame-sync and data levels. The caller must provide all clock transitions
-and must explicitly resolve mux, direction and routing. Unknown/undriven clock
+clock, frame-sync and data levels. observe_ordered additionally accepts an explicit
+causal ordinal within a tick: ticks never decrease, and same-tick ordinals must
+increase strictly. Ordinary observe uses ordinal 0 and retains its strict-time
+contract. No ordinal is converted into elapsed time. The caller provides every
+clock transition and explicitly resolves mux, direction and routing. Unknown/undriven clock
 or FS reject; unknown data rejects on a sampled payload bit. Data outside payload
 bits is not audio and is not substituted into the sample. No edge, frequency,
 interpolation, missing sample or silence is generated. Irregular observed clock
@@ -24,7 +27,8 @@ declared slot position. Early, late or missing frame boundaries fail visibly.
 Only all slot_bits * channels observations complete a frame, including padding.
 Incomplete frames produce no output. Each result contains its channel count,
 right-justified signed int32 samples at the declared word precision, and actual
-first/last sampling ticks. Unused array entries are outside the channel count.
+first/last sampling ticks and ordinals. Unused array entries are outside the
+channel count.
 
 A fault includes ticks, completed-frame count, slot and bit, and quarantines the
 receiver. Reset explicitly discards alignment, partial data and counters. Trusted
@@ -54,8 +58,12 @@ receiver and pin observations must leave native debug state unchanged.
 
 Scope
 
-This receiver is not yet bound to the standalone board output path. Host/WAV
-transport, codec routing, a physical sample rate, complete original boot,
+The standalone reference board now binds this receiver to explicitly selected
+ESAI signals and emits delimited PCM trace frames (reference-board.txt). Native
+completion and external-input observations retain causal order within a tick;
+joint snapshots retain receiver and logical external-clock input state. Tests
+compare the complete non-PCM trace against a run with the receiver disabled.
+Host/WAV transport, codec routing, a physical sample rate, complete original boot,
 automatic DMA, original active-voice audio and device equivalence remain open.
 No firmware result, missing word, TPR setting, physical clock or bus grant is
 manufactured to obtain the native test frame.

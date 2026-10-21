@@ -9,6 +9,7 @@
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_run_clock.hpp"
 #include "blofeld/private_file.hpp"
+#include "blofeld/serial_pcm.hpp"
 #include "reference_board.hpp"
 
 #include <algorithm>
@@ -267,6 +268,31 @@ void dsp_order(Config &config, std::istringstream &line) {
   }
 }
 
+PcmRoute pcm_route(std::istringstream &line) {
+  literal(line, "esai");
+  const auto instance = static_cast<unsigned>(number(line, 1));
+  literal(line, "tx");
+  const auto lane = static_cast<unsigned>(number(line, 5));
+  literal(line, "after");
+  const auto after = number(line, UINT64_MAX);
+  const auto edge = token(line);
+  if (edge != "rising" && edge != "falling") { throw Fault("Unknown PCM sampling edge"); }
+  constexpr unsigned maximum_bits = 32;
+  PcmRoute result{
+      .instance = instance,
+      .lane = lane,
+      .after_ticks = after,
+      .format = {.slot_bits = static_cast<unsigned>(number(line, maximum_bits)),
+                 .word_bits = static_cast<unsigned>(number(line, maximum_bits)),
+                 .channels = static_cast<unsigned>(number(line, SerialPcmFrame::maximum_channels)),
+                 .sample_edge = edge == "rising" ? SerialPcmEdge::rising : SerialPcmEdge::falling}};
+  const auto polarity = token(line);
+  if (polarity != "high" && polarity != "low") { throw Fault("Unknown PCM frame polarity"); }
+  result.format.frame_sync_high = polarity == "high";
+  const SerialPcmReceiver validated(result.format);
+  return result;
+}
+
 void setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "clock") {
     clocks(config, line);
@@ -276,6 +302,8 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
     dsp_interrupts(config, line);
   } else if (key == "dsp-input-order") {
     dsp_order(config, line);
+  } else if (key == "pcm-receive") {
+    config.pcm = pcm_route(line);
   } else if (key == "spi-b") {
     serial(config, line);
   } else if (key == "dsp-release") {
@@ -380,6 +408,9 @@ struct Parser {
       if (clock.start_ticks < result.release_ticks) {
         throw Fault("DSP ESAI periodic clock precedes the requested DSP release");
       }
+    }
+    if (result.pcm && result.pcm->after_ticks < result.release_ticks) {
+      throw Fault("PCM observation threshold precedes the requested DSP release");
     }
   }
 };

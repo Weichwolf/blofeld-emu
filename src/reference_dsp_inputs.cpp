@@ -41,6 +41,8 @@ void Board::apply_dsp(const DspInput &input) {
       }
       case DspInputKind::esai:
         native_->dsp.bus().observe_esai_transmit(instance(input.index), input.esai);
+        control_.esai_inputs.at(input.index) = {.clock = input.esai.clock,
+                                                .frame_sync = input.esai.frame_sync};
         break;
       default: throw Fault("Unknown reference DSP input kind");
     }

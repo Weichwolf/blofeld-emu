@@ -96,11 +96,14 @@ void Board::update_return(const std::optional<ReturnRoute> &route,
 }
 
 DspCompletionObserver Board::return_observer() {
-  if (!config_.hreq && !config_.miso) { return {}; }
+  if (!config_.hreq && !config_.miso && !config_.pcm) { return {}; }
   return {.observe = [this](const DspScheduledStep &step) {
-    control_.return_boundary = step.completion_ticks;
-    update_wiring();
-    control_.return_boundary.reset();
+    if (config_.hreq || config_.miso) {
+      control_.return_boundary = step.completion_ticks;
+      update_wiring();
+      control_.return_boundary.reset();
+    }
+    observe_pcm(step.completion_ticks, "native");
   }};
 }
 

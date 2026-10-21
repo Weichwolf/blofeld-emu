@@ -647,7 +647,16 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           checks literal signed words, strict FS,
                                           unknown pins and joint mid-word replay
                                           from both actual native ESAI maps
-                                          (serial-pcm.txt). Board/host/WAV output
+                                          (serial-pcm.txt). The standalone board
+                                          now emits complete PCM trace frames
+                                          from native/external pin observations,
+                                          with exact same-tick causal order and
+                                          joint receiver/input snapshots. Literal
+                                          payloads, unchanged non-PCM CPU trace,
+                                          external SCKT/generated FST, late joining
+                                          and native
+                                          mux-loss failures are checked
+                                          (reference-board.txt). Host/WAV output
                                           and original active-voice audio remain
                                           pending.
 Persistent storage               partial  MCU NVM files preserve mutations,

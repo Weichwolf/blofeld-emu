@@ -209,6 +209,58 @@ configured count with a bounded executed prefix proves compact scheduling, not
 sustained real-time operation. Full original boot, DMA/voice integration, host
 MIDI/audio and physical clock/pad/rate validation remain open.
 
+Standalone serial PCM observation
+
+  pcm-receive esai 1 tx 0 after 1200 rising 32 24 2 high
+
+This optional setting selects one actual ESAI instance (0/1), TX wire (0..5),
+observation threshold in common ticks, sample edge (rising/falling), slot bits,
+signed payload bits, slots per frame and active word-length-FS level (high/low).
+The receiver contract and unsupported formats are in serial-pcm.txt. These
+fields do not program hardware registers or infer a physical audio format/rate.
+The threshold must not precede the requested DSP release. The first actual DSP
+completion or external input at/after it establishes the baseline; no event is
+inserted at that threshold. Capturing a stream with active FS waits for inactive
+FS and the following frame; partial input is never padded or delivered.
+
+Signals are sampled after each committed native DSP instruction and external
+DSP input. Both SCKT/FST pads must remain selected for their peripheral function.
+Generated clocks use actual mux-qualified known output levels. Input directions
+use the latest explicitly supplied complete ESAI input snapshot; there is no
+default pull, inherited missing level or implicit external clock. TX data comes
+only from the selected actual mux-qualified transmitter output. Unknown clock/FS,
+unknown sampled payload, missing mux and malformed frames fail with operation,
+ESAI addresses, both PCs, time and source. No data register, TPR or DMA grant is
+supplied by the receiver.
+
+Every observation gets its real absolute tick and a causal ordinal starting at 0
+within that tick. Native/external ties follow the existing qualified scheduler
+order. Unqualified ties continue to reject before observation. No synthetic
+sub-tick duration is assigned. Native writes that remove a clock mux are observed
+at completion, before the next external edge. Observation leaves native CPU
+state, cycle accounting and the non-PCM trace unchanged.
+
+PCM-PINS rows show end/order/source, resolved clock/FS/data and both PCs.
+PCM-FRAME rows contain the completed-frame index, first/end ticks and ordinals,
+channel count and comma-separated signed samples at the declared payload width.
+PCM summary counts only complete frames; zero frames does not prove audio output.
+These rows form a diagnostic PCM event stream, not a WAV file or host audio port.
+The joint board snapshot retains partial receiver state, external clock levels,
+last observation and last completed frame. Replay sections repeat their own trace
+suffixes under the existing REPLAY markers; consumers must select one branch,
+not concatenate duplicate suffixes as new audio. The emulator does not internally
+retain an unbounded sample queue or claim that its final-state comparison checks
+every earlier output frame. CLI regression tests compare the full replay suffix.
+
+  ctest --test-dir build/strict -R '^reference_pcm_cli$' --output-on-failure
+
+Own native tests check both maps, exact signed samples/ticks, unchanged CPU traces,
+known retained-data underrun, late joining, external SCKT with generated FST, qualified payload
+ties, partial/completed-frame copies and strict failures. Full original voice
+audio, host/WAV transport, codec routing and physical sample-rate qualification
+remain open. Fully external word-length FST remains unqualified in the ESAI
+model and rejects before a PCM frame; this binding does not relax that check.
+
 Blank lines and # comments are allowed. Unknown/duplicate settings, extra tokens,
 invalid/overflowing numbers, unsorted events, NUL bytes and configuration files
 larger than 65536 bytes reject. Inputs must be bounded regular files. Config/ROM
