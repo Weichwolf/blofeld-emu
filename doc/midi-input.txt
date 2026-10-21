@@ -6,7 +6,8 @@ McuMidiInput connects those levels to an explicitly selected PR2 or PS4 pad and
 advances the existing SCI receiver. The caller supplies a fixed bus frequency;
 the 30 MHz/PR2 application fixture is an experiment, not measured Blofeld wiring
 or a Desktop/Keyboard profile. CPU, oscillator, timer and DSP time remain separate.
-No operating-system MIDI port or automatic board scheduler is implemented.
+The separate host-midi.txt path supplies binary files or read-only Linux RawMIDI
+to the headless reference driver. Live hardware and real-time timing are unverified.
 
 Owned-clock wire peer
 McuClockedMidiInput supplies the same bounded byte source through pre-period
@@ -28,7 +29,8 @@ trusted MCU checkpoint and other external fixtures, then restore all of them.
 Restoring only the MCU or wire across different boundaries fails rather than
 retiming the source. This is a trusted in-process protocol, not an identity check
 against arbitrary unrelated MCU instances that happen to have equal counters.
-Host timestamp conversion, dynamic-rate resampling and device ports are pending.
+Host timestamp conversion and dynamic-rate resampling are pending. The explicit
+reference-board driver now owns/copies this peer with its coordinated checkpoint.
 
 Transport
 - The source emits start-low, eight least-significant-bit-first data slots and
@@ -88,7 +90,7 @@ decision from native SCI configuration writes. These are conditional experiments
 they do not qualify the real transfer edge, complete message semantics or audio.
 
 Remaining requirements
-Host MIDI ports, external timestamp scheduling and dynamic-rate input,
+Validated live MIDI ports, external timestamp scheduling and dynamic-rate input,
 complete MIDI/controller handling by the original firmware and DSP, voices,
 audio output and hardware calibration are pending. A byte-to-SCI experiment
 does not establish complete board boot or playable MIDI/audio behavior.

@@ -8,6 +8,7 @@
 #include "blofeld/mcu_machine.hpp"
 #include "reference_board.hpp"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -172,6 +173,9 @@ Status Board::status() const {
           .pcm_stamp = control_.pcm_stamp,
           .last_pcm = control_.last_pcm,
           .recording = control_.recording,
+          .midi_queued = control_.midi ? control_.midi->queued_bytes() : 0,
+          .midi_bytes = control_.midi_bytes,
+          .midi_started = control_.midi.has_value(),
           .started = control_.started,
           .waiting = native_->mcu.cpu().waiting(),
           .held_reset = native_->schedule == nullptr,
@@ -212,6 +216,9 @@ bool Status::operator==(const Status &other) const {
                   pcm_stamp,
                   last_pcm,
                   recording,
+                  midi_queued,
+                  midi_bytes,
+                  midi_started,
                   started,
                   waiting,
                   held_reset,
@@ -240,17 +247,26 @@ bool Status::operator==(const Status &other) const {
                                        other.pcm_stamp,
                                        other.last_pcm,
                                        other.recording,
+                                       other.midi_queued,
+                                       other.midi_bytes,
+                                       other.midi_started,
                                        other.started,
                                        other.waiting,
                                        other.held_reset,
                                        other.faulted);
 }
 
-Board::Outcome Board::finish_branch() {
+Board::Outcome Board::finish_branch(const std::function<void(Board &)> &input) {
   std::optional<std::string> fault;
   try {
-    while (!finished()) { advance(); }
-  } catch (const Fault &error) { fault = error.what(); }
+    while (!finished()) {
+      if (input) { input(*this); }
+      advance();
+    }
+  } catch (const Fault &error) {
+    control_.faulted = true;
+    fault = error.what();
+  }
   return {.fault = std::move(fault), .state = status()};
 }
 

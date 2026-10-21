@@ -602,9 +602,18 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           This is declared component setup, not
                                           original MCU/DSP boot or physical baud
                                           (reference-board.txt).
-                                          No virtual/physical MIDI port, complete
-                                          message/controller processing or DSP
-                                          voice/audio integration yet.
+                                          Headless binary-byte/legacy Linux
+                                          RawMIDI input feeds the owned-clock SCI
+                                          peer at explicit reference boundaries.
+                                          Own native CLI SCI/IRQ/RTI checks cover
+                                          both routes; a separate conditional
+                                          original cold-start fixture receives
+                                          eight file bytes through its handlers.
+                                          Live device/overrun paths are untested;
+                                          no host timestamps or real-time pacing.
+                                          Complete message/controller processing,
+                                          DSP voice/audio and hardware integration
+                                          remain open (host-midi.txt).
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
                                           sequences and pin routing tested.

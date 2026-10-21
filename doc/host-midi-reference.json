@@ -1,0 +1,21 @@
+{
+  "qualification": "Host byte-file reads feed actual original SCI/ISR/RTI/main-WAI after the conditional untimed MCU cold-start fixture. No complete message processing, scheduled MCU/DSP board, physical MIDI device/timing or audio proof.",
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [
+    {
+      "entry": 46529,
+      "bytes": 64,
+      "name": "SCI handler context window; complete MCU identity is independently pinned",
+      "sha256": "46f02508b4814a3632fb2e8dc2fd8e668307b4857cbdfc31ecc578302388fcca"
+    }
+  ],
+  "source_bytes": 8,
+  "source_sha256": "069973bc9d111b9dc4247fd14f65194049e8310064cfba3b090c0f0e36b2ac9b",
+  "linux_abi_reference": {
+    "url": "https://github.com/torvalds/linux/blob/v6.12/sound/core/rawmidi.c",
+    "file": "local/host-midi/linux-v6.12-rawmidi.c",
+    "bytes": 59466,
+    "sha256": "13489511f1c262be83dd3993a2615d5c1e64aa0ba01bde2cff12028fb502f40b",
+    "scope": "Input-only Linux RawMIDI ABI review: nonblocking reads, unframed input parameters and read-reset xrun status. Reference source is not redistributed or linked as a dependency."
+  }
+}

@@ -8,7 +8,9 @@
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/mcu_midi.hpp"
 #include "blofeld/mcu_run_clock.hpp"
+#include "blofeld/midi_serial.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "reference_board.hpp"
 
@@ -20,6 +22,8 @@
 #include <functional>
 #include <ios>
 #include <iostream>
+#include <limits>
+#include <optional>
 #include <source_location>
 #include <sstream>
 #include <string>
@@ -43,6 +47,7 @@ constexpr unsigned unmapped_page = 0x30;
 constexpr unsigned serial_pins = 0x16;
 constexpr unsigned first_cursor = 0x101;
 constexpr unsigned suffix_operations = 20;
+constexpr unsigned midi_operations = 12000;
 
 std::string rejects(const auto &operation,
                     const std::source_location location = std::source_location::current()) {
@@ -73,7 +78,8 @@ blofeld::McuFlashImage image(const bool fault) {
   return blofeld::McuFlashImage::from_known(bytes);
 }
 
-reference::Config config(const std::uint64_t release) {
+reference::Config config(const std::uint64_t release,
+                         const std::optional<reference::MidiRoute> midi = std::nullopt) {
   reference::Config result;
   result.mcu = {.clock = {.oscillator_hz = oscillator,
                           .switch_timing = blofeld::McuRunClockSwitch::reference_cycle_boundary},
@@ -88,7 +94,8 @@ reference::Config config(const std::uint64_t release) {
       .maximum_dsp_steps_per_cycle = 16,
       .wait_order = blofeld::McuDspWaitOrder::dsp_before_mcu};
   result.release_ticks = release;
-  result.operations = 32;
+  result.operations = midi ? midi_operations : 32;
+  result.midi = midi;
   result.select_n = 2;
   result.clock = 4;
   result.mosi = 16;
@@ -101,10 +108,11 @@ struct Fixture {
   Fixture(const std::filesystem::path &specification,
           const bool fault = true,
           const std::uint64_t release = epoch,
-          std::vector<std::uint32_t> program = {0, absolute_jump, blofeld::test::boot})
+          std::vector<std::uint32_t> program = {0, absolute_jump, blofeld::test::boot},
+          const std::optional<reference::MidiRoute> midi = std::nullopt)
       : flash(image(fault)),
         rom(std::move(program)),
-        configuration(config(release)),
+        configuration(config(release, midi)),
         execution{.image = flash,
                   .rom = rom,
                   .specification = specification,
@@ -360,6 +368,95 @@ void test_latched_rep_and_written_memory(const std::filesystem::path &specificat
         "Four remaining native REP stores and real old/new RAM reads survive each joint restore");
   }
 }
+
+void test_midi_wire_checkpoint_and_capacity(const std::filesystem::path &specification) {
+  constexpr unsigned frame_cycles = 1920;
+  constexpr unsigned partial_cycles = 317;
+  constexpr unsigned complete_cycles = 3 * frame_cycles;
+  constexpr unsigned bus_hz = 6000000;
+  for (const auto pin : {blofeld::SciReceivePin::pr2, blofeld::SciReceivePin::ps4}) {
+    Fixture f(specification,
+              false,
+              std::numeric_limits<std::uint64_t>::max(),
+              {0, absolute_jump, blofeld::test::boot},
+              reference::MidiRoute{.bus_hz = bus_hz, .pin = pin});
+    require(rejects([&] { f.board.enqueue_midi({}); }).contains("precedes"),
+            "External bytes cannot enter before the configured MIDI source is armed");
+    f.board.initialize();
+    const auto initial = f.board.status();
+    const std::array<std::uint8_t, 3> bytes{0x90, 64, 127};
+    f.board.enqueue_midi(bytes);
+    require(f.board.midi_window().available == blofeld::MidiSerialInput::capacity - bytes.size(),
+            "The public input window accounts for every accepted but unconsumed byte");
+    std::array<std::uint8_t, blofeld::MidiSerialInput::capacity> excess{};
+    const auto before = f.board.status();
+    static_cast<void>(rejects([&] { f.board.enqueue_midi(excess); }));
+    require(f.board.status() == before, "An overflowing enqueue is rejected atomically");
+    for (unsigned cycle = 0; cycle < partial_cycles; ++cycle) { f.board.advance(); }
+    const auto saved = f.board.checkpoint();
+    std::optional<reference::Status> expected;
+    std::string expected_trace;
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      f.board.restore(saved);
+      f.trace.str({});
+      f.trace.clear();
+      for (unsigned cycle = partial_cycles; cycle < complete_cycles; ++cycle) { f.board.advance(); }
+      const auto observed = f.board.status();
+      require(observed.midi_bytes == bytes.size() && observed.midi_queued == 0 &&
+                  observed.midi_started && observed.mcu_cycles == 5 + complete_cycles &&
+                  observed.common_ticks == (5 + complete_cycles) * mcu_period &&
+                  observed.cold_nvm == initial.cold_nvm,
+              "Native NOP periods drain exactly three 8-N-1 frames with unchanged NVM");
+      if (expected) {
+        require(
+            observed == *expected && f.trace.str() == expected_trace,
+            "Joint MCU/board/source snapshots retain the partial bit, queue and complete trace");
+      } else {
+        expected = observed;
+        expected_trace = f.trace.str();
+      }
+    }
+  }
+}
+
+void test_midi_rate_failure(const std::filesystem::path &specification) {
+  constexpr unsigned mismatched_bus_hz = 30000000;
+  Fixture f(specification,
+            false,
+            std::numeric_limits<std::uint64_t>::max(),
+            {0, absolute_jump, blofeld::test::boot},
+            reference::MidiRoute{.bus_hz = mismatched_bus_hz});
+  f.board.initialize();
+  const auto before = f.board.status();
+  const auto error = rejects([&] { f.board.advance(); });
+  require(error.contains("fixed bus rate") && error.contains("address=0x0268") &&
+              error.contains("pc=0x9000") && f.board.status().faulted &&
+              f.board.status().mcu_cycles == before.mcu_cycles,
+          "A supplied MIDI rate cannot silently override native source/divider or advance time");
+}
+
+void test_midi_trace_failure(const std::filesystem::path &specification) {
+  constexpr unsigned bus_hz = 6000000;
+  Fixture f(specification,
+            false,
+            std::numeric_limits<std::uint64_t>::max(),
+            {0, absolute_jump, blofeld::test::boot},
+            reference::MidiRoute{.bus_hz = bus_hz});
+  f.board.initialize();
+  const auto saved = f.board.checkpoint();
+  const std::array<std::uint8_t, 1> byte{0x90};
+  f.trace.setstate(std::ios::badbit);
+  require(rejects([&] { f.board.enqueue_midi(byte); }).contains("trace output failed") &&
+              f.board.status().faulted && f.board.status().midi_bytes == 1,
+          "Trace failure retains the actual accepted prefix and quarantines board/source together");
+  static_cast<void>(rejects([&] { static_cast<void>(f.board.checkpoint()); }));
+  f.board.restore(saved);
+  f.trace.clear();
+  f.board.enqueue_midi(byte);
+  require(!f.board.status().faulted && f.board.status().midi_bytes == 1,
+          "Trusted joint restore removes the failed unrecorded input prefix before retry");
+}
+
 }
 
 int main(const int argc, char **argv) {
@@ -377,6 +474,9 @@ int main(const int argc, char **argv) {
     test_replay_marker_rejections(specification);
     test_trace_flush_rejections(specification);
     test_latched_rep_and_written_memory(specification);
+    test_midi_wire_checkpoint_and_capacity(specification);
+    test_midi_rate_failure(specification);
+    test_midi_trace_failure(specification);
     std::cout
         << "Joint reference-board checkpoints, atomic restore, real REP/RAM and guards passed.\n";
     return 0;

@@ -7,6 +7,7 @@
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/mcu_midi.hpp"
 #include "blofeld/mcu_run_clock.hpp"
 #include "blofeld/private_file.hpp"
 #include "blofeld/serial_pcm.hpp"
@@ -293,6 +294,18 @@ PcmRoute pcm_route(std::istringstream &line) {
   return result;
 }
 
+MidiRoute midi_route(std::istringstream &line) {
+  const auto input_pin = token(line);
+  if (input_pin != "PR2" && input_pin != "PS4") {
+    throw Fault("Reference MIDI pin must be PR2 or PS4");
+  }
+  const auto hz = static_cast<std::uint32_t>(number(line, UINT32_MAX));
+  literal(line, "after");
+  return {.bus_hz = hz,
+          .pin = input_pin == "PR2" ? SciReceivePin::pr2 : SciReceivePin::ps4,
+          .after_ticks = number(line, UINT64_MAX)};
+}
+
 void setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "clock") {
     clocks(config, line);
@@ -304,6 +317,13 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
     dsp_order(config, line);
   } else if (key == "pcm-receive") {
     config.pcm = pcm_route(line);
+  } else if (key == "midi-sci") {
+    config.midi = midi_route(line);
+  } else if (key == "midi-transfer-reference") {
+    const auto divisor = static_cast<unsigned>(number(line, UINT32_MAX));
+    config.midi_reference = {.baud_divisor = divisor,
+                             .transfer_delay_bus_cycles =
+                                 static_cast<unsigned>(number(line, UINT32_MAX))};
   } else if (key == "spi-b") {
     serial(config, line);
   } else if (key == "dsp-release") {
@@ -437,6 +457,7 @@ Config parse(const std::string &text) {
     throw Fault("Reference-board checkpoint exceeds the operation budget");
   }
   validate_returns(parser.result);
+  validate_midi(parser.result);
   return parser.result;
 }
 }

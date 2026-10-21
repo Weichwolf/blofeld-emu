@@ -9,9 +9,11 @@
 #include "blofeld/flash_image.hpp"
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_clocked_midi.hpp"
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/mcu_sci.hpp"
 #include "blofeld/pcm_recording.hpp"
 #include "blofeld/serial_pcm.hpp"
 
@@ -19,9 +21,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iosfwd>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -81,6 +85,12 @@ struct PcmRoute {
   SerialPcmFormat format;
 };
 
+struct MidiRoute {
+  std::uint32_t bus_hz = 0;
+  SciReceivePin pin = SciReceivePin::pr2;
+  std::uint64_t after_ticks = 0;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunContract dsp;
@@ -104,9 +114,12 @@ struct Config {
   std::vector<DspInput> dsp_events;
   std::vector<DspEsaiClock> dsp_clocks;
   std::optional<PcmRoute> pcm;
+  std::optional<MidiRoute> midi;
+  std::optional<SciReceiveReference> midi_reference;
 };
 
 void validate_returns(const Config &config);
+void validate_midi(const Config &config);
 
 [[nodiscard]] Config load_config(const std::filesystem::path &path);
 [[nodiscard]] std::vector<std::uint32_t> load_rom(const std::filesystem::path &path);
@@ -115,6 +128,12 @@ struct AudioOutput {
   std::filesystem::path path;
   std::uint32_t sample_rate = 0;
   std::size_t maximum_frames = 0;
+};
+
+struct MidiInputWindow {
+  std::uint64_t ticks = 0;
+  std::size_t available = 0;
+  bool started = false;
 };
 
 struct Execution {
@@ -169,6 +188,9 @@ struct Status {
   std::optional<SerialPcmStamp> pcm_stamp;
   std::optional<SerialPcmFrame> last_pcm;
   PcmRecording recording;
+  std::size_t midi_queued = 0;
+  std::uint64_t midi_bytes = 0;
+  bool midi_started = false;
   bool started = false;
   bool waiting = false;
   bool held_reset = true;
@@ -184,11 +206,13 @@ public:
   Board &operator=(const Board &) = delete;
   Board(Board &&) = delete;
   Board &operator=(Board &&) = delete;
-  int run();
+  int run(const std::function<void(Board &)> &input = {});
   void initialize();
   void advance();
   [[nodiscard]] bool finished() const;
   [[nodiscard]] Status status() const;
+  [[nodiscard]] MidiInputWindow midi_window() const;
+  void enqueue_midi(std::span<const std::uint8_t> bytes);
   [[nodiscard]] Checkpoint checkpoint() const;
   // Strong exception guarantee; restores native owners and all wiring together.
   void restore(const Checkpoint &checkpoint);
@@ -228,6 +252,8 @@ private:
     std::optional<SerialPcmStamp> pcm_stamp;
     std::optional<SerialPcmFrame> last_pcm;
     PcmRecording recording;
+    std::optional<McuClockedMidiInput> midi;
+    std::uint64_t midi_bytes = 0;
     bool started = false;
     bool faulted = false;
   };
@@ -241,7 +267,7 @@ private:
   void require_idle() const;
   void require_healthy() const;
   void attach(Owners &owners);
-  [[nodiscard]] Outcome finish_branch();
+  [[nodiscard]] Outcome finish_branch(const std::function<void(Board &)> &input = {});
   [[nodiscard]] Outcome run_replays();
   void replay_marker(std::string_view phase, unsigned index);
   void flush_trace();
@@ -275,6 +301,9 @@ private:
                  const std::optional<SerialPcmFrame> &frame) const;
   [[nodiscard]] DspExternalEvents dsp_inputs();
   void boundary();
+  void start_midi();
+  void observe_midi(ExecutionContext context);
+  void synchronize_midi();
   void step();
   void release();
   void on_cycle(Hc12BusCycle cycle);

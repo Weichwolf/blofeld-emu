@@ -87,6 +87,8 @@ doc/hc12-cycles.txt covers the explicit un-stretched CPU cycle adapter, native
 SCI/TIM execution, IRQ/RTI and original MCU bootloader cycle checks.
 doc/midi-input.txt describes bounded byte-to-wire serialization, explicit SCI
 pad connection and partial-frame replay, including the original MCU receive path.
+doc/host-midi.txt covers read-only Linux RawMIDI/binary-byte input to the headless
+reference driver, explicit SCI clock/routing, snapshots and unqualified live timing.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.
 doc/mcu-interrupts.txt covers CPU exception frames, priority and peripheral requests;
 doc/mcu-rti.txt describes the separate oscillator-clocked periodic interrupt.
