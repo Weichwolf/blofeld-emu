@@ -12,6 +12,7 @@ namespace {
 constexpr unsigned usb_enable = 0x8000;
 constexpr unsigned usb_clock_enable = 0x4000;
 constexpr unsigned usb_commands = 0x3200;
+constexpr unsigned usb_endpoint_reset = 0x0200;
 constexpr unsigned usb_phy_reset = 0x0400;
 constexpr unsigned usb_suspend = 0x0800;
 constexpr unsigned usb_descriptor = 0x0010;
@@ -108,19 +109,26 @@ void McuClock::observe_phy(const PhyClockWindow window) {
   update_lock(phy_running() && window.edges == phy_qualified_edges);
 }
 
-void McuClock::write_usb(const ByteWrite write) {
+UsbControlCommand McuClock::write_usb(const ByteWrite write) {
   const unsigned previous = usb_control_;
   const bool high_byte = write.address == hc12::usb_control;
   const unsigned requested =
       high_byte ? (static_cast<unsigned>(write.value) << 8U) | (previous & byte_mask)
                 : (previous & ~byte_mask) | write.value;
   unsigned next = previous;
+  auto action = UsbControlCommand::none;
   if ((previous & usb_enable) == 0) {
     next = (next & ~usb_clock_enable) | (requested & usb_clock_enable);
   }
   if ((next & usb_clock_enable) != 0) {
     if ((previous & usb_enable) == 0 && (requested & usb_commands) != 0) {
-      throw Fault("Unimplemented USB reset or remote-resume command");
+      if ((requested & usb_commands) != usb_endpoint_reset) {
+        throw Fault("Unimplemented USB reset or remote-resume command");
+      }
+      if ((previous & usb_clock_enable) == 0) {
+        throw Fault("Unqualified USB EPRST with simultaneous MCE enable");
+      }
+      action = UsbControlCommand::endpoint_reset;
     }
     next = (next & ~usb_descriptor) | (requested & usb_descriptor);
     if ((previous & usb_enable) == 0) {
@@ -142,6 +150,7 @@ void McuClock::write_usb(const ByteWrite write) {
       update_lock(false);
     }
   }
+  return action;
 }
 
 void McuClock::write_clock_select(const std::uint8_t value) {
@@ -151,27 +160,28 @@ void McuClock::write_clock_select(const std::uint8_t value) {
   cop_wait_written_ = true;
 }
 
-void McuClock::write(const ByteWrite write) {
+UsbControlCommand McuClock::write(const ByteWrite write) {
   switch (write.address) {
     case hc12::refdv:
       if ((clock_select_ & pll_select) == 0) {
         reference_divider_ = static_cast<std::uint8_t>(write.value & reference_divider_mask);
       }
-      return;
+      return UsbControlCommand::none;
     case hc12::crg_flags:
       flags_ = static_cast<std::uint8_t>(flags_ & ~(write.value & clearable_flags));
-      return;
-    case hc12::clock_select: write_clock_select(write.value); return;
+      return UsbControlCommand::none;
+    case hc12::clock_select: write_clock_select(write.value); return UsbControlCommand::none;
     case hc12::usb_control:
-    case hc12::usb_control + 1: write_usb(write); return;
-    case hc12::crg_test_flags: return; // Documented unimplemented writes in normal mode.
+    case hc12::usb_control + 1: return write_usb(write);
+    case hc12::crg_test_flags:
+      return UsbControlCommand::none; // Documented unimplemented writes in normal mode.
     case hc12::crg_interrupts:
       interrupt_enable_ = static_cast<std::uint8_t>(write.value & interrupt_enable_mask);
-      return;
+      return UsbControlCommand::none;
     case hc12::rti_control:
       rti_control_ = static_cast<std::uint8_t>(write.value & rti_control_mask);
       rti_phase_ = 0;
-      return;
+      return UsbControlCommand::none;
     default: throw Fault("Unknown MCU clock register write at " + hex(write.address));
   }
 }

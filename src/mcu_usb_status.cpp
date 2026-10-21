@@ -11,6 +11,13 @@ bool McuUsb::enabled() const {
   return (module_control_ & usb::enable) != 0;
 }
 
+void McuUsb::require_control_phase() const {
+  if (!control_phase_known_) {
+    throw Fault(
+        "Unqualified USB optional control response after endpoint reset; new SETUP required");
+  }
+}
+
 void McuUsb::set_control(const std::uint16_t value) {
   module_control_ = value;
 }
@@ -49,6 +56,7 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
       for (auto &buffer : buffers_data_) {
         buffer.control = 0;
         buffer.data1 = false;
+        buffer.pid_known = true;
         buffer.transmitted.reset();
       }
       pending_in_.reset();
@@ -56,6 +64,7 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
       configuration_status_ = 0;
       alternate_.fill(0);
       setup_stall_ = false;
+      control_phase_known_ = true;
       status_ = static_cast<std::uint16_t>(status_ & ~(usb::sof | usb::setup_overrun | usb::setup));
     }
   }

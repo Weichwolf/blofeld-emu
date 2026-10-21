@@ -48,6 +48,8 @@ struct UsbInPacket {
 class McuUsb {
 public:
   void reset();
+  // EPRST resets only its documented register domain; DATA PID state is unqualified.
+  void reset_endpoints() noexcept;
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] static bool configuration_data(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
@@ -69,6 +71,7 @@ private:
     std::bitset<64> known;
     std::uint16_t control = 0;
     bool data1 = false;
+    bool pid_known = true;
     std::optional<UsbInPacket> transmitted = std::nullopt;
   };
 
@@ -90,6 +93,7 @@ private:
   [[nodiscard]] bool enabled() const;
   void require_observation() const;
   void require_packet() const;
+  void require_control_phase() const;
   [[nodiscard]] bool input_endpoint(unsigned index) const;
   [[nodiscard]] unsigned maximum_packet(unsigned index) const;
   UsbResponse stall_response(unsigned index);
@@ -111,6 +115,7 @@ private:
   UsbDecoderState decoder_{};
   bool decoder_known_ = false;
   bool setup_stall_ = false;
+  bool control_phase_known_ = true;
   std::array<std::uint8_t, 4> alternate_{};
 };
 

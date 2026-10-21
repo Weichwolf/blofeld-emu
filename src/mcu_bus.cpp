@@ -164,10 +164,11 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   }
   const auto clock_name = McuClock::register_name(offset);
   if (!clock_name.empty()) {
-    clock_.write(write);
+    const auto command = clock_.write(write);
     usb_.set_control(
         static_cast<std::uint16_t>((static_cast<unsigned>(clock_.read(hc12::usb_control)) << 8U) |
                                    clock_.read(hc12::usb_control + 1)));
+    if (command == UsbControlCommand::endpoint_reset) { usb_.reset_endpoints(); }
     return clock_name;
   }
   const auto sci_name = McuSci::register_name(offset);

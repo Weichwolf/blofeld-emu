@@ -80,11 +80,13 @@ UsbResponse McuUsb::receive_setup(const std::array<std::uint8_t, 8> &data, const
     auto &buffer = buffers_data_[index];
     buffer.control = static_cast<std::uint16_t>(buffer.control & ~(usb::stall | usb::data_valid));
     buffer.data1 = true;
+    buffer.pid_known = true;
     buffer.transmitted.reset();
   }
   setup_stall_ =
       optional && (module_control_ & (data[1] == set_descriptor ? usb::descriptor_support
                                                                 : usb::synch_frame_support)) == 0;
+  control_phase_known_ = true;
   if (setup_stall_) { return UsbResponse::ack; }
   if ((status_ & usb::setup) != 0) { status_ |= usb::setup_overrun; }
   setup_ = data;
@@ -102,9 +104,16 @@ UsbResponse McuUsb::receive_out(const UsbOutPacket packet) {
   if (packet.data.size() > maximum) {
     throw Fault("USB OUT packet exceeds the programmed endpoint size");
   }
-  if (index == 1 && setup_stall_) { return UsbResponse::stall; }
+  if (index == 1 && setup_stall_) {
+    require_control_phase();
+    return UsbResponse::stall;
+  }
   auto &buffer = buffers_data_[index];
   if ((buffer.control & usb::stall) != 0) { return stall_response(index); }
+  if (!buffer.pid_known) {
+    throw Fault("Unknown USB OUT DATA PID after endpoint reset at physical endpoint " +
+                std::to_string(index));
+  }
   // A lost ACK produces a duplicate PID. It is acknowledged without delivering
   // the packet again, even while the original OUT buffer remains occupied.
   if (packet.data1 != buffer.data1) { return UsbResponse::ack; }
@@ -126,7 +135,10 @@ UsbInPacket McuUsb::request_in(const UsbBuffer endpoint) {
   if (!input_endpoint(index)) { throw Fault("USB IN decoder routed to an OUT-only endpoint"); }
   const auto maximum = maximum_packet(index);
   if (pending_in_ && pending_in_->buffer != index) { pending_in_.reset(); }
-  if (index == 0 && setup_stall_) { return {.response = UsbResponse::stall}; }
+  if (index == 0 && setup_stall_) {
+    require_control_phase();
+    return {.response = UsbResponse::stall};
+  }
   auto &buffer = buffers_data_[index];
   if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }
   if ((buffer.control & usb::data_valid) == 0) { return {.response = UsbResponse::nak}; }
@@ -137,6 +149,10 @@ UsbInPacket McuUsb::request_in(const UsbBuffer endpoint) {
   }
   const auto size = buffer.control & usb::packet_size;
   if (size > maximum) { throw Fault("USB IN packet exceeds the programmed endpoint size"); }
+  if (!buffer.pid_known) {
+    throw Fault("Unknown USB IN DATA PID after endpoint reset at physical endpoint " +
+                std::to_string(index));
+  }
   UsbInPacket packet{.response = UsbResponse::data, .size = size, .data1 = buffer.data1};
   for (unsigned byte = 0; byte < size; ++byte) {
     if (!buffer.known.test(byte)) { throw Fault("Unknown USB IN endpoint-buffer data"); }

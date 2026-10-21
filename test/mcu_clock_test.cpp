@@ -160,7 +160,7 @@ void test_unimplemented_usb_commands_and_interrupts() {
   clock.write({.address = usb_high, .value = commands_without_clock});
   require(clock.read(usb_high) == 8, "MCE=0 blocks reset and resume commands");
   clock.write({.address = usb_high, .value = clock_enabled});
-  constexpr std::array<unsigned, 4> commands{0x60, 0x50, 0x44, 0x42};
+  constexpr std::array<unsigned, 3> commands{0x60, 0x50, 0x44};
   for (const auto command : commands) {
     reject(
         [&clock, command] {
@@ -169,6 +169,11 @@ void test_unimplemented_usb_commands_and_interrupts() {
         "Unimplemented USB commands must fail");
     require(clock.read(usb_high) == clock_enabled, "Rejected commands preserve control state");
   }
+  constexpr unsigned endpoint_reset = 0x42;
+  require(clock.write({.address = usb_high, .value = endpoint_reset}) ==
+                  blofeld::UsbControlCommand::endpoint_reset &&
+              clock.read(usb_high) == clock_enabled,
+          "Legal EPRST emits one bus action and always reads back zero");
   clock.write({.address = clock_select, .value = pll_selected});
   constexpr unsigned phy_reset = 0x44;
   clock.write({.address = usb_high, .value = phy_reset});

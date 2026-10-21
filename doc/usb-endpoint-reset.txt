@@ -1,0 +1,47 @@
+USB endpoint reset EPRST
+
+  cmake --build --preset strict --target blofeld-usb-endpoint-reset-test
+  ctest --test-dir build/strict -R '^usb_endpoint_reset$' --output-on-failure
+
+S12USB20D6E2FV1/D V01.03 section 3.1.1 defines UMCR.EPRST (0x0200):
+with MEN=0 and MCE=1, writing one clears endpoint control/status registers and
+UMSR1.USSC/URSC/SETOVR/SETUP (mask 0x1803). Zero has no effect; readback is zero.
+Reference identity and source are recorded in hardware/sources.json; the
+original-firmware regression identities are in usb-reset-reference.json.
+The bus synchronously applies the accepted clock-register command to its USB
+owner. Prior MEN=1 and MCE=0 commands retain their documented write gates.
+Simultaneous MCE enable plus EPRST remains explicitly unqualified and rejects
+before either owner changes. Mixed unsupported commands also reject first.
+MRST, PHYRST and remote resume remain unsupported when their write gates permit
+them. The original firmware's ignored MEN=1 MRST attempt is unchanged.
+
+Reset clears all modeled local/IQUE A controls, cancels pending handshakes and
+immutable IN snapshots, and clears the specified flags. It retains SOF, live
+decoder fields, UIMR, UCCSR/configuration, UTSR, static endpoint descriptions,
+configuration-word staging, selectors, buffer payload/knowledge and CRG phase.
+Configured IQUE/B registers remain unsupported; EPRST does not add queue data.
+The guide does not specify the resulting DATA PID or automatic optional-request
+phase here. These become unknown rather than guessed. Empty IN still NAKs;
+data-bearing transfers reject until a new SETUP establishes control DATA1,
+a configuration/interface acknowledgement establishes affected bulk DATA0, or
+a decoded bus reset establishes its initial state. An old automatic optional
+STALL response rejects until new SETUP/bus reset. Unknown payload stays unknown.
+
+The test uses own descriptors, data and HC12 instructions. A native LDD/STD
+issues the real command with independent final PC/register/CCR expectations.
+Before reset, two SETUPs, reset/suspend transitions, SOF, received OUT packets
+and unacknowledged IN transmissions establish the actual flags and ownership.
+All six modeled control words clear; all 256 known local bytes, descriptions,
+staged high word, configuration and clock phase survive. Retained SOF raises
+its real interrupt; acknowledging it leaves no canceled endpoint/reset IRQ.
+Two joint owner restores before the native store reproduce declared register,
+buffer and clock observations. Two post-reset restores exercise PID barriers
+and genuine recovery events. Complete MCU NVM bytes/knowledge/erase history
+remain unchanged. Inspection uses detached copies rather than reconfiguring
+the running native board. Gate/mixed-command and unknown-payload controls are
+separate cases. No manufacturer program bytes are embedded in this test.
+
+This is register/decoded-event evidence, not wire timing, physical USB recovery
+or hardware equivalence. The original initialization's reserved NISOF=2
+boundary remains unchanged (usb-reset.txt); no MIDI delivery or full boot is
+claimed. No fuzzing or physical traffic runs.

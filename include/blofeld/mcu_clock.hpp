@@ -15,6 +15,7 @@ struct PhyClockWindow {
 };
 
 enum class McuClockSource : std::uint8_t { oscillator, usb_phy };
+enum class UsbControlCommand : std::uint8_t { none, endpoint_reset };
 
 struct McuRunClockRoute {
   McuClockSource source = McuClockSource::oscillator;
@@ -28,7 +29,8 @@ public:
   void reset(); // External reset; PORF is retained until software clears it.
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
-  void write(ByteWrite write);
+  // The bus applies an accepted command to its USB owner at the same write.
+  UsbControlCommand write(ByteWrite write);
   void observe_phy(PhyClockWindow window);
   void advance_oscillator(unsigned cycles);
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
@@ -41,7 +43,7 @@ public:
 
 private:
   static constexpr std::uint16_t usb_reset_control = 0x0820;
-  void write_usb(ByteWrite write);
+  UsbControlCommand write_usb(ByteWrite write);
   void write_clock_select(std::uint8_t value);
   void update_lock(bool locked);
   [[nodiscard]] unsigned rti_period() const;

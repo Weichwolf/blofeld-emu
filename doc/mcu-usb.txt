@@ -13,7 +13,8 @@ MEN enables this modeled data path. UMCR protects MCE and disabled-only options
 while MEN is set; packet callbacks require MCE, an active PHY, DISCON clear,
 known decoder state, enumeration complete and no reset/suspend. High-speed
 transactions, automatic standard requests such as SET_ADDRESS, wire timing,
-reset/resume commands, IQUE endpoints and host ports remain unsupported. The
+module/PHY reset and remote-resume commands, IQUE transfers and host ports remain
+unsupported. Endpoint reset EPRST is described in usb-endpoint-reset.txt. The
 model does not automatically assert ENUMD or report enumeration success.
 
 Registers and interrupts
@@ -52,7 +53,7 @@ as one word. These are logical operand sizes, not completed CPU/bus-cycle timing
 Unconfigured IQUE endpoint controls
 UEPCSR4A at 0x031c and UEPCSR5A at 0x0320 implement the documented reset-zero
 STALL/SNAK/TCIE/CTERR and eleven-bit size fields, with byte-preserving updates
-and W1C TFRC. CPU writes do not create a completed transfer. Functional USB and
+and W1C TFRC. CPU writes do not create a completed transfer. EPRST, functional USB and
 external MCU reset clear both controls; native-owner copies retain them.
 These accesses require an all-zero physical endpoint4/5 description. A configured
 IQUE endpoint rejects instead of inventing queue ownership, counts or completion.

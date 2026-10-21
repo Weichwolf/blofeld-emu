@@ -112,6 +112,7 @@ void McuUsb::acknowledge_configuration(const ByteWrite access) {
     const auto selected_interface = (configuration_.at(index - 1) >> 11U) & usb::nibble_mask;
     if ((configuration_status_ & usb::interface_valid) == 0 || selected_interface == interface) {
       buffers_data_[index].data1 = false;
+      buffers_data_[index].pid_known = true;
       buffers_data_[index].transmitted.reset();
       if (pending_in_ && pending_in_->buffer == index) { pending_in_.reset(); }
     }

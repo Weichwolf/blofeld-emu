@@ -95,7 +95,7 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
   src/mcu_clock.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp
-  src/mcu_usb_ique_control.cpp)
+  src/mcu_usb_ique_control.cpp src/mcu_usb_reset.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
 add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
@@ -445,6 +445,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-usb-ique-control-test test/usb_ique_control_test.cpp)
   target_link_libraries(blofeld-usb-ique-control-test PRIVATE blofeld_mcu)
   add_test(NAME usb_ique_control COMMAND blofeld-usb-ique-control-test)
+  add_executable(blofeld-usb-endpoint-reset-test test/usb_endpoint_reset_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-usb-endpoint-reset-test PRIVATE blofeld_core)
+  add_test(NAME usb_endpoint_reset COMMAND blofeld-usb-endpoint-reset-test)
   add_executable(blofeld-original-usb-reset-test test/original_usb_reset_test.cpp)
   target_link_libraries(blofeld-original-usb-reset-test PRIVATE blofeld_application_fixture)
   add_test(NAME original_usb_reset COMMAND ${Python3_EXECUTABLE}
@@ -978,6 +981,7 @@ add_custom_target(quality
     blofeld-original-lcd-helper-test
     blofeld-original-mcu-scan-test
     blofeld-usb-ique-control-test
+    blofeld-usb-endpoint-reset-test
     blofeld-original-usb-reset-test
     blofeld-original-application-test
     blofeld-wai-test
