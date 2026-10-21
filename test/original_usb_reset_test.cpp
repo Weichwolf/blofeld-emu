@@ -41,6 +41,7 @@ constexpr unsigned configuration_vector = 0xffd0;
 constexpr unsigned reset_poll = 0xbdf9;
 constexpr unsigned reset_delay = 0xbdf1;
 constexpr unsigned reset_return = 0xbe10;
+constexpr unsigned suspend_return = 0xbddc;
 constexpr unsigned configuration_return = 0xbe4f;
 constexpr unsigned split_controls = 0xbf0c;
 constexpr unsigned main_wait = 0x8314;
@@ -217,7 +218,8 @@ void Session::step(const unsigned vector) {
               "Every real WAI frame byte matches the independent NXP register order");
     }
   }
-  if (before.pc == (vector == reset_vector ? reset_return : configuration_return)) {
+  if (before.pc == (vector == reset_vector ? reset_return : configuration_return) ||
+      (vector == reset_vector && before.pc == suspend_return)) {
     auto expected = interrupted;
     expected[4] = main_stack;
     require(result.instruction_executed && registers(machine.cpu().state()) == expected &&
@@ -781,6 +783,93 @@ void check_runtime_paths(Session &session, const Saved &configured) {
   }
 }
 
+std::optional<Saved> finish_suspend(Session &session, const bool capture) {
+  constexpr unsigned suspend_mask_instruction = 0xbdd8;
+  std::optional<Saved> middle;
+  while (session.counters.returns == 0) {
+    require(session.counters.native < 7,
+            "Original suspend-change handler must retire exactly seven instructions");
+    if (capture && session.counters.native == 5) {
+      require(session.machine.cpu().state().pc == suspend_mask_instruction &&
+                  (session.word(status_word) & 0x1000U) == 0,
+              "Suspend snapshot follows actual USSC acknowledgement before original mask BCLR");
+      middle.emplace(session.save());
+    }
+    session.step(reset_vector);
+  }
+  require(session.counters.entries == 1 && session.counters.native == 7 &&
+              session.counters.polls == 0 && session.counters.delays == 0,
+          "Suspend and resume use the actual status vector, short handler and native RTI");
+  return middle;
+}
+
+void check_suspend_paths(Session &session) {
+  const auto configured = session.save();
+  constexpr unsigned suspend_change = 0x1000;
+  constexpr unsigned suspend_detected = 0x10;
+  constexpr unsigned status_index = 1;
+  constexpr unsigned masks_index = 2;
+  constexpr unsigned interrupt_mask_word = 0x304;
+  constexpr unsigned original_mask_high = 0x38;
+  for (unsigned profile = 0; profile < 4; ++profile) {
+    const bool suspended = profile % 2 == 0;
+    session.counters = {};
+    session.interrupted = registers(session.machine.cpu().state());
+    auto expected = session.outcome();
+    inspect_setup_payload(session, expected);
+    const auto evidence = session.machine.bus().usb_host_evidence();
+    const auto configuration = session.machine.bus().usb_host_configuration();
+    const blofeld::UsbDecoderState observation{.suspended = suspended, .enumerated = true};
+    session.machine.bus().observe_usb_decoder(observation);
+    const unsigned retained_status = idle_usb_status | (suspended ? suspend_detected : 0U);
+    require(session.word(status_word) == (retained_status | suspend_change) &&
+                session.machine.cpu().pending_interrupt().has_value() &&
+                session.machine.cpu().pending_interrupt()->vector == reset_vector &&
+                session.machine.bus().usb_host_evidence() == evidence &&
+                session.machine.bus().usb_host_configuration() == configuration,
+            "Decoded changes assert the real enabled status IRQ and retain configuration/link");
+    const auto middle = finish_suspend(session, true);
+    require(middle.has_value(),
+            "Every suspend/resume run requires its actual mid-handler snapshot");
+    expected.cpu[4] = main_stack;
+    expected.usb[status_index] = retained_status;
+    expected.usb[masks_index] &= ~0x4000U;
+    const Writes writes{
+        {status_word, 0x10}, {status_word + 1, 0}, {interrupt_mask_word, original_mask_high}};
+    const auto check = [&] {
+      auto actual = session.outcome();
+      inspect_setup_payload(session, actual);
+      require(
+          actual.cpu == expected.cpu && actual.ram == expected.ram && actual.usb == expected.usb &&
+              actual.counters.writes == writes && !session.machine.cpu().pending_interrupt() &&
+              session.machine.bus().usb_host_suspended() == suspended &&
+              session.machine.bus().usb_host_evidence() == evidence &&
+              session.machine.bus().usb_host_configuration() == configuration,
+          "Original RTI preserves all registers/RAM/USB payload knowledge/NVM except USSC/mask");
+      return actual;
+    };
+    const auto completed = check();
+    session.trace_ << "SUSPEND_CASE " << profile << ' ' << suspended << " 7 1 1 3\n";
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      session.restore(*middle);
+      static_cast<void>(finish_suspend(session, false));
+      require(check() == completed, "Both mid-handler restores reproduce complete native state");
+      session.trace_ << "SUSPEND_REPLAY " << profile << ' ' << suspended << " 7 1 1 3\n";
+    }
+    session.machine.bus().observe_usb_decoder(observation);
+    require(!session.machine.cpu().pending_interrupt() &&
+                session.word(status_word) == retained_status && check() == completed,
+            "Repeated identical decoder input cannot manufacture a second change interrupt");
+    do {
+      require(session.counters.native < instruction_limit,
+              "Original resumed foreground must reach its own next WAI");
+      session.step(reset_vector);
+    } while (!session.machine.cpu().waiting() || session.machine.cpu().pending_interrupt());
+    session.trace_ << "SUSPEND_FOREGROUND " << profile << ' ' << session.counters.native << '\n';
+  }
+  session.restore(configured);
+}
+
 void check_setup_paths(Session &session, const blofeld::Firmware &firmware) {
   const auto configured = session.save();
   constexpr unsigned maximum_length = 0xffff;
@@ -857,6 +946,7 @@ void run(const Inputs &inputs) {
   if (!delayed) { throw blofeld::Fault("Released-reset checkpoint must be present"); }
   session.restore(*delayed);
   session.finish_configuration();
+  check_suspend_paths(session);
   session.reject_midi();
   check_setup_paths(session, firmware);
   std::cout << "Original cold MCU -> USB reset IRQ/configuration -> native RTI/main WAI verified; "

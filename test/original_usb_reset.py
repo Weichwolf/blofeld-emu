@@ -12,6 +12,27 @@ from original_mcu_scan import original_mcu
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def validate_suspend(text):
+    def rows(kind):
+        return [tuple(map(int, row)) for row in re.findall(
+            rf"^{kind} (\d+) (\d+) (\d+) (\d+) (\d+) (\d+)$", text, re.M)]
+    cases = rows("SUSPEND_CASE")
+    expected = [(profile, int(profile % 2 == 0), 7, 1, 1, 3) for profile in range(4)]
+    if cases != expected or rows("SUSPEND_REPLAY") != [row for row in expected for _ in range(2)]:
+        raise ValueError("Missing original suspend/resume IRQ, actual RTI or eight mid-handler restores")
+    foreground = [tuple(map(int, row)) for row in re.findall(
+        r"^SUSPEND_FOREGROUND (\d+) (\d+)$", text, re.M)]
+    if len(foreground) != 4 or [row[0] for row in foreground] != list(range(4)):
+        raise ValueError("Missing all four original foreground continuations to actual WAI")
+    if any(native <= 7 for _, native in foreground):
+        raise ValueError("Original foreground must execute its own instructions after RTI")
+    # Each initial handler retires seven steps; each restore after step five
+    # retires only the final two again. Replayed prefixes are not new work.
+    return {"suspend_resume_changes": 4, "suspend_resume_irqs": 4, "suspend_resume_returns": 12,
+            "suspend_resume_restores": 8, "suspend_handler_retirements": 4 * (7 + 2 * 2),
+            "suspend_foreground_retirements": sum(native - 7 for _, native in foreground)}
+
+
 def validate(text):
     def rows(kind):
         return [tuple(map(int, match)) for match in re.findall(
@@ -67,7 +88,7 @@ def validate(text):
         raise ValueError("Missing production runtime original refusal, zero-device TCP reply or restore retirement")
     setup_instructions = sum(row[2] for row in setup_cases + setup_replays)
     reset_instructions = sum(row[-1] for row in resets + replays + configurations)
-    return {"setup_profiles": len(setup_cases), "setup_replays": len(setup_replays),
+    return {**validate_suspend(text), "setup_profiles": len(setup_cases), "setup_replays": len(setup_replays),
             "descriptor_deliveries": sum(row[0] for row in setup_cases + setup_replays),
             "descriptor_bytes": sum(row[5] for row in setup_cases + setup_replays),
             "setup_native_instructions": setup_instructions,

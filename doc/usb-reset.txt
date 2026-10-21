@@ -53,6 +53,15 @@ is no synthesized zero-length success, TFRC or completed host configuration.
 The adapter retains its pending request, poisons further polling and reports the
 actual MCU context and request identity. No import/listener/host attach is implied.
 
+Four alternating decoded suspend/resume changes also enter the original status
+handler through its actual WAI frame. The seven-instruction path acknowledges
+USSC, clears RESUMEIE and returns through native RTI. Eight mid-handler restores
+repeat its exact state/write-prefix outcome; original foreground reaches its own
+next WAI after each change. CPU/RAM/USB payload knowledge/configuration/link/NVM
+retention and repeated identical input are checked independently. These decoded
+observations do not qualify electrical suspend, clock gating or remote wakeup
+(usb-suspend.txt).
+
 The next original MIDI boundary is retained explicitly. Native initialization
 stores 0x820008d1 and 0x820008c1 for physical endpoints 2/3. Their NISOF field is 2;
 S12USB20D6E2FV1 table 3-10 specifies 0 for these endpoints. With all other declared

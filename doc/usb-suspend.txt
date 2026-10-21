@@ -25,8 +25,8 @@ same request and exclusive import. Normal close and strict recovery rules remain
 There is no TCP-triggered automatic wakeup or wall-clock bus-idle inference.
 
 Deterministic gates:
-  cmake --build --preset strict --target blofeld-headless blofeld-usbip-suspend-test blofeld-usbip-runtime-test
-  ctest --test-dir build/strict --output-on-failure -R '^(usbip_suspend|usbip_runtime|reference_usb_cli)$'
+  cmake --build --preset strict --target blofeld-headless blofeld-usbip-suspend-test blofeld-usbip-runtime-test blofeld-original-usb-reset-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_suspend|usbip_runtime|reference_usb_cli|original_usb_reset)$'
 
 Own native/TCP cases cover admission before resume, a zero-device DEVLIST before
 capture, retained captured metadata during later suspend, a coalesced import and
@@ -44,8 +44,20 @@ are embedded: own guest code initializes USB, serves descriptors and handles IRQ
 All SETUP IRQs/publication must occur after that resume boundary. The structural
 test descriptors are not a complete USB-MIDI class.
 
+The original_usb_reset gate additionally applies four alternating suspend/resume
+observations to the unchanged original1.25 MCU after its conditional cold start
+and real configuration IRQ. Each change uses the actual status vector and WAI
+frame, executes all seven original handler instructions and returns through real
+RTI. Independent expectations cover the three original byte writes, every CPU
+register, all5120 mapped RAM bytes, declared USB registers/descriptions, all256
+local-buffer payload/knowledge states, active configuration, host link evidence
+and all MCU NVM bytes/knowledge/erase history. Eight joint native/LCD restores
+after actual USSC acknowledgement replay the last two instructions; identical
+decoder inputs generate no new IRQ. Original foreground reaches its next WAI
+after every change. Original SETUP/NISOF/status-completion faults remain intact.
+
 This is decoded reference-state support, not electrical suspend/resume, automatic
-PHY clock gating, original firmware resume-handler qualification, remote wakeup,
+PHY clock gating, remote wakeup,
 kernel USB attachment, USB-MIDI/Spectre functionality or real-time/hardware proof.
 No fuzzing, physical device traffic or system USB/MIDI routing is used.
 

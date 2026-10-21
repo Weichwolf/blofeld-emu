@@ -286,6 +286,9 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           Decoded full-speed suspend retains
                                           imports and pending native transfers
                                           through resume (usb-suspend.txt).
+                                          Four original suspend/resume IRQ paths
+                                          and eight joint mid-handler restores
+                                          retain state and reach native RTI/WAI.
                                           Kernel attachment remains pending.
                                           All fixed import/IN splits, truncated
                                           EOFs and partial-reply/fault cases
