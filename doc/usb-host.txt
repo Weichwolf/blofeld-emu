@@ -57,6 +57,16 @@ backend. Reset/address/configuration semantics must be qualified before selectin
 and exposing a usable Blofeld backend. USB/IP components exist; the board/runtime and host-controller integration is
 not qualified as a usable original-firmware USB device yet. Reference runtime
 admission/lifetime is documented in usb-runtime.txt.
+Linux v6.12 source inspection distinguishes the virtual root-hub reset in
+vhci_hub_control from a remote device-reset proxy. vhci_urb_enqueue handles
+SET_ADDRESS locally and forwards GET_DESCRIPTOR at address zero. The separate
+server stub recognizes a hub-class SET_FEATURE(PORT_RESET) proxy and calls
+usb_reset_device. Therefore implementing that proxy is not established as the
+first prerequisite for initial vhci attachment. This source observation neither
+qualifies the installed kernel nor permits synthetic guest reset/status success.
+The original ordinary descriptor SETUP failure remains the first known capture
+frontier. Kernel root-hub suspend also does not establish decoder-level guest
+suspend/resume; those require separate evidence.
 The controller's ENUMD flag means completed PHY chirp/speed negotiation; it does
 not establish successful host descriptor/address/configuration enumeration.
 
@@ -72,10 +82,15 @@ as ALSA sequencer ports, PipeWire can bridge and connect these ports. A separate
 emulator-owned MIDI hub is not required. This routing is not yet qualified here:
 the emulator has no host-visible USB-MIDI port today. MIDI traffic still follows
 the modeled peripheral/original firmware rather than a host synthesizer.
+PipeWire exposes ALSA sequencer ports through its MIDI bridge; a route must be
+linked explicitly or supplied by session policy. Device appearance alone does
+not automatically connect the keyboard to the emulator.
 
 References
   https://docs.kernel.org/usb/usbip_protocol.html
   https://docs.kernel.org/usb/raw-gadget.html
+  https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/vhci_hcd.c
+  https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/stub_rx.c
   https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winealsa.drv/alsamidi.c
   https://docs.pipewire.org/page_midi.html
   https://docs.pipewire.org/page_man_pw-link_1.html

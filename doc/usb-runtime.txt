@@ -12,7 +12,9 @@ All four CLI options are required together with --reference-board and --dsp-rom:
   --usbip-period TICKS         positive polling interval in reference common ticks
   --usbip-probe-timeout TICKS  positive actual-admission-relative probe tick budget
 
-The listen banner reports the actual port and declared limits. Administrative
+The listen banner reports the actual port, declared common-tick limits and
+separate TCP frame-timeout milliseconds (default30000; usbip-session.txt).
+Administrative
 virtual location /blofeld-emu/usb/1-1 and busid1-1 are not a physical sysfs path or
 manufacturer identity. Device descriptors still require three complete actual
 GET_DESCRIPTOR control transfers through UsbDeviceProbe. The runner never writes
@@ -74,8 +76,9 @@ Remaining requirements
   and keyboard/PipeWire routing remain unqualified. USB/IP remote port reset is
   explicitly rejected until its board-owned semantics are established.
 - An imported peer that half-closes with pending NAK transfers can retain them
-  until the enclosing execution budget ends. Wall-clock idle/transfer timeouts
-  and recovery/re-attachment policies need separate qualification.
+  until the enclosing execution budget ends. Output-stall/drain deadlines and
+  recovery/re-attachment policies need separate qualification. Fully framed
+  pending MIDI reads intentionally have no input-frame deadline.
 - Raw suspend/resume wire timing, PHY clock gating and remote resume remain
   unqualified. Decoded full-speed packet admission and retained session/guest
   state are covered separately in usb-suspend.txt. Speed changes still retire

@@ -404,7 +404,8 @@ int run_reference(const Options &config,
     std::cout << "USBIP listening=127.0.0.1:" << usb->port()
               << " busid=1-1 after=" << usb_options.after_ticks
               << " period=" << usb_options.period_ticks
-              << " probe-timeout=" << usb_options.probe_timeout_ticks << '\n'
+              << " probe-timeout=" << usb_options.probe_timeout_ticks
+              << " frame-timeout-ms=" << usb_options.tcp.frame_timeout.count() << '\n'
               << std::flush;
   }
   if (!input && !usb) { return machine.run(); }
