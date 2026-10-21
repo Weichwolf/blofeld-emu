@@ -1,0 +1,23 @@
+{
+  "qualification": "Original MIDI IN ISR and submitter under explicitly own valid peripheral configuration, seeded ring and synthetic caller state; not original initialization, boot, normal enumeration, original endpoint NISOF acceptance, physical timing or USB-MIDI equivalence. Actual host ACK raises the original vector; no firmware patch or synthetic completion flag.",
+  "source_review": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "62ce3cfe3281b2fef548d000d08890e87683992e",
+    "document": "doc/usb_midi_output.txt"
+  },
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [
+    {
+      "entry": 48747,
+      "bytes": 15,
+      "name": "usb_midi_in_interrupt",
+      "sha256": "4a4d3cb8568fcc373437ae01b1019b1df96c4ee06c10053f91c151cb7bf1b580"
+    },
+    {
+      "entry": 46592,
+      "bytes": 104,
+      "name": "send_usb_midi_chunk",
+      "sha256": "8a68f9e7964ce30ad43392daacac7dc5ae6da4218b015308c2af6bfbad9ae5a9"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-3.0-only
+--- a/HCS_HC12.sinc
++++ b/HCS_HC12.sinc
+@@ -4675,4 +4675,6 @@
+-:PULC                    is Prefix18=0 & op8=0x38
+-{
+-	Pull1( CCR );
+-}
++:PULC                    is Prefix18=0 & op8=0x38
++{
++	pulled:1 = 0;
++	Pull1( pulled );
++	setCCR( pulled );
++}
+@@ -4940,4 +4942,6 @@
+-:RTI                     is Prefix18=0 & op8=0x0B
+-{
+-	tmp:2 = 0;
+-	Pull1( CCR );
++:RTI                     is Prefix18=0 & op8=0x0B
++{
++	tmp:2 = 0;
++	pulled:1 = 0;
++	Pull1( pulled );
++	setCCR( pulled );

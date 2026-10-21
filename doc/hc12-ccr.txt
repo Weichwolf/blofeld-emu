@@ -1,0 +1,54 @@
+HC12 CCR stack restores and the XIRQ mask
+
+NXP HCS12COREUG section 3.1 PULC/RTI and S12CPUV2 section 2.2.5.2 specify
+that software may clear CCR.X but cannot set it after it was cleared. Reset
+and recognition of an XIRQ may set X. This also applies to a CCR pulled from
+the stack: old CCR=0 and stacked CCR=0x40 must produce CCR=0, not 0x40.
+All seven other flag bits retain their ordinary restore behavior.
+
+The pinned Ghidra language already applies this rule to TAP/TFR/EXG. Its
+PULC and RTI constructors instead assigned the stack byte directly to CCR.
+The local ccr patch pulls into a temporary and uses the existing setCCR macro.
+This corrects native instruction semantics without a host-side register clamp.
+Original firmware, hardware interrupt entry and the installed Ghidra files are
+unchanged. RTI's existing operand widths/order and cycle schedule are retained.
+
+hc12_ccr checks every old/loaded flag pair for PULC, RTI, TAP, TFR B/CCR and
+both A/CCR exchange directions: 393216 independently expected register/stack
+outcomes. The unpatched language fails exactly 16384 pairs for each stack
+instruction while all four register-transfer controls pass. Separate actual
+XIRQ cases assert a source during the stack read: PULC admits it at the next
+boundary; RTI tail-chains through its reused frame. Hardware entry/reset may
+still set X. These are deterministic instruction tests, not fuzzing.
+
+Conditional original USB-MIDI regression
+original_usb_midi executes the unmodified original MIDI IN ISR and its real
+64-byte batch submitter. The fixture explicitly supplies RAM/caller state,
+QRAM mapping and own valid full-speed endpoint descriptions. It does not run
+the original initializer or establish that its reserved NISOF fields work.
+An own preceding zero-length IN transaction and actual ACK raise the real
+endpoint 2 vector. The original ISR acknowledges TFRC, calls its real helper
+and returns through native RTI. The helper's ANDCC clears X, which RTI must
+leave clear even when the interrupted frame contains X=1.
+
+Seeded event counts 0/1/15/16/17/31, cursors 0/124 and three entry CCR patterns
+give 36 cases. Actual IN packets contain only the bytes copied by original
+instructions; ACKs trigger subsequent native IRQs until the ring drains to NAK.
+Independent checks cover the 16-event packet limit, wrap, DATA PID alternation,
+cursor-before-payload writes, second-word-before-first byte order, whole-word
+status acknowledgements/submission, all other CPU registers/flags, unchanged
+ring/unrelated RAM, bounded stack and NVM bytes/knowledge/erase history.
+Two pending-IRQ restores per case replay CPU, all 5120 mapped RAM bytes, USB
+buffer contents and writes. Reference code/image hashes are public; code bytes
+and official firmware remain local (usb-midi-producer-reference.json).
+
+This does not qualify queue_usb_midi_event, original endpoint configuration,
+normal boot/enumeration, USB-MIDI class binding, MIDI input, DSP/audio, physical
+timing or device equivalence. The original USTB/NISOF/automatic configuration
+status frontiers remain strict and are tested separately in usb-reset.txt.
+
+  cmake --build --preset strict --target blofeld-hc12-ccr-test blofeld-original-usb-midi-test
+  ctest --test-dir build/strict --output-on-failure -R '^(hc12_ccr|original_usb_midi)$'
+
+Primary instruction reference, local size/hash pinned in hardware/sources.json:
+  https://www.nxp.com/docs/en/data-sheet/HCS12COREUG.pdf
