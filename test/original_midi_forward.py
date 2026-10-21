@@ -50,6 +50,10 @@ def validate(text):
         r"^PREFIX (\d+) (\d+) (\d+) (\d+)$", text, re.M)]
     if [row[0] for row in prefixes] != list(range(178)):
         raise ValueError("Missing captured native-prefix accounting")
+    for case, instructions, usb, sci in prefixes:
+        expected_sci = int(151 <= case <= 173)
+        if usb != 0 or sci != expected_sci or (instructions > 0) != bool(expected[case][2]):
+            raise ValueError("Incorrect retained prefix; restored IRQ entries must not be recounted")
     if text.splitlines()[-1:] != ["SUMMARY cases=178 restores=356 own-peripheral-inputs=1 original-boot=0"]:
         raise ValueError("Missing exact conditional forwarding scope")
     return {"cases": 178, "restores": 356,
