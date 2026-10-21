@@ -1,0 +1,65 @@
+Conditional original MIDI dispatcher and native UART-to-USB caller
+
+original_midi_dispatch runs the unchanged B352..B3EC dispatcher with the actual
+UART/USB queues, CCR reader, sender and SCI/MIDI-IN interrupt handlers. Optional
+own PULX; JSR B4AA instructions remove its argument and invoke the original
+main-loop mirror. The two own instructions are counted separately from original
+firmware. Their encodings follow HCS12COREUG PULX/JSR tables. No successful callee,
+rewritten firmware, host-built USB reply or host CPU/RAM continuation is used.
+
+The complete local official 1.25 MCU and nine code/data spans are hash-pinned.
+The fixture declares RAM, a synthetic near-call frame and own valid full-speed
+64-byte endpoints; it is not original startup, normal enumeration or acceptance
+of original reserved endpoint settings. SCI begins at reset and is enabled by
+the real UART queue. Native instruction execution is untimed; wire timing,
+physical clocks, actual MIDI-port connectivity and full foreground boot remain
+unqualified. Manufacturer program bytes and detailed analysis remain local.
+
+242 fixed cases have two joint restores each (484 restores):
+- Seven channel classes, ordinary routes 0/1/2/3/4/6/7 and TX positions 0/63.
+- High selector-bit controls and ordinary UART-priority routes followed by the
+  real main-loop USB mirror through the explicit own native caller.
+- Six fixed chunk buffers, routes 10/11/12/13/1A/1B/1F, UART and USB wrap, all
+  three F7 probe positions and held two-byte count with a three-byte stride.
+- Checkpoints before actual queue calls and after the completed dispatcher/SCI
+  IRQ, before the own caller starts the mirror. Captured prefixes count once.
+
+Independent checks distinguish ordinary selector 3 (UART only) from chunk 13
+(UART then USB independently). Every real callee pointer, raw flag/count byte,
+payload and cross-interface call ordinal is compared with expected calls.
+Chunk peer bit 8 is ignored as in the firmware; ordinary peer output remains
+unqualified and is not replaced with a stub. Raw unrelated selector bits remain.
+
+Initial C/D classes clear the writable third source byte even with no selected
+output. That count remains two for every chunk while the scanner always probes
+three bytes and advances by three. Clearing an initial third-byte F7 can thus
+remove that terminator before scanning; the next declared chunk must execute.
+An F7 in the first/second position returns without publishing that iteration's
+advanced pointer; the third-position probe publishes it before testing F7.
+Sends precede all probes. No new buffer bound, timeout or terminator guard is
+added to the firmware.
+
+Deferred USB events may remain queued with genuine NAK after the dispatcher
+returns. Forced SysEx headers can flush two deferred records together; ordinary
+chunk sends can instead produce separate four-byte IN packets. Native data,
+packet lengths, ACK-owned DATA PID, IRQ/RTI context, independent UART/mirror/USB
+readers and every ring byte are checked. The SCI ISR must write the expected
+first TX byte and every whole enable preset must remain AC.
+
+The own caller's real stack history leaves byte 49 at the mirror's uninitialized
+C/D third packet slot, while the original source tail is zero. The test checks
+both effects without equating dispatcher tail clearing with mirror padding.
+Joint restores retain CPU, all 5120 RAM bytes, USB/SCI visibility, host/controller
+PID and raw call/write history. Unrelated RAM, caller code, source extents and
+all NVM bytes/knowledge/erase history remain independently guarded.
+
+Original normal USB enumeration/class binding, configuration status, ordinary
+peer output, natural host/SysEx/Spectre/keyboard routing, complete boot, DSP/audio,
+realtime operation and physical equivalence remain open. USTB/NISOF refusals
+remain strict. No fuzzing, physical traffic, module loading or routing runs.
+
+  cmake --build --preset strict --target blofeld-original-midi-dispatch-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_midi_dispatch$'
+
+Testing/original-midi-dispatch.json records counts. Missing firmware skips;
+changed reference identities fail. This gate does not establish full USB-MIDI.
