@@ -64,6 +64,12 @@ not proof of defective firmware or of silicon behavior for reserved settings.
 The field is not masked, rewritten or treated as a successful transaction.
 
 The same configured original CPU also receives own GET_DESCRIPTOR requests.
+The ordinary request now comes from the production UsbDeviceProbe. Its exact
+eight SETUP bytes match an independent standard request. After the real CPU
+failure, pending probe polls and metadata queries leave capture unavailable and
+preserve CPU/RAM/USB payload knowledge and NVM. Both native pre-read restores
+also restore the pending probe and reproduce this refusal. No original identity
+is synthesized for export.
 One SETUP enters FFD2, acknowledges SETUP before the callback and retires nine
 instructions before its first USTB read fails: address 0x033f, PC 0xbc3d,
 CCR 0x90. S12USB20D6E2FV1 section 3.1.17 declares USTB valid only while SETUP=1.

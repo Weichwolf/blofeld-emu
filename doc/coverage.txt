@@ -278,6 +278,9 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           register/native tests (usb-discovery.txt).
                                           Current configuration/alternates come
                                           from read-only controller state.
+                                          Production descriptor probe also reaches
+                                          the original USTB failure; no metadata
+                                          escapes after two joint restores.
                                           Transport requirements and current
                                           original frontiers: usb-host.txt.
 Original DSP runtime              partial  127 checked records extracted; DSP56300

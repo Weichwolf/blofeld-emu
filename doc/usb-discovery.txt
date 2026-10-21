@@ -61,6 +61,13 @@ actual IN/OUT completion IRQs/RTIs. Guest ROM loads and USB RAM stores produce
 all captured bytes before an import record can exist. These own fixtures do not
 establish original Blofeld descriptor or host enumeration behavior.
 
+original_usb_reset also drives the production probe against unchanged1.25 MCU
+code after its conditional cold start. Its actual first GET_DESCRIPTOR reaches
+the retained post-ack USTB failure. Descriptor capture remains unavailable;
+polling and metadata queries preserve CPU/RAM/USB payload knowledge and NVM.
+Two joint pending-probe/native pre-read restores repeat the same refusal. This
+negative original result cannot supply an export identity or normal enumeration.
+
 References:
   https://docs.kernel.org/usb/usbip_protocol.html
   https://github.com/torvalds/linux/blob/v6.12/tools/usb/usbip/configure.ac
