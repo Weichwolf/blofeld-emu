@@ -18,8 +18,9 @@ Implemented normal-mode configuration
   programming clock, command timing or elapsed time is invented.
 - FSEC (0101) loads every bit from physical flash FF0F on reset and ignores
   writes. Only SEC=10 reports unsecured and only KEYEN=10 enables the backdoor
-  configuration bitfield. Actual backdoor transactions, BDM restrictions and
-  special-mode security/unsecure algorithms remain unsupported.
+  configuration bitfield. McuFlash owns the separate nominal key transaction
+  model (mcu-flash-backdoor.txt); BDM restrictions and special-mode security/
+  unsecure algorithms remain unsupported.
 - FPROT (0104) loads from physical FF0D on reset. Normal-mode writes obey the
   eight protection scenarios and their allowed transitions. Invalid scenarios
   ignore the whole write. Each size field freezes while its corresponding range

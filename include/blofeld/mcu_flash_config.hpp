@@ -15,7 +15,7 @@ struct FlashOptions {
 };
 
 // FTS32K normal-mode configuration only. No command completion, programming,
-// erase, backdoor access, BDM or physical power-loss behavior is implied.
+// erase, BDM or physical power-loss behavior is implied. McuFlash owns key access.
 class McuFlashConfig {
 public:
   explicit McuFlashConfig(FlashOptions options);
@@ -30,6 +30,8 @@ public:
   [[nodiscard]] std::optional<unsigned> oscillator_divisor() const;
 
 private:
+  friend class McuFlash;
+  void unsecure(); // Only the owning, successfully matched key sequence may call this.
   void write_protection(std::uint8_t value);
   std::uint8_t divider_ = 0;
   FlashOptions options_;

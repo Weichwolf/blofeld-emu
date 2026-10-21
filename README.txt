@@ -62,6 +62,8 @@ Explicit simulated pin inputs can explore the next boot stage; see
 doc/mcu-model.txt for the implemented map, GPIO behavior and remaining limits.
 doc/mcu-flash-config.txt covers reset security/protection and flash-clock
 configuration, including the isolated original updater initialization check.
+doc/mcu-flash-backdoor.txt covers nominal temporary key-based security recovery,
+strict unsupported combinations and native partial-sequence replay.
 doc/mcu-flash-commands.txt covers the explicit reference command/milestone model,
 interrupted-NVM unknownness and isolated original programming/recovery-vector checks.
 doc/mcu-flash-persistence.txt describes private --flash-in/--flash-out MCU NVM

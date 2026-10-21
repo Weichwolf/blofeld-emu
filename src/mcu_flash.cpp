@@ -52,6 +52,8 @@ McuFlash::McuFlash(McuMemory &memory, const McuFlash &source)
       command_(source.command_),
       errors_(source.errors_),
       blank_(source.blank_),
+      key_words_(source.key_words_),
+      key_locked_(source.key_locked_),
       clock_(source.clock_) {}
 
 FlashRange McuFlash::affected(const Job job) {
@@ -72,6 +74,8 @@ void McuFlash::reset() {
   command_ = 0;
   errors_ = 0;
   blank_ = false;
+  key_words_ = 0;
+  key_locked_ = false;
   clock_.reset();
   config_.reset(options(memory_));
 }
@@ -95,6 +99,11 @@ std::uint8_t McuFlash::status() const {
 }
 
 std::uint8_t McuFlash::read(const std::uint16_t offset) const {
+  constexpr unsigned complete_keys = 4;
+  if (offset == hc12::flash_security && (control_ & key_access) != 0 &&
+      key_words_ == complete_keys && !key_locked_) {
+    throw Fault("Unqualified MCU flash FSEC.SEC read after four key matches before KEYACC clear");
+  }
   if (!McuFlashConfig::register_name(offset).empty()) { return config_.read(offset); }
   switch (offset) {
     case configuration: return control_;
@@ -115,6 +124,10 @@ void McuFlash::reject_sequence(const std::uint8_t flag) {
 }
 
 void McuFlash::stage(const MemoryWrite word) {
+  if ((control_ & key_access) != 0) {
+    write_key(word);
+    return;
+  }
   if (buffer_state_ == BufferState::launched) {
     throw Fault("Unqualified MCU flash write while a launched buffer is occupied");
   }
@@ -175,6 +188,13 @@ void McuFlash::write(const ByteWrite access) {
   if (register_name(access.address).empty()) {
     throw Fault("Unknown MCU flash register write at " + hex(access.address));
   }
+  if (access.address == configuration && ((access.value | control_) & key_access) != 0) {
+    write_key_configuration(access.value);
+    return;
+  }
+  if ((control_ & key_access) != 0) {
+    throw Fault("Unqualified MCU flash register write during key access");
+  }
   if (active_ && access.address == hc12::flash_protection) {
     throw Fault("Unqualified MCU flash protection change during an executing command");
   }
@@ -197,9 +217,6 @@ void McuFlash::write(const ByteWrite access) {
     return;
   }
   if (access.address == configuration) {
-    if ((access.value & violation) != 0) {
-      throw Fault("Unimplemented MCU flash backdoor transaction mode");
-    }
     control_ = static_cast<std::uint8_t>(access.value & (buffer_empty | command_complete));
     return;
   }
@@ -264,6 +281,9 @@ void McuFlash::advance(const FlashMilestone milestone) {
 }
 
 void McuFlash::check_array_read() const {
+  if ((control_ & key_access) != 0) {
+    throw Fault("Invalid MCU flash array read while KEYACC is set");
+  }
   if (active_ || buffer_state_ == BufferState::launched) {
     throw Fault("Invalid MCU flash array read while a command is in progress");
   }

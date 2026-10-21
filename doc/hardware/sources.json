@@ -118,5 +118,11 @@
     "source": "https://www.nxp.com/docs/en/errata/MSE9S12UF32_1L47S.htm",
     "bytes": 17620,
     "sha256": "fdc44bdea455cc568df57009196cadcc2d01aafd82781e8391da662ebf6ffc72"
+  },
+  {
+    "file": "AN2880.pdf",
+    "source": "https://www.nxp.com/docs/en/application-note/AN2880.pdf",
+    "bytes": 89463,
+    "sha256": "6c32276a00c190c1d5aaadc57185049b27532675476291b16a34240030363d3a"
   }
 ]
