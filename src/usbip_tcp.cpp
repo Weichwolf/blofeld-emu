@@ -9,6 +9,7 @@
 #include "usbip_tcp_detail.hpp"
 
 #include <algorithm>
+#include <asm-generic/socket.h>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +33,14 @@ UsbipTcpServer::Impl::Impl(const UsbipTcpOptions requested)
   }
   if (listener.get() < 0) {
     throw Fault("USB/IP socket: " + std::error_code(errno, std::generic_category()).message());
+  }
+  // Reuse an address retained by a closed connection, while an active listener
+  // still owns its port exclusively. SO_REUSEPORT is deliberately not enabled.
+  constexpr int reuse_address = 1;
+  if (::setsockopt(
+          listener.get(), SOL_SOCKET, SO_REUSEADDR, &reuse_address, sizeof(reuse_address)) != 0) {
+    throw Fault("USB/IP listener SO_REUSEADDR setup: " +
+                std::error_code(errno, std::generic_category()).message());
   }
   sockaddr_in address{};
   address.sin_family = AF_INET;

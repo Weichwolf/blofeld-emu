@@ -281,6 +281,9 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           Session/loopback TCP has own wire/CPU
                                           tests (usbip-session.txt), with runtime
                                           binding and kernel attachment pending.
+                                          Fixed-port restarts retain exclusive
+                                          active binding across real TCP close;
+                                          listener/client descriptors are checked.
                                           Production descriptor probe also reaches
                                           the original USTB failure; no metadata
                                           escapes after two joint restores.
