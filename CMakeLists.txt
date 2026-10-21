@@ -189,6 +189,15 @@ if(BUILD_TESTING)
     test/dsp_external_esai.cpp test/mcu_dsp_external_events.cpp)
   target_link_libraries(blofeld-dsp-external-events-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME dsp_external_events COMMAND blofeld-dsp-external-events-test)
+  add_executable(blofeld-reference-original-midi-rom test/reference_original_midi_rom.cpp)
+  target_link_libraries(blofeld-reference-original-midi-rom PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME reference_original_midi_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_original_midi_cli.py"
+    $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-original-midi-rom>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-original-midi")
+  set_tests_properties(reference_original_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-reference-rom-fixture test/reference_rom.cpp)
   target_link_libraries(blofeld-reference-rom-fixture PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME reference_shi_cli COMMAND ${Python3_EXECUTABLE}

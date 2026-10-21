@@ -557,6 +557,17 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           changed input plus actual unknown-DI
                                           failure, uncharged failed duration and
                                           coordinated recovery (dsp-clocked-wire.txt).
+                                          The reference_original_midi_cli case
+                                          now runs original receiver, ring consumer
+                                          and pitch callback through the actual
+                                          headless common-time driver. Own native
+                                          preload/caller and MCU GPIO poll test
+                                          center/noncenter inputs, all 27 receiver
+                                          returns, joint mid-byte replay and an
+                                          exact original unknown-DI failure.
+                                          This is declared component setup, not
+                                          original MCU/DSP boot or physical baud
+                                          (reference-board.txt).
                                           No virtual/physical MIDI port, complete
                                           message/controller processing or DSP
                                           voice/audio integration yet.

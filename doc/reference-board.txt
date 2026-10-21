@@ -202,6 +202,29 @@ future/exhausted cursor snapshots and repeated native unknown-input faults are
 checked. It does not replace the original-firmware regressions or establish
 whole original boot, physical clocks, device profiles, MIDI ports or audio.
 
+  cmake --build --preset strict --target blofeld-headless blofeld-reference-original-midi-rom
+  ctest --test-dir build/strict -R '^reference_original_midi_cli$' --output-on-failure
+
+This directed component regression pins the original 1.25 archive and all 127 DSP
+records. Its own diagnostic ROM copies four complete unchanged original program
+records and bounded low X/Y data with native DSP instructions, then declares an
+explicit caller/ring setup for the original_dsp_clocked_wire_pitch components.
+Original serial input, IRQ/RTI, queue consumer and pitch callback execute under
+both CPU owners through the real CLI. No host writes ring messages, timer counters
+or parsed results.
+The ROM enables actual SHI HREQ only when the original pitch result equals center;
+own MCU code polls the routed pad, writes a register marker and executes WAI.
+A changed pitch-byte control must complete the original callback without this
+marker. Every input timestamp and all 27 original receiver returns are checked.
+A joint snapshot inside the first byte repeats the complete trace suffix and
+result three times; an unknown last-data input repeats the original DI fault.
+
+The generated ROM contains local original data and stays in ignored build output.
+It is an explicit test caller, not a recovered chip ROM, original MCU application
+or complete original boot. Bit period 3249*2*45 and the 12 MHz/540 MHz time contract
+are nominal test inputs, not physical 31250-baud or device-clock qualification.
+Host MIDI ports, original note allocation/audio and board validation remain open.
+
 Coverage: test_reference_cli.py runs the actual CLI with own native MCU/DSP code,
 independent clock/step expectations, WAI/RTI, quantized inputs, shared-write/pad
 order rejections, strict missing pads/ROM and output-alias checks.
