@@ -618,6 +618,12 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           request arguments across304 cases/35
                                           starts (dsp-scheduler.txt). Queued paths
                                           stop before transaction execution.
+                                          Original request-queue compositions
+                                          check 152 descriptors and 4 bounded
+                                          scans. Reset TCIE permits actual service
+                                          decisions: 52 raw head/tail aliases take
+                                          genuine RTS; 100 cases fail on unknown
+                                          TIO1 DI at P:188a (dsp-request-queue.txt).
                                           No complete note lifecycle/allocation,
                                           board scheduler or PCM transport yet.
 Persistent storage               partial  MCU NVM files preserve mutations,

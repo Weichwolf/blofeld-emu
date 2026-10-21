@@ -1,0 +1,49 @@
+Original request descriptors and TCSR1 service boundary
+
+original_dsp_request_queue executes unchanged official 1.25 queue instructions
+against independent raw-word equations adapted from GPL-3.0-only blofeld-src
+checkpoint 35a7cfb8e9ddd722d065626544937c48086b05a6,
+test/check_dsp_request_queue.py. dsp-request-queue-reference.json pins that source,
+the complete original queue component and 27 queue/32 integrated instruction
+starts. dsp-voice-reference.json pins all 127 ordered original records. No
+source-built firmware, sibling build or external assembler is a runtime input.
+
+The 156 fixed cases cover 112 direct prefixes, 24 default prefixes, 8 actual
+scheduler calls, 8 continuation calls and 4 bounded table scans. Independent
+models check 152 four-word descriptors, header ADD versus OR, integer B1 tags,
+signed address translation with prefetched thresholds, modulo head wrapping,
+old-head XOR Z flags and preserved accumulator extensions. Ring/table words,
+low X/Y guards, declared registers/modifiers and original programs are checked.
+Three caller M0 values and both RM settings are explicit inputs.
+
+The prefix has no full-queue or table-end check. Four raw scan cases stop before
+the first outside prefetch, retaining only their header stores and original
+frames. They are bounded windows, not observed hardware faults or completed
+enqueues. No table bound or successful outcome is inserted into firmware.
+
+After each complete descriptor, original service continues past P:1876.
+X:ffff8b is Timer1 TCSR1. The first BRCLR reads TCIE bit2, whose reset value is
+zero; it does not need unknown DI bits. The actual access observer checks this
+completed read. DSP56371UM table3-7 and chapter11 define the address and fields;
+hardware/sources.json pins the manual. B1 integer immediates follow DSP56300FM
+Rev.5 page13-113.
+
+For 52 raw cases the advanced head equals the consumer, so original instructions
+take their genuine queue-empty RTS. This preserves the full-queue alias of the
+unbounded prefix and does not establish transfer success. The other 100 cases
+reach P:188a and fail on actual unobserved Timer1 DI bit12 at X:ffff8b. No TIO1
+level, readiness flag or GPIO transfer is supplied. Failure retains PC/OMR context
+and quarantines native execution until the next diagnostic reset. Independent
+equations also check the new-head XOR Z flag, retained rounding/scaling domain,
+declared register endpoints and remaining frames, including retained A2 bits.
+
+The own caller explicitly loads accumulators/registers/modifiers and returns at
+P:ff0051. Scheduler JSEQ and continuation paths feed the real queue; the latter is
+called directly, so asynchronous callback provenance stays open. Physical timing,
+protocol units, valid upstream address/table provenance, complete peripheral
+transfers, callback execution, voice scheduling, live MIDI/audio and hardware
+equivalence remain unqualified. Manufacturer instructions, detailed listings and
+run artifacts remain local. This is not a complete original boot or update test.
+
+  cmake --build --preset strict --target blofeld-original-dsp-request-queue-test
+  ctest --test-dir build/strict -R '^original_dsp_request_queue$' --output-on-failure

@@ -533,6 +533,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
   set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
+  add_executable(blofeld-original-dsp-request-queue-test test/original_dsp_request_queue_test.cpp)
+  target_link_libraries(blofeld-original-dsp-request-queue-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_request_queue COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_request_queue.py"
+    $<TARGET_FILE:blofeld-original-dsp-request-queue-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-request-queue.trace")
+  set_tests_properties(original_dsp_request_queue PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
   add_executable(blofeld-dsp-vsl-test test/dsp_vsl_test.cpp)
   target_link_libraries(blofeld-dsp-vsl-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_vsl COMMAND blofeld-dsp-vsl-test)
@@ -813,6 +821,7 @@ add_custom_target(quality
     blofeld-reference-access-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
+    blofeld-reference-original-midi-rom
     blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test
     blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test
@@ -831,6 +840,7 @@ add_custom_target(quality
     blofeld-original-dsp-midi-test
     blofeld-original-dsp-note-test
     blofeld-original-dsp-scheduler-test
+    blofeld-original-dsp-request-queue-test
     blofeld-original-dsp-wire-test
     blofeld-original-dsp-clocked-wire-test
     blofeld-mcu-clock-checkpoint-test
