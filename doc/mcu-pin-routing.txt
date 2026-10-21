@@ -1,0 +1,38 @@
+MCU peripheral pin routing
+
+McuBus caches the derived GPIO alternate-function assignments. The complete
+key contains MODRR, all timer input/output/level/unknown masks, SCI receiver
+enable and the optional SCI transmit level. An unchanged key avoids rebuilding
+eleven port assignments. No pad sample, GPIO latch, direction, external drive,
+pull configuration, timer counter, serial sampling phase or IRQ state is cached.
+
+Each original clock advance, timer output contention check and SCI sample/check
+still executes. Reset invalidates the key. Clones copy the modeled peripheral
+and GPIO state but rebuild the derived routing on the next sync. The key is
+invalidated before rebuilding and becomes valid only after every port assignment
+succeeds. Unknown output latches remain unknown even with a matching external
+driver; changes to external drives and GPIO configuration take effect directly.
+
+Deterministic qualification, without fuzz execution or physical traffic:
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict
+  ctest --test-dir build/strict --output-on-failure \
+    -R '^(mcu_pin_routing|mcu_timer|mcu_sci|original_cycle_application)$'
+
+mcu_pin_routing uses independent literal UF32 routing/level expectations:
+- All eight timer channels in 100-pin, 64-pin mirrored and Port-B-only routes.
+  Unknown, forced-clear and forced-set latches, unchanged-route counter advances,
+  opposing external drivers after a stable key, clone independence and reset.
+- Both SCI port selections with the original modeled preamble and complete
+  start/LSB-first 0x55/stop waveform. Every bit also crosses an unchanged timer
+  sync and a clone; RX ownership and external-input changes are checked.
+- Live GPIO latch/direction/pull/drive changes and power-cycle ownership release.
+
+The existing original_cycle_application fixture independently checks retired
+instructions, nominal bus/oscillator/timebase counts, RTI phase, unchanged MCU
+NVM and the two strict hardware frontiers. Its register-write/fault trace can be
+compared byte-for-byte across the optimization. This is a bounded application
+run with declared reference inputs, not complete boot or physical validation.
+
+Routing tables and unresolved peripheral timing are described in mcu-timer.txt
+and mcu-sci.txt. These changes do not qualify real-time audio performance.

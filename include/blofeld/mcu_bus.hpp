@@ -98,6 +98,15 @@ private:
 
   struct CloneState {};
 
+  struct PeripheralPinState {
+    std::uint8_t routing = 0;
+    PinFunction timer;
+    bool sci_receive = false;
+    std::optional<bool> sci_transmit;
+
+    bool operator==(const PeripheralPinState &) const = default;
+  };
+
   McuBus(const McuBus &source, CloneState /*tag*/);
   [[nodiscard]] std::uint8_t read_register(std::uint16_t offset);
   [[nodiscard]] std::string_view write_register(ByteWrite write);
@@ -115,6 +124,8 @@ private:
   McuClock clock_;
   McuSci sci_;
   McuTimer timer_;
+  // Derived routing only; reset and cloned buses rebuild it on the next sync.
+  std::optional<PeripheralPinState> peripheral_pins_;
   McuUsb usb_;
   McuInterrupts interrupts_;
   ExecutionContext context_{};

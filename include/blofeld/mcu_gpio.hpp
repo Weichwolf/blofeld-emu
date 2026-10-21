@@ -23,6 +23,8 @@ struct PinFunction {
   std::uint8_t outputs = 0;
   std::uint8_t levels = 0;
   std::uint8_t unknown = 0; // Output pads whose peripheral latch is not known.
+
+  bool operator==(const PinFunction &) const = default;
 };
 
 struct PinSample {

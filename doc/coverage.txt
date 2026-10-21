@@ -156,6 +156,10 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Timer prescaling, capture/compare, flags,
                                           TC7 reset and routing tested; see
                                           mcu-timer.txt for unresolved boundaries.
+                                          Cached alternate-function routing retains
+                                          live pad checks; 24 timer routes, both
+                                          SCI waveforms and clone/reset/GPIO
+                                          changes tested (mcu-pin-routing.txt).
                                           Instruction-boundary IRQ/XIRQ selection,
                                           HPRIO/write gates, SCI/TIM/PLL requests
                                           and real synthetic SCI/TIM ISRs tested.

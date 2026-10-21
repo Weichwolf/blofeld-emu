@@ -988,6 +988,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-timer-test test/mcu_timer_test.cpp)
   target_link_libraries(blofeld-timer-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_timer COMMAND blofeld-timer-test)
+  add_executable(blofeld-pin-routing-test test/mcu_pin_routing_test.cpp)
+  target_link_libraries(blofeld-pin-routing-test PRIVATE blofeld_mcu)
+  add_test(NAME mcu_pin_routing COMMAND blofeld-pin-routing-test)
   add_executable(blofeld-interrupt-test test/interrupt_test.cpp)
   target_link_libraries(blofeld-interrupt-test PRIVATE blofeld_core)
   add_test(NAME mcu_interrupt COMMAND blofeld-interrupt-test)
@@ -1075,6 +1078,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test
     blofeld-original-midi-forward-test
