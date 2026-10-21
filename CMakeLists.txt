@@ -204,6 +204,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-midi-forward.log")
   set_tests_properties(original_midi_forward PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  add_executable(blofeld-original-midi-dispatch-test test/original_midi_dispatch_test.cpp
+    test/original_midi_dispatch_fixture.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-midi-dispatch-test PRIVATE blofeld_core)
+  add_test(NAME original_midi_dispatch COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_midi_dispatch.py"
+    $<TARGET_FILE:blofeld-original-midi-dispatch-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-midi-dispatch.log")
+  set_tests_properties(original_midi_dispatch PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-usbip-output-timeout-test test/usbip_output_timeout_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_include_directories(blofeld-usbip-output-timeout-test PRIVATE src)
   target_link_libraries(blofeld-usbip-output-timeout-test PRIVATE blofeld_usbip_tcp blofeld_core)
@@ -1060,6 +1069,7 @@ add_custom_target(quality
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test
     blofeld-original-midi-forward-test
+    blofeld-original-midi-dispatch-test
     blofeld-sample-wave-test
     blofeld-usbip-test blofeld-usb-host-test blofeld-usb-host-native-test
     blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test

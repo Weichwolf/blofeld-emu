@@ -347,6 +347,15 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           (midi-forwarding.txt). RAM/caller/valid
                                           endpoints and untimed execution remain
                                           explicit fixture conditions.
+                                          Original MIDI dispatcher has 242
+                                          conditional cases/484 restores for raw
+                                          routes, C/D writable tails, native queue
+                                          call ordering and chunk EOX/pointers.
+                                          An own native caller also enters the
+                                          original UART-to-USB mirror with real
+                                          stack history (midi-dispatch.txt).
+                                          No original startup or host USB binding
+                                          follows from these explicit fixtures.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,
