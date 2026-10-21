@@ -62,6 +62,9 @@ def validate(text):
         r"^DESCRIPTOR_PROBE_UNAVAILABLE (\d+) (\d+) (\d+)$", text, re.M)]
     if probe != [(9, 0xbc3d, 0x90)] * 3:
         raise ValueError("Missing original descriptor-probe refusal and two joint restores")
+    runtime = rows("USBIP_RUNTIME_REFUSAL")
+    if runtime != [(index, 9, 0xbc3d, 0x90, 12, 1) for index in range(3)]:
+        raise ValueError("Missing production runtime original refusal, zero-device TCP reply or restore retirement")
     setup_instructions = sum(row[2] for row in setup_cases + setup_replays)
     reset_instructions = sum(row[-1] for row in resets + replays + configurations)
     return {"setup_profiles": len(setup_cases), "setup_replays": len(setup_replays),
@@ -73,9 +76,12 @@ def validate(text):
             "configuration_irqs": len(configurations), "configuration_replays": 2,
             "configuration_host_faults": len(host),
             "original_descriptor_probe_refusals": len(probe),
+            "original_runtime_refusals": len(runtime),
+            "original_runtime_restore_retirements": sum(row[5] for row in runtime),
+            "runtime_native_instructions": sum(row[1] for row in runtime),
             "reserved_midi_failures": len(frontiers),
             "original_delay_calls": sum(row[2] for row in resets),
-            "native_instructions": reset_instructions + setup_instructions}
+            "native_instructions": reset_instructions + setup_instructions + sum(row[1] for row in runtime)}
 
 
 def main():
@@ -102,7 +108,8 @@ def main():
     print("Verified original cold-start USB reset/configuration IRQs and two joint mid-ISR "
           "replays, eight original SETUP branches, seven conditional descriptor sizes and sixteen "
           "pre-read restores. Ordinary/chained SETUP retains its invalid-USTB boundary; "
-          "original MIDI endpoints retain their reserved NISOF failure. "
+          "original MIDI endpoints retain their reserved NISOF failure. Three fresh production runtime "
+          "attempts return exact zero-device TCP lists and retire on trusted restore. "
           "no successful MIDI, physical USB timing, full board boot or fuzzing claim.")
     return 0
 
