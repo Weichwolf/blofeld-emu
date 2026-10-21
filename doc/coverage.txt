@@ -8,10 +8,13 @@ Requirement                       State    Evidence / remaining work
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.
 Spectre functions in CLI          partial  samples subcommand edits XML 0.5 program
-                                          collections and sample metadata; bounded
-                                          parser, atomic rebased save, actual CLI
+                                          collections and sample metadata.
+                                          WAV decoding/import, declared root/loops
+                                          and offline pitch estimates have own
+                                          independent vectors (sample-wave.txt).
+                                          Bounded XML parser, atomic rebased save, CLI
                                           tests and one own original-app readback.
-                                          WAV processing, other import formats,
+                                          Final audio processing, other formats,
                                           complete mapping/gain, audition, capacity,
                                           MIDI export/transfer and Upgrade remain
                                           open (spectre-client.txt). Original-app
@@ -253,6 +256,13 @@ USB device/transport              partial  PHY control and register/data-side en
                                           Wire decoding, automatic standard requests,
                                           IQUE, module/PHY reset, remote resume
                                           and host ports pending.
+Host-visible USB-MIDI device      missing  Required as an actual USB device, not
+                                          solely a virtual ALSA endpoint. No host
+                                          backend, complete original enumeration,
+                                          bidirectional USB-MIDI or Spectre/Wine
+                                          sample-transfer qualification exists.
+                                          Transport requirements and current
+                                          original frontiers: usb-host.txt.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,

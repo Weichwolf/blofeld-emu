@@ -21,7 +21,9 @@ Required capabilities and current evidence
   directly to physical NAND.
 - WAV samples: add/remove references, preserve source files, decode loop/root
   metadata, convert stereo to mono, detect pitch for automatic initial root and
-  key ranges. Input/conversion behavior needs independent reference vectors.
+  key ranges. Bounded WAV decoding/import, stereo analysis, declared metadata
+  and a separate offline pitch estimate are implemented (sample-wave.txt).
+  Automatic ranges, audition and final export conversion remain open.
 - Mapping: fractional root keys, highest key, note-name/MIDI-number input,
   relative/all-sample transposition, automatic ordering and range inspection.
   Numeric root/highest-key editing, stable highest-key ordering and all-sample
@@ -82,15 +84,20 @@ sample filename/highest/level/normalize/fixed-pitch metadata and program
 normalization flags. Fixed-pitch remains an editor flag, not Blofeld support.
 Numbers are written with Spectre's two decimal places. Listing produces JSON
 with resolved paths and highest keys; it does not infer unqualified key ranges.
+wave-info reports decoded WAV format/root/loops and a separate pitch estimate.
+add-sample takes explicit highest key and numeric, auto or metadata root input;
+source audio stays unchanged. Original Spectre's pitch/metadata behavior differs
+on a tagged own signal, documented in sample-wave.txt; no algorithm parity claim.
 
 XML input is bounded to 16 MiB, 1024 programs, 65536 total samples and 4096 UTF-8
 bytes per text field. These are editor resource limits, not hardware capacities.
 The nonrecursive reader accepts the observed version/element/attribute vocabulary
 and rejects unknown structures, DTDs, external entities, nonfinite values and
 invalid text/keys. RelativePath resolves against the actual XML location; foreign
-absolute paths without a portable relative path fail visibly. Audio sources are
-not opened or decoded. Save rebases references and atomically publishes a private
-regular file; collision with a referenced source or hardlink is rejected. Other
+absolute paths without a portable relative path fail visibly. XML metadata edits
+do not open audio; add-sample separately validates/decodes WAV. Save rebases
+references and atomically publishes a private regular file; collision with a
+referenced source or hardlink is rejected. Other
 formats, MIDI export and transmission have no command yet and fail visibly.
 
   ctest --test-dir build/strict --output-on-failure -R '^sample_library(_cli)?$'
@@ -99,7 +106,7 @@ sample_library checks independent metadata/entity/path/order expectations and
 fixed invalid XML cases. sample_library_cli invokes the actual binary for
 collection edits, in-place/relocated saves, JSON/XML results and source/output
 preservation on failure. These are deterministic sanitizer tests, not fuzzing.
-WAV import/processing, audition, other import formats, capacity accounting,
+Final WAV/audio processing, audition, other import formats, capacity accounting,
 MIDI export/transfer and Upgrade remain open. Fuzzing is opt-in only.
 
 Local reference installation

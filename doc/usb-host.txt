@@ -1,0 +1,57 @@
+Host-visible USB-MIDI requirement and transport boundary
+
+blofeld-emu must present an actual USB-MIDI device to the host USB subsystem.
+Original descriptors, control requests, configuration, MIDI IN/OUT, SysEx and
+sample transfer must go through the emulated USB peripheral and unmodified
+firmware. A virtual ALSA port alone does not satisfy this requirement. Wine
+Spectre must be qualified against that virtual USB device through the host MIDI
+driver; successful detection alone does not establish functional communication.
+
+Current state
+McuUsb models registers, buffers and explicit decoded transactions. Native own
+CPU/ISR/endpoint tests and conditional original reset/configuration/descriptor
+tests exist. There is no host USB backend or functioning USB-MIDI device today.
+--midi-device is a read-only legacy RawMIDI input, with no output or USB-device
+enumeration. The editor's XML/WAV commands are offline functionality.
+
+Original enumeration still stops when FFD2 acknowledges SETUP before reading
+USTB: address 0x033f at PC 0xbc3d. The current peripheral specification declares
+the setup buffer valid only with SETUP set. A two-SETUP overrun condition can
+queue original descriptor data but does not complete normal enumeration.
+Original MIDI endpoint descriptions also use NISOF=2 where the manual specifies
+zero. These conflicts remain visible; usb-reset.txt records the exact evidence.
+Do not synthesize descriptors, mask reserved fields, retain invalid bytes without
+evidence or manufacture a successful status phase to make host attachment pass.
+
+Backend requirements
+- Keep host transport independent of MCU/DSP execution. Supply real request/data
+  events and return only bytes/completions produced by the modeled peripheral.
+- Preserve control setup/data/status phases, short packets, zero-length status,
+  bulk IN/OUT, pending NAKs, errors, cancellation, reset/disconnect and retries.
+  Reconcile a host URB's abstraction with hardware ACK/PID ownership explicitly.
+- Obtain advertised identity/configuration from the original firmware/device
+  model. Do not use a host-side fake Blofeld responder or route to a host synth.
+- Run the emulator as the regular user. Host-controller provisioning must remain
+  separate from application startup; do not load modules or alter system USB/MIDI
+  routing automatically as a routine test.
+- Prove actual host USB enumeration/class binding, bidirectional own MIDI/SysEx,
+  original receiver replies and Spectre transfer/cancellation/failure behavior.
+  Retain remaining boot, update/recovery, timing and device-equivalence limits.
+
+Linux candidates are a userspace USB/IP server imported by vhci_hcd, or a gadget
+backend with an available UDC/virtual controller. USB/IP exports URBs over TCP;
+the importing host runs the device's normal driver. Raw Gadget exposes requests
+to userspace but is documented as a debugging interface, not a production
+backend. Reset/address/configuration semantics must be qualified before selecting
+and exposing a usable Blofeld backend. No such backend is implemented yet.
+
+In Wine 10 the ALSA MIDI driver handles MIDI and SysEx via the ALSA sequencer.
+For host USB-MIDI, this yields the intended path: Spectre -> Wine MIDI -> host
+USB-MIDI driver -> virtual USB transport -> MCU peripheral/original firmware,
+and back. Wine does not need a physical device for that eventual virtual path.
+This architecture is not evidence that current Spectre/emulator transfers work.
+
+References
+  https://docs.kernel.org/usb/usbip_protocol.html
+  https://docs.kernel.org/usb/raw-gadget.html
+  https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winealsa.drv/alsamidi.c

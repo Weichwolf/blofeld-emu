@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/sample_library.hpp"
+#include "sample_wave_client.hpp"
 #include "sample_xml.hpp"
 
 #include <algorithm>
@@ -25,6 +26,8 @@ constexpr std::string_view usage =
     "Usage: blofeld-headless samples COMMAND ...\n"
     "  new OUTPUT.xml\n"
     "  list INPUT.xml\n"
+    "  wave-info INPUT.wav\n"
+    "  add-sample INPUT.xml OUTPUT.xml PROGRAM INPUT.wav ROOT|auto|metadata HIGHEST\n"
     "  add-program INPUT.xml OUTPUT.xml NAME\n"
     "  rename-program INPUT.xml OUTPUT.xml PROGRAM NAME\n"
     "  move-program INPUT.xml OUTPUT.xml PROGRAM DESTINATION\n"
@@ -166,6 +169,9 @@ void modify(Library &library, const Arguments &args) {
     program.samples.erase(std::next(program.samples.begin(), static_cast<std::ptrdiff_t>(sample)));
   } else if (command == "set-sample") {
     set_sample(program, args);
+  } else if (command == "add-sample") {
+    args.count(7);
+    append_wave(program, args.get(4), args.get(5), xml::key(args.get(6)));
   } else if (command == "set-program-normalize") {
     args.count(5);
     program.normalize = xml::boolean(args.get(4));
@@ -185,8 +191,10 @@ int run_client(const std::span<char *> arguments, std::ostream &output) {
   }
   const Arguments args(arguments);
   const auto command = args.get(0);
-  constexpr std::array<std::string_view, 12> commands{"new",
+  constexpr std::array<std::string_view, 14> commands{"new",
                                                       "list",
+                                                      "wave-info",
+                                                      "add-sample",
                                                       "add-program",
                                                       "rename-program",
                                                       "move-program",
@@ -203,6 +211,11 @@ int run_client(const std::span<char *> arguments, std::ostream &output) {
   if (command == "new") {
     args.count(2);
     save_xml({}, args.get(1));
+    return 0;
+  }
+  if (command == "wave-info") {
+    args.count(2);
+    wave_information(args.get(1), output);
     return 0;
   }
   auto library = load_xml(args.get(1));
