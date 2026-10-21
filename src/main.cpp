@@ -4,9 +4,11 @@
 #include "blofeld/flash_file.hpp"
 #include "blofeld/flash_image.hpp"
 #include "blofeld/hc12.hpp"
+#include "blofeld/host_midi.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/pcm_recording.hpp"
+#include "host_midi_runner.hpp"
 #include "reference_board.hpp"
 
 #include <charconv>
@@ -34,6 +36,8 @@ struct Options {
   std::filesystem::path reference_board;
   std::filesystem::path dsp_rom;
   std::filesystem::path audio_out;
+  std::filesystem::path midi_file;
+  std::filesystem::path midi_device;
   std::optional<std::uint32_t> audio_rate;
   std::optional<std::size_t> audio_max_frames;
   std::uint64_t instructions = 1000000;
@@ -75,6 +79,7 @@ void validate_options(const Options &config) {
                          "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS] "
                          "[--flash-in state.bfnvm] [--flash-out state.bfnvm] "
                          "[--reference-board scenario.bfboard --dsp-rom packed24.bin] "
+                         "[--midi-file bytes.bin | --midi-device /dev/snd/midiCxDy] "
                          "[--audio-out capture.wav --audio-rate HZ --audio-max-frames N]");
   }
   if (config.inspect && (!config.flash_in.empty() || !config.flash_out.empty())) {
@@ -85,6 +90,12 @@ void validate_options(const Options &config) {
   }
   if (!config.reference_board.empty() && (config.inspect || config.port_e_input)) {
     throw blofeld::Fault("--reference-board conflicts with --inspect or --port-e-input");
+  }
+  if ((!config.midi_file.empty() && !config.midi_device.empty()) ||
+      ((!config.midi_file.empty() || !config.midi_device.empty()) &&
+       (config.reference_board.empty() || config.inspect))) {
+    throw blofeld::Fault("MIDI input requires a reference board and exactly one of --midi-file "
+                         "or --midi-device");
   }
   const bool audio = !config.audio_out.empty();
   if (audio != config.audio_rate.has_value() || audio != config.audio_max_frames.has_value() ||
@@ -120,6 +131,10 @@ Options options(const int count, char **values) {
       result.dsp_rom = value;
     } else if (argument == "--audio-out") {
       result.audio_out = value;
+    } else if (argument == "--midi-file") {
+      result.midi_file = value;
+    } else if (argument == "--midi-device") {
+      result.midi_device = value;
     } else if (argument == "--audio-rate") {
       result.audio_rate =
           static_cast<std::uint32_t>(positive(value, std::numeric_limits<std::uint32_t>::max()));
@@ -172,13 +187,19 @@ void validate_files(const Options &config, const std::filesystem::path &specific
                             config.flash_in,
                             config.flash_out,
                             config.reference_board,
-                            config.dsp_rom}) {
+                            config.dsp_rom,
+                            config.midi_file,
+                            config.midi_device}) {
     distinct_files({.first = config.trace, .second = input});
     distinct_files({.first = config.audio_out, .second = input});
   }
   distinct_files({.first = config.audio_out, .second = config.trace});
-  for (const auto &input :
-       {config.firmware, specification, config.reference_board, config.dsp_rom}) {
+  for (const auto &input : {config.firmware,
+                            specification,
+                            config.reference_board,
+                            config.dsp_rom,
+                            config.midi_file,
+                            config.midi_device}) {
     distinct_files({.first = config.flash_out, .second = input});
   }
 }
@@ -285,6 +306,37 @@ int run_mcu(const Options &config,
   return 0;
 }
 
+void validate_board_options(const Options &config,
+                            const std::optional<blofeld::reference::Config> &board) {
+  if (!config.audio_out.empty() && (!board || !board->pcm)) {
+    throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
+  }
+  const bool midi = !config.midi_file.empty() || !config.midi_device.empty();
+  if (midi && (!board || !board->midi || board->checkpoint)) {
+    throw blofeld::Fault("Host MIDI requires midi-sci and rejects automatic checkpoint replay");
+  }
+}
+
+std::optional<blofeld::reference::AudioOutput> audio_output(const Options &config) {
+  if (config.audio_out.empty() || !config.audio_rate || !config.audio_max_frames) { return {}; }
+  return blofeld::reference::AudioOutput{.path = config.audio_out,
+                                         .sample_rate = *config.audio_rate,
+                                         .maximum_frames = *config.audio_max_frames};
+}
+
+int run_reference(const Options &config,
+                  const blofeld::reference::Config &board,
+                  const blofeld::reference::Execution &execution) {
+  blofeld::reference::Board machine(board, execution);
+  if (config.midi_file.empty() && config.midi_device.empty()) { return machine.run(); }
+  const bool raw = config.midi_file.empty();
+  blofeld::reference::HostMidiPump input(raw ? config.midi_device : config.midi_file,
+                                         raw ? blofeld::MidiInputKind::linux_rawmidi
+                                             : blofeld::MidiInputKind::bytes,
+                                         board.dsp.clock.timebase_hz);
+  return machine.run([&input](auto &target) { input(target); });
+}
+
 int run(const Options &config) {
   const auto specification =
       config.specification.empty() ? default_specification() : config.specification;
@@ -295,9 +347,7 @@ int run(const Options &config) {
   const auto rom =
       board ? blofeld::reference::load_rom(config.dsp_rom) : std::vector<std::uint32_t>{};
   const auto firmware = blofeld::Firmware::load(config.firmware);
-  if (!config.audio_out.empty() && (!board || !board->pcm)) {
-    throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
-  }
+  validate_board_options(config, board);
   std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
             << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
   if (config.inspect) { return 0; }
@@ -310,21 +360,14 @@ int run(const Options &config) {
   const auto image = config.flash_in.empty() ? blofeld::McuFlashImage::from_known(firmware.mcu)
                                              : blofeld::load_flash_image(config.flash_in);
   if (board) {
-    std::optional<blofeld::reference::AudioOutput> audio;
-    if (!config.audio_out.empty() && config.audio_rate && config.audio_max_frames) {
-      audio = blofeld::reference::AudioOutput{.path = config.audio_out,
-                                              .sample_rate = *config.audio_rate,
-                                              .maximum_frames = *config.audio_max_frames};
-    }
     const blofeld::reference::Execution execution{.image = image,
                                                   .rom = rom,
                                                   .specification = specification,
                                                   .flash_out = config.flash_out,
                                                   .trace = trace.is_open() ? &trace : nullptr,
                                                   .instructions = config.instructions,
-                                                  .audio = audio};
-    blofeld::reference::Board machine(*board, execution);
-    return machine.run();
+                                                  .audio = audio_output(config)};
+    return run_reference(config, *board, execution);
   }
   return run_mcu(config, image, specification, trace);
 }

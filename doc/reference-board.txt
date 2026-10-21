@@ -377,3 +377,12 @@ No forced ready event occurs in these cases. These are reference observations,
 not proof of physical pin roles or the missing electrical/reset topology.
 Physical reset/pad/HREQ routing, complete DSP ROM, original DSP main boot,
 MIDI/audio and hardware equivalence remain pending.
+
+Optional host MIDI/SCI route
+  midi-sci PR2 6000000 after 54000
+  midi-transfer-reference 12 0
+
+The second setting is optional and explicitly experimental; the default retains
+the strict unresolved SCI transfer edge. --midi-file/--midi-device require this
+route and reject automatic checkpoint replay. See host-midi.txt for source
+formats, native clock ownership, snapshots, polling and untested live timing.

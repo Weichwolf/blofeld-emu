@@ -1,0 +1,71 @@
+Headless host MIDI input
+
+  cmake --build --preset strict --target blofeld-headless
+  ctest --test-dir build/strict -R '^(host_midi|reference_midi_cli|original_host_midi|reference_checkpoint)$' --output-on-failure
+
+The reference-board CLI accepts --midi-file bytes.bin or --midi-device
+/dev/snd/midiCxDy. File input requires literal MIDI bytes in a regular file,
+not a Standard MIDI File container. Linux legacy RawMIDI opens read-only and
+nonblocking, validates protocol/input flags and requests unframed bytes. UMP,
+inactive and non-RawMIDI endpoints reject. No output stream or device discovery
+is used. The source opens when its declared route starts.
+Only input subdevice 0 is admitted; a kernel fallback to another subdevice fails
+before capture instead of silently choosing another port or a control channel.
+
+An explicit reference-board route is required, for example:
+
+  midi-sci PR2 6000000 after 54000
+
+These are own-program values, not Blofeld clock/wiring calibration. Fields select
+PR2 or PS4, fixed native bus Hz and earliest common tick. Arming rounds forward
+to an MCU operation boundary. If startup enables SCI before arming, supply an
+initial idle-high observation. Conflicting timed drives, return routes and
+loopback destinations reject. Native SCI setup/mux and clock selection remain
+required. Rate changes fail visibly; the host never programs peripheral setup.
+
+The default SCI stop-to-data transfer edge retains its unresolved-window fault.
+An explicit timing experiment may select the existing reference API:
+
+  midi-transfer-reference 12 0
+
+This chooses divisor 12 and zero bus periods after the stop-majority decision.
+It is an unverified hypothesis, not a default or hardware fix (mcu-sci.txt).
+
+The separate host runner polls before MCU operations at intervals of
+floor(common_Hz/1000), at least one tick, quantized forward to operation
+boundaries. Each read admits at most 256 bytes and respects remaining space in
+the 4096-byte wire queue, including its active byte. CPU/WAI owners alone advance
+SCI/OSC/TIM. The peer supplies RX levels and commits completed periods; message
+bytes, running status and realtime bytes are preserved without interpretation.
+
+RawMIDI status checks before/after each read detect reported kernel overruns,
+including while the downstream queue is full. Input errors quarantine the run
+and require a new source session. The positive device/overrun/disconnect paths
+are implemented against the Linux ABI but untested on physical or virtual MIDI
+hardware. Poll times are emulator observations. Host timestamps, wall-clock
+pacing, physical arrival times and real-time/latency guarantees remain absent.
+
+MIDI-START/MIDI-INPUT trace records retain common ticks, operation number and
+every accepted byte. Native joint snapshots include the complete wire peer.
+Deterministic API callers can restore and explicitly replay external inputs.
+Automatic checkpoint plans reject host file/device rereading: an OS stream is
+not rewound by a board snapshot. Source paths participate in trace/audio/NVM
+output collision checks.
+
+Checks and limits
+The CLI test uses own native MCU code to configure SCI, wake actual WAI through
+its vector, read status/data, report bytes through GPIO stores and execute RTI
+on both pin routes. It checks the strict transfer fault and source/rate/conflict/
+replay guards too. Partial-bit/queue API snapshots replay on both routes; file
+tests check 8192 exact bytes, fragmented reads, bounds, EOF and descriptor cleanup.
+
+original_host_midi checks eight file bytes after the unchanged conditional
+untimed MCU cold-start fixture. Real original SCI/ISR/RTI/foreground calls retain
+the bytes, complete CPU context, independent 12/16-instruction paths and all NVM.
+Its explicit 30 MHz wire fixture is separate from the owned-clock CLI test.
+Complete original MIDI messages, allocated DSP voices, scheduled board boot,
+controller audio and a working physical MIDI port remain unqualified.
+
+host-midi-reference.json pins original inputs and the Linux ABI reference source;
+reference code and run artifacts remain local. No fuzzing or physical traffic
+is run by these deterministic tests.

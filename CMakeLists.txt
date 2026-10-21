@@ -143,12 +143,27 @@ target_compile_definitions(blofeld_core PUBLIC
 add_library(blofeld_mcu_dsp src/mcu_dsp_schedule.cpp)
 target_include_directories(blofeld_mcu_dsp PUBLIC include)
 target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
+add_library(blofeld_host_midi src/host_midi.cpp)
+target_include_directories(blofeld_host_midi PUBLIC include)
+target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)
 add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
   src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp src/reference_checkpoint.cpp
-  src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp)
-target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport)
+  src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
+  src/reference_midi.cpp src/host_midi_runner.cpp)
+target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport
+  blofeld_mcu_midi blofeld_host_midi)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-host-midi-test test/host_midi_test.cpp)
+  target_link_libraries(blofeld-host-midi-test PRIVATE blofeld_host_midi blofeld_firmware)
+  add_test(NAME host_midi COMMAND blofeld-host-midi-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-midi")
+  add_test(NAME reference_midi_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_midi_cli.py"
+    $<TARGET_FILE:blofeld-headless>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-midi-cli")
+  set_tests_properties(reference_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-pcm-transport-test test/pcm_transport_test.cpp test/pcm_wave_test.cpp)
   target_link_libraries(blofeld-pcm-transport-test PRIVATE blofeld_pcm_transport blofeld_private_files)
   add_test(NAME pcm_transport COMMAND blofeld-pcm-transport-test
@@ -180,10 +195,11 @@ if(BUILD_TESTING)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
   add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp
     src/reference_config.cpp src/reference_board.cpp src/reference_wiring.cpp
-    src/reference_returns.cpp src/reference_checkpoint.cpp src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp)
+    src/reference_returns.cpp src/reference_checkpoint.cpp src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
+    src/reference_midi.cpp)
   target_include_directories(blofeld-reference-checkpoint-test PRIVATE src)
   target_link_libraries(blofeld-reference-checkpoint-test PRIVATE
-    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport)
+    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport blofeld_mcu_midi)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}
@@ -453,6 +469,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-usb-reset.trace")
   set_tests_properties(original_usb_reset PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-host-midi-test test/original_host_midi_test.cpp)
+  target_link_libraries(blofeld-original-host-midi-test PRIVATE
+    blofeld_application_fixture blofeld_mcu_midi blofeld_host_midi)
+  add_test(NAME original_host_midi COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_host_midi.py"
+    $<TARGET_FILE:blofeld-original-host-midi-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-host-midi.trace")
+  set_tests_properties(original_host_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-original-application-test test/original_application_test.cpp)
   target_link_libraries(blofeld-original-application-test PRIVATE blofeld_application_fixture)
   add_test(NAME original_application COMMAND ${Python3_EXECUTABLE}
@@ -902,6 +927,8 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-serial-pcm-test
+    blofeld-host-midi-test
+    blofeld-original-host-midi-test
     blofeld-pcm-transport-test
     blofeld-bank-test
     blofeld-repeat-test

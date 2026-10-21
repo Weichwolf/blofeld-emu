@@ -10,6 +10,7 @@
 #include "blofeld/pcm_recording.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -34,6 +35,7 @@ Board::Board(const Config &config, const Execution &execution)
       execution_(execution),
       identity_(std::make_shared<const Identity>()),
       native_(std::make_unique<Owners>(config_, execution_)) {
+  validate_midi(config_);
   const auto common = native_->dsp.run_clock().timebase_hz();
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
@@ -66,6 +68,7 @@ Board::Board(const Config &config, const Execution &execution)
 void Board::attach(Owners &owners) {
   owners.mcu.set_cycle_observer([this](const auto cycle) { on_cycle(cycle); });
   owners.mcu.set_wait_period_observer([this](const auto period) {
+    observe_midi(period.context);
     check_signals();
     if (native_->schedule) {
       native_->schedule->begin_wait_period(
@@ -140,11 +143,13 @@ void Board::boundary() {
     ++control_.next_event;
   }
   if (!native_->schedule && ticks() >= config_.release_ticks) { release(); }
+  start_midi();
   check_signals();
 }
 
 void Board::on_cycle(const Hc12BusCycle cycle) {
   control_.context = cycle.context;
+  observe_midi(cycle.context);
   check_signals();
   if (!native_->schedule) { return; }
   constexpr unsigned port_b = 1;
@@ -208,6 +213,11 @@ void Board::report(std::ostream &stream) const {
     stream << "AUDIO recorded=" << control_.recording.frames().size()
            << " limit=" << control_.recording.capacity() << '\n';
   }
+  if (config_.midi) {
+    stream << "MIDI accepted=" << control_.midi_bytes
+           << " queued=" << (control_.midi ? control_.midi->queued_bytes() : 0)
+           << " started=" << control_.midi.has_value() << '\n';
+  }
 }
 
 void Board::persist() const {
@@ -232,16 +242,20 @@ void Board::step() {
       }
     }
   }
+  synchronize_midi();
 }
 
-int Board::run() {
+int Board::run(const std::function<void(Board &)> &input) {
   require_healthy();
+  if (input && config_.checkpoint) {
+    throw Fault("External MIDI input cannot be reread by an automatic checkpoint replay");
+  }
   std::cout << "Explicit MCU/DSP reference experiment; physical board wiring and timing "
                "are unverified. Inputs start after native MCU reset.\n";
   std::optional<std::string> fault;
   try {
     initialize();
-    fault = config_.checkpoint ? run_replays().fault : finish_branch().fault;
+    fault = config_.checkpoint ? run_replays().fault : finish_branch(input).fault;
   } catch (const Fault &error) {
     control_.faulted = true;
     fault = error.what();
