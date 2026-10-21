@@ -624,6 +624,15 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           decisions: 52 raw head/tail aliases take
                                           genuine RTS; 100 cases fail on unknown
                                           TIO1 DI at P:188a (dsp-request-queue.txt).
+                                          Original peripheral initialization now
+                                          establishes DMA preloads through actual
+                                          instructions. Four reset/HCKT cases keep
+                                          default active-config and reserved-write
+                                          faults. Declared native TPR/HCKT setup
+                                          decodes/replays the original zero-primed
+                                          two-slot frame before the reserved write
+                                          (dsp-peripheral-init.txt). No complete
+                                          startup, DMA progress or note audio.
                                           No complete note lifecycle/allocation,
                                           board scheduler or PCM transport yet.
 Persistent storage               partial  MCU NVM files preserve mutations,

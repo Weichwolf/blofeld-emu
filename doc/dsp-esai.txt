@@ -123,3 +123,10 @@ orders and trusted snapshots of partial divider, frame, data, native instruction
 and receiver phase reproduce the full stream. A separate real native missing-
 clock fault/recovery checks its PC/address and independent instruction cost.
 The fixture's frequency and initial phase are assumptions, not Blofeld evidence.
+
+The original_dsp_peripheral_init regression additionally executes the unchanged
+original control-write prefix. Default active reconfiguration still rejects;
+declared own TPR/HCKT preconditions permit original zero priming before the next
+reserved write. Paused-prefix snapshots decode one complete two-slot zero frame
+with independent bit times (dsp-peripheral-init.txt). This does not establish
+original startup, DMA progression or host audio.

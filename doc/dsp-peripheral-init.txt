@@ -1,0 +1,41 @@
+Original DSP peripheral-initialization prerequisites
+
+original_dsp_peripheral_init loads the complete unchanged original extended-services
+program record from the official 1.25 archive. The shared dsp-voice-reference.json
+pins all 127 records. Own native OMR/SR/JSR setup calls the original routine;
+no host writes DMA preloads, substitutes an initializer or supplies its result.
+This is an isolated callee experiment, not original startup/caller provenance.
+
+Four cases cross declared native TPR setup with present/missing external HCKT.
+From the modeled reset state, the original prefix completes thirteen peripheral
+writes and CLR, establishing all ten DMA offset/source/destination/count preloads.
+Both channels remain disabled. Its next TCCR_1 write fails because the original
+preceding port mux has already left individual reset. HCKT alone does not fix
+that configuration prerequisite. The strict active-configuration check remains.
+
+DSP56371UM Rev.2.1 sections8.4.2/9.4.2 require reset for control changes;
+sections8.6.2/9.6.2 describe personal-reset transmitter configuration. The local
+PDF identity is pinned in hardware/sources.json. The controlled TPR case is an
+explicit own native caller precondition, not a recovered original boot state.
+It permits seventeen original peripheral writes and CLR, including actual TX0_1
+zero priming and TE0 enable, then retains the strict reserved X:ffff80 write fault.
+
+Each native failure is attempted three times with coordinated owner restoration.
+Faulted execution/capture reject. Full restored CPU state, original program,
+preloads, disabled DMA controls and relevant ESAI controls are checked. DSR0 starts
+unknown and becomes known through the genuine original write, not a fake phase.
+
+Only the TPR/known-HCKT prefix supplies usable serial output. With CPU execution
+paused before the still-rejected write, explicit external HCKT edges produce
+one 64-bit two-slot frame. An opposite-edge receiver checks every bit and literal
+divider phase, word-length FST, known zero payload/padding and actual retained-data
+underrun flags. Restoring the original prefix reproduces it. Missing HCKT rejects;
+no clock, source data, native continuation or successful return is invented.
+
+The frame is original zero priming, not synthesized notes or host audio. Physical
+clock/pad timing, original caller/reset provenance, Port E input-mode preload,
+reserved-write behavior, DMA progression, complete boot/MIDI/audio and hardware
+equivalence remain unqualified. Detailed MMIO traces stay in ignored test output.
+
+  cmake --build --preset strict --target blofeld-original-dsp-peripheral-init-test
+  ctest --test-dir build/strict -R '^original_dsp_peripheral_init$' --output-on-failure
