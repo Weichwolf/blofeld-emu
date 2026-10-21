@@ -581,6 +581,18 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-wire-${scope}.trace" ${scope})
     set_tests_properties(original_dsp_wire_${scope} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   endforeach()
+  add_executable(blofeld-original-dsp-clocked-wire-test test/original_dsp_clocked_wire_test.cpp)
+  target_link_libraries(blofeld-original-dsp-clocked-wire-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  foreach(scope IN ITEMS bytes pitch checkpoint)
+    add_test(NAME original_dsp_clocked_wire_${scope} COMMAND ${Python3_EXECUTABLE}
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_clocked_wire.py"
+      $<TARGET_FILE:blofeld-original-dsp-clocked-wire-test>
+      "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+      "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clocked-wire-${scope}.trace" ${scope})
+    set_tests_properties(original_dsp_clocked_wire_${scope} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  endforeach()
+  set_tests_properties(original_dsp_clocked_wire_bytes PROPERTIES TIMEOUT 300)
   add_executable(blofeld-original-sample-preparation-test test/original_sample_preparation_test.cpp)
   target_link_libraries(blofeld-original-sample-preparation-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_sample_preparation COMMAND ${Python3_EXECUTABLE}
@@ -804,6 +816,7 @@ add_custom_target(quality
     blofeld-original-dsp-note-test
     blofeld-original-dsp-scheduler-test
     blofeld-original-dsp-wire-test
+    blofeld-original-dsp-clocked-wire-test
     blofeld-mcu-clock-checkpoint-test
     blofeld-mcu-wait-clock-test
     blofeld-original-cycle-boot-test

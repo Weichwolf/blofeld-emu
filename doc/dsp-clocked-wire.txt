@@ -1,0 +1,53 @@
+Original serial reception with continuous nominal CPU/timer clocks
+
+The three original_dsp_clocked_wire scopes execute unchanged original 1.25
+producer/vector records, with the original ring consumer and pitch callback
+enabled in pitch/checkpoint scopes. All 127 ordered original record identities
+and the official archive are verified using dsp-voice-reference.json. No
+manufacturer program words or data are embedded in these tests.
+
+An own caller supplies OMR=600085, ordinary SR, linear modifiers, declared low
+data/guards, PINIT low observed before an actual reset, and the original input
+configuration call. The idle loop either runs NOP/JMP or repeatedly calls the
+genuine parser. Only the explicit external TIO observations enter during the
+run; no host ISR invocation, ring injection, timer advancement, register repair
+or callback result supplies the execution. Native CPU steps own the timer clock.
+
+The declared reference is EXTAL=12 MHz, a 540 MHz integer timebase, default reset
+PCTL and native_vector_estimates plus reference_prepare_boundary admission.
+Each artificial serial bit lasts 3249 CLK/2 edges; frames include an extra idle
+bit. Raw/synchronized levels arrive under external_before_dsp tie ordering.
+Observations retain the scheduler's last completed clock prefix. This does
+not establish actual Blofeld EXTAL, runtime PCTL, 31250 baud, physical sampling
+phases or IRQ latency. Do not fit an oscillator to the firmware's timer constants.
+
+bytes sends the fixed sequence 0..255. Every frame checks all 64 real ring cells,
+the original cursor and adjacent guards across four complete ring wraps. All
+2304 original vector entries create real frames and all 2304 RTIs remove them.
+The existing bounded instruction/event budgets are applied per frame.
+
+pitch sends 12 fixed bytes with running status and an interleaved clock, checking
+108 actual vector/RTI pairs, genuine nested callback frames and five independent
+signed 14-bit pitch endpoints: minimum, maximum, center and its two neighbors.
+No host request triggers a parser call after reception starts.
+
+checkpoint saves inside the genuine third data-bit ISR of a partly received
+MSB, after the original parser has consumed its saved LSB. Coordinated native
+owner/schedule/input-cursor restoration checks two identical continuations, a
+changed unobserved input bit, an unknown raw input failure and exact recovery.
+Comparisons include full native debug CPU state, reference counts, loaded
+program/low data records, ring/parser/guard observations and readable timer
+registers/PCTL. The write-only timer load register is never read. Independent
+MIDI expectations supplement replay; the changed branch must change the
+original callback result. At P:002ce4 the unknown DI read must expose X:ffff8f,
+the native PC/OMR and failure context, leave its nominal duration uncharged and
+retain the incomplete message. Faulted capture rejects until coordinated restore.
+
+These are component experiments with supplied caller state. Full original boot
+still encounters reserved Y:002000; note allocation encounters Y:ffffff. Complete
+note lifecycle, host MIDI transport, physical baud/clock qualification, original
+audio, update/recovery and Desktop/Keyboard hardware equivalence remain open.
+No fuzzing or physical input occurs.
+
+  cmake --build --preset strict --target blofeld-original-dsp-clocked-wire-test
+  ctest --test-dir build/strict -R '^original_dsp_clocked_wire_' --output-on-failure

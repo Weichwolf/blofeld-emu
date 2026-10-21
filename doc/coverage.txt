@@ -141,9 +141,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           foreground step across later inputs and
                                           an accepted source across higher-priority
                                           arrivals; strict mutation/source checks
-                                          remain (dsp-irq-admission.txt). This does
-                                          not qualify physical IRQ latency or
-                                          CPU-clocked original serial reception.
+                                          remain (dsp-irq-admission.txt). Original
+                                          serial reception now has a CPU-owned
+                                          nominal timer reference experiment
+                                          (dsp-clocked-wire.txt). Physical IRQ
+                                          latency and serial baud remain open.
                                           Physical pipeline/PLL/board timing open.
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
@@ -541,6 +543,14 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           two identical and one changed wire
                                           suffix through the genuine callback,
                                           preserving CPU and watched RAM/timers.
+                                          Continuous nominal CPU/timer clocks
+                                          now receive all 256 bytes without host
+                                          timer advances and drive five original
+                                          pitch callbacks from 12 wire bytes.
+                                          Mid-ISR snapshots check identical and
+                                          changed input plus actual unknown-DI
+                                          failure, uncharged failed duration and
+                                          coordinated recovery (dsp-clocked-wire.txt).
                                           No virtual/physical MIDI port, complete
                                           message/controller processing or DSP
                                           voice/audio integration yet.
