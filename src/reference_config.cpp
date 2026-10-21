@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/bus.hpp"
+#include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 #include "blofeld/dsp_scheduled_run.hpp"
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -184,15 +186,31 @@ ReturnRoute return_route(std::istringstream &line) {
   return result;
 }
 
-DspInput dsp_input(std::istringstream &line) {
-  literal(line, "tio");
-  DspInput result{.index = static_cast<unsigned>(number(line, 1))};
+std::optional<bool> dsp_level(std::istringstream &line) {
   const auto level = token(line);
-  if (level == "high" || level == "low") {
-    result.level = level == "high";
-  } else if (level != "unknown") {
-    throw Fault("DSP TIO level must be high, low or unknown");
+  if (level == "high" || level == "low") { return level == "high"; }
+  if (level != "unknown") { throw Fault("DSP input level must be high, low or unknown"); }
+  return std::nullopt;
+}
+
+DspInput dsp_input(std::istringstream &line) {
+  const auto kind = token(line);
+  if (kind != "tio" && kind != "esai") { throw Fault("Unknown DSP input kind: " + kind); }
+  DspInput result{.index = static_cast<unsigned>(number(line, 1))};
+  if (kind == "esai") {
+    result.kind = DspInputKind::esai;
+    result.esai.clock = dsp_level(line);
+    result.esai.frame_sync = dsp_level(line);
+    result.esai.high_clock = dsp_level(line);
+    const auto timing = token(line);
+    if (timing == "reference-reset-edges") {
+      result.esai.timing = DspEsaiClockTiming::reference_reset_edges;
+    } else if (timing != "raw") {
+      throw Fault("DSP ESAI timing must be raw or reference-reset-edges");
+    }
+    return result;
   }
+  result.level = dsp_level(line);
   const auto observation = token(line);
   if (observation != "raw" && observation != "synchronized") {
     throw Fault("DSP TIO observation must be raw or synchronized");
@@ -202,6 +220,20 @@ DspInput dsp_input(std::istringstream &line) {
     throw Fault("An unknown DSP TIO level cannot be synchronized");
   }
   return result;
+}
+
+DspEsaiClock dsp_clock(std::istringstream &line) {
+  literal(line, "esai");
+  const auto index = static_cast<unsigned>(number(line, 1));
+  literal(line, "hckt");
+  const auto start = number(line, UINT64_MAX);
+  const auto half = number(line, UINT64_MAX);
+  const auto edges = number(line, UINT64_MAX);
+  literal(line, "reference-reset-edges");
+  if (half == 0 || edges == 0 || (edges - 1) > (UINT64_MAX - start) / half) {
+    throw Fault("Invalid DSP ESAI periodic-clock span");
+  }
+  return {.start_ticks = start, .half_period_ticks = half, .edges = edges, .index = index};
 }
 
 void dsp_interrupts(Config &config, std::istringstream &line) {
@@ -296,6 +328,13 @@ struct Parser {
       result.initial.push_back(input(line));
     } else if (key == "dsp-initial") {
       result.dsp_initial.push_back(dsp_input(line));
+    } else if (key == "dsp-clock") {
+      const auto clock = dsp_clock(line);
+      if (std::ranges::any_of(result.dsp_clocks,
+                              [&](const auto &value) { return value.index == clock.index; })) {
+        throw Fault("Duplicate DSP ESAI periodic clock");
+      }
+      result.dsp_clocks.push_back(clock);
     } else if (key == "dsp-at") {
       const auto when = number(line, UINT64_MAX);
       auto event = dsp_input(line);
@@ -329,12 +368,17 @@ struct Parser {
         throw Fault("Missing reference-board setting: " + std::string(required));
       }
     }
-    if (!result.dsp_events.empty()) {
+    if (!result.dsp_events.empty() || !result.dsp_clocks.empty()) {
       if (result.dsp_input_order == DspExternalOrder::unqualified) {
         throw Fault("Timed DSP inputs require an explicit dsp-input-order");
       }
-      if (result.dsp_events.front().ticks < result.release_ticks) {
+      if (!result.dsp_events.empty() && result.dsp_events.front().ticks < result.release_ticks) {
         throw Fault("Timed DSP inputs precede the requested DSP release");
+      }
+    }
+    for (const auto &clock : result.dsp_clocks) {
+      if (clock.start_ticks < result.release_ticks) {
+        throw Fault("DSP ESAI periodic clock precedes the requested DSP release");
       }
     }
   }

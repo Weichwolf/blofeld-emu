@@ -154,6 +154,61 @@ pad/synchronization state and pending event deadlines. Identical future and
 exhausted sources replay; native unknown-input failures still require joint
 restoration. No host MIDI port or calibrated physical input is supplied here.
 
+ESAI clock snapshots and compact periodic HCKT
+
+  dsp-initial esai 1 unknown unknown low reference-reset-edges
+  dsp-at 2000 esai 1 unknown unknown high reference-reset-edges
+  dsp-at 2023 esai 1 unknown unknown low reference-reset-edges
+
+ESAI index 0 selects the primary X-space block; index 1 selects secondary ESAI_1.
+The three levels are SCKT, FST and HCKT, in that order. Each is high, low or
+unknown. One row is an atomic complete snapshot; unspecified pins do not inherit
+a known value. Timing is raw for ordinary external SCKT/FST, or the explicit
+reference-reset-edges convention required by the existing generated-clock model.
+Native reset/configuration, mux, clock-source and unknown-input checks apply.
+No TPR, control register, DMA phase, data register or firmware result is supplied.
+
+  dsp-initial esai 1 unknown unknown low reference-reset-edges
+  dsp-clock esai 1 hckt 2000 23 516 reference-reset-edges
+
+The second example replaces the listed timed observations with a compact finite
+source: start tick, positive half-period in common ticks and positive observation
+count. The first HCKT observation is high; following levels alternate. SCKT/FST
+remain unknown and the reference-reset-edges convention is explicit. Initial
+low baseline is declared separately, not manufactured by the source. No oscillator
+or audio rate is inferred. The last timestamp must fit uint64; spans ending
+exactly at UINT64_MAX are accepted. Future observations are generated on demand,
+not expanded into the configuration or a host event array.
+
+At most one periodic HCKT source per ESAI instance is allowed. Both sources and
+the static TIO/ESAI list share the existing input order and per-advance budget.
+Simultaneous observations from different sources reject at their due boundary;
+dsp-input-order only qualifies source versus native completion, not an ordering
+between external sources. Requested/actual release checks cover periodic sources.
+Coordinated snapshots retain both periodic indices, future/exhausted static
+cursor, native divider/shift state and pending CPU completion. DSP-ESAI-CLOCK
+reports each source's observed prefix and configured count; DSP-INPUTS retains
+its existing static-list meaning. Neither count proves completed CPU work.
+
+DSP-ESAI trace rows retain requested/actual ticks, all input levels/timing, both
+PCs and actual post-observation output snapshots. tx-driven/known/levels use
+logical TX0..TX5 bits 0..5; clocks-driven/known/levels use SCKT/FST bits 0/1.
+Unknown or undriven bits are not zero samples. Rows observe actual mux-qualified
+signals after each external input; they do not enumerate every native pin change
+or provide host PCM. Decoder tests use known bits and explicit sample edges.
+
+  ctest --test-dir build/strict -R '^reference_esai_cli$' --output-on-failure
+
+Own native programs check both maps, nonzero old/refill words, retained-data
+underrun, literal divider/sample ticks and external SCKT/FST snapshots. A refill
+tied to a real slot launch must change the serial payload according to the two
+explicit orders. Mid-word/future/exhausted replay, native WAI/shared-write paths,
+mixed TIO/two-clock sources, missing clocks/mux, active reconfiguration, input
+budgets, collisions, representable spans and late release are checked. A large
+configured count with a bounded executed prefix proves compact scheduling, not
+sustained real-time operation. Full original boot, DMA/voice integration, host
+MIDI/audio and physical clock/pad/rate validation remain open.
+
 Blank lines and # comments are allowed. Unknown/duplicate settings, extra tokens,
 invalid/overflowing numbers, unsorted events, NUL bytes and configuration files
 larger than 65536 bytes reject. Inputs must be bounded regular files. Config/ROM

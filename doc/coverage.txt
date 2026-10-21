@@ -432,7 +432,15 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           vectors and actual MCU GPIO reads;
                                           both completion/shared-write orders,
                                           WAI, budgets and strict input failures
-                                          checked. Physical wake latency remains
+                                          checked.
+                                          Exact ESAI snapshots and compact finite
+                                          HCKT sources now drive the same CLI.
+                                          Native refill/payload ties, external
+                                          SCKT/FST, both maps, mixed sources and
+                                          periodic cursor/divider replay checked.
+                                          Missing/unqualified inputs still fail;
+                                          no host PCM or physical clock claim.
+                                          Physical wake latency remains
                                           pending. Original reset
                                           through the CLI transfers all 97 SPI
                                           words before the strict Y:002000 fault;

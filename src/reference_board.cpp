@@ -37,9 +37,10 @@ Board::Board(const Config &config, const Execution &execution)
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
   control_.scale = common / local;
+  const auto first_dsp = next_dsp_input();
   if (config.release_ticks < ticks() ||
       (!config.events.empty() && config.events.front().ticks < ticks()) ||
-      (!config.dsp_events.empty() && config.dsp_events.front().ticks < ticks())) {
+      (first_dsp && first_dsp->input.ticks < ticks())) {
     throw Fault("Reference-board release/events precede the completed native MCU reset");
   }
   native_->dsp.bus().install_rom({.start = bootstrap_base, .words = execution.rom});
@@ -91,8 +92,8 @@ void Board::apply(const Input &input) {
 }
 
 void Board::release() {
-  if (control_.next_dsp_event < config_.dsp_events.size() &&
-      config_.dsp_events[control_.next_dsp_event].ticks < ticks()) {
+  const auto next = next_dsp_input();
+  if (next && next->input.ticks < ticks()) {
     throw Fault("Timed DSP input precedes the actual DSP release boundary");
   }
   control_.previous = sample();
@@ -181,6 +182,11 @@ void Board::report(std::ostream &stream) const {
   if (!config_.dsp_events.empty()) {
     stream << "DSP-INPUTS observed=" << control_.next_dsp_event
            << " configured=" << config_.dsp_events.size() << '\n';
+  }
+  for (const auto &clock : config_.dsp_clocks) {
+    stream << "DSP-ESAI-CLOCK instance=" << clock.index
+           << " observed=" << control_.next_esai_edge.at(clock.index)
+           << " configured=" << clock.edges << '\n';
   }
 }
 

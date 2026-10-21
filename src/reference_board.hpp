@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/bus.hpp"
+#include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/dsp_scheduled_run.hpp"
 #include "blofeld/dsp_shi.hpp"
@@ -12,6 +13,7 @@
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
@@ -51,11 +53,22 @@ struct ReplayPlan {
   unsigned replays = 0;
 };
 
+enum class DspInputKind : std::uint8_t { tio, esai };
+
 struct DspInput {
   std::uint64_t ticks = 0;
+  DspInputKind kind = DspInputKind::tio;
   unsigned index = 0;
   std::optional<bool> level = std::nullopt;
   bool synchronized = false;
+  DspEsaiInputs esai{};
+};
+
+struct DspEsaiClock {
+  std::uint64_t start_ticks = 0;
+  std::uint64_t half_period_ticks = 0;
+  std::uint64_t edges = 0;
+  unsigned index = 0;
 };
 
 struct Config {
@@ -79,6 +92,7 @@ struct Config {
   unsigned maximum_dsp_inputs_per_advance = 0;
   std::vector<DspInput> dsp_initial;
   std::vector<DspInput> dsp_events;
+  std::vector<DspEsaiClock> dsp_clocks;
 };
 
 void validate_returns(const Config &config);
@@ -131,6 +145,7 @@ struct Status {
   std::uint64_t ordered_pairs = 0;
   std::size_t next_event = 0;
   std::size_t next_dsp_event = 0;
+  std::array<std::uint64_t, 2> next_esai_edge{};
   bool started = false;
   bool waiting = false;
   bool held_reset = true;
@@ -184,6 +199,7 @@ private:
     std::uint64_t ordered_pairs = 0;
     std::size_t next_event = 0;
     std::size_t next_dsp_event = 0;
+    std::array<std::uint64_t, 2> next_esai_edge{};
     bool started = false;
     bool faulted = false;
   };
@@ -212,7 +228,17 @@ private:
                      std::optional<ShiOutput> &previous,
                      std::string_view name);
   void apply(const Input &input);
+
+  struct DspOffer {
+    DspInput input;
+    std::optional<unsigned> clock_index = std::nullopt;
+    bool collision = false;
+  };
+
+  [[nodiscard]] std::optional<DspOffer> next_dsp_input() const;
+  void observe_dsp_input(std::uint64_t at);
   void apply_dsp(const DspInput &input);
+  void trace_dsp_input(const DspInput &input, std::uint64_t at);
   [[nodiscard]] DspExternalEvents dsp_inputs();
   void boundary();
   void step();
