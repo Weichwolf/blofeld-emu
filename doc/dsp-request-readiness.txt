@@ -1,0 +1,40 @@
+Controlled TIO1 inputs through the original request service
+
+original_dsp_request_readiness extends the original descriptor experiment in
+dsp-request-queue.txt. Both original scheduler-to-queue and continuation-to-queue
+producers run in both RM settings. Each publishes its real four-word descriptor
+before a declared unknown, low, high or low-to-high TIO1 input is supplied.
+These are controlled untimed reference inputs, not measured Blofeld readiness,
+pin wiring or a successful device response. No GPIO latch is supplied.
+
+The sixteen cases have four outcomes per producer/RM pair:
+- Unknown input fails at the actual TCSR1 DI read P:188a/X:ffff8b.
+- Low input completes four genuine DI polls and stops before a fifth read.
+  No busy flag, timer W1C command, GPIO access or return is fabricated.
+- High input passes the actual poll and executes the original busy-flag store,
+  TCSR1 W1C write, descriptor-header load and header-dependent branch.
+- Low-to-high input changes only the external TIO1 drive before the third
+  actual DI read. Two low polls precede the same original ready path.
+
+Ready paths fail at the first real BSET of Port C bit8 because its old latch
+is unknown. The scheduler request reaches P:1894; the data continuation reaches
+P:18a5. Both faults name X:ffffbd and mask000100, retain PC/OMR and reject
+further native steps until diagnostic reset. No Port F transaction or callback
+success is inserted. Readiness alone does not establish original GPIO setup.
+
+Independent equations check complete prefix descriptors and guards, full declared
+service registers/modifiers, actual pending frames, old/new-head XOR flags,
+header loading, busy-flag timing and actual DI/write counts. The access observer
+permits only the expected original RAM flag/TCSR1 writes and checks the failed
+GPIO operation before a prior bit is returned. The complete original program
+remains unchanged. All127 record identities are pinned before execution.
+
+The existing complete156-case request matrix retains its full-matrix assertions
+and is rerun after the per-window model is shared. The new test requires all16
+controlled profiles; it does not replace that broader raw descriptor matrix.
+Original caller/reset and upstream address provenance, physical clock/pin timing,
+complete transfers, IRQ/callback scheduling, boot/update/recovery and live original
+MIDI/audio remain open. These cases run offline and drive no physical device.
+
+  cmake --build --preset strict --target blofeld-original-dsp-request-queue-test
+  ctest --test-dir build/strict -R '^original_dsp_request_(queue|readiness)$' --output-on-failure

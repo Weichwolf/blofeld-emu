@@ -44,6 +44,8 @@ protocol units, valid upstream address/table provenance, complete peripheral
 transfers, callback execution, voice scheduling, live MIDI/audio and hardware
 equivalence remain unqualified. Manufacturer instructions, detailed listings and
 run artifacts remain local. This is not a complete original boot or update test.
+Separate controlled TIO1 profiles advance the real service to its next strict
+GPIO-latch fault; see dsp-request-readiness.txt for their inputs and limits.
 
   cmake --build --preset strict --target blofeld-original-dsp-request-queue-test
   ctest --test-dir build/strict -R '^original_dsp_request_queue$' --output-on-failure

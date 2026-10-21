@@ -6,6 +6,7 @@
 #include "blofeld/dsp_native_access.hpp"
 #include "blofeld/firmware.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "dsp_request_readiness.hpp"
 
 #include <array>
 #include <cstdint>
@@ -67,6 +68,7 @@ struct Case {
   unsigned id, target, seed, tick, timer, threshold, count, status, flags, mode;
   std::uint64_t initial_a, initial_b;
   unsigned x0, y0, y1, x1, r0, m0, head, tail, scan_stop;
+  unsigned ready_profile = 0;
   std::array<unsigned, 16> bases{};
 };
 
@@ -80,6 +82,7 @@ struct Fixture {
   unsigned long long probe_instructions = 0;
   unsigned long long instructions = 0;
   std::set<unsigned> visited;
+  bool readiness = false;
 
   Fixture(const Source &image, std::ostream &output) : cpu(bus), source(image), trace(output) {
     harness();
@@ -338,7 +341,11 @@ struct Fixture {
       require(get(register_slots + i) == args[i], "Caller argument changed");
     }
     trace << "STEPS " << std::dec << steps << '\n';
-    if (c.scan_stop == 0) { probe(c); }
+    if (readiness) {
+      blofeld::test::request::probe(*this, c);
+    } else if (c.scan_stop == 0) {
+      probe(c);
+    }
     for (const auto &[at, v] : source.program) {
       require(bus.peek_program(at) == v, "Original program changed");
     }
@@ -348,11 +355,15 @@ struct Fixture {
 
 int main(const int count, char **arguments) {
   try {
-    require(count == 4, "Expected original firmware, cases and trace");
+    require(count == 4 || count == 5, "Expected original firmware, cases, trace and optional mode");
     const Source source(arguments[1]);
     std::ofstream trace(arguments[3]);
     trace.exceptions(std::ios::badbit | std::ios::failbit);
     Fixture fixture(source, trace);
+    if (count == 5) {
+      require(std::string(arguments[4]) == "readiness", "Unknown queue-test mode");
+      fixture.readiness = true;
+    }
     std::ifstream cases(arguments[2]);
     require(cases.is_open(), "Missing queue cases");
     Case c{};
@@ -362,6 +373,9 @@ int main(const int count, char **arguments) {
            c.y1 >> c.x1 >> c.r0 >> c.m0 >> c.head >> c.tail >> c.scan_stop) {
       for (auto &value : c.bases) {
         require(static_cast<bool>(cases >> value), "Truncated base table");
+      }
+      if (fixture.readiness) {
+        require(static_cast<bool>(cases >> c.ready_profile), "Missing controlled input profile");
       }
       fixture.run(c);
       ++completed;
