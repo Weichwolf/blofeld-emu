@@ -524,7 +524,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-usb-endpoint-reset-test PRIVATE blofeld_core)
   add_test(NAME usb_endpoint_reset COMMAND blofeld-usb-endpoint-reset-test)
   add_executable(blofeld-original-usb-reset-test test/original_usb_reset_test.cpp)
-  target_link_libraries(blofeld-original-usb-reset-test PRIVATE blofeld_application_fixture)
+  target_link_libraries(blofeld-original-usb-reset-test PRIVATE blofeld_application_fixture blofeld_usbip)
   add_test(NAME original_usb_reset COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_usb_reset.py"
     $<TARGET_FILE:blofeld-original-usb-reset-test>

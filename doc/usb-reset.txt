@@ -43,12 +43,15 @@ CPU state, all 5120 mapped RAM bytes, declared USB registers/descriptions and th
 actual write prefix. All MCU NVM bytes, knowledge and erase history stay intact.
 Register inspection uses detached board copies; it does not reconfigure the CPU's
 board. The same continued CPU receives an actual SET_CONFIGURATION SETUP for
-configuration 1. Hardware ACKs the SETUP and NAKs status IN before CPU execution.
+configuration 1 through the USB/IP transfer-stage decoder and MCU-backed host
+queue. Hardware ACKs the SETUP and NAKs status IN before CPU execution.
 Its original FFD0 ISR writes DONEECRU, returns through RTI and reaches main WAI.
-Two pending-request snapshot restores repeat the complete CPU/RAM/register/write
+Two joint queue/pending-request snapshot restores repeat the complete CPU/RAM/register/write
 prefix and unchanged NVM result. Automatic status IN after DONEECRU still fails
 explicitly: its endpoint register/interrupt effects remain unqualified. There
 is no synthesized zero-length success, TFRC or completed host configuration.
+The adapter retains its pending request, poisons further polling and reports the
+actual MCU context and request identity. No import/listener/host attach is implied.
 
 The next original MIDI boundary is retained explicitly. Native initialization
 stores 0x820008d1 and 0x820008c1 for physical endpoints 2/3. Their NISOF field is 2;
