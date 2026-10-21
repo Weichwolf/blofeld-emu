@@ -53,7 +53,8 @@ struct UsbEndpointInfo {
   UsbBuffer buffer = UsbBuffer::control_in;
   std::uint8_t address = 0;
   unsigned maximum_packet = 0;
-  unsigned type = 0; // USB transfer type: 0 control, 2 bulk, 3 interrupt.
+  unsigned type = 0;         // USB transfer type: 0 control, 2 bulk, 3 interrupt.
+  std::optional<bool> data1; // Unknown after an unqualified endpoint reset.
 };
 
 // USB20D6E2F register/buffer side, with configuration SETUP decoding/pending NAK.

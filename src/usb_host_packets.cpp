@@ -42,6 +42,11 @@ void UsbHostQueue::input(McuBus &bus, Pending &pending) {
 
 void UsbHostQueue::output(McuBus &bus, Pending &pending) {
   const auto endpoint = bus.usb_host_endpoint(pending.request.address);
+  if (!endpoint.data1) { throw Fault("Unknown USB OUT DATA PID after endpoint reset"); }
+  if (*endpoint.data1 != data1_[pending.request.address]) {
+    throw Fault(
+        "USB host OUT DATA PID disagrees with device; host/controller ownership is unqualified");
+  }
   const auto remaining = pending.request.length - pending.completion.transferred;
   const auto count = std::min(remaining, endpoint.maximum_packet);
   if (count == 0 && pending.request.length != 0 && !pending.extra_zero) {
@@ -98,6 +103,10 @@ void UsbHostQueue::status_packet(McuBus &bus, Pending &pending) {
       bus.finish_usb_in(true);
     }
   } else {
+    const auto endpoint = bus.usb_host_endpoint(0);
+    if (!endpoint.data1 || !*endpoint.data1) {
+      throw Fault("Unqualified USB control OUT status DATA PID");
+    }
     const auto response =
         bus.receive_usb_out({.buffer = UsbBuffer::control_out, .data = {}, .data1 = true});
     if (response == UsbResponse::nak || response == UsbResponse::none) { return; }

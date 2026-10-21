@@ -40,9 +40,9 @@ malformed requests and poisoned/closed connections cannot produce a new request.
 
 The caller owns descriptor/configuration evidence lifetime and must discard the
 export after reset, descriptor/configuration changes or loss of qualified state.
-No TCP listener/session, live CLI binding, kernel attachment, host class binding,
-original enumeration, original MIDI/sample exchange or Spectre connection exists
-yet. Import success here reserves an existing qualified export; it is not a
+A nonblocking loopback listener/session is described in usbip-session.txt.
+Runtime CLI binding, kernel attachment, host class binding, original enumeration,
+original MIDI/sample exchange and Spectre communication remain unqualified. Import success here reserves an existing qualified export; it is not a
 simulated successful device reset or proof of host attachment. The original USTB
 and NISOF boundaries remain strict. Full objective and gaps: objective.txt and
 coverage.txt. No fuzzing, physical traffic, modules or system routing are used.

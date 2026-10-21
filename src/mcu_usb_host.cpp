@@ -20,7 +20,11 @@ UsbEndpointInfo McuUsb::host_endpoint(const std::uint8_t address) const {
     return {.buffer = buffer,
             .address = address,
             .maximum_packet = maximum_packet(input ? 0 : 1),
-            .type = 0};
+            .type = 0,
+            .data1 =
+                buffers_data_.at(static_cast<unsigned>(buffer)).pid_known
+                    ? std::optional<bool>(buffers_data_.at(static_cast<unsigned>(buffer)).data1)
+                    : std::nullopt};
   }
   std::optional<UsbEndpointInfo> result;
   for (unsigned index = 2; index < 4; ++index) {
@@ -30,7 +34,10 @@ UsbEndpointInfo McuUsb::host_endpoint(const std::uint8_t address) const {
       result = UsbEndpointInfo{.buffer = static_cast<UsbBuffer>(index),
                                .address = address,
                                .maximum_packet = maximum_packet(index),
-                               .type = (description >> 5U) & 3U};
+                               .type = (description >> 5U) & 3U,
+                               .data1 = buffers_data_.at(index).pid_known
+                                            ? std::optional<bool>(buffers_data_.at(index).data1)
+                                            : std::nullopt};
     }
   }
   if (result) { return *result; }

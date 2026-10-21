@@ -110,9 +110,12 @@ add_library(blofeld_usb_host src/usb_transfer.cpp src/usb_host.cpp src/usb_host_
 target_include_directories(blofeld_usb_host PUBLIC include)
 target_link_libraries(blofeld_usb_host PUBLIC blofeld_mcu)
 add_library(blofeld_usbip src/usbip_decode.cpp src/usbip_encode.cpp
-  src/usbip_management.cpp src/usbip_export.cpp)
+  src/usbip_management.cpp src/usbip_export.cpp src/usbip_session.cpp src/usbip_session_output.cpp)
 target_include_directories(blofeld_usbip PUBLIC include)
 target_link_libraries(blofeld_usbip PUBLIC blofeld_usb_host)
+add_library(blofeld_usbip_tcp src/usbip_tcp.cpp src/usbip_tcp_io.cpp)
+target_include_directories(blofeld_usbip_tcp PUBLIC include)
+target_link_libraries(blofeld_usbip_tcp PUBLIC blofeld_usbip)
 add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
 target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
@@ -172,6 +175,17 @@ target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_f
   blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-usbip-tcp-native-test test/usbip_tcp_native_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_include_directories(blofeld-usbip-tcp-native-test PRIVATE src)
+  target_link_libraries(blofeld-usbip-tcp-native-test PRIVATE blofeld_usbip_tcp blofeld_core)
+  add_test(NAME usbip_tcp_native COMMAND blofeld-usbip-tcp-native-test)
+  add_executable(blofeld-usbip-session-test test/usbip_session_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-usbip-session-test PRIVATE blofeld_usbip)
+  add_test(NAME usbip_session COMMAND blofeld-usbip-session-test)
+  add_executable(blofeld-usbip-tcp-test test/usbip_tcp_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_include_directories(blofeld-usbip-tcp-test PRIVATE src)
+  target_link_libraries(blofeld-usbip-tcp-test PRIVATE blofeld_usbip_tcp)
+  add_test(NAME usbip_tcp COMMAND blofeld-usbip-tcp-test)
   add_executable(blofeld-usb-device-native-test test/usb_device_native_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_link_libraries(blofeld-usb-device-native-test PRIVATE blofeld_usbip blofeld_core)
   add_test(NAME usb_device_native COMMAND blofeld-usb-device-native-test)
@@ -992,6 +1006,7 @@ add_custom_target(quality
     blofeld-sample-wave-test
     blofeld-usbip-test blofeld-usb-host-test blofeld-usb-host-native-test
     blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test
+    blofeld-usbip-session-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test
     blofeld-midi-timed-test

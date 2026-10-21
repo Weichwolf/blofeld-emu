@@ -80,6 +80,11 @@ void UsbipDecoder::require_active() const {
   }
 }
 
+std::size_t UsbipDecoder::input_space() const {
+  require_active();
+  return maximum_frame - (bytes_.size() - consumed_);
+}
+
 void UsbipDecoder::feed(const std::span<const std::uint8_t> bytes) {
   require_active();
   if (bytes.size() > maximum_frame || bytes_.size() - consumed_ > maximum_frame - bytes.size()) {

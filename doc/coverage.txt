@@ -278,6 +278,9 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           register/native tests (usb-discovery.txt).
                                           Current configuration/alternates come
                                           from read-only controller state.
+                                          Session/loopback TCP has own wire/CPU
+                                          tests (usbip-session.txt), with runtime
+                                          binding and kernel attachment pending.
                                           Transport requirements and current
                                           original frontiers: usb-host.txt.
 Original DSP runtime              partial  127 checked records extracted; DSP56300

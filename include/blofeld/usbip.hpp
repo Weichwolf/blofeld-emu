@@ -25,6 +25,7 @@ class UsbipDecoder {
 public:
   explicit UsbipDecoder(std::uint32_t device);
   void feed(std::span<const std::uint8_t> bytes);
+  [[nodiscard]] std::size_t input_space() const;
   [[nodiscard]] std::optional<UsbipCommand> next();
   void finish();
 

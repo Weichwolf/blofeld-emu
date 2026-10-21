@@ -1,0 +1,64 @@
+USB/IP session and nonblocking loopback transport
+
+UsbipSession joins management framing, a qualified UsbipExport, transfer framing
+and UsbHostQueue. DEVLIST without a publication returns no device; import without
+one fails. The publication is selected when the complete management request is
+received, not when a socket opens. A successful import holds that exact export
+for the connection and keeps it claimed after close/abort. The board owner must
+qualify reset/state and publish a fresh capture before another import. Host-side
+lease bookkeeping never supplies a guest reset, rollback or successful status.
+
+Fragmented requests and import/transfer coalescing retain exact wire boundaries.
+The transfer decoder exposes remaining frame capacity so a full-size OUT request
+can end in the same read as the next command without exceeding the one-frame
+buffer. Live sequence identities remain reserved until a complete reply is
+consumed; cancellation suppresses the target's later submission reply. Already
+completed submissions retain FIFO position before a zero-result unlink reply.
+
+Input chunks are bounded at4096 bytes; pending requests remain capped at32 and
+1MiB each. Outbound data is bounded by32 maximum transfer frames and4096 queued
+replies, with input headroom reserved for the next chunk. Backpressure stops
+socket reads and further USB packet polling until capacity is available. Partial
+socket writes consume only their accepted byte prefix. A valid input half-close
+retains accepted pending transfers and drains actual replies before closing;
+truncated EOF or invalid input poisons that connection. Abort discards host
+queues/output only; already accepted MCU effects and IRQs remain observable.
+
+Host OUT/status packets additionally check the controller's known DATA PID
+against independently retained host state. A new/stale host queue must not count
+a device's duplicate ACK as new data. Unknown EPRST PID state and mismatches fail
+with request/endpoint/PC/CCR; no state is silently synchronized or repaired.
+Linux USB/IP's hub-class SET_FEATURE(PORT_RESET) proxy is rejected explicitly
+until a board-owned reset implementation is qualified. It is not forwarded as a
+Blofeld firmware class request or assigned successful reset status.
+
+UsbipTcpServer binds IPv4 loopback as a regular user, with nonblocking/CLOEXEC
+listener and accepted sockets. It has at most4 active connections,4 accepts and
+one bounded read per connection per poll. Output has a per-connection byte budget
+(up to64KiB) and bounded send attempts; no sleep, socket thread or MCU execution
+exists inside the transport. The caller supplies actual MCU execution/context
+between polls. These scheduling limits do not establish USB wire timing or
+real-time performance. TCP_NODELAY is enabled; SIGPIPE cannot terminate a poll.
+
+Malformed input and ordinary peer I/O errors close that peer and return a visible
+event. Imported closure reports required board-state qualification. A modeled
+hardware fault propagates its real context, retires all connections/publication
+and stops the listener; it is never turned into a fake transfer success/STALL.
+Withdrawal also closes live connections without changing guest peripheral state.
+Socket/session state is noncopyable and excluded from board replay/checkpoints.
+
+These components do not yet have runtime CLI/common-clock board binding or a
+kernel USB attachment. Normal original enumeration, USB-MIDI class binding,
+Wine Spectre transfer, keyboard/PipeWire routing and full boot/MIDI/audio remain
+open. Original USTB/NISOF/automatic configuration status frontiers remain strict.
+Loopback own-fixture tests are not hardware or original-firmware equivalence.
+No fuzzing, physical device traffic, module loading or system routing is used.
+
+Deterministic gates:
+  cmake --build --preset strict --target blofeld-usbip-session-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_session|usbip_tcp|usbip_tcp_native)$'
+
+References (protocol facts only; no kernel implementation code is copied):
+  https://docs.kernel.org/usb/usbip_protocol.html
+  https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/stub_rx.c
+  https://github.com/torvalds/linux/blob/v6.12/drivers/usb/usbip/vhci_hcd.c
