@@ -1,0 +1,82 @@
+USB/IP reference-board runtime admission and lifetime
+
+The existing blofeld-headless reference-board runner can bind the USB/IP adapter
+to its actual MCU/peripheral owner. This is a non-real-time diagnostic path, not
+a verified Desktop/Keyboard USB clock profile or a working Blofeld USB-MIDI device.
+No kernel USB controller is provisioned, no MIDI routes are changed, and no Wine
+application is started by the runner.
+
+All four CLI options are required together with --reference-board and --dsp-rom:
+  --usbip-port PORT            IPv4 loopback only; 0 chooses a free local port
+  --usbip-after TICKS          first allowed operation boundary for the probe
+  --usbip-period TICKS         positive polling interval in reference common ticks
+  --usbip-probe-timeout TICKS  positive actual-admission-relative probe tick budget
+
+The listen banner reports the actual port and declared limits. Administrative
+virtual location /blofeld-emu/usb/1-1 and busid1-1 are not a physical sysfs path or
+manufacturer identity. Device descriptors still require three complete actual
+GET_DESCRIPTOR control transfers through UsbDeviceProbe. The runner never writes
+guest initialization registers, seeds buffers, enables clocks, executes an ISR
+itself or manufactures a control status. Unready or unsupported hardware at the
+declared start fails with actual MCU PC/CCR and tick rather than being initialized
+by the host. A configured poll interval is an explicit reference assumption,
+not measured USB wire timing or a real-time pacing guarantee.
+
+At each inactive native MCU operation boundary the board supplies its identity,
+monotonic common time, non-rewinding restore revision and current architectural
+PC/CCR. Packet polling occurs only when due; the actual MCU executes between
+polls. Probe timeout and evidence validity are checked at every boundary, also
+between due transport polls. USBIP-START, USBIP-PUBLISH and peer events record
+their actual common ticks in the existing optional trace. SCI/DSP MIDI input
+can retain its separate existing pump. Automatic checkpoint replay rejects live
+host input before output files or a listener are created.
+
+Read-only USB evidence revisions are host metadata, not emulated hardware
+registers. Module control changes, decoder changes, functional/endpoint resets
+expire link evidence. Committed changed endpoint/configuration descriptions
+expire preimport captures; staged or identical writes do not invent a change.
+A reset pulse remains observable even when its final decoder levels equal their
+earlier values. Before import, changed current configuration/alternates also
+retire metadata. After exclusive import, actual configuration/description changes
+belong to that same host; its lease can never be automatically re-published.
+Pending or unsupported automatic configuration status still fails in McuUsb.
+
+Board checkpoint restore reinstates modeled MCU/DSP state but increments a
+separate transport revision. A subsequent poll of the old adapter closes every
+connection and discards its capture before another USB event is accepted.
+Owner changes and time rewind likewise retire the adapter. Imported EOF/errors
+require explicit board-owned recovery and retire the whole runtime; already
+accepted SETUP/data/IRQ effects remain. Retirement never clears guest hardware,
+repairs DATA PID, acknowledges configuration or rolls back a cancelled request.
+The CLI retires the listener on execution termination and reports publication
+availability at that stop boundary. A normal execution-budget exit does not
+prove enumeration.
+
+Directed gates:
+  cmake --build --preset strict --target blofeld-headless blofeld-usbip-runtime-test blofeld-reference-checkpoint-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_runtime|reference_usb_cli|reference_checkpoint)$'
+
+The CLI gate creates own MCU NVM and DSP ROM fixtures. Actual native MCU stores
+initialize USB, and actual own SETUP/IN/OUT IRQs copy ROM descriptors to USB RAM
+and return through RTI/WAI before exact TCP replies. It checks capture/discovery,
+import and a fresh control request, then requires visible retirement after an
+imported half-close. Input files remain unchanged. These structural descriptors
+are not a complete USB-MIDI class. Component gates additionally check reset
+pulses, between-poll timeout/reset, description/configuration expiry, imported
+configuration ownership, and real board restore/foreign-owner/time guards.
+No manufacturer program bytes, automatic fuzzing or physical traffic are used.
+
+Remaining requirements
+- Original ordinary SETUP still reaches invalid USTB0x033f at PC0xbc3d. Reserved
+  bulk NISOF=2 and automatic configuration-status completion remain strict.
+- Kernel USB attachment, normal descriptor/address/configuration enumeration,
+  USB-MIDI driver binding, bidirectional MIDI/SysEx/sample transfer, Wine Spectre
+  and keyboard/PipeWire routing remain unqualified. USB/IP remote port reset is
+  explicitly rejected until its board-owned semantics are established.
+- An imported peer that half-closes with pending NAK transfers can retain them
+  until the enclosing execution budget ends. Wall-clock idle/transfer timeouts
+  and recovery/re-attachment policies need separate qualification.
+- Decoder suspend/resume or speed changes conservatively retire the session;
+  continuous suspended operation and remote resume are not qualified.
+- Full original boot, hardware timing, real-time behavior and physical device
+  equivalence are not established by these own runtime fixtures.

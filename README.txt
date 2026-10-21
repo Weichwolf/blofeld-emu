@@ -100,6 +100,8 @@ doc/mcu-usb.txt covers USB registers/buffers, decoder-event inputs, interrupts a
 doc/usb-host-transfers.txt covers the MCU-backed host control/bulk queue and USB/IP
 transfer framing; doc/usb-discovery.txt covers MCU descriptor capture and USB/IP
 discovery/import records. doc/usbip-session.txt covers bounded sessions/loopback TCP.
+doc/usb-runtime.txt covers explicit reference-board/CLI admission, native own
+guest/TCP tests and capture/session invalidation. Host USB-MIDI remains unqualified.
 Actual host USB-MIDI attachment remains required and unimplemented.
 doc/mcu-code-cache.txt describes bounded instruction caching and mutation tests.
 doc/mcu-checkpoints.txt describes immutable in-process MCU checkpoints, native

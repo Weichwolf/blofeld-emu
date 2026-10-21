@@ -5,7 +5,8 @@
 #include <cstdint>
 
 namespace blofeld {
-void McuUsb::reset_endpoints() noexcept {
+void McuUsb::reset_endpoints() {
+  host_evidence_.link = next_host_revision(host_evidence_.link);
   for (auto &buffer : buffers_data_) {
     buffer.control = 0;
     buffer.transmitted.reset();

@@ -268,7 +268,7 @@ void Board::step() {
 int Board::run(const std::function<void(Board &)> &input) {
   require_healthy();
   if (input && config_.checkpoint) {
-    throw Fault("External MIDI input cannot be reread by an automatic checkpoint replay");
+    throw Fault("External host input cannot be reread by an automatic checkpoint replay");
   }
   std::cout << "Explicit MCU/DSP reference experiment; physical board wiring and timing "
                "are unverified. Inputs start after native MCU reset.\n";

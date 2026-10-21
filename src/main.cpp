@@ -8,6 +8,7 @@
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/pcm_recording.hpp"
+#include "blofeld/usbip_runtime.hpp"
 #include "host_midi_runner.hpp"
 #include "reference_board.hpp"
 #include "sample_client.hpp"
@@ -20,6 +21,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -42,6 +44,10 @@ struct Options {
   std::filesystem::path midi_device;
   std::optional<std::uint32_t> audio_rate;
   std::optional<std::size_t> audio_max_frames;
+  std::optional<std::uint16_t> usbip_port;
+  std::optional<std::uint64_t> usbip_after;
+  std::optional<std::uint64_t> usbip_period;
+  std::optional<std::uint64_t> usbip_probe_timeout;
   std::uint64_t instructions = 1000000;
   bool inspect = false;
   std::optional<blofeld::PinDrive> port_e_input;
@@ -75,6 +81,17 @@ std::uint64_t positive(const std::string_view value, const std::uint64_t maximum
   return result;
 }
 
+std::uint64_t
+usb_number(const std::string_view value, const std::uint64_t maximum, const bool allow_zero) {
+  std::uint64_t result = 0;
+  const auto converted = std::from_chars(value.data(), value.data() + value.size(), result);
+  if (converted.ec != std::errc{} || converted.ptr != value.data() + value.size() ||
+      (!allow_zero && result == 0) || result > maximum) {
+    throw blofeld::Fault("Invalid USB/IP port/reference tick value");
+  }
+  return result;
+}
+
 void validate_options(const Options &config) {
   if (config.firmware.empty()) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
@@ -82,6 +99,8 @@ void validate_options(const Options &config) {
                          "[--flash-in state.bfnvm] [--flash-out state.bfnvm] "
                          "[--reference-board scenario.bfboard --dsp-rom packed24.bin] "
                          "[--midi-file bytes.bin | --midi-device /dev/snd/midiCxDy] "
+                         "[--usbip-port PORT --usbip-after TICKS --usbip-period TICKS "
+                         "--usbip-probe-timeout TICKS] "
                          "[--audio-out capture.wav --audio-rate HZ --audio-max-frames N]");
   }
   if (config.inspect && (!config.flash_in.empty() || !config.flash_out.empty())) {
@@ -105,6 +124,41 @@ void validate_options(const Options &config) {
     throw blofeld::Fault("Audio output requires a reference board, --audio-out, --audio-rate and "
                          "--audio-max-frames together");
   }
+  const bool usb =
+      config.usbip_port || config.usbip_after || config.usbip_period || config.usbip_probe_timeout;
+  if (usb && (!config.usbip_port || !config.usbip_after || !config.usbip_period ||
+              !config.usbip_probe_timeout || config.reference_board.empty() || config.inspect)) {
+    throw blofeld::Fault("USB/IP requires a reference board, --usbip-port, --usbip-after, "
+                         "--usbip-period and --usbip-probe-timeout together");
+  }
+}
+
+struct OptionValue {
+  std::string_view name;
+  std::string_view value;
+};
+
+bool numeric_option(Options &result, const OptionValue &input) {
+  if (input.name == "--usbip-port") {
+    result.usbip_port = static_cast<std::uint16_t>(
+        usb_number(input.value, std::numeric_limits<std::uint16_t>::max(), true));
+  } else if (input.name == "--usbip-after") {
+    result.usbip_after = usb_number(input.value, std::numeric_limits<std::uint64_t>::max(), true);
+  } else if (input.name == "--usbip-period") {
+    result.usbip_period = usb_number(input.value, std::numeric_limits<std::uint64_t>::max(), false);
+  } else if (input.name == "--usbip-probe-timeout") {
+    result.usbip_probe_timeout =
+        usb_number(input.value, std::numeric_limits<std::uint64_t>::max(), false);
+  } else if (input.name == "--audio-rate") {
+    result.audio_rate = static_cast<std::uint32_t>(
+        positive(input.value, std::numeric_limits<std::uint32_t>::max()));
+  } else if (input.name == "--audio-max-frames") {
+    result.audio_max_frames =
+        static_cast<std::size_t>(positive(input.value, blofeld::PcmRecording::maximum_capacity));
+  } else {
+    return false;
+  }
+  return true;
 }
 
 Options options(const int count, char **values) {
@@ -117,6 +171,7 @@ Options options(const int count, char **values) {
     }
     if (index + 1 >= count) { throw blofeld::Fault("Missing value for " + std::string(argument)); }
     const std::string_view value(values[++index]);
+    if (numeric_option(result, {.name = argument, .value = value})) { continue; }
     if (argument == "--firmware") {
       result.firmware = value;
     } else if (argument == "--sla") {
@@ -137,12 +192,6 @@ Options options(const int count, char **values) {
       result.midi_file = value;
     } else if (argument == "--midi-device") {
       result.midi_device = value;
-    } else if (argument == "--audio-rate") {
-      result.audio_rate =
-          static_cast<std::uint32_t>(positive(value, std::numeric_limits<std::uint32_t>::max()));
-    } else if (argument == "--audio-max-frames") {
-      result.audio_max_frames =
-          static_cast<std::size_t>(positive(value, blofeld::PcmRecording::maximum_capacity));
     } else if (argument == "--port-e-input") {
       result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
@@ -318,6 +367,9 @@ void validate_board_options(const Options &config,
     throw blofeld::Fault("Host MIDI requires midi-sci or midi-dsp-tio and rejects automatic "
                          "checkpoint replay");
   }
+  if (config.usbip_port && (!board || board->checkpoint)) {
+    throw blofeld::Fault("Host USB/IP rejects automatic checkpoint replay");
+  }
 }
 
 std::optional<blofeld::reference::AudioOutput> audio_output(const Options &config) {
@@ -331,13 +383,41 @@ int run_reference(const Options &config,
                   const blofeld::reference::Config &board,
                   const blofeld::reference::Execution &execution) {
   blofeld::reference::Board machine(board, execution);
-  if (config.midi_file.empty() && config.midi_device.empty()) { return machine.run(); }
-  const bool raw = config.midi_file.empty();
-  blofeld::reference::HostMidiPump input(raw ? config.midi_device : config.midi_file,
-                                         raw ? blofeld::MidiInputKind::linux_rawmidi
-                                             : blofeld::MidiInputKind::bytes,
-                                         board.dsp.clock.timebase_hz);
-  return machine.run([&input](auto &target) { input(target); });
+  std::unique_ptr<blofeld::reference::HostMidiPump> input;
+  std::unique_ptr<blofeld::UsbipRuntime> usb;
+  if (!config.midi_file.empty() || !config.midi_device.empty()) {
+    const bool raw = config.midi_file.empty();
+    input = std::make_unique<blofeld::reference::HostMidiPump>(
+        raw ? config.midi_device : config.midi_file,
+        raw ? blofeld::MidiInputKind::linux_rawmidi : blofeld::MidiInputKind::bytes,
+        board.dsp.clock.timebase_hz);
+  }
+  if (config.usbip_port && config.usbip_after && config.usbip_period &&
+      config.usbip_probe_timeout) {
+    const blofeld::UsbipRuntimeOptions usb_options{
+        .tcp = {.port = *config.usbip_port},
+        .location = {.path = "/blofeld-emu/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
+        .after_ticks = *config.usbip_after,
+        .period_ticks = *config.usbip_period,
+        .probe_timeout_ticks = *config.usbip_probe_timeout};
+    usb = std::make_unique<blofeld::UsbipRuntime>(usb_options);
+    std::cout << "USBIP listening=127.0.0.1:" << usb->port()
+              << " busid=1-1 after=" << usb_options.after_ticks
+              << " period=" << usb_options.period_ticks
+              << " probe-timeout=" << usb_options.probe_timeout_ticks << '\n'
+              << std::flush;
+  }
+  if (!input && !usb) { return machine.run(); }
+  const auto result = machine.run([&](auto &target) {
+    if (input) { (*input)(target); }
+    if (usb) { target.poll_usb(*usb); }
+  });
+  if (usb) {
+    const auto published = usb->published();
+    usb->retire();
+    std::cout << "USBIP started=" << usb->started() << " published=" << published << " closed=1\n";
+  }
+  return result;
 }
 
 int run(const Options &config) {

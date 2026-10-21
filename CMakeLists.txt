@@ -113,7 +113,7 @@ add_library(blofeld_usbip src/usbip_decode.cpp src/usbip_encode.cpp
   src/usbip_management.cpp src/usbip_export.cpp src/usbip_session.cpp src/usbip_session_output.cpp)
 target_include_directories(blofeld_usbip PUBLIC include)
 target_link_libraries(blofeld_usbip PUBLIC blofeld_usb_host)
-add_library(blofeld_usbip_tcp src/usbip_tcp.cpp src/usbip_tcp_io.cpp)
+add_library(blofeld_usbip_tcp src/usbip_tcp.cpp src/usbip_tcp_io.cpp src/usbip_runtime.cpp)
 target_include_directories(blofeld_usbip_tcp PUBLIC include)
 target_link_libraries(blofeld_usbip_tcp PUBLIC blofeld_usbip)
 add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
@@ -172,9 +172,18 @@ add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
   src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
   src/reference_midi.cpp src/reference_dsp_midi.cpp src/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport
-  blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library)
+  blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library blofeld_usbip_tcp)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-usbip-runtime-test test/usbip_runtime_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_include_directories(blofeld-usbip-runtime-test PRIVATE src)
+  target_link_libraries(blofeld-usbip-runtime-test PRIVATE blofeld_usbip_tcp blofeld_core)
+  add_test(NAME usbip_runtime COMMAND blofeld-usbip-runtime-test)
+  add_test(NAME reference_usb_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_usb_cli.py"
+    $<TARGET_FILE:blofeld-headless> "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-usb")
+  set_tests_properties(reference_usb_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-usbip-tcp-native-test test/usbip_tcp_native_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_include_directories(blofeld-usbip-tcp-native-test PRIVATE src)
   target_link_libraries(blofeld-usbip-tcp-native-test PRIVATE blofeld_usbip_tcp blofeld_core)
@@ -269,7 +278,7 @@ if(BUILD_TESTING)
   target_include_directories(blofeld-reference-checkpoint-test PRIVATE src)
   target_link_libraries(blofeld-reference-checkpoint-test PRIVATE
     blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport blofeld_mcu_midi
-    blofeld_midi_timed)
+    blofeld_midi_timed blofeld_usbip_tcp)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}

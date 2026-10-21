@@ -5,6 +5,7 @@
 #include "mcu_usb_registers.hpp"
 
 #include <cstdint>
+#include <limits>
 #include <string_view>
 
 namespace blofeld {
@@ -24,7 +25,17 @@ constexpr unsigned alternate_settings = 9;
 }
 
 void McuUsb::reset() {
+  const UsbHostEvidence next{.link = next_host_revision(host_evidence_.link),
+                             .descriptions = next_host_revision(host_evidence_.descriptions)};
   *this = McuUsb{};
+  host_evidence_ = next;
+}
+
+std::uint64_t McuUsb::next_host_revision(const std::uint64_t revision) {
+  if (revision == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("USB host evidence revision exhausted");
+  }
+  return revision + 1;
 }
 
 std::string_view McuUsb::register_name(const std::uint16_t offset) {
@@ -119,7 +130,10 @@ void McuUsb::write_memory(const MemoryWrite access) {
       throw Fault("Reserved USB configuration/interface count");
     }
   }
-  configuration_.at(index) = value;
+  if (configuration_.at(index) != value) {
+    host_evidence_.descriptions = next_host_revision(host_evidence_.descriptions);
+    configuration_.at(index) = value;
+  }
   staged_high_.reset();
 }
 

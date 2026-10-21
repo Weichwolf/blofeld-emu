@@ -52,7 +52,8 @@ and stops the listener; it is never turned into a fake transfer success/STALL.
 Withdrawal also closes live connections without changing guest peripheral state.
 Socket/session state is noncopyable and excluded from board replay/checkpoints.
 
-These components do not yet have runtime CLI/common-clock board binding or a
+Explicit runtime CLI/common-clock board binding has own native/actual-process
+tests and capture/session invalidation guards (usb-runtime.txt). There is no
 kernel USB attachment. Normal original enumeration, USB-MIDI class binding,
 Wine Spectre transfer, keyboard/PipeWire routing and full boot/MIDI/audio remain
 open. Original USTB/NISOF/automatic configuration status frontiers remain strict.

@@ -264,14 +264,14 @@ USB device/transport              partial  PHY control and register/data-side en
                                           IQUE, module/PHY reset, remote resume
                                           and host ports pending.
 Host-visible USB-MIDI device      missing  Required as an actual USB device, not
-                                          solely a virtual ALSA endpoint. No host
-                                          backend, complete original enumeration,
+                                          solely a virtual ALSA endpoint. No
+                                          kernel attachment, complete original enumeration,
                                           bidirectional USB-MIDI or Spectre/Wine
                                           sample-transfer qualification exists.
                                           MCU-backed control/bulk host queue and
                                           USB/IP transfer framing have own native
                                           IRQ/ACK/status and fixed protocol tests
-                                          (usb-host-transfers.txt); no listener or
+                                          (usb-host-transfers.txt); no kernel
                                           host attachment claim.
                                           MCU descriptor capture and USB/IP
                                           DEVLIST/IMPORT framing also have own
@@ -279,8 +279,11 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           Current configuration/alternates come
                                           from read-only controller state.
                                           Session/loopback TCP has own wire/CPU
-                                          tests (usbip-session.txt), with runtime
-                                          binding and kernel attachment pending.
+                                          tests (usbip-session.txt). Explicit
+                                          reference CLI/common-clock binding has
+                                          own guest/TCP tests (usb-runtime.txt),
+                                          with capture lifetime/restore guards.
+                                          Kernel attachment remains pending.
                                           Fixed-port restarts retain exclusive
                                           active binding across real TCP close;
                                           listener/client descriptors are checked.

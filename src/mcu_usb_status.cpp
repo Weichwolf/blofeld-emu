@@ -18,6 +18,7 @@ void McuUsb::require_control_phase() const {
 }
 
 void McuUsb::set_control(const std::uint16_t value) {
+  if (module_control_ != value) { host_evidence_.link = next_host_revision(host_evidence_.link); }
   module_control_ = value;
 }
 
@@ -47,6 +48,11 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
       throw Fault("Unimplemented USB status observation while module/link clocks are inactive");
     }
     require_observation();
+  }
+  if (!decoder_known_ || decoder_ != state) {
+    host_evidence_.link = next_host_revision(host_evidence_.link);
+  }
+  if (enabled()) {
     if (decoder_.reset != state.reset) { status_ |= usb::reset_change; }
     if (decoder_.suspended != state.suspended) { status_ |= usb::suspend_change; }
     if (state.reset && !decoder_.reset) {

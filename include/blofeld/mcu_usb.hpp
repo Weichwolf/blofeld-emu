@@ -21,6 +21,7 @@ struct UsbDecoderState {
   bool suspended = false;
   bool enumerated = false;
   bool full_speed = true;
+  bool operator==(const UsbDecoderState &) const = default;
 };
 
 struct UsbOutPacket {
@@ -47,6 +48,14 @@ struct UsbConfigurationInfo {
   std::uint8_t configuration = 0;
   unsigned interfaces = 0;
   std::array<std::uint8_t, 4> alternatives{};
+  bool operator==(const UsbConfigurationInfo &) const = default;
+};
+
+// Host capture lifetime metadata, not guest-visible hardware registers.
+struct UsbHostEvidence {
+  std::uint64_t link = 0;
+  std::uint64_t descriptions = 0;
+  bool operator==(const UsbHostEvidence &) const = default;
 };
 
 struct UsbEndpointInfo {
@@ -64,7 +73,7 @@ class McuUsb {
 public:
   void reset();
   // EPRST resets only its documented register domain; DATA PID state is unqualified.
-  void reset_endpoints() noexcept;
+  void reset_endpoints();
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] static bool configuration_data(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
@@ -80,9 +89,14 @@ public:
   void finish_in(bool acknowledged);
   [[nodiscard]] UsbEndpointInfo host_endpoint(std::uint8_t address) const;
   [[nodiscard]] UsbConfigurationInfo host_configuration() const;
+
+  [[nodiscard]] UsbHostEvidence host_evidence() const { return host_evidence_; }
+
   [[nodiscard]] std::uint8_t interrupt_sources() const;
 
 private:
+  [[nodiscard]] static std::uint64_t next_host_revision(std::uint64_t revision);
+
   struct Buffer {
     std::array<std::uint8_t, 64> bytes{};
     std::bitset<64> known;
@@ -117,6 +131,7 @@ private:
   decode_configuration_setup(const std::array<std::uint8_t, 8> &data) const;
   UsbResponse stall_response(unsigned index);
   std::array<std::uint32_t, 7> configuration_{};
+  UsbHostEvidence host_evidence_;
   std::uint8_t selector_ = 0;
   std::uint8_t buffers_ = 0;
   std::optional<std::uint16_t> staged_high_;

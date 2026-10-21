@@ -6,9 +6,14 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/usbip_runtime.hpp"
+#include "blofeld/usbip_tcp.hpp"
 #include "reference_board.hpp"
 
+#include <cstdint>
 #include <functional>
+#include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -126,6 +131,9 @@ void Board::restore(const Checkpoint &checkpoint) {
   if (!checkpoint.storage_ || checkpoint.storage_->identity != identity_) {
     throw Fault("Reference-board checkpoint belongs to another owner");
   }
+  if (usb_restore_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("Reference-board USB restore revision exhausted");
+  }
   const Busy guard(*this);
   const auto &saved = *checkpoint.storage_;
   auto replacement = std::make_unique<Owners>(config_, execution_);
@@ -143,6 +151,46 @@ void Board::restore(const Checkpoint &checkpoint) {
   static_assert(std::is_nothrow_copy_assignable_v<Control>);
   native_.swap(replacement);
   control_ = saved.control;
+  ++usb_restore_revision_;
+}
+
+void Board::poll_usb(UsbipRuntime &runtime) {
+  require_healthy();
+  if (!control_.started || finished()) {
+    throw Fault("USB/IP input requires an active reference-board execution budget");
+  }
+  const Busy guard(*this);
+  const auto cpu = native_->mcu.cpu().state();
+  const auto before_started = runtime.started();
+  const auto before_published = runtime.published();
+  try {
+    const auto events = runtime.poll(
+        native_->mcu.bus(),
+        {.pc = cpu.pc, .ccr = cpu.ccr},
+        {.owner = identity_, .restore_revision = usb_restore_revision_, .ticks = ticks()});
+    if (execution_.trace != nullptr) {
+      if (!before_started && runtime.started()) {
+        *execution_.trace << "USBIP-START actual=" << ticks() << '\n';
+      }
+      if (!before_published && runtime.published()) {
+        *execution_.trace << "USBIP-PUBLISH actual=" << ticks() << '\n';
+      }
+      for (const auto &event : events) {
+        *execution_.trace << "USBIP-PEER actual=" << ticks() << " connection=" << event.connection
+                          << " error=" << event.error << " reason=" << event.reason << '\n';
+      }
+    }
+    if (!before_published && runtime.published()) {
+      std::cout << "USBIP descriptors=ready tick=" << ticks() << '\n' << std::flush;
+    }
+    for (const auto &event : events) {
+      if (event.error) { std::cerr << "USB/IP peer: " << event.reason << '\n'; }
+    }
+  } catch (...) {
+    control_.faulted = true;
+    runtime.retire();
+    throw;
+  }
 }
 
 Status Board::status() const {

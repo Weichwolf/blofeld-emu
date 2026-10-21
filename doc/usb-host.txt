@@ -15,7 +15,8 @@ The MCU-backed transfer queue and USB/IP transfer-stage framing are implemented
 and tested with own native IRQ/descriptor fixtures (usb-host-transfers.txt).
 MCU-backed descriptor capture and USB/IP discovery/import framing are implemented
 separately (usb-discovery.txt). A bounded nonblocking loopback listener/session
-exists (usbip-session.txt); runtime binding and host USB attachment remain absent.
+exists (usbip-session.txt). Explicit reference-board/CLI binding has own runtime
+tests (usb-runtime.txt); kernel attachment and actual USB-MIDI remain absent.
 Actual SET_CONFIGURATION/SET_INTERFACE SETUP decoding and pending-status NAK are
 modeled; the former executes the original configuration ISR and replays through
 RTI/WAI. Automatic status completion after DONEECRU is still an explicit failure
@@ -54,7 +55,8 @@ the importing host runs the device's normal driver. Raw Gadget exposes requests
 to userspace but is documented as a debugging interface, not a production
 backend. Reset/address/configuration semantics must be qualified before selecting
 and exposing a usable Blofeld backend. USB/IP components exist; the board/runtime and host-controller integration is
-not qualified yet.
+not qualified as a usable original-firmware USB device yet. Reference runtime
+admission/lifetime is documented in usb-runtime.txt.
 The controller's ENUMD flag means completed PHY chirp/speed negotiation; it does
 not establish successful host descriptor/address/configuration enumeration.
 

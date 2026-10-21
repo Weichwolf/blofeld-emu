@@ -31,6 +31,10 @@
 #include <string_view>
 #include <vector>
 
+namespace blofeld {
+class UsbipRuntime;
+}
+
 namespace blofeld::reference {
 enum class PadOrder : std::uint8_t { reject, clock_before_select, select_before_clock };
 enum class InputKind : std::uint8_t { drive, phy_window, usb_decoder, timer_inputs };
@@ -230,6 +234,8 @@ public:
   [[nodiscard]] Status status() const;
   [[nodiscard]] MidiInputWindow midi_window() const;
   void enqueue_midi(std::span<const std::uint8_t> bytes);
+  // Non-real-time input admission at an inactive native MCU operation boundary.
+  void poll_usb(UsbipRuntime &runtime);
   [[nodiscard]] Checkpoint checkpoint() const;
   // Strong exception guarantee; restores native owners and all wiring together.
   void restore(const Checkpoint &checkpoint);
@@ -339,6 +345,8 @@ private:
   std::shared_ptr<const Identity> identity_;
   std::unique_ptr<Owners> native_;
   Control control_;
+  // External transport epochs must not rewind with a modeled-state restore.
+  std::uint64_t usb_restore_revision_ = 0;
   bool active_ = false;
 };
 }

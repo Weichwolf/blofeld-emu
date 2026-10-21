@@ -77,6 +77,9 @@ public:
   void finish_usb_in(bool acknowledged);
   [[nodiscard]] UsbEndpointInfo usb_host_endpoint(std::uint8_t address) const;
   [[nodiscard]] UsbConfigurationInfo usb_host_configuration() const;
+
+  [[nodiscard]] UsbHostEvidence usb_host_evidence() const { return usb_.host_evidence(); }
+
   void advance_oscillator(unsigned cycles);
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   void advance_sci(unsigned bus_cycles);

@@ -11,6 +11,7 @@
 #include "blofeld/mcu_midi.hpp"
 #include "blofeld/mcu_run_clock.hpp"
 #include "blofeld/midi_serial.hpp"
+#include "blofeld/usbip_runtime.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "reference_board.hpp"
 
@@ -515,6 +516,30 @@ void test_dsp_midi_idle_deadline_and_joint_restore(const std::filesystem::path &
   }
 }
 
+void test_usb_transport_epoch_does_not_rewind(const std::filesystem::path &specification) {
+  Fixture f(specification, false, std::numeric_limits<std::uint64_t>::max());
+  const blofeld::UsbipRuntimeOptions options{
+      .tcp = {},
+      .location = {.path = "/own/usb/1-1", .busid = "1-1", .bus = 1, .device = 1},
+      .after_ticks = std::numeric_limits<std::uint64_t>::max(),
+      .period_ticks = 1,
+      .probe_timeout_ticks = 100};
+  blofeld::UsbipRuntime external(options);
+  f.board.initialize();
+  f.board.poll_usb(external);
+  const auto saved = f.board.checkpoint();
+  f.board.advance();
+  f.board.restore(saved);
+  require(
+      rejects([&] { f.board.poll_usb(external); }).contains("board owner/restore/time changed") &&
+          external.faulted() && f.board.status().faulted,
+      "Actual coordinated restore retires its live host session before another USB event");
+  f.board.restore(saved);
+  blofeld::UsbipRuntime fresh(options);
+  f.board.poll_usb(fresh);
+  require(!fresh.started() && !fresh.faulted() && !f.board.status().faulted,
+          "A new adapter can wait before its declared admission after a trusted board restore");
+}
 }
 
 int main(const int argc, char **argv) {
@@ -536,6 +561,7 @@ int main(const int argc, char **argv) {
     test_midi_rate_failure(specification);
     test_midi_trace_failure(specification);
     test_dsp_midi_idle_deadline_and_joint_restore(specification);
+    test_usb_transport_epoch_does_not_rewind(specification);
     std::cout
         << "Joint reference-board checkpoints, atomic restore, real REP/RAM and guards passed.\n";
     return 0;
