@@ -51,6 +51,13 @@ struct ReplayPlan {
   unsigned replays = 0;
 };
 
+struct DspInput {
+  std::uint64_t ticks = 0;
+  unsigned index = 0;
+  std::optional<bool> level = std::nullopt;
+  bool synchronized = false;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunContract dsp;
@@ -68,6 +75,10 @@ struct Config {
   std::optional<ReplayPlan> checkpoint;
   std::vector<Input> initial;
   std::vector<Input> events;
+  DspExternalOrder dsp_input_order = DspExternalOrder::unqualified;
+  unsigned maximum_dsp_inputs_per_advance = 0;
+  std::vector<DspInput> dsp_initial;
+  std::vector<DspInput> dsp_events;
 };
 
 void validate_returns(const Config &config);
@@ -119,6 +130,7 @@ struct Status {
   std::uint64_t ties = 0;
   std::uint64_t ordered_pairs = 0;
   std::size_t next_event = 0;
+  std::size_t next_dsp_event = 0;
   bool started = false;
   bool waiting = false;
   bool held_reset = true;
@@ -171,6 +183,7 @@ private:
     std::uint64_t frames = 0;
     std::uint64_t ordered_pairs = 0;
     std::size_t next_event = 0;
+    std::size_t next_dsp_event = 0;
     bool started = false;
     bool faulted = false;
   };
@@ -199,6 +212,8 @@ private:
                      std::optional<ShiOutput> &previous,
                      std::string_view name);
   void apply(const Input &input);
+  void apply_dsp(const DspInput &input);
+  [[nodiscard]] DspExternalEvents dsp_inputs();
   void boundary();
   void step();
   void release();

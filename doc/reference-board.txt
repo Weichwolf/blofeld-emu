@@ -112,6 +112,48 @@ and actual times. No external input or ready/HREQ routing is inferred from PCs.
   bit3 full-speed. Raw USB wire decoding is not supplied by this experiment.
 - timer-inputs: mask sampled by the native MCU owner, including during WAI.
 
+Optional DSP interrupt timing and exact common-time TIO inputs:
+dsp-interrupts native-vector-estimates prepare-boundary
+dsp-input-order input-before-dsp 4
+dsp-initial tio 0 high synchronized
+dsp-at 1200 tio 0 low synchronized
+
+dsp-interrupts explicitly selects nominal native vector costs and either
+prepare-boundary admission or reject-changes. Its position relative to clock
+does not change the contract. Without this setting, interrupt timing remains
+unqualified and prepared-plan changes still reject. Recognition, pipeline and
+physical interrupt latency are not inferred (dsp-irq-admission.txt).
+
+dsp-initial applies after both native resets and before DSP release. TIO indices
+are 0 or 1. Levels are high, low or unknown. raw sets only the observed pad level;
+synchronized additionally supplies an explicit synchronized observation. Unknown
+levels require raw and remain unknown until a later observation. They do not
+invent a pull or a synchronized sample; a required native read/capture fails.
+
+dsp-at uses exact common ticks through the existing DSP external-event scheduler,
+including within an MCU bus period or a pending DSP instruction. Its timestamps
+must increase strictly; simultaneous DSP input batches are not qualified.
+These events require dsp-input-order: input-before-dsp, dsp-before-input or
+reject, followed by a positive event budget per DSP scheduler advance. This is
+separate from ordering against a native MCU shared write. A shared cycle can
+make separate exclusive/inclusive advances with their own event budgets.
+
+The first timed input cannot precede requested or actual DSP release. A release
+delayed to a completed MCU boundary must reject an already-past DSP input instead
+of backdating or dropping it. Use dsp-initial for a level held before release.
+All configured sources remain bound after exhaustion. MCU shared-write and
+committed WAI paths forward the same source; cancelled WAI offers dispatch none.
+Existing MCU at inputs retain their operation-boundary timing and file ordering.
+
+DSP-INPUT trace rows record exact requested/observed ticks, index, raw level,
+synchronization choice and both PCs. DSP-INPUTS reports the observed input prefix,
+which can survive a later schedule/native fault; it is not completed CPU work.
+Native capture sees the last completed DSP clock prefix, not subdivided physical
+CLK/2 phases. The checkpoint also retains this separate input cursor, actual
+pad/synchronization state and pending event deadlines. Identical future and
+exhausted sources replay; native unknown-input failures still require joint
+restoration. No host MIDI port or calibrated physical input is supplied here.
+
 Blank lines and # comments are allowed. Unknown/duplicate settings, extra tokens,
 invalid/overflowing numbers, unsorted events, NUL bytes and configuration files
 larger than 65536 bytes reject. Inputs must be bounded regular files. Config/ROM
@@ -148,6 +190,17 @@ visible native/reference execution fault. Final diagnostics include both PCs,
 completed clocks/steps, MCU idle periods, SPI writes/frames and ordering counts.
 A trace's DSP row is an attempted step observation; a failing step is not added
 to completed counters. Partial fault effects are retained, never silently fixed.
+
+  cmake --build --preset strict --target blofeld-headless blofeld-reference-rom-fixture
+  ctest --test-dir build/strict -R '^reference_dsp_inputs_cli$' --output-on-failure
+
+The own native capture/vector/SHI diagnostic changes a real MCU GPIO read.
+Independent manual costs check output ticks, including HCS12 STAA's PwO write
+slot before instruction completion. Both input/completion and MCU-write/input
+orders, default rejection, WAI, budgets, late release, invalid configurations,
+future/exhausted cursor snapshots and repeated native unknown-input faults are
+checked. It does not replace the original-firmware regressions or establish
+whole original boot, physical clocks, device profiles, MIDI ports or audio.
 
 Coverage: test_reference_cli.py runs the actual CLI with own native MCU/DSP code,
 independent clock/step expectations, WAI/RTI, quantized inputs, shared-write/pad

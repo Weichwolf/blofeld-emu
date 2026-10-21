@@ -112,7 +112,8 @@ void Board::on_write(const BusEvent &event) {
         }
       },
       [this](const auto &step) { before_dsp(step); },
-      return_observer());
+      return_observer(),
+      dsp_inputs());
   update_wiring();
 }
 }

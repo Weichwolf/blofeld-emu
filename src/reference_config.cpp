@@ -125,10 +125,10 @@ void clocks(Config &config, std::istringstream &line) {
                           .initial_oscillator_phase_ticks = phase,
                           .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
                 .memory_timing = McuRunMemory::internal_flash_reads};
-  config.dsp = {.clock = {.extal_hz = extal,
-                          .timebase_hz = timebase,
-                          .switch_timing = DspClockSwitch::reference_instruction_boundary},
-                .timing = DspRunTiming::native_internal_estimates};
+  config.dsp.clock = {.extal_hz = extal,
+                      .timebase_hz = timebase,
+                      .switch_timing = DspClockSwitch::reference_instruction_boundary};
+  config.dsp.timing = DspRunTiming::native_internal_estimates;
   const McuRunClock mcu(config.mcu.clock);
   const DspRunClock dsp(config.dsp.clock);
   if (dsp.timebase_hz() < mcu.timebase_hz() || timebase % mcu.timebase_hz() != 0) {
@@ -184,11 +184,66 @@ ReturnRoute return_route(std::istringstream &line) {
   return result;
 }
 
+DspInput dsp_input(std::istringstream &line) {
+  literal(line, "tio");
+  DspInput result{.index = static_cast<unsigned>(number(line, 1))};
+  const auto level = token(line);
+  if (level == "high" || level == "low") {
+    result.level = level == "high";
+  } else if (level != "unknown") {
+    throw Fault("DSP TIO level must be high, low or unknown");
+  }
+  const auto observation = token(line);
+  if (observation != "raw" && observation != "synchronized") {
+    throw Fault("DSP TIO observation must be raw or synchronized");
+  }
+  result.synchronized = observation == "synchronized";
+  if (result.synchronized && !result.level.has_value()) {
+    throw Fault("An unknown DSP TIO level cannot be synchronized");
+  }
+  return result;
+}
+
+void dsp_interrupts(Config &config, std::istringstream &line) {
+  literal(line, "native-vector-estimates");
+  config.dsp.interrupts = DspInterruptTiming::native_vector_estimates;
+  const auto admission = token(line);
+  if (admission == "prepare-boundary") {
+    config.schedule.dsp.irq_admission = DspIrqAdmission::reference_prepare_boundary;
+  } else if (admission == "reject-changes") {
+    config.schedule.dsp.irq_admission = DspIrqAdmission::reject_changes;
+  } else {
+    throw Fault("Unknown reference-board DSP interrupt admission");
+  }
+}
+
+void dsp_order(Config &config, std::istringstream &line) {
+  const auto order = token(line);
+  if (order == "dsp-before-input") {
+    config.dsp_input_order = DspExternalOrder::dsp_before_external;
+  } else if (order == "input-before-dsp") {
+    config.dsp_input_order = DspExternalOrder::external_before_dsp;
+  } else if (order == "reject") {
+    config.dsp_input_order = DspExternalOrder::reject_tie;
+  } else {
+    throw Fault("Unknown reference-board DSP input order");
+  }
+  config.maximum_dsp_inputs_per_advance =
+      static_cast<unsigned>(number(line, std::numeric_limits<unsigned>::max()));
+  if (config.maximum_dsp_inputs_per_advance == 0) {
+    throw Fault("Reference-board DSP input budget must be positive");
+  }
+}
+
 void setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "clock") {
     clocks(config, line);
   } else if (key == "ordering") {
     ordering(config, line);
+  } else if (key == "dsp-interrupts") {
+    dsp_interrupts(config, line);
+  } else if (key == "dsp-input-order") {
+    dsp_order(config, line);
   } else if (key == "spi-b") {
     serial(config, line);
   } else if (key == "dsp-release") {
@@ -239,6 +294,16 @@ struct Parser {
       header = true;
     } else if (key == "initial") {
       result.initial.push_back(input(line));
+    } else if (key == "dsp-initial") {
+      result.dsp_initial.push_back(dsp_input(line));
+    } else if (key == "dsp-at") {
+      const auto when = number(line, UINT64_MAX);
+      auto event = dsp_input(line);
+      event.ticks = when;
+      if (!result.dsp_events.empty() && when <= result.dsp_events.back().ticks) {
+        throw Fault("DSP input event timestamps must increase strictly");
+      }
+      result.dsp_events.push_back(event);
     } else if (key == "at") {
       const auto when = number(line, UINT64_MAX);
       auto event = input(line);
@@ -262,6 +327,14 @@ struct Parser {
     for (const auto *required : {"clock", "ordering", "spi-b", "dsp-release", "operations"}) {
       if (std::ranges::find(settings, required) == settings.end()) {
         throw Fault("Missing reference-board setting: " + std::string(required));
+      }
+    }
+    if (!result.dsp_events.empty()) {
+      if (result.dsp_input_order == DspExternalOrder::unqualified) {
+        throw Fault("Timed DSP inputs require an explicit dsp-input-order");
+      }
+      if (result.dsp_events.front().ticks < result.release_ticks) {
+        throw Fault("Timed DSP inputs precede the requested DSP release");
       }
     }
   }

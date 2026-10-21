@@ -38,13 +38,15 @@ Board::Board(const Config &config, const Execution &execution)
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
   control_.scale = common / local;
   if (config.release_ticks < ticks() ||
-      (!config.events.empty() && config.events.front().ticks < ticks())) {
+      (!config.events.empty() && config.events.front().ticks < ticks()) ||
+      (!config.dsp_events.empty() && config.dsp_events.front().ticks < ticks())) {
     throw Fault("Reference-board release/events precede the completed native MCU reset");
   }
   native_->dsp.bus().install_rom({.start = bootstrap_base, .words = execution.rom});
   native_->dsp.bus().pll().observe_pinit(config.pinit);
   native_->dsp.cpu().reset_spi_boot();
   for (const auto &entry : config.initial) { apply(entry); }
+  for (const auto &entry : config.dsp_initial) { apply_dsp(entry); }
   update_wiring();
   attach(*native_);
 }
@@ -55,7 +57,7 @@ void Board::attach(Owners &owners) {
     check_signals();
     if (native_->schedule) {
       native_->schedule->begin_wait_period(
-          period, [this](const auto &step) { before_dsp(step); }, return_observer());
+          period, [this](const auto &step) { before_dsp(step); }, return_observer(), dsp_inputs());
       update_wiring();
     }
   });
@@ -89,6 +91,10 @@ void Board::apply(const Input &input) {
 }
 
 void Board::release() {
+  if (control_.next_dsp_event < config_.dsp_events.size() &&
+      config_.dsp_events[control_.next_dsp_event].ticks < ticks()) {
+    throw Fault("Timed DSP input precedes the actual DSP release boundary");
+  }
   control_.previous = sample();
   if (control_.previous.selected) {
     throw Fault("Reference-board DSP release requires deasserted SPI SS");
@@ -134,7 +140,11 @@ void Board::on_cycle(const Hc12BusCycle cycle) {
   const bool shared =
       write && cycle.address && *cycle.address <= port_b && port_b - *cycle.address < cycle.size;
   native_->schedule->begin_cycle(
-      cycle, shared, [this](const auto &step) { before_dsp(step); }, return_observer());
+      cycle,
+      shared,
+      [this](const auto &step) { before_dsp(step); },
+      return_observer(),
+      dsp_inputs());
   update_wiring();
 }
 
@@ -168,6 +178,10 @@ void Board::report(std::ostream &stream) const {
          << " spi-writes=" << control_.writes << " frames=" << control_.frames
          << " ordered-pairs=" << control_.ordered_pairs
          << " ties=" << (native_->schedule ? native_->schedule->ties() : 0) << '\n';
+  if (!config_.dsp_events.empty()) {
+    stream << "DSP-INPUTS observed=" << control_.next_dsp_event
+           << " configured=" << config_.dsp_events.size() << '\n';
+  }
 }
 
 void Board::persist() const {

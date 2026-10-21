@@ -41,7 +41,32 @@ void echo_loop(blofeld::test::DspProgram &result) {
   result.word(loop);
 }
 
+blofeld::test::DspProgram capture_program() {
+  constexpr unsigned status = 0xc00000;
+  constexpr unsigned vector_offset = 0x54;
+  constexpr unsigned absolute_jump = 0x0af080;
+  blofeld::test::DspProgram result;
+  result.immediate("vba", blofeld::test::boot);
+  result.immediate("sr", status);
+  result.emit("movep #>0,x:<<$ffff90");
+  result.emit("movep #>$200,x:<<$fffffe");
+  result.emit("movep #>0,x:<<$ffff8e");
+  result.emit("movep #>1,x:<<$ffff8d");
+  result.emit("movep #>$165,x:<<$ffff8f");
+  const auto loop = result.pc();
+  result.emit("nop");
+  result.word(absolute_jump);
+  result.word(loop);
+  while (result.pc() < blofeld::test::boot + vector_offset) { result.emit("nop"); }
+  blofeld::test::require(result.pc() == blofeld::test::boot + vector_offset,
+                         "Own capture vector has its declared VBA-relative address");
+  // Actual two-word fast vector enables a real SHI request output.
+  result.emit("movep #>$89,x:<<$ffff91");
+  return result;
+}
+
 blofeld::test::DspProgram program(const std::string_view mode) {
+  if (mode == "capture-irq") { return capture_program(); }
   if (mode != "transmit" && mode != "unknown-transmit" && mode != "delayed-request" &&
       mode != "short-request" && mode != "echo") {
     throw blofeld::Fault("Unknown own SHI ROM scenario");

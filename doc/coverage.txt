@@ -426,8 +426,14 @@ MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges
                                           Opt-in standalone reference CLI connects
                                           both owners with explicit clock/reset/
                                           pin inputs and bounded native WAI time
-                                          (reference-board.txt). Physical wake
-                                          latency remains pending. Original reset
+                                          (reference-board.txt). Exact DSP TIO
+                                          inputs and optional nominal IRQ
+                                          admission now reach native capture,
+                                          vectors and actual MCU GPIO reads;
+                                          both completion/shared-write orders,
+                                          WAI, budgets and strict input failures
+                                          checked. Physical wake latency remains
+                                          pending. Original reset
                                           through the CLI transfers all 97 SPI
                                           words before the strict Y:002000 fault;
                                           an independent decoder compares the wire
@@ -857,6 +863,11 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           now compose native owners/schedule,
                                           actual release epoch, SPI/return pads
                                           and future input cursor atomically.
+                                          Separate exact-time DSP TIO cursor and
+                                          native capture state now follow joint
+                                          restore, including future/exhausted
+                                          sources and repeated unknown-input
+                                          failures (reference-board.txt).
                                           Independent REP/RAM, held-reset, fault
                                           recovery and failed-preparation guards;
                                           CLI WAI/IRQ/event and original mid-SPI
