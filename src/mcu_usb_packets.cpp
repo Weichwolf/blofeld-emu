@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 namespace blofeld {
 
@@ -28,7 +29,8 @@ unsigned McuUsb::maximum_packet(const unsigned index) const {
   } else {
     constexpr unsigned isochronous_shift = 30;
     if ((description >> isochronous_shift) != 0) {
-      throw Fault("Reserved USB local endpoint NISOF field");
+      throw Fault("Reserved USB local endpoint NISOF field physical-endpoint=" +
+                  std::to_string(index) + " description=" + hex(description, 8));
     }
     const auto type = (description >> 5U) & 3U;
     const auto configuration = (description >> 7U) & usb::nibble_mask;

@@ -52,6 +52,7 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
         buffer.transmitted.reset();
       }
       pending_in_.reset();
+      ique_controls_.fill(0);
       configuration_status_ = 0;
       alternate_.fill(0);
       setup_stall_ = false;

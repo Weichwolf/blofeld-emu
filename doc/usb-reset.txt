@@ -1,0 +1,60 @@
+Original MCU USB reset and endpoint-control initialization
+
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-original-usb-reset-test blofeld-usb-ique-control-test
+  ctest --test-dir build/strict -R '^(original_usb_reset|usb_ique_control)$' --output-on-failure
+
+The original test pins the official local 1.25 ZIP, complete MCU image and
+status/interrupt/initialization/delay spans before execution. Missing firmware
+skips with code 77; changed identities fail. No manufacturer program bytes or
+descriptors are distributed. usb-reset-reference.json records identities and
+primary manuals; traces and results remain ignored build artifacts.
+
+The same unmodified MCU first executes reset and the complete conditional
+untimed application fixture through main WAI (original-application.txt).
+GPIO/PHY/LCD/ready and PM3-low observations remain explicit assumptions; startup
+oscillator periods enter at the fixture's two foreground wait slots. This is
+not an owned-clock, physical USB or whole MCU/DSP boot proof. USB-window
+instruction totals exclude this shared cold start. No host supplies
+RAM, CPU registers, endpoint descriptions or successful peripheral callbacks.
+
+Each decoded USB reset raises the actual FFD4 source and enters the original
+handler through the existing WAI frame. Inputs release reset before the first
+or third real status poll, or retain it through the byte-counter timeout.
+The profiles contain 1/3/256 genuine polls and 0/2/255 original delay calls.
+Every delay calls the actual byte loop with count 100; no time unit is inferred.
+The original initializer executes its complete control/configuration writes,
+including both real STD 0x3800 acknowledgements at UEPCSR4A/5A. Their actual
+readback is 0x1800: TFRC remains clear, TCIE and CTERR are retained, size 0.
+
+The documented unconfigured A-control profile implements both entire words,
+including eleven-bit software size fields, without queue progress. Independent
+literal masks cover all 131072 whole-word writes, all byte values at both byte
+positions, distinct endpoint storage, copies and resets. Configured IQUE access
+and B-register/queue semantics reject with address/operation/native context.
+No IQUE packet or completion/IRQ source is fabricated.
+
+The original MRST attempt while MEN=1 remains subject to the documented write
+gate; no module-reset implementation is substituted. Original RTI restores every
+interrupted CPU register. Foreground instructions then reach actual main WAI
+with an independently checked nine-byte NXP frame. One joint native/LCD snapshot, restored twice,
+after the real UEPCSR4A write, before UEPCSR5A, reproduce complete architectural
+CPU state, all 5120 mapped RAM bytes, declared USB registers/descriptions and the
+actual write prefix. All MCU NVM bytes, knowledge and erase history stay intact.
+Register inspection uses detached board copies; it does not reconfigure the CPU's
+board. The same continued CPU also executes the original FFD0 configuration
+acknowledgement and RTI/WAI after a decoded configuration 1 request.
+
+The next original MIDI boundary is retained explicitly. Native initialization
+stores 0x820008d1 and 0x820008c1 for physical endpoints 2/3. Their NISOF field is 2;
+S12USB20D6E2FV1 table 3-10 specifies 0 for these endpoints. With all other declared
+post-decoder prerequisites satisfied, a valid four-byte Note On OUT and the
+primed IN request both reject before data transfer or MIDI IRQ. The diagnostic
+names the physical endpoint and full descriptor. Observable CPU/RAM/USB state
+and NVM remain unchanged. These are register facts and a manual/model conflict,
+not proof of defective firmware or of silicon behavior for reserved settings.
+The field is not masked, rewritten or treated as a successful transaction.
+
+USB wire decoding, automatic enumeration/standard-request handling, active IQUE,
+host USB ports, original USB-MIDI delivery, DSP boot/audio, physical timing and
+stock-hardware equivalence remain open. No fuzzing or physical traffic runs.
