@@ -1,0 +1,33 @@
+{
+  "qualification": "Isolated original MCU callees under declared RAM/caller, inactive external interrupt inputs and un-stretched internal-memory core-cycle contract. All 256 byte inputs with four CCR patterns, all 256 CCR values at seven boundary inputs, genuine nested frames, full declared RAM guards and unchanged MCU NVM/history. No physical delay, scan-input/pin wiring, RTI scheduling, startup, MIDI/audio or hardware-equivalence proof.",
+  "source_review": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "ac8b11f04440b6350ecbe417adb68ab5788cb8a4",
+    "document": "doc/c_scan_delays.txt"
+  },
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [
+    {
+      "name": "spin_delay",
+      "entry": 47554,
+      "bytes": 4,
+      "sha256": "fc85464ad8690d13ba33ff8d31d30acbe7d89e94290310cd765bc4ca409f6df9"
+    },
+    {
+      "name": "spin_delay_extended",
+      "entry": 47546,
+      "bytes": 8,
+      "sha256": "825673192e70fbb1fa50eecfb6a62c00e6afc22ca133e348256e67a0c6ea4163"
+    },
+    {
+      "name": "restore_scan_outputs",
+      "entry": 35394,
+      "bytes": 12,
+      "sha256": "884bea42b9c47a43efbf960d04fce0f942efef19187c80706d48008768afa766"
+    }
+  ],
+  "primary_references": [
+    "S12CPUV2 Rev.4.0: DBNE, JSR, JMP, RTS, LDAB, STAB and CLR instruction entries",
+    "S12UF32PIMV2 V02.05: module memory map, PTJ/PTS/PTT output data registers"
+  ]
+}

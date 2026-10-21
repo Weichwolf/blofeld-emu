@@ -433,6 +433,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-lcd-helper.trace")
   set_tests_properties(original_lcd_helper PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-mcu-scan-test test/original_mcu_scan_test.cpp)
+  target_link_libraries(blofeld-original-mcu-scan-test PRIVATE blofeld_core)
+  add_test(NAME original_mcu_scan COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_mcu_scan.py"
+    $<TARGET_FILE:blofeld-original-mcu-scan-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-mcu-scan.trace")
+  set_tests_properties(original_mcu_scan PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-original-application-test test/original_application_test.cpp)
   target_link_libraries(blofeld-original-application-test PRIVATE blofeld_application_fixture)
   add_test(NAME original_application COMMAND ${Python3_EXECUTABLE}
@@ -956,6 +964,7 @@ add_custom_target(quality
     blofeld-original-flash-restart-test
     blofeld-original-parallel-update-test
     blofeld-original-lcd-helper-test
+    blofeld-original-mcu-scan-test
     blofeld-original-application-test
     blofeld-wai-test
     blofeld-st7565-test
