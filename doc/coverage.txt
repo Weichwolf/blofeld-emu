@@ -333,6 +333,14 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           and byte wrap (usb-midi-queue.txt). RAM/caller,
                                           own valid endpoints and scan inhibition
                                           remain explicit fixture conditions.
+                                          Original main-loop forwarding has 178
+                                          conditional cases/356 restores through
+                                          real UART/USB queues and SCI/MIDI IRQs,
+                                          independent TX/mirror cursors, C/D stack
+                                          padding and failed-queue publication
+                                          (midi-forwarding.txt). RAM/caller/valid
+                                          endpoints and untimed execution remain
+                                          explicit fixture conditions.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,

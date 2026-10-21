@@ -1,0 +1,61 @@
+Conditional original MIDI forwarding through real UART and USB queues
+
+original_midi_forward executes the unchanged service at B4AA..B532, including
+its outlined reader, the actual UART/USB queues, CCR reader, batch sender and
+SCI/MIDI-IN interrupt handlers. The local official 1.25 MCU image, eight code/
+data spans and the payload-length table are hash-pinned before execution.
+Public tests contain own messages/expectations; manufacturer program bytes and
+reference disassembly remain local.
+
+The fixture explicitly supplies mapped RAM, a near caller frame and own valid
+64-byte USB endpoint descriptions. A separate peer-ring input supplies selected
+own bytes. This is not original initialization, a complete foreground boot,
+SCI receive, normal USB enumeration or acceptance of original reserved NISOF.
+Native instruction execution here is untimed; no serial wire or clock rate is
+inferred. The SCI starts from reset and its real queue enables the transmitter.
+
+The fixed matrix contains 178 cases with two joint restores each (356 restores):
+- Seven channel classes, first-byte positions 0/62/63, empty/incomplete/complete
+  producer extents, and a second complete message that must remain unconsumed.
+- Data-leading and F0/F7/F8/FF bytes discard exactly one mirror byte without
+  running-status/SysEx reconstruction or an invented USB event.
+- Free/busy endpoints, both full-ring wrap positions, actual masked-I failure,
+  native full-ring flushing and three genuine busy wait loops before host ACK.
+- A raw reader of 64 aliases the SCI consumer byte. Ring byte zero deliberately
+  differs, so normalizing the first raw read would fail the independent check.
+- Peer-ring wrap, real one-byte UART queue calls and the actual SCI TX IRQ,
+  a raw FF terminator, realtime-first input and empty rings.
+
+The SCI consumer and USB mirror reader are independent. Complete messages enter
+the real queue with the actual stack packet pointer and flags zero. C/D messages
+retain the supplied A5 stack canary as their third USB payload byte; the test does
+not replace it with zero. Mirror publication follows the actual callee return,
+even when the full USB ring failed after staging the four record bytes. That
+original consumption does not imply successful host delivery.
+
+Host inputs only acknowledge actual pending IN packets. The original sender/ISR
+produce the compared bytes, 64-byte batching, ACK-owned DATA PID and IRQ/RTI mask
+effects. Incomplete/discarded/failed paths must leave real NAK and unpublished USB
+cursors. Peer cases check every TX ring byte, both independent readers, producer
+progress, real UART call counts and real SCI/USB IRQ counts. The actual SCI data-register
+write must contain the independently expected first byte, and every whole
+control-register write must retain AC; FF causes neither insertion nor enable.
+
+Complete-message checkpoints occur at the real nested USB call; busy-wait cases
+snapshot inside the original wait loop. Two restores compare complete CPU state,
+all 5120 RAM bytes, visible USB/SCI registers/buffers, host/device PID and native
+peripheral write history. Independent guards retain unrelated RAM, old events,
+peer source bytes and all NVM bytes/knowledge/erase history. Captured-prefix
+instructions/IRQs are counted once instead of once per replay.
+
+Full boot, original endpoint setup, host USB-MIDI binding, bidirectional natural
+MIDI/SysEx, Wine Spectre, keyboard/PipeWire routing, DSP/audio, realtime behavior
+and physical equivalence remain open. The USTB/NISOF/automatic configuration-
+status frontiers remain strict. No fuzzing, physical traffic, module loading or
+system routing is used.
+
+  cmake --build --preset strict --target blofeld-original-midi-forward-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_midi_forward$'
+
+Testing/original-midi-forward.json records the fixed matrix and actual native
+execution counts. Missing local firmware skips explicitly; changed hashes fail.

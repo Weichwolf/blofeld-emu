@@ -1,0 +1,59 @@
+{
+  "qualification": "Unchanged main-loop forwarding and actual UART/USB callees under own valid endpoint/RAM/caller inputs and untimed native instruction execution. No original startup, normal enumeration, serial-wire timing, full boot/audio or physical equivalence proof.",
+  "source_review": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "f6cc083993a0af0ad2eab75a0b925ea2dbdf051b",
+    "document": "doc/midi_forwarding.txt"
+  },
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [
+    {
+      "entry": 46250,
+      "bytes": 137,
+      "name": "service_midi_forwarding_and_outlined_reader",
+      "sha256": "2a42cbc93c5d84b1997e101d35feced45948bbe20916258149328c9a559f954a"
+    },
+    {
+      "entry": 46061,
+      "bytes": 189,
+      "name": "queue_usb_midi_event",
+      "sha256": "b3b9124a1cd40aac6b5273efaf017ea8743172b304b5b8df312d2ef792b25ce8"
+    },
+    {
+      "entry": 45903,
+      "bytes": 3,
+      "name": "read_condition_codes",
+      "sha256": "f508307fccdf9a1a417622f6987743c0504cffbd0d47c39cc23740cbded3fe93"
+    },
+    {
+      "entry": 46592,
+      "bytes": 104,
+      "name": "send_usb_midi_chunk",
+      "sha256": "8a68f9e7964ce30ad43392daacac7dc5ae6da4218b015308c2af6bfbad9ae5a9"
+    },
+    {
+      "entry": 48747,
+      "bytes": 15,
+      "name": "usb_midi_in_interrupt",
+      "sha256": "4a4d3cb8568fcc373437ae01b1019b1df96c4ee06c10053f91c151cb7bf1b580"
+    },
+    {
+      "entry": 46421,
+      "bytes": 108,
+      "name": "queue_uart_midi_bytes",
+      "sha256": "23a7742b6b2181662abaa467606ae57e1cdba820b553112353c809a6162b3f28"
+    },
+    {
+      "entry": 46529,
+      "bytes": 63,
+      "name": "midi_uart_interrupt",
+      "sha256": "df64e5ddba725cc6f12b4c38bf9608e6d7b7256d337f2cc3343f285d9bfcf257"
+    },
+    {
+      "entry": 63589,
+      "bytes": 16,
+      "name": "packet_payload_lengths",
+      "sha256": "a63f9436528bbf6a40efef2285773cd0c95d23343d281cd4347fa1608c97e034"
+    }
+  ]
+}
