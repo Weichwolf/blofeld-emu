@@ -7,6 +7,12 @@ only its named behavior. No hardware equivalence or brick-safety claim is made.
 Requirement                       State    Evidence / remaining work
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.
+Spectre functions in CLI          missing  Full Spectre sample-management scope
+                                          requested for blofeld-headless, including
+                                          interchange, mapping/gain, audition,
+                                          MIDI export and transfer (spectre-client.txt).
+                                          Reference app installed in repo-named
+                                          Wine prefix; no CLI compatibility claim.
 Standard sample library           partial  Official MIDI/WPC download and contained
                                           MIDI identities are size/hash pinned in
                                           library/sources.json. Fixed 0x75 bulk
