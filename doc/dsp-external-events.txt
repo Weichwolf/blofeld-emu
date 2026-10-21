@@ -64,9 +64,12 @@ Scope
 The event source and ESAI wire in this test are explicit reference fixtures.
 The ESAI component now supports explicitly observed HCKT-fed clock division,
 generated bit/word frame sync and preserved startup/reset input levels under a
-separate reference reset-edge contract (dsp-esai.txt). Production board clock
-sources, a serial PCM receiver, host audio/WAV transport and actual firmware
-audio remain pending. The source project's static analysis reports HCKT-fed
+separate reference reset-edge contract (dsp-esai.txt). The standalone reference
+board now supplies explicit snapshots and compact finite HCKT inputs through
+this scheduler (reference-board.txt). A separate serial PCM receiver is tested
+against actual native ESAI output (serial-pcm.txt); its standalone binding, host
+audio/WAV transport and actual firmware audio remain pending. The source
+project's static analysis reports HCKT-fed
 clock, word-length frame sync and DMA intent. The separate DMA experiment in
 dsp-dma.txt covers native register setup, counters and explicitly granted bus
 phases. DAX now has a separate buffered reference transmitter (dsp-dax.txt).

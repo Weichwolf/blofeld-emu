@@ -107,6 +107,9 @@ target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
 add_library(blofeld_midi_serial src/midi_serial.cpp)
 target_include_directories(blofeld_midi_serial PUBLIC include)
 target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
+add_library(blofeld_serial_pcm src/serial_pcm.cpp)
+target_include_directories(blofeld_serial_pcm PUBLIC include)
+target_link_libraries(blofeld_serial_pcm PUBLIC blofeld_firmware)
 add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
@@ -142,6 +145,9 @@ add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
 target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-serial-pcm-test test/serial_pcm_test.cpp test/serial_pcm_native.cpp)
+  target_link_libraries(blofeld-serial-pcm-test PRIVATE blofeld_serial_pcm blofeld_dsp blofeld_dsp_native)
+  add_test(NAME serial_pcm COMMAND blofeld-serial-pcm-test)
   add_executable(blofeld-esai-test test/dsp_esai_test.cpp test/dsp_esai_native.cpp)
   target_link_libraries(blofeld-esai-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_esai COMMAND blofeld-esai-test)
@@ -831,6 +837,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-serial-pcm-test
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test

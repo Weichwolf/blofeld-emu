@@ -1,0 +1,61 @@
+Serial PCM receiver
+
+SerialPcmReceiver is a separate bounded transport component. It observes one
+MSB-first, left-justified serial data wire and an explicitly selected clock edge.
+Word-length frame sync is active throughout slot0 and inactive in all remaining
+slots. The caller declares active FS polarity, 1..32 bits per slot, 1..slot_bits
+signed payload bits and 2..32 serial slots per frame. One-slot continuous FS,
+bit-pulse sync, I2S delay, right justification and LSB-first formats are not
+supported by this contract. This does not configure or infer an ESAI format.
+
+observe accepts strictly increasing absolute integer ticks and optional logical
+clock, frame-sync and data levels. The caller must provide all clock transitions
+and must explicitly resolve mux, direction and routing. Unknown/undriven clock
+or FS reject; unknown data rejects on a sampled payload bit. Data outside payload
+bits is not audio and is not substituted into the sample. No edge, frequency,
+interpolation, missing sample or silence is generated. Irregular observed clock
+spacing remains explicit in frame timestamps; it is not qualified for a WAV rate.
+
+The first observation only establishes a clock baseline. The receiver waits for
+known inactive FS before accepting a following active first-slot sample. Joining
+an already active frame therefore discards that partial frame instead of treating
+its first observed bit as an MSB. Once locked, every sampled FS must match the
+declared slot position. Early, late or missing frame boundaries fail visibly.
+Only all slot_bits * channels observations complete a frame, including padding.
+Incomplete frames produce no output. Each result contains its channel count,
+right-justified signed int32 samples at the declared word precision, and actual
+first/last sampling ticks. Unused array entries are outside the channel count.
+
+A fault includes ticks, completed-frame count, slot and bit, and quarantines the
+receiver. Reset explicitly discards alignment, partial data and counters. Trusted
+process-local copies retain those fields, the previous clock/time and quarantine.
+Restore them together with the native DSP, divider, scheduler and event-source
+cursor. Copies do not constitute a portable or untrusted state-file format.
+Successful observation uses fixed storage and allocates nothing; failure strings
+throw. This interface is not a real-time host audio callback.
+
+Verification
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-serial-pcm-test
+  ctest --test-dir build/strict -R '^serial_pcm$' --output-on-failure
+
+Literal bit strings check signs, word/slot boundaries, all 32 payload widths,
+the 32-slot bound, both clock edges and FS polarities, unknown padding, mid-frame
+joining, truncated frames, failures, quarantine and mid-word/padding/boundary
+copies. No transmitter/receiver round trip supplies these expectations.
+
+Own native MOVEP/NOP programs configure both ESAI maps and refill TX0 during
+an active word. The production DspScheduledRun merges their completions with
+explicit HCKT observations; mux-qualified clock and TX0 snapshots feed the same
+receiver. Literal signed values -5913697 and 1193046, sampling ticks 2230..13822,
+one complete two-slot frame and three joint mid-word replays are checked. The
+receiver and pin observations must leave native debug state unchanged.
+
+Scope
+
+This receiver is not yet bound to the standalone board output path. Host/WAV
+transport, codec routing, a physical sample rate, complete original boot,
+automatic DMA, original active-voice audio and device equivalence remain open.
+No firmware result, missing word, TPR setting, physical clock or bus grant is
+manufactured to obtain the native test frame.

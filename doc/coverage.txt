@@ -643,6 +643,13 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           startup, DMA progress or note audio.
                                           No complete note lifecycle/allocation,
                                           board scheduler or PCM transport yet.
+                                          A separate bounded serial PCM receiver
+                                          checks literal signed words, strict FS,
+                                          unknown pins and joint mid-word replay
+                                          from both actual native ESAI maps
+                                          (serial-pcm.txt). Board/host/WAV output
+                                          and original active-voice audio remain
+                                          pending.
 Persistent storage               partial  MCU NVM files preserve mutations,
                                           unknownness and erase history across
                                           reconstruction; native/CLI and real
