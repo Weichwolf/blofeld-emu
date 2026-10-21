@@ -1,4 +1,4 @@
-Original MCU USB reset and endpoint-control initialization
+Original MCU USB reset, endpoint initialization and SETUP boundaries
 
   cmake --preset strict
   cmake --build --preset strict --target blofeld-original-usb-reset-test blofeld-usb-ique-control-test
@@ -54,6 +54,34 @@ names the physical endpoint and full descriptor. Observable CPU/RAM/USB state
 and NVM remain unchanged. These are register facts and a manual/model conflict,
 not proof of defective firmware or of silicon behavior for reserved settings.
 The field is not masked, rewritten or treated as a successful transaction.
+
+The same configured original CPU also receives own GET_DESCRIPTOR requests.
+One SETUP enters FFD2, acknowledges SETUP before the callback and retires nine
+instructions before its first USTB read fails: address 0x033f, PC 0xbc3d,
+CCR 0x90. S12USB20D6E2FV1 section 3.1.17 declares USTB valid only while SETUP=1.
+The failed byte read leaves architectural CPU state unchanged. Neither firmware
+nor the buffer-validity check is changed to resolve this manual/model conflict.
+
+Two SETUPs before CPU service instead establish SETOVR. The first requests 18
+bytes; the superseding request asks for 0/1/8/9/17/18/65535 bytes. The original
+handler acknowledges only SETOVR, leaving SETUP set. Its real callback, unsigned
+clamp and paired-byte copy queue the corresponding device descriptor from the
+pinned ROM. Independent expectations cover every transmitted byte, the original
+conditional serial-index rule, the even copied extent for odd lengths, and all
+256 local-buffer byte knowledge states. Reference data and program bytes remain
+local; public tests pin their spans/hashes rather than embedding descriptors.
+
+The decoded host receives actual DATA1 payloads and ACKs them before original
+RTI. ACK alone sets TFRC and clears DVALID. Retained SETUP has higher priority
+than the new control-IN completion, so actual RTI immediately chains to FFD2
+using its original frame. The next callback then reaches the same invalid-USTB
+read. This conditional overrun reply does not establish normal enumeration or
+a successful complete control transfer. No foreground continuation is invented.
+Each of the eight profiles has a joint native/LCD snapshot after the real flag
+acknowledgement/JSR, before callback reads. Sixteen restores reproduce complete
+architectural CPU state, all mapped RAM, declared USB registers/descriptions,
+all local payload bytes/knowledge and the actual write prefix. NVM stays intact.
+USB-window instruction totals still exclude the shared original cold start.
 
 USB wire decoding, automatic enumeration/standard-request handling, active IQUE,
 host USB ports, original USB-MIDI delivery, DSP boot/audio, physical timing and

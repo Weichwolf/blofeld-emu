@@ -34,10 +34,30 @@ def validate(text):
             raise ValueError("A different failure replaced the original NISOF boundary")
     if any(row[-1] <= 0 for row in resets + replays + configurations):
         raise ValueError("A genuine original instruction path is required")
-    return {"reset_profiles": len(resets), "replays": len(replays),
+    setup_cases = rows("SETUP_CASE")
+    setup_replays = rows("SETUP_REPLAY")
+    profiles = [(0, 18), *((1, length) for length in (0, 1, 8, 9, 17, 18, 65535))]
+    if len(setup_cases) != len(profiles) or [row[:2] for row in setup_cases] != profiles:
+        raise ValueError("Incomplete original ordinary/overrun SETUP length matrix")
+    for row in setup_cases:
+        overrun, length, native, entries, returns, size = row
+        if entries != 1 + overrun or returns != overrun or size != (min(length, 18) if overrun else 0):
+            raise ValueError("Wrong original SETUP/RTI/descriptor branch outcome")
+        if native <= 0 or (not overrun and native != 9):
+            raise ValueError("Missing real original SETUP instructions before the retained fault")
+    if setup_replays != [row for row in setup_cases for _ in range(2)]:
+        raise ValueError("Missing sixteen joint pre-read SETUP restores")
+    setup_instructions = sum(row[2] for row in setup_cases + setup_replays)
+    reset_instructions = sum(row[-1] for row in resets + replays + configurations)
+    return {"setup_profiles": len(setup_cases), "setup_replays": len(setup_replays),
+            "descriptor_deliveries": sum(row[0] for row in setup_cases + setup_replays),
+            "descriptor_bytes": sum(row[5] for row in setup_cases + setup_replays),
+            "setup_native_instructions": setup_instructions,
+            "reset_configuration_instructions": reset_instructions,
+            "reset_profiles": len(resets), "replays": len(replays),
             "configuration_irqs": len(configurations), "reserved_midi_failures": len(frontiers),
             "original_delay_calls": sum(row[2] for row in resets),
-            "native_instructions": sum(row[-1] for row in resets + replays + configurations)}
+            "native_instructions": reset_instructions + setup_instructions}
 
 
 def main():
@@ -62,7 +82,9 @@ def main():
     report.write_text(json.dumps({"passed": True, **totals, "scope": reference["qualification"],
                                   "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
     print("Verified original cold-start USB reset/configuration IRQs and two joint mid-ISR "
-          "replays. Original MIDI endpoints retain their reserved NISOF failure; "
+          "replays, eight original SETUP branches, seven conditional descriptor sizes and sixteen "
+          "pre-read restores. Ordinary/chained SETUP retains its invalid-USTB boundary; "
+          "original MIDI endpoints retain their reserved NISOF failure. "
           "no successful MIDI, physical USB timing, full board boot or fuzzing claim.")
     return 0
 

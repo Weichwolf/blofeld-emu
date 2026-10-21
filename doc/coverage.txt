@@ -224,6 +224,13 @@ USB device/transport              partial  PHY control and register/data-side en
                                           255 genuine delay calls on timeout;
                                           two mid-ISR replays retain CPU/RAM and
                                           declared USB registers/write prefix.
+                                          Original ordinary SETUP retains its
+                                          post-ack invalid-USTB read boundary.
+                                          Seven overrun lengths first queue real
+                                          ROM descriptor bytes, then RTI chains
+                                          into the same retained-SETUP failure.
+                                          Sixteen pre-read restores also compare
+                                          all local payload bytes/knowledge.
                                           Unconfigured UEPCSR4A/5A controls have
                                           independent word/byte/reset checks.
                                           Original MIDI descriptors retain their
