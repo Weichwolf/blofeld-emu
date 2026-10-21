@@ -844,6 +844,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-midi.trace")
   set_tests_properties(original_dsp_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-dsp-shi-receive-test test/original_dsp_shi_receive_test.cpp)
+  target_link_libraries(blofeld-original-dsp-shi-receive-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_shi_receive COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_shi_receive.py"
+    $<TARGET_FILE:blofeld-original-dsp-shi-receive-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-shi-receive.trace")
+  set_tests_properties(original_dsp_shi_receive PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-original-dsp-note-test test/original_dsp_note_test.cpp)
   target_link_libraries(blofeld-original-dsp-note-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
@@ -1124,6 +1133,7 @@ add_custom_target(quality
     blofeld-original-dsp-request-queue-test
     blofeld-original-dsp-workspace-test
     blofeld-original-dsp-peripheral-init-test
+    blofeld-original-dsp-shi-receive-test
     blofeld-original-dsp-wire-test
     blofeld-original-dsp-clocked-wire-test
     blofeld-mcu-clock-checkpoint-test

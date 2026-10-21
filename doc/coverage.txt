@@ -485,7 +485,15 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           behavior qualification. SHI SPI
                                           pins/registers/FIFO, error-clear sequences,
                                           request vectors and reset cycles tested
-                                          (dsp-shi.txt). C/E/F GPIO mux, unknown
+                                          (dsp-shi.txt). Original tagged receive
+                                          vectors/initializer/handler/RTI: eight
+                                          fixed cases with sixteen native runs
+                                          cover FIFO overrun, idle/publication,
+                                          ring aliasing, HTX pending replacement,
+                                          register preservation and checkpoints
+                                          (dsp-shi-receive.txt). Untagged reset,
+                                          physical timing and boot provenance
+                                          remain unqualified. C/E/F GPIO mux, unknown
                                           pads/latches, contention and Port F BIU
                                           setup tested (dsp-gpio.txt), including
                                           native C output/E input operations.

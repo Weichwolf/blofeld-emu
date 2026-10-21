@@ -118,7 +118,8 @@ void DspShi::write(const DspWordWrite access) {
     }
     case shi::htx:
       if (!active_) { throw Fault("Unverified DSP SHI HTX write during reset at X:0xffff93"); }
-      if (transmit_) { throw Fault("DSP SHI HTX overwrite before HTDE at X:0xffff93"); }
+      // DSP56371UM 7.4.2: writing before HTDE overwrites pending HTX data.
+      // The separately prepared/in-flight IOSR word is retained.
       transmit_ = value;
       errors_ &= ~(clear_armed_ & shi::underrun);
       clear_armed_ &= ~shi::underrun;

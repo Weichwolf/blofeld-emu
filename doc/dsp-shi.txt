@@ -12,7 +12,9 @@ words. Early SS release discards the incomplete received word. MISO is tri-state
 when deselected/disabled; an uninitialized active output remains unknown.
 
 The one- or ten-word receive FIFO preserves arrival order and discards new words
-on overrun. HTX and IOSR are separate: HTDE changes when HTX moves to IOSR. With no
+on overrun. HTX and IOSR are separate: HTDE changes when HTX moves to IOSR. A write
+before HTDE replaces the pending HTX word, losing its previous value; it does not
+replace the prepared or in-flight IOSR word (section 7.4.2). With no
 fresh HTX word, SPI shifts out retained IOSR contents, including previously received
 data. HROE clears only after HCSR-read then HRX-read; HTUE clears only after
 HCSR-read then HTX-write. Empty FIFO reads and unsupported registers fail visibly.
@@ -47,7 +49,10 @@ Verification
 
 The first test uses independent expected words, flags, capacities, vectors and
 priority encodings, including abort/reset, both error-clear sequences and unknown
-signals. Separate vectors leave MOSI unknown on every non-capture edge, checking
+signals. Fixed pending-overwrite cases cover all four clock modes and three word
+widths before clocking and after one bit, including zero data, both real buffers,
+retained IOSR echo and HCSR-read/HTX-write underrun acknowledgement. Separate
+vectors leave MOSI unknown on every non-capture edge, checking
 that each clock mode samples only its specified edge. The second executes
 the project's own HC12 diagnostic program: real
 STAA writes drive GPIO SS/SCK/MOSI; real LDAA/ANDA reads sample SHI MISO into RAM.
@@ -55,7 +60,7 @@ An explicit synthetic pin fixture connects the two models. It verifies the exact
 independent words in both directions. This proves MCU/peripheral communication,
 not execution of a DSP CPU, original DSP bootstrap or a Blofeld board profile.
 
-Offline edge/register fuzzing, using only synthetic seed data:
+Offline edge/register fuzzing, only on explicit user request, using synthetic data:
   cmake --build build/fuzz --target dsp-shi-fuzz
   mkdir -p doc/local/shi-fuzz-corpus doc/local/shi-fuzz-artifacts
   python3 tools/make_shi_fuzz_seeds.py doc/local/shi-fuzz-corpus
@@ -88,3 +93,8 @@ to the executing DSP ROM prefix. It checks both CPUs, 94 loaded words, retained
 trailing data, mapped clears, checkpoint replay and strict pin failures under an
 explicit receiver pad-order experiment. This does not qualify the physical
 route, reset or elapsed clocks; see coupled-boot.txt for exact inputs and limits.
+
+Original tagged receive interrupts are separately qualified with their actual
+stored vectors, initializer, software ring writes and RTI (dsp-shi-receive.txt).
+An untagged receive still exposes the conservative HCSR reset/mode-change guard;
+this unresolved path is not silently accepted.

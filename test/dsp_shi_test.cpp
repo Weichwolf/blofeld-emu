@@ -162,9 +162,12 @@ void test_transmit_pipeline_and_iosr_recycling() {
     constexpr unsigned next = 0x90efab;
     shi.write({.address = htx, .value = next});
     require((shi.read(hcsr) & tx_empty) == 0, "One word may wait behind the prepared IOSR");
-    reject([&shi] { shi.write({.address = htx, .value = 1}); }, "Pending HTX is not overwritten");
+    constexpr unsigned replacement = 0x654321;
+    shi.write({.address = htx, .value = replacement});
+    require((shi.read(hcsr) & tx_empty) == 0, "Replacing HTX keeps its pending state");
     require(peer.word({.value = inbound}) == outbound, "First frame uses the prepared IOSR word");
-    require(peer.word({.value = outbound}) == next, "Second frame uses the pending HTX word");
+    require(peer.word({.value = outbound}) == replacement,
+            "Second frame uses the last HTX write, losing the replaced data");
     require(peer.word({.value = inbound}) == outbound,
             "Without HTX, the next SPI word shifts out the previous received IOSR contents");
     require((shi.read(hcsr) & underrun) != 0, "No fresh transmit data raises underrun");
@@ -175,6 +178,80 @@ void test_transmit_pipeline_and_iosr_recycling() {
   require(!peer.word({.value = inbound}),
           "Initial MISO data remains unknown instead of fabricated zero");
   require(unknown.read(hrx) == inbound, "Unknown outgoing data does not invalidate known MOSI");
+}
+
+void test_pending_transmit_overwrites() {
+  // Independent HTX/IOSR register semantics: DSP56371UM 7.4.1/2 and 7.4.5.1.
+  constexpr unsigned replacement = 0x654321;
+  constexpr unsigned pending = 0x90efab;
+  constexpr unsigned word_mask = 0xffffff;
+  for (unsigned mode = 0; mode < 4; ++mode) {
+    for (unsigned size = 0; size < 3; ++size) {
+      for (unsigned prefix_bits = 0; prefix_bits < 2; ++prefix_bits) {
+        blofeld::DspShi shi;
+        Peer peer(shi, mode);
+        const auto control = 0x21U | (size << 2U);
+        const auto width = (size + 1) * 8U;
+        const auto padding = word_bits - width;
+        shi.write({.address = hcsr, .value = control});
+        shi.write({.address = htx, .value = outbound});
+        shi.write({.address = htx, .value = pending});
+        peer.select();
+        const auto prefix = peer.bits({.value = inbound, .bits = prefix_bits});
+        shi.write({.address = htx, .value = replacement});
+        require((shi.read(hcsr) & tx_empty) == 0, "Overwrite cannot fabricate HTDE");
+        const auto suffix =
+            peer.bits({.value = (inbound << prefix_bits) & word_mask, .bits = width - prefix_bits});
+        peer.deselect();
+        if (!prefix || !suffix) { throw blofeld::Fault("Known in-flight IOSR became unknown"); }
+        const auto first = (*prefix << (width - prefix_bits)) | *suffix;
+        require(first == (outbound >> padding), "Pending overwrite preserves every IOSR bit");
+        require(shi.read(hrx) == ((inbound >> padding) << padding),
+                "An HTX overwrite leaves receive alignment/data intact");
+        require(shi.read(hcsr) == (idle_empty | control),
+                "IOSR transfer releases HTX without adding flags or a third buffer");
+        shi.write({.address = htx, .value = pending});
+        shi.write({.address = htx, .value = 0});
+        require((shi.read(hcsr) & tx_empty) == 0, "Pending zero is data, not an empty register");
+        require(peer.word({.value = outbound, .bits = width}) == (replacement >> padding),
+                "Next frame contains the replacement, not the lost pending word");
+        require(shi.read(hrx) == ((outbound >> padding) << padding),
+                "Second receive survives the next pending overwrite");
+        require(peer.word({.value = inbound, .bits = width}) == 0,
+                "A zero replacement transfers as a complete known word");
+        require(shi.read(hrx) == ((inbound >> padding) << padding) &&
+                    shi.read(hcsr) == (idle_empty | control),
+                "A fresh zero word must not raise transmit underrun");
+        require(peer.word({.value = outbound, .bits = width}) == (inbound >> padding),
+                "After the two real buffers drain, IOSR reuses its last received data");
+        require(shi.read(hrx) == ((outbound >> padding) << padding) &&
+                    shi.read(hcsr) == (idle_empty | control | underrun),
+                "Only the later unprimed word raises underrun");
+      }
+    }
+  }
+}
+
+void test_overwrite_underrun_acknowledgement() {
+  blofeld::DspShi shi;
+  Peer peer(shi, 1);
+  shi.write({.address = hcsr, .value = fifo24});
+  static_cast<void>(peer.word({.value = inbound}));
+  require(shi.read(hrx) == inbound, "Known receive without a transmit preload");
+  constexpr unsigned pending = 0x90efab;
+  constexpr unsigned replacement = 0x654321;
+  shi.write({.address = htx, .value = outbound});
+  shi.write({.address = htx, .value = pending});
+  shi.write({.address = htx, .value = replacement});
+  require((shi.read(hcsr) & underrun) != 0,
+          "Unarmed pending overwrites cannot acknowledge transmit underrun");
+  shi.write({.address = htx, .value = inbound});
+  require(shi.read(hcsr) == (0x200U | fifo24),
+          "HCSR-read then pending HTX-write clears only the armed underrun");
+  require(peer.word({.value = inbound}) == outbound,
+          "Underrun acknowledgement retains the prepared IOSR");
+  require(peer.word({.value = outbound}) == inbound,
+          "The acknowledging write also replaces the pending data");
 }
 
 void test_fifo_capacity_order_overrun_and_clear_sequence() {
@@ -386,6 +463,8 @@ int main() {
   try {
     test_reset_registers_and_modes();
     test_transmit_pipeline_and_iosr_recycling();
+    test_pending_transmit_overwrites();
+    test_overwrite_underrun_acknowledgement();
     test_fifo_capacity_order_overrun_and_clear_sequence();
     test_underrun_clear_and_host_request();
     test_interrupt_encoding_errors_and_mask_latency();
