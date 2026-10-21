@@ -11,6 +11,11 @@ Current state
 McuUsb models registers, buffers and explicit decoded transactions. Native own
 CPU/ISR/endpoint tests and conditional original reset/configuration/descriptor
 tests exist. There is no host USB backend or functioning USB-MIDI device today.
+Actual SET_CONFIGURATION/SET_INTERFACE SETUP decoding and pending-status NAK are
+modeled; the former executes the original configuration ISR and replays through
+RTI/WAI. Automatic status completion after DONEECRU is still an explicit failure
+until its endpoint register/interrupt effects are qualified. No host status
+success follows merely from firmware acknowledging the configuration interrupt.
 --midi-device is a read-only legacy RawMIDI input, with no output or USB-device
 enumeration. The editor's XML/WAV commands are offline functionality.
 

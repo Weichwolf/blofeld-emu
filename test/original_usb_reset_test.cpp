@@ -282,19 +282,46 @@ void Session::finish_configuration() {
   counters = {};
   interrupted = registers(machine.cpu().state());
   machine.bus().observe_usb_decoder({.enumerated = true});
-  machine.bus().observe_usb_configuration({.configuration = 1});
-  do {
-    require(counters.native < instruction_limit,
-            "Original configuration acknowledgement must return");
-    step(configuration_vector);
-  } while (!machine.cpu().waiting() || machine.cpu().pending_interrupt());
+  constexpr std::array<std::uint8_t, 8> request{0, 9, 1, 0, 0, 0, 0, 0};
+  require(machine.bus().receive_usb_setup(request) == blofeld::UsbResponse::ack &&
+              machine.bus().request_usb_in(blofeld::UsbBuffer::control_in).response ==
+                  blofeld::UsbResponse::nak,
+          "Actual SET_CONFIGURATION SETUP must ACK and NAK status before original firmware runs");
+  trace_ << "CONFIGURATION_SETUP ACK NAK\n";
+  const auto pending = save();
+  std::optional<Outcome> expected;
   constexpr unsigned requested = 0x2000;
   constexpr unsigned valid_configuration = 0x8100;
-  require(
-      counters.entries == 1 && counters.returns == 1 &&
-          (word(configuration_status) & (requested | valid_configuration)) == valid_configuration,
-      "The actual configuration IRQ acknowledges SETECR while retaining CFGVALID/configuration1");
-  report("CONFIGURATION");
+  for (unsigned replay = 0; replay < 3; ++replay) {
+    if (replay != 0) { restore(pending); }
+    do {
+      require(counters.native < instruction_limit,
+              "Original configuration acknowledgement must return");
+      step(configuration_vector);
+    } while (!machine.cpu().waiting() || machine.cpu().pending_interrupt());
+    require(counters.entries == 1 && counters.returns == 1 &&
+                (word(configuration_status) & (requested | valid_configuration)) ==
+                    valid_configuration,
+            "Original configuration IRQ acknowledges SETECR and retains CFGVALID/configuration1");
+    const auto actual = outcome();
+    if (!expected) { expected = actual; }
+    require(actual == *expected,
+            "Pending configuration snapshot replays CPU/RAM/USB/write prefix through native RTI");
+    bool rejected = false;
+    try {
+      static_cast<void>(machine.bus().request_usb_in(blofeld::UsbBuffer::control_in));
+    } catch (const blofeld::Fault &fault) {
+      require(std::string_view(fault.what())
+                  .contains("automatic configuration status completion after DONEECRU"),
+              "Automatic status completion retains its specific unresolved boundary");
+      trace_ << "CONFIGURATION_STATUS_FRONTIER " << fault.what() << '\n';
+      rejected = true;
+    }
+    require(rejected && outcome() == actual,
+            "Unknown status completion cannot mutate CPU/RAM/USB/NVM or synthesize host success");
+    check_flash();
+    report("CONFIGURATION");
+  }
 }
 
 void Session::reject_midi() {

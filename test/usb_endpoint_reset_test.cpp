@@ -154,9 +154,9 @@ void test_optional_control_and_bus_reset_recovery() {
   reset_command(machine.bus());
   enable(machine.bus());
   reject([&] { static_cast<void>(machine.bus().request_usb_in(blofeld::UsbBuffer::control_in)); },
-         "Unqualified USB optional control response after endpoint reset");
+         "Unqualified USB control response after endpoint reset");
   reject([&] { static_cast<void>(machine.bus().receive_usb_out({.data = {}})); },
-         "Unqualified USB optional control response after endpoint reset");
+         "Unqualified USB control response after endpoint reset");
   require(machine.bus().receive_usb_setup(request) == blofeld::UsbResponse::ack &&
               machine.bus().request_usb_in(blofeld::UsbBuffer::control_in).response ==
                   blofeld::UsbResponse::nak,

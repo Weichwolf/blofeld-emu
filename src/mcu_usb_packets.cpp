@@ -65,17 +65,25 @@ UsbResponse McuUsb::receive_setup(const std::array<std::uint8_t, 8> &data, const
   require_packet();
   pending_in_.reset();
   if (!crc_valid) { return UsbResponse::none; }
+  if (configuration_control_ && (configuration_status_ & usb::configuration_request) != 0) {
+    throw Fault("Unqualified USB SETUP replacing an unacknowledged configuration request");
+  }
   const auto type = (data[0] >> 5U) & 3U;
   constexpr unsigned get_descriptor = 6;
   constexpr unsigned set_descriptor = 7;
   constexpr unsigned synch_frame = 12;
   if (type == 3) { throw Fault("Reserved USB SETUP request type"); }
+  const auto configuration = decode_configuration_setup(data);
   const bool descriptor = type == 0 && data[1] == get_descriptor;
   const bool optional = type == 0 && (data[1] == set_descriptor || data[1] == synch_frame);
-  if (type == 0 && !descriptor && !optional) {
+  if (type == 0 && !descriptor && !optional && !configuration) {
     throw Fault("Unimplemented USB automatic standard request " + hex(data[1], 2));
   }
   static_cast<void>(maximum_packet(0));
+  if (configuration && (status_ & (usb::setup | usb::setup_overrun)) != 0) {
+    throw Fault("Unqualified USB configuration SETUP while firmware SETUP flags remain pending");
+  }
+  if (configuration) { observe_configuration(*configuration); }
   for (unsigned index = 0; index < 2; ++index) {
     auto &buffer = buffers_data_[index];
     buffer.control = static_cast<std::uint16_t>(buffer.control & ~(usb::stall | usb::data_valid));
@@ -87,7 +95,8 @@ UsbResponse McuUsb::receive_setup(const std::array<std::uint8_t, 8> &data, const
       optional && (module_control_ & (data[1] == set_descriptor ? usb::descriptor_support
                                                                 : usb::synch_frame_support)) == 0;
   control_phase_known_ = true;
-  if (setup_stall_) { return UsbResponse::ack; }
+  configuration_control_ = configuration.has_value();
+  if (setup_stall_ || configuration_control_) { return UsbResponse::ack; }
   if ((status_ & usb::setup) != 0) { status_ |= usb::setup_overrun; }
   setup_ = data;
   status_ |= usb::setup;
@@ -101,6 +110,10 @@ UsbResponse McuUsb::receive_out(const UsbOutPacket packet) {
   pending_in_.reset();
   if (!packet.crc_valid) { return UsbResponse::none; }
   const auto maximum = maximum_packet(index);
+  if (index == 1 && configuration_control_) {
+    require_control_phase();
+    throw Fault("USB OUT during automatic configuration status-IN phase");
+  }
   if (packet.data.size() > maximum) {
     throw Fault("USB OUT packet exceeds the programmed endpoint size");
   }
@@ -138,6 +151,13 @@ UsbInPacket McuUsb::request_in(const UsbBuffer endpoint) {
   if (index == 0 && setup_stall_) {
     require_control_phase();
     return {.response = UsbResponse::stall};
+  }
+  if (index == 0 && configuration_control_) {
+    require_control_phase();
+    if ((configuration_status_ & usb::configuration_request) != 0) {
+      return {.response = UsbResponse::nak};
+    }
+    throw Fault("Unqualified USB automatic configuration status completion after DONEECRU");
   }
   auto &buffer = buffers_data_[index];
   if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }

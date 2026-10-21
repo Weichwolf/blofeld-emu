@@ -22,8 +22,14 @@ def validate(text):
         raise ValueError("Incomplete original USB reset/counter/IRQ/RTI matrix")
     if replays != [resets[1], resets[1]]:
         raise ValueError("Missing complete mid-ISR replay comparisons")
-    if len(configurations) != 1 or configurations[0][:5] != (1, 0, 0, 1, 1):
-        raise ValueError("Missing original configuration IRQ acknowledgement and return")
+    if (len(configurations) != 3 or configurations != [configurations[0]] * 3 or
+            configurations[0][:5] != (1, 0, 0, 1, 1)):
+        raise ValueError("Missing original configuration IRQ acknowledgement and two replays")
+    if re.findall(r"^CONFIGURATION_SETUP (.+)$", text, re.M) != ["ACK NAK"]:
+        raise ValueError("Missing actual configuration SETUP and pending status NAK")
+    completion = "Unqualified USB automatic configuration status completion after DONEECRU"
+    if re.findall(r"^CONFIGURATION_STATUS_FRONTIER (.+)$", text, re.M) != [completion] * 3:
+        raise ValueError("Missing automatic configuration completion boundary and replays")
     frontiers = re.findall(r"^MIDI_FRONTIER (IN|OUT) (.+)$", text, re.M)
     if len(frontiers) != 2 or {kind for kind, _ in frontiers} != {"IN", "OUT"}:
         raise ValueError("Missing original MIDI descriptor failure evidence")
@@ -55,7 +61,8 @@ def validate(text):
             "setup_native_instructions": setup_instructions,
             "reset_configuration_instructions": reset_instructions,
             "reset_profiles": len(resets), "replays": len(replays),
-            "configuration_irqs": len(configurations), "reserved_midi_failures": len(frontiers),
+            "configuration_irqs": len(configurations), "configuration_replays": 2,
+            "reserved_midi_failures": len(frontiers),
             "original_delay_calls": sum(row[2] for row in resets),
             "native_instructions": reset_instructions + setup_instructions}
 
