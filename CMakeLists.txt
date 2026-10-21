@@ -175,6 +175,17 @@ target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_f
   blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library blofeld_usbip_tcp)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-hc12-ccr-test test/hc12_ccr_test.cpp)
+  target_link_libraries(blofeld-hc12-ccr-test PRIVATE blofeld_core)
+  add_test(NAME hc12_ccr COMMAND blofeld-hc12-ccr-test)
+  add_executable(blofeld-original-usb-midi-test test/original_usb_midi_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-usb-midi-test PRIVATE blofeld_core)
+  add_test(NAME original_usb_midi COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_usb_midi.py"
+    $<TARGET_FILE:blofeld-original-usb-midi-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-usb-midi.log")
+  set_tests_properties(original_usb_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
   add_executable(blofeld-usbip-frame-timeout-test test/usbip_frame_timeout_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_include_directories(blofeld-usbip-frame-timeout-test PRIVATE src)
   target_link_libraries(blofeld-usbip-frame-timeout-test PRIVATE blofeld_usbip_tcp blofeld_core)
@@ -1023,7 +1034,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
-    blofeld-sample-library-test
+    blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-sample-wave-test
     blofeld-usbip-test blofeld-usb-host-test blofeld-usb-host-native-test
     blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test

@@ -57,6 +57,10 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           branches, code-cache invalidation and
                                           word-transfer side effects tested; 12288
                                           bit-branch vectors and BRN length checked.
+                                          PULC/RTI one-way XIRQ masking has
+                                          393216 independent CCR pair controls,
+                                          actual XIRQ/reset and RTI tail-chain
+                                          exceptions (hc12-ccr.txt).
                                           Indexed words: 96 signed-offset load/store
                                           pairs plus word postincrement; patched
                                           the missing memory dereference.
@@ -312,6 +316,14 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           RAM/USB/NVM guards (usb-reset.txt).
                                           Transport requirements and current
                                           original frontiers: usb-host.txt.
+                                          Under separate own valid endpoint/RAM
+                                          conditions, the original MIDI IN ISR
+                                          and batch submitter deliver 64-byte
+                                          packet limits, wrap, actual ACK/IRQ/RTI
+                                          and X clear with 36 cases/72 restores
+                                          (hc12-ccr.txt). This does not qualify
+                                          the original endpoint configuration,
+                                          queue producer or normal enumeration.
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,
