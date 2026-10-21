@@ -93,11 +93,12 @@ void UsbipTcpServer::Impl::accept(const Time now, std::vector<UsbipConnectionEve
       events.push_back(
           {.connection = id, .error = true, .reason = "USB/IP connection capacity exhausted"});
     } else {
+      auto session = std::make_unique<UsbipSession>();
       auto &channel = channels.emplace_back();
+      channel.session = std::move(session);
       channel.socket = std::move(socket);
       channel.id = id;
       channel.frame_deadline = now + options.frame_timeout;
-      channel.session = std::make_unique<UsbipSession>();
     }
   }
 }
