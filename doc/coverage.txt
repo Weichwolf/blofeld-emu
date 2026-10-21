@@ -605,6 +605,12 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           Headless binary-byte/legacy Linux
                                           RawMIDI input feeds the owned-clock SCI
                                           peer at explicit reference boundaries.
+                                          Alternative DSP TIO host-byte input
+                                          retains fixed 31250-baud deadlines and
+                                          explicit legacy reference timing. Real
+                                          original receiver/ring/parser/pitch
+                                          calls and MCU feedback are checked
+                                          separately (dsp-host-midi.txt).
                                           Own native CLI SCI/IRQ/RTI checks cover
                                           both routes; a separate conditional
                                           original cold-start fixture receives

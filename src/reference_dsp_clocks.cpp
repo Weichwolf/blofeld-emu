@@ -31,6 +31,19 @@ std::optional<Board::DspOffer> Board::next_dsp_input() const {
                                          .timing = DspEsaiClockTiming::reference_reset_edges}},
                       .clock_index = clock.index};
   }
+  if (control_.midi_dsp) {
+    if (!config_.midi_dsp) { throw Fault("DSP MIDI source has no configured route"); }
+    const auto event = control_.midi_dsp->next_event();
+    if (result && event.ticks == result->input.ticks) {
+      result->collision = true;
+    } else if (!result || event.ticks < result->input.ticks) {
+      result = DspOffer{.input = {.ticks = event.ticks,
+                                  .index = config_.midi_dsp->index,
+                                  .level = event.level,
+                                  .synchronized = config_.midi_dsp->synchronized},
+                        .midi = true};
+    }
+  }
   return result;
 }
 
@@ -43,9 +56,16 @@ void Board::observe_dsp_input(const std::uint64_t at) {
                 " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
   }
   apply_dsp(next->input);
-  trace_dsp_input(next->input, at);
+  if (next->midi) {
+    trace_dsp_midi(at);
+  } else {
+    trace_dsp_input(next->input, at);
+  }
   observe_pcm(at, "external");
-  if (next->clock_index.has_value()) {
+  if (next->midi) {
+    if (!control_.midi_dsp) { throw Fault("Scheduled DSP MIDI event has no source"); }
+    control_.midi_dsp->consume(at);
+  } else if (next->clock_index.has_value()) {
     ++control_.next_esai_edge.at(next->clock_index.value());
   } else {
     ++control_.next_dsp_event;

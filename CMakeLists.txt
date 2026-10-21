@@ -108,6 +108,9 @@ target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
 add_library(blofeld_midi_serial src/midi_serial.cpp)
 target_include_directories(blofeld_midi_serial PUBLIC include)
 target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
+add_library(blofeld_midi_timed src/midi_timed.cpp)
+target_include_directories(blofeld_midi_timed PUBLIC include)
+target_link_libraries(blofeld_midi_timed PUBLIC blofeld_midi_serial)
 add_library(blofeld_serial_pcm src/serial_pcm.cpp)
 target_include_directories(blofeld_serial_pcm PUBLIC include)
 target_link_libraries(blofeld_serial_pcm PUBLIC blofeld_firmware)
@@ -149,11 +152,20 @@ target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)
 add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
   src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp src/reference_checkpoint.cpp
   src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
-  src/reference_midi.cpp src/host_midi_runner.cpp)
+  src/reference_midi.cpp src/reference_dsp_midi.cpp src/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport
-  blofeld_mcu_midi blofeld_host_midi)
+  blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-midi-timed-test test/midi_timed_test.cpp)
+  target_link_libraries(blofeld-midi-timed-test PRIVATE blofeld_midi_timed)
+  add_test(NAME midi_timed COMMAND blofeld-midi-timed-test)
+  add_test(NAME reference_dsp_host_midi_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_dsp_host_midi_cli.py"
+    $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-original-midi-rom>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-dsp-host-midi")
+  set_tests_properties(reference_dsp_host_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_executable(blofeld-host-midi-test test/host_midi_test.cpp)
   target_link_libraries(blofeld-host-midi-test PRIVATE blofeld_host_midi blofeld_firmware)
   add_test(NAME host_midi COMMAND blofeld-host-midi-test
@@ -196,10 +208,11 @@ if(BUILD_TESTING)
   add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp
     src/reference_config.cpp src/reference_board.cpp src/reference_wiring.cpp
     src/reference_returns.cpp src/reference_checkpoint.cpp src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
-    src/reference_midi.cpp)
+    src/reference_midi.cpp src/reference_dsp_midi.cpp)
   target_include_directories(blofeld-reference-checkpoint-test PRIVATE src)
   target_link_libraries(blofeld-reference-checkpoint-test PRIVATE
-    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport blofeld_mcu_midi)
+    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport blofeld_mcu_midi
+    blofeld_midi_timed)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}
@@ -931,6 +944,7 @@ add_custom_target(quality
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test
+    blofeld-midi-timed-test
     blofeld-original-host-midi-test
     blofeld-pcm-transport-test
     blofeld-bank-test

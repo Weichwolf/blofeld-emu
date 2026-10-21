@@ -45,8 +45,11 @@ retain the incomplete message. Faulted capture rejects until coordinated restore
 
 These are component experiments with supplied caller state. Full original boot
 still encounters reserved Y:002000; note allocation encounters Y:ffffff. Complete
-note lifecycle, host MIDI transport, physical baud/clock qualification, original
+note lifecycle, physical baud/clock qualification, original
 audio, update/recovery and Desktop/Keyboard hardware equivalence remain open.
+The separate dsp-host-midi.txt path now supplies host file/device byte queues to
+this component receiver through the headless scheduler. The legacy timing remains
+an explicit unqualified reference period; normal MIDI baud is not inferred from it.
 No fuzzing or physical input occurs.
 
   cmake --build --preset strict --target blofeld-original-dsp-clocked-wire-test

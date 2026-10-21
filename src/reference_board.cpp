@@ -7,6 +7,8 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/midi_serial.hpp"
+#include "blofeld/midi_timed.hpp"
 #include "blofeld/pcm_recording.hpp"
 
 #include <cstdint>
@@ -40,6 +42,20 @@ Board::Board(const Config &config, const Execution &execution)
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
   control_.scale = common / local;
+  if (config_.midi_dsp) {
+    MidiWireTiming timing{.timebase_hz = common, .start_ticks = config_.midi_dsp->after_ticks};
+    if (config_.midi_dsp_reference) {
+      timing.reference_bit_ticks = config_.midi_dsp_reference->bit_ticks;
+      timing.reference_idle_bits = config_.midi_dsp_reference->idle_bits;
+    }
+    control_.midi_dsp.emplace(timing);
+    if (execution_.trace != nullptr) {
+      *execution_.trace << "DSP-MIDI-SOURCE first=" << timing.start_ticks
+                        << " baud=" << (timing.reference_bit_ticks ? 0 : MidiSerialInput::baud)
+                        << " reference-bit-ticks=" << timing.reference_bit_ticks.value_or(0)
+                        << " reference-idle-bits=" << timing.reference_idle_bits << '\n';
+    }
+  }
   const auto first_dsp = next_dsp_input();
   if (config.release_ticks < ticks() ||
       (!config.events.empty() && config.events.front().ticks < ticks()) ||
@@ -213,10 +229,14 @@ void Board::report(std::ostream &stream) const {
     stream << "AUDIO recorded=" << control_.recording.frames().size()
            << " limit=" << control_.recording.capacity() << '\n';
   }
-  if (config_.midi) {
-    stream << "MIDI accepted=" << control_.midi_bytes
-           << " queued=" << (control_.midi ? control_.midi->queued_bytes() : 0)
-           << " started=" << control_.midi.has_value() << '\n';
+  if (config_.midi || config_.midi_dsp) {
+    stream << "MIDI accepted=" << control_.midi_bytes << " queued=" << midi_queue_size()
+           << " started=" << (control_.midi.has_value() || (control_.midi_dsp && control_.started));
+    if (control_.midi_dsp) {
+      stream << " dsp-events=" << control_.midi_dsp->observed_events()
+             << " dsp-frames=" << control_.midi_dsp->completed_frames();
+    }
+    stream << '\n';
   }
 }
 

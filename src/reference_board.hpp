@@ -14,6 +14,7 @@
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_sci.hpp"
+#include "blofeld/midi_timed.hpp"
 #include "blofeld/pcm_recording.hpp"
 #include "blofeld/serial_pcm.hpp"
 
@@ -91,6 +92,17 @@ struct MidiRoute {
   std::uint64_t after_ticks = 0;
 };
 
+struct DspMidiRoute {
+  std::uint64_t after_ticks = 0;
+  unsigned index = 0;
+  bool synchronized = false;
+};
+
+struct DspMidiReference {
+  std::uint64_t bit_ticks = 0;
+  unsigned idle_bits = 0;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunContract dsp;
@@ -116,10 +128,13 @@ struct Config {
   std::optional<PcmRoute> pcm;
   std::optional<MidiRoute> midi;
   std::optional<SciReceiveReference> midi_reference;
+  std::optional<DspMidiRoute> midi_dsp;
+  std::optional<DspMidiReference> midi_dsp_reference;
 };
 
 void validate_returns(const Config &config);
 void validate_midi(const Config &config);
+void validate_dsp_midi(const Config &config);
 
 [[nodiscard]] Config load_config(const std::filesystem::path &path);
 [[nodiscard]] std::vector<std::uint32_t> load_rom(const std::filesystem::path &path);
@@ -191,6 +206,8 @@ struct Status {
   std::size_t midi_queued = 0;
   std::uint64_t midi_bytes = 0;
   bool midi_started = false;
+  std::uint64_t midi_dsp_events = 0;
+  std::uint64_t midi_dsp_frames = 0;
   bool started = false;
   bool waiting = false;
   bool held_reset = true;
@@ -253,6 +270,7 @@ private:
     std::optional<SerialPcmFrame> last_pcm;
     PcmRecording recording;
     std::optional<McuClockedMidiInput> midi;
+    std::optional<MidiTimedInput> midi_dsp;
     std::uint64_t midi_bytes = 0;
     bool started = false;
     bool faulted = false;
@@ -287,12 +305,14 @@ private:
     DspInput input;
     std::optional<unsigned> clock_index = std::nullopt;
     bool collision = false;
+    bool midi = false;
   };
 
   [[nodiscard]] std::optional<DspOffer> next_dsp_input() const;
   void observe_dsp_input(std::uint64_t at);
   void apply_dsp(const DspInput &input);
   void trace_dsp_input(const DspInput &input, std::uint64_t at);
+  void trace_dsp_midi(std::uint64_t at);
   void observe_pcm(std::uint64_t at, std::string_view source);
   [[nodiscard]] SerialPcmPins pcm_pins() const;
   void trace_pcm(SerialPcmStamp stamp,
@@ -304,6 +324,7 @@ private:
   void start_midi();
   void observe_midi(ExecutionContext context);
   void synchronize_midi();
+  [[nodiscard]] std::size_t midi_queue_size() const;
   void step();
   void release();
   void on_cycle(Hc12BusCycle cycle);

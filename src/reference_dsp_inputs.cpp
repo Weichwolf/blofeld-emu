@@ -78,7 +78,7 @@ void Board::trace_dsp_input(const DspInput &input, const std::uint64_t at) {
 }
 
 DspExternalEvents Board::dsp_inputs() {
-  if (config_.dsp_events.empty() && config_.dsp_clocks.empty()) { return {}; }
+  if (config_.dsp_events.empty() && config_.dsp_clocks.empty() && !control_.midi_dsp) { return {}; }
   return {.next_ticks = [this]() -> std::optional<std::uint64_t> {
             const auto next = next_dsp_input();
             return next ? std::optional{next->input.ticks} : std::nullopt;

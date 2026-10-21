@@ -1,0 +1,69 @@
+Host bytes into the original DSP serial receiver
+
+  cmake --build --preset strict --target blofeld-headless blofeld-reference-original-midi-rom blofeld-midi-timed-test
+  ctest --test-dir build/strict -R '^(midi_timed|reference_dsp_host_midi_cli|reference_checkpoint)$' --output-on-failure
+
+--midi-file/--midi-device can select an explicit DSP timer-input route instead
+of midi-sci (host-midi.txt):
+
+  dsp-input-order input-before-dsp 4
+  dsp-initial tio 0 high synchronized
+  midi-dsp-tio 0 after 10000000 synchronized
+
+Timer 0 or 1, common start tick and raw/synchronized observation are explicit.
+Start must not precede DSP release. Initial idle-high observations remain caller
+inputs if the guest reads DI before the first bit event. Native timer setup,
+GPIO mux, interrupts, capture/sampling and parser execution remain required.
+SCI and DSP routes are mutually exclusive. Static timed writes to the selected
+TIO reject; simultaneous independent DSP sources still require qualification
+and fail with both CPU contexts rather than dropping or reordering an input.
+
+The default wire is 31250 baud, start-low/eight LSB-first data/stop-high, without
+an extra inter-frame bit. Deadlines use independent integer common-time units:
+start + ceil(n*common_Hz/31250). Fixed idle-high observations continue when the
+queue empties, so later enqueue cannot change a deadline already pinned by the
+DSP scheduler. Host arrival is quantized to this free-running bit grid and the
+existing host poll boundary. No wall-clock pacing or physical timestamps exist.
+
+The queue holds 4096 bytes, including the active byte through its stop interval.
+Only the external TIO level/synchronized observation enters the board. Native
+DSP instructions own timer progress and vector/RTI entry. The source never calls
+the producer, injects ring data, alters CPU registers or supplies parser results.
+Joint snapshots include the entire queue, partial frame, rational phase and next
+deadline with native owners/schedule. Automatic OS-source rereading remains
+rejected; deterministic API callers explicitly replay their external enqueues.
+
+An optional diagnostic reference mode retains the existing component experiment:
+
+  midi-dsp-reference 292410 1
+
+This requests 292410 common ticks per bit and one extra idle bit per frame. With
+the existing 540 MHz reference and reset PCTL / 12 MHz EXTAL, that equals 3249 CLK/2
+edges per bit, about 1846.7 baud. It is not actual MIDI baud or Blofeld calibration.
+No oscillator/PLL is fitted to the firmware's timer constants. The mode must be
+explicit; normal 31250-baud input is never silently slowed to make a test pass.
+
+Evidence and limits
+The timed source regression compares every bit/time of 8192 directed frames,
+including all 256 byte values and queue wraps, against independent absolute-time
+equations. It checks idle-to-enqueue deadlines, partial copies, explicit reference
+gaps and rejected overflow/deadline/timestamp operations. The native board API
+test captures a partly transmitted frame after an empty interval and independently
+checks MCU/DSP clock totals, complete replay traces, queue state and unchanged NVM.
+
+The CLI test uses the existing private ROM generator with four complete unchanged
+original producer/vector/parser components and original low data. An own native
+caller supplies the declared setup; no host writes supply executed original code.
+Three file bytes take 27 genuine receive returns, the real ring consumer and pitch
+callback under the explicit legacy timing contract. Center pitch reaches a guest
+SHI marker and an actual MCU GPIO-poll/WAI endpoint; noncenter input cannot reach
+that marker. A separate normal-baud case checks actual 31250-baud wire timestamps,
+not correct decoding under the artificial reset-clock setup. Unknown/static input
+and collision contracts remain strict. Original record/archive hashes are pinned
+by dsp-voice-reference.json; generated ROM/traces remain local.
+
+This is an original-component/reference-caller path, not complete original MCU/DSP
+boot, physical DIN/USB wiring, allocated notes/voice/audio, calibrated timing or
+live RawMIDI validation. Reserved boot Y:002000 and allocator Y:ffffff frontiers,
+original update/recovery and hardware comparisons remain open. No fuzzing or
+physical traffic runs as part of these deterministic checks.

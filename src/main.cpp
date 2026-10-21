@@ -312,8 +312,9 @@ void validate_board_options(const Options &config,
     throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
   }
   const bool midi = !config.midi_file.empty() || !config.midi_device.empty();
-  if (midi && (!board || !board->midi || board->checkpoint)) {
-    throw blofeld::Fault("Host MIDI requires midi-sci and rejects automatic checkpoint replay");
+  if (midi && (!board || (!board->midi && !board->midi_dsp) || board->checkpoint)) {
+    throw blofeld::Fault("Host MIDI requires midi-sci or midi-dsp-tio and rejects automatic "
+                         "checkpoint replay");
   }
 }
 
