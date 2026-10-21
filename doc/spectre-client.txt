@@ -39,6 +39,19 @@ Required capabilities and current evidence
   working Spectre export/upload implementation. No physical programming is a
   routine check; original update/recovery requirements still apply.
 
+Observed reference interchange
+One own 440 Hz mono PCM16 WAV (44100 Hz, 11025 frames) was imported and saved
+by the actual Windows application. XML uses WaldorfSampleSet Version="0.5",
+SampleProgram(Name, Normalize), and Sample(Filename, Path, RelativePath, Pitch,
+HighKey, Normalize, FixedPitch, Level). The own export records pitch 69.05 and
+highest key 127. Absolute DOS paths and a separate relative path are retained.
+Its actual MIDI export contains 513 SysEx messages: eight command 0x73 headers
+and 505 command 0x74 packets. This differs from the pinned factory distribution's
+0x75 bulk profile; do not assume equivalent framing or receiver behavior.
+These are observations of one original application/input, not full format or
+conversion qualification. The own inputs, original exports and hashes remain
+ignored under doc/local/spectre-reference/ for independent comparison.
+
 CLI and library implementation are pending. Maintain each requirement and its
 validation evidence as implementation proceeds. Reuse bounded file handling,
 strict builds/sanitizers and independent expected sample/transport vectors.
