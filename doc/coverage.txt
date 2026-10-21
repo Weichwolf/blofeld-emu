@@ -620,6 +620,14 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           reserved Y:ffffff at P:04ce; 23 filtered
                                           or release-only controls return with an
                                           empty list (dsp-notes.txt).
+                                          Separate original workspace callees
+                                          check 526 complete allocation, eviction,
+                                          removal and owner-cleanup calls against
+                                          independent equations: all 93 component
+                                          starts, full mapped-RAM guards and joint
+                                          fallback/eviction snapshot replay
+                                          (dsp-workspace.txt). Declared setup does
+                                          not resolve upstream note allocation.
                                           Original scheduler primitives check
                                           seed/tick/timer/countdown arithmetic,
                                           real conditional-call/RTS frames and

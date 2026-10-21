@@ -1,0 +1,50 @@
+Original DSP workspace and active-list regression
+
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-original-dsp-workspace-test
+  ctest --test-dir build/strict -R '^original_dsp_workspace$' --output-on-failure
+
+The test requires the local official Blofeld_Firmware_V1.25.zip. Absence skips
+with code 77; changed contents fail. The archive, MID and all 127 ordered DSP
+records are checked through the pinned dsp-voice-reference.json before execution.
+dsp-workspace-reference.json pins the original 120-word component and a hash of
+all 93 instruction starts from an independent static listing. No manufacturer
+program bytes, disassembly or reference assets are distributed with this test.
+
+The independent GPL-3.0-only equations and directed cases originate from the
+source-side review pinned in that manifest. This regression runs the actual
+original records, using the current emulator and native dependency builds.
+It does not use a source-built replacement for the manufacturer program.
+
+The 526 explicit calls exercise both rounding modes with linear addressing and
+unscaled accumulators: 408 allocations of one through six workspace cells,
+84 evicted voices, 46 literal request-mask fallbacks, 54 list removals,
+14 unsuccessful searches and 50 owner cleanups. Allocation covers every admitted
+first-fit position and odd/even alignment. Saturated cases check reverse eviction,
+multiple retries, zero-workspace candidates and the protected list head. Removal
+checks compaction through the complete declared tail and the readable prefetch
+word beyond the terminator. Fallback preserves the original retained owners and
+callbacks, even when the resulting occupancy metadata is inconsistent.
+
+The own native caller explicitly supplies register arguments and RAM fixtures,
+performs JSR and receives the actual RTS. Original program words remain unchanged.
+Independent expectations check full A/B/X/Y, all R/N/M, the call frame, rounding
+and scaling modes, and all 77 output words. Each call also compares all 77,824
+mapped X/Y RAM words outside the permitted outputs, including original data,
+caller slots and workspace payloads. The baseline contains 76,316 original
+instructions; own caller instructions are excluded from that count.
+
+The same DspMachine runs consecutive calls without resetting its owned clock.
+Native cycle estimates must agree with the nominal 12 MHz EXTAL / 540 MHz
+timebase contract. Joint CPU/bus/clock snapshots taken inside fallback and
+eviction are each restored twice and must reproduce complete debug state and
+mapped RAM. This establishes replay under the declared nominal contract, not
+hardware instruction timing. General final CCR and loop-register expectations
+are not independently established by this component test.
+
+These are isolated original callees with declared setup. They do not resume the
+failed positive-note allocator described in dsp-notes.txt, qualify boot RAM or
+establish full startup, original caller reachability, live release/stealing,
+MIDI-to-audio scheduling or device equivalence. Corrupt, zero and other
+out-of-domain allocation requests are outside this directed matrix. Execution
+traces, cases and JSON results remain ignored build artifacts. No fuzzing runs.

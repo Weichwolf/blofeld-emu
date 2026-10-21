@@ -1,0 +1,45 @@
+{
+  "runtime_reference": {
+    "path": "doc/dsp-voice-reference.json",
+    "sha256": "edcfacf65e2092be4d793f4b86d8cd8dab48f48671dc472b52f35c0f3def9ee9"
+  },
+  "program": {
+    "record": 116,
+    "space": 0,
+    "address": 11094,
+    "words": 120,
+    "sha256": "3797838d9e9d42b91437126b6b33a9f41f3c1453d78bc0bdf25b15e4eb3c6716"
+  },
+  "coverage": {
+    "encoding": "sorted lowercase six-digit hexadecimal PCs, each followed by LF",
+    "instruction_starts": 93,
+    "sha256": "490f09029d42e596100911984267bb6d5147635e27a93badbd159aacf8a3e433"
+  },
+  "model_provenance": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "6dbe4f9137e82bfa687b4afd101a9d95f428d8c9",
+    "inputs": {
+      "test/check_dsp_workspace.py": {
+        "bytes": 17238,
+        "sha256": "48705aadcdfeb719799c505e687551114523cab938a212376e172ca1766bd829"
+      },
+      "test/check_dsp_allocation_frontier.py": {
+        "bytes": 15368,
+        "sha256": "07892c2155d0ce77d61ea35799f1926c37bff3ca496837b0341f7d3c521efc89"
+      }
+    },
+    "static_listing_sha256": "2fee14ee7d414022a0991d41de9bd66fed4691886d0ea2488820365bce0c6cef"
+  },
+  "cases": 526,
+  "expected_metrics": {
+    "allocations": 408,
+    "evicted_voices": 84,
+    "request_mask_fallbacks": 46,
+    "list_removals": 54,
+    "list_misses": 14,
+    "complete_cleanups": 50,
+    "shifted_list_words": 108,
+    "native_instructions": 76316
+  },
+  "qualification": "Complete original workspace allocation, eviction, owner cleanup and active-list removal with 526 declared linear/unscaled caller fixtures in both RM modes. Independent data/address/accumulator expectations, all mapped RAM guards, unchanged original program, native RTS and joint snapshot replay. No full boot, original upstream note allocation, general CCR/loop-state proof, physical timing, MIDI, audio or corrupt/out-of-domain allocation proof."
+}
