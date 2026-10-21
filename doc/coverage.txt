@@ -566,6 +566,12 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           state across 32 eight-block streams:
                                           256 real returns with independent
                                           output/state equations (dsp-voice.txt).
+                                          Original MIDI note dispatch now checks
+                                          packed history/linear velocity and all
+                                          channels: 27 allocation attempts expose
+                                          reserved Y:ffffff at P:04ce; 23 filtered
+                                          or release-only controls return with an
+                                          empty list (dsp-notes.txt).
                                           No complete note lifecycle/allocation,
                                           board scheduler or PCM transport yet.
 Persistent storage               partial  MCU NVM files preserve mutations,
