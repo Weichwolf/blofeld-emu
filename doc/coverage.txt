@@ -296,6 +296,12 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           Fixed-port restarts retain exclusive
                                           active binding across real TCP close;
                                           listener/client descriptors are checked.
+                                          Monotonic host frame deadlines reject
+                                          idle/trickled incomplete TCP input;
+                                          fully framed pending MIDI reads survive
+                                          beyond the deadline. Expiry retains
+                                          actual native SETUP/IRQ/RAM ownership
+                                          (usbip_frame_timeout).
                                           Production descriptor probe also reaches
                                           the original USTB failure; no metadata
                                           escapes after two joint restores.

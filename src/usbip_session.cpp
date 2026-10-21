@@ -82,28 +82,42 @@ void UsbipSession::command(UsbipCommand value) {
   }
 }
 
-void UsbipSession::receive(const std::span<const std::uint8_t> bytes,
-                           const std::shared_ptr<UsbipExport> &publication) {
+UsbipInputProgress UsbipSession::receive(const std::span<const std::uint8_t> bytes,
+                                         const std::shared_ptr<UsbipExport> &publication) {
   try {
     if (!wants_input() || bytes.size() > usbip_input_chunk) {
       throw Fault("USB/IP input exceeds connection state/backpressure/chunk limits");
     }
+    UsbipInputProgress progress;
     auto remaining = bytes;
     if (state_ == State::management) {
       remaining = remaining.subspan(management_.consume(remaining));
-      if (management_.request()) { manage(publication); }
+      if (management_.request()) {
+        manage(publication);
+        progress.completed_frame = true;
+      }
     }
-    if (remaining.empty()) { return; }
-    if (state_ != State::transfers || !decoder_) {
-      throw Fault("Trailing USB/IP bytes after a closing management operation");
+    if (!remaining.empty()) {
+      if (state_ != State::transfers || !decoder_) {
+        throw Fault("Trailing USB/IP bytes after a closing management operation");
+      }
+      auto &decoder = *decoder_;
+      while (!remaining.empty()) {
+        const auto count = std::min(remaining.size(), decoder.input_space());
+        if (count == 0) { throw Fault("USB/IP frame buffer cannot make progress"); }
+        decoder.feed(remaining.first(count));
+        remaining = remaining.subspan(count);
+        while (auto value = decoder.next()) {
+          command(std::move(*value));
+          progress.completed_frame = true;
+        }
+      }
     }
-    while (!remaining.empty()) {
-      const auto count = std::min(remaining.size(), decoder_->input_space());
-      if (count == 0) { throw Fault("USB/IP frame buffer cannot make progress"); }
-      decoder_->feed(remaining.first(count));
-      remaining = remaining.subspan(count);
-      while (auto value = decoder_->next()) { command(std::move(*value)); }
-    }
+    constexpr auto maximum_frame = maximum_usb_transfer + usbip_transfer_header;
+    progress.frame_pending =
+        state_ == State::management ||
+        (state_ == State::transfers && decoder_->input_space() != maximum_frame);
+    return progress;
   } catch (const Fault &) {
     fail();
     throw;

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <asm-generic/socket.h>
 #include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -30,6 +31,11 @@ UsbipTcpServer::Impl::Impl(const UsbipTcpOptions requested)
   constexpr std::size_t maximum_write_budget = std::size_t{64} * 1024;
   if (options.write_budget == 0 || options.write_budget > maximum_write_budget) {
     throw Fault("USB/IP TCP write budget is outside supported bounds");
+  }
+  constexpr auto maximum_frame_timeout = std::chrono::hours{24};
+  if (options.frame_timeout <= std::chrono::milliseconds::zero() ||
+      options.frame_timeout > maximum_frame_timeout) {
+    throw Fault("USB/IP TCP frame timeout must be positive and at most 24 hours");
   }
   if (listener.get() < 0) {
     throw Fault("USB/IP socket: " + std::error_code(errno, std::generic_category()).message());
@@ -60,7 +66,7 @@ UsbipTcpServer::Impl::Impl(const UsbipTcpOptions requested)
   options.port = ntohs(address.sin_port);
 }
 
-void UsbipTcpServer::Impl::accept(std::vector<UsbipConnectionEvent> &events) {
+void UsbipTcpServer::Impl::accept(const Time now, std::vector<UsbipConnectionEvent> &events) {
   constexpr unsigned maximum_connections = 4;
   constexpr unsigned accept_budget = 4;
   for (unsigned i = 0; i < accept_budget; ++i) {
@@ -87,8 +93,12 @@ void UsbipTcpServer::Impl::accept(std::vector<UsbipConnectionEvent> &events) {
       events.push_back(
           {.connection = id, .error = true, .reason = "USB/IP connection capacity exhausted"});
     } else {
-      channels.push_back(
-          {.socket = std::move(socket), .session = std::make_unique<UsbipSession>(), .id = id});
+      auto session = std::make_unique<UsbipSession>();
+      auto &channel = channels.emplace_back();
+      channel.session = std::move(session);
+      channel.socket = std::move(socket);
+      channel.id = id;
+      channel.frame_deadline = now + options.frame_timeout;
     }
   }
 }
@@ -124,19 +134,25 @@ void UsbipTcpServer::withdraw() {
   impl_->publication.reset();
 }
 
-std::vector<UsbipConnectionEvent> UsbipTcpServer::poll(McuBus &bus,
-                                                       const ExecutionContext context) {
+std::vector<UsbipConnectionEvent> UsbipTcpServer::poll(
+    McuBus &bus, const ExecutionContext context, const std::chrono::steady_clock::time_point now) {
   if (!impl_ || impl_->faulted) {
     throw Fault("Faulted/moved USB/IP TCP server requires a new session");
   }
   std::vector<UsbipConnectionEvent> events;
   try {
-    impl_->accept(events);
+    if (now < impl_->last_poll || now > Impl::Time::max() - impl_->options.frame_timeout) {
+      throw Fault("USB/IP host clock moved backwards or cannot represent a frame deadline");
+    }
+    impl_->last_poll = now;
+    impl_->accept(now, events);
     for (auto current = impl_->channels.begin(); current != impl_->channels.end();) {
       auto &channel = *current;
       auto budget = impl_->options.write_budget;
       const auto before_events = events.size();
-      const bool active = Impl::flush(channel, budget, events) && impl_->receive(channel, events);
+      const bool active = Impl::expire(channel, now, events) &&
+                          Impl::flush(channel, budget, events) &&
+                          impl_->receive(channel, now, events);
       if (active && !channel.session->closed() &&
           (!channel.session->imported() || !bus.usb_host_suspended())) {
         channel.session->poll(bus, context);

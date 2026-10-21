@@ -822,15 +822,16 @@ void check_suspend_paths(Session &session) {
     const blofeld::UsbDecoderState observation{.suspended = suspended, .enumerated = true};
     session.machine.bus().observe_usb_decoder(observation);
     const unsigned retained_status = idle_usb_status | (suspended ? suspend_detected : 0U);
+    const auto pending = session.machine.cpu().pending_interrupt();
     require(session.word(status_word) == (retained_status | suspend_change) &&
-                session.machine.cpu().pending_interrupt().has_value() &&
-                session.machine.cpu().pending_interrupt()->vector == reset_vector &&
+                pending.has_value() && pending->vector == reset_vector &&
                 session.machine.bus().usb_host_evidence() == evidence &&
                 session.machine.bus().usb_host_configuration() == configuration,
             "Decoded changes assert the real enabled status IRQ and retain configuration/link");
     const auto middle = finish_suspend(session, true);
-    require(middle.has_value(),
-            "Every suspend/resume run requires its actual mid-handler snapshot");
+    if (!middle) {
+      throw blofeld::Fault("Every suspend/resume run requires its actual mid-handler snapshot");
+    }
     expected.cpu[4] = main_stack;
     expected.usb[status_index] = retained_status;
     expected.usb[masks_index] &= ~0x4000U;

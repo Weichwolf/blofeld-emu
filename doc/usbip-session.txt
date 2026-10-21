@@ -55,6 +55,28 @@ Decoded full-speed suspend retains the import and pending phases while the TCP
 server continues management/output/cancellation without device packet polling.
 Actual packets resume only after a supplied decoder resume (usb-suspend.txt).
 
+Input frame deadlines
+The TCP adapter uses a separate monotonic host clock. The default frame timeout
+is30 seconds; UsbipTcpOptions accepts a positive millisecond duration up to24
+hours. The initial management request has a deadline from socket acceptance,
+including a peer that sends nothing. After import, only a partial next frame
+arms a deadline. Completing one frame and starting another in the same read
+starts a fresh deadline; additional bytes within an incomplete frame do not
+extend it. Expiry is checked before I/O at the next caller poll, not by a timer
+thread. It is a host resource policy, not USB wire timing or reference common
+ticks. A backwards clock or unrepresentable deadline retires the adapter.
+
+Fully framed pending URBs and idle imported connections have no frame deadline:
+MIDI IN may legitimately NAK until data exists. Expiry closes only the affected
+peer with a visible error and imported recovery requirement. It never sends a
+synthetic URB completion, releases the lease or resets guest SETUP/IRQ/RAM.
+Deterministic own TCP/native tests inject the host clock, check idle management,
+byte trickles, partial headers/payloads, coalesced boundaries and an IN request
+still pending after two simulated host hours. Actual own HC12 ISR execution
+after expiry retains the already accepted SETUP. No sleep or fuzzing is used.
+Output-stall and valid-half-close drain deadlines remain unqualified separately;
+the pure session itself has no clock or timeout policy.
+
 Explicit runtime CLI/common-clock board binding has own native/actual-process
 tests and capture/session invalidation guards (usb-runtime.txt). There is no
 kernel USB attachment. Normal original enumeration, USB-MIDI class binding,
@@ -64,8 +86,8 @@ Loopback own-fixture tests are not hardware or original-firmware equivalence.
 No fuzzing, physical device traffic, module loading or system routing is used.
 
 Deterministic gates:
-  cmake --build --preset strict --target blofeld-usbip-session-test blofeld-usbip-session-boundaries-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
-  ctest --test-dir build/strict --output-on-failure -R '^(usbip_session|usbip_session_boundaries|usbip_tcp|usbip_tcp_native)$'
+  cmake --build --preset strict --target blofeld-usbip-session-test blofeld-usbip-session-boundaries-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test blofeld-usbip-frame-timeout-test
+  ctest --test-dir build/strict --output-on-failure -R '^(usbip_session|usbip_session_boundaries|usbip_tcp|usbip_tcp_native|usbip_frame_timeout)$'
 
 usbip_session_boundaries supplements the packet/native/TCP cases with all89
 split positions of a coalesced40-byte import and48-byte IN request, all40 truncated

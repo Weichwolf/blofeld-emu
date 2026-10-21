@@ -16,6 +16,18 @@
 #include <vector>
 
 namespace blofeld {
+bool UsbipTcpServer::Impl::expire(Connection &connection,
+                                  const Time now,
+                                  std::vector<UsbipConnectionEvent> &events) {
+  if (!connection.frame_deadline || now < *connection.frame_deadline) { return true; }
+  events.push_back({.connection = connection.id,
+                    .error = true,
+                    .requires_board_reset = connection.session->imported(),
+                    .reason = "USB/IP incomplete input frame deadline expired"});
+  connection.session->abort();
+  return false;
+}
+
 bool UsbipTcpServer::Impl::flush(Connection &connection,
                                  std::size_t &budget,
                                  std::vector<UsbipConnectionEvent> &events) {
@@ -45,6 +57,7 @@ bool UsbipTcpServer::Impl::flush(Connection &connection,
 }
 
 bool UsbipTcpServer::Impl::receive(Connection &connection,
+                                   const Time now,
                                    std::vector<UsbipConnectionEvent> &events) const {
   if (!connection.session->wants_input()) { return true; }
   std::array<std::uint8_t, usbip_input_chunk> bytes{};
@@ -62,9 +75,15 @@ bool UsbipTcpServer::Impl::receive(Connection &connection,
   try {
     if (received == 0) {
       connection.session->end_input();
+      connection.frame_deadline.reset();
     } else {
-      connection.session->receive(std::span(bytes).first(static_cast<std::size_t>(received)),
-                                  publication);
+      const auto progress = connection.session->receive(
+          std::span(bytes).first(static_cast<std::size_t>(received)), publication);
+      if (!progress.frame_pending) {
+        connection.frame_deadline.reset();
+      } else if (!connection.frame_deadline || progress.completed_frame) {
+        connection.frame_deadline = now + options.frame_timeout;
+      }
     }
     return true;
   } catch (const Fault &fault) {

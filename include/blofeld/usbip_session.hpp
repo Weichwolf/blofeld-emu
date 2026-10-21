@@ -21,6 +21,12 @@ inline constexpr std::size_t maximum_usbip_output =
     maximum_usb_pending * (maximum_usb_transfer + usbip_transfer_header);
 inline constexpr std::size_t maximum_usbip_replies = 4096;
 
+struct UsbipInputProgress {
+  // Frame assembly only: an accepted URB may still wait indefinitely for MIDI.
+  bool frame_pending = false;
+  bool completed_frame = false;
+};
+
 // Serialized, non-real-time connection state. No socket or CPU execution lives here.
 // An imported export remains claimed after EOF/abort; re-publication requires
 // separate board reset/state qualification, never automatic lease release.
@@ -33,8 +39,8 @@ public:
   UsbipSession &operator=(UsbipSession &&) = delete;
   ~UsbipSession() = default;
 
-  void receive(std::span<const std::uint8_t> bytes,
-               const std::shared_ptr<UsbipExport> &publication = {});
+  UsbipInputProgress receive(std::span<const std::uint8_t> bytes,
+                             const std::shared_ptr<UsbipExport> &publication = {});
   void poll(McuBus &bus, ExecutionContext context);
   void end_input();
   void abort();
