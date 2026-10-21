@@ -409,6 +409,26 @@ void DspBus::acknowledge_interrupt(const DspInterruptRequest request) {
   if (request.vector >= first_timer) { timers_.acknowledge_interrupt(request.vector); }
 }
 
+void DspBus::validate_admitted_interrupt(const DspInterruptRequest request) const {
+  const auto priority = interrupts_.priority(request.vector);
+  if (!priority || *priority != request.level) {
+    throw Fault("DSP admitted interrupt priority changed before acknowledgement vector=" +
+                hex(request.vector, 6));
+  }
+  constexpr unsigned first_timer = 0x54;
+  const auto pending =
+      request.vector >= first_timer ? timers_.interrupt_vectors() : shi_.interrupt_vectors();
+  if (std::ranges::find(pending, request.vector) == pending.end()) {
+    throw Fault("DSP admitted interrupt source withdrew before acknowledgement vector=" +
+                hex(request.vector, 6));
+  }
+}
+
+void DspBus::acknowledge_admitted_interrupt(const DspInterruptRequest request) {
+  validate_admitted_interrupt(request);
+  acknowledge_latched_interrupt(request);
+}
+
 void DspBus::acknowledge_latched_interrupt(const DspInterruptRequest request) {
   const auto priority = interrupts_.priority(request.vector);
   if (!priority || *priority != request.level) {

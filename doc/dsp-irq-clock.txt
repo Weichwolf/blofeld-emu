@@ -35,6 +35,9 @@ sources, timer state and clock phase. External schedules still require their
 own coordinated checkpoint. This does not provide portable whole-board state.
 Rebuild C++ consumers after the DspRunContract/DspStepPlan layout changes.
 
+The optional prepared-admission scheduler contract for later external IRQ arrivals
+is documented separately in dsp-irq-admission.txt.
+
   cmake --build --preset strict --target blofeld-dsp-irq-clock-test
   ctest --test-dir build/strict -R '^dsp_irq_clock$' --output-on-failure
 

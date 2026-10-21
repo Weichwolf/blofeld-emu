@@ -28,6 +28,13 @@ DspScheduledRun::DspScheduledRun(const DspScheduleInputs inputs, const DspMachin
   if (inputs.observation != DspStepObservation::reference_completion_boundary) {
     throw Fault("DSP scheduling requires an explicit nominal completion-observation contract");
   }
+  if (inputs.irq_admission != DspIrqAdmission::reject_changes &&
+      inputs.irq_admission != DspIrqAdmission::reference_prepare_boundary) {
+    throw Fault("Unknown DSP schedule interrupt admission contract");
+  }
+  if (inputs.irq_admission == DspIrqAdmission::reference_prepare_boundary) {
+    machine.check_admission_contract();
+  }
   const auto &clock = machine.run_clock();
   if (machine.timing_faulted() || clock.active() ||
       inputs.epoch_ticks > std::numeric_limits<std::uint64_t>::max() - clock.elapsed_ticks()) {
@@ -47,8 +54,12 @@ void DspScheduledRun::verify(const DspScheduleCheckpoint &state, const DspMachin
       clock.native_cycle_units() != state.completed_cycles_) {
     throw Fault("DSP scheduler/owner clock state requires coordinated recovery");
   }
-  if (state.pending_ && machine.plan_step() != *state.pending_) {
-    throw Fault("DSP scheduled instruction changed before its declared completion");
+  if (state.pending_) {
+    if (state.inputs_.irq_admission == DspIrqAdmission::reference_prepare_boundary) {
+      machine.verify_prepared_step(*state.pending_);
+    } else if (machine.plan_step() != *state.pending_) {
+      throw Fault("DSP scheduled instruction changed before its declared completion");
+    }
   }
 }
 
@@ -71,7 +82,11 @@ void DspScheduledRun::complete(DspMachine &machine,
   }
   if (before_step) { before_step({.completion_ticks = completion, .plan = plan}); }
   verify(state_, machine);
-  machine.cpu().step();
+  if (state_.inputs_.irq_admission == DspIrqAdmission::reference_prepare_boundary) {
+    machine.execute_prepared_step(plan);
+  } else {
+    machine.cpu().step();
+  }
   const auto &clock = machine.run_clock();
   if (clock.elapsed_ticks() != plan.start_ticks + plan.duration_ticks ||
       clock.native_cycle_units() != plan.before.native_cycles + plan.native_cycle_units) {
@@ -121,7 +136,11 @@ DspScheduledRun::advance_to(DspMachine &machine,
     bind_external(machine, external);
     unsigned external_count = 0;
     while (true) {
-      const auto native_end = prepare_native(machine, horizon);
+      const bool boundary_input =
+          state_.inputs_.irq_admission == DspIrqAdmission::reference_prepare_boundary &&
+          !state_.pending_ && state_.next_external_ &&
+          *state_.next_external_ == state_.inputs_.epoch_ticks + state_.completed_ticks_;
+      const auto native_end = boundary_input ? std::nullopt : prepare_native(machine, horizon);
       const auto next = earlier_deadline(native_end, state_.next_external_);
       if (!next) { break; }
       const auto end = *next;

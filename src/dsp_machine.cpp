@@ -6,6 +6,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
+#include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
@@ -187,6 +188,43 @@ DspStepPlan DspMachine::plan_step() const {
     throw Fault("DSP run plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
                 ": " + error.what());
   }
+}
+
+void DspMachine::check_admission_contract() const {
+  static_cast<void>(run_clock());
+  const auto contract = state_->run.contract;
+  if (!contract || contract->interrupts != DspInterruptTiming::native_vector_estimates) {
+    throw Fault("Prepared DSP interrupt admission requires explicit native vector estimates");
+  }
+}
+
+void DspMachine::verify_prepared_step(const DspStepPlan &plan) const {
+  check_admission_contract();
+  state_->check_boundary();
+  const auto before = state_->cpu.debug_state();
+  const auto &clock = run_clock();
+  try {
+    if (before != plan.before || clock.elapsed_ticks() != plan.start_ticks) {
+      throw Fault("DSP admitted instruction lost its native boundary");
+    }
+    DspCore::Admission admission;
+    if (plan.interrupt) { admission.interrupt = plan.interrupt->request; }
+    const auto estimate = state_->cpu.next_step_cycles(true, &admission);
+    if (estimate.units != plan.native_cycle_units || estimate.interrupt != plan.interrupt ||
+        clock.next_step_ticks(state_->bus, estimate.units) != plan.duration_ticks) {
+      throw Fault("DSP admitted instruction changed before its declared completion");
+    }
+  } catch (const std::exception &error) {
+    throw Fault("DSP admitted plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
+                ": " + error.what());
+  }
+}
+
+void DspMachine::execute_prepared_step(const DspStepPlan &plan) {
+  verify_prepared_step(plan);
+  std::optional<DspInterruptRequest> request;
+  if (plan.interrupt) { request = plan.interrupt->request; }
+  state_->cpu.step_admitted(request);
 }
 
 DspReferenceProgress DspMachine::begin_reference_instruction(const DspReferenceExecution contract) {

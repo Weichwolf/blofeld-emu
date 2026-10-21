@@ -81,6 +81,10 @@ public:
   void restore(const DspCheckpoint &checkpoint);
 
 private:
+  friend class DspScheduledRun;
+  void check_admission_contract() const;
+  void verify_prepared_step(const DspStepPlan &plan) const;
+  void execute_prepared_step(const DspStepPlan &plan);
   struct State;
   std::unique_ptr<State> state_;
 };

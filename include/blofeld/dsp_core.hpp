@@ -105,10 +105,17 @@ private:
     std::optional<DspInterruptVector> interrupt;
   };
 
+  struct Admission {
+    std::optional<DspInterruptRequest> interrupt = std::nullopt;
+  };
+
   void set_run_hooks(RunHooks hooks);
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] std::uint64_t native_cycles() const;
-  [[nodiscard]] StepEstimate next_step_cycles(bool vector_estimates) const;
+  [[nodiscard]] StepEstimate next_step_cycles(bool vector_estimates,
+                                              const Admission *admission = nullptr) const;
+  void step_admitted(std::optional<DspInterruptRequest> interrupt);
+  void step_impl(DspNativeAccessObserver observer, const Admission *admission);
   [[nodiscard]] DspCoreCheckpoint checkpoint() const;
   void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
   [[nodiscard]] bool executing() const;

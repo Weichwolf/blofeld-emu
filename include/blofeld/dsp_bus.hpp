@@ -108,6 +108,9 @@ public:
   [[nodiscard]] DspCodeChanges take_code_changes();
   [[nodiscard]] std::optional<DspInterruptRequest> interrupt_request(unsigned mask) const;
   void acknowledge_interrupt(DspInterruptRequest request);
+  // Explicit nominal admission: later higher-priority requests stay pending.
+  void validate_admitted_interrupt(DspInterruptRequest request) const;
+  void acknowledge_admitted_interrupt(DspInterruptRequest request);
 
   [[nodiscard]] DspShi &shi() { return shi_; }
 

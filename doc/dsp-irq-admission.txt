@@ -1,0 +1,53 @@
+Prepared nominal interrupt admission
+
+DspScheduleInputs.irq_admission defaults to reject_changes. Existing schedules
+retain their strict rejection when an external event changes a prepared plan.
+The separately selected reference_prepare_boundary policy requires an owner
+with native_vector_estimates interrupt timing (dsp-irq-clock.txt).
+
+This policy selects the native interrupt request, or absence of a request,
+when the scheduler prepares the next step. Inputs already due at the completed
+clock boundary are observed before preparing another step. Existing
+completion-tie policies still decide the order against an already prepared
+completion. The CPU still performs actual instruction reads and effects at the
+declared completion boundary. This mixed reference ordering is an explicit
+software experiment, not physical pipeline/recognition latency or an inferred
+Blofeld clock profile. External observations see the last completed
+peripheral/clock prefix. This policy does not subdivide the pending
+instruction's nominal CLK2 units at an event timestamp; captured counter
+values therefore remain reference-prefix observations, not physical
+intra-instruction measurements.
+
+An input arriving after foreground admission cannot replace that instruction.
+It remains pending for the next selection after the instruction completes,
+including its actual SR/mask changes. If a vector was already admitted, a
+later higher-priority source remains pending while the admitted native entry
+executes. The admitted source must still be enabled, pending and at its
+captured priority. Withdrawal or priority changes fail visibly before
+dispatch. Native REP eligibility and SR.SC rejection remain in force.
+
+Both actual vector words, native CPU/counter state, PLL-derived duration and
+executed costs remain checked. A private owner/scheduler path supplies the
+captured admission to the same native interpreter; no host ISR or invented
+acknowledgement replaces it. Acknowledgement follows both genuine vector
+reads. The existing unclocked access-tape acknowledgement path retains its own
+contract.
+
+Schedule snapshots retain the admission policy and selected plan; owner
+snapshots retain CPU, bus, real pending sources and CLK2 residue. Restore
+remains coordinated with the caller's external input cursor. Contract
+mismatches and stale native state reject. Rebuild C++ consumers after
+DspScheduleInputs layout changes.
+
+  cmake --build --preset strict --target blofeld-dsp-irq-admission-test
+  ctest --test-dir build/strict -R '^dsp_irq_admission$' --output-on-failure
+
+Directed diagnostics cover raw/synchronized capture edges before and at
+completion, both allowed tie orders and rejection, foreground effects before a
+fast vector, native masking/unmasking, later higher-priority SHI arrival and
+genuine nested JSR/HRX/RTI, snapshots before/after input delivery, same-cost
+changes of either vector word, source withdrawal and priority changes. Literal
+instruction costs and register/frame expectations supplement replay
+comparisons. No fuzzing or physical input occurs. Full original serial
+reception, boot, physical IRQ latency, host MIDI ports, calibrated clocks,
+complete audio and hardware equivalence remain unqualified.

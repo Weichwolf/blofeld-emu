@@ -136,7 +136,12 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           actual native costs/acknowledgement,
                                           JSR/RTI/nesting, CLK2 residue, snapshots,
                                           same-cost mutation and adjacent REP
-                                          deferral (dsp-irq-clock.txt). This does
+                                          deferral (dsp-irq-clock.txt). Optional
+                                          prepared admission retains a begun
+                                          foreground step across later inputs and
+                                          an accepted source across higher-priority
+                                          arrivals; strict mutation/source checks
+                                          remain (dsp-irq-admission.txt). This does
                                           not qualify physical IRQ latency or
                                           CPU-clocked original serial reception.
                                           Physical pipeline/PLL/board timing open.

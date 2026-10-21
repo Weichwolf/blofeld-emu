@@ -118,6 +118,8 @@ public:
       }
       if (native_.reference().intercepting()) {
         native_.reference().acknowledge_interrupt(interrupt_->request);
+      } else if (interrupt_->admitted) {
+        bus_.acknowledge_admitted_interrupt(interrupt_->request);
       } else {
         bus_.acknowledge_interrupt(interrupt_->request);
       }
@@ -130,9 +132,11 @@ public:
 
   void arm_interrupt(const DspInterruptRequest request,
                      const std::uint32_t address,
-                     const std::optional<std::array<std::uint32_t, 2>> expected = std::nullopt) {
+                     const std::optional<std::array<std::uint32_t, 2>> expected = std::nullopt,
+                     const bool admitted = false) {
     if (interrupt_) { throw Fault("DSP interrupt vector fetch is already armed"); }
-    interrupt_ = VectorFetch{.request = request, .address = address, .expected = expected};
+    interrupt_ = VectorFetch{
+        .request = request, .address = address, .expected = expected, .admitted = admitted};
   }
 
   void verify_interrupt_fetch() const {
@@ -146,6 +150,7 @@ private:
     DspInterruptRequest request;
     std::uint32_t address = 0;
     std::optional<std::array<std::uint32_t, 2>> expected;
+    bool admitted = false;
   };
 
   DspBus &bus_;
@@ -259,6 +264,25 @@ public:
             .interrupt = vector};
   }
 
+  [[nodiscard]] std::optional<DspInterruptRequest>
+  select_interrupt(const DspState &before, const Admission *admission) const {
+    constexpr unsigned mask_shift = 8;
+    constexpr unsigned interrupt_mask = 3;
+    const auto mask = (before.sr >> mask_shift) & interrupt_mask;
+    auto selected = admission != nullptr ? admission->interrupt : bus.interrupt_request(mask);
+    if (!selected) { return std::nullopt; }
+    const bool eligible = cpu.referenceInterruptible(bus.peek_program(before.pc));
+    if (admission != nullptr) {
+      if (!eligible || selected->level < mask) {
+        throw Fault("DSP admitted interrupt is no longer eligible");
+      }
+      bus.validate_admitted_interrupt(*selected);
+    } else if (!eligible) {
+      selected.reset();
+    }
+    return selected;
+  }
+
   void reset_reference() {
     auto next_owner = std::make_shared<const bool>(true);
     native.reference().clear();
@@ -350,22 +374,19 @@ std::uint64_t DspCore::native_cycles() const {
   return impl_->cpu.getCycles();
 }
 
-DspCore::StepEstimate DspCore::next_step_cycles(const bool vector_estimates) const {
+DspCore::StepEstimate DspCore::next_step_cycles(const bool vector_estimates,
+                                                const Admission *admission) const {
   if (impl_->active || impl_->faulted || impl_->native.reference().active()) {
     throw Fault("DSP cycle preview requires a healthy completed step");
   }
   const auto before = state();
   try {
     constexpr unsigned compatibility = 0x2000;
-    constexpr unsigned mask_shift = 8;
-    constexpr unsigned interrupt_mask = 3;
-    const auto interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
-    const bool accepted =
-        interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc));
-    if ((before.sr & compatibility) != 0 || (accepted && !vector_estimates)) {
+    const auto interrupt = impl_->select_interrupt(before, admission);
+    if ((before.sr & compatibility) != 0 || (interrupt && !vector_estimates)) {
       throw Fault("Unqualified DSP interrupt or compatibility-mode timing preview");
     }
-    if (accepted) { return impl_->interrupt_estimate(before, *interrupt); }
+    if (interrupt) { return impl_->interrupt_estimate(before, *interrupt); }
     return {.units = impl_->cpu.referenceNextCycles(), .interrupt = std::nullopt};
   } catch (const std::exception &error) {
     throw Fault("DSP cycle preview pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) + ": " +
@@ -556,6 +577,15 @@ void DspCore::step() {
 }
 
 void DspCore::step(DspNativeAccessObserver observer) {
+  step_impl(std::move(observer), nullptr);
+}
+
+void DspCore::step_admitted(const std::optional<DspInterruptRequest> interrupt) {
+  const Admission admission{.interrupt = interrupt};
+  step_impl({}, &admission);
+}
+
+void DspCore::step_impl(DspNativeAccessObserver observer, const Admission *admission) {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
   if (impl_->native.reference().active()) {
     throw Fault("Cannot execute an atomic DSP step while a reference access is pending");
@@ -567,12 +597,7 @@ void DspCore::step(DspNativeAccessObserver observer) {
   StepEstimate estimate;
   try {
     impl_->invalidate();
-    constexpr unsigned mask_shift = 8;
-    constexpr unsigned interrupt_mask = 3;
-    interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
-    if (interrupt && !impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc))) {
-      interrupt.reset();
-    }
+    interrupt = impl_->select_interrupt(before, admission);
     if (impl_->run.begin) { impl_->run.begin(before, interrupt.has_value()); }
     if (interrupt && impl_->run.vector_estimates) {
       estimate = impl_->interrupt_estimate(before, *interrupt);
@@ -584,7 +609,8 @@ void DspCore::step(DspNativeAccessObserver observer) {
       impl_->access.arm_interrupt(*interrupt,
                                   vector,
                                   estimate.interrupt ? std::optional(estimate.interrupt->words)
-                                                     : std::nullopt);
+                                                     : std::nullopt,
+                                  admission != nullptr);
       impl_->cpu.execReferenceInterrupt(vector, interrupt->level);
       impl_->access.verify_interrupt_fetch();
     } else {

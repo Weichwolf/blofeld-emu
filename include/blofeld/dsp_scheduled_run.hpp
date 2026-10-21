@@ -12,6 +12,7 @@ namespace blofeld {
 
 enum class DspStepObservation : std::uint8_t { unqualified, reference_completion_boundary };
 enum class DspScheduleBoundary : std::uint8_t { before, through };
+enum class DspIrqAdmission : std::uint8_t { reject_changes, reference_prepare_boundary };
 enum class DspExternalOrder : std::uint8_t {
   unqualified,
   reject_tie,
@@ -32,6 +33,7 @@ struct DspExternalEvents {
 struct DspScheduleInputs {
   std::uint64_t epoch_ticks = 0;
   DspStepObservation observation = DspStepObservation::unqualified;
+  DspIrqAdmission irq_admission = DspIrqAdmission::reject_changes;
   bool operator==(const DspScheduleInputs &) const = default;
 };
 

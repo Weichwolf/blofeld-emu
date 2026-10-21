@@ -646,6 +646,10 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-dsp-irq-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_irq_clock COMMAND blofeld-dsp-irq-clock-test)
   set_tests_properties(dsp_irq_clock PROPERTIES TIMEOUT 120)
+  add_executable(blofeld-dsp-irq-admission-test test/dsp_irq_admission_test.cpp)
+  target_link_libraries(blofeld-dsp-irq-admission-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_irq_admission COMMAND blofeld-dsp-irq-admission-test)
+  set_tests_properties(dsp_irq_admission PROPERTIES TIMEOUT 120)
   add_executable(blofeld-dsp-scheduled-run-test test/dsp_scheduled_run_test.cpp)
   target_link_libraries(blofeld-dsp-scheduled-run-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_scheduled_run COMMAND blofeld-dsp-scheduled-run-test)
@@ -768,6 +772,7 @@ add_custom_target(quality
     blofeld-mcu-run-clock-test
     blofeld-dsp-run-clock-test
     blofeld-dsp-irq-clock-test
+    blofeld-dsp-irq-admission-test
     blofeld-dsp-scheduled-run-test
     blofeld-original-dsp-clock-test
     blofeld-original-dsp-midi-test
