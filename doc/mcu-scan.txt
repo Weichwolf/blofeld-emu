@@ -1,0 +1,45 @@
+Original MCU byte delays and scan-output helper
+
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-original-mcu-scan-test
+  ctest --test-dir build/strict -R '^original_mcu_scan$' --output-on-failure
+
+The official local 1.25 ZIP, complete MCU image and three function spans are
+SHA-256 pinned before execution. Missing firmware skips with code 77; changed
+contents fail. No manufacturer instructions or program bytes are distributed.
+The source-side review pinned in mcu-scan-reference.json supplies independently
+recovered behavior; S12CPUV2 instruction entries supply flag and cycle rules.
+
+The 8364 actual JSR/RTS calls exercise byte delay at 0xb9c2, extended delay at 0xb9ba
+and scan-output reset at 0x8a42. Each routine has 2788 cases: all 256 input bytes
+cross four CCR patterns, plus all 256 CCR values at inputs 0/1/2/127/128/254/255.
+Overlapping pairs run once. Complete A/B/X/Y/SP/CCR/PC,
+instruction counts and un-stretched internal-memory core-cycle counts are
+checked against independent expectations, both natively and from the trace.
+
+The byte delay performs n DBNE instructions where n=input or 256 for input 0.
+It returns B=0 without changing CCR. Including the own outer JSR, the call
+retires n+2 instructions in 3*n+9 core cycles. Extended delay executes its
+original nested JSR/RTS, loads 255 and tail-jumps to the same byte loop. It
+retires n+261 instructions in 3*n+787 cycles. Its final N=1, Z=V=0 and retained
+Carry come from LDAB #255 and are not recomputed from the final B=0.
+
+The scan helper writes whole bytes PTJ=1, PTS=0, PTT=1 in that exact order.
+It retains A/X/Y, leaves B=1 and clears N/Z/V/C. Its own call plus five
+original instructions takes 19 core cycles. Actual operand cycles reject every
+port read, including an accidental read-before-write for CLR PTS. These ports
+retain reset input directions and unknown external pads throughout; no sampled
+pad level or scan result is supplied. Prior latch bytes use the same matrix.
+
+Actual frame write/read addresses, big-endian return words and nested return
+order are checked. All 3584 bytes of the declared SMRAM fixture outside the
+three own caller bytes and four genuine frame bytes are guarded after every
+call. All 32768 MCU flash bytes, knowledge and erase history remain unchanged.
+Other data operands or peripheral accesses fail in the cycle observer.
+
+The fixture explicitly supplies diagnostic RAM/registers and inactive IRQ/XIRQ
+inputs. It executes isolated original callees, without running boot or an RTI
+caller. Clock callbacks count reference core cycles; they do not advance board
+oscillators or claim physical delay, wait-state/prefetch timing, interrupts,
+scan inputs, pin wiring, MIDI/audio or hardware equivalence. Private traces and
+JSON summaries remain ignored build artifacts. No fuzz or physical traffic runs.

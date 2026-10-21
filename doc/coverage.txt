@@ -32,6 +32,15 @@ Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
                                           untimed fixture; RAM clear and original
                                           checksum verified (mcu-boot.txt).
                                           Unknown pins still stop the default run.
+Original MCU scan helpers         partial  8364 original delay/scan calls cover
+                                          every byte input and all CCR values
+                                          at seven boundaries, zero-count wrap,
+                                          unchanged DBNE flags, nested/tail
+                                          returns and ordered port writes without
+                                          pad reads. Independent CPU/core-cycle
+                                          expectations and RAM/NVM guards
+                                          (mcu-scan.txt); no RTI/scan-input or
+                                          physical-delay qualification.
 CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrite,
                                           branches, code-cache invalidation and
                                           word-transfer side effects tested; 12288
