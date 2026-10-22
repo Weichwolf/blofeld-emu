@@ -959,6 +959,13 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           fallback/eviction snapshot replay
                                           (dsp-workspace.txt). Declared setup does
                                           not resolve upstream note allocation.
+                                          Original CC7/CC1 bytes now control held
+                                          voices through master/DMA/ESAI PCM:
+                                          608 parser returns, 256 blocks and 4096
+                                          independent frames (dsp-voice-midi.txt).
+                                          Destination switching is checked;
+                                          smoothing clock, normal host MIDI and
+                                          NoteOn allocation remain unqualified.
                                           Original scheduler primitives check
                                           seed/tick/timer/countdown arithmetic,
                                           real conditional-call/RTS frames and

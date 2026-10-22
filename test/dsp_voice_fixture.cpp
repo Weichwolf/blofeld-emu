@@ -24,7 +24,27 @@
 
 namespace {
 using Words = std::vector<unsigned>;
-constexpr unsigned sound = 0x1000, entry = 0xc500, mask = 0xffffff, rounding_mode = 1U << 21U;
+constexpr unsigned fixture_sound = 0x1000, entry = 0xc500, mask = 0xffffff,
+                   rounding_mode = 1U << 21U;
+constexpr unsigned primary_sound = 0x936;
+constexpr unsigned midi_parser = 0xc53;
+constexpr unsigned midi_ring = 0x2f80;
+constexpr unsigned midi_ring_size = 64;
+constexpr unsigned midi_producer = 0x3b;
+constexpr unsigned midi_consumer = 0x3c;
+constexpr unsigned midi_channel_setting = 0x744;
+constexpr unsigned midi_control_assignments = 0x753;
+constexpr unsigned midi_staged_status = 0x24;
+constexpr unsigned midi_byte_shift = 16;
+constexpr unsigned midi_controller_status = 0xb0;
+constexpr unsigned midi_volume = 7;
+constexpr unsigned midi_wheel = 1;
+constexpr unsigned transition_destination = 0x15;
+constexpr unsigned transition_target = 0x16;
+constexpr unsigned transition_flag = 0x80;
+constexpr unsigned runtime_flags = 6;
+constexpr unsigned modulation_controller = 383;
+constexpr std::array<unsigned, 8> midi_volumes{127, 0, 1, 64, 96, 127, 32, 0};
 constexpr unsigned parameters_copied = 0x51c, processing_chain = 0x59d, lfo_initializer = 0x169d;
 constexpr unsigned mixer_gains = 0x6ed, mixer_renderer = 0x707, noise_generator = 0x7e5;
 
@@ -224,7 +244,8 @@ struct Call {
 void harness(blofeld::DspBus &bus,
              unsigned &stop,
              blofeld::test::VoiceMaster &master,
-             blofeld::test::VoicePcm &pcm) {
+             blofeld::test::VoicePcm &pcm,
+             const unsigned sound) {
   blofeld::test::DspProgram code;
   code.immediate("x1", memory_mode);
   code.emit("move x1,omr");
@@ -259,6 +280,7 @@ unsigned initial_bus_word(const unsigned index, const bool varied) {
 
 struct Fixture {
   blofeld::DspBus bus;
+  const unsigned sound;
   unsigned stop = 0;
   blofeld::test::VoiceMaster master;
   blofeld::test::VoicePcm pcm;
@@ -273,6 +295,7 @@ struct Fixture {
   bool rendering = false;
   bool master_enabled = false;
   bool pcm_enabled = false;
+  bool midi_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
   Case configuration{};
   bool drive_pending = false;
@@ -301,8 +324,9 @@ struct Fixture {
                                const Source &s,
                                unsigned &stop,
                                blofeld::test::VoiceMaster &master,
-                               blofeld::test::VoicePcm &pcm) {
-    harness(bus, stop, master, pcm);
+                               blofeld::test::VoicePcm &pcm,
+                               const unsigned sound_base) {
+    harness(bus, stop, master, pcm, sound_base);
     bus.observe_omr(memory_mode);
     bus.advance_instruction_cycles(3);
     for (const auto &r : s.records) {
@@ -313,12 +337,19 @@ struct Fixture {
     return bus;
   }
 
-  Fixture(const Source &s, std::ostream &output)
-      : cpu(load(bus, s, stop, master, pcm)), source(s), trace(output) {}
+  Fixture(const Source &s, std::ostream &output, const bool midi)
+      : sound(midi ? primary_sound : fixture_sound),
+        cpu(load(bus, s, stop, master, pcm, sound)),
+        source(s),
+        trace(output),
+        midi_enabled(midi) {}
 
   void put(blofeld::DspSpace space, unsigned at, unsigned v) {
     require(!rendering ||
-                (space == blofeld::DspSpace::x && (at == caller_target || at == caller_status)),
+                (space == blofeld::DspSpace::x &&
+                 (at == caller_target || at == caller_status ||
+                  (midi_enabled &&
+                   (at == midi_producer || (at >= midi_ring && at < midi_ring + midi_ring_size))))),
             "Host synthesis-state repair is forbidden between original voice blocks");
     bus.write({.space = space, .address = at, .value = v});
   }
@@ -792,6 +823,7 @@ struct Fixture {
     reset_stream(input.twos);
     configure_sound(input);
     prepare_output(input);
+    if (midi_enabled) { initialize_midi(input.twos); }
     if (master_enabled) { blofeld::test::VoiceMaster::initialize(bus); }
     if (pcm_enabled) {
       pcm.begin(bus);
@@ -801,6 +833,7 @@ struct Fixture {
     rendering = true;
     for (unsigned block = 0; block < input.blocks; ++block) {
       begin_block(block);
+      if (midi_enabled) { midi_block(block, input.twos); }
       run({.target = voice_entry, .end = stop, .twos = input.twos});
       check_block(block);
       emit_samples();
@@ -812,6 +845,66 @@ struct Fixture {
       }
     }
     rendering = false;
+  }
+
+  void initialize_midi(const bool twos) {
+    using enum blofeld::DspSpace;
+    // Original single-part dispatch selects X:$936; no relocated parser or firmware patch.
+    require(sound == primary_sound, "Original MIDI parser requires its actual part base");
+    put(x, midi_channel_setting, 1); // MIDI channel 1, zero-based status nibble 0.
+    for (unsigned i = 0; i < 4; ++i) { put(x, midi_control_assignments + i, parameter_max); }
+    for (unsigned i = 0; i < midi_ring_size; ++i) { put(x, midi_ring + i, initial_left ^ i); }
+    require(get(x, midi_producer) == midi_ring && get(x, midi_consumer) == midi_ring,
+            "Original pointer initializer must supply the empty primary ring");
+    run({.target = midi_parser, .end = stop, .twos = twos});
+  }
+
+  void send_midi(const std::vector<unsigned> &bytes, const bool twos) {
+    using enum blofeld::DspSpace;
+    auto cursor = get(x, midi_producer);
+    require(cursor == get(x, midi_consumer) && bytes.size() < midi_ring_size,
+            "Own MIDI transport supplies a bounded empty ring");
+    trace << "MIDI_BYTES" << std::hex;
+    for (const auto byte : bytes) {
+      require(byte <= byte_mask, "Own MIDI transport supplies bytes");
+      trace << ' ' << byte;
+      put(x, cursor, byte << midi_byte_shift);
+      cursor = midi_ring + ((cursor - midi_ring + 1) % midi_ring_size);
+    }
+    put(x, midi_producer, cursor);
+    trace << '\n';
+    run({.target = midi_parser, .end = stop, .twos = twos});
+    require(cpu.state().sp == 0 && get(x, midi_consumer) == cursor,
+            "Original parser must consume supplied bytes and actually return");
+    trace << "MIDI_RETURN " << cursor << ' ' << get(x, midi_consumer);
+    for (unsigned at = midi_staged_status; at < midi_staged_status + 3; ++at) {
+      trace << ' ' << get(x, at);
+    }
+    trace << ' ' << get(x, transition_destination) << ' ' << get(x, transition_target) << ' '
+          << (get(x, runtime_flags) & transition_flag) << ' ' << get(x, sound + output_controller)
+          << ' ' << get(x, sound + modulation_controller) << ' ' << cpu.state().sp << '\n'
+          << std::dec;
+  }
+
+  void midi_block(const unsigned block, const bool twos) {
+    const auto value = midi_volumes.at(block);
+    if (block == 2) {
+      for (const auto byte : {midi_controller_status, midi_volume, value}) {
+        send_midi({byte}, twos);
+      }
+    } else {
+      if (block == 3) {
+        send_midi({midi_controller_status | 1U, midi_volume, parameter_max}, twos);
+      }
+      if (block == 1) {
+        send_midi({midi_volume, value}, twos); // Running status survives the preceding block.
+      } else {
+        send_midi({midi_controller_status, midi_volume, value}, twos);
+      }
+    }
+    // A subsequent real wheel command commits the previous volume transition.
+    // This tests original destination switching, not the main-loop smoothing clock.
+    send_midi({midi_wheel, 0}, twos);
   }
 
   void callbacks(const char *label) {
@@ -871,14 +964,15 @@ int run_voice_test(const int count,
                    const bool drive,
                    const bool master,
                    const bool pcm,
-                   VoicePcmCapture *const capture) {
+                   VoicePcmCapture *const capture,
+                   const bool midi) {
   try {
     require(count == 3, "Expected original firmware and private voice trace");
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
     require(trace.is_open(), "Cannot write private original voice trace");
     trace.exceptions(std::ios::failbit | std::ios::badbit);
-    Fixture fixture(source, trace);
+    Fixture fixture(source, trace, midi);
     fixture.master_enabled = master;
     fixture.pcm_enabled = pcm;
     fixture.capture = capture;

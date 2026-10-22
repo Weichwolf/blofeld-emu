@@ -8,5 +8,6 @@ struct VoicePcmCapture;
                                  bool drive,
                                  bool master = false,
                                  bool pcm = false,
-                                 VoicePcmCapture *capture = nullptr);
+                                 VoicePcmCapture *capture = nullptr,
+                                 bool midi = false);
 }

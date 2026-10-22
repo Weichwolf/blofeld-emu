@@ -6,7 +6,7 @@ import re
 
 from dsp_drive_validation import validate_drive_calls
 
-from dsp_voice_model import (FULL_MASK, H, RESET_LEVEL, W, WORD_MASK, Voice,
+from dsp_voice_model import (FULL_MASK, H, W, WORD_MASK, Voice,
                              initial_bus, mixer_model, output_model, signed,
                              waveform_model)
 
@@ -30,10 +30,11 @@ def new_totals():
 
 
 def validate_stream(stream, xdata, ydata, tables, identity, totals, block_count=8, drives=None,
-                    after_block=None):
+                    after_block=None, before_block=None, sound_base=0x1000):
     kind, mode, color, profile, routing = identity
     high, twos, varied, serial = kind == 'sync', mode == '1', profile == '1', routing == '1'
-    voice = Voice(xdata, ydata, tables[twos], high, twos, int(color), varied, serial, drives)
+    voice = Voice(xdata, ydata, tables[twos], high, twos, int(color), varied, serial, drives,
+                  sound_base)
 
     def check(label, expected, text):
         rows = re.findall('^' + label + r' ([^\n]+)$', text, re.M)
@@ -51,6 +52,8 @@ def validate_stream(stream, xdata, ydata, tables, identity, totals, block_count=
     if [int(n) for n, _ in blocks] != list(range(block_count)):
         raise ValueError('Incomplete consecutive stream')
     for number, block in blocks:
+        if before_block is not None:
+            before_block(voice, block, int(number))
         validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
                        varied, serial, totals)
         if after_block is not None:
@@ -67,7 +70,7 @@ def validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
     check('HISTORY_INIT', voice.history_words(), block)
     writes = voice.start_controls() if n == 0 else []
     lfos = [[int(v, 16) for v in row.split()] for row in re.findall('^LFO ([^\\n]+)', block, re.M)]
-    if lfos != ([[root + 1 + 10 * i, 4096 + 160 + 12 * i, 3 ** i] for i in range(3)] if n == 0 else []):
+    if lfos != ([[root + 1 + 10 * i, voice.sound_base + 160 + 12 * i, 3 ** i] for i in range(3)] if n == 0 else []):
         raise ValueError('Unexpected LFO initialization in dependent stream')
     for stage in ('COPIED', 'ROUTED', 'GAINS'):
         check(stage, voice.gains, block)
@@ -122,8 +125,8 @@ def validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
     check('FILTER_RETURN', returned, block)
     check('PRIOR_BUS', voice.bus, block)
     envelope = voice.envelopes[7]
-    check('OUTPUT_DISPATCH', [envelope, voice.gain, RESET_LEVEL], block)
-    out = output_model(voice.gain, envelope, RESET_LEVEL, routed, voice.bus)
+    check('OUTPUT_DISPATCH', [envelope, voice.gain, voice.controller], block)
+    out = output_model(voice.gain, envelope, voice.controller, routed, voice.bus)
     check('OUTPUT_BUS', out['bus'], block)
     check('FINAL_GAIN', [out['stored_target']], block)
     check('OUTPUT_KERNEL', [signed(voice.gain) * W & FULL_MASK, out['delta'] & FULL_MASK, out['stored_target'], 2176, 50621, 1440, 1], block)
