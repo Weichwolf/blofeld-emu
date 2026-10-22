@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Compare a direct original foreground/ring source with a private host audio monitor."""
+"""Verify all original ring contexts through distinct source-owned native workers."""
 
+import itertools
 import json
 from pathlib import Path
 import re
@@ -15,34 +16,43 @@ from dsp_voice_model import signed, waveform_model
 from dsp_voice_validation import new_totals, validate_stream
 from host_audio import require, service, terminate, until
 from original_dsp_foreground import row
-from original_dsp_idle_midi import BLOCKS as MIDI_BLOCKS, IdlePipeline
-from original_dsp_idle_midi import negative_controls as midi_negative_controls
+from original_dsp_idle_midi import (BLOCKS as MIDI_BLOCKS, IdlePipeline,
+                                   negative_controls as midi_negative_controls)
 from original_dsp_repeat import BLOCKS, Pipeline, SOUND, negative_controls
-from original_dsp_release_ring import BLOCKS as RELEASE_BLOCKS
-from original_dsp_release_ring import expected_payload as release_payload
-from original_dsp_release_ring import negative_controls as release_negative_controls
-from original_dsp_sustain_ring import BLOCKS as SUSTAIN_BLOCKS
-from original_dsp_sustain_ring import expected_payload as sustain_payload
-from original_dsp_sustain_ring import negative_controls as sustain_negative_controls
+from original_dsp_release_ring import (BLOCKS as RELEASE_BLOCKS,
+                                       expected_payload as release_payload,
+                                       negative_controls as release_negative_controls)
+from original_dsp_sustain_ring import (BLOCKS as SUSTAIN_BLOCKS,
+                                       expected_payload as sustain_payload,
+                                       negative_controls as sustain_negative_controls)
 from original_dsp_voice import original_records
+from original_dsp_voice_audio import compare
 
 ROOT = Path(__file__).resolve().parents[1]
+IDENTITIES = tuple((kind, mode, '127', str(int(kind == 'sync')), routing)
+                   for kind, mode, routing in itertools.product(('normal', 'sync'),
+                                                               ('0', '1'), ('0', '1')))
 
 
-def expected_payload(text, xdata, ydata, program, midi=False, release=False, sustain=False):
+def expected_payload(text, xdata, ydata, program, identity,
+                     midi=False, release=False, sustain=False):
     if sustain:
+        require(identity == IDENTITIES[0], 'Direct sustain oracle covers only the first context')
         return sustain_payload(text, xdata, ydata, program)
     if release:
+        require(identity == IDENTITIES[0], 'Direct release oracle covers only the first context')
         return release_payload(text, xdata, ydata, program)
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
-    identity = ('normal', '0', '127', '0', '0')
     require(len(cases) == 1 and tuple(cases[0][:5]) == identity,
-            'Direct audio must select one complete declared original ring stream')
+            'Direct audio must select exactly the requested original ring context')
+    varied, twos = identity[3] == '1', identity[1] == '1'
 
-    class Capture(IdlePipeline if midi else Pipeline):
+    base = IdlePipeline if midi else Pipeline
+
+    class Capture(base):
         def __init__(self):
-            super().__init__(False, False, program)
+            super().__init__(varied, twos, program)
             self.payload = bytearray()
 
         def serial(self, text, check):
@@ -52,38 +62,78 @@ def expected_payload(text, xdata, ydata, program, midi=False, release=False, sus
 
     capture = Capture()
     stream = cases[0][5]
+    inputs = [0xb0, 7, 127, 1, 0, 7, 127] if varied else [0xb0, 7, 0]
     require(row('REPEAT_AUTOMATIC_REJECTED', stream) == [1] and
-            row('FOREGROUND_INPUT', stream) == [0xb0, 7, 0],
-            'Direct audio must retain the DMA timing refusal and actual controller input')
+            row('FOREGROUND_INPUT', stream) == inputs,
+            'Direct audio must retain the timing refusal and actual controller input')
     require([ydata[0x1e25 + index] & 255 for index in (129, 145)] == [0, 0],
             'Changed original factory FX Mix0/0 profile')
     totals = new_totals()
     blocks = MIDI_BLOCKS if midi else BLOCKS
-    validate_stream(stream, xdata, ydata, {False: waveform_model(ydata, False)}, identity,
+    validate_stream(stream, xdata, ydata, {twos: waveform_model(ydata, twos)}, identity,
                     totals, block_count=blocks, before_block=capture.before,
                     after_block=capture.after, sound_base=SOUND)
     require(totals['blocks'] == blocks and totals['dependent_blocks'] == blocks - 1 and
             capture.nonzero > 0 and len(capture.payload) == blocks * 16 * 8,
-            'Every native original ring block must reach the independent audio oracle')
+            'Every original ring block must reach the independent audio oracle')
+    if midi:
+        require(capture.idle_polls == 24, 'Every MIDI source must execute 24 real idle polls')
     return bytes(capture.payload)
 
 
-def check_monitor(recorded, expected):
-    position = recorded.find(expected)
-    require(len(recorded) % 8 == 0 and position >= 0 and position % 8 == 0,
-            'Private monitor lacks the complete aligned original ring audio prefix')
-    require(not recorded[:position].strip(b'\0') and
-            not recorded[position + len(expected):].strip(b'\0'),
-            'Private monitor has extra, stale, duplicated or changed source samples')
-    return position
+def render(binary, firmware, trace, server, env, directory, index, xdata, ydata, program,
+           midi, release=False, sustain=False):
+    result = subprocess.run([str(binary), str(firmware), str(trace), server, str(index),
+                             *(['sustain'] if sustain else ['release'] if release else ['midi'] if midi else [])],
+                            env=env, capture_output=True, text=True, check=False,
+                            timeout=240 if env.get('BLOFELD_TEST_SANITIZER') == 'thread' else 90)
+    diagnostics = result.stdout + result.stderr
+    (directory / f'client-{index}.log').write_text(diagnostics)
+    require(result.returncode == 0 and not result.stderr and
+            not any(marker in diagnostics for marker in
+                    ('AddressSanitizer', 'LeakSanitizer', 'ThreadSanitizer', 'runtime error:')),
+            'Direct original ring audio failed: ' + diagnostics)
+    require(re.findall(r'^direct-ring-frames=(\d+) playback-rate=48000 '
+                       r'physical-clock=unqualified source-reuse-rejected=1$',
+                       result.stdout, re.M) ==
+            [str((SUSTAIN_BLOCKS if sustain else RELEASE_BLOCKS if release else MIDI_BLOCKS if midi else BLOCKS) * 16)],
+            'Every worker must retain one source and accept/write/finish all decoded frames')
+    text = trace.read_text()
+    identity = IDENTITIES[index]
+    expected = expected_payload(text, xdata, ydata, program, identity,
+                                midi=midi, release=release, sustain=sustain)
+
+    def validate(changed, xdata, ydata, program):
+        return expected_payload(changed, xdata, ydata, program, identity,
+                                midi=midi, release=release, sustain=sustain)
+
+    controls = (sustain_negative_controls if sustain else release_negative_controls if release
+                else midi_negative_controls if midi else negative_controls)
+    controls(text, xdata, ydata, program, validator=validate)
+    return expected
 
 
-def playback(binary, firmware, trace, directory, xdata, ydata, program,
-             midi=False, release=False, sustain=False):
+def monitor_controls(recorded, expected):
+    for index, stream in enumerate(expected):
+        changed = bytearray(stream)
+        changed[-8] ^= 1
+        corrupted = list(expected)
+        corrupted[index] = bytes(changed)
+        try:
+            compare(recorded, corrupted)
+        except ValueError:
+            pass
+        else:
+            raise ValueError('Private monitor accepted a corrupted original ring stream')
+
+
+def playback(binary, firmware, artifacts, directory, xdata, ydata, program,
+             midi, release=False, sustain=False):
     blocks = SUSTAIN_BLOCKS if sustain else RELEASE_BLOCKS if release else MIDI_BLOCKS if midi else BLOCKS
-    frames = blocks * 16
+    count = 1 if release or sustain else len(IDENTITIES)
     with service(directory) as (daemon, server, env):
         recorded = directory / 'monitor.pcm'
+        expected = []
         with recorded.open('wb') as samples, (directory / 'monitor.log').open('w') as log:
             monitor = subprocess.Popen(['parec', '--raw', '--format=s32le', '--rate=48000',
                                         '--channels=2', '--device=fixture.monitor',
@@ -95,46 +145,35 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program,
                                               text=True, timeout=2, check=True)
                     return bool(outputs.stdout.strip())
 
-                until(ready, daemon, 'the direct original ring monitor')
-                option = ['sustain'] if sustain else ['release'] if release else ['midi'] if midi else []
-                command = [str(binary), str(firmware), str(trace), server, *option]
-                result = subprocess.run(command, env=env,
-                                        capture_output=True, text=True, check=False,
-                                        timeout=240 if env.get('BLOFELD_TEST_SANITIZER') == 'thread' else 90)
-                diagnostics = result.stdout + result.stderr
-                (directory / 'client.log').write_text(diagnostics)
-                require(result.returncode == 0 and not result.stderr and
-                        not any(marker in diagnostics for marker in
-                                ('AddressSanitizer', 'LeakSanitizer', 'ThreadSanitizer', 'runtime error:')),
-                        'Direct original ring audio failed: ' + diagnostics)
-                require(re.findall(r'^direct-ring-frames=(\d+) playback-rate=48000 '
-                                   r'physical-clock=unqualified$', result.stdout, re.M) == [str(frames)],
-                        f'The actual worker must accept, write and finish all {frames} decoded frames')
+                until(ready, daemon, 'the original ring matrix monitor')
+                for index in range(count):
+                    expected.append(render(binary, firmware, artifacts / f'case-{index}.trace',
+                                           server, env, directory, index, xdata, ydata, program,
+                                           midi, release, sustain))
                 time.sleep(0.1)
             finally:
                 terminate(monitor)
         require(not (directory / 'monitor.log').read_text(), 'Private monitor failed')
-        text = trace.read_text()
-        def validator(text, xdata, ydata, program):
-            return expected_payload(text, xdata, ydata, program, midi=midi, release=release,
-                                    sustain=sustain)
-
-        expected = validator(text, xdata, ydata, program)
-        controls = (sustain_negative_controls if sustain else release_negative_controls if release
-                    else midi_negative_controls if midi else negative_controls)
-        controls(text, xdata, ydata, program, validator=validator)
-        position = check_monitor(recorded.read_bytes(), expected)
-        return {'passed': True, 'original_foreground_blocks': blocks, 'accepted_frames': frames,
-                'exact_host_frames': frames,
-                'oracle_negative_controls': 12 if sustain else 10 if release else 9 if midi else 4,
-                'idle_midi': midi, 'release_midi': release, 'sustain_midi': sustain,
-                'monitor_offset_bytes': position, 'reference_sample_rate': 48000,
-                'reference_timebase': 24576000, 'fuzz_execution': False, 'physical_audio': False,
-                'scope': 'Direct original controller/foreground/repeating DMA/ESAI frames '
-                'to AudioRuntime, verified at a private no-rewind monitor. Native source '
-                'remains untimed, Effects Off and predeclared held entry/RAM. Source is '
-                'shorter than host prebuffer and starts on EOF; no realtime, physical '
-                'clock, full boot, live host MIDI or NoteOn-allocation qualification.'}
+        actual = recorded.read_bytes()
+        offsets = compare(actual, expected)
+        monitor_controls(actual, expected)
+        return {'passed': True, 'original_foreground_blocks': count * blocks,
+                'contexts': IDENTITIES[:count],
+                'host_streams': count, 'accepted_frames': count * blocks * 16,
+                'exact_host_frames': count * blocks * 16,
+                'rejected_foreign_sources': count,
+                'oracle_negative_controls': count * (12 if sustain else 10 if release else 9 if midi else 4),
+                'idle_midi': midi, 'idle_polls': count * 24 if midi else 0,
+                'release_midi': release, 'sustain_midi': sustain,
+                'monitor_negative_controls': count, 'monitor_offsets_bytes': offsets,
+                'reference_sample_rate': 48000, 'reference_timebase': 24576000,
+                'fuzz_execution': False, 'physical_audio': False,
+                'scope': f'{count} independently initialized original foreground/repeating DMA/'
+                'ESAI sources, each delivering real decoded frames directly to its own '
+                'source-owned AudioRuntime and exact private monitor. Explicit untimed '
+                'admissions, paused-core phases, Effects Off and declared RAM/held entry. '
+                'Short corked sources start on EOF. No calibrated time, sustained RT, '
+                'full boot, normal USB-MIDI, original NoteOn or hardware equivalence claim.'}
 
 
 def main():
@@ -149,22 +188,23 @@ def main():
     report.unlink(missing_ok=True)
     for tool in ('pulseaudio', 'parec', 'pactl'):
         if shutil.which(tool) is None:
-            print('SKIP direct original ring audio: missing ' + tool)
+            print('SKIP original ring audio matrix: missing ' + tool)
             return 77
     if not firmware.is_file():
-        print('SKIP direct original ring audio: private firmware absent')
+        print('SKIP original ring audio matrix: private firmware absent')
         return 77
     reference = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
     program = {}
     xdata, ydata = original_records(firmware, reference, program)
-    with tempfile.TemporaryDirectory(prefix='bf-direct-ring-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='bf-ring-matrix-') as temporary:
         directory = Path(temporary)
         try:
-            result = playback(binary, firmware, artifacts / 'native.trace', directory,
-                              xdata, ydata, program, midi=midi, release=release, sustain=sustain)
+            result = playback(binary, firmware, artifacts, directory, xdata, ydata, program,
+                              midi, release, sustain)
             report.write_text(json.dumps(result, indent=2) + '\n')
-            print(f"Verified {result['exact_host_frames']} direct original ring frames at the private host audio monitor; "
-                  'full boot, realtime playback and live host MIDI remain open.')
+            print(f"Verified {result['host_streams']} source-owned workers, "
+                  f"{result['exact_host_frames']} original ring frames and "
+                  'all source/payload controls; full boot/MIDI/realtime remain open.')
         finally:
             for file in directory.rglob('*'):
                 if file.is_file() and file.suffix in ('.log', '.pcm', '.pa'):

@@ -1,37 +1,59 @@
-Direct original foreground/ring frames to the native audio worker
+Original foreground/ring matrix to source-owned audio workers
 
-original_dsp_ring_audio binds AudioRuntime before a six-block original DSP
-foreground stream. Actual ESAI pin-decoded frames are submitted after each
-verified half, once the held-word replay has finished. The native client never
-reads its trace or reconstructs audio from it. No completed-stream capture is
-used for this direct handoff. The sink claims one source identity; source failure
-invalidates it. External output remains outside bus/peripheral snapshots.
+original_dsp_ring_audio checks all eight pitch/RM/filter-routing contexts from
+dsp-foreground-ring.txt. Each independent native process initializes one held
+entry and six unchanged original foreground iterations. Context indices0..7 map
+to pitch bit2, RM bit1 and routing bit0; the expected case identities are checked
+independently. Existing one-context and offline32-stream tests keep their scope.
 
-The unchanged primary MIDI parser consumes CC7=0. The original held voice,
-controller smoothing, copy/mix/master, scheduler and continuously enabled 64-word
-DMA ring retain state. Independent equations check all six blocks, delayed ring
-halves and serial words before predicting the complete S32LE monitor prefix.
-The private no-rewind server must receive exactly 96 accepted/written stereo
-frames, with no extra nonzero source data. Idle monitor zeros are allowed.
-Four corrupted native trace-word controls must fail. Original firmware/program
-identities retain their existing pins; manufacturer traces/assets stay local.
-The separate original_dsp_ring_midi_audio profile extends the same direct path
-to 160 frames with CC7 changes during idle waits; see dsp-idle-midi.txt. The
-original six-block profile and its independent expectations remain in place.
-original_dsp_ring_release_audio follows original release, retirement and four
-later empty bodies through the same160-frame direct path (dsp-release-ring.txt).
+Each context binds a fresh AudioRuntime before execution and claims its own
+source identity outside peripheral checkpoints. Actual ESAI-decoded frames are
+submitted directly after each verified half and held-word replay. No completed
+capture or trace supplies playback samples. A distinct source claim must reject
+without retiring the original source; its96 frames must still finish normally.
+This checks eight real source bindings and eight rejected attempts to share them.
 
-This is a short offline producer. Its 96 frames remain below the 4096-frame host
-prebuffer, so playback starts on EOF after native computation. Playback 48kHz and
-timebase 24576000 are declared for laboratory edge ordinals, not measured Blofeld
-clocks. The test changes no session routing and sends no physical MIDI/audio.
-No realtime production, physical DMA arbitration, full boot, live host MIDI,
-NoteOn allocation or whole-device equivalence is established.
+Independent voice, smoothing, previous-mix/master and ring equations predict all
+48 blocks and768 S32LE stereo frames. A single private monitor must contain the
+eight complete sources in order, with only zero-valued service gaps. Truncated,
+duplicated, stale or extra nonzero data fails. All32 fixed trace corruptions and
+eight monitor corruptions must reject. Archive/MID and all127 record identities
+remain hash-pinned; native traces/PCM and reference assets remain local.
+
+The continuously enabled64-word DMA ring observes real source-half changes under
+explicit untimed access admissions and paused-core HCKT/grants. Automatic active-
+DMA timing still rejects. Each96-frame source is below the4096-frame prebuffer
+and starts on EOF. Playback48000 Hz/timebase24576000 are laboratory conventions.
+This establishes neither sustained RT nor calibrated physical timing, complete
+boot, normal USB-MIDI, original NoteOn allocation or hardware equivalence.
+Native client/codecs and project code run separately under ASan/UBSan and TSan.
+The monitor/service are private; session routes and physical devices are untouched.
 
   cmake --build --preset strict --target blofeld-original-dsp-ring-audio-test
-  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_ring_audio$'
+  ctest --test-dir build/strict -R '^original_dsp_ring_audio$' --output-on-failure
 
-Run the same target/gate separately with the thread preset. Result/counts,
-private trace, client/server logs and monitor PCM are retained under
-Testing/original-dsp-ring-audio/. Missing firmware/service tools skip; changed
-identities or native diagnostics fail. No automatic fuzzing runs.
+Repeat with the thread preset. Testing/original-dsp-ring-audio/ holds per-context
+traces/logs, complete monitor PCM and result counts. The whole-test timeout covers
+eight native runs; each run retains its bounded instruction and control deadlines.
+Missing private references/tools skip; changed identities or diagnostics fail.
+No automatic fuzzing runs.
+
+The separate original_dsp_ring_midi_audio matrix retains all eight contexts with
+ten blocks per source and CC7 changes during real idle waits. Its1280 exact
+monitor frames,192 idle polls,72 trace corruptions, eight monitor corruptions
+and eight rejected foreign claims share the same direct path; see dsp-idle-midi.txt.
+
+The separate original_dsp_ring_release_audio check uses one source-owned context
+(normal pitch, RM0, parallel routing). Its ten blocks include real idle-wait
+NoteOff, six rendered bodies, retirement and four subsequent empty blocks. The
+independent release/ring oracle predicts all160 directly decoded monitor frames;
+ten trace corruptions, one monitor corruption and one foreign claim must reject.
+The offline release-ring matrix covers all eight contexts; direct host release
+playback currently covers only the first. See dsp-release-ring.txt for the limits.
+
+The separate original_dsp_ring_sustain_audio check retains one source-owned
+192-frame context with native CC64, deferred NoteOff and fragmented pedal release.
+Its twelve trace corruptions, one monitor corruption and one foreign-source
+claim reject independently. All eight contexts remain covered by the offline
+sustain-ring matrix; direct sustain playback covers the first. Neither path
+establishes boot, positive allocation or physical timing. See dsp-sustain-ring.txt.

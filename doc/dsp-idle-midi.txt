@@ -13,10 +13,12 @@ idle; current gain, scheduler counters, seed, audio RAM, enabled DMA and serial
 state remain unchanged until their actual next body/transfer. Original program
 words and native caller frames are checked. Nine corrupt trace controls reject.
 
-original_dsp_ring_midi_audio submits one such ten-block stream directly to
-AudioRuntime: all 160 independently predicted S32LE stereo frames must match
-an isolated no-rewind monitor under ASan/UBSan and separately TSan. The client
-submits actual pin-decoded frames per half, without reading a trace or capture.
+original_dsp_ring_midi_audio submits all eight ten-block contexts directly to
+eight source-owned AudioRuntime instances: all1280 independently predicted S32LE
+stereo frames must match an isolated no-rewind monitor in order under ASan/UBSan
+and separately TSan. Each client submits actual pin-decoded frames per half,
+without reading a trace or capture. All192 idle polls,72 fixed trace corruptions,
+eight monitor corruptions and eight rejected foreign source claims are checked.
 
   cmake --build --preset strict --target blofeld-original-dsp-idle-midi-test blofeld-original-dsp-ring-audio-test
   ctest --test-dir build/strict --output-on-failure -R '^original_dsp_(idle_midi|ring_midi_audio)$'

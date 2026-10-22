@@ -19,11 +19,18 @@ enum class VoiceInput : std::uint8_t {
   stream_sustain
 };
 
-// External output remains outside peripheral snapshots. Select at most one.
-// A direct sink selects one ring stream; capture retains the selected matrix.
+// Output objects stay outside peripheral snapshots and must outlive the call.
+// A direct sink selects one default eight-block stream; capture retains the full
+// matrix. Choose at most one; neither option changes the original PCM path.
+// Stream modes select six steady, ten MIDI/release or twelve sustain blocks;
+// its full matrix remains available without an external sink.
 struct VoiceOutputOptions {
   PcmFrameSink *direct = nullptr;
   VoicePcmCapture *capture = nullptr;
+  // Direct stream context: pitch bit2, rounding bit1, filter-routing bit0.
+  unsigned stream_case_index = 0;
+  // Offline negative control: corrupt one unexecuted word after a foreground body.
+  bool program_guard_negative = false;
 };
 
 [[nodiscard]] int run_voice_test(int count,

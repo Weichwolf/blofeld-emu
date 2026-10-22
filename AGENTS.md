@@ -33,4 +33,4 @@
 - The public repository is Weichwolf/blofeld-emu; its original implementation uses GPL-3.0-only.
 - Push only reviewed source commits to upstream/main. Never push local/pre-publication-* backup branches or use --all/--mirror.
 - Keep detailed manufacturer disassembly analysis under ignored doc/local/. Public tests pin reference hashes instead of embedding manufacturer program bytes.
-- Cross-repository coordination through GitHub issues is authorized between Weichwolf/blofeld-emu and private Weichwolf/blofeld-src. Use public issues for emulator interfaces and test summaries, and private source issues for source-specific findings. Raw disassembly and reference assets retain their local-only rules.
+- All GitHub issue communication belongs in private Weichwolf/blofeld-src, including emulator interfaces, test summaries and source findings. Do not create or comment on blofeld-emu issues. Existing emulator issues are migrated with their history before the originals are removed. Raw disassembly and reference assets retain their local-only rules.

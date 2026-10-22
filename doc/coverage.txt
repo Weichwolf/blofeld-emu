@@ -34,6 +34,13 @@ Host audio output                partial  Native client plus bounded SPSC handof
                                           MCU/DSP/ESAI frames reach a private
                                           no-rewind monitor, with unchanged modeled
                                           state/ticks (64 frames per native route).
+                                          A caller-qualified original voice stream
+                                          also reaches the private session monitor
+                                          through actual finite DMA, ESAI pins,
+                                          receiver and bounded worker;128 frames
+                                          match independent equations. The declared
+                                          playback rate is not a physical clock
+                                          (dsp-voice-pcm.txt).
                                           Foreign-source rejection and actual
                                           bounded-queue saturation retain the
                                           accepted prefix/NVM. Continuous own vectors,
@@ -226,6 +233,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           DSP PCTL command/PINIT reset and target
                                           ratios tested against NXP worked example;
                                           ED57 sequence guard (dsp-pll.txt).
+                                          Original MCU/DSP clock prefixes retain
+                                          their native source selection, complete
+                                          runtime delay and nominal PLL changes;
+                                          an independent ledger checks timebase
+                                          refusal/restoration (runtime-clocks.txt).
                                           Optional DSP clock owner retains nominal
                                           native units, exact declared PLL ticks,
                                           CLK/2 residue and memory-switch delays.
@@ -1001,6 +1013,11 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           voices through master/DMA/ESAI PCM:
                                           608 parser returns, 256 blocks and 4096
                                           independent frames (dsp-voice-midi.txt).
+                                          One default controller stream also
+                                          sends 128 actual decoded frames to
+                                          AudioRuntime and an exact isolated
+                                          service monitor, with 19 parser calls
+                                          and five fixed corruption controls.
                                           Destination switching is checked;
                                           smoothing clock, normal host MIDI and
                                           NoteOn allocation remain unqualified.
@@ -1020,6 +1037,11 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           iterations now compose MIDI, held voice
                                           and scheduler smoothing with original
                                           parent frames (dsp-foreground.txt).
+                                          Another 256 real idle polls consume
+                                          running-status volume input, stage its
+                                          target and preserve the independently
+                                          checked voice/audio state until the
+                                          actual DMA half-cursor changes.
                                           Effects Off, declared prior phase and
                                           disabled DMA; continuous scheduling,
                                           boot and live playback remain open.
@@ -1028,20 +1050,28 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           ring: 48 iterations,1536 DMA words and
                                           768 stereo frames
                                           (dsp-foreground-ring.txt).
+                                          One six-iteration source also hands
+                                          96 actual decoded frames directly to
+                                          AudioRuntime and an exact isolated
+                                          monitor, retaining the delayed pipeline
+                                          and five fixed corruption controls.
                                           Untimed admissions alternate with
                                           paused-core HCKT/grants; physical bus
                                           timing and original boot remain open.
                                           A direct six-block ring source submits
                                           decoded frames at each verified half:
-                                          96 accepted/written frames match the
-                                          private host monitor exactly, with
-                                          separate TSan (dsp-ring-audio.txt).
-                                          Idle MIDI adds 192 actual equal-half
+                                          eight independent workers receive768
+                                          frames across all ring contexts, with
+                                          eight rejected foreign-source claims
+                                          and40 trace/monitor corruption controls.
+                                          Separate TSan (dsp-ring-audio.txt).
+                                          Idle MIDI adds192 actual equal-half
                                           polls, fragmented/running/coalesced CC7,
-                                          wrong-channel rejection and input wrap:
-                                          80 bodies/1280 frames; one direct
-                                          160-frame private monitor stream with
-                                          separate TSan (dsp-idle-midi.txt).
+                                          wrong-channel rejection and ring wrap:
+                                          80 bodies/1280 frames; eight direct
+                                          source-owned workers match1280 monitor
+                                          frames in ASan/UBSan and separate TSan
+                                          (dsp-idle-midi.txt).
                                           Short source plays on EOF; realtime
                                           boot/MIDI/audio remain unqualified.
                                           Original scheduler primitives check

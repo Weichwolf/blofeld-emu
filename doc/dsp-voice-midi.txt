@@ -27,8 +27,21 @@ No original NoteOn allocation, full boot, normal host MIDI/USB connection,
 wall-clock smoothing, live audio or physical equivalence is established.
 The upstream NoteOn reserved Y:ffffff read remains a strict separate boundary.
 
+original_dsp_voice_midi_host also delivers one default eight-block stream directly
+to AudioRuntime after each completed finite DMA/ESAI replay. All 19 parser calls
+and 128 actual decoded frames reach the independent integer oracle and exact
+private S32LE service monitor, including volume transitions. Four fixed corrupted
+byte/state/master/serial trace controls and one monitor corruption must reject.
+The generic sink stays outside modeled checkpoints; no frames are reconstructed
+from traces for playback. See dsp-voice-pcm.txt for the declared 48000 Hz playback
+rate, unqualified physical clock and private service isolation. ASan/UBSan and
+TSan qualify this concurrent path separately. This remains own ring transport
+and held-voice setup; external MIDI routing and normal runtime are still pending.
+
   cmake --build --preset strict --target blofeld-original-dsp-voice-midi-test
   ctest --test-dir build/strict --output-on-failure -R '^original_dsp_voice_midi$'
+  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_voice_midi_host$'
+  ctest --test-dir build/thread --output-on-failure -R '^original_dsp_voice_midi_host$'
 
 Testing/original-dsp-voice-midi.json records counts. Missing private firmware
 skips; changed identities fail. No automatic fuzzing or physical MIDI runs.

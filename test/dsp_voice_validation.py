@@ -55,13 +55,13 @@ def validate_stream(stream, xdata, ydata, tables, identity, totals, block_count=
         if before_block is not None:
             before_block(voice, block, int(number))
         validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
-                       varied, serial, totals)
+                       varied, serial, totals, identity)
         if after_block is not None:
             after_block(voice, block, check)
 
 
 def validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
-                   varied, serial, totals):
+                   varied, serial, totals, identity):
     n = int(number)
     root = xdata[50432] & 8388607
     initial_callbacks = [ydata[50432 + 3], ydata[50432 + 3], ydata[(50439 if high else 50432) + 4], 1723]

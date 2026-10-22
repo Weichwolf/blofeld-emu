@@ -8,6 +8,7 @@
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/firmware.hpp"
 #include "blofeld/pcm_sink.hpp"
+#include "blofeld/serial_pcm.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_voice_capture.hpp"
 #include "dsp_voice_master.hpp"
@@ -24,7 +25,9 @@
 #include <memory>
 #include <ostream>
 #include <set>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -53,6 +56,8 @@ constexpr unsigned runtime_flags = 6;
 constexpr unsigned modulation_controller = 383;
 constexpr std::array<unsigned, 8> midi_volumes{127, 0, 1, 64, 96, 127, 32, 0};
 constexpr unsigned main_loop = 0x198;
+constexpr unsigned master_output = 0x27b;
+constexpr unsigned scheduler_tail = 0x22d;
 constexpr unsigned active_entry_next = 0x43e;
 constexpr unsigned part_stride = 0x1ac;
 constexpr unsigned part_count = 16;
@@ -112,14 +117,14 @@ constexpr std::array<unsigned, 13> foreground_stages{main_loop,
                                                      midi_parser,
                                                      midi_secondary_parser,
                                                      response_parser,
-                                                     0x27b,
+                                                     master_output,
                                                      0x2a20,
                                                      0x298,
                                                      0x251,
                                                      0x1cc1,
                                                      0x436,
                                                      0x4df,
-                                                     0x22d,
+                                                     scheduler_tail,
                                                      0x246};
 constexpr unsigned parameters_copied = 0x51c, processing_chain = 0x59d, lfo_initializer = 0x169d;
 constexpr unsigned mixer_gains = 0x6ed, mixer_renderer = 0x707, noise_generator = 0x7e5;
@@ -314,6 +319,22 @@ struct Case {
   bool drive_case = false;
 };
 
+constexpr unsigned stream_contexts = 8;
+
+Case stream_configuration(const unsigned index, const unsigned blocks) {
+  require(index < stream_contexts, "Original ring context index exceeds its declared matrix");
+  constexpr unsigned pitch_bit = 4;
+  constexpr unsigned rounding_bit = 2;
+  constexpr unsigned routing_bit = 1;
+  const bool high = (index & pitch_bit) != 0;
+  return {.high = high,
+          .twos = (index & rounding_bit) != 0,
+          .color = parameter_max,
+          .varied = high,
+          .serial = (index & routing_bit) != 0,
+          .blocks = blocks};
+}
+
 struct Call {
   unsigned target;
   unsigned end;
@@ -370,6 +391,40 @@ bool stream_profile(const blofeld::test::VoiceInput input) {
          input == stream_sustain;
 }
 
+bool release_callback(const unsigned address) {
+  return address >= entry + first_envelope_callback &&
+         address < entry + first_envelope_callback + (4 * envelope_state_stride) &&
+         (address - entry - first_envelope_callback) % envelope_state_stride == 0;
+}
+
+void validate_voice_output(const bool drive,
+                           const bool master,
+                           const bool pcm,
+                           const blofeld::test::VoiceOutputOptions output,
+                           const blofeld::test::VoiceInput input) {
+  using blofeld::test::VoiceInput;
+  auto *const stream_output = output.direct;
+  const bool ring = stream_profile(input);
+  require(output.direct == nullptr || output.capture == nullptr,
+          "Choose direct delivery or the complete offline matrix");
+  require(input != VoiceInput::foreground ||
+              (!drive && master && !pcm && output.direct == nullptr && output.capture == nullptr),
+          "Foreground reference requires declared disabled DMA and no external PCM output");
+  require(!ring || (!drive && master && !pcm && output.capture == nullptr),
+          "Repeating reference requires declared ring setup and no offline collector");
+  require(
+      (stream_output == nullptr && output.capture == nullptr && input != VoiceInput::controllers) ||
+          (!drive && master && (pcm || ring)),
+      "An external source requires the original voice/master/PCM composition");
+  require(output.stream_case_index < stream_contexts &&
+              (output.stream_case_index == 0 || (stream_output != nullptr && ring)),
+          "A selected ring context requires direct stream output");
+  require(!output.program_guard_negative ||
+              (stream_output == nullptr && output.capture == nullptr &&
+               (input == VoiceInput::foreground || ring)),
+          "Program guard negative control requires offline foreground or ring execution");
+}
+
 struct Fixture {
   blofeld::DspMachine machine;
   blofeld::DspBus &bus;
@@ -389,6 +444,7 @@ struct Fixture {
   bool rendering = false;
   bool master_enabled = false;
   bool pcm_enabled = false;
+  blofeld::PcmFrameSink *stream_output = nullptr;
   bool midi_enabled = false;
   bool foreground_enabled = false;
   bool stream_enabled = false;
@@ -396,7 +452,8 @@ struct Fixture {
   bool release_enabled = false;
   bool sustain_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
-  blofeld::PcmFrameSink *direct = nullptr;
+  bool program_guard_negative = false;
+  bool program_guard_mutated = false;
   Case configuration{};
   bool drive_pending = false;
   unsigned drive_return = 0;
@@ -947,9 +1004,20 @@ struct Fixture {
           << '\n';
   }
 
+  void publish_frames(const std::span<const blofeld::SerialPcmFrame> decoded,
+                      const unsigned count) const {
+    require(count <= decoded.size(), "Decoded frame count exceeds the verified buffer");
+    if (stream_output == nullptr) { return; }
+    // External output follows the final verified DMA/ESAI replay branch, once.
+    // It never becomes part of modeled bus/receiver checkpoints.
+    for (unsigned frame = 0; frame < count; ++frame) { stream_output->accept(decoded[frame]); }
+  }
+
   void sample_case(const Case input) {
     if (capture != nullptr) { capture->begin(); }
-    if (direct != nullptr) { direct->claim_source(std::make_shared<const bool>(true)); }
+    if (stream_output != nullptr) {
+      stream_output->claim_source(std::make_shared<const bool>(true));
+    }
     rendering = false;
     configuration = input;
     reset_stream(input.twos);
@@ -975,6 +1043,7 @@ struct Fixture {
     }
     rendering = true;
     for (unsigned block = 0; block < input.blocks; ++block) {
+      if (stream_output != nullptr) { stream_output->check(); }
       begin_block(block);
       if (midi_enabled) { midi_block(block, input.twos); }
       run({.target = voice_entry, .end = stop, .twos = input.twos});
@@ -984,7 +1053,10 @@ struct Fixture {
       if (master_enabled) {
         run({.target = master.entry, .end = stop, .twos = input.twos});
         require(cpu.state().sp == 0, "Original copy/mix/master calls must genuinely return");
-        if (pcm_enabled) { run({.target = pcm.transfer, .end = stop, .twos = input.twos}); }
+        if (pcm_enabled) {
+          run({.target = pcm.transfer, .end = stop, .twos = input.twos});
+          publish_frames(pcm.decoded, pcm.frames);
+        }
       }
     }
     rendering = false;
@@ -1066,7 +1138,45 @@ struct Fixture {
     }
   }
 
-  void foreground_ram(const char *label) {
+  void foreground_state() {
+    using enum blofeld::DspSpace;
+    const auto s = cpu.state();
+    require(s.sp == 1 && s.stack_pc == stop,
+            "Original foreground retains the own native entry frame; no fabricated RTS");
+    trace << "FOREGROUND_END" << std::hex << ' ' << s.pc << ' ' << s.sp << ' ' << s.a << ' ' << s.b
+          << ' ' << s.x << ' ' << s.y << ' ' << s.r[0] << ' ' << s.sr << '\n';
+    foreground_words("FOREGROUND_RAM");
+    trace << "FOREGROUND_PREVIOUS_OUTPUT" << std::hex;
+    for (unsigned i = 0; i < stereo_words; ++i) {
+      trace << ' ' << get(x, declared_source + stereo_words + i);
+    }
+    trace << '\n' << std::dec;
+    if (program_guard_negative && !program_guard_mutated) {
+      // The runtime caller bypasses this original clock prefix (runtime-clocks.txt).
+      constexpr unsigned unexecuted_prefix = 0x100;
+      const auto expected = source.program.find(unexecuted_prefix);
+      require(expected != source.program.end() &&
+                  bus.peek_program(unexecuted_prefix) == expected->second,
+              "Program guard negative control requires an unchanged original word");
+      bus.write({.address = unexecuted_prefix, .value = expected->second ^ 1U});
+      program_guard_mutated = true;
+      trace << "PROGRAM_GUARD_CORRUPTED " << std::hex << unexecuted_prefix << '\n' << std::dec;
+    }
+    verify_program();
+  }
+
+  void verify_program() {
+    for (const auto &[at, value] : source.program) {
+      if (bus.peek_program(at) != value) {
+        const auto state = cpu.state();
+        throw blofeld::Fault(
+            "Original foreground executable word changed at P:" + blofeld::hex(at, 6) +
+            " pc=" + blofeld::hex(state.pc, 6) + " omr=" + blofeld::hex(state.omr, 6));
+      }
+    }
+  }
+
+  void foreground_words(const char *label) {
     using enum blofeld::DspSpace;
     trace << label << std::hex;
     for (const auto at : {4U,
@@ -1088,21 +1198,72 @@ struct Fixture {
     trace << '\n' << std::dec;
   }
 
-  void foreground_state() {
+  void foreground_idle_input() {
     using enum blofeld::DspSpace;
-    const auto s = cpu.state();
-    require(s.sp == 1 && s.stack_pc == stop,
-            "Original foreground retains the own native entry frame; no fabricated RTS");
-    trace << "FOREGROUND_END" << std::hex << ' ' << s.pc << ' ' << s.sp << ' ' << s.a << ' ' << s.b
-          << ' ' << s.x << ' ' << s.y << ' ' << s.r[0] << ' ' << s.sr << '\n';
-    foreground_ram("FOREGROUND_RAM");
-    trace << "FOREGROUND_PREVIOUS_OUTPUT" << std::hex;
-    for (unsigned i = 0; i < stereo_words; ++i) {
-      trace << ' ' << get(x, declared_source + stereo_words + i);
+    auto cursor = get(x, midi_producer);
+    require(cursor == get(x, midi_consumer), "Original foreground must consume its initial input");
+    trace << "FOREGROUND_IDLE_INPUT" << std::hex;
+    for (const auto byte : {midi_volume, 64U}) {
+      put(x, cursor, byte << midi_byte_shift);
+      cursor = midi_ring + ((cursor - midi_ring + 1) % midi_ring_size);
+      trace << ' ' << byte;
     }
+    put(x, midi_producer, cursor);
     trace << '\n' << std::dec;
-    for (const auto &[at, value] : source.program) {
-      require(bus.peek_program(at) == value, "Original foreground executable word changed");
+  }
+
+  [[nodiscard]] Words foreground_audio_state(const bool releasing = false) {
+    using enum blofeld::DspSpace;
+    Words values;
+    for (const auto base : {first_filter_history, second_filter_history}) {
+      for (const auto space : {x, y}) {
+        for (unsigned i = 0; i < 4; ++i) { values.push_back(get(space, base + i)); }
+      }
+    }
+    for (const auto at : {entry + previous_gain, entry + noise_history}) {
+      values.push_back(get(x, at));
+    }
+    for (const auto [base, count] : {std::pair{lfo_state, lfo_words},
+                                     std::pair{envelope_state, envelope_words},
+                                     std::pair{output_bus, stereo_words},
+                                     std::pair{0x620U, stereo_words * 4}}) {
+      for (unsigned i = 0; i < count; ++i) {
+        // Idle release changes only these callbacks; the release oracle checks their values.
+        if (!releasing || !release_callback(base + i)) { values.push_back(get(x, base + i)); }
+      }
+    }
+    for (const auto at : {first_phase, second_phase, third_phase}) { values.push_back(get(y, at)); }
+    return values;
+  }
+
+  void foreground_idle() {
+    const auto audio = foreground_audio_state();
+    foreground_idle_input();
+    constexpr unsigned iterations = 8;
+    for (unsigned iteration = 0; iteration < iterations; ++iteration) {
+      trace << "FOREGROUND_IDLE_BEGIN " << iteration << '\n';
+      unsigned steps = 0;
+      do {
+        require(steps++ < instruction_limit, "Original foreground idle iteration bound");
+        const auto s = cpu.state();
+        require(s.pc != voice_entry && s.pc != master_output && s.pc != scheduler_tail,
+                "A stationary DMA cursor cannot dispatch another voice/master/scheduler block");
+        if (std::ranges::find(foreground_stages, s.pc) != foreground_stages.end()) {
+          trace << "FOREGROUND_IDLE_STAGE " << std::hex << s.pc << ' ' << s.sp << '\n' << std::dec;
+        }
+        cpu.step();
+        bus.advance_instruction_cycles(1);
+        ++total_steps;
+      } while (cpu.state().pc != main_loop);
+      const auto s = cpu.state();
+      require(s.sp == 1 && s.stack_pc == stop,
+              "Actual idle iteration retains the original parent entry frame");
+      trace << "FOREGROUND_IDLE_END" << std::hex << ' ' << s.pc << ' ' << s.sp << ' ' << s.a << ' '
+            << s.b << ' ' << s.sr << '\n'
+            << std::dec;
+      foreground_words("FOREGROUND_IDLE_RAM");
+      require(foreground_audio_state() == audio,
+              "Idle input polling cannot advance voice/control histories or audio buffers");
     }
   }
 
@@ -1196,21 +1357,21 @@ struct Fixture {
     run({.target = main_loop, .end = main_loop, .twos = input.twos});
     rendering = true;
     foreground_iteration(0);
+    foreground_idle();
+    verify_program();
     rendering = false;
   }
 
   [[nodiscard]] std::vector<unsigned> idle_audio_state(const bool releasing = false) {
     using enum blofeld::DspSpace;
-    std::vector<unsigned> values;
+    auto values = foreground_audio_state(releasing);
     const auto range = [&](const auto space, const MemoryRange interval) {
       for (unsigned i = 0; i < interval.count; ++i) {
         const auto at = interval.base + i;
-        const bool callback = at >= entry + first_envelope_callback &&
-                              at < entry + first_envelope_callback + (4 * envelope_state_stride) &&
-                              (at - entry - first_envelope_callback) % envelope_state_stride == 0;
         const bool release_write =
-            releasing && ((space == x && (callback || at == entry + release_velocity_field)) ||
-                          (space == y && at == coefficient_buffer));
+            releasing &&
+            ((space == x && (release_callback(at) || at == entry + release_velocity_field)) ||
+             (space == y && at == coefficient_buffer));
         if (!release_write) { values.push_back(get(space, at)); }
       }
     };
@@ -1262,7 +1423,7 @@ struct Fixture {
           << (get(x, runtime_flags) & transition_flag) << ' ' << get(x, sound + output_controller)
           << ' ' << get(x, sound + modulation_controller) << ' ' << s.sp << '\n'
           << std::dec;
-    foreground_ram("IDLE_RAM");
+    foreground_words("IDLE_RAM");
   }
 
   void
@@ -1424,15 +1585,12 @@ struct Fixture {
     trace << "REPEAT_AUTOMATIC_REJECTED 1\n";
     rendering = true;
     for (unsigned block = 0; block < input.blocks; ++block) {
-      if (direct != nullptr) { direct->check(); }
+      if (stream_output != nullptr) { stream_output->check(); }
       foreground_iteration(block);
       if (idle_midi_enabled) { stream_idle(block); }
       if (release_enabled) { release_input(block); }
       repeat.drain(bus, cpu, trace);
-      if (direct != nullptr) {
-        // Publish only the final, verified branch after any held-word replay.
-        for (const auto &frame : repeat.decoded) { direct->accept(frame); }
-      }
+      publish_frames(repeat.decoded, repeat.frames);
     }
     rendering = false;
   }
@@ -1536,17 +1694,8 @@ void drive_matrix(Fixture &fixture) {
 }
 
 void stream_matrix(Fixture &fixture) {
-  for (const bool high : {false, true}) {
-    for (const bool twos : {false, true}) {
-      for (const bool serial : {false, true}) {
-        fixture.sample_case({.high = high,
-                             .twos = twos,
-                             .color = parameter_max,
-                             .varied = high,
-                             .serial = serial,
-                             .blocks = fixture.stream_block_count()});
-      }
-    }
+  for (unsigned index = 0; index < stream_contexts; ++index) {
+    fixture.sample_case(stream_configuration(index, fixture.stream_block_count()));
   }
 }
 }
@@ -1559,11 +1708,12 @@ int run_voice_test(const int count,
                    const bool pcm,
                    const VoiceOutputOptions output,
                    const VoiceInput input) {
+  auto *const stream_output = output.direct;
+  const bool ring = stream_profile(input);
   try {
     require(count == 3, "Expected original firmware and private voice trace");
-    require(output.direct == nullptr ||
-                (output.capture == nullptr && stream_profile(input) && !drive && master && !pcm),
-            "Direct output requires one ring stream and excludes offline capture");
+    validate_voice_output(drive, master, pcm, output, input);
+    if (stream_output != nullptr) { stream_output->check(); }
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
     require(trace.is_open(), "Cannot write private original voice trace");
@@ -1572,15 +1722,16 @@ int run_voice_test(const int count,
     fixture.master_enabled = master;
     fixture.pcm_enabled = pcm;
     fixture.capture = output.capture;
-    fixture.direct = output.direct;
-    if (output.direct != nullptr) {
-      fixture.sample_case({.high = false,
-                           .twos = false,
-                           .color = parameter_max,
-                           .varied = false,
-                           .serial = false,
-                           .blocks = fixture.stream_block_count()});
-    } else if (stream_profile(input)) {
+    fixture.program_guard_negative = output.program_guard_negative;
+    fixture.stream_output = stream_output;
+    if (stream_output != nullptr) {
+      if (ring) {
+        fixture.sample_case(
+            stream_configuration(output.stream_case_index, fixture.stream_block_count()));
+      } else {
+        fixture.sample_case({});
+      }
+    } else if (ring) {
       stream_matrix(fixture);
     } else if (drive) {
       drive_matrix(fixture);
@@ -1596,7 +1747,7 @@ int run_voice_test(const int count,
         << "Original voice streams executed; independent numerical verification is separate.\n";
     return 0;
   } catch (const std::exception &error) {
-    if (output.direct != nullptr) { output.direct->invalidate(); }
+    if (stream_output != nullptr) { stream_output->invalidate(); }
     std::cerr << error.what() << '\n';
     return 1;
   }

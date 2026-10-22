@@ -158,7 +158,8 @@ def validate_context(stream, xdata, ydata, program, identity, totals,
         block = int(raw)
         pipeline.before(voice, text, block)
         if pipeline.active:
-            validate_block(voice, raw, text, xdata, ydata, check, twos, color, high, varied, serial, totals)
+            validate_block(voice, raw, text, xdata, ydata, check, twos, color, high,
+                           varied, serial, totals, identity)
         else:
             forbidden = ('WHOLE_RETURN', 'OUTPUT_BUS', 'NOISE_INPUT', 'COEFFICIENTS', 'OUTPUT_DISPATCH')
             if any(re.search('^' + label + ' ', text, re.M) for label in forbidden):

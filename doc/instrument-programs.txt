@@ -1,0 +1,14 @@
+Future instrument programs
+
+After establishing the original-firmware emulator as a reliable test target,
+develop Blofeld programs that reproduce the instruments in reference MIDI
+performances as accurately as possible, preferably without external samples.
+Evaluate the available original synthesis mechanisms by their audible results.
+The user's sound-design ideas and experiences are suggestions, not prescribed
+methods, parameter choices or design constraints.
+
+User-supplied MIDI performances and sample recordings remain local references.
+Use them for repeatable musical input and later timbre/dynamics comparisons;
+they are not permission to redistribute assets or substitute host synthesis.
+This future sound-design objective does not qualify current boot, MIDI voice
+allocation, realtime audio, update/recovery or physical hardware behavior.

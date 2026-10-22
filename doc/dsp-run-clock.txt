@@ -80,6 +80,11 @@ manual corrections, not this missing write behavior. No RAM expansion, ignored
 write or loop skip is used. Physical memory semantics, full boot, physical board
 time, original audio, reset timing and hardware equivalence remain pending.
 
+The separately preloaded original runtime clock prefix also requests216 MHz
+at declared12 MHz EXTAL. Its complete delay, first faster instruction and
+mid-REP restoration have an independent ledger. It needs an integral1080 MHz
+timebase;540 MHz deliberately rejects the next step. See runtime-clocks.txt.
+
 The separate completion scheduler and original MCU/DSP common-time experiment
 are documented in scheduled-coupling.txt. plan_step() is a pure nominal preview;
 reference accounting uses the executed/latched word even after code mutation.

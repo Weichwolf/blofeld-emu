@@ -24,6 +24,12 @@ retain their default. Four corrupted trace-word controls must fail. Eight restor
 after a source read reproduce the held word, ring state and actual PCM without
 executing the paused core. Original program words remain unchanged.
 
+Program integrity is checked after every foreground body and again after the
+separate idle window. original_dsp_program_guard deliberately changes one
+unexecuted word in each offline profile; both callers must reject after the
+first body, before a second block. Normal reference runs retain the original
+words; the damaged images and traces remain local.
+
 Each fixture explicitly declares readable part/history/queue RAM, one held entry,
 zero initial buses/ring, previous phase0, no due part-clock/countdown service,
 ESAI setup and receiver polarity. It loads 127 hash-pinned original records rather
@@ -47,3 +53,29 @@ equal-half wait, independent parser/smoothing/output checks and private audio.
 
 Testing/original-dsp-repeat.json records counts/scope. Missing private firmware
 skips; changed identities fail. No fuzzing or physical MIDI/audio traffic runs.
+
+Direct session-output regression
+
+original_dsp_repeat_host supplies the 96 actual pin-decoded frames of one
+six-iteration normal/RM0/noise127/parallel case directly to AudioRuntime after
+each completed peripheral replay. The generic sink stays outside all checkpoints
+and knows no native audio API. The full eight-context ring matrix remains intact.
+
+Independent previous-mix/master/serial equations produce the expected S32LE
+monitor payload; no observed output word is used as an expected sample. Original
+parent call order and frame depths are checked in all six iterations. The first
+three zero blocks and subsequent nonzero output retain their actual pipeline
+delay. Exact monitor matching rejects missing, duplicated or altered nonzero
+samples; accepted/written counts must both be96. Four fixed trace corruptions
+and one monitor corruption must fail. This is a short corked source, with no
+padding or claim of sustained realtime production.
+
+The isolated no-rewind service uses the declared48000 Hz playback rate and
+24576000 edge ordinals/s from dsp-voice-pcm.txt, not measured Blofeld clocks.
+The user's audio service/output, physical MIDI and device routing are untouched.
+ASan/UBSan and TSan run separately; instrumentation/dependency rules remain the
+same as audio-runtime.txt. Normal runtime, USB-MIDI and NoteOn remain open.
+
+  cmake --build --preset strict --target blofeld-original-dsp-voice-host-test
+  ctest --test-dir build/strict -R '^original_dsp_repeat_host$' --output-on-failure
+  ctest --test-dir build/thread -R '^original_dsp_repeat_host$' --output-on-failure

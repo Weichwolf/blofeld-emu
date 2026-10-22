@@ -64,6 +64,33 @@ class Foreground:
                 or state[7] & ((1 << 21) | 0xc00) != (int(self.twos) << 21)):
             raise ValueError('FOREGROUND_END full registers or mode differ')
         check('FOREGROUND_PREVIOUS_OUTPUT', [0] * 32, text)
+        self.idle(text, wanted, check)
+
+    def idle(self, text, wanted, check):
+        if row('FOREGROUND_IDLE_INPUT', text) != [7, 64]:
+            raise ValueError('FOREGROUND_IDLE_INPUT running-status bytes differ')
+        loops = re.findall(r'^FOREGROUND_IDLE_BEGIN (\d+)\n([\s\S]*?)'
+                           r'(?=^FOREGROUND_IDLE_BEGIN |\Z)', text, re.M)
+        if [int(index) for index, _ in loops] != list(range(8)):
+            raise ValueError('Incomplete FOREGROUND_IDLE_BEGIN iterations')
+        # A new target is staged by the original parser. The current volume,
+        # scheduler/seed/countdown and source/phase remain unchanged while idle.
+        expected_ram = list(wanted)
+        expected_ram[2], expected_ram[4] = 0x80, 512 * 64 ** 2
+        expected_ram[10] += 2
+        expected_ram[11] += 2
+        for index, loop in loops:
+            stages = [[int(value, 16) for value in values.split()]
+                      for values in re.findall(r'^FOREGROUND_IDLE_STAGE ([^\n]+)$', loop, re.M)]
+            expected = [[0x198, 1], *[[0xc53, 2]] * (3 if index == '0' else 1),
+                        [0xc5d, 2], [0x2407, 2]]
+            if stages != expected:
+                raise ValueError('FOREGROUND_IDLE_STAGE advanced past the real DMA half gate')
+            check('FOREGROUND_IDLE_RAM', expected_ram, loop)
+            state = row('FOREGROUND_IDLE_END', loop)
+            if (len(state) != 5 or state[:4] != [0x198, 1, 32 * W, 0]
+                    or state[4] & ((1 << 21) | 0xc00 | 4) != (int(self.twos) << 21) | 4):
+                raise ValueError('FOREGROUND_IDLE_END compare/zero flag or entry frame differs')
 
 
 def validate(text, xdata, ydata):
@@ -89,7 +116,9 @@ def validate(text, xdata, ydata):
 
 
 def negative_controls(text, xdata, ydata):
-    labels = ('FOREGROUND_STAGE', 'FOREGROUND_RAM', 'FOREGROUND_END', 'OUTPUT_BUS')
+    labels = ('FOREGROUND_STAGE', 'FOREGROUND_RAM', 'FOREGROUND_END', 'OUTPUT_BUS',
+              'FOREGROUND_IDLE_INPUT', 'FOREGROUND_IDLE_STAGE',
+              'FOREGROUND_IDLE_RAM', 'FOREGROUND_IDLE_END')
     for label in labels:
         def corrupt(match):
             words = match[1].split()
@@ -130,11 +159,14 @@ def main():
     negative_controls(text, xdata, ydata)
     report.write_text(json.dumps({'passed': True, 'iterations': 32, **totals,
                                   'active_transitions': 16, 'settled_transitions': 16,
-                                  'oracle_negative_controls': 4, 'fuzz_execution': False,
+                                  'idle_iterations': 256, 'idle_controller_messages': 32,
+                                  'oracle_negative_controls': 8, 'fuzz_execution': False,
                                   'physical_traffic': False,
                                   'scope': 'One real original foreground iteration per declared '
                                   'Effects Off context. Original MIDI, voice and scheduler '
-                                  'smoothing; no replaced callee/return. Disabled DMA with '
+                                  'smoothing, then eight real idle polls consuming a new '
+                                  'controller target without clock/synthesis progress. '
+                                  'No replaced callee/return. Disabled DMA with '
                                   'declared source/previous phase; no physical timing, '
                                   'continuous DMA, boot, live playback or NoteOn allocation.'},
                                  indent=2) + '\n')

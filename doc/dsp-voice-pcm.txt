@@ -43,5 +43,27 @@ Full boot, original peripheral initialization, repeating DMA, automatic core/
 DMA arbitration, live MIDI allocation, host playback, physical timing/channel
 mapping and hardware equivalence remain open. No fuzzing or physical playback.
 
+Private session-output integration
+  cmake --build --preset strict --target blofeld-original-dsp-voice-host-test
+  ctest --test-dir build/strict -R '^original_dsp_voice_host$' --output-on-failure
+
+One default eight-block original stream now hands its 128 actual pin-decoded
+frames to the separate AudioRuntime worker. The generic sink stays outside all
+peripheral snapshots; frames publish once after held-word replay/verification.
+The fixture knows no native audio API. Other voice/drive/master/PCM test modes
+retain their full matrices and have no external sink.
+
+The private no-rewind service monitor must match independently computed signed
+S32 stereo bytes exactly, with no extra nonzero prefix/suffix. A corrupted
+monitor payload rejects. The source is finite and corked until complete; this
+does not qualify a sustained realtime producer. The declared 48000-frame/s
+playback rate and 24576000 reference ticks/s merely give the existing eight
+edge ordinals per serial bit. They do not establish physical HCKT/core/sample
+frequency. No host resampling, sample copying from RAM, invented frames, physical
+playback or normal-runtime boot is supplied. Concurrency runs separately under
+TSan; the same private service/client instrumentation rules as audio-runtime.txt
+apply. Full original MIDI allocation, automatic DMA and stock equivalence remain
+pending.
+
 The separate dsp-voice-audio.txt fixture delivers these actual decoded objects
 through the native host worker to an exact private service monitor.

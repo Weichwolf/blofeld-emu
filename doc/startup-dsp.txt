@@ -30,6 +30,12 @@ voltages or weak bias back as strong sources. This rules out that feedback as
 the sole cause in these declared direct-link cases; physical topology/timing
 and complete transactions remain unqualified. See gpio-drivers.txt.
 
+An additional16-case recheck uses the original MCU clock prefix and full
+firmware-derived DSP delay/PLL setup under declared nominal inputs. All still
+reject known opposition, so reset/bypass clocks alone do not explain these
+direct-link cases. Real clock/pad timing and topology remain unverified;
+see runtime-clocks.txt for the bounded original-clock regression and its scope.
+
 The reset-to-runtime path separately stops at the original first-stage reserved
 Y:002000 store. The documented map does not establish discard/alias behavior.
 No loop shortening, RAM enlargement, ignored store or host PC continuation is

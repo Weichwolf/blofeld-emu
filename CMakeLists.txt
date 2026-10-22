@@ -519,6 +519,7 @@ if(BUILD_TESTING)
     --binary $<TARGET_FILE:blofeld-headless>
     --audio-binary $<TARGET_FILE:blofeld-host-audio-test>
     --audio-binary $<TARGET_FILE:blofeld-audio-runtime-test>
+    --audio-binary $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
     --audio-binary $<TARGET_FILE:blofeld-original-dsp-voice-audio-test>
     --audio-binary $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
     --mode "${BLOFELD_SANITIZER}"
@@ -779,6 +780,14 @@ if(BUILD_TESTING)
   add_test(NAME dsp_operand_bounds COMMAND blofeld-dsp-instruction-test --operand-bounds)
   set_tests_properties(dsp_operand_bounds PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
+  add_executable(blofeld-original-runtime-clocks-test test/original_runtime_clocks.cpp)
+  target_link_libraries(blofeld-original-runtime-clocks-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_runtime_clocks COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_runtime_clocks.py"
+    $<TARGET_FILE:blofeld-original-runtime-clocks-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-runtime-clocks.trace")
+  set_tests_properties(original_runtime_clocks PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-dsp-dispatch-cache-test test/dsp_dispatch_cache_test.cpp)
   target_link_libraries(blofeld-dsp-dispatch-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dispatch_cache COMMAND blofeld-dsp-dispatch-cache-test)
@@ -880,6 +889,29 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-pcm.trace")
   set_tests_properties(original_dsp_voice_pcm PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-voice-host-test test/original_dsp_voice_host_test.cpp)
+  target_link_libraries(blofeld-original-dsp-voice-host-test PRIVATE blofeld_voice_fixture blofeld_audio_runtime)
+  add_test(NAME original_dsp_voice_host COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_host.py"
+    $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-host")
+  set_tests_properties(original_dsp_voice_host PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120
+    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
+  add_test(NAME original_dsp_voice_midi_host COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_host.py"
+    $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-midi-host" midi)
+  set_tests_properties(original_dsp_voice_midi_host PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120
+    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
+  add_test(NAME original_dsp_repeat_host COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_host.py"
+    $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-repeat-host" stream)
+  set_tests_properties(original_dsp_repeat_host PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 360
+    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
   add_executable(blofeld-original-dsp-voice-midi-test test/original_dsp_voice_midi_test.cpp)
   target_link_libraries(blofeld-original-dsp-voice-midi-test PRIVATE blofeld_voice_fixture)
   add_test(NAME original_dsp_voice_midi COMMAND ${Python3_EXECUTABLE}
@@ -896,6 +928,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-foreground.trace")
   set_tests_properties(original_dsp_foreground PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-program-guard-test test/original_dsp_program_guard_test.cpp)
+  target_link_libraries(blofeld-original-dsp-program-guard-test PRIVATE blofeld_voice_fixture)
+  add_test(NAME original_dsp_program_guard COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_program_guard.py"
+    $<TARGET_FILE:blofeld-original-dsp-program-guard-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-program-guard")
+  set_tests_properties(original_dsp_program_guard PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-repeat-test test/original_dsp_repeat_test.cpp)
   target_link_libraries(blofeld-original-dsp-repeat-test PRIVATE blofeld_voice_fixture)
   add_test(NAME original_dsp_repeat COMMAND ${Python3_EXECUTABLE}
@@ -936,14 +976,14 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-audio")
-  set_tests_properties(original_dsp_ring_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300
+  set_tests_properties(original_dsp_ring_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
     ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
   add_test(NAME original_dsp_ring_midi_audio COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
     $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-midi-audio" midi)
-  set_tests_properties(original_dsp_ring_midi_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300
+  set_tests_properties(original_dsp_ring_midi_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900
     ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
   add_test(NAME original_dsp_ring_release_audio COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
@@ -1368,7 +1408,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-original-runtime-clocks-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test
@@ -1456,9 +1496,11 @@ add_custom_target(quality
     blofeld-original-dsp-voice-test
     blofeld-original-dsp-voice-master-test
     blofeld-original-dsp-voice-pcm-test
+    blofeld-original-dsp-voice-host-test
     blofeld-original-dsp-voice-audio-test
     blofeld-original-dsp-voice-midi-test
     blofeld-original-dsp-foreground-test
+    blofeld-original-dsp-program-guard-test
     blofeld-original-dsp-repeat-test
     blofeld-original-dsp-idle-midi-test
     blofeld-original-dsp-release-ring-test blofeld-original-dsp-sustain-ring-test

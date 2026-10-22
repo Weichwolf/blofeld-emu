@@ -17,7 +17,9 @@ The model retains the original post-scan parser status 0x70 from shared scratch;
 it does not repair that context or qualify later running-status traffic.
 
 One direct 192-frame stream reaches AudioRuntime per decoded half and must match
-a private no-rewind monitor. Both sanitizers use the actual native source;
+a private no-rewind monitor. A foreign source claim must reject while the
+original source still finishes. The monitor corruption control must also reject.
+Both sanitizer profiles use the actual native source;
 no trace or completed-stream capture supplies the client.
 
   cmake --build --preset strict --target blofeld-original-dsp-sustain-ring-test blofeld-original-dsp-ring-audio-test
