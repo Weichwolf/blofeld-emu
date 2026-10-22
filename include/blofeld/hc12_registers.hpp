@@ -59,14 +59,17 @@ inline constexpr std::uint16_t ptm = 0x0248;
 inline constexpr std::uint16_t ddrm = 0x024a;
 inline constexpr std::uint16_t ptj = 0x0250;
 inline constexpr std::uint16_t ddrj = 0x0252;
+inline constexpr std::uint16_t rdrj = 0x0253;
 inline constexpr std::uint16_t modrr = 0x0257;
 inline constexpr std::uint16_t ptp = 0x0258;
 inline constexpr std::uint16_t ptq = 0x0260;
 inline constexpr std::uint16_t ddrq = 0x0262;
+inline constexpr std::uint16_t rdrq = 0x0263;
 inline constexpr std::uint16_t perq = 0x0264;
 inline constexpr std::uint16_t ppsq = 0x0265;
 inline constexpr std::uint16_t ptr = 0x0268;
 inline constexpr std::uint16_t pts = 0x0270;
+inline constexpr std::uint16_t rdrs = 0x0273;
 inline constexpr std::uint16_t ptu = 0x0278;
 inline constexpr std::uint16_t usb_control = 0x0300;
 }

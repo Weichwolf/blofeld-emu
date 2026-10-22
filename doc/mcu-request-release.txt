@@ -4,6 +4,12 @@ original_mcu_request_release executes unchanged MCU request/strobe helpers with
 an own native caller and declared RAM/stack/port state. The original reset clock
 prefix runs first, with explicit E2/E3 loopback and PHY observations. This is a
 bounded component fixture, not a reset-to-runtime or physical clock claim.
+An isolated unchanged GPIO-setup suffix then executes23 native instructions:
+the original direction/latch/pull stores select PERQ/PPSQ=ff and RDRQ=ff,
+RDRS=c0 and RDRJ=02. Its53-cycle/106-tick ledger and D/CCR effects are independent
+expectations. Explicitly floating peers resolve to low input pads through those
+native pull-down settings; they do not produce a reply or active output.
+This is a component entry, not the whole I/O initializer.
 
 Eight independent packet expectations cover Sound, Multi, metadata and Global
 requests, maximum field bytes, location bits and the startup Global field0x4c.
@@ -17,9 +23,10 @@ predicts37 whole-tail cycles: the last request-byte write commits after2,
 the unflagged payload write after33, and DDR-Q release after36. Therefore the
 last field remains actively driven for34 cycles; its final latch change is
 three cycles before release. All observed driver masks/levels and write times
-must agree. The fixture ends after cycle37, before any data-port input poll.
-NVM bytes/knowledge/history must remain unchanged. Five fixed corruptions of
-inputs, clock, writes, steps and endpoint data-read count must reject.
+must agree, including reduced strength on every active Q bit and no strength
+after release. The fixture ends after cycle37, before any data-port input poll.
+NVM bytes/knowledge/history must remain unchanged. Six fixed corruptions of
+inputs, clock, drive setup, writes, steps and endpoint data-read count must reject.
 
 The nominal30MHz bus derives from the original prefix and declared sources.
 It does not measure a Blofeld oscillator, GPIO pad delay or external driver.

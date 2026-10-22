@@ -41,6 +41,11 @@ including Global0x4c. An independent HCS12 ledger gives34 driven cycles from the
 last request-byte write to DDR-Q release; the fixture stops before reply polling.
 This constrains the source chronology without fabricating a peer or complete
 transaction. See mcu-request-release.txt.
+The original I/O setup selects reduced drive for every Q data output and enables
+pull-downs on the Q inputs. The native setup suffix and driver metadata retain
+those conditions. Earlier CPU-pair fixtures omitted them; their equal-drive and
+unbiased-input assumptions therefore do not establish real pad behavior. Reduced
+strength does not itself define conflict voltage, release a driver or prove a reply.
 
 The reset-to-runtime path separately stops at the original first-stage reserved
 Y:002000 store. The documented map does not establish discard/alias behavior.

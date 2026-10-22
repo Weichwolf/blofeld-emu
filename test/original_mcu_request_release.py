@@ -35,6 +35,13 @@ def validate(text):
         if one(body, 'PREFIX') != dict(pc=0x8050, instructions=35, cycles=76, ticks=752,
                                        timebase=60000000, divider=2):
             raise ValueError('PREFIX original clock initialization differs')
+        # Original suffix: seven LDAB immediate, thirteen STAB EXT,
+        # two CLR EXT and NEGB. Explicit floating peers allow the actual pulls.
+        # NEGB sets C; later positive loads/stores retain it and clear N/Z/V.
+        if one(body, 'DRIVE') != dict(pc=0x8833, instructions=23, cycles=53, ticks=106,
+                                      q=255, s=192, j=2, pull=255, polarity=255,
+                                      pad_known=255, pad_levels=0, d=2, ccr=0xd1):
+            raise ValueError('DRIVE original reduced-strength setup differs')
         writes = rows(body, 'WRITE')
         data = [row for row in writes if row['address'] == 0x260]
         direction = [row for row in writes if row['address'] == 0x262]
@@ -45,8 +52,9 @@ def validate(text):
             raise ValueError('WRITE original direction setup/release differs')
         if [row['value'] for row in strobe] != [1, 0, 1, 1, 1]:
             raise ValueError('WRITE original J0 sequence differs')
-        if (any((row['mask'], row['known'], row['levels']) != (255, 255, row['value'])
-                for row in data) or direction[-1]['mask'] or direction[-1]['known']):
+        if (any((row['mask'], row['known'], row['levels'], row['reduced']) !=
+                (255, 255, row['value'], 255) for row in data)
+                or direction[-1]['mask'] or direction[-1]['known'] or direction[-1]['reduced']):
             raise ValueError('WRITE data drivers must retain their latch until native release')
         steps = rows(body, 'STEP')
         if any(row['ticks'] - 752 != 2 * (row['cycles'] - 76) for row in steps):
@@ -73,7 +81,7 @@ def validate(text):
 
 
 def negative_controls(text):
-    for label, field in (('CASE', 'kind'), ('PREFIX', 'divider'), ('WRITE', 'value'),
+    for label, field in (('CASE', 'kind'), ('PREFIX', 'divider'), ('DRIVE', 'q'), ('WRITE', 'value'),
                          ('STEP', 'ticks'), ('RELEASE', 'data_reads')):
         changed, count = re.subn('^' + label + r' (.*?\b' + field + r'=)(\d+)',
                                  lambda m: label + ' ' + m[1] + str(int(m[2]) + 1),
@@ -112,10 +120,14 @@ def main():
     report.write_text(json.dumps({'passed': True, 'cases': len(INPUTS),
                                   'driven_tail_cycles': 34, 'post_latch_release_cycles': 3,
                                   'whole_tail_cycles': sum(cycles for _, cycles in TAIL),
-                                  'reply_reads': 0, 'fixed_oracle_corruptions': 5,
+                                  'reply_reads': 0, 'fixed_oracle_corruptions': 6,
+                                  'native_reduced_drive_setup': True,
+                                  'native_input_pull_setup': True,
+                                  'reduced_drive_output_mask': 255,
                                   'fuzz_execution': False, 'physical_traffic': False,
                                   'scope': 'Unmodified original MCU request/strobe helpers after '
-                                  'the original clock prefix, with explicit caller/RAM and '
+                                  'the original clock prefix and isolated native drive-setup '
+                                  'suffix, with explicit caller/RAM and '
                                   'GPIO/PHY observations. Independent packet/cycle expectations; '
                                   'no DSP reply, complete transaction, boot or hardware timing proof.'},
                                  indent=2) + '\n')

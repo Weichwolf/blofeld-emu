@@ -28,6 +28,7 @@ constexpr unsigned caller = 0x1400, stack = 0x2200, request = 0xb6dc;
 constexpr unsigned bus_flags = 0x1815, setup_flags = 0x21;
 constexpr unsigned instruction_limit = 1024, byte_mask = 255;
 constexpr unsigned x_seed = 0x5678, y_seed = 0x9abc;
+constexpr unsigned drive_setup_begin = 0x87f7, drive_setup_end = 0x8833;
 
 void require(const bool condition, const std::string_view message) {
   if (!condition) { throw blofeld::Fault(std::string(message)); }
@@ -108,6 +109,33 @@ void prepare(blofeld::McuMachine &machine, const Input input) {
                            .ccr = 0x40});
 }
 
+void drive_setup(blofeld::McuMachine &machine, std::ostream &trace) {
+  // Explicit isolated component entry, not complete I/O initialization.
+  machine.cpu().set_state(
+      {.pc = drive_setup_begin, .sp = stack, .ccr = blofeld::ExecutionContext::initial_ccr});
+  const auto cycles = machine.run_clock().bus_cycles();
+  const auto ticks = machine.run_clock().elapsed_ticks();
+  unsigned steps = 0;
+  while (machine.cpu().state().pc != drive_setup_end) {
+    require(steps++ < instruction_limit, "Original output-strength setup bound");
+    machine.cpu().step();
+  }
+  const auto state = machine.cpu().state();
+  machine.bus().set_pin_drive(blofeld::McuPort::q, {.floating = byte_mask});
+  const auto pads = machine.bus().observe_pads(blofeld::McuPort::q, byte_mask);
+  trace << "DRIVE pc=" << state.pc << " instructions=" << steps
+        << " cycles=" << machine.run_clock().bus_cycles() - cycles
+        << " ticks=" << machine.run_clock().elapsed_ticks() - ticks
+        << " q=" << static_cast<unsigned>(machine.bus().read(blofeld::hc12::rdrq))
+        << " s=" << static_cast<unsigned>(machine.bus().read(blofeld::hc12::rdrs))
+        << " j=" << static_cast<unsigned>(machine.bus().read(blofeld::hc12::rdrj))
+        << " pull=" << static_cast<unsigned>(machine.bus().read(blofeld::hc12::perq))
+        << " polarity=" << static_cast<unsigned>(machine.bus().read(blofeld::hc12::ppsq))
+        << " pad_known=" << static_cast<unsigned>(pads.known)
+        << " pad_levels=" << static_cast<unsigned>(pads.levels) << " d=" << state.d
+        << " ccr=" << static_cast<unsigned>(state.ccr) << '\n';
+}
+
 void run(const blofeld::Firmware &firmware, const Input input, std::ostream &trace) {
   blofeld::McuMachine machine(
       blofeld::McuFlashImage::from_known(firmware.mcu),
@@ -117,6 +145,7 @@ void run(const blofeld::Firmware &firmware, const Input input, std::ostream &tra
                     .switch_timing = blofeld::McuRunClockSwitch::reference_cycle_boundary},
           .memory_timing = blofeld::McuRunMemory::internal_flash_reads});
   clock_prefix(machine, trace);
+  drive_setup(machine, trace);
   prepare(machine, input);
   const auto nvm = machine.bus().power_off_flash_image();
   bool output = false;
@@ -141,7 +170,8 @@ void run(const blofeld::Firmware &firmware, const Input input, std::ostream &tra
           << " ticks=" << machine.run_clock().elapsed_ticks()
           << " mask=" << static_cast<unsigned>(pins.mask)
           << " known=" << static_cast<unsigned>(pins.known)
-          << " levels=" << static_cast<unsigned>(pins.levels) << '\n';
+          << " levels=" << static_cast<unsigned>(pins.levels)
+          << " reduced=" << static_cast<unsigned>(pins.reduced_drive) << '\n';
   });
   while (!released) {
     require(steps++ < instruction_limit, "Original MCU release-prefix bound");

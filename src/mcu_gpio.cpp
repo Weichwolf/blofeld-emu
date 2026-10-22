@@ -159,7 +159,8 @@ PinOutputs McuGpio::outputs(const McuPort port) const {
   const auto known = mask & latch_known;
   return {.mask = static_cast<std::uint8_t>(mask),
           .known = static_cast<std::uint8_t>(known),
-          .levels = static_cast<std::uint8_t>(latch & known)};
+          .levels = static_cast<std::uint8_t>(latch & known),
+          .reduced_drive = static_cast<std::uint8_t>(mask & state.reduced_drive)};
 }
 
 std::uint8_t McuGpio::tied_low(const McuPort port) const {

@@ -37,6 +37,8 @@ struct PinOutputs {
   std::uint8_t mask = 0;
   std::uint8_t known = 0;
   std::uint8_t levels = 0;
+  // Subset of mask with reduced output strength; never a weak pull or release.
+  std::uint8_t reduced_drive = 0;
 
   bool operator==(const PinOutputs &) const = default;
 };

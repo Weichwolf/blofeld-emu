@@ -26,6 +26,10 @@ Original request direction       partial  Eight native MCU request prefixes cove
                                           ends at actual DDR-Q input selection,
                                           before any reply read. No peer or full
                                           transaction (mcu-request-release.txt).
+                                          Native reduced-drive setup and actual
+                                          active-output strength metadata are
+                                          retained; pad-voltage/current resolution
+                                          remains unqualified (gpio-drivers.txt).
 LCD screenshots/live export      partial  Read-only controller capture, digital
                                           modes, unknownness and 1-bit PBM/text/
                                           saved PNG encoders tested. Atomic host

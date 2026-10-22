@@ -47,6 +47,7 @@ void rejects(const auto &operation,
 
 void separate_driver_and_pad() {
   blofeld::McuGpio gpio;
+  gpio.write({.address = reg::rdrq, .value = byte_mask});
   gpio.write({.address = reg::perq, .value = byte_mask});
   gpio.set_drive(McuPort::q, {.floating = byte_mask});
   require(gpio.observe_pads(McuPort::q, byte_mask).levels == byte_mask &&
@@ -59,15 +60,16 @@ void separate_driver_and_pad() {
   gpio.write({.address = reg::ptq, .value = mixed});
   gpio.write({.address = reg::ddrq, .value = upper});
   require(gpio.outputs(McuPort::q) ==
-              blofeld::PinOutputs{.mask = upper, .known = upper, .levels = local_levels},
+              blofeld::PinOutputs{
+                  .mask = upper, .known = upper, .levels = local_levels, .reduced_drive = upper},
           "Driver export is the literal local latch/direction, even during opposed peer drive");
   rejects([&] { static_cast<void>(gpio.observe_pads(McuPort::q, byte_mask)); }, "contention");
   gpio.set_drive(McuPort::q, {.mask = lower, .levels = 3});
   require(gpio.observe_pads(McuPort::q, byte_mask).levels == combined_levels,
           "Independent upper local and lower peer drivers resolve to the actual pad byte");
   gpio.write({.address = reg::ddrq, .value = 0});
-  require(gpio.outputs(McuPort::q) == blofeld::PinOutputs{},
-          "Native direction release withdraws every local data driver");
+  require(gpio.outputs(McuPort::q) == blofeld::PinOutputs{} && gpio.read(reg::rdrq) == byte_mask,
+          "Native direction release withdraws drivers without changing strength selection");
 }
 
 void unknown_and_peripheral_drivers() {
@@ -78,17 +80,28 @@ void unknown_and_peripheral_drivers() {
           "A matching peer cannot qualify cold unknown local output latches");
   gpio.write({.address = reg::ddrq, .value = byte_mask});
   gpio.write({.address = reg::ptq, .value = mixed});
+  gpio.write({.address = reg::rdrq, .value = byte_mask});
   gpio.set_function(
       McuPort::q,
       {.inputs = lower, .outputs = upper, .levels = peripheral_level, .unknown = unknown_bit});
   require(gpio.outputs(McuPort::q) == blofeld::PinOutputs{.mask = upper,
                                                           .known = peripheral_known,
-                                                          .levels = peripheral_level},
-          "Peripheral ownership suppresses GPIO direction and preserves an unknown driver bit");
+                                                          .levels = peripheral_level,
+                                                          .reduced_drive = upper},
+          "Peripheral and unknown output latches retain their independent strength selection");
   gpio.set_function(McuPort::q, {});
+  require(gpio.outputs(McuPort::q) == blofeld::PinOutputs{.mask = byte_mask,
+                                                          .known = byte_mask,
+                                                          .levels = mixed,
+                                                          .reduced_drive = byte_mask},
+          "Releasing alternate ownership exposes the original literal GPIO latch");
+  gpio.write({.address = reg::rdrq, .value = 0});
   require(gpio.outputs(McuPort::q) ==
               blofeld::PinOutputs{.mask = byte_mask, .known = byte_mask, .levels = mixed},
-          "Releasing alternate ownership exposes the original literal GPIO latch");
+          "Restoring full drive changes no direction, latch knowledge or level");
+  gpio.reset();
+  require(gpio.read(reg::rdrq) == 0 && gpio.outputs(McuPort::q) == blofeld::PinOutputs{},
+          "Reset restores full-drive selection and releases the GPIO outputs");
   rejects([&] { static_cast<void>(gpio.outputs(McuPort::e)); }, "ECLK");
   gpio.write({.address = reg::modrr, .value = 3});
   rejects([&] { static_cast<void>(gpio.outputs(McuPort::q)); }, "package");
@@ -102,12 +115,16 @@ void board_observation() {
           "pc=0x8123 ccr=0x90");
   bus.write(reg::ptq, mixed);
   bus.write(reg::ddrq, upper);
+  bus.write(reg::rdrq, byte_mask);
   bus.set_pin_drive(McuPort::q, {.mask = lower, .levels = 3});
   const auto revision = bus.revision();
   const auto code_revision = bus.code_revision();
   const auto before = bus.power_off_flash_image();
   const auto output = bus.gpio_outputs(McuPort::q);
-  require(output == blofeld::PinOutputs{.mask = upper, .known = upper, .levels = local_levels} &&
+  require(output == blofeld::PinOutputs{.mask = upper,
+                                        .known = upper,
+                                        .levels = local_levels,
+                                        .reduced_drive = upper} &&
               bus.observe_pads(McuPort::q, byte_mask).levels == combined_levels,
           "The board observes local drivers while the actual combined pad byte stays intact");
   const auto after = bus.power_off_flash_image();
@@ -116,6 +133,11 @@ void board_observation() {
               before.fresh == after.fresh,
           "Driver observation changes no memory revision or persistent state");
   const auto copy = bus.clone();
+  bus.write(reg::rdrq, 0);
+  require(copy->gpio_outputs(McuPort::q) == output &&
+              bus.gpio_outputs(McuPort::q) ==
+                  blofeld::PinOutputs{.mask = upper, .known = upper, .levels = local_levels},
+          "Cloning preserves reduced strength independently of subsequent register writes");
   bus.write(reg::ddrq, 0);
   require(copy->gpio_outputs(McuPort::q) == output &&
               bus.gpio_outputs(McuPort::q) == blofeld::PinOutputs{},
