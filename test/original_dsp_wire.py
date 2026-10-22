@@ -47,7 +47,20 @@ def main() -> int:
                              str(trace.resolve()), scope], check=False, timeout=110)
     if result.returncode:
         return result.returncode
-    observed = dict(token.split("=", maxsplit=1) for token in trace.read_text().split())
+    text = trace.read_text()
+    if scope == "download":
+        expected = []
+        for mode in range(4):
+            for command in (0x74, 0x75):
+                expected.extend(f"NORMAL {mode} {command} {value}" for value in (0, 127))
+                expected.append(f"OMITTED {mode} {command}")
+        expected.extend(("REJECTED 4", "FRAGMENTED 1", "RESTARTED 1"))
+        rows = text.splitlines()
+        if rows[:-1] != expected or not rows[-1].startswith("RESULT "):
+            raise ValueError("Incomplete fixed original wire/SysEx/download case matrix")
+        observed = dict(token.split("=", maxsplit=1) for token in rows[-1][len("RESULT "):].split())
+    else:
+        observed = dict(token.split("=", maxsplit=1) for token in text.split())
     if {key: int(value) for key, value in observed.items()} != reference["scopes"][scope]:
         raise ValueError("Incomplete original MIDI wire evidence: " + scope)
     print("Verified original MIDI wire scope: " + scope)

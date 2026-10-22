@@ -29,7 +29,15 @@ raw 24-bit state, signed-length MAC/end equations, complete A/B and pointer regi
 and masked high mode bits. Observed instruction counts are recorded, not a new
 silicon timing oracle. These are directed cases, not fuzzing.
 
-Limits: the original upstream dispatcher, packet/frame/checksum validation layer,
-cold boot and original caller provenance are absent. The regression writes RAM,
-not physical flash. Complete update/interruption/recovery, boot/assets, MIDI/audio,
-pipeline timing and physical Desktop/Keyboard equivalence remain unqualified.
+The separate original_dsp_wire_download scope supplies original TIO0 receive
+IRQs/RTIs, byte collection, F0/F7 framing and manufacturer dispatch before reaching
+this same routine (dsp-midi-replay.txt). Its 30 fixed cases retain the explicit
+laboratory timing and include ignored headers, interrupted collection, realtime
+interleaving and an omitted trailing word. The original end marker is then read;
+this path does not invoke the ordinary parameter-checksum validator.
+
+Limits: the direct-command matrix alone has no upstream caller/frame provenance.
+Neither scope establishes cold boot or normal physical MIDI baud/connector
+routing. The regression writes RAM; complete physical flash update/interruption/
+recovery, boot/assets, MIDI voices/audio, pipeline timing and Desktop/Keyboard
+equivalence remain unqualified.

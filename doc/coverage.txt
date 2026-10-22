@@ -931,8 +931,14 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           guards, sequence failure/disabled/wrap,
                                           zero groups/targets and full header/MAC
                                           accumulator state (dsp-download.txt).
-                                          Original caller/transport, physical flash
-                                          and whole recovery remain unqualified.
+                                          Separate declared TIO0 wire path: 30 cases,
+                                          1050 bytes / 9450 original IRQs/RTIs feed
+                                          real SysEx collection and manufacturer
+                                          dispatch, including ignored headers,
+                                          F8/F7 interleaving, new-F0 restart and
+                                          omitted trailing word (dsp-midi-replay.txt).
+                                          Normal physical baud/caller provenance,
+                                          flash and whole recovery remain unqualified.
                                           Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an
