@@ -9,6 +9,7 @@
 #include <iostream>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -116,6 +117,35 @@ blofeld::CpuState initial() {
   constexpr blofeld::CpuState state{
       .pc = entry, .d = 0x1234, .x = 0x5678, .y = 0x9abc, .sp = stack, .ccr = initial_flags};
   return state;
+}
+
+std::array<std::uint64_t, 7> activity(const WaitBus &bus) {
+  return {bus.accesses.size(),
+          bus.operands.size(),
+          bus.peeks,
+          bus.fetches,
+          bus.acknowledgements,
+          bus.retirements,
+          bus.generation};
+}
+
+void require_recovery(blofeld::Hc12 &cpu, const WaitBus &bus) {
+  const auto before = cpu.state();
+  const auto waiting = cpu.waiting();
+  const auto saved_bytes = bus.bytes;
+  const auto saved_activity = activity(bus);
+  bool stopped = false;
+  try {
+    cpu.step();
+  } catch (const blofeld::Fault &fault) {
+    stopped = std::string_view(fault.what()).contains("requires coordinated recovery");
+  }
+  const auto after = cpu.state();
+  require(stopped && before.pc == after.pc && before.d == after.d && before.x == after.x &&
+              before.y == after.y && before.sp == after.sp && before.ccr == after.ccr &&
+              cpu.waiting() == waiting && bus.bytes == saved_bytes &&
+              activity(bus) == saved_activity,
+          "A failed WAI operation refuses further stepping before any CPU or bus effect");
 }
 
 void check_restored(const blofeld::CpuState &state, const unsigned next = entry + 1) {
@@ -262,7 +292,9 @@ void test_faults_and_vector_retry() {
   reject([&bad] { bad.step(); });
   require(!bad.waiting() && bad.state().sp == stack - 4 && broken.accesses.size() == 2,
           "A stack failure remains visible before wait entry and preserves partial bus effects");
+  require_recovery(bad, broken);
   WaitBus bus;
+  const auto initial_bus = bus;
   blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
   cpu.set_state(initial());
   cpu.step();
@@ -274,9 +306,16 @@ void test_faults_and_vector_retry() {
   require(cpu.waiting() && cpu.state().sp == frame && bus.acknowledgements == 0 &&
               bus.bytes == saved,
           "A failed wake vector leaves WAI/frame intact and does not acknowledge its source");
-  bus.fail_read.reset();
+  require_recovery(cpu, bus);
+  // The fixture owner restores its whole bus and re-executes the genuine WAI;
+  // replacing registers alone cannot reconstruct the CPU's private wait latch.
+  bus = initial_bus;
+  cpu.set_state(initial());
+  require(cpu.step().instruction_executed && cpu.waiting() && bus.bytes == saved,
+          "Explicit owner recovery re-executes WAI and recreates the independent frame");
+  bus.pending = blofeld::InterruptRequest{.vector = sci_vector};
   require(cpu.step().stack_reused && !cpu.waiting(),
-          "A later valid vector can retry the same frame");
+          "A valid vector wakes the explicitly recovered WAI frame");
   cpu.step();
   check_restored(cpu.state());
 }
@@ -305,13 +344,16 @@ void test_stack_wrap_reset_and_state_replacement() {
 
 void test_pc_wrap_fetch_fault_and_masked_xirq() {
   WaitBus bus;
+  const auto initial_bus = bus;
   blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
   cpu.set_state(initial());
   bus.reject_fetch = true;
   reject([&cpu] { cpu.step(); });
   require(!cpu.waiting() && cpu.state().sp == stack && bus.accesses.empty(),
           "A rejected WAI opcode fetch cannot write a frame or enter wait");
-  bus.reject_fetch = false;
+  require_recovery(cpu, bus);
+  bus = initial_bus;
+  cpu.set_state(initial());
   cpu.step();
   bus.pending =
       blofeld::InterruptRequest{.vector = xirq_vector, .kind = blofeld::InterruptKind::xirq};

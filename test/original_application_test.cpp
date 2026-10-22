@@ -52,8 +52,7 @@ void run(const std::filesystem::path &reference, std::ostream &trace, std::ostre
     blofeld::McuMachine machine(blofeld::McuFlashImage::from_known(firmware.mcu),
                                 BLOFELD_DEFAULT_SLA);
     auto display = std::make_unique<blofeld::test::LcdFixture>(machine.bus());
-    static_cast<void>(
-        blofeld::test::start_application(machine.bus(), machine.cpu(), *display, trace, high));
+    static_cast<void>(blofeld::test::start_application(machine, display, trace, high));
     auto &bus = machine.bus();
     trace << "native-sci baud-high=" << blofeld::hex(bus.read(blofeld::hc12::sci_baud_high), 2)
           << " baud-low=" << blofeld::hex(bus.read(blofeld::hc12::sci_baud_low), 2)
@@ -62,7 +61,7 @@ void run(const std::filesystem::path &reference, std::ostream &trace, std::ostre
           << " modrr=" << blofeld::hex(bus.read(blofeld::hc12::modrr), 2) << '\n';
     if (!high) { verify_checkpoint_replay(machine, display, trace); }
     updates << "case pm3=" << (high ? 1 : 0) << '\n';
-    blofeld::test::verify_application_update(machine.bus(), machine.cpu(), firmware, updates);
+    blofeld::test::verify_application_update(machine, display, firmware, updates);
     machine.bus().set_observer({});
   }
 }
@@ -80,14 +79,15 @@ int main(const int count, char **arguments) {
     std::ofstream updates(update_path);
     updates.exceptions(std::ios::failbit | std::ios::badbit);
     run(arguments[1], trace, updates);
-    std::cout << "Original application: native reset/RTI/display/main WAI, missing-PM3 retry, "
-                 "both controlled input levels, 264 SCI receives plus cold-WAI checkpoint replay, "
-                 "two original update requests "
-                 "through first-helper return/drain and main-helper flash initialization, and "
-                 "unchanged MCU NVM verified. "
-                 "Conditional "
-                 "GPIO/USB/ready/clock fixture; idle FSTAT CBEIF write still unqualified. "
-                 "No measured board, full update or DSP boot.\n";
+    std::cout
+        << "Original application: native reset/RTI/display/main WAI, coordinated PM3 recovery, "
+           "both controlled input levels, 264 SCI receives plus cold-WAI checkpoint replay, "
+           "two original update requests "
+           "through first-helper return/drain and main-helper flash initialization, and "
+           "unchanged MCU NVM verified. "
+           "Conditional "
+           "GPIO/USB/ready/clock fixture; idle FSTAT CBEIF write still unqualified. "
+           "No measured board, full update or DSP boot.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

@@ -1018,7 +1018,8 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           then main-helper loading/UI/configuration
                                           to the idle FSTAT CBEIF RMW frontier.
                                           Unknown parallel data must fail without
-                                          CPU/bus/NVM mutation before pin-only retry
+                                          CPU/bus/NVM mutation; implicit retry
+                                          rejects until joint checkpoint recovery
                                           (original-application-update.txt).
                                           Full image programming remains unproven.
                                           Explicit reference milestones only;

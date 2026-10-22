@@ -2,10 +2,12 @@
 #include "application_fixture.hpp"
 #include "blofeld/bus.hpp"
 #include "blofeld/firmware.hpp"
+#include "blofeld/flash_image.hpp"
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/host_midi.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_midi.hpp"
 #include "lcd_fixture.hpp"
 
@@ -16,6 +18,7 @@
 #include <fstream>
 #include <ios>
 #include <iostream>
+#include <memory>
 #include <ostream>
 #include <span>
 #include <string>
@@ -89,12 +92,14 @@ struct Inputs {
 
 void run(const Inputs &inputs) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
-  blofeld::McuBus bus(firmware.mcu);
-  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
-  blofeld::test::LcdFixture display(bus);
+  blofeld::McuMachine machine(blofeld::McuFlashImage::from_known(firmware.mcu),
+                              BLOFELD_DEFAULT_SLA);
+  auto display = std::make_unique<blofeld::test::LcdFixture>(machine.bus());
   std::ofstream trace(inputs.trace);
   trace.exceptions(std::ios::failbit | std::ios::badbit);
-  static_cast<void>(blofeld::test::start_application(bus, cpu, display, trace, false));
+  static_cast<void>(blofeld::test::start_application(machine, display, trace, false));
+  auto &bus = machine.bus();
+  auto &cpu = machine.cpu();
   require(bus.read(blofeld::hc12::sci_baud_low) == divisor &&
               bus.read(blofeld::hc12::sci_control1) == 8 &&
               bus.read(blofeld::hc12::sci_control2) == expected_control2,

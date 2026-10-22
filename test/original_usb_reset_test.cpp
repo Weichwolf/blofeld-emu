@@ -108,8 +108,7 @@ struct Session {
         display(std::make_unique<blofeld::test::LcdFixture>(machine.bus())),
         trace_(trace),
         initial_(machine.bus().power_off_flash_image()) {
-    static_cast<void>(
-        blofeld::test::start_application(machine.bus(), machine.cpu(), *display, trace, false));
+    static_cast<void>(blofeld::test::start_application(machine, display, trace, false));
     bind();
   }
 

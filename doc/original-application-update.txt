@@ -28,8 +28,12 @@ a measured cable, or a scheduler for electrical setup/hold/propagation delays.
 At the first data read of each request, the peer deliberately withdraws the six
 data observations. The actual original LDAB must fail with PORTQ address,
 unknown mask, PC and CCR. Visible CPU state, bus revision and all NVM/history
-must remain unchanged. Supplying only the missing external observations then
-retries that same instruction. The host does not repair a register or RAM byte.
+must remain unchanged. A second step must refuse without another CPU/bus effect.
+The test owner restores the joint CPU/bus checkpoint taken before withdrawal and
+value-copies/rebinds its LCD before supplying the next external observation.
+The original instruction then executes from its recovered native boundary;
+no CPU register or RAM byte is replaced individually. The peer has not consumed
+any sample or advanced its logical phase at the captured boundary.
 
 Preparation-helper continuation
 The complete original first block supplies its unchanged object, padding and

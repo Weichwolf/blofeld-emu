@@ -26,6 +26,12 @@ The own post-increment regression checks the visible prefix, refused retry and
 recovery at the original operand; original_usb_peer adds original IRQ/USB/GPIO
 failure prefixes (usb-peer.txt).
 
+Original application PM3 and withdrawn update-data regressions also reject an
+implicit retry, then restore the actual pre-read CPU/bus checkpoint and rebind
+their value-copied LCD before supplying inputs. Their peer consumes no input or
+clock period during the failed read. Own WAI stack/vector/fetch regressions retain
+partial effects and refuse retries; their fixture owner explicitly restores its
+bus and initial debug context, then executes a genuine WAI again before wake.
 
 The CPU state includes the native register bank, WAI and CLI/TAP interrupt
 deferral. The register-bank extent is checked against named native registers.

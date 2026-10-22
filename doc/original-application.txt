@@ -22,8 +22,10 @@ Explicit conditions
   enter. The original controller/CPU/ISR acknowledges each real interrupt.
 - PM3 is initially unobserved. Its original read must fail visibly with address,
   PC, CCR and unknown mask, preserving visible CPU state, bus revision and NVM.
-  The test checks native input direction and disabled pull, supplies low/high,
-  then retries that same original instruction without redirecting the CPU.
+  Further stepping must reject without another CPU or bus effect. The test
+  restores its pre-read joint CPU/bus checkpoint, value-copies/rebinds its LCD,
+  checks native input direction and disabled pull, then supplies low/high and
+  executes that same original instruction. No CPU register replacement is used.
 
 Checks
 After 90312 reset/loader instructions, each application case executes 12046302

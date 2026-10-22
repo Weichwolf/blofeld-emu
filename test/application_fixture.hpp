@@ -2,10 +2,10 @@
 #pragma once
 
 #include <iosfwd>
+#include <memory>
 
 namespace blofeld {
-class Hc12;
-class McuBus;
+class McuMachine;
 
 namespace test {
 class LcdFixture;
@@ -17,7 +17,9 @@ struct ApplicationRun {
 };
 
 // Conditional native reset/application experiment; no calibrated board timing.
-ApplicationRun
-start_application(McuBus &bus, Hc12 &cpu, LcdFixture &display, std::ostream &trace, bool pm3_high);
+ApplicationRun start_application(McuMachine &machine,
+                                 std::unique_ptr<LcdFixture> &display,
+                                 std::ostream &trace,
+                                 bool pm3_high);
 }
 }
