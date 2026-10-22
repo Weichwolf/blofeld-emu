@@ -11,6 +11,11 @@ floating observation. Local output-intent getters remain independent of peer
 voltages. Architectural MCU output-latch reads retain their existing semantics;
 an input read needing an unknown bit fails with its address and PC/CCR context.
 DSP pad-dependent data reads and peripheral validation reject unknown levels.
+PinOutputs.reduced_drive retains the RDR selection for active GPIO/peripheral
+drivers, independently of their latch knowledge. Input/released bits export no
+drive strength. This is an output-current selection, not a weak input pull or
+an open-drain mode. S12UF32PIMV2 V02.05 specifies about1/6 of full drive for RDR
+bits1; no current/voltage winner or safe conflicting-pad level is inferred.
 Pad resolution still rejects known opposing strong drivers. No grace period,
 hidden buffer gate, automatic acknowledgement or fixed firmware response is introduced.
 
@@ -30,4 +35,7 @@ bias transfer, electrical timing or a complete original transaction/boot.
 Fixed synthetic expectations cover strong/weak/unknown precedence, independent
 local intent, release, reset, partial updates, clone independence, malformed
 masks, contextual unknown-read faults and retained known-contention rejection.
+Reduced/full selection, unknown/peripheral drivers, release, reset and clone
+independence are checked separately. Rebuild matching consumers/archives when
+the PinOutputs layout changes; old binaries do not qualify this metadata.
 No manufacturer code/data is embedded. No fuzzing or physical traffic runs.
