@@ -36,6 +36,10 @@ program words, MCU flash bytes/knowledge/freshness and own caller code are
 checked before/after. The shared caller also retains the Multi-global contract
 in gpio-parameters.txt.
 
+Enabled-policy notification through original controller mapping, UART queue,
+SCI interrupt and actual serial pad output has a separate gate in
+gpio-notification.txt; this callback fixture retains its disabled policy.
+
 All7098 sampled pad queries are known, but256 intermediate net states remain
 unresolved and all eight board qualifications must reject. The nominal clocks,
 instruction-completion schedule and direct GPIO assumptions in gpio-pair.txt

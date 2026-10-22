@@ -710,6 +710,15 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           insertions (gpio-sound.txt). One own
                                           active-list entry is declared, not
                                           actual voice allocation/rendering.
+                                          Enabled policies1/3 add24 original
+                                          mapped CC notifications,72 SCI pin
+                                          bytes and80 real SCI interrupts with
+                                          wrapped ring/cache/last-stop checks
+                                          (gpio-notification.txt). Rejected
+                                          writes still notify incoming values;
+                                          notification is not DSP acceptance.
+                                          SysEx/unmapped fallback and host-visible
+                                          output remain unqualified.
                                           Other write classes, settle waits,
                                           real boot/initialization,
                                           host MIDI/audio and physical safety
