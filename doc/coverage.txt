@@ -694,6 +694,17 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           source/program/NVM are checked. All four
                                           board qualifications remain rejected;
                                           long-run/RT is not established.
+                                          Original Multi-global field2 writes now
+                                          traverse the native MCU F5 sender, GPIO
+                                          IRQ/ring, secondary parser and actual
+                                          DSP store before genuine F4 readback:
+                                          32 stores/reads,160 bytes consumed and
+                                          288 data writes (gpio-parameters.txt).
+                                          Final original P-record overlays are
+                                          verified before/after. Other write
+                                          classes, real boot/initialization,
+                                          host MIDI/audio and physical safety
+                                          remain unqualified.
                                           Declared external pad sources separate
                                           local register intent from shared net
                                           voltage (gpio-pads.txt). Opposing active

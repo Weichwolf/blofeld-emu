@@ -1,0 +1,42 @@
+Original GPIO parameter write and readback
+
+  cmake --build --preset strict --target blofeld-original-gpio-parameter-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_parameters$'
+
+Four declared order/phase contexts each execute eight writes and reads of
+Multi-global field2, X:e818. Values0,1,7,63,64,126,127,42 exercise zero, maximum
+and intermediate values, restoring the initial own value42 at the end. An own
+native MCU caller supplies the different original write/read stack frames and
+stores real readback results. No per-operation host CPU, argument, pin, IRQ,
+clock or source update supplies a result. Only oracle metadata advances.
+
+The original MCU emits F5/header/field/value/F7. Actual GPIO IRQA instructions
+publish each byte into the secondary ring. An own DSP foreground calls the
+unchanged original secondary consumer, parser and extended parameter writer.
+The real stored value is then selected by the original F4 request/response path.
+Native publication/consumption cursors, all ring cells, actual write-instruction
+register/memory effects, caller write cycles/post-store state and every original
+wire byte are checked against independent expectations, alongside readback.
+This is not merely a self-consistent echo test.
+
+The optional secondary-parser fixture loads all127 original runtime records in
+stream order. Two early P-vector words are overwritten by later original records.
+The exact final11961-word P image is checked before and after execution; requiring
+every historical record value simultaneously would reject the valid final vector.
+Own caller code, the original signature word and whole MCU flash bytes, knowledge
+and erase/program freshness are retained. Missing data outside the loaded image
+and explicit caller/RAM preconditions remain unknown.
+
+The gate checks32 actual original stores/readbacks,160 published/consumed bytes,
+288 original data-port writes and nine fixed oracle corruptions. All four board
+qualifications must still reject the recorded unresolved intermediate voltages.
+Nominal completion/clock and direct GPIO/IRQA assumptions remain in gpio-pair.txt.
+There is no inferred voltage winner, host acknowledgement or substituted parser.
+
+Only the selected raw Multi-global field is qualified here. Sound/global writes,
+normalization, callbacks, settle waits, voice/audio effects, complete initialization,
+NAND/reset-to-runtime loading, normal host MIDI/USB, both hardware profiles and
+physical timing/update/recovery safety retain separate acceptance requirements.
+The full record load is declared fixture preparation, not successful native boot.
+Manufacturer code/data, detailed source analysis and traces stay local. No fuzzing
+or physical-device traffic is performed.

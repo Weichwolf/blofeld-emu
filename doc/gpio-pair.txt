@@ -98,3 +98,8 @@ configured pull-downs. Eight fixed evidence corruptions must reject.
 Every whole-stream board qualification still rejects unresolved intermediate
 voltages. This short declared stream is not full boot, physical timing, normal
 MIDI/audio or long-run/realtime qualification.
+
+The separate original_gpio_parameters gate connects the original MCU write
+routine to the actual DSP GPIO ring, secondary parser and parameter writer,
+then uses genuine native readback on the continuous owners. See gpio-parameters.txt
+for the selected field, final-record overlay checks and explicit scope limits.

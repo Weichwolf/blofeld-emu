@@ -23,6 +23,7 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -84,6 +85,7 @@ constexpr unsigned source_load = 0x269a;
 constexpr unsigned reply_write = 0x26a1;
 constexpr unsigned word_bits = 24;
 constexpr unsigned flags_seed = 0x2200;
+constexpr unsigned secondary_input_entry = 0xc5d;
 constexpr unsigned original_setup_begin = 0x87f7;
 constexpr unsigned original_setup_end = 0x8833;
 constexpr unsigned original_setup_steps = 23;
@@ -129,6 +131,7 @@ inline ClockInputs clock_inputs(const Firmware &firmware) {
 }
 
 enum class PadFault : std::uint8_t { none, mcu, dsp };
+enum class DspSetup : std::uint8_t { request_only, secondary_parser };
 
 struct LinkState {
   bool returned = false;
@@ -155,13 +158,18 @@ struct OriginalGpioPair {
   DspMachine dsp;
   std::unique_ptr<McuDspSchedule> schedule;
   Case input;
+  DspSetup setup;
   ClockInputs clocks;
   unsigned foreground = 0;
   unsigned completion_pc = caller + 3;
   std::ostream &trace;
   LinkState link;
+  DspCompletionObserver additional_completion;
 
-  OriginalGpioPair(const Firmware &firmware, const Case scenario, std::ostream &log)
+  OriginalGpioPair(const Firmware &firmware,
+                   const Case scenario,
+                   std::ostream &log,
+                   const DspSetup configuration = DspSetup::request_only)
       : mcu(McuFlashImage::from_known(firmware.mcu),
             BLOFELD_DEFAULT_SLA,
             McuRunContract{.clock = {.oscillator_hz = oscillator_hz,
@@ -174,6 +182,7 @@ struct OriginalGpioPair {
             .timing = DspRunTiming::native_internal_estimates,
             .interrupts = DspInterruptTiming::native_vector_estimates}),
         input(scenario),
+        setup(configuration),
         clocks(clock_inputs(firmware)),
         trace(log) {
     dsp.bus().pll().observe_pinit(false);
@@ -262,13 +271,14 @@ struct OriginalGpioPair {
 
   void install(const Firmware &firmware) {
     for (const auto &record : firmware.dsp) {
-      if (record.space != 0 || (record.address != 0x10 && record.address != capture_entry)) {
+      if (setup == DspSetup::request_only &&
+          (record.space != 0 || (record.address != 0x10 && record.address != capture_entry))) {
         continue;
       }
       for (unsigned n = 0; n < record.words.size(); ++n) {
         const auto address = record.address + n;
-        const bool mapped = address >= 0x1000;
-        dsp.bus().write({.space = mapped ? DspSpace::x : DspSpace::p,
+        const bool mapped = record.space == 0 && address >= 0x1000;
+        dsp.bus().write({.space = mapped ? DspSpace::x : static_cast<DspSpace>(record.space),
                          .address = mapped ? address + program_alias : address,
                          .value = record.words[n]});
       }
@@ -282,9 +292,9 @@ struct OriginalGpioPair {
     for (unsigned n = 0; n < 128; ++n) { put(input_ring + n, data_canary ^ n); }
     for (unsigned n = 0; n < 16; ++n) { put(part_table + n, ram_begin + (n * 128)); }
     put(ring_write, input_ring);
-    put(ring_read, ring_read_initial);
+    put(ring_read, setup == DspSetup::secondary_parser ? input_ring : ring_read_initial);
     put(input_stamp, a_seed);
-    put(6, flags_seed);
+    put(6, setup == DspSetup::secondary_parser ? 0 : flags_seed);
     put(saved_request, request_seed);
     put(deferred, x_seed);
     for (unsigned address = saved_a; address <= saved_x; ++address) { put(address, data_canary); }
@@ -332,6 +342,10 @@ struct OriginalGpioPair {
     program.emit("movep #>$ff,x:<<$ffffbf");
     program.emit("movep #>$4006,x:<<$ffffff");
     foreground = program.pc();
+    if (setup == DspSetup::secondary_parser) {
+      program.immediate("r6", secondary_input_entry);
+      program.emit("jsr (r6)");
+    }
     program.word(absolute_jump);
     program.word(foreground);
     program.install(dsp.bus());
@@ -433,15 +447,21 @@ struct OriginalGpioPair {
     require(before.bytes == after.bytes && before.known == after.known &&
                 before.fresh == after.fresh && !mcu.timing_faulted() && !dsp.timing_faulted(),
             "Original request must preserve NVM and healthy native execution");
+    std::map<std::uint32_t, std::uint32_t> expected_program;
     for (const auto &record : firmware.dsp) {
-      if (record.space != 0 || (record.address != 0x10 && record.address != capture_entry)) {
+      if (record.space != 0 || (setup == DspSetup::request_only && record.address != 0x10 &&
+                                record.address != capture_entry)) {
         continue;
       }
       for (unsigned n = 0; n < record.words.size(); ++n) {
-        const auto address = record.address + n;
-        require(dsp.bus().read({.space = DspSpace::p, .address = address}) == record.words[n],
-                "Original program records must remain unchanged");
+        expected_program[record.address + n] = record.words[n];
       }
+    }
+    // Later original records replace early vectors. Verify the final ordered
+    // load image, rather than demanding incompatible historical words together.
+    for (const auto &[address, word] : expected_program) {
+      require(dsp.bus().read({.space = DspSpace::p, .address = address}) == word,
+              "Original final program image changed at P:" + hex(address, 6));
     }
     require(dsp.bus().read({.space = DspSpace::x, .address = input.address}) == input.value,
             "Original request must preserve its source data");
@@ -494,6 +514,7 @@ struct OriginalGpioPair {
       }
       trace << "D " << step.completion_ticks << ' ' << hex(step.plan.before.cpu.pc, 6) << '\n';
       sync();
+      if (additional_completion.observe) { additional_completion.observe(step); }
     }};
   }
 
