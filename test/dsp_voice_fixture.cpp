@@ -7,6 +7,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/firmware.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "dsp_voice_master.hpp"
 
 #include <array>
 #include <cstdint>
@@ -218,7 +219,7 @@ struct Call {
   bool twos;
 };
 
-void harness(blofeld::DspBus &bus, unsigned &stop) {
+void harness(blofeld::DspBus &bus, unsigned &stop, blofeld::test::VoiceMaster &master) {
   blofeld::test::DspProgram code;
   code.immediate("x1", memory_mode);
   code.emit("move x1,omr");
@@ -239,6 +240,7 @@ void harness(blofeld::DspBus &bus, unsigned &stop) {
   code.emit("nop");
   code.word(absolute_jump); // DSP56300FM long absolute JMP plus its target extension.
   code.word(begin);
+  master.append(code);
   code.install(bus);
 }
 
@@ -252,6 +254,7 @@ unsigned initial_bus_word(const unsigned index, const bool varied) {
 struct Fixture {
   blofeld::DspBus bus;
   unsigned stop = 0;
+  blofeld::test::VoiceMaster master;
   blofeld::DspCore cpu;
   const Source &source;
   std::ostream &trace;
@@ -261,6 +264,7 @@ struct Fixture {
   unsigned long long total_steps = 0;
   bool output_seen = false;
   bool rendering = false;
+  bool master_enabled = false;
   Case configuration{};
   bool drive_pending = false;
   unsigned drive_return = 0;
@@ -284,8 +288,9 @@ struct Fixture {
     trace << '\n' << std::dec;
   }
 
-  static blofeld::DspBus &load(blofeld::DspBus &bus, const Source &s, unsigned &stop) {
-    harness(bus, stop);
+  static blofeld::DspBus &
+  load(blofeld::DspBus &bus, const Source &s, unsigned &stop, blofeld::test::VoiceMaster &master) {
+    harness(bus, stop, master);
     bus.observe_omr(memory_mode);
     bus.advance_instruction_cycles(3);
     for (const auto &r : s.records) {
@@ -297,7 +302,7 @@ struct Fixture {
   }
 
   Fixture(const Source &s, std::ostream &output)
-      : cpu(load(bus, s, stop)), source(s), trace(output) {}
+      : cpu(load(bus, s, stop, master)), source(s), trace(output) {}
 
   void put(blofeld::DspSpace space, unsigned at, unsigned v) {
     require(!rendering ||
@@ -524,6 +529,7 @@ struct Fixture {
     while (cpu.state().pc != end || steps == 0) {
       require(steps++ < instruction_limit, "Original sample-path instruction bound");
       const auto s = cpu.state();
+      if (target == master.entry) { master.observe(bus, s, trace); }
       if (target == voice_entry) {
         observe_output(s);
         observe_filters(s);
@@ -769,6 +775,7 @@ struct Fixture {
     reset_stream(input.twos);
     configure_sound(input);
     prepare_output(input);
+    if (master_enabled) { blofeld::test::VoiceMaster::initialize(bus); }
     rendering = true;
     for (unsigned block = 0; block < input.blocks; ++block) {
       begin_block(block);
@@ -776,6 +783,10 @@ struct Fixture {
       check_block(block);
       emit_samples();
       emit_state();
+      if (master_enabled) {
+        run({.target = master.entry, .end = stop, .twos = input.twos});
+        require(cpu.state().sp == 0, "Original copy/mix/master calls must genuinely return");
+      }
     }
     rendering = false;
   }
@@ -832,7 +843,7 @@ void drive_matrix(Fixture &fixture) {
 }
 
 namespace blofeld::test {
-int run_voice_test(const int count, char **arguments, const bool drive) {
+int run_voice_test(const int count, char **arguments, const bool drive, const bool master) {
   try {
     require(count == 3, "Expected original firmware and private voice trace");
     const Source source(arguments[1]);
@@ -840,6 +851,7 @@ int run_voice_test(const int count, char **arguments, const bool drive) {
     require(trace.is_open(), "Cannot write private original voice trace");
     trace.exceptions(std::ios::failbit | std::ios::badbit);
     Fixture fixture(source, trace);
+    fixture.master_enabled = master;
     if (drive) {
       drive_matrix(fixture);
     } else {

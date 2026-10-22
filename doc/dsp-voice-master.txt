@@ -1,0 +1,39 @@
+Original voice-to-master composition
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-original-dsp-voice-master-test
+  ctest --test-dir build/strict -R '^original_dsp_voice_master$' --output-on-failure
+
+The locally pinned official 1.25 archive supplies all 127 unchanged ordered DSP
+records (dsp-voice-reference.json). No sibling build or manufacturer program
+bytes in tests are required. Scalar master coefficients are read from the
+hash-checked original instruction extensions, not copied into the implementation.
+
+An own native caller composes the complete original voice with P:0298 copy,
+P:0251 replacement mix and P:027b master output. All calls execute genuine
+JSR/RTS frames. The original default FX1 gains remain zero. The actual mix
+kernel clears X:05a0, replaces X:0620 and writes its zero effect send X:0640.
+The native caller sets/clears replacement mode around that actual mix call.
+The next voice adds to the genuinely consumed buffer. Between blocks no host
+copies samples, clears synthesis state, patches firmware or supplies results.
+
+The 32 existing voice profiles run eight dependent blocks each: both pitches,
+rounding modes, Noise Color endpoints, mixer/filter profiles and routing modes.
+Independent voice equations check every block through its complete return.
+Separate integer models then check copied words, quantized mix, consumed/send
+buses, all 8192 master words, full final A/B, pointers, real return frame, both
+output halves and retained input/output histories. Four corrupted trace-word
+controls must fail at the corresponding copy/mix/output/history equation.
+Traces and numerical reports remain under build/Testing/.
+
+Fixture inputs include the held-note workspace and initial voice-bus pattern,
+readable prefetch neighbors, cold master histories, Volume 127 and Port E bit 9's
+output latch. The own caller alternates phase 0/32; this is explicitly not a
+DMA address observation. The original oscillator/filter/LFO/envelope state
+persists without CPU reset or host repair between blocks. Initializers and
+all original executable words retain the voice fixture's existing checks.
+
+This establishes an original synthesis-to-master data path under declared
+caller inputs. Original boot, MIDI allocation, part/effect scheduling, DMA
+arbitration, ESAI/host PCM, physical sample rate and hardware equivalence remain
+open. It does not bypass the strict Y:002000 bootstrap boundary. No fuzzing.

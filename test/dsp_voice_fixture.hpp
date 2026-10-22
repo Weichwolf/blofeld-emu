@@ -2,5 +2,5 @@
 #pragma once
 
 namespace blofeld::test {
-[[nodiscard]] int run_voice_test(int count, char **arguments, bool drive);
+[[nodiscard]] int run_voice_test(int count, char **arguments, bool drive, bool master = false);
 }
