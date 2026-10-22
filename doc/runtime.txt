@@ -27,9 +27,12 @@ are optional development tools. They are not the normal-operation interface and
 do not establish complete boot, device enumeration or live audio. Source and
 reference artifacts remain separate; manufacturer firmware/assets stay local.
 
-Display snapshots and live GUI access use ordinary PNG/text files below
+Display snapshots and live GUI access use packed 1-bit PBM/text files below
 $XDG_RUNTIME_DIR/blofeld-emu/. Atomic replacement and directory change events
-permit live GUI refresh as well as screenshots; see display-export.txt.
+permit live GUI refresh at complete-frame publication boundaries, analogous to
+a software display swap. PNG is for saved screenshots; see display-export.txt.
+The separate native GTK Blofeld Display viewer only consumes this export; it
+waits for available frames without starting or controlling the emulator.
 
 Current evidence and missing requirements
 coverage.txt retains the full acceptance scope. Keyboard/Desktop normal startup,

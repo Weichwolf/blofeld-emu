@@ -1,35 +1,53 @@
-LCD screenshots and live export: required interface
+LCD interface
 
-The running emulator must publish the actual firmware-driven LCD contents as
-$XDG_RUNTIME_DIR/blofeld-emu/display.png and display.txt. PNG supports independent
-GUI viewers and saved screenshots; text is a pixel raster suitable for ordinary
-terminal tools. Do not add a blofeld-cli, kernel module, /proc entry or sysfs API.
-The XDG runtime location is private to the logged-in user, not persistent storage.
+Live files: $XDG_RUNTIME_DIR/blofeld-emu/display.pbm and display.txt.
+PBM: P4, 128x64, row-major, MSB first, black=1; 1024 payload bytes.
+Text: '#' on, space off, '?' unknown. PNG is optional saved output.
+Capture actual LCD state, not buffered MCU drawing RAM. Unknown raster pixels
+reject PBM/PNG. Explicit panel geometry remains separate from controller modes.
 
-Publish each complete file by writing a temporary file in the same directory
-and atomically renaming it over the current name. A GUI watches the directory
-and reloads display.png on its rename/publication event. Watching only the old
-file inode is insufficient after replacement. Initial reads, notification queue
-overflow and directory recreation must permit resynchronization from the current
-complete image. This provides live GUI refresh without a polling requirement.
+Publish immutable complete files by same-directory atomic rename; unchanged
+pixels skip I/O. Watch the directory, not the replaced inode. Initial reads,
+queue overflow and directory recreation must resynchronize from the latest file.
+This is software presentation, not physical VSync or atomic firmware redraw.
+PBM/text publish separately. A failed publication invalidates the cache so either
+old or new pixels can repair both files. Publisher lease and files are private.
+Image/file work stays outside native execution and realtime audio callbacks.
+The host runtime is tmpfs; active swap prevents a strict no-SSD-I/O guarantee.
 
-Each capture must inspect a consistent LCD state without issuing native reads,
-advancing its dummy-read pipeline or changing RAM, CPU, clocks or pin state.
-Honor digital display modes and establish the panel's RAM/segment/COM mapping.
-Keep unknown pixels and unverified geometry explicit. A rendered digital raster
-is not a measurement of contrast, optical response or physical scan timing.
-Coalescing host presentation updates must not alter firmware execution or run
-file/image work inside a future realtime audio callback.
+Implementation/evidence
+capture_lcd copies an inactive controller without native reads or pipeline/RMW
+mutation. It honors ADC/COM reversal, start-line wrapping, reverse/all-points and
+display-off modes. The renderer models digital 64-COM pixels, not optical drive.
+LcdPublisher requires an existing directory and uses the shared atomic writer.
 
-Validate independent pixel patterns, modes, unknownness and read-only capture,
-then original firmware drawing and actual MIDI-triggered LCD changes. Test GUI
-notifications and concurrent readers during repeated complete-frame replacement.
-Manufacturer-derived captures and private traces stay local reference artifacts.
+lcd_image: literal pixel/mode/packing expectations, unknownness, read-only RMW.
+lcd_export: independent PNG CRC/rows, write failures/repair, 64 replacements,
+concurrent complete-file readers and inotify events.
+original_lcd_image: hash-pinned local 1.25 setup/clear/pixel/full-flush execution
+through the conditional GPIO fixture. Buffered drawing stays invisible until
+1024 original GPIO writes flush it. Recovered logical UI Y reverses normal COM
+presentation; physical module wiring/timing remains unverified.
 
-Current state: the controller and conditional original drawing fixtures provide
-LCD RAM inspection. The live export, image renderer and MIDI-driven screenshot
-gate are not implemented yet. Existing display component gates do not prove them.
+GTK viewer
+  tools/blofeld-display
+  cmake --install build/strict --prefix "$HOME/.local" --component Display
+Menu: Multimedia / Blofeld Display. Dependencies: python3-gi, python3-gi-cairo,
+gir1.2-gtk-4.0. --runtime-dir selects an alternate runtime root for development.
+The viewer reads only, watches directory/parent replacement, coalesces redraws
+and scales pixels by integer factors. Missing/invalid files clear the image.
+Frame availability is not publisher liveness: abandoned files remain snapshots.
+display_gui checks actual GTK redraw and file/directory/session lifecycle under
+Xvfb; missing test dependencies explicitly skip. No companion CLI is introduced.
+
+Pending: automatic normal Keyboard/Desktop runtime publication, MIDI-triggered
+UI regression, physical display validation and complete board/audio operation.
+Manufacturer captures/traces remain ignored local references.
 
 References:
   https://specifications.freedesktop.org/basedir/latest/
   https://man7.org/linux/man-pages/man7/inotify.7.html
+  https://netpbm.sourceforge.net/doc/pbm.html
+  https://www.w3.org/TR/png-3/
+  https://docs.gtk.org/gio/method.File.monitor_directory.html
+  https://docs.gtk.org/gtk4/class.DrawingArea.html

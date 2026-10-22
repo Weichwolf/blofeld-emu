@@ -120,6 +120,9 @@ target_link_libraries(blofeld_usbip_tcp PUBLIC blofeld_usbip)
 add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
 target_include_directories(blofeld_display PUBLIC include)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
+add_library(blofeld_lcd_export src/lcd_image.cpp src/lcd_png.cpp src/lcd_export.cpp)
+target_include_directories(blofeld_lcd_export PUBLIC include)
+target_link_libraries(blofeld_lcd_export PUBLIC blofeld_display blofeld_private_files PRIVATE ZLIB::ZLIB)
 add_library(blofeld_core src/hc12.cpp src/hc12_decimal.cpp src/mcu_machine.cpp)
 add_library(blofeld_hc12_cycles src/hc12_cycle_plan.cpp src/hc12_cycle_page2.cpp src/hc12_cycle_bus.cpp)
 target_include_directories(blofeld_hc12_cycles PUBLIC include)
@@ -617,6 +620,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-lcd-helper.trace")
   set_tests_properties(original_lcd_helper PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-lcd-image-test test/original_lcd_image_test.cpp)
+  target_link_libraries(blofeld-original-lcd-image-test PRIVATE blofeld_parallel_fixture
+    blofeld_lcd_fixture blofeld_lcd_export)
+  add_test(NAME original_lcd_image COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-lcd-image-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-lcd-image.trace")
+  set_tests_properties(original_lcd_image PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-original-mcu-scan-test test/original_mcu_scan_test.cpp)
   target_link_libraries(blofeld-original-mcu-scan-test PRIVATE blofeld_core)
   add_test(NAME original_mcu_scan COMMAND ${Python3_EXECUTABLE}
@@ -1091,6 +1103,16 @@ if(BUILD_TESTING)
   add_executable(blofeld-st7565-parallel-test test/st7565_parallel_test.cpp)
   target_link_libraries(blofeld-st7565-parallel-test PRIVATE blofeld_display)
   add_test(NAME st7565_parallel COMMAND blofeld-st7565-parallel-test)
+  add_executable(blofeld-lcd-image-test test/lcd_image_test.cpp)
+  target_link_libraries(blofeld-lcd-image-test PRIVATE blofeld_lcd_export)
+  add_test(NAME lcd_image COMMAND blofeld-lcd-image-test)
+  add_executable(blofeld-lcd-export-test test/lcd_export_test.cpp)
+  target_link_libraries(blofeld-lcd-export-test PRIVATE blofeld_lcd_export)
+  add_test(NAME lcd_export COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/lcd_export.py" $<TARGET_FILE:blofeld-lcd-export-test>)
+  add_test(NAME display_gui COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/display_gui.py")
+  set_tests_properties(display_gui PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-rti-test test/mcu_rti_test.cpp)
   target_link_libraries(blofeld-rti-test PRIVATE blofeld_core)
   add_test(NAME mcu_rti COMMAND blofeld-rti-test)
@@ -1156,6 +1178,12 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS blofeld-headless RUNTIME DESTINATION bin)
+install(PROGRAMS tools/blofeld-display DESTINATION bin COMPONENT Display)
+install(FILES gui/__init__.py gui/frame.py gui/watch.py gui/display.py
+  DESTINATION share/blofeld-emu/gui COMPONENT Display)
+install(FILES packaging/org.blofeld_emu.Display.desktop
+  DESTINATION share/applications COMPONENT Display)
+install(FILES LICENSE DESTINATION share/doc/blofeld-emu COMPONENT Display)
 install(FILES LICENSE THIRD_PARTY.txt DESTINATION share/doc/blofeld-emu)
 install(DIRECTORY LICENSES/ DESTINATION share/doc/blofeld-emu/licenses)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla" DESTINATION share/blofeld-emu)
@@ -1267,14 +1295,14 @@ add_custom_target(quality
     blofeld-original-flash-test
     blofeld-original-flash-restart-test
     blofeld-original-parallel-update-test
-    blofeld-original-lcd-helper-test
+    blofeld-original-lcd-helper-test blofeld-original-lcd-image-test
     blofeld-original-mcu-scan-test
     blofeld-usb-ique-control-test
     blofeld-usb-endpoint-reset-test
     blofeld-original-usb-reset-test
     blofeld-original-application-test
     blofeld-wai-test
-    blofeld-st7565-test
+    blofeld-st7565-test blofeld-lcd-image-test blofeld-lcd-export-test
     blofeld-st7565-parallel-test
     blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
