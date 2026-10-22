@@ -18,11 +18,16 @@ installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java a
 runtime.
 DSP56300_ROOT must point to a clean checkout of the revision in
 doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
-The pinned zlib source archive is built locally; a system zlib package is not used.
+Pinned zlib, PulseAudio client and libsndfile sources are built locally; system
+libraries do not replace these instrumented dependencies. Pinned Python Meson
+configures the native audio client without installation.
 Download once with the explicit command below. Configure/build remain offline;
 BLOFELD_ZLIB_ARCHIVE can select another copy of the same verified archive.
 
   python3 tools/dependencies.py --fetch
+  python3 tools/dependencies.py --fetch --component pulseaudio
+  python3 tools/dependencies.py --fetch --component libsndfile
+  python3 tools/dependencies.py --fetch --component meson
   cmake --preset strict
   cmake --build --preset strict
   cmake --build build/strict --target quality
@@ -36,7 +41,7 @@ clang-tidy runs as a mandatory build step on every project C++ translation unit;
 format-check checks formatting without changing files. All diagnostics are
 errors, including the 120-line function limit. ASan/UBSan and additional integer
 checks are enabled in strict builds. Native SLEIGH, DSP, asmjit and zlib sources
-also receive ASan/UBSan. The dependency_instrumentation test verifies compile
+also receive ASan/UBSan, as do PulseAudio and libsndfile. The dependency_instrumentation test verifies compile
 commands, native object hooks and static zlib linkage; see doc/dependency-build.txt.
 Shared hardening also covers native dependencies: explicit PIC/PIE, strong stack
 and stack-clash protection, format security, FORTIFY 3 and libstdc++ assertions.
@@ -46,6 +51,8 @@ release retains warning/static-analysis gates and disables sanitizers for timing
 measurements. thread selects separate TSan instrumentation. No concurrency is
 currently implemented. Native CPU adapters use exceptions; any future audio
 callback must keep allocation and exceptions outside its real-time boundary.
+doc/host-audio.txt describes the separate session audio adapter and isolated
+service/monitor test. Complete original boot and runtime audio remain pending.
 
 Local manufacturer references
 Manifests under doc/ record URLs and SHA-256 values. Never commit or redistribute

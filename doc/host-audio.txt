@@ -1,0 +1,84 @@
+Native session audio transport
+
+HostAudioOutput is a separate ordinary-host-thread adapter. Empty server selects
+the normal session server and default output using the native PulseAudio client
+API. PipeWire's pulse protocol service supports this API. No exclusive hardware
+device, USB Audio function, daemon autospawn or host synthesizer is involved.
+The current integration test uses PulseAudio 17; PipeWire playback is not yet
+tested. Normal standalone firmware/runtime wiring remains pending.
+
+The caller supplies the actual decoded SerialPcmFrame stream, its two-channel
+format, sample rate and emulated timebase. Complete batches of at most256 frames
+are validated before publication: shape, signed precision, uniform bit clock,
+frame duration and continuity must match that explicit clock. Unknown/incomplete
+samples, jitter and a guessed rate cannot become silence. Signed source samples
+are left-aligned in32-bit native-endian PCM containers without resampling.
+
+The service buffer is bounded, initially corked, and returns backpressure; callers
+retain every unaccepted frame. start requires queued data; drain requires a
+running stream and waits for an actual service acknowledgement. Writes after
+drain reject. Connection/start/drain have finite configurable deadlines, at most
+10 seconds. A service fault or deadline failure requires a new session. Pending
+operations are cancelled before their stack callback context expires.
+Underflows remain visible in status; a final drain can produce an underflow
+notification. This adapter does not hide service-inserted silence or implement
+continuous producer pacing, a worker queue or recovery from underruns.
+
+The adapter is thread-confined. Native API calls, setup allocation and exception
+diagnostics belong to an ordinary worker, never a future real-time audio
+callback. Its two C callbacks only update bounded scalar state and are noexcept.
+No project thread or concurrent producer/consumer is introduced by this change.
+Separate TSan validation becomes mandatory when that concurrency is implemented.
+
+Reproduce
+  python3 tools/dependencies.py --fetch --component pulseaudio
+  python3 tools/dependencies.py --fetch --component libsndfile
+  python3 tools/dependencies.py --fetch --component meson
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-host-audio-test
+  ctest --test-dir build/strict -R '^host_audio$' --output-on-failure
+
+The directed test needs pulseaudio, parec and pactl; it skips explicitly if those
+external test tools are absent. Every daemon uses its own private socket,
+runtime/state directories and an unavailable session-bus address. Only an
+explicitly configured null sink and native Unix protocol module are loaded in
+that test daemon. No module/routing/default changes reach the user's service.
+Each test process is closed on success/failure, including a stopped service.
+
+An own DSP program actually executes MOVEP, NOP and JMP through the native core.
+An explicit reference HCKT source drives primary/secondary ESAI and the serial
+receiver. At a declared3072000000-tick timebase, bit periods1000 and64 bits per
+frame imply48000 frames/s. All256 decoded frames have independent literal word
+expectations. After its first refill the test program leaves TX unchanged;
+the modeled ESAI underrun retransmits that known TX value. This is test-program
+behavior, not original firmware voices or a physical Blofeld clock claim.
+
+Primary, secondary and default-server cases compare all256 frames exactly once
+against the private server's stereo s32le monitor. The null sink has norewinds=1
+so this is a linear sample-transport oracle; rewind/timestamp/device-move behavior
+of ordinary session outputs remains unqualified. Whole-batch invalid-final-frame
+controls preserve the accepted prefix. Full corked-buffer backpressure, illegal
+start/drain/write order, service termination, SIGSTOP while starting, nonexistent
+and connected-but-unresponsive servers test actual failure paths and cleanup.
+No fuzzing, physical playback, original assets or device programming occurs.
+
+Sources and sanitizers
+doc/dependencies.json pins all three inputs. CMake verifies archives offline;
+Meson generates the upstream configuration and reviewed source/include/definition
+sets. CMake compiles all96 client units and92 libsndfile units as static native
+targets with the same hardening and dependency sanitizer policy. Optional native
+desktop/network/codec dependencies are disabled, without system fallback.
+dependency_instrumentation checks every native command and actual object hooks,
+plus static client symbols and absence of system audio libraries in the test ELF.
+The external test daemon/tools are a service oracle, not linked dependencies.
+
+The first sanitized close exposed an incompatible property_free callback type.
+The build-copy patch gives that callback its actual void* signature, and supplies
+typed void* adapters for JSON frees and dispatch-owned operation references.
+No sanitizer is suppressed. The live lifecycle and cancelled-operation cases
+retain deterministic regression coverage; unused extended client APIs and JSON
+parsing are not thereby qualified. Upstream source notices remain intact.
+
+Primary API references
+  https://www.freedesktop.org/software/pulseaudio/doxygen/async.html
+  https://docs.pipewire.org/page_module_protocol_pulse.html

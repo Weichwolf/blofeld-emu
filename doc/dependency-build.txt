@@ -1,7 +1,7 @@
 Native dependency builds and instrumentation
 
 The emulator links native SLEIGH, the pinned DSP56300 interpreter and asmjit,
-and a static zlib built from the official source archive. Original source notices
+static zlib, and the pinned PulseAudio client plus libsndfile. Original source notices
 remain in their local/build trees. Project clang-tidy applies to project C++;
 third-party source is built separately with dependency sanitizer flags.
 Upstream compiler diagnostics remain visible under its separate warning policy;
@@ -10,7 +10,7 @@ and JIT offsetof diagnostics remain unresolved, without suppressions or baseline
 
 Shared hardening
 cmake/Hardening.cmake adds the same compiler protection to project source,
-SLEIGH, DSP, asmjit and zlib without replacing strict diagnostics or sanitizers:
+SLEIGH, DSP, asmjit, zlib, PulseAudio and libsndfile without replacing strict diagnostics or sanitizers:
   -fstack-protector-strong -fstack-clash-protection
   -Wformat=2 -Werror=format-security -D_FORTIFY_SOURCE=3
 C++ using libstdc++ also receives _GLIBCXX_ASSERTIONS. Debug builds retain -O1
@@ -58,7 +58,7 @@ Archive hashes establish source identity; compile commands and object hooks
 establish instrumentation, not complete behavioral coverage or memory safety.
 
 strict instruments our code plus native SLEIGH, DSP, asmjit and zlib with
-ASan/UBSan. Additional integer checks apply to project source. thread selects
+ASan/UBSan. Native PulseAudio and libsndfile also receive these checks. Additional integer checks apply to project source. thread selects
 separate TSan; release disables sanitizer instrumentation for measurements.
 Both C and C++ compilers must be LLVM 19. A dependency archive can contain
 sanitizer hooks without exercising every instruction in its runtime tests.
@@ -70,3 +70,16 @@ Upstream zlib examples/coverage/package tests run in a separate build; they are
 not imported into the emulator's CTest inventory. No fuzzer is run by quality.
 Full board boot, voice/audio processing, concurrency and real-time validation
 still require the work listed in coverage.txt.
+
+Session audio inputs
+  python3 tools/dependencies.py --fetch --component pulseaudio
+  python3 tools/dependencies.py --fetch --component libsndfile
+  python3 tools/dependencies.py --fetch --component meson
+
+The pinned Python Meson tool configures the client without installation. Its
+reviewed source/definition/include sets become CMake static targets. Native
+PulseAudio and libsndfile use dependency sanitizers and shared hardening;
+optional native desktop/codec dependencies are disabled. The callback-type patch
+fixes a deterministic UBSan finding, without suppressions (host-audio.txt).
+The dependency check also inspects the audio test ELF for static client symbols
+and rejects uncontrolled dynamic libpulse/libpulsecommon/libsndfile dependencies.

@@ -18,12 +18,16 @@ LCD screenshots/live export      pending  Actual LCD RAM and read-only inspectio
                                           notifications and MIDI-driven image
                                           regression remain to be implemented
                                           (display-export.txt). No separate CLI.
-Host audio output                missing  Original DSP audio must feed the normal
-                                          session audio host/default output, e.g.
-                                          PipeWire. No exclusive ALSA requirement
-                                          and no emulated USB Audio function.
-                                          Current serial PCM/WAV fixtures do not
-                                          establish live application audio.
+Host audio output                partial  Separate native client and directed private
+                                          service test (host-audio.txt). Primary and
+                                          secondary own native DSP/ESAI frames reach
+                                          a no-rewind null-sink monitor exactly;
+                                          explicit/default server and bounded service
+                                          failures are checked under sanitizers.
+                                          Original firmware voices, normal runtime
+                                          integration, continuous refill, PipeWire,
+                                          device moves/rewinds and realtime behavior
+                                          remain unqualified. No USB Audio function.
 Optional Spectre sample tools     partial  samples subcommand edits XML 0.5 program
                                           collections and sample metadata.
                                           WAV decoding/import, declared root/loops

@@ -215,3 +215,13 @@ latches remain independent of later backing-program changes. JIT/debugger/extern
 queue/callback contexts reject. DspMachine pairs this trusted native state with
 an immutable strict-bus copy; no portable SDK object dump is exposed. See
 doc/dsp-checkpoints.txt for independent instruction and original-coupling checks.
+
+PulseAudio17 client callback types
+The pinned build copy receives pulseaudio-callback-types.patch with zero patch
+fuzz. Property destruction now accepts void*, matching pa_free_cb_t, instead
+of calling a typed-pointer function through an incompatible function pointer.
+JSON frees and dispatch-owned operation references use void* adapter functions
+that call the original typed functions. The first sanitized live stream close
+exposed the property callback UB; host_audio preserves lifecycle and cancelled
+operation regressions. All sanitizer checks remain active. Extended unused
+client APIs and JSON parsing are not covered merely by this live adapter test.

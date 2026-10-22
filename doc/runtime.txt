@@ -33,7 +33,9 @@ permit live GUI refresh as well as screenshots; see display-export.txt.
 
 Current evidence and missing requirements
 coverage.txt retains the full acceptance scope. Keyboard/Desktop normal startup,
-complete original boot, host USB-MIDI enumeration and live host audio remain
-unqualified. Conditional original MCU/DSP MIDI/F4 fixtures and serial PCM/WAV
+complete original boot, host USB-MIDI enumeration and original firmware audio
+remain unqualified. A separate session audio adapter has directed native DSP
+program/ESAI-to-private-service monitor tests (host-audio.txt); ordinary runtime
+connection, continuous pacing and PipeWire playback remain pending. Conditional original MCU/DSP MIDI/F4 fixtures and serial PCM/WAV
 gates are component evidence. Real hardware equivalence, update/recovery and
 realtime behavior still require their own complete validation.

@@ -1,0 +1,294 @@
+--- a/src/pulse/context.c
++++ b/src/pulse/context.c
+@@ -1248 +1248 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, internal_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, internal_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1275 +1275 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT,  pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT,  pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1295 +1295 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT,  pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT,  pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1334 +1334 @@
+-        pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT,  pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++        pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT,  pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1417 +1417 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1449 +1449 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+--- a/src/pulse/ext-device-manager.c
++++ b/src/pulse/ext-device-manager.c
+@@ -102 +102 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_manager_test_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_manager_test_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -202 +202 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_manager_read_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_manager_read_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -239 +239 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -278 +278 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -321 +321 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -363 +363 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -393 +393 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+--- a/src/pulse/ext-device-restore.c
++++ b/src/pulse/ext-device-restore.c
+@@ -103 +103 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_restore_test_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_restore_test_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -133 +133 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -256 +256 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_restore_read_device_formats_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_restore_read_device_formats_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -289 +289 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_restore_read_device_formats_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_device_restore_read_device_formats_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -332 +332 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+--- a/src/pulse/ext-stream-restore.c
++++ b/src/pulse/ext-stream-restore.c
+@@ -98 +98 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_stream_restore_test_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_stream_restore_test_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -179 +179 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_stream_restore_read_cb, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, ext_stream_restore_read_cb, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -233 +233 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -281 +281 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -320 +320 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+--- a/src/pulse/introspect.c
++++ b/src/pulse/introspect.c
+@@ -335 +335 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sink_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sink_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -359 +359 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sink_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sink_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -384 +384 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -409 +409 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -614 +614 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_source_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_source_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -638 +638 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_source_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_source_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -663 +663 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -688 +688 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -767 +767 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_client_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_client_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1033 +1033 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_card_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_card_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1058 +1058 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_card_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_card_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1089 +1089 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1114 +1114 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1195 +1195 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_module_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_module_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1300 +1300 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sink_input_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sink_input_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1405 +1405 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_source_output_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_source_output_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1436 +1436 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1463 +1463 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1486 +1486 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1511 +1511 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1536 +1536 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1560 +1560 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1585 +1585 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1612 +1612 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1635 +1635 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1660 +1660 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1686 +1686 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1710 +1710 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1797 +1797 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sample_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sample_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1821 +1821 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sample_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_get_sample_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1847 +1847 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1914 +1914 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_index_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_index_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -1945 +1945 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2028 +2028 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2054 +2054 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2080 +2080 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2106 +2106 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2131 +2131 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2155 +2155 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2180 +2180 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2204 +2204 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2276,4 +2276,4 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_string_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
+-
+-    return o;
+-}
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, context_string_callback, pa_operation_ref(o), pa_operation_unref_callback);
++
++    return o;
++}
+--- a/src/pulse/operation.c
++++ b/src/pulse/operation.c
+@@ -120,0 +121,4 @@
++void pa_operation_unref_callback(void *userdata) {
++    pa_operation_unref(userdata);
++}
++
+--- a/src/pulse/proplist.c
++++ b/src/pulse/proplist.c
+@@ -57 +57,2 @@
+-static void property_free(struct property *prop) {
++static void property_free(void *userdata) {
++    struct property *prop = userdata;
+@@ -66 +67 @@
+-    return MAKE_PROPLIST(pa_hashmap_new_full(pa_idxset_string_hash_func, pa_idxset_string_compare_func, NULL, (pa_free_cb_t) property_free));
++    return MAKE_PROPLIST(pa_hashmap_new_full(pa_idxset_string_hash_func, pa_idxset_string_compare_func, NULL, property_free));
+--- a/src/pulse/scache.c
++++ b/src/pulse/scache.c
+@@ -203 +203 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, play_sample_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, play_sample_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -246 +246 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, play_sample_with_proplist_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, play_sample_with_proplist_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -269 +269 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+--- a/src/pulse/stream.c
++++ b/src/pulse/stream.c
+@@ -1748 +1748 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2053 +2053 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, stream_get_timing_info_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, stream_get_timing_info_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2335 +2335 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2362 +2362 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2491 +2491 @@
+-        pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++        pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2754 +2754 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, stream_set_buffer_attr_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, stream_set_buffer_attr_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2879 +2879 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, stream_update_sample_rate_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, stream_update_sample_rate_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2909 +2909 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+@@ -2946 +2946 @@
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+--- a/src/pulse/subscribe.c
++++ b/src/pulse/subscribe.c
+@@ -74 +74 @@
+-    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    pa_pdispatch_register_reply(c->pdispatch, tag, DEFAULT_TIMEOUT, pa_context_simple_ack_callback, pa_operation_ref(o), pa_operation_unref_callback);
+--- a/src/pulse/internal.h
++++ b/src/pulse/internal.h
+@@ -27,0 +28,3 @@
++
++/* Exact pa_free_cb_t signature for dispatch-owned operation references. */
++void pa_operation_unref_callback(void *userdata);
+--- a/src/pulsecore/json.c
++++ b/src/pulsecore/json.c
+@@ -32,0 +33,4 @@
++
++static void json_object_free_callback(void *userdata) {
++    pa_json_object_free(userdata);
++}
+@@ -313 +317 @@
+-                                             pa_xfree, (pa_free_cb_t) pa_json_object_free);
++                                             pa_xfree, json_object_free_callback);
+@@ -394 +398 @@
+-    pa_idxset_free(obj->array_values, (pa_free_cb_t) pa_json_object_free);
++    pa_idxset_free(obj->array_values, json_object_free_callback);
+@@ -518 +522 @@
+-            pa_idxset_free(obj->array_values, (pa_free_cb_t) pa_json_object_free);
++            pa_idxset_free(obj->array_values, json_object_free_callback);

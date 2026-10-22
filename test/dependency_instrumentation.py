@@ -90,11 +90,22 @@ def check_artifacts(native, binary, mode, nm, readelf):
                 f"Executable does not contain the required static zlib implementation: {symbol}")
 
 
+def check_audio_binary(binary, nm, readelf):
+    needed = output([readelf, "--dynamic", str(binary)])
+    require(not re.search(r"\[lib(?:pulse(?:common)?|sndfile)[^]]*\.so[^]]*\]", needed),
+            "Audio executable still loads uncontrolled native audio libraries")
+    defined = output([nm, "--defined-only", str(binary)])
+    for symbol in ("pa_context_connect", "pa_stream_write", "pa_mainloop_iterate"):
+        require(re.search(rf"\bT {symbol}$", defined, re.MULTILINE),
+                f"Audio executable lacks the static native client implementation: {symbol}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--audio-binary", type=Path, required=True)
     parser.add_argument("--mode", choices=DEPENDENCY_SANITIZERS, required=True)
     parser.add_argument("--nm", required=True)
     parser.add_argument("--readelf", required=True)
@@ -105,6 +116,7 @@ def main():
         counts = check_commands(json.loads(args.database.read_text()), args.source.resolve(),
                                 args.mode, native)
         check_artifacts(native, args.binary, args.mode, args.nm, args.readelf)
+        check_audio_binary(args.audio_binary, args.nm, args.readelf)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Native dependency verification failed: {error}\n")
     print(f"Verified {args.mode} compile commands and native object hooks: {counts}; static zlib.")

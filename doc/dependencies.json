@@ -44,5 +44,33 @@
     "artifact": "https://github.com/xemu-project/dsp56300/releases/download/v1.0.0/dsp56300-1.0.0-x86_64-unknown-linux-gnu.tar.gz",
     "sha256": "e16ef45da9572815d43ab89d030029b898e71226a265468a22591e0171df4b60",
     "license": "MIT"
+  },
+  "pulseaudio": {
+    "version": "17.0",
+    "file": "pulseaudio-17.0.tar.xz",
+    "source": "https://freedesktop.org/software/pulseaudio/releases/pulseaudio-17.0.tar.xz",
+    "bytes": 1566556,
+    "sha256": "053794d6671a3e397d849e478a80b82a63cb9d8ca296bd35b73317bb5ceb87b5",
+    "license": "LGPL-2.1-or-later (client); see upstream LICENSE for individual file notices",
+    "integration": "Upstream-generated client configuration and static native build under dependency sanitizers, with patches/pulseaudio-callback-types.patch correcting incompatible free callbacks. No system libpulse fallback.",
+    "patch": "patches/pulseaudio-callback-types.patch"
+  },
+  "libsndfile": {
+    "version": "1.2.2",
+    "file": "libsndfile-1.2.2.tar.xz",
+    "source": "https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz",
+    "bytes": 730760,
+    "sha256": "3799ca9924d3125038880367bf1468e53a1b7e3686a934f098b7e1d286cdb80e",
+    "license": "LGPL-2.1-or-later",
+    "integration": "Static native dependency of the PulseAudio client. External codecs, programs, examples and upstream tests are disabled; native dependency sanitizers remain enabled."
+  },
+  "meson": {
+    "version": "1.5.2",
+    "file": "meson-1.5.2-py3-none-any.whl",
+    "source": "https://files.pythonhosted.org/packages/55/a6/47b9353c331318a13eb050887eacfd61eb075746285f9baf7ef7de6ae235/meson-1.5.2-py3-none-any.whl",
+    "bytes": 968744,
+    "sha256": "77706e2368a00d789c097632ccf4fc39251fba56d03e1e1b262559a3c7a08f5b",
+    "license": "Apache-2.0",
+    "integration": "Pinned Python build tool used only to configure unmodified PulseAudio source; no installation or system changes."
   }
 }

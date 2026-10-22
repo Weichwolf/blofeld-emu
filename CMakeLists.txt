@@ -72,6 +72,7 @@ if(DEFINED blofeld_dependency_sanitizers)
 endif()
 # Apply clang-tidy to our targets, after the third-party target was created.
 include(cmake/DspCore.cmake)
+include(cmake/PulseAudio.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 include(cmake/Hc12Spec.cmake)
@@ -135,6 +136,9 @@ target_link_libraries(blofeld_serial_pcm PUBLIC blofeld_firmware)
 add_library(blofeld_pcm_transport src/pcm_recording.cpp src/pcm_wave.cpp src/pcm_wave_file.cpp)
 target_include_directories(blofeld_pcm_transport PUBLIC include)
 target_link_libraries(blofeld_pcm_transport PUBLIC blofeld_serial_pcm PRIVATE blofeld_private_files)
+add_library(blofeld_host_audio src/host_audio.cpp src/host_audio_pcm.cpp)
+target_include_directories(blofeld_host_audio PUBLIC include)
+target_link_libraries(blofeld_host_audio PUBLIC blofeld_serial_pcm PRIVATE blofeld_pulse)
 add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
@@ -175,6 +179,11 @@ target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_f
   blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library blofeld_usbip_tcp)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-host-audio-test test/host_audio_test.cpp test/host_audio_native.cpp)
+  target_link_libraries(blofeld-host-audio-test PRIVATE blofeld_host_audio blofeld_dsp blofeld_dsp_native)
+  add_test(NAME host_audio COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio.py" $<TARGET_FILE:blofeld-host-audio-test>)
+  set_tests_properties(host_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-hc12-ccr-test test/hc12_ccr_test.cpp)
   target_link_libraries(blofeld-hc12-ccr-test PRIVATE blofeld_core)
   add_test(NAME hc12_ccr COMMAND blofeld-hc12-ccr-test)
@@ -485,12 +494,16 @@ if(BUILD_TESTING)
     --source "${CMAKE_CURRENT_SOURCE_DIR}"
     --database "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
     --binary $<TARGET_FILE:blofeld-headless>
+    --audio-binary $<TARGET_FILE:blofeld-host-audio-test>
     --mode "${BLOFELD_SANITIZER}"
     --nm "${BLOFELD_LLVM_NM}" --readelf "${BLOFELD_LLVM_READELF}"
     --native zlibstatic=$<TARGET_FILE:zlibstatic>
     --native blofeld_sleigh=$<TARGET_FILE:blofeld_sleigh>
     --native blofeld_dsp_native=$<TARGET_FILE:blofeld_dsp_native>
-    --native asmjit=$<TARGET_FILE:asmjit>)
+    --native asmjit=$<TARGET_FILE:asmjit>
+    --native sndfile=$<TARGET_FILE:sndfile>
+    --native blofeld_pulse=$<TARGET_FILE:blofeld_pulse>
+    --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>)
   add_executable(blofeld-midi-serial-test test/midi_serial_test.cpp)
   target_link_libraries(blofeld-midi-serial-test PRIVATE blofeld_midi_serial)
   add_test(NAME midi_serial COMMAND blofeld-midi-serial-test)
@@ -1136,6 +1149,9 @@ if(BUILD_TESTING)
     --native blofeld_sleigh=$<TARGET_FILE:blofeld_sleigh>
     --native blofeld_dsp_native=$<TARGET_FILE:blofeld_dsp_native>
     --native asmjit=$<TARGET_FILE:asmjit>
+    --native sndfile=$<TARGET_FILE:sndfile>
+    --native blofeld_pulse=$<TARGET_FILE:blofeld_pulse>
+    --native blofeld_pulse_common=$<TARGET_FILE:blofeld_pulse_common>
     ${blofeld_hardening_options})
 endif()
 
@@ -1152,7 +1168,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-headless blofeld-host-audio-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test
