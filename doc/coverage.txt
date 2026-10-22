@@ -132,6 +132,9 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           DSP initial and MS/MSW=111 maps, retained
                                           X/P alias, protected/missing ROM and
                                           explicit three-cycle switch tested.
+                                          ROM software-code variant and matching
+                                          device ROM identity remain unverified
+                                          (dsp-core.txt).
                                           Original DSP RAM clear reaches reserved
                                           Y:002000; write/alias behavior unverified.
                                           Other DSP layouts and full timing pending.
