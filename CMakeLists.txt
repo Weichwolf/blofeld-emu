@@ -848,7 +848,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-envelopes.trace")
   set_tests_properties(original_dsp_envelopes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
-  add_library(blofeld_voice_fixture STATIC test/dsp_voice_fixture.cpp)
+  add_library(blofeld_voice_fixture STATIC test/dsp_voice_fixture.cpp test/dsp_voice_master.cpp)
   target_link_libraries(blofeld_voice_fixture PUBLIC blofeld_dsp blofeld_dsp_native)
   add_executable(blofeld-original-dsp-voice-test test/original_dsp_voice_test.cpp)
   target_link_libraries(blofeld-original-dsp-voice-test PRIVATE blofeld_voice_fixture)
@@ -858,6 +858,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice.trace")
   set_tests_properties(original_dsp_voice PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-voice-master-test test/original_dsp_voice_master_test.cpp)
+  target_link_libraries(blofeld-original-dsp-voice-master-test PRIVATE blofeld_voice_fixture)
+  add_test(NAME original_dsp_voice_master COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_voice_master.py"
+    $<TARGET_FILE:blofeld-original-dsp-voice-master-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-master.trace")
+  set_tests_properties(original_dsp_voice_master PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-original-dsp-drive-voice-test test/original_dsp_drive_voice_test.cpp)
   target_link_libraries(blofeld-original-dsp-drive-voice-test PRIVATE blofeld_voice_fixture)
   add_test(NAME original_dsp_drive_voice COMMAND ${Python3_EXECUTABLE}
@@ -1312,6 +1320,7 @@ add_custom_target(quality
     blofeld-original-dsp-waveforms-test
     blofeld-original-dsp-envelopes-test
     blofeld-original-dsp-voice-test
+    blofeld-original-dsp-voice-master-test
     blofeld-original-dsp-drive-voice-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test

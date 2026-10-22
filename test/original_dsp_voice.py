@@ -15,7 +15,7 @@ from extract_runtime import dsp_records, hc12_object
 from inspect_firmware import decode_block, load_input, read_smf, split_blocks
 
 
-def original_records(firmware, reference):
+def original_records(firmware, reference, program=None):
     downloads = json.loads((ROOT / "doc/downloads.json").read_text())
     pinned = next(row for row in downloads["files"]
                   if row["file"] == "Blofeld_Firmware_V1.25.zip")
@@ -39,6 +39,11 @@ def original_records(firmware, reference):
         if observed != (expected["record"], expected["space"], expected["address"],
                         expected["words"], expected["sha256"]):
             raise ValueError("Changed original voice record: " + str(number))
+        if record["space"] == 0 and program is not None:
+            data = record["data"]
+            program.update({record["address"] + index // 3:
+                            int.from_bytes(data[index:index + 3], "big")
+                            for index in range(0, len(data), 3)})
         if record["space"] in (1, 2):
             target = xdata if record["space"] == 1 else ydata
             data = record["data"]

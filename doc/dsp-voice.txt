@@ -42,6 +42,10 @@ accumulates across blocks. Full boot, MIDI note-on/off and voice allocation,
 scheduled bus consumption, PCM/audio transport, physical sample rate and hardware
 equivalence remain unqualified. Other synthesis/control modes remain open.
 
+The separate original_dsp_voice_master composition consumes the actual bus
+through original copy/mix/master calls between dependent voice blocks; see
+dsp-voice-master.txt. Its declared caller is not the original scheduler.
+
 The shared native implementation is test/dsp_voice_fixture.cpp. The separate
 nonzero-Drive variant keeps these baseline checks and adds the original filter
 callbacks and their live caller state; see dsp-drive-voice.txt.

@@ -919,6 +919,12 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           state across 32 eight-block streams:
                                           256 real returns with independent
                                           output/state equations (dsp-voice.txt).
+                                          An own native caller composes original
+                                          voice/copy/mix/master across 256 blocks;
+                                          consumed bus and retained histories,
+                                          all 8192 master words, both halves and
+                                          full A/B have independent expectations
+                                          (dsp-voice-master.txt). No DMA/PCM claim.
                                           Nonzero Drive adds64 four-block streams
                                           through all13 curves/3 reserved slots,
                                           both RM modes and serial/parallel LP24:

@@ -29,7 +29,8 @@ def new_totals():
                 changed_prefetch_blocks=0)
 
 
-def validate_stream(stream, xdata, ydata, tables, identity, totals, block_count=8, drives=None):
+def validate_stream(stream, xdata, ydata, tables, identity, totals, block_count=8, drives=None,
+                    after_block=None):
     kind, mode, color, profile, routing = identity
     high, twos, varied, serial = kind == 'sync', mode == '1', profile == '1', routing == '1'
     voice = Voice(xdata, ydata, tables[twos], high, twos, int(color), varied, serial, drives)
@@ -52,6 +53,8 @@ def validate_stream(stream, xdata, ydata, tables, identity, totals, block_count=
     for number, block in blocks:
         validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
                        varied, serial, totals)
+        if after_block is not None:
+            after_block(voice, block, check)
 
 
 def validate_block(voice, number, block, xdata, ydata, check, twos, color, high,

@@ -33,5 +33,6 @@ No clock, reserved memory behavior, initialization or hard mute is substituted.
 The original Y:002000 boot boundary remains strict. No fuzzing runs.
 
 Reference identities and scope: dsp-master-output-reference.json.
+Original voice/copy/mix composition is checked separately in dsp-voice-master.txt.
 Primary arithmetic/loop reference: DSP56300FM Rev.5, DO pp.13-56..13-58 and
 full-accumulator data-shifter/limiting rules (hardware/sources.json).
