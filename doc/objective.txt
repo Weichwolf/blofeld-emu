@@ -62,9 +62,12 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    tools; their availability does not establish a working normal runtime.
    See runtime.txt for this interface contract and its current missing evidence.
 10. Make the actual modeled LCD contents available for screenshots and live
-    display in an independent GUI. Publish complete image/text captures under
+    display in an independent GUI. Use a packed 1-bit live PBM image and text
+    raster, with PNG for saved screenshots. Publish complete captures under
     $XDG_RUNTIME_DIR/blofeld-emu/ using atomic replacement and directory change
     notifications, so ordinary tools can read them without a blofeld-cli.
+    Provide a small native GTK viewer that waits for available frames and
+    follows updates and runtime-directory recreation automatically.
     Captures derive from the original firmware's LCD state, including changes
     caused by MIDI; unknown pixels, display modes and unqualified panel mapping
     remain explicit. See display-export.txt. Live GUI refresh does not establish

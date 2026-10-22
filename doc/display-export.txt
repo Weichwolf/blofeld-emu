@@ -1,17 +1,29 @@
 LCD screenshots and live export: required interface
 
 The running emulator must publish the actual firmware-driven LCD contents as
-$XDG_RUNTIME_DIR/blofeld-emu/display.png and display.txt. PNG supports independent
-GUI viewers and saved screenshots; text is a pixel raster suitable for ordinary
-terminal tools. Do not add a blofeld-cli, kernel module, /proc entry or sysfs API.
+$XDG_RUNTIME_DIR/blofeld-emu/display.pbm and display.txt. The live image is
+binary PBM (P4): one bit per pixel, row-major, most-significant bit first, black
+one/white zero. A 128x64 frame has 1024 payload bytes plus its small format header.
+Text is a pixel raster for ordinary terminal tools; PNG is for saved screenshots.
+Do not add a blofeld-cli, kernel module, /proc entry or sysfs API.
 The XDG runtime location is private to the logged-in user, not persistent storage.
 
 Publish each complete file by writing a temporary file in the same directory
 and atomically renaming it over the current name. A GUI watches the directory
-and reloads display.png on its rename/publication event. Watching only the old
+and reloads display.pbm on its rename/publication event. Watching only the old
 file inode is insufficient after replacement. Initial reads, notification queue
 overflow and directory recreation must permit resynchronization from the current
 complete image. This provides live GUI refresh without a polling requirement.
+Prepare a complete immutable capture before publishing it, analogous to a
+software buffer swap. This does not invent an atomic firmware redraw or physical
+LCD VSync. Preserve genuine intermediate drawing and the controller's state.
+Only changed image content needs publication; compression is not in the live
+path. Do not directly mmap the MCU drawing buffer as a displayed bitmap: its
+page layout, buffered-but-unflushed writes, knownness and LCD modes differ.
+
+On this host the runtime directory is tmpfs. It is normally RAM-backed, although
+active SSD swap can page tmpfs data out under pressure; no no-swap guarantee is
+made. Do not write an ongoing screenshot sequence to persistent storage.
 
 Each capture must inspect a consistent LCD state without issuing native reads,
 advancing its dummy-read pipeline or changing RAM, CPU, clocks or pin state.
@@ -26,10 +38,56 @@ then original firmware drawing and actual MIDI-triggered LCD changes. Test GUI
 notifications and concurrent readers during repeated complete-frame replacement.
 Manufacturer-derived captures and private traces stay local reference artifacts.
 
-Current state: the controller and conditional original drawing fixtures provide
-LCD RAM inspection. The live export, image renderer and MIDI-driven screenshot
-gate are not implemented yet. Existing display component gates do not prove them.
+Implemented component interface
+capture_lcd copies an inactive controller state with explicit 64-COM panel
+wiring. It honors ADC/COM reversal, start-line wrapping, reverse/all-points and
+display-off modes. Text retains unknown pixels as '?'; PBM/PNG reject unknown
+pixels rather than inventing a valid raster. PNG uses the existing instrumented
+zlib dependency. File/image work remains outside emulated hardware/audio callbacks.
+
+LcdPublisher takes an existing directory, holds a single-writer lease and writes
+private 0600 files through the shared atomic writer. Unchanged pixels skip I/O.
+PBM and text are separate complete publications, not a two-file transaction.
+A failed publication invalidates its cache so either the old or new frame can
+repair a partially published pair. Unknown captures reject before file writes;
+callers must expose that failure and handle any previous snapshot explicitly.
+
+lcd_image checks literal independent pixel/mode/packing expectations and the
+unchanged dummy-read/RMW pipeline. lcd_export checks independent PNG CRC/rows,
+failure repair, 64 replacements, concurrent readers and directory notifications.
+original_lcd_image loads hash-pinned local 1.25 firmware and executes original
+setup, clear, pixel and full-frame flush routines through the conditional GPIO
+fixture. Buffered drawing stays invisible until the original 1024-byte flush.
+Recovered logical UI coordinates require reversed COM presentation with the
+observed normal ADC/COM setup. Physical module wiring/timing remains unverified.
+
+Native GTK viewer
+Run tools/blofeld-display from the checkout. Debian dependencies are python3-gi,
+python3-gi-cairo and gir1.2-gtk-4.0; WebKit and a local web server are unnecessary.
+Install the viewer and application-menu entry for the current user with:
+  cmake --install build/strict --prefix "$HOME/.local" --component Display
+Then start Blofeld Display from the application menu or run blofeld-display.
+There is no desktop shortcut or emulator-control/companion CLI.
+
+The viewer starts before an export exists, watches its directory and parent,
+and recovers after file, directory or session-directory replacement. It coalesces
+notifications into GTK-loop redraws, displays sharp integer-scaled pixels and
+clears invalid/missing images. It writes no runtime files and never starts an
+emulator or sends MIDI. --runtime-dir selects a different XDG runtime root for
+development. A readable frame establishes snapshot availability, not publisher
+liveness; an old file left behind by a stopped publisher remains a snapshot.
+display_gui validates real GTK rendering and these directory lifecycle events
+under Xvfb; absent GTK/Xvfb dependencies produce an explicit skipped test.
+
+Remaining integration: automatic publication from the normal Keyboard/Desktop
+runtime and actual MIDI-triggered UI changes are not implemented/qualified yet.
+The viewer can consume available frames now; these component gates do not
+establish complete board boot, physical display equivalence or realtime audio.
 
 References:
   https://specifications.freedesktop.org/basedir/latest/
   https://man7.org/linux/man-pages/man7/inotify.7.html
+  https://netpbm.sourceforge.net/doc/pbm.html
+  https://www.w3.org/TR/png-3/
+  https://docs.gtk.org/gio/method.File.monitor_directory.html
+  https://docs.gtk.org/gtk4/class.DrawingArea.html

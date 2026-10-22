@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-only
+[Desktop Entry]
+Type=Application
+Name=Blofeld Display
+Comment=Show the firmware-driven Blofeld emulator display
+Exec=blofeld-display
+Icon=video-display
+Terminal=false
+StartupNotify=true
+Categories=AudioVideo;Audio;
