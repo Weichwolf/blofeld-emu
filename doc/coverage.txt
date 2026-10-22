@@ -12,6 +12,12 @@ Standalone runtime interface     pending  Keyboard must be the default; --deskto
                                           blofeld-cli companion (runtime.txt).
                                           Current diagnostic/reference commands
                                           do not provide a working stock device.
+LCD screenshots/live export      pending  Actual LCD RAM and read-only inspection
+                                          exist. PNG/text publication under XDG
+                                          runtime, atomic replacement, GUI directory
+                                          notifications and MIDI-driven image
+                                          regression remain to be implemented
+                                          (display-export.txt). No separate CLI.
 Host audio output                missing  Original DSP audio must feed the normal
                                           session audio host/default output, e.g.
                                           PipeWire. No exclusive ALSA requirement

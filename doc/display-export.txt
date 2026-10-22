@@ -1,0 +1,35 @@
+LCD screenshots and live export: required interface
+
+The running emulator must publish the actual firmware-driven LCD contents as
+$XDG_RUNTIME_DIR/blofeld-emu/display.png and display.txt. PNG supports independent
+GUI viewers and saved screenshots; text is a pixel raster suitable for ordinary
+terminal tools. Do not add a blofeld-cli, kernel module, /proc entry or sysfs API.
+The XDG runtime location is private to the logged-in user, not persistent storage.
+
+Publish each complete file by writing a temporary file in the same directory
+and atomically renaming it over the current name. A GUI watches the directory
+and reloads display.png on its rename/publication event. Watching only the old
+file inode is insufficient after replacement. Initial reads, notification queue
+overflow and directory recreation must permit resynchronization from the current
+complete image. This provides live GUI refresh without a polling requirement.
+
+Each capture must inspect a consistent LCD state without issuing native reads,
+advancing its dummy-read pipeline or changing RAM, CPU, clocks or pin state.
+Honor digital display modes and establish the panel's RAM/segment/COM mapping.
+Keep unknown pixels and unverified geometry explicit. A rendered digital raster
+is not a measurement of contrast, optical response or physical scan timing.
+Coalescing host presentation updates must not alter firmware execution or run
+file/image work inside a future realtime audio callback.
+
+Validate independent pixel patterns, modes, unknownness and read-only capture,
+then original firmware drawing and actual MIDI-triggered LCD changes. Test GUI
+notifications and concurrent readers during repeated complete-frame replacement.
+Manufacturer-derived captures and private traces stay local reference artifacts.
+
+Current state: the controller and conditional original drawing fixtures provide
+LCD RAM inspection. The live export, image renderer and MIDI-driven screenshot
+gate are not implemented yet. Existing display component gates do not prove them.
+
+References:
+  https://specifications.freedesktop.org/basedir/latest/
+  https://man7.org/linux/man-pages/man7/inotify.7.html

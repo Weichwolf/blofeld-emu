@@ -61,6 +61,14 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    Existing reference/inspection/sample commands remain optional developer
    tools; their availability does not establish a working normal runtime.
    See runtime.txt for this interface contract and its current missing evidence.
+10. Make the actual modeled LCD contents available for screenshots and live
+    display in an independent GUI. Publish complete image/text captures under
+    $XDG_RUNTIME_DIR/blofeld-emu/ using atomic replacement and directory change
+    notifications, so ordinary tools can read them without a blofeld-cli.
+    Captures derive from the original firmware's LCD state, including changes
+    caused by MIDI; unknown pixels, display modes and unqualified panel mapping
+    remain explicit. See display-export.txt. Live GUI refresh does not establish
+    hardware display timing or realtime audio/board equivalence.
 
 Completion requires evidence for the whole emulator and both profiles, original
 MIDI/audio, full update/recovery behavior, reproducible failure/performance tests
