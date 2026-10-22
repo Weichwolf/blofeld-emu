@@ -37,8 +37,13 @@ Host audio output                partial  Native client plus bounded SPSC handof
                                           starvation and service failures have
                                           directed sanitizer checks; concurrency
                                           is checked separately with TSan.
-                                          Original firmware voices, normal startup,
-                                          PipeWire, ordinary device moves/rewinds
+                                          Offline original voice/DMA/ESAI frames
+                                          now reach the actual native worker and
+                                          private monitor: all 4096 frames match
+                                          independent equations, in 32 complete
+                                          streams (dsp-voice-audio.txt). Normal
+                                          startup/live production, PipeWire,
+                                          ordinary device moves/rewinds
                                           and sustained realtime behavior remain
                                           unqualified. No USB Audio function.
 Optional Spectre sample tools     partial  samples subcommand edits XML 0.5 program

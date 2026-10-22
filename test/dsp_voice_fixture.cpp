@@ -7,6 +7,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/firmware.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "dsp_voice_capture.hpp"
 #include "dsp_voice_master.hpp"
 #include "dsp_voice_pcm.hpp"
 
@@ -272,6 +273,7 @@ struct Fixture {
   bool rendering = false;
   bool master_enabled = false;
   bool pcm_enabled = false;
+  blofeld::test::VoicePcmCapture *capture = nullptr;
   Case configuration{};
   bool drive_pending = false;
   unsigned drive_return = 0;
@@ -552,6 +554,7 @@ struct Fixture {
         cpu.step();
         if (pcm_enabled && target == pcm.transfer && cpu.state().pc == pcm.enabled) {
           pcm.drain(bus, cpu, trace);
+          if (capture != nullptr) { capture->append(pcm.decoded); }
         }
         bus.advance_instruction_cycles(1);
         ++total_steps;
@@ -783,6 +786,7 @@ struct Fixture {
   }
 
   void sample_case(const Case input) {
+    if (capture != nullptr) { capture->begin(); }
     rendering = false;
     configuration = input;
     reset_stream(input.twos);
@@ -862,8 +866,12 @@ void drive_matrix(Fixture &fixture) {
 }
 
 namespace blofeld::test {
-int run_voice_test(
-    const int count, char **arguments, const bool drive, const bool master, const bool pcm) {
+int run_voice_test(const int count,
+                   char **arguments,
+                   const bool drive,
+                   const bool master,
+                   const bool pcm,
+                   VoicePcmCapture *const capture) {
   try {
     require(count == 3, "Expected original firmware and private voice trace");
     const Source source(arguments[1]);
@@ -873,6 +881,7 @@ int run_voice_test(
     Fixture fixture(source, trace);
     fixture.master_enabled = master;
     fixture.pcm_enabled = pcm;
+    fixture.capture = capture;
     if (drive) {
       drive_matrix(fixture);
     } else {

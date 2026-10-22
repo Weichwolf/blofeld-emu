@@ -7,6 +7,10 @@ device, USB Audio function, daemon autospawn or host synthesizer is involved.
 The current integration test uses PulseAudio 17; PipeWire playback is not yet
 tested. Normal standalone firmware/runtime wiring remains pending.
 
+Original voice/copy/mix/master plus DMA/ESAI now feeds a separate offline worker
+integration with an exact private monitor (dsp-voice-audio.txt). Its declared
+reference rate and completed captures do not establish live firmware production.
+
 The caller supplies the actual decoded SerialPcmFrame stream, its two-channel
 format, sample rate and emulated timebase. Complete batches of at most256 frames
 are validated before publication: shape, signed precision, uniform bit clock,

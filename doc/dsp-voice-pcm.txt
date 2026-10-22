@@ -42,3 +42,6 @@ repair occurs between blocks. Traces/reports stay under build/Testing/.
 Full boot, original peripheral initialization, repeating DMA, automatic core/
 DMA arbitration, live MIDI allocation, host playback, physical timing/channel
 mapping and hardware equivalence remain open. No fuzzing or physical playback.
+
+The separate dsp-voice-audio.txt fixture delivers these actual decoded objects
+through the native host worker to an exact private service monitor.
