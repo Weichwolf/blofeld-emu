@@ -4,6 +4,7 @@
 #include "blofeld/dsp_esai.hpp"
 #include "blofeld/dsp_gpio.hpp"
 #include "blofeld/hc12.hpp"
+#include "blofeld/pcm_sink.hpp"
 #include "blofeld/pcm_wave.hpp"
 #include "blofeld/serial_pcm.hpp"
 #include "reference_board.hpp"
@@ -84,6 +85,7 @@ void Board::observe_pcm(const std::uint64_t at, const std::string_view source) {
     control_.pcm_stamp = stamp;
     if (frame) {
       if (control_.recording) { control_.recording.append(*frame); }
+      if (pcm_output_ != nullptr) { pcm_output_->accept(*frame); }
       control_.last_pcm = frame;
     }
     trace_pcm(stamp, pins, source, frame);

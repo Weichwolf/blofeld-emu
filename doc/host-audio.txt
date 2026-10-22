@@ -20,15 +20,18 @@ running stream and waits for an actual service acknowledgement. Writes after
 drain reject. Connection/start/drain have finite configurable deadlines, at most
 10 seconds. A service fault or deadline failure requires a new session. Pending
 operations are cancelled before their stack callback context expires.
-Underflows remain visible in status; a final drain can produce an underflow
-notification. This adapter does not hide service-inserted silence or implement
-continuous producer pacing, a worker queue or recovery from underruns.
+Underflows retain their earliest server stream byte index (-1 stays unknown);
+a final drain can produce an EOF underflow notification. Runtime classification
+uses that server position, not the callback arrival or client-written count. This adapter does not hide service-inserted silence or implement
+producer pacing or recovery from underruns. AudioRuntime supplies a separate
+bounded worker/queue and fails on underruns before complete source delivery.
 
 The adapter is thread-confined. Native API calls, setup allocation and exception
 diagnostics belong to an ordinary worker, never a future real-time audio
-callback. Its two C callbacks only update bounded scalar state and are noexcept.
-No project thread or concurrent producer/consumer is introduced by this change.
-Separate TSan validation becomes mandatory when that concurrency is implemented.
+callback. Its two C callbacks read/update bounded scalar state and are noexcept.
+The separate AudioRuntime worker owns these calls and receives a bounded SPSC
+frame handoff from the board (audio-runtime.txt). That concurrency is validated
+separately under TSan; native callbacks remain allocation/exception free.
 
 Reproduce
   python3 tools/dependencies.py --fetch --component pulseaudio
@@ -82,3 +85,6 @@ parsing are not thereby qualified. Upstream source notices remain intact.
 Primary API references
   https://www.freedesktop.org/software/pulseaudio/doxygen/async.html
   https://docs.pipewire.org/page_module_protocol_pulse.html
+
+Underflow index API (also checked against pinned17.0 source):
+  https://www.freedesktop.org/software/pulseaudio/doxygen/stream_8h.html

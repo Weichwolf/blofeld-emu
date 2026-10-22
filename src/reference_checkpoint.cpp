@@ -83,10 +83,11 @@ void Board::initialize() {
   if (control_.started) { return; }
   const Busy guard(*this);
   try {
+    check_pcm_output();
     boundary();
     control_.started = true;
   } catch (...) {
-    control_.faulted = true;
+    mark_fault();
     throw;
   }
 }
@@ -97,6 +98,7 @@ void Board::advance() {
   if (finished()) { throw Fault("Reference-board operation exceeds its execution budget"); }
   const Busy guard(*this);
   try {
+    check_pcm_output();
     step();
     ++control_.operations;
     if (execution_.trace != nullptr) {
@@ -107,7 +109,7 @@ void Board::advance() {
     }
     boundary();
   } catch (...) {
-    control_.faulted = true;
+    mark_fault();
     throw;
   }
 }
@@ -152,6 +154,7 @@ void Board::restore(const Checkpoint &checkpoint) {
   native_.swap(replacement);
   control_ = saved.control;
   ++usb_restore_revision_;
+  retire_pcm_output();
 }
 
 void Board::poll_usb(UsbipRuntime &runtime) {
@@ -187,7 +190,7 @@ void Board::poll_usb(UsbipRuntime &runtime) {
       if (event.error) { std::cerr << "USB/IP peer: " << event.reason << '\n'; }
     }
   } catch (...) {
-    control_.faulted = true;
+    mark_fault();
     runtime.retire();
     throw;
   }
@@ -318,7 +321,7 @@ Board::Outcome Board::finish_branch(const std::function<void(Board &)> &input) {
       advance();
     }
   } catch (const Fault &error) {
-    control_.faulted = true;
+    mark_fault();
     fault = error.what();
   }
   return {.fault = std::move(fault), .state = status()};
@@ -357,7 +360,7 @@ Board::Outcome Board::run_replays() {
     const auto observed = finish_branch();
     replay_marker("end", index + 1);
     if (observed != expected) {
-      control_.faulted = true;
+      mark_fault();
       throw Fault("Reference-board replay changed its visible outcome");
     }
   }

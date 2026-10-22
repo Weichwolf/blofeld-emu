@@ -142,6 +142,12 @@ target_link_libraries(blofeld_pcm_transport PUBLIC blofeld_serial_pcm PRIVATE bl
 add_library(blofeld_host_audio src/host_audio.cpp src/host_audio_pcm.cpp)
 target_include_directories(blofeld_host_audio PUBLIC include)
 target_link_libraries(blofeld_host_audio PUBLIC blofeld_serial_pcm PRIVATE blofeld_pulse)
+add_library(blofeld_pcm_queue src/pcm_queue.cpp)
+target_include_directories(blofeld_pcm_queue PUBLIC include)
+target_link_libraries(blofeld_pcm_queue PUBLIC blofeld_serial_pcm)
+add_library(blofeld_audio_runtime src/audio_runtime.cpp src/audio_worker.cpp)
+target_include_directories(blofeld_audio_runtime PUBLIC include)
+target_link_libraries(blofeld_audio_runtime PUBLIC blofeld_host_audio blofeld_pcm_queue PRIVATE Threads::Threads)
 add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
@@ -174,14 +180,34 @@ target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_library(blofeld_host_midi src/host_midi.cpp)
 target_include_directories(blofeld_host_midi PUBLIC include)
 target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)
-add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
+add_library(blofeld_reference_board src/reference_config.cpp
   src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp src/reference_checkpoint.cpp
-  src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
-  src/reference_midi.cpp src/reference_dsp_midi.cpp src/host_midi_runner.cpp)
-target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport
-  blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library blofeld_usbip_tcp)
+  src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp src/reference_audio.cpp
+  src/reference_midi.cpp src/reference_dsp_midi.cpp)
+target_include_directories(blofeld_reference_board PUBLIC src)
+target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp blofeld_private_files
+  blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp)
+add_executable(blofeld-headless src/main.cpp src/host_midi_runner.cpp)
+target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-audio-runtime-test test/audio_runtime_test.cpp
+    test/audio_runtime_failure.cpp test/audio_runtime_board.cpp test/audio_runtime_underrun.cpp)
+  target_link_libraries(blofeld-audio-runtime-test PRIVATE blofeld_audio_runtime blofeld_reference_board)
+  add_test(NAME audio_runtime COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/audio_runtime.py"
+    $<TARGET_FILE:blofeld-audio-runtime-test> $<TARGET_FILE:blofeld-reference-rom-fixture>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/audio-runtime")
+  set(blofeld_audio_test_timeout 120)
+  if(BLOFELD_SANITIZER STREQUAL "thread")
+    set(blofeld_audio_test_timeout 300)
+  endif()
+  set_tests_properties(audio_runtime PROPERTIES SKIP_RETURN_CODE 77
+    TIMEOUT ${blofeld_audio_test_timeout} ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
+  add_executable(blofeld-pcm-queue-test test/pcm_queue_test.cpp)
+  target_link_libraries(blofeld-pcm-queue-test PRIVATE blofeld_pcm_queue Threads::Threads)
+  add_test(NAME pcm_queue COMMAND blofeld-pcm-queue-test)
+  set_tests_properties(pcm_queue PROPERTIES TIMEOUT 40)
   add_executable(blofeld-host-audio-test test/host_audio_test.cpp test/host_audio_native.cpp)
   target_link_libraries(blofeld-host-audio-test PRIVATE blofeld_host_audio blofeld_dsp blofeld_dsp_native)
   add_test(NAME host_audio COMMAND ${Python3_EXECUTABLE}
@@ -346,14 +372,8 @@ if(BUILD_TESTING)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
-  add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp
-    src/reference_config.cpp src/reference_board.cpp src/reference_wiring.cpp
-    src/reference_returns.cpp src/reference_checkpoint.cpp src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
-    src/reference_midi.cpp src/reference_dsp_midi.cpp)
-  target_include_directories(blofeld-reference-checkpoint-test PRIVATE src)
-  target_link_libraries(blofeld-reference-checkpoint-test PRIVATE
-    blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport blofeld_mcu_midi
-    blofeld_midi_timed blofeld_usbip_tcp)
+  add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp)
+  target_link_libraries(blofeld-reference-checkpoint-test PRIVATE blofeld_reference_board blofeld_dsp_native)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}
@@ -498,6 +518,7 @@ if(BUILD_TESTING)
     --database "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
     --binary $<TARGET_FILE:blofeld-headless>
     --audio-binary $<TARGET_FILE:blofeld-host-audio-test>
+    --audio-binary $<TARGET_FILE:blofeld-audio-runtime-test>
     --mode "${BLOFELD_SANITIZER}"
     --nm "${BLOFELD_LLVM_NM}" --readelf "${BLOFELD_LLVM_READELF}"
     --native zlibstatic=$<TARGET_FILE:zlibstatic>
@@ -1196,7 +1217,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-host-audio-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-headless blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test

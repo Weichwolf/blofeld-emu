@@ -134,7 +134,7 @@ void Board::enqueue_midi(const std::span<const std::uint8_t> bytes) {
       if (!*execution_.trace) { throw Fault("Reference MIDI input trace output failed"); }
     }
   } catch (...) {
-    control_.faulted = true;
+    mark_fault();
     throw;
   }
 }

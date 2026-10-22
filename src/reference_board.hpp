@@ -16,6 +16,7 @@
 #include "blofeld/mcu_sci.hpp"
 #include "blofeld/midi_timed.hpp"
 #include "blofeld/pcm_recording.hpp"
+#include "blofeld/pcm_sink.hpp"
 #include "blofeld/serial_pcm.hpp"
 
 #include <array>
@@ -234,6 +235,8 @@ public:
   [[nodiscard]] Status status() const;
   [[nodiscard]] MidiInputWindow midi_window() const;
   void enqueue_midi(std::span<const std::uint8_t> bytes);
+  // Explicit external binding; a restored model requires a fresh sink session.
+  void attach_pcm_output(PcmFrameSink &sink);
   // Non-real-time input admission at an inactive native MCU operation boundary.
   void poll_usb(UsbipRuntime &runtime);
   [[nodiscard]] Checkpoint checkpoint() const;
@@ -320,6 +323,9 @@ private:
   void trace_dsp_input(const DspInput &input, std::uint64_t at);
   void trace_dsp_midi(std::uint64_t at);
   void observe_pcm(std::uint64_t at, std::string_view source);
+  void check_pcm_output() const;
+  void retire_pcm_output() noexcept;
+  void mark_fault() noexcept;
   [[nodiscard]] SerialPcmPins pcm_pins() const;
   void trace_pcm(SerialPcmStamp stamp,
                  SerialPcmPins pins,
@@ -347,6 +353,7 @@ private:
   Control control_;
   // External transport epochs must not rewind with a modeled-state restore.
   std::uint64_t usb_restore_revision_ = 0;
+  PcmFrameSink *pcm_output_ = nullptr;
   bool active_ = false;
 };
 }

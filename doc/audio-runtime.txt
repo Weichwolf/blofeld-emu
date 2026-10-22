@@ -1,0 +1,104 @@
+Bounded live PCM handoff
+
+AudioRuntime owns one ordinary audio worker and a fixed-capacity PcmQueue.
+Only that worker calls HostAudioOutput/native PulseAudio. The single producer's
+try_submit copies a complete SerialPcmFrame or returns an explicit full/closed/
+failed/retired/exhausted result. It never waits, allocates or throws. Queue
+storage is allocated at construction, with capacity1..65536 and one internal
+sentinel slot. Indices wrap inside that allocation, without overflowing counters.
+Release/acquire publication protects both frame visibility and slot reuse.
+check, accept, construction and finish are ordinary control-thread operations;
+they can wait/allocate/throw and must not be used as real-time audio callbacks.
+
+The worker fills the service's corked buffer before starting; a closed short
+prefix can start and drain without being padded. Backpressure retains the
+unwritten suffix in a fixed256-frame batch. Closure is acquired before the final
+queue read, so a final concurrently published frame cannot be mistaken for EOF.
+An empty completed source fails explicitly. Service faults and underruns before
+complete delivery are terminal, retaining the exception for the owner thread.
+Underflow classification uses the earliest server-reported byte position, never
+callback arrival or the client's written counter. Closure is acquired before
+reading the final accepted count. Unknown positions or events before source EOF
+fail even if observed alongside the final write or during drain; only a known
+event at/after the complete closed EOF is benign.
+Pending writes with no progress use the native client's configured timeout;
+a reachable server with a suspended sink cannot leave finish waiting forever.
+The final drain retains its own client deadline. Valid queued audio can require
+its playback duration; cancellation and lack of progress are separate outcomes.
+No resampling, duplicate frames, invented silence or hardware time is supplied.
+Status fields are independent transport observations, not an atomic device
+snapshot. finish joins and proves successful delivery of the accepted prefix;
+destruction requests cancellation instead of claiming successful drain.
+
+reference::Board::attach_pcm_output binds a generic PcmFrameSink to its decoded
+output route. The board knows no host audio library or worker. Unknown pins fail
+in the receiver before publication. Admission failures retain the register
+address, operation, tick/source and MCU/DSP PCs in the existing PCM diagnostic.
+Asynchronous sink errors are checked before the next native operation, with
+tick and CPU context. A fault invalidates the external sink.
+
+The binding is external to modeled checkpoints. Restore first reconstructs the
+native owners and then invalidates the previous sink; it does not rewind host
+audio. The retired binding fails visibly until a fresh healthy sink is explicitly
+attached. An invalid candidate cannot retire the previous valid binding. Missing
+routes, duplicate bindings and automatic replay branches reject attachment.
+The bound sink must outlive its board binding. Closed sessions reject check and
+cannot replace a still-valid live binding. Retirement closes admission
+immediately; a native call already in flight can finish before the worker notices
+retirement. Existing host-buffered audio cannot be recalled. Worker shutdown is
+bounded by the native client's deadlines, not a hard real-time cancellation SLA.
+
+Verification
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict
+  ctest --test-dir build/strict -R '^(pcm_queue|audio_runtime|reference_checkpoint)$' --output-on-failure
+  cmake --preset thread -DBLOFELD_FUZZING=OFF
+  cmake --build --preset thread --target blofeld-audio-runtime-test blofeld-pcm-queue-test blofeld-host-audio-test blofeld-reference-rom-fixture blofeld-reference-checkpoint-test blofeld-headless
+  ctest --test-dir build/thread -R '^(pcm_queue|audio_runtime|host_audio|reference_checkpoint|dependency_instrumentation)$' --output-on-failure
+
+pcm_queue checks literal whole-frame fields, exact capacity, empty/full behavior
+and wrap. Three concurrent100000-frame FIFO runs use capacities1/7/256 and check
+every frame's independently counted order, signed words and time fields.
+audio_runtime uses the real private service/monitor from host_audio, retaining
+own generated PCM/configurations/logs under build/Testing/audio-runtime/.
+It checks a one-frame source, a1025-frame final publication/closure boundary and
+8192 continuously paced frames. All monitor payloads and unique first markers
+must match exactly, without missing/duplicated/stale prefixes. Invalid/absent
+PCM, cancellation, retirement, starvation, service death/SIGSTOP and missing/
+unresponsive service tests exercise actual worker failures and shutdown.
+Suspending the private sink while leaving its server responsive tests both
+full-buffer write stalls and the final drain deadline. A scoped signal/pipe
+handshake parks only the named owned worker while the private service drains;
+publishing the last frame and closing before releasing it must still report the
+server's earlier32768-byte underrun against4097 accepted frames. Linux task
+inspection belongs only to this regression, not to the device/display interface.
+The ordinary worker is named blofeld-audio for diagnostics. The earlier worker
+without a write-progress bound remained live on1025 queued frames after4 seconds;
+the fixed directed regression requires the specific failure within5 seconds.
+
+Two native coupled MCU/DSP reference boards exercise primary/secondary ESAI at
+an explicit48000-frame/s reference clock. Their two frames have independent
+literal words/ticks; live output must leave the complete native board status
+identical to an observed control run. Restore retires a queued corked prefix;
+reusing that sink fails with context, while a new binding delivers the replay
+exactly once. Unknown source data, output rejection and binding controls cannot
+silently produce audio. These programs/flash inputs are project-owned vectors,
+not manufacturer firmware. Native SLEIGH/DSP/PulseAudio/libsndfile and all other
+linked native dependencies retain the selected instrumentation. TSan runs
+separately from ASan/UBSan. No fuzzing or physical playback occurs.
+
+Remaining acceptance
+The normal Keyboard/Desktop entry point has no qualified complete board profile,
+and does not yet instantiate this bridge automatically. Actual original1.25
+boot, MIDI voice audio, sustained performance, physical clock/pin mapping,
+PipeWire, ordinary sink rewind/device moves and real-device equivalence remain
+unqualified. Transport success never substitutes for those requirements.
+
+TSan supervision allows90 seconds for each board subprocess and300 seconds for
+its complete integration test. This accounts for instrumented native owner
+construction/restores; client deadlines and the5-second failure assertions do
+not change. The same restore case was observed making CPU progress and passing
+in40.43 seconds without a TSan report after its earlier30-second supervision
+limit expired. Detailed observations/failures remain local, not diagnostic
+suppressions. Normal full hardening runs in strict mode; the separate TSan
+verification also inspects every built/tested executable and all native archives.

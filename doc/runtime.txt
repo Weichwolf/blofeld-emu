@@ -37,8 +37,11 @@ waits for available frames without starting or controlling the emulator.
 Current evidence and missing requirements
 coverage.txt retains the full acceptance scope. Keyboard/Desktop normal startup,
 complete original boot, host USB-MIDI enumeration and original firmware audio
-remain unqualified. A separate session audio adapter has directed native DSP
-program/ESAI-to-private-service monitor tests (host-audio.txt); ordinary runtime
-connection, continuous pacing and PipeWire playback remain pending. Conditional original MCU/DSP MIDI/F4 fixtures and serial PCM/WAV
-gates are component evidence. Real hardware equivalence, update/recovery and
-realtime behavior still require their own complete validation.
+remain unqualified. The separate session adapter and bounded AudioRuntime worker
+have native DSP/ESAI-to-private-service tests (host-audio.txt, audio-runtime.txt).
+The reference board can bind that worker without changing native state/ticks;
+restore retires the external stream. Normal startup/profile wiring, sustained
+original firmware audio and PipeWire playback remain pending. Conditional
+original MCU/DSP MIDI/F4 fixtures and serial PCM/WAV gates are component evidence.
+Real hardware equivalence, update/recovery and realtime behavior still require
+their own complete validation.

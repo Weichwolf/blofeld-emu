@@ -23,6 +23,9 @@ struct HostAudioConfig {
 struct HostAudioStatus {
   std::uint64_t frames_written = 0;
   std::uint64_t underflows = 0;
+  // Server stream byte position, not the client's callback arrival position.
+  // -1 retains unknownness; the earliest event survives subsequent underruns.
+  std::int64_t earliest_underflow_byte = -1;
   bool started = false;
   bool drained = false;
 };

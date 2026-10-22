@@ -126,8 +126,12 @@ void HostAudioOutput::Session::completed(pa_stream * /*stream*/,
   *static_cast<int *>(data) = success != 0 ? 1 : -1;
 }
 
-void HostAudioOutput::Session::underflow(pa_stream * /*stream*/, void *data) noexcept {
+void HostAudioOutput::Session::underflow(pa_stream *stream, void *data) noexcept {
   auto &session = *static_cast<Session *>(data);
+  const auto position = pa_stream_get_underflow_index(stream);
+  if (session.status.underflows == 0 || position < session.status.earliest_underflow_byte) {
+    session.status.earliest_underflow_byte = position;
+  }
   if (session.status.underflows != UINT64_MAX) { ++session.status.underflows; }
 }
 

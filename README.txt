@@ -48,8 +48,8 @@ and stack-clash protection, format security, FORTIFY 3 and libstdc++ assertions.
 Linux/x86 adds compiler control-flow protection. build_hardening verifies compile
 commands and executable PIE/full RELRO/NX-stack properties, with negative controls.
 release retains warning/static-analysis gates and disables sanitizers for timing
-measurements. thread selects separate TSan instrumentation. No concurrency is
-currently implemented. Native CPU adapters use exceptions; any future audio
+measurements. thread selects separate TSan instrumentation. AudioRuntime introduces a bounded SPSC handoff and ordinary audio worker;
+its concurrency is checked separately under TSan (doc/audio-runtime.txt). Native CPU adapters use exceptions; any future audio
 callback must keep allocation and exceptions outside its real-time boundary.
 doc/host-audio.txt describes the separate session audio adapter and isolated
 service/monitor test. Complete original boot and runtime audio remain pending.

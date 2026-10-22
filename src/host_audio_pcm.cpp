@@ -40,7 +40,9 @@ std::size_t HostAudioOutput::Session::write(const std::span<const SerialPcmFrame
   if (writable % frame_bytes != 0) { fail("unaligned server capacity"); }
   const auto count = std::min(frames.size(), writable / frame_bytes);
   if (count == 0) { return 0; }
-  if (count > std::numeric_limits<std::uint64_t>::max() - status.frames_written) {
+  constexpr auto maximum_frames =
+      static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) / frame_bytes;
+  if (status.frames_written > maximum_frames || count > maximum_frames - status.frames_written) {
     throw Fault("Host audio frame counter exhausted");
   }
   for (std::size_t index = 0; index < count; ++index) {

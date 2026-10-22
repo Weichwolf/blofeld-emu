@@ -277,7 +277,7 @@ int Board::run(const std::function<void(Board &)> &input) {
     initialize();
     fault = config_.checkpoint ? run_replays().fault : finish_branch(input).fault;
   } catch (const Fault &error) {
-    control_.faulted = true;
+    mark_fault();
     fault = error.what();
   }
   flush_trace();

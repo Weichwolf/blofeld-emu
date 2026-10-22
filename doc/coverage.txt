@@ -24,16 +24,20 @@ LCD screenshots/live export      partial  Read-only controller capture, digital
                                           tests. Normal-runtime publication and
                                           MIDI-driven UI regression remain pending
                                           (display-export.txt). No separate CLI.
-Host audio output                partial  Separate native client and directed private
-                                          service test (host-audio.txt). Primary and
-                                          secondary own native DSP/ESAI frames reach
-                                          a no-rewind null-sink monitor exactly;
-                                          explicit/default server and bounded service
-                                          failures are checked under sanitizers.
-                                          Original firmware voices, normal runtime
-                                          integration, continuous refill, PipeWire,
-                                          device moves/rewinds and realtime behavior
-                                          remain unqualified. No USB Audio function.
+Host audio output                partial  Native client plus bounded SPSC handoff
+                                          and AudioRuntime worker (host-audio.txt,
+                                          audio-runtime.txt). Own native coupled
+                                          MCU/DSP/ESAI frames reach a private
+                                          no-rewind monitor, with unchanged modeled
+                                          state/ticks. Continuous own vectors,
+                                          final closure, restored-stream retirement,
+                                          starvation and service failures have
+                                          directed sanitizer checks; concurrency
+                                          is checked separately with TSan.
+                                          Original firmware voices, normal startup,
+                                          PipeWire, ordinary device moves/rewinds
+                                          and sustained realtime behavior remain
+                                          unqualified. No USB Audio function.
 Optional Spectre sample tools     partial  samples subcommand edits XML 0.5 program
                                           collections and sample metadata.
                                           WAV decoding/import, declared root/loops
