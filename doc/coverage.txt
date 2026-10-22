@@ -1182,6 +1182,11 @@ MCU security key access           partial  Nominal enabled-KEYEN four-word compa
                                           unsupported access combinations fail.
                                           Original recovery, BDM, physical mask and
                                           persistent unsecuring remain unqualified.
+Original update validation        partial  Thirteen original main-updater validation
+                                          cases check checksum/marker branches,
+                                          exact operand reads and missing data.
+                                          No programming or helper transfer;
+                                          see original-update-validation.txt.
 Original update and recovery      partial  Isolated original DSP command record:
                                           144 fixed cases / 1240 actual calls check
                                           live P patches, exact P/X/Y payload and

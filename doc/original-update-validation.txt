@@ -1,0 +1,34 @@
+Original main-update validation
+
+  cmake --build --preset strict --target blofeld-original-update-validation-test
+  ctest --test-dir build/strict -R '^original_update_validation$' --output-on-failure
+
+The pinned original 400-word DSP main updater executes through an own native
+JSR with declared switched RAM and payload state. Original instructions choose
+the programming entry or the MCU error-helper stream. Execution stops at that
+selection, before GPIO transfer or NAND operations. No firmware opcode, branch,
+return value or checksum result is replaced by the host.
+
+Thirteen fixed cases cover the original payload, damaged marker/first/last sum
+word, balanced damage, 24-bit wrap, a changed extra prefetch, four missing words
+and marker rejection before an unknown payload word. The original checksum
+sums 29811 words, then retains a further pipelined read outside that sum. Its
+address must still be readable. An independent integer-modulo oracle checks
+every actual operand read/value/order, native instruction census, accumulator,
+cursor, zero flag, caller frame and branch. Program/payload guards remain exact;
+missing RAM remains unknown. Five fixed report corruptions must reject.
+
+An additive checksum accepts compensating changes. A marker failure selects the
+error helper without checking the payload. These are original algorithm limits,
+not successful-update or authenticity guarantees. Unknown required words fail
+with address, PC and OMR instead of selecting either valid-data branch.
+The interpreter retains already fetched words/AGU updates on a rejected access;
+its diagnostic PC identifies the attempted instruction. Further steps reject
+without changing native registers, stack or counters until reset.
+
+Archive/MIDI and all 127 runtime-record identities are checked before execution.
+Original bytes, traces and reports remain local. This isolated validation does
+not establish preceding transport/boot, secondary updater validation, helper
+forwarding, NAND layout/timing, complete update/recovery or physical behavior.
+No fuzzing or physical traffic runs. See original-update-restarts.txt,
+nand-write.txt and objective.txt for the remaining update requirements.

@@ -573,6 +573,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write.trace")
   set_tests_properties(original_nand_write PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-update-validation-test test/original_update_validation_test.cpp)
+  target_link_libraries(blofeld-original-update-validation-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_update_validation COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_validation.py"
+    $<TARGET_FILE:blofeld-original-update-validation-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-validation.trace")
+  set_tests_properties(original_update_validation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_test(NAME nand_store_processes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/nand_store_processes.py"
     $<TARGET_FILE:blofeld-original-nand-write-test>
@@ -1483,6 +1492,7 @@ add_custom_target(quality
     blofeld-nand-store-test
     blofeld-nand-gpio-write-test
     blofeld-original-nand-write-test
+    blofeld-original-update-validation-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-instruction-test
