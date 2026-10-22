@@ -94,7 +94,8 @@ void McuGpio::reset() {
 void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
   const auto index = port_index(port);
   if ((drive.mask & drive.floating) != 0 || (drive.levels & ~drive.mask) != 0 ||
-      ((drive.mask | drive.floating) & ~specs[index].valid) != 0) {
+      (drive.unknown & (drive.mask | drive.floating)) != 0 ||
+      ((drive.mask | drive.floating | drive.unknown) & ~specs[index].valid) != 0) {
     throw Fault("Invalid MCU GPIO external drive masks");
   }
   ports_[index].external = drive;
@@ -102,8 +103,10 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
 
 void McuGpio::update_drive(const McuPort port, const std::uint8_t affected, const PinDrive drive) {
   const auto index = port_index(port);
-  if ((affected & ~specs[index].valid) != 0 || ((drive.mask | drive.floating) & ~affected) != 0 ||
-      (drive.mask & drive.floating) != 0 || (drive.levels & ~drive.mask) != 0) {
+  if ((affected & ~specs[index].valid) != 0 ||
+      ((drive.mask | drive.floating | drive.unknown) & ~affected) != 0 ||
+      (drive.unknown & (drive.mask | drive.floating)) != 0 || (drive.mask & drive.floating) != 0 ||
+      (drive.levels & ~drive.mask) != 0) {
     throw Fault("Invalid MCU GPIO partial external drive mask");
   }
   const auto previous = ports_[index].external;
@@ -111,7 +114,8 @@ void McuGpio::update_drive(const McuPort port, const std::uint8_t affected, cons
       port,
       {.mask = static_cast<std::uint8_t>((previous.mask & ~affected) | drive.mask),
        .levels = static_cast<std::uint8_t>((previous.levels & ~affected) | drive.levels),
-       .floating = static_cast<std::uint8_t>((previous.floating & ~affected) | drive.floating)});
+       .floating = static_cast<std::uint8_t>((previous.floating & ~affected) | drive.floating),
+       .unknown = static_cast<std::uint8_t>((previous.unknown & ~affected) | drive.unknown)});
 }
 
 void McuGpio::set_function(const McuPort port, const PinFunction function) {
@@ -134,6 +138,28 @@ PinSample McuGpio::observe_pads(const McuPort port, const std::uint8_t mask) con
     throw Fault("Invalid MCU GPIO observation mask");
   }
   return resolve(port, mask);
+}
+
+PinOutputs McuGpio::outputs(const McuPort port) const {
+  const auto index = port_index(port);
+  if (tied_low(port) != 0) {
+    throw Fault("Unqualified MCU package GPIO output observation at " + hex(specs[index].base));
+  }
+  if (port == McuPort::e && (assignment_e_ & port_e_clock_disable) == 0) {
+    throw Fault("Unimplemented MCU ECLK output observation at " + hex(hc12::porte));
+  }
+  const auto &state = ports_[index];
+  const auto &function = state.function;
+  const auto functions = static_cast<unsigned>(function.inputs) | function.outputs;
+  const auto direction = (state.direction & ~functions) | function.outputs;
+  const auto latch = (state.latch & ~static_cast<unsigned>(function.outputs)) | function.levels;
+  const auto latch_known = (static_cast<unsigned>(state.latch_known) | function.outputs) &
+                           ~static_cast<unsigned>(function.unknown);
+  const auto mask = direction & specs[index].valid;
+  const auto known = mask & latch_known;
+  return {.mask = static_cast<std::uint8_t>(mask),
+          .known = static_cast<std::uint8_t>(known),
+          .levels = static_cast<std::uint8_t>(latch & known)};
 }
 
 std::uint8_t McuGpio::tied_low(const McuPort port) const {
@@ -183,7 +209,8 @@ PinSample McuGpio::resolve(const McuPort port, const std::uint8_t requested) con
       state.external.floating & pull_enable & ~static_cast<unsigned>(direction) & ~tied;
   known |= weak;
   value |= weak & ~static_cast<unsigned>(state.pull_down);
-  known = known & ~unknown_output & requested & specs[index].valid;
+  known = known & ~unknown_output & ~static_cast<unsigned>(state.external.unknown) & requested &
+          specs[index].valid;
   return {.known = static_cast<std::uint8_t>(known),
           .levels = static_cast<std::uint8_t>(value & known)};
 }

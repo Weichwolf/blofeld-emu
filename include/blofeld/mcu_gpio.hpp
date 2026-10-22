@@ -16,6 +16,7 @@ struct PinDrive {
   std::uint8_t mask = 0;
   std::uint8_t levels = 0;
   std::uint8_t floating = 0;
+  std::uint8_t unknown = 0; // Strong peer drivers with an unobserved level.
 };
 
 struct PinFunction {
@@ -32,6 +33,14 @@ struct PinSample {
   std::uint8_t levels = 0;
 };
 
+struct PinOutputs {
+  std::uint8_t mask = 0;
+  std::uint8_t known = 0;
+  std::uint8_t levels = 0;
+
+  bool operator==(const PinOutputs &) const = default;
+};
+
 // Logical GPIO and explicit external drives, with unknown inputs tracked.
 // Electrical transition/synchronizer timing and alternate peripheral functions
 // are not yet a complete board model.
@@ -44,6 +53,8 @@ public:
   void set_function(McuPort port, PinFunction function);
   [[nodiscard]] std::uint8_t read_pad(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
+  // Intended local drivers only; excludes peer levels and weak input pulls.
+  [[nodiscard]] PinOutputs outputs(McuPort port) const;
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
   void write(ByteWrite write);

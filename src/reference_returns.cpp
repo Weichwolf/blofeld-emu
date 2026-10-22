@@ -34,7 +34,8 @@ void validate_route(const Config &config, const ReturnRoute route) {
     }
   }
   const auto check = [&](const Input &input) {
-    const auto mask = static_cast<std::uint8_t>(input.drive.mask | input.drive.floating);
+    const auto mask =
+        static_cast<std::uint8_t>(input.drive.mask | input.drive.floating | input.drive.unknown);
     if (input.kind == InputKind::drive && overlaps(route, input.port, mask)) {
       throw Fault("SHI return destination also has an explicit external drive/floating input");
     }

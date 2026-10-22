@@ -50,13 +50,13 @@ void validate_midi(const Config &config) {
   }
   for (const auto &input : config.events) {
     if (input.kind == InputKind::drive && input.port == receive.port &&
-        ((input.drive.mask | input.drive.floating) & receive.mask) != 0) {
+        ((input.drive.mask | input.drive.floating | input.drive.unknown) & receive.mask) != 0) {
       throw Fault("Reference MIDI receive pad conflicts with a timed external drive");
     }
   }
   for (const auto &input : config.initial) {
     if (input.kind == InputKind::drive && input.port == receive.port &&
-        ((input.drive.mask | input.drive.floating) & receive.mask) != 0 &&
+        ((input.drive.mask | input.drive.floating | input.drive.unknown) & receive.mask) != 0 &&
         ((input.drive.mask & input.drive.levels & receive.mask) != receive.mask)) {
       throw Fault("Initial MIDI receive-pad observation must be known idle-high");
     }

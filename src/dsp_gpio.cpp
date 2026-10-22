@@ -69,7 +69,7 @@ DspGpioSample DspGpio::resolve(const std::uint32_t mask) const {
   // Only an explicitly floating input/disconnected pad can use this bias.
   const auto weak =
       port_ == DspPort::c ? external_.floating & ~output.mask & ~output.peripheral : 0U;
-  const auto known = (output.known | external_mask | weak) & mask;
+  const auto known = (output.known | external_mask | weak) & ~external_.unknown & mask;
   return {.known = known, .levels = (output.levels | (external_.levels & external_mask)) & known};
 }
 
@@ -80,11 +80,14 @@ DspGpioSample DspGpio::observe_pads(const std::uint32_t mask) const {
 
 void DspGpio::validate_peripheral_drive(const DspGpioDrive drive) const {
   if ((drive.mask & ~outputs().peripheral) != 0 || (drive.levels & ~drive.mask) != 0 ||
-      drive.floating != 0) {
+      drive.floating != 0 || drive.unknown != 0) {
     throw Fault("Invalid DSP peripheral output mask at " + address(DspGpioRegister::data));
   }
   if ((drive.mask & external_.mask & (drive.levels ^ external_.levels)) != 0) {
     throw Fault("DSP peripheral pad contention at " + address(DspGpioRegister::data));
+  }
+  if ((drive.mask & external_.unknown) != 0) {
+    throw Fault("Unknown external DSP peripheral pad driver at " + address(DspGpioRegister::data));
   }
 }
 
@@ -143,7 +146,8 @@ void DspGpio::write(const DspGpioWrite access) {
 }
 
 void DspGpio::set_drive(const DspGpioDrive drive) {
-  if (((drive.mask | drive.floating) & ~pin_mask()) != 0 || (drive.levels & ~drive.mask) != 0 ||
+  if (((drive.mask | drive.floating | drive.unknown) & ~pin_mask()) != 0 ||
+      (drive.unknown & (drive.mask | drive.floating)) != 0 || (drive.levels & ~drive.mask) != 0 ||
       (drive.mask & drive.floating) != 0) {
     throw Fault("Invalid DSP GPIO external drive at " + address(DspGpioRegister::data));
   }

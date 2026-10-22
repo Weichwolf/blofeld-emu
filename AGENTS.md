@@ -12,6 +12,7 @@
 - Apply the strict quality practices of `~/Git/octa-capture`: warnings as errors, strict compiler/linker flags, clang-format, clang-tidy with zero findings, and a maximum 120 lines per function.
 - Use C++23, CMake/Ninja and LLVM 19. Instrument our code and native dependencies with ASan/UBSan; run TSan separately once concurrent code exists.
 - Never weaken checks, add diagnostic baselines or add NOLINT markers to hide findings. Third-party source retains its notices and is analyzed separately from project-owned code.
+- Scope validation to the affected behavior. Do not rerun the entire suite after small changes. Run a broader regression once after a coherent CPU/DSP, memory-map or scheduler integration when justified. Avoid duplicate runs across identical source in separate worktrees; verify source identity and evidence scope before reusing results.
 - Native SLEIGH uses exceptions as its error interface. This dependency requirement must stay explicit; no exceptions or allocations belong in a future real-time audio callback.
 - Run fuzz tests only when the user explicitly requests them; never run them automatically as part of routine development, validation or quality checks. When requested, fuzz untrusted firmware, MIDI and state parsers offline under sanitizers. Preserve a regression input for every finding. Never send malformed fuzz traffic to physical devices.
 - Test CPU flags, addressing and state changes against independent instruction expectations and recovered firmware behavior. Round trips and self-consistency alone are insufficient.

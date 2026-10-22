@@ -338,6 +338,15 @@ PinSample McuBus::observe_pads(const McuPort port, const std::uint8_t mask) cons
   return gpio_.observe_pads(port, mask);
 }
 
+PinOutputs McuBus::gpio_outputs(const McuPort port) const {
+  try {
+    return gpio_.outputs(port);
+  } catch (const Fault &fault) {
+    throw Fault("MCU GPIO output observation pc=" + hex(context_.pc) +
+                " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+  }
+}
+
 void McuBus::begin_instruction(const ExecutionContext context) {
   context_ = context;
 }

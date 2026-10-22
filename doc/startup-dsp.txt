@@ -1,0 +1,44 @@
+Original startup DSP response: acceptance boundary
+
+A healthy startup must execute both original processors, including reset,
+bootstrap transfer, runtime initialization and the actual bidirectional request.
+The original MCU queries Global field0x4c and requires reply127. Other startup
+status fields must also pass their original checks. Reaching the main screen
+after a diagnostic is not a successful board boot.
+
+The signature exists in an original DSP data record in the official1.25 update;
+its presence is checked against all127 pinned record identities. Initial status
+values still require the genuine runtime probe/initialization path. Neither a
+host reply nor directly placing a signature into live state proves that path.
+
+The current local LCD preview constructs only the MCU and a display fixture,
+supplies declared GPIO/RTI observations and pauses at the original main WAI.
+It has no attached DSP or live MIDI/audio. Its original bad-DSP diagnostic is
+expected for that fixture and is evidence against complete-runtime acceptance.
+
+Separate original CPU-pair experiments have not completed the parameter read.
+Forty discrete interleavings and sixteen nominal elapsed-clock direct-link
+profiles stop on unknown input or opposed output drivers. Those observations
+constrain the declared direct data/IRQ wiring; they do not establish the actual
+board topology, electrical resolution, synchronization or physical timing.
+Keep contention visible until those contracts have stronger evidence.
+
+A driver-only recheck preserves the intermediate driven-unknown latch state.
+Sixteen native source-register observations and sixteen original reply-write
+attempts reach the same opposed-driver frontier without feeding resolved peer
+voltages or weak bias back as strong sources. This rules out that feedback as
+the sole cause in these declared direct-link cases; physical topology/timing
+and complete transactions remain unqualified. See gpio-drivers.txt.
+
+The reset-to-runtime path separately stops at the original first-stage reserved
+Y:002000 store. The documented map does not establish discard/alias behavior.
+No loop shortening, RAM enlargement, ignored store or host PC continuation is
+admitted. Matching mask ROM, complete flash/NAND mapping and device identity
+remain explicit missing inputs; see dsp-core.txt and coupled-boot.txt.
+
+  ctest --test-dir build/strict --output-on-failure -R '^(original_dsp_boot|original_scheduled_coupling|original_dsp_gpio_request)$'
+
+These are bounded component/frontier checks, not a full startup acceptance
+command. Firmware, private source analysis, pin traces and run receipts remain
+local. Full boot, both device profiles, host USB-MIDI/audio, update/recovery and
+hardware comparison retain their separate requirements in objective.txt.

@@ -21,6 +21,7 @@ struct DspGpioDrive {
   std::uint32_t levels = 0;
   // Explicitly undriven pins; absent mask/floating bits remain unobserved.
   std::uint32_t floating = 0;
+  std::uint32_t unknown = 0; // Strong peer drivers with an unobserved level.
 };
 
 struct DspGpioSample {
