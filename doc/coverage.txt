@@ -735,7 +735,17 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           F7 are not qualified message data.
                                           Host-visible output and complete
                                           instrument functions remain open.
-                                          Other write classes, settle waits,
+                                          One reserved global boundary write
+                                          adds4 complete original8-tick waits,
+                                          32 native timer IRQ/frame/RTI returns,
+                                          8 original page-state reads and4
+                                          final readbacks.2 disabled-delivery
+                                          cases remain genuinely unfinished
+                                          beyond9 clocked periods, with no
+                                          host tick updates (gpio-global-wait.txt).
+                                          Scan inhibition and page data are
+                                          declared inputs, not normal panel/boot
+                                          evidence. Other writes/Multi waits,
                                           real boot/initialization,
                                           host MIDI/audio and physical safety
                                           remain unqualified.
