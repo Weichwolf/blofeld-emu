@@ -39,3 +39,30 @@ fixed evidence corruptions must fail. Manufacturer bytes, detailed source
 analysis and traces remain local. No fuzzing or physical traffic is performed.
 Full original boot, real board routing/timing, normal MIDI/audio, Desktop/Keyboard
 differences and update/recovery/hardware safety retain their separate requirements.
+
+Joint native snapshot and failure recovery
+
+  cmake --build --preset strict --target blofeld-original-gpio-pair-checkpoint-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_pair_checkpoints$'
+
+The signature request also supplies12 joint snapshot contexts: both declared
+write orders, both epoch phases, and three native event boundaries (two data
+writes before the source load, observed output conflict, four writes followed
+by actual MCU direction release). Capture composes both native owners, pending
+schedule/time, local driver/bias descriptors and audit counters. No caller, PC,
+program or source word is reconstructed on restore. The shared own fixture is
+original_gpio_pair_fixture.hpp; the32-case request regression retains its trace.
+
+Each context first completes normally. A restored branch must reject both
+detached pad queries before explicit fresh attachment. A directed unknown DSP
+or MCU observation then reaches an actual native consumer and quarantines the
+coupled execution; faulted capture rejects. After changing a separate own RAM
+canary, two further joint restores must recover its saved value and replay every
+timestamped CPU/pin event, final native CPU state, schedule time and tie count.
+Program/source/NVM retention, signature127 and board rejection are checked for
+all36 successful returns. There are36 joint restores,72 detached-source refusals,
+12 actual unknown-input faults and six fixed oracle-corruption controls.
+
+These are trusted in-process component snapshots. They do not provide a portable
+whole-board file, physical recovery procedure, flash/power-loss qualification,
+safe conflicting voltages or a successful original boot.
