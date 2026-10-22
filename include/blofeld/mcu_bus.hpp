@@ -67,6 +67,9 @@ public:
   [[nodiscard]] PinOutputs gpio_outputs(McuPort port) const;
   [[nodiscard]] PinBiases gpio_biases(McuPort port) const;
   void attach_gpio_pad_source(McuPort port, GpioPadReader reader);
+  // Observe resolved PE0/PE1 after board pad changes, including while masked.
+  // Selection remains pure; the board must deliver every edge it claims to model.
+  void observe_interrupt_pads();
   void observe_phy(PhyClockWindow window);
   [[nodiscard]] McuRunClockRoute run_clock_route() const;
   // Qualified system clocks continue through WAI; unsupported CRG gates fail.

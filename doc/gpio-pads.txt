@@ -42,3 +42,17 @@ Freshly attached inputs drive independent register/flag expectations. The clocke
 DSP replays identical native state/time, then retains the fresh connection across
 an explicit reference reset epoch. MCU NVM remains unchanged. These are trusted
 in-process checkpoints, not serialized board state or measured reset timing.
+
+Resolved Port E interrupt sources
+
+Attaching a Port E source records its current PE0/PE1 levels in the real
+IRQ/XIRQ controller. The board calls McuBus::observe_interrupt_pads after
+subsequent pad changes, including while CPU interrupts are masked. Selection
+stays pure; polling is not a substitute for delivering every modeled edge.
+The source supplies voltage observations, never a synthetic interrupt request.
+Observed IRQ pulses retain the real pending/acknowledgement semantics across
+native bus copies and fresh source attachment. Detached observation rejects;
+unknown enabled XIRQ levels still fail. Existing ECLK/package limits remain.
+The gpio_pad_sources regression checks the initial baseline, XIRQ release/mask,
+masked IRQ pulse retention, clone isolation/fresh attachment and unknown input.
+Physical synchronizer delay and omitted board events remain unqualified.
