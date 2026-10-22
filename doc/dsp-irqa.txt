@@ -10,8 +10,10 @@ IPRC X:ffffff accepts IAL[1:0] and IAL2 (bits 0..2). Priority encoding 00 disabl
 01/10/11 select IPL 0/1/2. IAL2=0 selects active-low level, 1 falling-edge mode.
 IRQA uses relative vector 10 and precedes SHI/TIM at equal IPL. CPU mask gating
 uses the same independently tested SR I1:I0 rules as other interrupt sources.
-Other IPRC fields remain unsupported, including the original runtime's DMA1
-priority in 4006. Supporting IRQA alone does not qualify that initializer.
+The six DMA priority fields are supported separately (dsp-dma-interrupts.txt),
+including the original runtime's DMA1 IPL0 field in 4006. Other external/core
+sources remain unsupported. Priority support does not qualify the initializer's
+complete DMA execution, peripheral timing or board wiring.
 
 DspBus::observe_irqa supplies an explicit logical synchronized pin level;
 nullopt withdraws its qualification. No inactive/high input is a board default.
@@ -32,7 +34,7 @@ selected source and priority to remain valid until acknowledgement. Withdrawal
 within a suspended vector access rejects; it does not assert silicon cancels an
 already fetched level interrupt. Physical synchronization, recognition/fetch
 latency, mode-switch pipeline effects and MODA boot straps remain unqualified.
-No IRQB/C/D, DMA, NMI or other core source is silently enabled.
+No IRQB/C/D, NMI or other unsupported core source is silently enabled.
 
 Checks cover 256 external/SHI/TIM priority/mask tuples, actual timer arbitration,
 masked unknown input, level repeat/release, edge retention/acknowledgement,

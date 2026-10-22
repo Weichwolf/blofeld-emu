@@ -205,7 +205,7 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Compare/reload-boundary TRM changes
                                           remain explicitly unqualified.
                                           Native ready polls and RESET checked.
-                                          SHI/TIM IPRP arbitration, CPU masking,
+                                          IRQA/SHI/TIM priority arbitration, CPU masking,
                                           native fast/long and nested entry,
                                           exact JSR/RTI frames, VBA relocation and
                                           DO/REP interaction checked
@@ -213,7 +213,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           access continuation admits vector words,
                                           acknowledgement and native effects once;
                                           later higher-priority sources retain
-                                          their own pending state. Other sources,
+                                          their own pending state. Six-channel
+                                          DMA completion/explicit-stop latches,
+                                          IPRC priorities and real vector service
+                                          are checked separately
+                                          (dsp-dma-interrupts.txt). Other sources,
                                           stack extension and full latency pending.
                                           Conditional native CPU-cycle SCI/TIM
                                           execution now includes live reception,
