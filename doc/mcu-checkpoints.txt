@@ -12,6 +12,21 @@ callback or after a failed step fails visibly. Restore during a CPU step also
 fails; an earlier valid checkpoint can recover a machine after a failed step.
 The API is single-threaded and does not belong in a real-time audio callback.
 
+The same completed-boundary rule now guards step() itself. A failed untimed
+instruction may already expose its native translation's partial register/bus
+prefix; it is not retired, checkpointable or implicitly retryable. For example,
+an indexed post-increment can precede an unknown operand read. Retrying from
+that advanced pointer used to skip the unknown byte. Further stepping now
+rejects before any bus access until explicit recovery establishes a boundary.
+A coordinated restore recovers the earlier CPU/bus/knowledge state. CPU reset
+or debug register replacement alone does not roll back peripheral effects or
+repair failed board clocks. This is host-side strict-model failure handling,
+not an invented MCU hardware exception or a silicon fault-ordering claim.
+The own post-increment regression checks the visible prefix, refused retry and
+recovery at the original operand; original_usb_peer adds original IRQ/USB/GPIO
+failure prefixes (usb-peer.txt).
+
+
 The CPU state includes the native register bank, WAI and CLI/TAP interrupt
 deferral. The register-bank extent is checked against named native registers.
 Decoded instruction caches are recreated, allowing restored executable RAM to
