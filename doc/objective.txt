@@ -45,6 +45,9 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    enumeration and original Spectre under Wine, including SysEx/sample transfer,
    cancellation and errors through the emulator. Permit ordinary host MIDI
    routing, including PipeWire, from a connected keyboard to the virtual device.
+   Qualify complete control/playback with standard Debian MIDI tools, including
+   notes, controllers, program changes, SysEx and observable replies; no custom
+   emulator CLI may substitute for external MIDI and original audio execution.
    Keep host transport separate
    from the board model and original firmware; never fabricate enumeration or
    transfer success to bypass unsupported peripheral/firmware behavior.
