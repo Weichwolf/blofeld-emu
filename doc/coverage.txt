@@ -701,8 +701,17 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           32 stores/reads,160 bytes consumed and
                                           288 data writes (gpio-parameters.txt).
                                           Final original P-record overlays are
-                                          verified before/after. Other write
-                                          classes, real boot/initialization,
+                                          verified before/after. Selected Sound
+                                          writes add64 original normalizations,
+                                          32 stores/Noise Color callbacks and32
+                                          rejected off-grid Octave writes,64
+                                          native sound readbacks and8 genuine
+                                          notification-policy reads/cache
+                                          insertions (gpio-sound.txt). One own
+                                          active-list entry is declared, not
+                                          actual voice allocation/rendering.
+                                          Other write classes, settle waits,
+                                          real boot/initialization,
                                           host MIDI/audio and physical safety
                                           remain unqualified.
                                           Declared external pad sources separate
