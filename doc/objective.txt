@@ -49,6 +49,19 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    from the board model and original firmware; never fabricate enumeration or
    transfer success to bypass unsupported peripheral/firmware behavior.
 
+9. Provide a standalone normal runtime: Keyboard is the default profile and
+   --desktop is the only profile-selection option. A separate end-user CLI is
+   not part of the product; do not add a blofeld-cli companion. The running
+   emulator communicates through MIDI and/or its actual host-visible USB-MIDI
+   device, with the behavior of the selected stock hardware profile. Send original DSP audio to the session's normal audio host
+   and default output, as an ordinary audio application (for example PipeWire).
+   Host audio transport is separate from emulated hardware; exclusive direct
+   ALSA hardware access is not a requirement. Do not add a USB Audio function:
+   the original Blofeld USB connection transports MIDI, not live audio.
+   Existing reference/inspection/sample commands remain optional developer
+   tools; their availability does not establish a working normal runtime.
+   See runtime.txt for this interface contract and its current missing evidence.
+
 Completion requires evidence for the whole emulator and both profiles, original
 MIDI/audio, full update/recovery behavior, reproducible failure/performance tests
 and hardware comparisons. The current component/reference fixtures remain

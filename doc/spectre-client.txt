@@ -1,17 +1,19 @@
-Spectre functions in the headless client
+Optional Spectre sample tools
 
-Requested scope
-The existing blofeld-headless CLI must gain the functional scope of Waldorf
-Spectre sample management. A graphical client was explicitly not requested.
-Keep this requirement in addition to the complete emulator objective; installing
-the reference application or inspecting factory samples does not complete it.
+Runtime and tool scope
+Normal standalone operation has no separate blofeld-cli companion (runtime.txt).
+Existing blofeld-headless samples commands are optional developer/sample tools;
+their earlier Spectre-style feature backlog and current evidence follow below.
+Original Spectre interoperability and firmware sample transfer through the
+emulator remain part of the device objective. Installing the reference program
+or inspecting factory samples does not establish that transport.
 
 Reference: Spectre_Manual.pdf, revision 0.9 June 2009, pages 4..9 (German) and
 11..16 (English). doc/downloads.json pins the official download, size and hash.
 The official Windows 1.00 application is a local compatibility reference only.
 Its installer, binaries, manual and factory samples must not be committed.
 
-Required capabilities and current evidence
+Sample-tool capabilities and current evidence
 - Program collections: create, list, rename, reorder, remove, save all as XML
   and export a selected program are implemented for Spectre XML 0.5. Collections
   can be appended with sample references rebased to the new output directory.
