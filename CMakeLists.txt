@@ -1223,6 +1223,9 @@ if(BUILD_TESTING)
   set_tests_properties(original_mcu_sender PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME firmware_python
     COMMAND ${Python3_EXECUTABLE} -m unittest discover -s test -v)
+  add_test(NAME source_guard
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test/source_guard_test.py")
+  set_tests_properties(source_guard PROPERTIES TIMEOUT 30)
   set_tests_properties(firmware_python PROPERTIES
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     ENVIRONMENT "BLOFELD_TEST_BINARY=$<TARGET_FILE:blofeld-headless>")

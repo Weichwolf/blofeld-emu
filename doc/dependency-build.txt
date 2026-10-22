@@ -83,3 +83,19 @@ optional native desktop/codec dependencies are disabled. The callback-type patch
 fixes a deterministic UBSan finding, without suppressions (host-audio.txt).
 The dependency check also inspects the audio test ELF for static client symbols
 and rejects uncontrolled dynamic libpulse/libpulsecommon/libsndfile dependencies.
+
+Source boundaries for developer verification
+  python3 tools/source_guard.py capture doc/local/source-snapshot.json
+  python3 tools/source_guard.py check doc/local/source-snapshot.json
+
+Capture before validation and check before/after each configure/build/test phase.
+The snapshot records the worktree, Git revision, all tracked files and nonignored
+untracked candidate files, including contents, modes and symlink destinations.
+Additions, deletions, renames and changes reject with explicit paths. Ignored
+references/build outputs are excluded. Snapshot output must be ignored or outside
+the source worktree; publication replaces a complete private metadata file.
+These are boundary observations, not a lock or continuous filesystem monitor.
+Keep source unchanged throughout a build; a completed test report must refer to
+the captured revision/candidate, not a later working-tree edit. The source_guard
+CTest uses real temporary Git repositories and fixed filesystem mutations;
+it executes no firmware, build, fuzzer or physical-device traffic.
