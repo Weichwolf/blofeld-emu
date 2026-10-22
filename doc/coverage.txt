@@ -505,6 +505,13 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           pads/latches, contention and Port F BIU
                                           setup tested (dsp-gpio.txt), including
                                           native C output/E input operations.
+                                          Explicitly floating C0..11 pads use
+                                          documented weak pull-downs; unobserved
+                                          pins, cold output latches and unmodeled
+                                          peripheral outputs remain unknown.
+                                          Per-pin/mixed-mask, reset/copy/contention
+                                          and native bit-poll cases qualify this
+                                          logical bias, not board wiring/timing.
                                           Symbolic C/F bit RMW and bit branches
                                           preserve unknown neighbors; previous-bit
                                           Carry and one EA update tested, including

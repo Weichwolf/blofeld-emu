@@ -87,6 +87,103 @@ void test_output_contention_and_nonreset_latches() {
   }
 }
 
+void test_explicitly_floating_port_c_pads() {
+  constexpr unsigned width = 12;
+  for (unsigned index = 0; index < width; ++index) {
+    blofeld::DspGpio gpio(blofeld::DspPort::c);
+    const auto bit = 1U << index;
+    gpio.set_drive({.floating = bit});
+    require(gpio.observe_pads(bit).known == bit && gpio.observe_pads(bit).levels == 0,
+            "NXP table 2-8 pulls each explicitly undriven PC0..11 pad down after reset");
+    reject([&gpio, bit] { static_cast<void>(gpio.read(Register::data, bit)); },
+           "A known disconnected pad voltage does not define its PDR register bit");
+    gpio.write({.reg = Register::control, .value = bit});
+    require(gpio.read(Register::data, bit) == 0,
+            "Selecting GPIO input observes the documented pull-down on an undriven pad");
+    gpio.set_drive({.mask = bit, .levels = bit});
+    require(gpio.read(Register::data, bit) == bit,
+            "A strong high input overrides the internal weak pull-down");
+    gpio.set_drive({});
+    reject([&gpio, bit] { static_cast<void>(gpio.read(Register::data, bit)); },
+           "Unobserved external state must not be mistaken for a known floating input");
+    gpio.set_drive({.floating = bit});
+    gpio.write({.reg = Register::control});
+    gpio.write({.reg = Register::direction, .value = bit});
+    require(gpio.outputs().known == 0 && gpio.observe_pads(bit).known == 0,
+            "A weak pull-down cannot qualify an unknown GPIO output latch");
+    gpio.write({.value = bit});
+    require(gpio.read(Register::data, bit) == bit,
+            "An explicitly written high GPIO output overrides its weak pull-down");
+    reject([&gpio, bit] { gpio.set_drive({.mask = bit}); },
+           "Floating bias support must not hide strong output contention");
+    gpio.reset();
+    require(gpio.observe_pads(bit).known == bit && gpio.observe_pads(bit).levels == 0 &&
+                gpio.outputs().mask == 0,
+            "Reset retains explicit floating observations and disconnects the old output");
+    reject([&gpio, bit] { static_cast<void>(gpio.read(Register::data, bit)); },
+           "Reset still leaves disconnected Port C data reads undefined");
+  }
+}
+
+void test_mixed_floating_driven_and_unknown_inputs() {
+  constexpr unsigned driven = 0x505;
+  constexpr unsigned floating = 0x202;
+  constexpr unsigned known = 0x707;
+  constexpr unsigned levels = 0x404;
+  constexpr unsigned reserved = 0x1000;
+  blofeld::DspGpio gpio(blofeld::DspPort::c);
+  gpio.write({.reg = Register::control, .value = serial_mask});
+  gpio.set_drive({.mask = driven, .levels = levels, .floating = floating});
+  const auto check = [&gpio] {
+    const auto pads = gpio.observe_pads(serial_mask);
+    require(pads.known == known && pads.levels == levels &&
+                gpio.read(Register::data, known) == levels,
+            "Strong highs/lows and weak lows retain an independently specified known mask");
+    reject([&gpio] { static_cast<void>(gpio.read(Register::data)); },
+           "Other input bits remain unknown even beside qualified weak levels");
+  };
+  check();
+  reject([&gpio] { gpio.set_drive({.mask = 1, .floating = 1}); },
+         "An external pin cannot be strongly driven and floating at the same time");
+  reject([&gpio] { gpio.set_drive({.levels = 1, .floating = 1}); },
+         "Floating observations cannot carry a strong level");
+  reject([&gpio] { gpio.set_drive({.floating = reserved}); },
+         "Reserved bits cannot be declared floating pads");
+  check();
+  const auto saved = gpio;
+  gpio.reset();
+  gpio.write({.reg = Register::control, .value = serial_mask});
+  check();
+  gpio.set_drive({});
+  require(gpio.observe_pads(serial_mask).known == 0,
+          "Withdrawing all observations removes strong and weak input qualifications");
+  gpio = saved;
+  check();
+}
+
+void test_floating_does_not_qualify_unmodeled_functions() {
+  blofeld::DspGpio gpio(blofeld::DspPort::c);
+  gpio.write({.reg = Register::control, .value = 1});
+  gpio.write({.reg = Register::direction, .value = 1});
+  gpio.set_drive({.floating = 1});
+  require(gpio.observe_pads(1).known == 0,
+          "An unmodeled peripheral output cannot be replaced by a GPIO pull-down");
+  reject([&gpio] { static_cast<void>(gpio.read(Register::data, 1)); },
+         "Peripheral-owned PDR reads remain unqualified");
+  reject([&gpio] { gpio.validate_peripheral_drive({.mask = 1, .floating = 1}); },
+         "Peripheral output validation accepts strong outputs rather than floating declarations");
+  gpio.validate_peripheral_drive({.mask = 1, .levels = 1});
+  for (const auto port : {blofeld::DspPort::e, blofeld::DspPort::f, blofeld::DspPort::d}) {
+    blofeld::DspGpio other(port);
+    other.write({.reg = Register::control, .value = 1});
+    other.set_drive({.floating = 1});
+    require(other.observe_pads(1).known == 0,
+            "This Port C qualification does not invent weak bias for other ports");
+    reject([&other] { static_cast<void>(other.read(Register::data, 1)); },
+           "Unqualified other-port floating input reads remain visible failures");
+  }
+}
+
 void test_mux_ownership_and_reserved_modes() {
   for (const auto port : {blofeld::DspPort::c, blofeld::DspPort::e}) {
     blofeld::DspGpio gpio(port);
@@ -226,6 +323,9 @@ int main() {
   try {
     test_reset_and_every_gpio_input_output();
     test_output_contention_and_nonreset_latches();
+    test_explicitly_floating_port_c_pads();
+    test_mixed_floating_driven_and_unknown_inputs();
+    test_floating_does_not_qualify_unmodeled_functions();
     test_mux_ownership_and_reserved_modes();
     test_symbolic_bit_access_preserves_unknown_state();
     test_bus_spaces_and_port_f_biu_gate();

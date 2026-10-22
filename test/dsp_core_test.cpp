@@ -414,6 +414,10 @@ void test_native_symbolic_bit_branches() {
   cpu.step();
   require(cpu.state().pc == wait && cpu.state().sr == status,
           "BRCLR samples only its known input bit and does not modify CCR");
+  bus.gpio(blofeld::DspPort::c).set_drive({.floating = 4});
+  cpu.step();
+  require(cpu.state().pc == wait && cpu.state().sr == status,
+          "Native BRCLR keeps waiting on an explicitly floating Port C pull-down");
   bus.gpio(blofeld::DspPort::c).set_drive({.mask = 4, .levels = 4});
   cpu.step();
   require(cpu.state().pc == after_wait, "Observed high input releases the original-style bit poll");
