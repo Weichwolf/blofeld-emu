@@ -192,8 +192,8 @@ void test_priority_rejections_and_reset() {
     require(controller.read(iprp) == known_priorities,
             "Rejected priorities preserve register state");
   }
-  static_cast<void>(reject([&controller] { controller.write(iprc, 1); },
-                           "Enabled external/core sources remain unsupported"));
+  static_cast<void>(reject([&controller] { controller.write(iprc, 8); },
+                           "Enabled unimplemented IRQB/core sources remain unsupported"));
   static_cast<void>(
       reject([&controller] { controller.write(0, 0); }, "Unknown write address fails"));
   static_cast<void>(reject([&controller] { static_cast<void>(controller.read(0)); },

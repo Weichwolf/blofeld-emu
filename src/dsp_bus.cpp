@@ -390,8 +390,13 @@ std::optional<DspInterruptRequest> DspBus::interrupt_request(const unsigned mask
   constexpr unsigned shi_receive = 0x44;
   constexpr unsigned timer_compare = 0x54;
   std::vector<std::uint32_t> pending;
+  const auto irqa = interrupts_.irqa_request(mask);
+  if (irqa) { pending.push_back(irqa->vector); }
   const auto shi_level = interrupts_.priority(shi_receive);
-  if (shi_level && *shi_level >= mask) { pending = shi_.interrupt_vectors(); }
+  if (shi_level && *shi_level >= mask) {
+    const auto shi = shi_.interrupt_vectors();
+    pending.insert(pending.end(), shi.begin(), shi.end());
+  }
   const auto timer_level = interrupts_.priority(timer_compare);
   if (timer_level && *timer_level >= mask) {
     const auto timer = timers_.interrupt_vectors();
@@ -400,13 +405,25 @@ std::optional<DspInterruptRequest> DspBus::interrupt_request(const unsigned mask
   return interrupts_.select(pending, mask);
 }
 
+void DspBus::observe_irqa(const std::optional<bool> level) {
+  interrupts_.observe_irqa(level);
+}
+
+bool DspBus::interrupt_source_pending(const DspInterruptRequest request) const {
+  constexpr unsigned irqa_vector = 0x10;
+  constexpr unsigned first_timer = 0x54;
+  if (request.vector == irqa_vector) { return interrupts_.irqa_request(request.level) == request; }
+  const auto pending =
+      request.vector >= first_timer ? timers_.interrupt_vectors() : shi_.interrupt_vectors();
+  return std::ranges::find(pending, request.vector) != pending.end();
+}
+
 void DspBus::acknowledge_interrupt(const DspInterruptRequest request) {
   const auto current = interrupt_request(request.level);
   if (!current || current->vector != request.vector || current->level != request.level) {
     throw Fault("DSP interrupt fetch has no matching pending source");
   }
-  constexpr unsigned first_timer = 0x54;
-  if (request.vector >= first_timer) { timers_.acknowledge_interrupt(request.vector); }
+  acknowledge_latched_interrupt(request);
 }
 
 void DspBus::validate_admitted_interrupt(const DspInterruptRequest request) const {
@@ -415,10 +432,7 @@ void DspBus::validate_admitted_interrupt(const DspInterruptRequest request) cons
     throw Fault("DSP admitted interrupt priority changed before acknowledgement vector=" +
                 hex(request.vector, 6));
   }
-  constexpr unsigned first_timer = 0x54;
-  const auto pending =
-      request.vector >= first_timer ? timers_.interrupt_vectors() : shi_.interrupt_vectors();
-  if (std::ranges::find(pending, request.vector) == pending.end()) {
+  if (!interrupt_source_pending(request)) {
     throw Fault("DSP admitted interrupt source withdrew before acknowledgement vector=" +
                 hex(request.vector, 6));
   }
@@ -435,13 +449,15 @@ void DspBus::acknowledge_latched_interrupt(const DspInterruptRequest request) {
     throw Fault("DSP latched interrupt priority changed before acknowledgement");
   }
   constexpr unsigned first_timer = 0x54;
-  if (request.vector >= first_timer) {
+  constexpr unsigned irqa_vector = 0x10;
+  if (!interrupt_source_pending(request)) {
+    throw Fault("DSP latched interrupt source withdrew before acknowledgement vector=" +
+                hex(request.vector, 6));
+  }
+  if (request.vector == irqa_vector) {
+    interrupts_.acknowledge_irqa();
+  } else if (request.vector >= first_timer) {
     timers_.acknowledge_interrupt(request.vector);
-  } else {
-    const auto pending = shi_.interrupt_vectors();
-    if (std::ranges::find(pending, request.vector) == pending.end()) {
-      throw Fault("DSP latched interrupt source withdrew before acknowledgement");
-    }
   }
 }
 
