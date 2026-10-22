@@ -464,6 +464,11 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           1080 independent full-state vectors
                                           check modes, rails and carry/borrow
                                           (dsp-saturation.txt).
+                                          Original CC64 defers/releases packed
+                                          note latches through actual callbacks;
+                                          960 directed held-entry cases check
+                                          every note bit and native retirement
+                                          (dsp-sustain.txt).
                                           REP targets reject extended/flow words
                                           before effects; legal one-word latch,
                                           per-iteration data reads and preview

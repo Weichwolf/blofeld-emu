@@ -1,0 +1,26 @@
+Original CC64 and deferred MIDI release
+
+  cmake --build --preset strict --target blofeld-original-dsp-note-test
+  ctest --test-dir build/strict -R '^original_dsp_sustain$' --output-on-failure
+
+The unchanged primary parser receives actual CC64 and release bytes. Every
+nonzero controller value enables sustain, including 1/63; zero drains packed
+note latches. Eight 16-bit groups cover all 128 notes. Each word is cleared before
+its callbacks, in ascending note order; repeated pending notes coalesce. A zero
+pedal value still drains release bits previously set after immediate releases.
+Deferred callbacks use the controller's zero staged velocity.
+
+960 directed cases check all note bits, 0/1/63/64/127 pedal values, both release
+forms, fragments/running status, channel filtering, all 16 envelope hold masks
+and reversed/duplicated chords. An independent integer/list model checks raw
+scalar/flag/latch states, actual callback inputs/order, held-entry values,
+native callee counts, three first-entry envelope passes and two collector calls.
+Eight corrupted traces must fail the independent oracle. Original program
+words and unrelated held-entry words retain native guards.
+
+Firmware and all 127 original records are hash-pinned through the shared voice
+manifest. Inputs/results/traces remain local; no manufacturer program bytes are
+distributed. No fuzz or physical traffic runs. This extends dsp-note-release.txt
+under its explicit held headers, ADSR state and zero converted-control inputs.
+It does not establish positive allocation, ordinary boot, scheduled audio or
+stock hardware equivalence. The reserved allocation read remains a strict fault.
