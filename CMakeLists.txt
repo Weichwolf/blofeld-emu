@@ -676,6 +676,15 @@ if(BUILD_TESTING)
   add_test(NAME dsp_dma_interrupts COMMAND blofeld-dsp-dma-interrupt-test)
   add_executable(blofeld-original-dsp-gpio-input-test test/original_dsp_gpio_input_test.cpp)
   target_link_libraries(blofeld-original-dsp-gpio-input-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_executable(blofeld-original-dsp-gpio-request-test test/original_dsp_gpio_request_test.cpp
+    test/original_dsp_gpio_request_fixture.cpp)
+  target_link_libraries(blofeld-original-dsp-gpio-request-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_gpio_request COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_gpio_request.py"
+    "$<TARGET_FILE:blofeld-original-dsp-gpio-request-test>"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-gpio-request.trace")
+  set_tests_properties(original_dsp_gpio_request PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_test(NAME original_dsp_gpio_input
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_gpio_input.py"
       "$<TARGET_FILE:blofeld-original-dsp-gpio-input-test>"
@@ -1121,6 +1130,7 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
+    blofeld-original-dsp-gpio-request-test
     blofeld-original-dsp-download-test
     blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test

@@ -1,0 +1,41 @@
+Original DSP F4 GPIO request/response component
+
+  cmake --build --preset strict --target blofeld-original-dsp-gpio-request-test
+  ctest --test-dir build/strict -R '^original_dsp_gpio_request$' --output-on-failure
+
+The optional gate pins the local original 1.25 archive/MID and all 127 runtime
+records. It loads the complete unchanged final IRQA vector and GPIO producer,
+using the identities in dsp-gpio-request-reference.json. Manufacturer bytes,
+source analysis and execution artifacts remain local.
+
+An own native caller declares memory mapping, linear addressing, saved registers,
+GPIO modes and original IPRC4006 priorities. No DMA event is invented. The peer
+supplies F4 and both handshake phases as logical external pin observations.
+Native IRQ entry, original instructions, actual source loads and GPIO stores,
+RTI and a subsequent actual output-mode IRQ perform the request and return to
+input mode. The host never writes a received request, reply, saved CPU context
+or completed transfer. Observer callbacks remain read-only; external drive changes
+occur between completed native operations.
+
+The 22 fixed cases cover five part reads, three multi reads, three metadata reads,
+three global reads, one deferred tag, both unreleased waits, unknown handshake
+and payload bits, unknown index/source words and an actively contending peer.
+Own source addresses/data are independent expectations, including route bounds,
+shared address ranges, high source bits and retained/normalized upper port bits.
+All input-ring cells, cursors, timestamp, unrelated flags and saved registers
+must survive. Immediate replies qualify all twelve actual output pads. Deferred
+publication retains unknown low output latches; it cannot invent a reply.
+
+Each case repeats after two joint CPU/bus/peer-phase restores. Fifteen additional
+restores capture the original mode change before pending external peer release,
+checking the actual partial GPIO prefix and continuation. Failed accesses retain
+native context and refuse retry/checkpoint until trusted owner restore. Healthy
+unreleased polls retain their interrupt frame without a synthetic timeout.
+The fixed input/result trace identity is a regression observation, not
+measured hardware timing.
+
+This is a conditional component proof. Original runtime initialization, preceding
+boot, native MCU/DSP wiring, synchronizer/clock timing, deferred queue and bulk
+response, normal MIDI/audio and complete update/recovery remain unqualified.
+The separate ordinary-byte gate still checks all 255 non-F4 inputs and real ring
+wrap; neither fixture establishes complete firmware boot or physical equivalence.

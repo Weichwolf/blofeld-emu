@@ -529,9 +529,15 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           uses its unchanged vector/producer for
                                           255 fixed values, including F8 timestamp
                                           and real ring wrap (dsp-gpio-input.txt).
-                                          Actual MCU GPIO sender, initializer/DMA,
-                                          physical route/clock, F4 requests and
-                                          full parser/update chain remain open.
+                                          F4 native requests cover four immediate
+                                          source routes, deferred-tag publication,
+                                          both waits, unknown sources/pins and
+                                          contention in 22 fixed cases with 59 joint
+                                          restores (dsp-gpio-request.txt). Later
+                                          deferred queue/bulk response, actual MCU
+                                          GPIO sender, initializer/DMA execution,
+                                          physical route/clock and full parser/
+                                          update chain remain open.
                                           Explicitly floating C0..11 pads use
                                           documented weak pull-downs; unobserved
                                           pins, cold output latches and unmodeled

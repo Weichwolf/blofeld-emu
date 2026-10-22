@@ -25,7 +25,10 @@ The original 182-word record is retained, not rewritten to a simplified receiver
 
 This qualifies a GPIO-producer component, not a native MCU sender or physical
 MIDI wire. The preceding original initializer/actual DMA execution, true pin routing,
-clock/synchronizer timing, F4 request/response, parser dispatch, full original
-boot, normal MIDI/audio and complete update/recovery remain open. In particular,
+clock/synchronizer timing, board-level F4 request/response, parser dispatch, full
+original boot, normal MIDI/audio and complete update/recovery remain open. In particular,
 the separate first-helper experiment's static high ACK observation is not made
 a board default or a successful whole-request release here.
+
+The separate conditional original F4 component gate is described in
+dsp-gpio-request.txt; it does not establish that board-level path.

@@ -1,0 +1,50 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "records": [
+    {
+      "record": 107,
+      "space": 0,
+      "address": 16,
+      "words": 2,
+      "sha256": "22089578d5b848a5f8efb09337f0c7da1853f51d81cd60a906c893b69826ce43"
+    },
+    {
+      "record": 109,
+      "space": 0,
+      "address": 9826,
+      "words": 182,
+      "sha256": "88a6198abf9301809729a6e7cfb8134d4a550700b005424968a89895873a98bd"
+    }
+  ],
+  "case_names": [
+    "part_first",
+    "part_bank_last",
+    "part_table_last",
+    "part_last",
+    "part_mixed_upper",
+    "multi_first",
+    "multi_last",
+    "multi_shared_base",
+    "metadata_first",
+    "metadata_last",
+    "metadata_mixed",
+    "global_first",
+    "global_last",
+    "global_mixed",
+    "deferred_tag_only",
+    "hold_low",
+    "hold_high",
+    "unknown_low_bit",
+    "unknown_second_payload",
+    "unknown_part_base",
+    "unknown_source_word",
+    "contending_peer"
+  ],
+  "expected": {
+    "cases": 22,
+    "restores": 59,
+    "instructions_excluding_replays": 867
+  },
+  "trace_sha256": "02118fd0731ee5b7ecbdfe1ff6dd2d485f6f961ff500660016c94819082878a7",
+  "qualification": "Complete unchanged original IRQA vector and F4 producer record, executed under explicit untimed own native map/register/GPIO/priority setup. Four immediate source routes use independently declared addresses/data; actual loads, GPIO stores, known pad masks, waits, retained faults, RTI, subsequent input-mode IRQ and joint CPU/bus/peer restores are checked. Fifteen checkpoints cover the original output-mode change before peer release. Deferred coverage ends at request-tag publication; no later queue/bulk completion, original initializer/boot, native MCU sender, physical wiring/timing or normal MIDI/audio/update equivalence is established."
+}
