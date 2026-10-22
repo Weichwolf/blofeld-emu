@@ -107,6 +107,7 @@ public:
   void advance_instruction_cycles(unsigned cycles);
   [[nodiscard]] DspCodeChanges take_code_changes();
   [[nodiscard]] std::optional<DspInterruptRequest> interrupt_request(unsigned mask) const;
+  void observe_irqa(std::optional<bool> level);
   void acknowledge_interrupt(DspInterruptRequest request);
   // Explicit nominal admission: later higher-priority requests stay pending.
   void validate_admitted_interrupt(DspInterruptRequest request) const;
@@ -136,6 +137,7 @@ public:
 private:
   friend class DspReferenceTape;
   void acknowledge_latched_interrupt(DspInterruptRequest request);
+  [[nodiscard]] bool interrupt_source_pending(DspInterruptRequest request) const;
   enum class Operation : std::uint8_t { read, write };
 
   struct Memory {

@@ -32,6 +32,22 @@
       "address": 2407,
       "words": 1092,
       "sha256": "603cd0a98101a15a7994a2d9f2d946f39890865ebf566f84161a7d9cf0a2dc5f"
+    },
+    {
+      "name": "download-context-templates",
+      "record": 93,
+      "space": 1,
+      "address": 11301,
+      "words": 12,
+      "sha256": "4bb473b50dbf06203fdca50374262345c04054e7a34c814025ba4ae7a1e0bd80"
+    },
+    {
+      "name": "download-commands",
+      "record": 94,
+      "space": 0,
+      "address": 9057,
+      "words": 126,
+      "sha256": "173b49d404125e71a317ab2203a5926a986e3086fb4e137ec7b1ba572a88e1bf"
     }
   ],
   "scopes": {
@@ -58,7 +74,22 @@
       "changed-suffixes": 1,
       "original-callbacks": 3,
       "data-sample-irqs-entered": 3
+    },
+    "download": {
+      "cases": 30,
+      "wire": 1050,
+      "irqs": 9450,
+      "rtis": 9450,
+      "appends": 940,
+      "entries": 51,
+      "launches": 6,
+      "starts": 55,
+      "frames": 54,
+      "stores": 96,
+      "prefetches": 24,
+      "timestamps": 1,
+      "producer-instructions": 96602
     }
   },
-  "qualification": "Isolated unchanged original TIO0 producer/vector/parser/callback with explicit ordered3249-edge8N1 CLK2 input. Native instructions/IRQ service add no timer clocks. No physical baud, connector routing, pipeline, full boot/audio or hardware-equivalence proof."
+  "qualification": "Isolated unchanged original TIO0 producer/vectors/byte parser and pitch/download paths with explicitly ordered 3249-edge 8N1 CLK2 input. Native instructions/IRQ service add no timer clocks. No physical baud, connector routing, pipeline, full boot/audio, flash update/recovery or hardware-equivalence proof."
 }

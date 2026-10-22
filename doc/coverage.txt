@@ -93,6 +93,22 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           (hc12-cycles.txt). Full ISA,
                                           qualified chip timing and hardware
                                           comparison pending.
+                                          Indexed addressing has an independent
+                                          fixed matrix for every postbyte: complete
+                                          5/9-bit and A/B offsets, auto updates,
+                                          16-bit/D boundaries, real indirect reads,
+                                          exact flags/registers and manual bus slots.
+                                          Wrapping words retain contextual faults
+                                          (hc12-indexed.txt); this is synthetic
+                                          internal memory, not board qualification.
+                                          Eight unsigned min/max instructions now
+                                          retain original subtraction flags, one
+                                          operand sample and mandatory memory writes;
+                                          all five timed index families are admitted.
+                                          Over 1.1 million independent fixed cases,
+                                          changing reads/failures and real GPIO
+                                          snapshots qualify this nominal CPU scope
+                                          (hc12-minmax.txt), not physical timing.
                                           Independent reset/opcode reference:
                                           HCS12COREUG section 3.1 and Appendix A.
 RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tracking,
@@ -116,6 +132,9 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           DSP initial and MS/MSW=111 maps, retained
                                           X/P alias, protected/missing ROM and
                                           explicit three-cycle switch tested.
+                                          ROM software-code variant and matching
+                                          device ROM identity remain unverified
+                                          (dsp-core.txt).
                                           Original DSP RAM clear reaches reserved
                                           Y:002000; write/alias behavior unverified.
                                           Other DSP layouts and full timing pending.
@@ -140,6 +159,10 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Timer prescaling, capture/compare, flags,
                                           TC7 reset and routing tested; see
                                           mcu-timer.txt for unresolved boundaries.
+                                          Cached alternate-function routing retains
+                                          live pad checks; 24 timer routes, both
+                                          SCI waveforms and clone/reset/GPIO
+                                          changes tested (mcu-pin-routing.txt).
                                           Instruction-boundary IRQ/XIRQ selection,
                                           HPRIO/write gates, SCI/TIM/PLL requests
                                           and real synthetic SCI/TIM ISRs tested.
@@ -306,6 +329,12 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           beyond the deadline. Expiry retains
                                           actual native SETUP/IRQ/RAM ownership
                                           (usbip_frame_timeout).
+                                          Queued reply progress has a separate
+                                          host deadline, renewed only by actual
+                                          accepted socket bytes. Real stream
+                                          EAGAIN and TCP/native half-close tests
+                                          retain SETUP ownership and import leases
+                                          on expiry (usbip_output_timeout).
                                           Production descriptor probe also reaches
                                           the original USTB failure; no metadata
                                           escapes after two joint restores.
@@ -473,10 +502,39 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           behavior qualification. SHI SPI
                                           pins/registers/FIFO, error-clear sequences,
                                           request vectors and reset cycles tested
-                                          (dsp-shi.txt). C/E/F GPIO mux, unknown
+                                          (dsp-shi.txt), including isolated active
+                                          short-word bits and 24 idle reset
+                                          mode/width/FIFO combinations with replay.
+                                          Original receive vectors/initializer/
+                                          handler/RTI: eighteen fixed cases with
+                                          thirty-six native runs
+                                          cover FIFO overrun, idle/publication,
+                                          ring aliasing, HTX pending replacement,
+                                          register preservation, 22 real nested
+                                          idle resets, FIFO/software queue discard
+                                          and pre-unmask checkpoints
+                                          (dsp-shi-receive.txt). Selected reset,
+                                          physical timing and boot provenance
+                                          remain unqualified. C/E/F GPIO mux, unknown
                                           pads/latches, contention and Port F BIU
                                           setup tested (dsp-gpio.txt), including
                                           native C output/E input operations.
+                                          Logical IRQA level/edge priorities and
+                                          native entry/RTI/checkpoint state tested
+                                          (dsp-irqa.txt). Original GPIO byte input
+                                          uses its unchanged vector/producer for
+                                          255 fixed values, including F8 timestamp
+                                          and real ring wrap (dsp-gpio-input.txt).
+                                          Actual MCU GPIO sender, initializer/DMA,
+                                          physical route/clock, F4 requests and
+                                          full parser/update chain remain open.
+                                          Explicitly floating C0..11 pads use
+                                          documented weak pull-downs; unobserved
+                                          pins, cold output latches and unmodeled
+                                          peripheral outputs remain unknown.
+                                          Per-pin/mixed-mask, reset/copy/contention
+                                          and native bit-poll cases qualify this
+                                          logical bias, not board wiring/timing.
                                           Symbolic C/F bit RMW and bit branches
                                           preserve unknown neighbors; previous-bit
                                           Carry and one EA update tested, including
@@ -897,7 +955,21 @@ MCU security key access           partial  Nominal enabled-KEYEN four-word compa
                                           unsupported access combinations fail.
                                           Original recovery, BDM, physical mask and
                                           persistent unsecuring remain unqualified.
-Original update and recovery      partial  Helpers and recovery entry recovered;
+Original update and recovery      partial  Isolated original DSP command record:
+                                          144 fixed cases / 1240 actual calls check
+                                          live P patches, exact P/X/Y payload and
+                                          guards, sequence failure/disabled/wrap,
+                                          zero groups/targets and full header/MAC
+                                          accumulator state (dsp-download.txt).
+                                          Separate declared TIO0 wire path: 30 cases,
+                                          1050 bytes / 9450 original IRQs/RTIs feed
+                                          real SysEx collection and manufacturer
+                                          dispatch, including ignored headers,
+                                          F8/F7 interleaving, new-F0 restart and
+                                          omitted trailing word (dsp-midi-replay.txt).
+                                          Normal physical baud/caller provenance,
+                                          flash and whole recovery remain unqualified.
+                                          Helpers and recovery entry recovered;
                                           original flash-initialization subroutine
                                           executes four unchanged instructions in an
                                           isolated RAM fixture. Original word routines

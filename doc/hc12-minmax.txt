@@ -1,0 +1,58 @@
+HC12 unsigned min/max instructions
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-hc12-minmax-test
+  ctest --test-dir build/strict -R '^hc12_minmax$' --output-on-failure
+
+The native SLEIGH description now implements MAXA/MINA/MAXM/MINM and
+EMAXD/EMIND/EMAXM/EMINM with one original byte/word operand read. Selection is
+unsigned; NZVC describe the original accumulator-minus-memory subtraction at
+the operand width, before destination replacement. S/X/H/I remain unchanged.
+Memory destinations always perform the documented write, including equal or
+unchanged values. A read-sensitive operand is never sampled again to select
+its value or compute flags. Only the private build copy is patched; installed
+Ghidra sources and manufacturer programs are untouched. Dependency notices
+and Ghidra's Apache-2.0 terms remain in force (patches/README.txt).
+
+The previous description set V even for MAXA 0,0, used the wrong width for
+byte-memory N, reread some word operands and conditionally omitted memory
+writes. Fixed own inputs fail with the prior decoder. Isolated prior-decoder
+controls also reject in the word and changing-input subsets; their private
+records pin the executable and both SLA hashes. The corrected decoder is
+restored before positive qualification. These are processor-reference facts,
+not measurements of a physical Blofeld.
+
+Hc12CycleBus now admits these eight page-two opcodes with literal S12CPUV2
+HCS12 slot sequences, including the leading O, actual I pointer reads and
+byte/word R/W operands. Five-bit/accumulator/auto, nine-bit, sixteen-bit,
+D-indirect and sixteen-bit-indirect forms retain their instruction lengths.
+Unqualified clocks, memory geometry, ranges and hardware accesses still fail.
+No prefetch address, external stretch or physical bus signal is fabricated.
+
+Independent fixed checks
+- 1048576 byte cases enumerate every operand pair for four byte opcodes and
+  four initial CCR patterns. Expected unsigned selection and subtraction flags
+  use independent integer arithmetic, not native helpers or round trips.
+- 4096 word cases check sixteen literal boundaries/patterns for both inputs,
+  four word opcodes and four CCR seeds. This is not the full word-pair domain.
+- 49600 timed cases check 31 explicit index forms, both instruction alignments,
+  both widths/destinations, flags, lengths, base updates and every manual slot.
+  The whole flat test memory is explicitly initialized; its un-stretched word
+  accesses are a test contract, not a board RAM/Flash timing default.
+- 20 changing-input/read-fault/write-fault cases check one sampled operand,
+  visible mandatory writes, exact failure slots and quarantine on retry.
+- 16 native McuMachine GPIO cases check selected data/flags, actual output
+  latches and byte-write order, with 32 trusted restores and unchanged complete
+  NVM bytes/knownness/erase history. McuBus observers report writes only; the
+  separate flat native bus supplies exact read-count evidence.
+
+The executable also accepts bytes, words, timing, effects or owner for directed
+investigation; CTest always runs the complete matrix. No fuzz input or physical
+traffic is generated. Full ISA, chip timing, complete original MCU/DSP boot,
+MIDI/audio/update/recovery and Desktop/Keyboard equivalence remain separate
+acceptance requirements in objective.txt and coverage.txt.
+
+Primary references: S12CPUV2 section 6.6 and the eight instruction entries in
+section 7.5; HCS12COREUG.pdf (S12CPU15UG V1.2), corresponding min/max entries.
+The original PDFs/archive, official URLs, sizes and hashes are pinned in
+hardware/sources.json. Use the HCS12 column of the two-derivative cycle tables.

@@ -19,6 +19,8 @@ struct DspGpioWrite {
 struct DspGpioDrive {
   std::uint32_t mask = 0;
   std::uint32_t levels = 0;
+  // Explicitly undriven pins; absent mask/floating bits remain unobserved.
+  std::uint32_t floating = 0;
 };
 
 struct DspGpioSample {

@@ -16,9 +16,10 @@ set(BLOFELD_HC12_INDEXED_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-
 set(BLOFELD_HC12_EXCEPTIONS_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-exceptions.patch")
 set(BLOFELD_HC12_ARITHMETIC_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-arithmetic.patch")
 set(BLOFELD_HC12_CCR_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-ccr.patch")
+set(BLOFELD_HC12_MINMAX_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hc12-minmax.patch")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${BLOFELD_HC12_PATCH}" "${BLOFELD_HC12_INDEXED_PATCH}" "${BLOFELD_HC12_EXCEPTIONS_PATCH}"
-  "${BLOFELD_HC12_ARITHMETIC_PATCH}" "${BLOFELD_HC12_CCR_PATCH}"
+  "${BLOFELD_HC12_ARITHMETIC_PATCH}" "${BLOFELD_HC12_CCR_PATCH}" "${BLOFELD_HC12_MINMAX_PATCH}"
   "${BLOFELD_HC12_LANGUAGES}/HCS_HC12.sinc")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12" "${CMAKE_CURRENT_BINARY_DIR}/share")
 configure_file("${BLOFELD_HC12_LANGUAGES}/HC12.slaspec" "generated/hc12/HC12.slaspec" COPYONLY)
@@ -49,8 +50,14 @@ execute_process(
 execute_process(
   COMMAND "${BLOFELD_PATCH}" --batch --silent --fuzz=0
     --input "${BLOFELD_HC12_CCR_PATCH}"
-    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.sinc"
+    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.ccr.sinc"
     "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.arithmetic.sinc"
+  COMMAND_ERROR_IS_FATAL ANY)
+execute_process(
+  COMMAND "${BLOFELD_PATCH}" --batch --silent --fuzz=0
+    --input "${BLOFELD_HC12_MINMAX_PATCH}"
+    --output "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.sinc"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/hc12/HCS_HC12.ccr.sinc"
   COMMAND_ERROR_IS_FATAL ANY)
 add_custom_command(
   OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"

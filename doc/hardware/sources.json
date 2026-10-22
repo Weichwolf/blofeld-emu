@@ -136,5 +136,17 @@
     "source": "https://www.nxp.com/docs/en/user-guide/M68EVB912UF32UM.pdf",
     "bytes": 624895,
     "sha256": "15dcf4a21d4e8f28e172756e8634307822542c852e35fa9390af7ce2dd186836"
+  },
+  {
+    "file": "DSPA56371SUM.pdf",
+    "source": "https://www.nxp.com/docs/en/user-guide/DSPA56371SUM.pdf",
+    "bytes": 1876008,
+    "sha256": "a7d100c6f7e9813c217cbda1fc22380d9e88999f123784b795ac54e057cf7dcd"
+  },
+  {
+    "file": "DSPDECODERMSC.pdf",
+    "source": "https://www.nxp.com/docs/en/product-numbering-scheme/DSPDECODERMSC.pdf",
+    "bytes": 30209,
+    "sha256": "1e76ef1209604f1202777a9ac2aa121115d00503bc8fcd49c3b5fb0ca1001d26"
   }
 ]

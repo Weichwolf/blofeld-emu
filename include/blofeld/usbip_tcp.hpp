@@ -13,12 +13,14 @@
 
 namespace blofeld {
 inline constexpr auto default_usbip_frame_timeout = std::chrono::seconds{30};
+inline constexpr auto default_usbip_output_timeout = std::chrono::seconds{30};
 
 struct UsbipTcpOptions {
   std::uint16_t port = 0; // Zero asks the kernel for a free loopback port.
   std::size_t write_budget = std::size_t{64} * 1024;
   // Host resource policy, independent of USB/MCU time and pending MIDI reads.
   std::chrono::milliseconds frame_timeout{default_usbip_frame_timeout};
+  std::chrono::milliseconds output_timeout{default_usbip_output_timeout};
 };
 
 struct UsbipConnectionEvent {

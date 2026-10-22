@@ -74,6 +74,21 @@ flags and cycles. hc12_compare_stack checks 4608 independent literal cases acros
 all eight address modes, preserved registers/memory, overlapping alternative
 entries and unknown operand-byte fetches. No installed Ghidra source is modified.
 
+HC12 min/max corrections
+-----------------------
+ghidra-hc12-minmax.patch follows the CCR patch in the private build copy, under
+the same pinned upstream hash and Apache-2.0 terms. All eight unsigned min/max
+constructors read their operand once, calculate width-correct NZVC from the
+original subtraction and then select the destination. Memory forms always write
+the selected value, including unchanged data. The old wider-result V/N tests,
+repeated word reads and conditional write omissions are removed.
+
+hc12_minmax supplies exhaustive byte pairs, word boundaries, literal HCS12 bus
+slots, changing-input/failure controls and genuine GPIO writes/snapshot replay.
+The native timing adapter now supports all five index families. Prior-decoder
+controls fail without a diagnostic baseline; no hardware behavior, firmware
+result or installed upstream source is substituted. See doc/hc12-minmax.txt.
+
 HC12 exception corrections
 -------------------------
 ghidra-hc12-exceptions.patch corrects SWI's indirect vector fetch, reads the

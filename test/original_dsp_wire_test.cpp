@@ -22,6 +22,55 @@
 namespace {
 using blofeld::DspSpace;
 using blofeld::test::require;
+constexpr unsigned download_program = 0x2361;
+constexpr unsigned download_entry = download_program;
+constexpr unsigned download_target = 0x600;
+constexpr unsigned download_buffer = 0x778;
+constexpr unsigned download_count = 0x29;
+constexpr unsigned append_entry = 0xcaf;
+constexpr unsigned append_end = 0xcb9;
+constexpr unsigned download_store = 0x23c6;
+constexpr unsigned download_return = 0x23ca;
+constexpr unsigned context_base = 0x2c25;
+constexpr unsigned device_setting = 0x745;
+constexpr unsigned launch_return = 0x81e;
+constexpr unsigned download_status = 0x76c;
+constexpr unsigned completed_status = 19;
+constexpr unsigned data_cursor = 0x2d;
+constexpr unsigned declared_length = 0x2e;
+constexpr unsigned data_end = 0x2f;
+constexpr unsigned data_start = 0x30;
+constexpr unsigned data_sequence = 0x31;
+constexpr unsigned end_sysex = 0xf7;
+constexpr unsigned start_sysex = 0xf0;
+constexpr unsigned configure_command = 0x73;
+constexpr unsigned group_command = 0x75;
+constexpr unsigned byte_command = 0x74;
+constexpr unsigned expected_cases = 30;
+constexpr unsigned expected_matrix_bytes = 1050;
+constexpr unsigned expected_matrix_appends = 940;
+constexpr unsigned expected_matrix_entries = 51;
+constexpr unsigned expected_frames = 54;
+constexpr unsigned expected_starts = 55;
+constexpr unsigned expected_target_writes = 96;
+constexpr unsigned configured_device = 5;
+constexpr unsigned other_device = 6;
+constexpr unsigned other_manufacturer = 0x3f;
+constexpr unsigned other_product = 0x12;
+constexpr unsigned final_payload_prefetch = 0x23b4;
+constexpr unsigned matrix_prefetches = 24;
+constexpr unsigned manufacturer = 0x3e;
+constexpr unsigned product = 0x13;
+constexpr unsigned all_devices = 0x7f;
+constexpr unsigned literal_rts = 12;
+constexpr unsigned header_bits = 28;
+constexpr unsigned byte_mask = 255;
+constexpr unsigned first_residual = 0x87;
+constexpr unsigned last_residual = 0xfe;
+constexpr unsigned parser_context = 0x22;
+constexpr unsigned buffer_limit = 0x920;
+constexpr unsigned packet_body_words = 23;
+constexpr std::array own_payload{literal_rts, 0x123456U, 0xfedcbaU, 0xa55a11U};
 constexpr unsigned original_program = 0x2cd9;
 constexpr unsigned physical_alias_offset = 0xf000;
 constexpr unsigned ordinary_status = 0xc00000;
@@ -88,7 +137,8 @@ void install(blofeld::DspBus &bus, const blofeld::Firmware &firmware) {
   for (const auto &record : firmware.dsp) {
     if (record.space == 0) {
       if (record.address != original_program && record.address != original_vector &&
-          record.address != parameters && record.address != messages) {
+          record.address != parameters && record.address != messages &&
+          record.address != download_program) {
         continue;
       }
       ++programs;
@@ -98,14 +148,14 @@ void install(blofeld::DspBus &bus, const blofeld::Firmware &firmware) {
     }
     for (std::size_t index = 0; index < record.words.size(); ++index) {
       const auto address = record.address + static_cast<unsigned>(index);
-      const bool aliased = record.space == 0 && record.address == original_program;
+      const bool aliased = record.space == 0 && record.address >= 0x1000;
       bus.write({.space = aliased ? DspSpace::x : static_cast<DspSpace>(record.space),
                  .address = aliased ? address + physical_alias_offset : address,
                  .value = record.words[index]});
     }
   }
-  require(programs == 4,
-          "All four complete unchanged original producer/vector/parser records load");
+  require(programs == 5,
+          "Five complete unchanged original producer/vector/parser/download records load");
 }
 
 [[nodiscard]] unsigned bend_word(const unsigned lsb, const unsigned msb) {
@@ -129,6 +179,66 @@ struct WireCompletion {
 struct ExpectedMessage {
   unsigned word;
   bool completed;
+};
+
+struct HeaderFrame {
+  unsigned mode;
+  unsigned maker = manufacturer;
+  unsigned product_id = product;
+  unsigned device = all_devices;
+};
+
+struct Transfer {
+  unsigned mode;
+  unsigned command;
+  unsigned trailing;
+  bool omitted = false;
+};
+
+std::vector<unsigned> configuration_bytes(const HeaderFrame header) {
+  std::vector<unsigned> result{
+      header.maker, header.product_id, header.device, configure_command, header.mode};
+  for (const auto field_value : {9U, download_target}) {
+    for (unsigned shift = 0; shift < header_bits; shift += 7) {
+      result.push_back((field_value >> shift) & midi_data_mask);
+    }
+  }
+  return result;
+}
+
+std::vector<unsigned> data_bytes(const Transfer transfer) {
+  std::vector<unsigned> decoded;
+  for (const auto word : own_payload) {
+    for (unsigned shift = 0; shift < blofeld::test::word_bits; shift += 8) {
+      decoded.push_back((word >> shift) & byte_mask);
+    }
+  }
+  decoded.push_back(first_residual);
+  decoded.push_back(last_residual);
+  std::vector<unsigned> result{manufacturer,
+                               product,
+                               all_devices,
+                               transfer.command,
+                               0,
+                               transfer.command == byte_command ? 16U : 2U};
+  for (unsigned offset = 0; offset < decoded.size(); offset += 7) {
+    unsigned flags = 0;
+    for (unsigned index = 0; index < 7; ++index) {
+      flags |= ((decoded[offset + index] >> 7U) & 1U) << (6U - index);
+    }
+    result.push_back(flags);
+    for (unsigned index = 0; index < 7; ++index) {
+      result.push_back(decoded[offset + index] & midi_data_mask);
+    }
+  }
+  if (!transfer.omitted) { result.push_back(transfer.trailing); }
+  return result;
+}
+
+struct InputByte {
+  unsigned value;
+  unsigned index;
+  bool appending;
 };
 
 class Fixture {
@@ -286,6 +396,43 @@ public:
     }
     trace << "inside-original-isr-snapshots=1 identical-suffixes=2 changed-suffixes=1 "
              "original-callbacks=3 data-sample-irqs-entered=3\n";
+  }
+
+  void run_download(std::ostream &trace) {
+    machine_.bus().write(
+        {.space = DspSpace::x, .address = device_setting, .value = configured_device});
+    for (unsigned mode = 0; mode < 4; ++mode) {
+      for (const unsigned command : {byte_command, group_command}) {
+        for (const unsigned trailing : {0U, midi_data_mask}) {
+          download_case({.mode = mode, .command = command, .trailing = trailing});
+          trace << "NORMAL " << mode << ' ' << command << ' ' << trailing << '\n';
+        }
+        download_case({.mode = mode, .command = command, .trailing = 0, .omitted = true});
+        trace << "OMITTED " << mode << ' ' << command << '\n';
+      }
+    }
+    rejected_header({.mode = 0, .maker = other_manufacturer}, false);
+    rejected_header({.mode = 0, .product_id = other_product}, false);
+    rejected_header({.mode = 0, .device = other_device}, false);
+    rejected_header({.mode = 0, .device = configured_device}, true);
+    trace << "REJECTED 4\n";
+    fragmented_header();
+    trace << "FRAGMENTED 1\n";
+    restarted_header();
+    trace << "RESTARTED 1\n";
+    require(words_ == expected_matrix_bytes && irqs_ == expected_matrix_bytes * 9 &&
+                returns_ == irqs_ && appended_ == expected_matrix_appends &&
+                download_entries_ == expected_matrix_entries && download_launches_ == 6 &&
+                frame_starts_ == expected_starts && frame_ends_ == expected_frames &&
+                target_writes_ == expected_target_writes && prefetches_ == matrix_prefetches &&
+                timestamp_writes_ == 1,
+            "Complete independent finite wire/parser/download/header/fragment matrix");
+    trace << "RESULT cases=" << expected_cases << " wire=" << words_ << " irqs=" << irqs_
+          << " rtis=" << returns_ << " appends=" << appended_ << " entries=" << download_entries_
+          << " launches=" << download_launches_ << " starts=" << frame_starts_
+          << " frames=" << frame_ends_ << " stores=" << target_writes_
+          << " prefetches=" << prefetches_ << " timestamps=" << timestamp_writes_
+          << " producer-instructions=" << instructions_ << '\n';
   }
 
 private:
@@ -455,6 +602,206 @@ private:
     }
   }
 
+  std::array<unsigned, 8> protocol_state() {
+    std::array<unsigned, 8> result{};
+    for (unsigned i = 0; i < 5; ++i) { result[i] = read(data_cursor + i); }
+    result[5] = read(download_status);
+    result[6] = machine_.bus().read({.space = DspSpace::p, .address = download_store});
+    result[7] = machine_.bus().read({.space = DspSpace::p, .address = download_return});
+    return result;
+  }
+
+  void download_case(const Transfer transfer) {
+    auto &bus = machine_.bus();
+    const std::array spaces{DspSpace::p, DspSpace::p, DspSpace::x, DspSpace::y};
+    expected_target_ = spaces.at(transfer.mode);
+    packet_writes_ = 0;
+    expected_trailing_ = transfer.omitted ? blofeld::test::word_mask : transfer.trailing << 16U;
+    for (const auto space : {DspSpace::p, DspSpace::x, DspSpace::y}) {
+      for (unsigned offset = 0; offset < 6; ++offset) {
+        bus.write({.space = space, .address = download_target - 1 + offset, .value = ring_guard});
+      }
+    }
+    const auto before_entries = download_entries_;
+    const auto before_launches = download_launches_;
+    stream_frame(configuration_bytes({.mode = transfer.mode}));
+    require(read(data_cursor) == download_target && read(declared_length) == 9 &&
+                read(data_end) == download_target + 3 && read(data_start) == download_target &&
+                read(data_sequence) == 0 && read(download_count) == 13 &&
+                download_entries_ == before_entries + 1 &&
+                bus.read({.space = DspSpace::p, .address = download_store}) ==
+                    read(context_base + 8 + transfer.mode),
+            "Actual wire/parser/SysEx path configures the original selected download mode");
+    stream_frame(data_bytes(transfer));
+    for (const auto space : {DspSpace::p, DspSpace::x, DspSpace::y}) {
+      require(bus.read({.space = space, .address = download_target - 1}) == ring_guard &&
+                  bus.read({.space = space, .address = download_target + 4}) == ring_guard,
+              "Wire-delivered data retains exact destination boundary guards");
+      for (unsigned index = 0; index < own_payload.size(); ++index) {
+        require(bus.read({.space = space, .address = download_target + index}) ==
+                    (space == expected_target_ ? own_payload[index] : ring_guard),
+                "Only original selected P/X/Y instructions write the exact own payload");
+      }
+    }
+    const auto expected_count = packet_body_words - (transfer.omitted ? 1U : 0U);
+    require(read(data_cursor) == download_target + 4 && read(data_sequence) == 0x10000 &&
+                read(download_count) == expected_count && packet_writes_ == own_payload.size() &&
+                download_entries_ == before_entries + 2 &&
+                download_launches_ == before_launches + (transfer.mode == 0 ? 1U : 0U),
+            "Original complete frames/padding stores and mode-dependent launches remain exact");
+  }
+
+  void rejected_header(const HeaderFrame header, const bool reached_download) {
+    const auto before = protocol_state();
+    const auto entries = download_entries_;
+    const auto launches = download_launches_;
+    stream_frame(configuration_bytes(header));
+    require(protocol_state() == before && download_launches_ == launches &&
+                download_entries_ == entries + (reached_download ? 1U : 0U),
+            "Both original header-validation layers retain ignored download state");
+  }
+
+  void input_byte(const InputByte input) {
+    send(input.value);
+    consume_download(input);
+  }
+
+  void fragmented_header() {
+    const auto body = configuration_bytes({.mode = 0});
+    const auto before = protocol_state();
+    const auto entries = download_entries_;
+    input_byte({.value = start_sysex, .index = 0, .appending = false});
+    for (unsigned index = 0; index < body.size(); ++index) {
+      if (index == 6) { input_byte({.value = clock_byte, .index = index, .appending = false}); }
+      input_byte({.value = body[index], .index = index, .appending = true});
+    }
+    require(protocol_state() == before && download_entries_ == entries,
+            "Partial SysEx plus a real interleaved clock byte never pre-dispatches downloading");
+    input_byte(
+        {.value = end_sysex, .index = static_cast<unsigned>(body.size()), .appending = false});
+    require(download_entries_ == entries + 1 && read(data_cursor) == download_target &&
+                read(data_sequence) == 0 && read(download_count) == body.size(),
+            "Actual F7 completes the retained frame after ignored realtime interleaving");
+  }
+
+  void restarted_header() {
+    const auto old = configuration_bytes({.mode = 2, .maker = other_manufacturer});
+    const auto before = protocol_state();
+    const auto entries = download_entries_;
+    input_byte({.value = start_sysex, .index = 0, .appending = false});
+    for (unsigned index = 0; index < 6; ++index) {
+      input_byte({.value = old[index], .index = index, .appending = true});
+    }
+    require(protocol_state() == before && download_entries_ == entries && read(download_count) == 6,
+            "The abandoned prefix remains pending without any original download call");
+    stream_frame(configuration_bytes({.mode = 3}));
+    require(download_entries_ == entries + 1 && read(download_count) == 13 &&
+                read(data_cursor) == download_target && read(data_sequence) == 0 &&
+                machine_.bus().read({.space = DspSpace::p, .address = download_store}) ==
+                    read(context_base + 8 + 3),
+            "A real new F0 resets the count and replaces the old prefix before actual F7 dispatch");
+  }
+
+  void stream_frame(const std::vector<unsigned> &body) {
+    send(start_sysex);
+    consume_download({.value = start_sysex, .index = 0, .appending = false});
+    for (unsigned index = 0; index < body.size(); ++index) {
+      send(body[index]);
+      consume_download({.value = body[index], .index = index, .appending = true});
+    }
+    send(end_sysex);
+    consume_download(
+        {.value = end_sysex, .index = static_cast<unsigned>(body.size()), .appending = false});
+  }
+
+  void download_write(const blofeld::DspNativeAccess &access,
+                      const InputByte input,
+                      unsigned &appended) {
+    watch(access);
+    if (access.stage == blofeld::DspNativeAccessStage::after &&
+        access.kind == blofeld::DspNativeAccessKind::read && access.pc == final_payload_prefetch &&
+        access.target.space == DspSpace::x &&
+        access.target.address == download_buffer + packet_body_words - 1) {
+      require(access.value == expected_trailing_,
+              "Actual original final payload prefetch uses checksum or M4 terminator");
+      ++prefetches_;
+    }
+    if (access.stage != blofeld::DspNativeAccessStage::after ||
+        access.kind != blofeld::DspNativeAccessKind::write) {
+      return;
+    }
+    const auto address = access.target.address;
+    const bool data =
+        access.target.space == DspSpace::x &&
+        ((address >= parser_context && address <= download_count) ||
+         (address >= data_cursor && address <= data_sequence) || address == consumer ||
+         address == download_status || (address >= download_buffer && address <= buffer_limit));
+    const bool program =
+        access.target.space == DspSpace::p &&
+        (address == download_store || address == download_return ||
+         (address >= download_target && address < download_target + own_payload.size()));
+    const bool target = access.pc == download_store && access.target.space == expected_target_ &&
+                        address == download_target + packet_writes_;
+    if (access.pc == download_store) {
+      require(target && packet_writes_ < own_payload.size() &&
+                  access.value == own_payload[packet_writes_],
+              "Each original destination store matches independent bank/order/value expectations");
+      ++packet_writes_;
+      ++target_writes_;
+    }
+    require(data || program || target,
+            "Unexpected native SysEx write at " + blofeld::hex(address) +
+                " pc=" + blofeld::hex(access.pc));
+    if (access.pc >= append_entry && access.pc <= append_end && address >= download_buffer) {
+      require(input.appending && access.target.space == DspSpace::x &&
+                  address == download_buffer + input.index && access.value == input.value << 16U,
+              "Every collected SysEx word comes from the actual original byte-append instruction");
+      ++appended;
+      ++appended_;
+    }
+  }
+
+  void consume_download(const InputByte input) {
+    machine_.bus().write(
+        {.space = DspSpace::x, .address = harness_selector, .value = parser_entry});
+    unsigned appended = 0;
+    const blofeld::DspNativeAccessObserver observer{
+        .observe = [&](const blofeld::DspNativeAccess &access) {
+          download_write(access, input, appended);
+        }};
+    for (unsigned steps = 0; machine_.cpu().state().pc != complete_; ++steps) {
+      require(steps < parser_steps, "Actual original SysEx consumer instruction bound");
+      const auto state = machine_.cpu().state();
+      if (state.pc == download_entry) {
+        require(
+            input.value == end_sysex && state.sp == 2 && state.stack_pc == launch_return,
+            "The real F7 path reaches original downloading with its actual nested caller frame");
+        ++download_entries_;
+      }
+      if (state.pc == download_target) {
+        require(
+            input.value == end_sysex && state.sp == 2 && state.stack_pc == launch_return &&
+                state.r[0] == context_base && read(download_status) == completed_status &&
+                machine_.bus().read({.space = DspSpace::p, .address = download_return}) ==
+                    literal_rts,
+            "Actual original launch restores RTS and passes context without a host PC/frame patch");
+        ++download_launches_;
+      }
+      machine_.cpu().step(observer);
+    }
+    if (input.value == start_sysex) { ++frame_starts_; }
+    if (input.value == end_sysex) { ++frame_ends_; }
+    const auto expected_count = input.appending ? input.index + 1 : input.index;
+    require(appended == (input.appending ? 1U : 0U) && read(download_count) == expected_count &&
+                machine_.cpu().state().sp == 0 && read(consumer) == read(producer),
+            "Real byte collection consumes one actual producer word and returns through the "
+            "original stack");
+    for (unsigned steps = 0; machine_.cpu().state().pc != foreground_; ++steps) {
+      require(steps < step_limit, "Own caller returns to the actual next input boundary");
+      machine_.cpu().step();
+    }
+  }
+
   void observe(const blofeld::DspNativeAccess &access) {
     if (access.stage != blofeld::DspNativeAccessStage::after ||
         access.kind != blofeld::DspNativeAccessKind::write) {
@@ -564,6 +911,16 @@ private:
   unsigned expected_field_ = field_seed;
   unsigned expected_timestamp_ = timestamp_seed;
   unsigned callbacks_ = 0;
+  unsigned appended_ = 0;
+  unsigned download_entries_ = 0;
+  unsigned download_launches_ = 0;
+  unsigned frame_starts_ = 0;
+  unsigned frame_ends_ = 0;
+  unsigned target_writes_ = 0;
+  unsigned packet_writes_ = 0;
+  unsigned prefetches_ = 0;
+  unsigned expected_trailing_ = 0;
+  DspSpace expected_target_ = DspSpace::p;
   unsigned expected_byte_ = 0;
   unsigned words_ = 0;
   unsigned irqs_ = 0;
@@ -578,13 +935,15 @@ private:
 int main(const int count, char **arguments) {
   try {
     require(count == 4,
-            "Usage: original-dsp-wire firmware.zip private.trace bytes|pitch|checkpoint");
+            "Usage: original-dsp-wire firmware.zip private.trace bytes|pitch|checkpoint|download");
     std::ofstream trace(arguments[2]);
     require(trace.is_open(), "Cannot create private original MIDI wire evidence");
     trace.exceptions(std::ios::badbit | std::ios::failbit);
     Fixture fixture(blofeld::Firmware::load(std::filesystem::path(arguments[1])));
     const std::string scope(arguments[3]);
-    if (scope == "bytes") {
+    if (scope == "download") {
+      fixture.run_download(trace);
+    } else if (scope == "bytes") {
       fixture.run_bytes(trace);
     } else if (scope == "pitch") {
       fixture.run_pitch(trace);

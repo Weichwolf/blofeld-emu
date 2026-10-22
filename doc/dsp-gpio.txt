@@ -1,7 +1,8 @@
 DSP56371 GPIO ports C, D, E and F
 
 Primary references
-DSP56371UM chapter 6, sections 8.5, 9.5 and 10.7, and register maps in Appendix C.
+DSP56371UM table 2-8 (printed pages 2-9..2-13), chapter 6, sections 8.5,
+9.5 and 10.7, and register maps in Appendix C.
 DSP56300FM sections 2.3.3 and 9.6.2 for the core BCR reset fields.
 Both reference PDFs are pinned in hardware/sources.json and remain local inputs.
 
@@ -22,7 +23,20 @@ remain unknown. Port D explicitly resets PDR to zero. Its disconnected register
 reads use retained known latch bits, which do not qualify physical pad voltages.
 
 GPIO data and pins
-Input reads require explicit external drive observations. Output values require
+Input reads require explicit external observations. DspGpioDrive distinguishes
+strong driven mask/levels, explicitly undriven floating pins and unobserved pins
+(neither mask). Table 2-8 specifies internal pull-downs on PC0..11. Explicitly
+floating Port C GPIO inputs therefore read low; disconnected pads can have a
+known low voltage while their PDR bits remain undefined. Strong inputs/outputs
+override the weak bias. Unknown output latches and peripheral-owned pads remain
+unknown; neither can be qualified by a weak pull. This does not establish weak
+bias for other ports. Withdrawal of an observation is not a floating assertion.
+Overlapping driven/floating masks and levels outside the strong mask reject
+without changing state. Peripheral output validation requires a strong drive.
+Reset and copies retain both external drive and explicit floating observations.
+This is logical weak/strong resolution, not analog resistance or timing.
+
+Output values require
 an explicit PDR write while configured output or the documented Port D reset.
 No pull-up, NAND-ready level or unqualified peripheral waveform is fabricated.
 The PDR
@@ -72,7 +86,12 @@ Checks
 Tests exercise every implemented pin as input/output, reset/disconnected data,
 latched outputs, masked/whole reads, contention and rejected-state preservation,
 both serial-port mux tables, reserved F functions, register-space separation and
-the BCR gate. Synthetic native MOVEP/BCLR/BSET drives C output bits and samples E
+the BCR gate. Every Port C pin also checks explicit floating input/disconnected
+bias, strong override, unobserved withdrawal, unknown output latches, contention
+and reset. Mixed masks, invalid observation preservation, copies, other-port and
+peripheral exclusions are directed cases. Native BRCLR waits on the weak low,
+releases on a strong high and still rejects a subsequently unobserved input.
+Synthetic native MOVEP/BCLR/BSET drives C output bits and samples E
 inputs through the strict bus, then executes RESET and re-enables C outputs to
 verify their nonreset latch. Native mixed-state tests check C (qq and EA) and F
 (pp), previous-bit Carry for all four operations, postincrement once, BRCLR/JSET

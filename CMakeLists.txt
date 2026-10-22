@@ -222,6 +222,11 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-usb-peer.log")
   set_tests_properties(original_usb_peer PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  add_executable(blofeld-usbip-output-timeout-test test/usbip_output_timeout_test.cpp test/usb_endpoint_reset_fixture.cpp)
+  target_include_directories(blofeld-usbip-output-timeout-test PRIVATE src)
+  target_link_libraries(blofeld-usbip-output-timeout-test PRIVATE blofeld_usbip_tcp blofeld_core)
+  add_test(NAME usbip_output_timeout COMMAND blofeld-usbip-output-timeout-test)
+  set_tests_properties(usbip_output_timeout PROPERTIES TIMEOUT 30)
   add_executable(blofeld-usbip-frame-timeout-test test/usbip_frame_timeout_test.cpp test/usb_endpoint_reset_fixture.cpp)
   target_include_directories(blofeld-usbip-frame-timeout-test PRIVATE src)
   target_link_libraries(blofeld-usbip-frame-timeout-test PRIVATE blofeld_usbip_tcp blofeld_core)
@@ -412,6 +417,15 @@ if(BUILD_TESTING)
   add_executable(blofeld-hc12-compare-stack-test test/hc12_compare_stack_test.cpp)
   target_link_libraries(blofeld-hc12-compare-stack-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_compare_stack COMMAND blofeld-hc12-compare-stack-test)
+  add_executable(blofeld-hc12-indexed-test test/hc12_indexed_test.cpp)
+  target_link_libraries(blofeld-hc12-indexed-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME hc12_indexed COMMAND blofeld-hc12-indexed-test)
+  add_executable(blofeld-hc12-minmax-test test/hc12_minmax_test.cpp
+    test/hc12_minmax_fixture.cpp test/hc12_minmax_timing.cpp test/hc12_minmax_machine.cpp)
+  target_link_libraries(blofeld-hc12-minmax-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME hc12_minmax COMMAND blofeld-hc12-minmax-test)
+  set_tests_properties(hc12_minmax PROPERTIES TIMEOUT 180)
+  set_tests_properties(hc12_indexed PROPERTIES TIMEOUT 120)
   add_executable(blofeld-hc12-flash-cycles-test test/hc12_flash_cycles_test.cpp)
   target_link_libraries(blofeld-hc12-flash-cycles-test PRIVATE blofeld_core)
   add_test(NAME hc12_flash_cycles COMMAND blofeld-hc12-flash-cycles-test)
@@ -653,6 +667,17 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-interrupt-test test/dsp_interrupt_test.cpp)
   target_link_libraries(blofeld-dsp-interrupt-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_interrupts COMMAND blofeld-dsp-interrupt-test)
+  add_executable(blofeld-dsp-irqa-test test/dsp_irqa_test.cpp)
+  target_link_libraries(blofeld-dsp-irqa-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_irqa COMMAND blofeld-dsp-irqa-test)
+  add_executable(blofeld-original-dsp-gpio-input-test test/original_dsp_gpio_input_test.cpp)
+  target_link_libraries(blofeld-original-dsp-gpio-input-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_gpio_input
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_gpio_input.py"
+      "$<TARGET_FILE:blofeld-original-dsp-gpio-input-test>"
+      "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+      "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-gpio-input.trace")
+  set_tests_properties(original_dsp_gpio_input PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-dsp-gpio-test test/dsp_gpio_test.cpp)
   target_link_libraries(blofeld-dsp-gpio-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_gpio COMMAND blofeld-dsp-gpio-test)
@@ -771,7 +796,16 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-original-dsp-scheduler-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
-  set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
+  set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250 RUN_SERIAL TRUE)
+  add_executable(blofeld-original-dsp-download-test test/original_dsp_download_test.cpp)
+  target_link_libraries(blofeld-original-dsp-download-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_download COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_download.py"
+    $<TARGET_FILE:blofeld-original-dsp-download-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-download.trace")
+  set_tests_properties(original_dsp_download PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-original-dsp-request-queue-test test/original_dsp_request_queue_test.cpp)
   target_link_libraries(blofeld-original-dsp-request-queue-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_dsp_request_queue COMMAND ${Python3_EXECUTABLE}
@@ -839,6 +873,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-midi.trace")
   set_tests_properties(original_dsp_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-dsp-shi-receive-test test/original_dsp_shi_receive_test.cpp)
+  target_link_libraries(blofeld-original-dsp-shi-receive-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_shi_receive COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_shi_receive.py"
+    $<TARGET_FILE:blofeld-original-dsp-shi-receive-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-shi-receive.trace")
+  set_tests_properties(original_dsp_shi_receive PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-original-dsp-note-test test/original_dsp_note_test.cpp)
   target_link_libraries(blofeld-original-dsp-note-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
@@ -851,7 +894,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-original-dsp-wire-test test/original_dsp_wire_test.cpp)
   target_link_libraries(blofeld-original-dsp-wire-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  foreach(scope IN ITEMS bytes pitch checkpoint)
+  foreach(scope IN ITEMS bytes pitch checkpoint download)
     add_test(NAME original_dsp_wire_${scope} COMMAND ${Python3_EXECUTABLE}
       "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_wire.py"
       $<TARGET_FILE:blofeld-original-dsp-wire-test>
@@ -983,6 +1026,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-timer-test test/mcu_timer_test.cpp)
   target_link_libraries(blofeld-timer-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_timer COMMAND blofeld-timer-test)
+  add_executable(blofeld-pin-routing-test test/mcu_pin_routing_test.cpp)
+  target_link_libraries(blofeld-pin-routing-test PRIVATE blofeld_mcu)
+  add_test(NAME mcu_pin_routing COMMAND blofeld-pin-routing-test)
   add_executable(blofeld-interrupt-test test/interrupt_test.cpp)
   target_link_libraries(blofeld-interrupt-test PRIVATE blofeld_core)
   add_test(NAME mcu_interrupt COMMAND blofeld-interrupt-test)
@@ -1070,6 +1116,9 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-dsp-irqa-test blofeld-original-dsp-gpio-input-test
+    blofeld-original-dsp-download-test
+    blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test
     blofeld-original-midi-forward-test
@@ -1080,6 +1129,7 @@ add_custom_target(quality
     blofeld-usb-device-test blofeld-usbip-management-test blofeld-usb-device-native-test
     blofeld-usbip-session-test blofeld-usbip-tcp-test blofeld-usbip-tcp-native-test
     blofeld-usbip-frame-timeout-test
+    blofeld-usbip-output-timeout-test
     blofeld-usbip-session-boundaries-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test
@@ -1099,6 +1149,8 @@ add_custom_target(quality
     blofeld-hc12-cycle-test
     blofeld-hc12-cycle-extended-test
     blofeld-hc12-compare-stack-test
+    blofeld-hc12-indexed-test
+    blofeld-hc12-minmax-test
     blofeld-hc12-flash-cycles-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
@@ -1113,6 +1165,7 @@ add_custom_target(quality
     blofeld-original-dsp-request-queue-test
     blofeld-original-dsp-workspace-test
     blofeld-original-dsp-peripheral-init-test
+    blofeld-original-dsp-shi-receive-test
     blofeld-original-dsp-wire-test
     blofeld-original-dsp-clocked-wire-test
     blofeld-mcu-clock-checkpoint-test

@@ -66,6 +66,7 @@ private:
   bool interrupt_delay_ = false;
   bool reset_pending_ = false;
   bool active_ = false;
+  bool reset_configuration_changed_ = false;
   std::optional<SpiInputs> pins_;
   std::optional<std::uint32_t> transmit_;
   std::uint32_t shift_ = 0;

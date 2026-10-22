@@ -32,10 +32,14 @@ UsbipTcpServer::Impl::Impl(const UsbipTcpOptions requested)
   if (options.write_budget == 0 || options.write_budget > maximum_write_budget) {
     throw Fault("USB/IP TCP write budget is outside supported bounds");
   }
-  constexpr auto maximum_frame_timeout = std::chrono::hours{24};
+  constexpr auto maximum_timeout = std::chrono::hours{24};
   if (options.frame_timeout <= std::chrono::milliseconds::zero() ||
-      options.frame_timeout > maximum_frame_timeout) {
+      options.frame_timeout > maximum_timeout) {
     throw Fault("USB/IP TCP frame timeout must be positive and at most 24 hours");
+  }
+  if (options.output_timeout <= std::chrono::milliseconds::zero() ||
+      options.output_timeout > maximum_timeout) {
+    throw Fault("USB/IP TCP output timeout must be positive and at most 24 hours");
   }
   if (listener.get() < 0) {
     throw Fault("USB/IP socket: " + std::error_code(errno, std::generic_category()).message());
@@ -141,8 +145,10 @@ std::vector<UsbipConnectionEvent> UsbipTcpServer::poll(
   }
   std::vector<UsbipConnectionEvent> events;
   try {
-    if (now < impl_->last_poll || now > Impl::Time::max() - impl_->options.frame_timeout) {
-      throw Fault("USB/IP host clock moved backwards or cannot represent a frame deadline");
+    const auto timeout = std::max(impl_->options.frame_timeout, impl_->options.output_timeout);
+    if (now < impl_->last_poll || now > Impl::Time::max() - timeout) {
+      throw Fault("USB/IP host clock moved backwards or cannot represent a frame deadline or "
+                  "output deadline");
     }
     impl_->last_poll = now;
     impl_->accept(now, events);
@@ -150,14 +156,18 @@ std::vector<UsbipConnectionEvent> UsbipTcpServer::poll(
       auto &channel = *current;
       auto budget = impl_->options.write_budget;
       const auto before_events = events.size();
-      const bool active = Impl::expire(channel, now, events) &&
-                          Impl::flush(channel, budget, events) &&
-                          impl_->receive(channel, now, events);
+      const bool active =
+          usbip_tcp::expire(channel, now, events) &&
+          usbip_tcp::flush(channel, budget, now, impl_->options.output_timeout, events) &&
+          impl_->receive(channel, now, events);
       if (active && !channel.session->closed() &&
           (!channel.session->imported() || !bus.usb_host_suspended())) {
         channel.session->poll(bus, context);
       }
-      if (active) { static_cast<void>(Impl::flush(channel, budget, events)); }
+      if (active) {
+        static_cast<void>(
+            usbip_tcp::flush(channel, budget, now, impl_->options.output_timeout, events));
+      }
       if (channel.session->closed()) {
         if (events.size() == before_events) {
           events.push_back({.connection = channel.id,

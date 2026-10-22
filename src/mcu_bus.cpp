@@ -111,6 +111,7 @@ void McuBus::reset() {
   ++revision_;
   flash_.reset();
   gpio_.reset();
+  peripheral_pins_.reset();
   clock_.reset();
   sci_.reset();
   timer_.reset();
@@ -417,10 +418,17 @@ unsigned McuBus::oscillator_cycles_until_rti() const {
 }
 
 void McuBus::sync_peripheral_pins() {
-  const auto routing = gpio_.read(hc12::modrr);
+  const PeripheralPinState state{.routing = gpio_.read(hc12::modrr),
+                                 .timer = timer_.pins(),
+                                 .sci_receive = sci_.receiver_enabled(),
+                                 .sci_transmit = sci_.transmit_level()};
+  if (peripheral_pins_ == state) { return; }
+  // A failed rebuild must never leave a reusable key for partially applied pins.
+  peripheral_pins_.reset();
+  const auto routing = state.routing;
   const bool small_package = (routing & 1U) != 0;
   std::array<PinFunction, port_count> ports{};
-  const auto timer_signals = timer_.pins();
+  const auto timer_signals = state.timer;
   for (unsigned channel = 0; channel < 8; ++channel) {
     const auto bit = 1U << channel;
     route_function(ports,
@@ -436,12 +444,12 @@ void McuBus::sync_peripheral_pins() {
           outputs);
     }
   }
-  const auto transmit = sci_.transmit_level();
+  const auto transmit = state.sci_transmit;
   const auto tx_mask = static_cast<std::uint8_t>(small_package ? small_tx : 8);
   const auto rx_mask = static_cast<std::uint8_t>(small_package ? 16 : 4);
   const auto port = small_package ? McuPort::s : McuPort::r;
   const auto sci_signals =
-      PinFunction{.inputs = static_cast<std::uint8_t>(sci_.receiver_enabled() ? 1 : 0),
+      PinFunction{.inputs = static_cast<std::uint8_t>(state.sci_receive ? 1 : 0),
                   .outputs = static_cast<std::uint8_t>(transmit ? 2 : 0),
                   .levels = static_cast<std::uint8_t>(transmit && *transmit ? 2 : 0)};
   route_function(ports, {.source = 1, .pad = {.port = port, .mask = rx_mask}}, sci_signals);
@@ -449,6 +457,7 @@ void McuBus::sync_peripheral_pins() {
   for (unsigned index = 0; index < ports.size(); ++index) {
     gpio_.set_function(static_cast<McuPort>(index), ports[index]);
   }
+  peripheral_pins_ = state;
 }
 
 void McuBus::advance_sci(const unsigned bus_cycles) {

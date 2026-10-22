@@ -5,6 +5,8 @@ DSP56300FM Rev 5 sections 2.3.2.3..2.3.2.8, VBA and REP instruction definitions.
 The manuals remain private inputs identified in doc/hardware/sources.json.
 
 Implemented subset
+External IRQA now has an explicit logical level/falling-edge input and native
+vector10 support; see dsp-irqa.txt for fields, detection and qualified limits.
 X:fffffe (IPRP) accepts SHI[3:2] and TIM[9:8]. Each field encodes disabled,
 IPL0, IPL1 or IPL2 as 00, 01, 10 or 11. SR I1:I0 is the actual native CPU mask:
 mask 0 admits levels 0..2, mask 1 admits 1..2, mask 2 admits 2 and mask 3 none.
@@ -15,7 +17,7 @@ SHI bus error has a priority slot but remains an unsupported I2C/master source.
 Disabled/masked sources are not probed during arbitration or acknowledgement;
 this does not turn unobserved peripheral inputs into known values.
 
-Other IPRP fields/reserved bits and enabled X:ffffff (IPRC) fields fail before
+Other IPRP fields/reserved bits and unimplemented X:ffffff (IPRC) fields fail before
 changing controller state. Software RESET and hardware reset disable priorities;
 software RESET preserves CPU SR and VBA, while hardware reset restores VBA=0.
 Native MOVEC writes preserve VBA's eight read-only zero low bits. The actual

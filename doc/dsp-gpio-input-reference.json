@@ -1,0 +1,28 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "records": [
+    {
+      "record": 107,
+      "space": 0,
+      "address": 16,
+      "words": 2,
+      "sha256": "22089578d5b848a5f8efb09337f0c7da1853f51d81cd60a906c893b69826ce43"
+    },
+    {
+      "record": 109,
+      "space": 0,
+      "address": 9826,
+      "words": 182,
+      "sha256": "88a6198abf9301809729a6e7cfb8134d4a550700b005424968a89895873a98bd"
+    }
+  ],
+  "excluded_request_byte": 244,
+  "expected": {
+    "bytes": 255,
+    "irqs": 255,
+    "rtis": 255,
+    "timestamps": 1,
+    "steps": 4847
+  },
+  "qualification": "Unmodified original IRQA vector and GPIO byte producer under explicit own native map/register/GPIO/priority setup and synchronized logical external pin observations. Ring, guards, input values, timestamp and native frame/RTI are checked independently. The F4 request protocol, original initializer/boot, native MCU sender, physical routing/synchronizer latency, parser dispatch, normal MIDI/audio and full update/recovery remain unqualified."
+}

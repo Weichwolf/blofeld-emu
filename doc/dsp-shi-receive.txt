@@ -1,0 +1,65 @@
+Original DSP SHI receive interrupts and nested idle reset
+
+Reproduce with the local, ignored official Blofeld 1.25 archive:
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-shi-test blofeld-original-dsp-shi-receive-test
+  ctest --test-dir build/strict -R '^(dsp_shi|original_dsp_shi_receive)$' --output-on-failure
+
+The wrapper validates the archive and all original record hashes against
+dsp-voice-reference.json. Only complete original P records 96, 97 and 100 are
+loaded, in source order. No manufacturer program bytes are embedded in tests.
+Detailed native traces and their hash summaries remain ignored build artifacts.
+
+An explicit project-owned ROM caller selects the declared memory mode, calls the
+unchanged original initializer, enables native SHI interrupt priority and supplies
+nontrivial register sentinels. Pin-level CPHA=1 input is buffered while that caller
+has interrupts masked. A real caller instruction unmasks; both stored vector
+words, original handler and RTI execute. No host PC/SR/frame continuation changes,
+replacement original routines or successful peripheral stubs are used.
+
+Eight tagged cases, each also replayed from a trusted native checkpoint: single
+tagged/idle words, three tagged/idle words, mixed tags including 0x800001, ten-word
+FIFO, eleven-word overrun and 64 published words in eight-word batches. Independent
+expectations check exact MISO words, HCSR flags, error/receive vector selection,
+HCSR/HRX/HTX order, accepted/lost FIFO words, every written software-ring cell,
+modulo-64 writer, unchanged reader, caller registers/status/return and unchanged
+original program. Idle stores do not publish the writer; 64 published words alias
+the unchanged reader. Neither behavior is replaced with a safer host queue.
+
+Ten additional cases cover zero/nonzero untagged reset, reset after tagged/idle
+words, full/overrun FIFO discard, reset after ring wrap, repeated resets and
+reception after reset. The unchanged nested initializer runs its complete original
+delay and primes SHI; the handler returns through its original RTI. The raw input
+store precedes reset. Untagged input rewinds both cursors and does not become a
+queued event, including nonzero input; old ring cells remain physically retained.
+Neither that ordering nor FIFO loss is repaired by a host queue.
+
+All eighteen cases run twice from the trusted pre-unmask checkpoint: 396 wire
+words, 392 accepted, four overrun losses, 362 processed, 22 nested resets and 30
+FIFO words discarded by reset; 324 tagged words published, sixteen tagged idle
+words and 256 pending HTX replacements. Every previously qualified tagged setup,
+case and I/O observation remains byte-identical to its prior trace prefix.
+Independent source-path counts are 18 steps/38 nominal units per tagged interrupt
+and 17/36 per zero-payload path, including native vector entry. A nested initializer
+adds 265 steps/278 nominal units: 256 NOPs, seven two-unit MOVEs, a five-unit REP
+and three-unit RTS. BSCLR already has a fixed five-unit nominal estimate on either
+conditional path. The full matrix has 12322 steps/19824 units. Caller unmasking
+instructions are counted separately. These estimates do not qualify silicon timing.
+
+DSP56371UM Rev. 2.1 sections 7.4.1/2/3 and 7.4.5.1 specify the separate HTX/IOSR
+buffers, replacement of pending HTX data, FIFO and clock phase semantics. Original
+bursts of at least three accepted words reproduce the former false HTX overwrite
+fault; replacing pending data is required while retaining the prepared IOSR.
+The peripheral unit test additionally checks different pending/replacement data,
+all clock modes/word widths and the actual underrun-clear sequence.
+
+Limits: the native clock uses explicitly declared 12 MHz EXTAL, reference-boundary
+switching and native instruction/vector estimates. Pin input is untimed and CPU
+execution is paused while buffering; no physical serial rate or board routing is
+inferred. All reset cases present deasserted SS before the handler; changing
+configuration while selected or observing transitional FIFO state is still
+unqualified and fails visibly. The peripheral separately checks pending reset
+component copies; native checkpoints here are at the caller's pre-unmask boundary.
+Original boot/caller provenance, MCU scheduling, full MIDI/audio and physical
+Desktop/Keyboard equivalence remain unproven. Sections 7.4.6.1..5 supply the idle
+reset/control reference; no firmware instruction or original callee is replaced.

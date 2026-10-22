@@ -405,7 +405,8 @@ int run_reference(const Options &config,
               << " busid=1-1 after=" << usb_options.after_ticks
               << " period=" << usb_options.period_ticks
               << " probe-timeout=" << usb_options.probe_timeout_ticks
-              << " frame-timeout-ms=" << usb_options.tcp.frame_timeout.count() << '\n'
+              << " frame-timeout-ms=" << usb_options.tcp.frame_timeout.count()
+              << " output-timeout-ms=" << usb_options.tcp.output_timeout.count() << '\n'
               << std::flush;
   }
   if (!input && !usb) { return machine.run(); }

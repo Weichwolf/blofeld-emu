@@ -1,0 +1,43 @@
+Original DSP runtime download command regression
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-original-dsp-download-test
+  BLOFELD_DSP_ASSEMBLER=/path/to/dsp56300-asm ctest --test-dir build/strict -R '^original_dsp_download$' --output-on-failure
+
+Requires the local official 1.25 ZIP and independent xemu-project assembler 1.0.0
+(dependencies.json). Missing inputs explicitly skip 77. The assembler processes
+only six project-owned generic instruction expectations; their output hash is
+pinned. No original firmware is a normal build input, patched or distributed.
+The wrapper checks all 127 original record identities, then supplies the complete
+original context/template and command records to the strict native DSP bus.
+
+A declared own ROM caller sets linear modifiers, unscaled accumulators and SC=0,
+then uses actual JSR/RTS. The original routine performs its own live P patches,
+decoding, stores and JMP; no host PC/frame continuation or replacement callee is
+used. A loaded own RTS permits checking the real launch context and return.
+
+144 fixed cases contain 1240 original calls, 1088 trailing prefetches, 96 destination
+stores and six launches. Independent expectations check all four P/P/X/Y modes,
+both packet-count commands, exact little-endian own payload and other-bank/boundary
+guards, whole padding-word overshoot and residual bytes. Sequence mismatch still
+decodes and advances old expected state before disabling stores. Matching later
+packets remain disabled until real reconfiguration; actual calls establish the
+127-to-0 wrap. Zero addresses and normal-mode zero groups preserve their distinct
+cursor behavior. Two differing trailing values confirm the read without inventing
+a checksum condition in this routine. 96 header cases check full 28-bit unpacking,
+raw 24-bit state, signed-length MAC/end equations, complete A/B and pointer registers,
+and masked high mode bits. Observed instruction counts are recorded, not a new
+silicon timing oracle. These are directed cases, not fuzzing.
+
+The separate original_dsp_wire_download scope supplies original TIO0 receive
+IRQs/RTIs, byte collection, F0/F7 framing and manufacturer dispatch before reaching
+this same routine (dsp-midi-replay.txt). Its 30 fixed cases retain the explicit
+laboratory timing and include ignored headers, interrupted collection, realtime
+interleaving and an omitted trailing word. The original end marker is then read;
+this path does not invoke the ordinary parameter-checksum validator.
+
+Limits: the direct-command matrix alone has no upstream caller/frame provenance.
+Neither scope establishes cold boot or normal physical MIDI baud/connector
+routing. The regression writes RAM; complete physical flash update/interruption/
+recovery, boot/assets, MIDI voices/audio, pipeline timing and Desktop/Keyboard
+equivalence remain unqualified.

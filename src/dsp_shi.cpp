@@ -25,6 +25,7 @@ void DspShi::reset() {
 }
 
 void DspShi::clear_paths() {
+  reset_configuration_changed_ = false;
   errors_ = 0;
   clear_armed_ = 0;
   interrupt_enable_ = 0;
@@ -55,6 +56,9 @@ bool DspShi::polarity() const {
 }
 
 std::uint32_t DspShi::status() const {
+  if (reset_configuration_changed_) {
+    throw Fault("Unqualified DSP SHI status during reset reconfiguration at X:0xffff91");
+  }
   auto result = (control_ & ~shi::idle) | shi::idle | errors_;
   if (!transmit_) { result |= shi::transmit_empty; }
   if (receive_count_ != 0) { result |= shi::receive_not_empty; }
@@ -77,6 +81,9 @@ std::uint32_t DspShi::read(const std::uint32_t address) {
     }
     case shi::hsar: return slave_address_;
     case shi::hrx: {
+      if (reset_configuration_changed_) {
+        throw Fault("Unqualified DSP SHI HRX read during reset reconfiguration at X:0xffff94");
+      }
       if (receive_count_ == 0) { throw Fault("Undefined empty DSP SHI FIFO read at X:0xffff94"); }
       const auto result = receive_[receive_head_];
       receive_head_ = (receive_head_ + 1) % receive_.size();
@@ -117,8 +124,12 @@ void DspShi::write(const DspWordWrite access) {
       return;
     }
     case shi::htx:
+      if (reset_configuration_changed_) {
+        throw Fault("Unqualified DSP SHI HTX write during reset reconfiguration at X:0xffff93");
+      }
       if (!active_) { throw Fault("Unverified DSP SHI HTX write during reset at X:0xffff93"); }
-      if (transmit_) { throw Fault("DSP SHI HTX overwrite before HTDE at X:0xffff93"); }
+      // DSP56371UM 7.4.2: writing before HTDE overwrites pending HTX data.
+      // The separately prepared/in-flight IOSR word is retained.
       transmit_ = value;
       errors_ &= ~(clear_armed_ & shi::underrun);
       clear_armed_ &= ~shi::underrun;
@@ -144,19 +155,28 @@ void DspShi::write_control(const std::uint32_t value) {
   if (reset_pending_) {
     throw Fault("DSP SHI individual-reset cycle has not elapsed at X:0xffff91");
   }
-  if (active_ && ((value ^ control_) & configuration_mask) != 0) {
+  const bool enabled = (value & shi::hen) != 0;
+  const bool changed = ((value ^ control_) & configuration_mask) != 0;
+  if (active_ && enabled && changed) {
     throw Fault("DSP SHI mode change requires individual reset at X:0xffff91");
+  }
+  if (active_ && changed && (!pins_ || pins_->selected)) {
+    throw Fault("DSP SHI reset reconfiguration requires known HBUSY=0 at X:0xffff91");
   }
   constexpr unsigned request_mask = 0x180;
   if (active_ && pins_ && pins_->selected && ((value ^ control_) & request_mask) != 0) {
     throw Fault("DSP SHI HREQ configuration change requires HBUSY=0 at X:0xffff91");
   }
-  const bool enabled = (value & shi::hen) != 0;
   if (!active_ && enabled && pins_ && pins_->selected) {
     throw Fault("Unverified DSP SHI enable with SS already asserted at X:0xffff91");
   }
   if (!active_ && enabled) { active_ = true; }
-  if (active_ && !enabled) { reset_pending_ = true; }
+  if (active_ && !enabled) {
+    // HCSR fields are writable; HEN clear takes effect after one instruction cycle.
+    // Idle HM changes are permitted (7.4.6.3); data-path transients remain unqualified.
+    reset_pending_ = true;
+    reset_configuration_changed_ = changed;
+  }
   const auto requested = value & shi::interrupt_mask;
   interrupt_enable_ |= requested;
   interrupt_delay_ = interrupt_enable_ != requested;

@@ -65,6 +65,24 @@ MID and records before native execution, and checks complete trace counters.
 Missing private firmware is explicit skip77. Manufacturer bytes and run traces
 remain local; the public fixture supplies only own setup and declared inputs.
 
+The separate original_dsp_wire_download scope adds the complete original context
+and download-command records. It sends actual TIO0 levels through the original
+Timer0 setup/vectors/IRQs/RTIs and ring consumer. Firmware alone appends the SysEx
+buffer and reaches its manufacturer dispatcher and runtime download routine.
+Thirty fixed cases send 1050 bytes through 9450 IRQs/RTIs: 54 complete frames and
+one abandoned prefix, 940 actual appends, 51 download entries, 96 P/X/Y stores and
+six real launches to a downloaded own RTS with the original nested caller frame.
+All four P/P/X/Y modes and both packet count commands retain exact own payload,
+padding overshoot and other-bank/boundary guards. Wrong manufacturer/product/ID,
+the distinct configured-ID and hardcoded download-ID checks, an interleaved F8,
+delayed F7 and restart through a new F0 are checked without host buffer/PC patches.
+The original path accepts both differing trailing values and an omitted one;
+the latter reads the original M4 end marker. This does not establish a checksum
+policy for other commands or physical update safety. The independently qualified
+producer path retires 92 instructions per ordinary byte and two additional ones
+for F8: 96602 for this matrix. The existing explicit 3249-edge laboratory timing
+is retained; this scope does not qualify normal 31250-baud decoding.
+
 Reproduce with the separately supplied official firmware archive:
   cmake --build --preset strict --target blofeld-original-dsp-wire-test
   ctest --test-dir build/strict -R '^original_dsp_wire_' --output-on-failure

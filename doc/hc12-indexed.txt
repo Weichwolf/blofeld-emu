@@ -1,0 +1,56 @@
+HC12 indexed address qualification
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-hc12-indexed-test
+  ctest --test-dir build/strict -R '^hc12_indexed$' --output-on-failure
+
+hc12_indexed executes own literal LDAA/LDD/STAA/STD and LEAX/LEAY/LEAS encodings
+through native SLEIGH and the production Hc12CycleBus. Independent arithmetic
+calculates effective addresses, indirect pointer locations, source accumulator
+values, updated base/destination registers, PC and all defined CCR bits. Literal
+manual tables specify each operand/pointer width and exact r/R/w/W/I/P/O/f slot;
+no native disassembly, address helper, assembler or round trip supplies these
+expectations. LEA must issue no data read. Stores must not preread their target.
+
+The fixed matrix executes every one of the 256 indexed postbytes. It enumerates
+all signed five-bit and nine-bit offsets, every unsigned A/B offset, every
+permitted pre/post increment/decrement by 1..8 for X/Y/SP, and both CCR extremes
+plus complementary mixed-bit seeds. Sixteen-bit and D controls use declared
+boundary vectors; X/Y/SP bases include 0, 1 and ffff. PC-relative cases use the
+end of the complete instruction. Indirect modes execute genuine word reads
+before the separate byte/word operand. LEA checks also include a destination
+that is itself the auto-updated base: a post-update is overwritten by loading
+the old effective address, as specified in the LEA instruction entries.
+
+All flat synthetic memory is explicitly initialized to an address-derived byte
+pattern. Test input writes can overlap code; expectations retain those actual
+own instruction bytes. This is an internal, un-stretched test memory contract,
+not a new RAM/reset default, Flash timing rule or physical external bus model.
+
+Sixteen-bit effective-address addition wraps modulo 65536. A two-byte data or
+pointer transfer starting at ffff remains unqualified by the existing Bus API.
+Those cases require the actual range/PC/CCR diagnostic, its exact manual cycle
+prefix, unchanged entire memory and quarantine on retry. A fresh coordinated
+CPU/bus fixture is constructed afterward; no guard is weakened and no low byte
+is invented at address zero. Byte accesses and LEA still check valid address
+arithmetic at this boundary. No rejected word is counted as a successful data
+transfer or a measured hardware result.
+
+Two isolated local historical-specification reversions independently make the
+new matrix fail: the missing indexed word dereference omits a required operand
+cycle; the old PC-relative nine-bit grouping reads the wrong data. The production
+SLA is restored byte-for-byte before positive checks. Private inputs/results
+retain the exact source, decoder and executable hashes; no reversion is shipped.
+
+The matrix has 151488 native cases, including 816 strict word-wrap rejections.
+This is a deterministic sanitizer regression; it generates no fuzz inputs and
+opens no physical device. Instruction-boundary snapshots, arbitrary operand
+values, the full 16-bit offset domain, instruction/prefetch wrapping, other
+opcodes, stretched/physical timing and complete original board boot remain
+separate requirements. No MCU/DSP, MIDI/audio or hardware-equivalence claim
+follows from this component check.
+
+Primary reference: HCS12COREUG.pdf (S12CPU15UG V1.2), sections 4.2.7.1..8,
+Table 4-2 and LDAA/LDD/STAA/STD/LEAS/LEAX/LEAY instruction entries; S12CPUV2
+section 6.6 supplies the reference cycle alphabet. Files, official URLs, sizes
+and hashes are pinned in hardware/sources.json.

@@ -1,0 +1,42 @@
+DSP56371 logical external IRQA input
+
+  ctest --test-dir build/strict -R '^(dsp_irqa|dsp_interrupts|original_dsp_gpio_input)$' --output-on-failure
+
+Primary references: DSP56300FM Rev5 sections 2.3.2.1/2.3.2.3, figure 2-2,
+tables 2-3..2-6; DSP56371UM Rev2.1 chapter 4 and table 2-3. The PDFs remain local,
+with URLs/sizes/hashes in hardware/sources.json.
+
+IPRC X:ffffff accepts IAL[1:0] and IAL2 (bits 0..2). Priority encoding 00 disables;
+01/10/11 select IPL 0/1/2. IAL2=0 selects active-low level, 1 falling-edge mode.
+IRQA uses relative vector 10 and precedes SHI/TIM at equal IPL. CPU mask gating
+uses the same independently tested SR I1:I0 rules as other interrupt sources.
+Other IPRC fields remain unsupported, including the original runtime's DMA1
+priority in 4006. Supporting IRQA alone does not qualify that initializer.
+
+DspBus::observe_irqa supplies an explicit logical synchronized pin level;
+nullopt withdraws its qualification. No inactive/high input is a board default.
+Disabled/masked sources do not probe unknown pins. Detection is independent of
+the CPU mask while priority is enabled: a known high-to-low observation latches
+an edge, which survives pin release and clears only on real vector service.
+A held-low level remains pending after service. Disabled detection stays reset;
+re-enabling an already low edge input cannot invent a preceding transition.
+Both reset types disable IPRC and clear detection while retaining external
+observations. Trusted machine checkpoints copy pin and pending-edge state.
+
+Unknown level or edge history fails when needed. A known captured edge remains
+serviceable after input withdrawal, but its acknowledgement does not fabricate
+later observations. Changing trigger mode while priority remains enabled is
+unqualified and rejects without mutation; disable before changing mode.
+The existing conservative admitted/reference-interrupt contract requires the
+selected source and priority to remain valid until acknowledgement. Withdrawal
+within a suspended vector access rejects; it does not assert silicon cancels an
+already fetched level interrupt. Physical synchronization, recognition/fetch
+latency, mode-switch pipeline effects and MODA boot straps remain unqualified.
+No IRQB/C/D, DMA, NMI or other core source is silently enabled.
+
+Checks cover 256 external/SHI/TIM priority/mask tuples, actual timer arbitration,
+masked unknown input, level repeat/release, edge retention/acknowledgement,
+disabled detection, withdrawal/history, reset, unsupported fields/live-mode
+changes, native two-word fast and long JSR/RTI entry, missing second-vector
+rejection before acknowledgement, and pending-edge checkpoint replay. These are
+fixed offline cases; no fuzz campaign or physical device traffic is run.

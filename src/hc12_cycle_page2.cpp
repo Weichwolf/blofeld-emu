@@ -3,7 +3,9 @@
 #include "blofeld/hc12_cycles.hpp"
 #include "hc12_cycle_internal.hpp"
 
+#include <array>
 #include <cstdint>
+#include <string_view>
 
 namespace blofeld::detail {
 namespace {
@@ -25,6 +27,74 @@ constexpr unsigned op_edivs = 0x14;
 constexpr unsigned op_idivs = 0x15;
 constexpr unsigned op_sba = 0x16;
 constexpr unsigned op_cba = 0x17;
+
+constexpr unsigned first_minmax = 0x18;
+constexpr unsigned last_minmax = 0x1f;
+
+struct MinmaxSlots {
+  std::string_view byte_read;
+  std::string_view word_read;
+  std::string_view byte_write;
+  std::string_view word_write;
+  unsigned bytes;
+};
+
+struct MinmaxEncoding {
+  std::uint8_t post;
+  unsigned opcode;
+};
+
+Hc12CyclePlan minmax_plan(const MinmaxEncoding encoding) {
+  const auto post = encoding.post;
+  const auto opcode = encoding.opcode;
+  // S12CPUV2 min/max tables include the leading page-two fetch O.
+  constexpr std::array<MinmaxSlots, 5> slots{{{.byte_read = "OrPf",
+                                               .word_read = "ORPf",
+                                               .byte_write = "OrPw",
+                                               .word_write = "ORPW",
+                                               .bytes = 3},
+                                              {.byte_read = "OrPO",
+                                               .word_read = "ORPO",
+                                               .byte_write = "OrPwO",
+                                               .word_write = "ORPWO",
+                                               .bytes = 4},
+                                              {.byte_read = "OfrPP",
+                                               .word_read = "OfRPP",
+                                               .byte_write = "OfrPwP",
+                                               .word_write = "OfRPWP",
+                                               .bytes = 5},
+                                              {.byte_read = "OfIfrPf",
+                                               .word_read = "OfIfRPf",
+                                               .byte_write = "OfIfrPw",
+                                               .word_write = "OfIfRPW",
+                                               .bytes = 3},
+                                              {.byte_read = "OfIPrPf",
+                                               .word_read = "OfIPRPf",
+                                               .byte_write = "OfIPrPw",
+                                               .word_write = "OfIPRPW",
+                                               .bytes = 5}}};
+  constexpr unsigned extended_mask = 0xe4;
+  constexpr unsigned extended_index = 0xe0;
+  constexpr unsigned indirect_mask = 0xe7;
+  constexpr unsigned indirect_d = 0xe7;
+  unsigned mode = 0;
+  if ((post & extended_mask) == extended_index) {
+    const auto tail = post & 3U;
+    if (tail < 2) {
+      mode = 1;
+    } else {
+      mode = tail == 2 ? 2U : 4U;
+    }
+  } else if ((post & indirect_mask) == indirect_d) {
+    mode = 3;
+  }
+  const auto row = slots.at(mode);
+  const bool word = (opcode & 2U) != 0;
+  if ((opcode & 4U) != 0) {
+    return {.slots = word ? row.word_write : row.byte_write, .bytes = row.bytes};
+  }
+  return {.slots = word ? row.word_read : row.byte_read, .bytes = row.bytes};
+}
 
 std::uint8_t code_byte(const Bus &bus, const ExecutionContext context, const unsigned offset) {
   return bus.peek(static_cast<std::uint16_t>((context.pc + offset) & address_mask));
@@ -85,6 +155,9 @@ Hc12CyclePlan hc12_page2_cycle_plan(const Bus &bus, const ExecutionContext conte
   const unsigned opcode = code_byte(bus, context, 1);
   if (opcode <= last_word_move || (opcode >= byte_moves && opcode <= last_byte_move)) {
     return move_plan(bus, context, opcode);
+  }
+  if (opcode >= first_minmax && opcode <= last_minmax) {
+    return minmax_plan({.post = code_byte(bus, context, 2), .opcode = opcode});
   }
   if ((opcode & opcode_group_mask) == branch_base) {
     return {.slots = hc12_cycle_branch(opcode & low_nibble, context) ? "OPPP" : "OPO", .bytes = 4};

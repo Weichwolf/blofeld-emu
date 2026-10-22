@@ -40,6 +40,11 @@ DSP56371 memory and peripheral scope
   ROM protection and RAM retention on external reset are modeled.
 - The initial 4K P / 36K X / 48K Y RAM map and 64K P / 32K X / 32K Y ROM windows
   follow DSP56371UM chapter 3. Missing ROM contents fail, including X/Y tables.
+- ROM software varies with the chip code-version letter. DSPDECODERMSC lists
+  DSPB56371 as generic with MiniSA/PPP and other variants with different software
+  bundles. DSPA56371SUM documents Audio SA. Both sources are pinned in
+  hardware/sources.json. Actual Desktop/Keyboard chip variants and matching ROM
+  byte identities remain unverified; missing contents still fail explicitly.
 - MS=1, MSW1=MSW0=1 switches the upper 8K X RAM to P, preserving physical contents.
   The three instruction-cycle delay is explicit. Affected accesses before supplied
   switch time fail. Other switched layouts remain unsupported.
