@@ -39,6 +39,8 @@ open; firmware and peripheral boundaries are not relaxed.
 dsp-ring-audio.txt additionally checks direct per-half delivery of these decoded
 frames through AudioRuntime to an isolated host monitor. Playback waits for EOF;
 this does not establish realtime production or original board startup.
+dsp-idle-midi.txt adds ten-block streams with incoming bytes during the real
+equal-half wait, independent parser/smoothing/output checks and private audio.
 
   cmake --build --preset strict --target blofeld-original-dsp-repeat-test
   ctest --test-dir build/strict --output-on-failure -R '^original_dsp_repeat$'

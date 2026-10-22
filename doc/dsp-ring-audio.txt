@@ -37,3 +37,8 @@ traces/logs, complete monitor PCM and result counts. The whole-test timeout cove
 eight native runs; each run retains its bounded instruction and control deadlines.
 Missing private references/tools skip; changed identities or diagnostics fail.
 No automatic fuzzing runs.
+
+The separate original_dsp_ring_midi_audio matrix retains all eight contexts with
+ten blocks per source and CC7 changes during real idle waits. Its1280 exact
+monitor frames,192 idle polls,72 trace corruptions, eight monitor corruptions
+and eight rejected foreign claims share the same direct path; see dsp-idle-midi.txt.

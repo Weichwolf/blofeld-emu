@@ -31,26 +31,30 @@ void reject_other_source(blofeld::PcmFrameSink &output) {
 
 int main(const int count, char **arguments) {
   try {
-    if ((count != 4 && count != 5) || !std::string_view(arguments[3]).starts_with("unix:")) {
+    const bool midi = count == 6 && std::string_view(arguments[5]) == "midi";
+    if ((count != 4 && count != 5 && !midi) ||
+        !std::string_view(arguments[3]).starts_with("unix:")) {
       throw blofeld::Fault("Expected firmware, private trace and explicit private audio server");
     }
-    const auto index = selected_case(count == 5 ? arguments[4] : "0");
+    const auto index = selected_case(count >= 5 ? arguments[4] : "0");
     // Declared playback rate for laboratory edge ordinals; not a physical clock.
     constexpr unsigned playback_rate = 48000;
     constexpr unsigned reference_timebase = 24576000;
-    constexpr unsigned expected_frames = 96;
+    constexpr unsigned unchanged_frames = 96;
+    constexpr unsigned midi_frames = 160;
+    const auto expected_frames = midi ? midi_frames : unchanged_frames;
     blofeld::AudioRuntime output({.output = {.pcm = {.frame_sync_high = false},
                                              .timebase_hz = reference_timebase,
                                              .sample_rate = playback_rate,
                                              .server = arguments[3]}});
-    const auto result =
-        blofeld::test::run_voice_test(3,
-                                      arguments,
-                                      false,
-                                      true,
-                                      false,
-                                      {.direct = &output, .stream_case_index = index},
-                                      blofeld::test::VoiceInput::stream);
+    const auto result = blofeld::test::run_voice_test(
+        3,
+        arguments,
+        false,
+        true,
+        false,
+        {.direct = &output, .stream_case_index = index},
+        midi ? blofeld::test::VoiceInput::stream_midi : blofeld::test::VoiceInput::stream);
     if (result != 0) { return result; }
     reject_other_source(output);
     output.finish();

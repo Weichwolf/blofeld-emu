@@ -9,12 +9,12 @@ class PcmFrameSink;
 
 namespace blofeld::test {
 struct VoicePcmCapture;
-enum class VoiceInput : std::uint8_t { none, controllers, foreground, stream };
+enum class VoiceInput : std::uint8_t { none, controllers, foreground, stream, stream_midi };
 
 // Output objects stay outside peripheral snapshots and must outlive the call.
 // A direct sink selects one default eight-block stream; capture retains the full
 // matrix. Choose at most one; neither option changes the original PCM path.
-// Stream mode selects one six-block repeating-ring case for direct delivery;
+// Stream modes select one six-block or ten-block idle-MIDI ring for direct delivery;
 // its full matrix remains available without an external sink.
 struct VoiceOutputOptions {
   PcmFrameSink *direct = nullptr;

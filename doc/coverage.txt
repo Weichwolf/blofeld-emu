@@ -1010,6 +1010,13 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           eight rejected foreign-source claims
                                           and40 trace/monitor corruption controls.
                                           Separate TSan (dsp-ring-audio.txt).
+                                          Idle MIDI adds192 actual equal-half
+                                          polls, fragmented/running/coalesced CC7,
+                                          wrong-channel rejection and ring wrap:
+                                          80 bodies/1280 frames; eight direct
+                                          source-owned workers match1280 monitor
+                                          frames in ASan/UBSan and separate TSan
+                                          (dsp-idle-midi.txt).
                                           Short source plays on EOF; realtime
                                           boot/MIDI/audio remain unqualified.
                                           Original scheduler primitives check

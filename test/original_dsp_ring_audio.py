@@ -16,6 +16,8 @@ from dsp_voice_model import signed, waveform_model
 from dsp_voice_validation import new_totals, validate_stream
 from host_audio import require, service, terminate, until
 from original_dsp_foreground import row
+from original_dsp_idle_midi import (BLOCKS as MIDI_BLOCKS, IdlePipeline,
+                                   negative_controls as midi_negative_controls)
 from original_dsp_repeat import BLOCKS, Pipeline, SOUND, negative_controls
 from original_dsp_voice import original_records
 from original_dsp_voice_audio import compare
@@ -26,14 +28,16 @@ IDENTITIES = tuple((kind, mode, '127', str(int(kind == 'sync')), routing)
                                                                ('0', '1'), ('0', '1')))
 
 
-def expected_payload(text, xdata, ydata, program, identity):
+def expected_payload(text, xdata, ydata, program, identity, midi=False):
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
     require(len(cases) == 1 and tuple(cases[0][:5]) == identity,
             'Direct audio must select exactly the requested original ring context')
     varied, twos = identity[3] == '1', identity[1] == '1'
 
-    class Capture(Pipeline):
+    base = IdlePipeline if midi else Pipeline
+
+    class Capture(base):
         def __init__(self):
             super().__init__(varied, twos, program)
             self.payload = bytearray()
@@ -52,17 +56,21 @@ def expected_payload(text, xdata, ydata, program, identity):
     require([ydata[0x1e25 + index] & 255 for index in (129, 145)] == [0, 0],
             'Changed original factory FX Mix0/0 profile')
     totals = new_totals()
+    blocks = MIDI_BLOCKS if midi else BLOCKS
     validate_stream(stream, xdata, ydata, {twos: waveform_model(ydata, twos)}, identity,
-                    totals, block_count=BLOCKS, before_block=capture.before,
+                    totals, block_count=blocks, before_block=capture.before,
                     after_block=capture.after, sound_base=SOUND)
-    require(totals['blocks'] == 6 and totals['dependent_blocks'] == 5 and
-            capture.nonzero > 0 and len(capture.payload) == 96 * 8,
+    require(totals['blocks'] == blocks and totals['dependent_blocks'] == blocks - 1 and
+            capture.nonzero > 0 and len(capture.payload) == blocks * 16 * 8,
             'Every original ring block must reach the independent audio oracle')
+    if midi:
+        require(capture.idle_polls == 24, 'Every MIDI source must execute 24 real idle polls')
     return bytes(capture.payload)
 
 
-def render(binary, firmware, trace, server, env, directory, index, xdata, ydata, program):
-    result = subprocess.run([str(binary), str(firmware), str(trace), server, str(index)],
+def render(binary, firmware, trace, server, env, directory, index, xdata, ydata, program, midi):
+    result = subprocess.run([str(binary), str(firmware), str(trace), server, str(index),
+                             *(['midi'] if midi else [])],
                             env=env, capture_output=True, text=True, check=False,
                             timeout=240 if env.get('BLOFELD_TEST_SANITIZER') == 'thread' else 90)
     diagnostics = result.stdout + result.stderr
@@ -73,16 +81,17 @@ def render(binary, firmware, trace, server, env, directory, index, xdata, ydata,
             'Direct original ring audio failed: ' + diagnostics)
     require(re.findall(r'^direct-ring-frames=(\d+) playback-rate=48000 '
                        r'physical-clock=unqualified source-reuse-rejected=1$',
-                       result.stdout, re.M) == ['96'],
-            'Every worker must retain one source and accept/write/finish 96 decoded frames')
+                       result.stdout, re.M) == [str((MIDI_BLOCKS if midi else BLOCKS) * 16)],
+            'Every worker must retain one source and accept/write/finish all decoded frames')
     text = trace.read_text()
     identity = IDENTITIES[index]
-    expected = expected_payload(text, xdata, ydata, program, identity)
+    expected = expected_payload(text, xdata, ydata, program, identity, midi=midi)
 
     def validate(changed, xdata, ydata, program):
-        return expected_payload(changed, xdata, ydata, program, identity)
+        return expected_payload(changed, xdata, ydata, program, identity, midi=midi)
 
-    negative_controls(text, xdata, ydata, program, validator=validate)
+    controls = midi_negative_controls if midi else negative_controls
+    controls(text, xdata, ydata, program, validator=validate)
     return expected
 
 
@@ -100,7 +109,9 @@ def monitor_controls(recorded, expected):
             raise ValueError('Private monitor accepted a corrupted original ring stream')
 
 
-def playback(binary, firmware, artifacts, directory, xdata, ydata, program):
+def playback(binary, firmware, artifacts, directory, xdata, ydata, program, midi):
+    blocks = MIDI_BLOCKS if midi else BLOCKS
+    count = len(IDENTITIES)
     with service(directory) as (daemon, server, env):
         recorded = directory / 'monitor.pcm'
         expected = []
@@ -118,7 +129,7 @@ def playback(binary, firmware, artifacts, directory, xdata, ydata, program):
                 until(ready, daemon, 'the original ring matrix monitor')
                 for index in range(len(IDENTITIES)):
                     expected.append(render(binary, firmware, artifacts / f'case-{index}.trace',
-                                           server, env, directory, index, xdata, ydata, program))
+                                           server, env, directory, index, xdata, ydata, program, midi))
                 time.sleep(0.1)
             finally:
                 terminate(monitor)
@@ -126,14 +137,17 @@ def playback(binary, firmware, artifacts, directory, xdata, ydata, program):
         actual = recorded.read_bytes()
         offsets = compare(actual, expected)
         monitor_controls(actual, expected)
-        return {'passed': True, 'original_foreground_blocks': 48, 'contexts': IDENTITIES,
-                'host_streams': 8, 'accepted_frames': 768, 'exact_host_frames': 768,
-                'rejected_foreign_sources': 8, 'oracle_negative_controls': 32,
+        return {'passed': True, 'original_foreground_blocks': count * blocks, 'contexts': IDENTITIES,
+                'host_streams': count, 'accepted_frames': count * blocks * 16,
+                'exact_host_frames': count * blocks * 16,
+                'rejected_foreign_sources': count,
+                'oracle_negative_controls': count * (9 if midi else 4),
+                'idle_midi': midi, 'idle_polls': count * 24 if midi else 0,
                 'monitor_negative_controls': 8, 'monitor_offsets_bytes': offsets,
                 'reference_sample_rate': 48000, 'reference_timebase': 24576000,
                 'fuzz_execution': False, 'physical_audio': False,
                 'scope': 'Eight independently initialized original foreground/repeating DMA/'
-                'ESAI sources, each delivering 96 real decoded frames directly to its own '
+                'ESAI sources, each delivering real decoded frames directly to its own '
                 'source-owned AudioRuntime and exact private monitor. Explicit untimed '
                 'admissions, paused-core phases, Effects Off and declared RAM/held entry. '
                 'Short corked sources start on EOF. No calibrated time, sustained RT, '
@@ -141,7 +155,9 @@ def playback(binary, firmware, artifacts, directory, xdata, ydata, program):
 
 
 def main():
-    binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:])
+    midi = sys.argv[4:] == ['midi']
+    require(len(sys.argv) == 4 or midi, 'Expected binary, firmware, artifacts and optional midi')
+    binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:4])
     artifacts.mkdir(parents=True, exist_ok=True)
     report = artifacts / 'result.json'
     report.unlink(missing_ok=True)
@@ -158,9 +174,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix='bf-ring-matrix-') as temporary:
         directory = Path(temporary)
         try:
-            result = playback(binary, firmware, artifacts, directory, xdata, ydata, program)
+            result = playback(binary, firmware, artifacts, directory, xdata, ydata, program, midi)
             report.write_text(json.dumps(result, indent=2) + '\n')
-            print('Verified eight source-owned workers, 768 original ring frames and '
+            print(f"Verified eight source-owned workers, {result['exact_host_frames']} original ring frames and "
                   'all source/payload controls; full boot/MIDI/realtime remain open.')
         finally:
             for file in directory.rglob('*'):
