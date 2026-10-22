@@ -1,0 +1,45 @@
+{
+  "local_directory": "doc/local/startup-dsp-diagnosis",
+  "qualification": "Primary author photographs of third-party Desktop and Keyboard boards. No user-device identification, readable chip/ROM identity, electrical continuity or hardware validation is established. Keep all image assets local.",
+  "files": [
+    {
+      "file": "blofeld-desktop-mainboard-deepsonic.jpg",
+      "source": "https://live.staticflickr.com/65535/50013232138_ce677c8c61_o.jpg",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Waldorf_Blofeld_Desktop_(50013232138).jpg",
+      "author": "deepsonic",
+      "license": "CC-BY-SA-2.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+      "bytes": 503742,
+      "sha256": "03e2ec7de1a79a96472a429988ff81274cee28775bf0ecff31ad17a9a99717d1"
+    },
+    {
+      "file": "blofeld-desktop-components-deepsonic.jpg",
+      "source": "https://live.staticflickr.com/65535/50013762571_5ea45bf873_o.jpg",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Waldorf_Blofeld_Desktop_(50013762571).jpg",
+      "author": "deepsonic",
+      "license": "CC-BY-SA-2.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+      "bytes": 627704,
+      "sha256": "ac25e7c4245179952b4fd6a4d73e01ccccfa00409b30f7144dd6fa54146a5051"
+    },
+    {
+      "file": "blofeld-desktop-front-deepsonic.jpg",
+      "source": "https://upload.wikimedia.org/wikipedia/commons/a/a3/Waldorf_Blofeld_Desktop_%2850014025297%29.jpg",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Waldorf_Blofeld_Desktop_(50014025297).jpg",
+      "author": "deepsonic",
+      "license": "CC-BY-SA-2.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+      "bytes": 807855,
+      "sha256": "e70c3a3c2ce853f2661cd0afd9c525e2a2e4abd7fcecd94e59f3b4926d7185b8"
+    },
+    {
+      "file": "untergeek-img3922.jpeg",
+      "source": "https://www.untergeek.de/wp-content/uploads/2016/01/img_3922.jpeg",
+      "source_page": "https://www.untergeek.de/2016/01/fixing-a-waldorf-blofelds-jumpy-encoders/",
+      "author": "untergeek",
+      "license": "No redistribution grant established; local reference only.",
+      "bytes": 1689028,
+      "sha256": "1d243ed098ec02d6cf8611b799b2b9bb3c22fb9d6d4af2c229a54a019f691f25"
+    }
+  ]
+}

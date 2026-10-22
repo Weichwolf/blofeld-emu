@@ -94,7 +94,8 @@ void McuGpio::reset() {
 void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
   const auto index = port_index(port);
   if ((drive.mask & drive.floating) != 0 || (drive.levels & ~drive.mask) != 0 ||
-      ((drive.mask | drive.floating) & ~specs[index].valid) != 0) {
+      (drive.unknown & (drive.mask | drive.floating)) != 0 ||
+      ((drive.mask | drive.floating | drive.unknown) & ~specs[index].valid) != 0) {
     throw Fault("Invalid MCU GPIO external drive masks");
   }
   ports_[index].external = drive;
@@ -102,8 +103,10 @@ void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
 
 void McuGpio::update_drive(const McuPort port, const std::uint8_t affected, const PinDrive drive) {
   const auto index = port_index(port);
-  if ((affected & ~specs[index].valid) != 0 || ((drive.mask | drive.floating) & ~affected) != 0 ||
-      (drive.mask & drive.floating) != 0 || (drive.levels & ~drive.mask) != 0) {
+  if ((affected & ~specs[index].valid) != 0 ||
+      ((drive.mask | drive.floating | drive.unknown) & ~affected) != 0 ||
+      (drive.unknown & (drive.mask | drive.floating)) != 0 || (drive.mask & drive.floating) != 0 ||
+      (drive.levels & ~drive.mask) != 0) {
     throw Fault("Invalid MCU GPIO partial external drive mask");
   }
   const auto previous = ports_[index].external;
@@ -111,7 +114,8 @@ void McuGpio::update_drive(const McuPort port, const std::uint8_t affected, cons
       port,
       {.mask = static_cast<std::uint8_t>((previous.mask & ~affected) | drive.mask),
        .levels = static_cast<std::uint8_t>((previous.levels & ~affected) | drive.levels),
-       .floating = static_cast<std::uint8_t>((previous.floating & ~affected) | drive.floating)});
+       .floating = static_cast<std::uint8_t>((previous.floating & ~affected) | drive.floating),
+       .unknown = static_cast<std::uint8_t>((previous.unknown & ~affected) | drive.unknown)});
 }
 
 void McuGpio::set_function(const McuPort port, const PinFunction function) {
@@ -205,7 +209,8 @@ PinSample McuGpio::resolve(const McuPort port, const std::uint8_t requested) con
       state.external.floating & pull_enable & ~static_cast<unsigned>(direction) & ~tied;
   known |= weak;
   value |= weak & ~static_cast<unsigned>(state.pull_down);
-  known = known & ~unknown_output & requested & specs[index].valid;
+  known = known & ~unknown_output & ~static_cast<unsigned>(state.external.unknown) & requested &
+          specs[index].valid;
   return {.known = static_cast<std::uint8_t>(known),
           .levels = static_cast<std::uint8_t>(value & known)};
 }

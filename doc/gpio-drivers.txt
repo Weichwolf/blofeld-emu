@@ -1,0 +1,33 @@
+Explicit unknown GPIO peer drivers
+
+PinDrive and DspGpioDrive distinguish four observations. The mask/levels fields
+describe known strong peer values. Unknown marks strong drivers whose level has
+not been observed. Floating marks explicitly released pins; absent bits remain
+unobserved. Known, unknown and floating masks must be disjoint and in range.
+
+A driven-unknown peer makes the shared pad unknown even beside a known local
+output or enabled input pull. It cannot be replaced by zero, a weak bias or a
+floating observation. Local output-intent getters remain independent of peer
+voltages. Architectural MCU output-latch reads retain their existing semantics;
+an input read needing an unknown bit fails with its address and PC/CCR context.
+DSP pad-dependent data reads and peripheral validation reject unknown levels.
+Known opposing strong drivers still fail immediately. No grace period, hidden
+buffer gate, automatic acknowledgement or fixed firmware response is introduced.
+
+Reset retains external observations; copies and MCU partial updates preserve
+unknown peer bits. Reference MIDI and SHI-return route guards include unknown
+drivers when checking explicit route ownership. The text input grammar is
+unchanged; this field serves programmatic board coupling.
+
+The original request routine creates a direction-before-latch transition in a
+declared caller/RAM fixture. Keeping it unknown permits faithful observation of
+that intermediate state; it does not establish the actual board wiring, weak
+bias transfer, electrical timing or a complete original transaction/boot.
+
+  cmake --build --preset strict --target blofeld-gpio-unknown-driver-test blofeld-gpio-output-test blofeld-dsp-gpio-test
+  ctest --test-dir build/strict --output-on-failure -R '^(gpio_unknown_drivers|mcu_gpio_outputs|dsp_gpio)$'
+
+Fixed synthetic expectations cover strong/weak/unknown precedence, independent
+local intent, release, reset, partial updates, clone independence, malformed
+masks, contextual unknown-read faults and retained known-contention rejection.
+No manufacturer code/data is embedded. No fuzzing or physical traffic runs.

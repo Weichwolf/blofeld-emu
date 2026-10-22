@@ -9,6 +9,8 @@ Unknown local latches remain driven but unknown. Unsupported ECLK and package
 tied-input configurations fail explicitly. Driver observation does not resolve
 contention, change GPIO/clock/NVM state or establish physical board wiring.
 Existing architectural reads and contention failures retain their behavior.
+Explicit driven-unknown peer levels are separate from released or unobserved
+pins; see gpio-drivers.txt for precedence, failures and focused checks.
 
   ctest --test-dir build/strict --output-on-failure -R '^mcu_gpio_outputs$'
 

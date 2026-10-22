@@ -16,6 +16,7 @@ struct PinDrive {
   std::uint8_t mask = 0;
   std::uint8_t levels = 0;
   std::uint8_t floating = 0;
+  std::uint8_t unknown = 0; // Strong peer drivers with an unobserved level.
 };
 
 struct PinFunction {

@@ -12,6 +12,10 @@ Standalone runtime interface     pending  Keyboard must be the default; --deskto
                                           blofeld-cli companion (runtime.txt).
                                           Current diagnostic/reference commands
                                           do not provide a working stock device.
+                                          The local MCU/LCD preview has no DSP;
+                                          its bad-DSP diagnostic is not successful
+                                          startup. Genuine bidirectional startup
+                                          remains open (startup-dsp.txt).
 LCD screenshots/live export      partial  Read-only controller capture, digital
                                           modes, unknownness and 1-bit PBM/text/
                                           saved PNG encoders tested. Atomic host
@@ -189,6 +193,12 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           Original DSP RAM clear reaches reserved
                                           Y:002000; write/alias behavior unverified.
                                           Other DSP layouts and full timing pending.
+Digital GPIO coupling            partial  Local driver intent is separate from pad
+                                          voltage and weak pulls. Explicit unknown
+                                          strong peers retain pad uncertainty;
+                                          reads fail and known opposition remains
+                                          strict (gpio-drivers.txt). Physical
+                                          topology and complete peer boot pending.
 Display peripheral               partial  Separate ST7565S transaction reference:
                                           all RAM cells, unknown data masks, icon
                                           bit, saturating columns, dummy/pipelined
