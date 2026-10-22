@@ -67,11 +67,28 @@ The failed full-confirmation probe remains recorded. DSP56371UM 6.2.4.3/Figure 6
 and Appendix C/Figure C-29 request zero reserved-bit writes; they do not establish
 ignoring these nonzero writes. No bit mask or successful hardware result is supplied.
 
-The WPC file is not established as a raw NAND image. The observed transport
-header fields, packet lengths and file sizes do not identify physical page
-addresses, spare/ECC bytes, bad-block handling or flash history. Applying the
-existing OS-firmware packing/word-order interpretation has not established
-byte equivalence between WPC and MIDI. Transformations remain unresolved.
+The WPC file is not established as a raw NAND image. Original Spectre 1.00 and
+1.01 page readers identify a repeating 528-byte XOR mask. Both pinned executable
+members contain the same mask; the inspection tool reads it from the local
+archives, without distributing mask bytes or original code. Exact member/mask
+identities and decoded-file SHA-256 are in wpc-reference.json.
+
+  python3 tools/inspect_wpc.py
+  ctest --test-dir build/strict -R '^(wpc_codec|wpc_reference)$' --output-on-failure
+
+The fixed standard WPC contains 46592 pages; the independent original MIDI
+preparation has 47616. Exact comparison finds 29117 matching pages/15373776 bytes,
+28975 uniquely matching pages and 44 matching complete blocks of 32 pages. The 17475
+unmatched WPC pages and varying page-index offsets prevent a complete direct
+mapping. File lengths differ by 1024 pages; that arithmetic is not a reserved-area
+or address-translation contract. The native helper's existing byte-copy
+expectations remain unchanged. Own finite codec/segment controls always run;
+the reference comparison skips explicitly when official local assets are absent.
+These checks execute no Spectre client instructions or device transactions.
+
+Original WPC catalog/sample semantics, physical page/spare/ECC contents,
+bad-block handling and flash history remain unqualified. Neither the XOR codec
+nor the matching subsets identify a complete physical NAND image.
 
 No firmware-derived mapping from these distributions to a complete original
 NAND image has been established. Required internal wavetable/ROM data,

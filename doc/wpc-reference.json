@@ -1,0 +1,41 @@
+{
+  "qualification": "Pinned original Spectre 1.00/1.01 page-reader interpretation and exact official WPC/MIDI byte comparison. Original client native execution, full WPC catalog/sample semantics, physical NAND mapping, installation, boot and audio remain unqualified. Original binaries, page mask and decoded assets stay local and are not redistributed.",
+  "page_bytes": 528,
+  "spectre": [
+    {
+      "version": "100",
+      "archive": "Spectre_1.00_Win_Mac.zip",
+      "member": "Spectre-MacV100/Spectre.app/Contents/MacOS/Spectre",
+      "bytes": 2682316,
+      "sha256": "42cff8d140e7b9758524d5d2d4fd3f7c09a9c89b6d2c489c11db15f30f3ba7a2",
+      "mask_address": 4296149536
+    },
+    {
+      "version": "101",
+      "archive": "Spectre_1.01_macOS.zip",
+      "member": "Spectre.app/Contents/MacOS/Spectre",
+      "bytes": 2448640,
+      "sha256": "94ceadc4f78ef63bab743e5e57f6ae45262b723fb5bbebe2ebbdbd103cdd9450",
+      "mask_address": 4296130592
+    }
+  ],
+  "mask": {
+    "bytes": 528,
+    "sha256": "b52ed3ef449de6a240dc195d03f41095e8fcce15c4bed0e2858e21ed64c2b97b"
+  },
+  "wpc_file": "Standard_Factory_Sample_Content_V1.0_for_License_SL_as_WPC_File.wpc",
+  "midi_archive": "Standard_Factory_Sample_Content_V1.0_for_License_SL_as_MID_File.zip",
+  "decoded": {
+    "bytes": 24600576,
+    "sha256": "ddf8a48111af7b0bf277b803f04bbde0465420c5425f69cd22c01c81900b275e"
+  },
+  "comparison": {
+    "wpc_pages": 46592,
+    "midi_prepared_pages": 47616,
+    "matching_pages": 29117,
+    "matching_bytes": 15373776,
+    "unique_matching_pages": 28975,
+    "unmatched_wpc_pages": 17475,
+    "matching_32_page_blocks": 44
+  }
+}
