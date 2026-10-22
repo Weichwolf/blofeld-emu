@@ -779,6 +779,9 @@ if(BUILD_TESTING)
   add_test(NAME dsp_operand_bounds COMMAND blofeld-dsp-instruction-test --operand-bounds)
   set_tests_properties(dsp_operand_bounds PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
+  add_executable(blofeld-dsp-dispatch-cache-test test/dsp_dispatch_cache_test.cpp)
+  target_link_libraries(blofeld-dsp-dispatch-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_dispatch_cache COMMAND blofeld-dsp-dispatch-cache-test)
   add_executable(blofeld-dsp-checkpoint-test test/dsp_checkpoint_test.cpp
     test/dsp_checkpoint_interrupts.cpp test/dsp_checkpoint_peripherals.cpp)
   target_link_libraries(blofeld-dsp-checkpoint-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1328,7 +1331,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test

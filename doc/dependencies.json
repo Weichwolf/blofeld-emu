@@ -34,7 +34,7 @@
     "source": "https://github.com/dsp56300/dsp56300",
     "revision": "3ff6610d5018d798f35bc784696f3384ade0e3c4",
     "integrated": true,
-    "integration": "Native interpreter reference core with strict DSP56371 bus and SHI; no combined MCU/DSP board boot.",
+    "integration": "Native interpreter reference core with strict DSP56371 bus and SHI, plus project-owned paged host dispatch storage; no combined MCU/DSP board boot.",
     "patch": "patches/dsp56300-reference-bus.patch"
   },
   "dsp56300_assembly_tool": {
