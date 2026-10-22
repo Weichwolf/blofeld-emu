@@ -7,7 +7,24 @@ only its named behavior. No hardware equivalence or brick-safety claim is made.
 Requirement                       State    Evidence / remaining work
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.
-Spectre functions in CLI          partial  samples subcommand edits XML 0.5 program
+Standalone runtime interface     pending  Keyboard must be the default; --desktop
+                                          selects the Desktop profile. No
+                                          blofeld-cli companion (runtime.txt).
+                                          Current diagnostic/reference commands
+                                          do not provide a working stock device.
+LCD screenshots/live export      pending  Actual LCD RAM and read-only inspection
+                                          exist. PNG/text publication under XDG
+                                          runtime, atomic replacement, GUI directory
+                                          notifications and MIDI-driven image
+                                          regression remain to be implemented
+                                          (display-export.txt). No separate CLI.
+Host audio output                missing  Original DSP audio must feed the normal
+                                          session audio host/default output, e.g.
+                                          PipeWire. No exclusive ALSA requirement
+                                          and no emulated USB Audio function.
+                                          Current serial PCM/WAV fixtures do not
+                                          establish live application audio.
+Optional Spectre sample tools     partial  samples subcommand edits XML 0.5 program
                                           collections and sample metadata.
                                           WAV decoding/import, declared root/loops
                                           and offline pitch estimates have own
@@ -552,9 +569,17 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           wrap, running status, channel filtering,
                                           actual parser preemption and two joint
                                           native owner snapshot replays checked.
-                                          Actual USB endpoint/ISR entry, original
-                                          initializer/DMA, physical route/clock,
-                                          F4, voice/audio and full update remain open.
+                                          The 12 actual USB OUT/ISR profiles above
+                                          also use this shared DSP/parser fixture.
+                                          F4 native requests cover four immediate
+                                          source routes, deferred-tag publication,
+                                          both waits, unknown sources/pins and
+                                          contention in 22 cases with 59 joint
+                                          restores (dsp-gpio-request.txt). Original
+                                          initializer/DMA execution, physical
+                                          route/clock, board-level F4 turnaround,
+                                          later deferred queue/bulk response,
+                                          voice/audio and full update remain open.
                                           Explicitly floating C0..11 pads use
                                           documented weak pull-downs; unobserved
                                           pins, cold output latches and unmodeled
@@ -1242,8 +1267,10 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           Persistent full-state format/fuzzing,
                                           physical scheduler and complete-board replay
                                           remain pending.
-Desktop/Keyboard differences      pending  Both requested with 1.25; keyboard scanner
-                                          and profile differences remain unresolved.
+Desktop/Keyboard differences      pending  Both requested with 1.25; Keyboard is
+                                          the normal default, with --desktop for
+                                          Desktop. Keyboard scanner and profile
+                                          differences remain unresolved.
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

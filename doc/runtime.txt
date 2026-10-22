@@ -1,0 +1,39 @@
+Standalone runtime interface: required behavior
+
+Launching without profile arguments must select Blofeld Keyboard. --desktop selects
+Blofeld Desktop. Do not add a blofeld-cli companion or a separate --keyboard
+option. The emulator runs as a device process, without an interactive CLI.
+Both profiles must execute the unchanged original 1.25 firmware and their actual
+required peripherals. Normal operation presents the selected device through
+MIDI and/or an actual host-visible USB-MIDI interface, including original
+control, SysEx, sample/update, reset and failure behavior.
+
+The emulated analog outputs supply audio from the original DSP to the normal
+session audio host and default output, as an ordinary audio application. PipeWire
+is suitable when it is the host's audio service; the runtime must not require
+exclusive access to an ALSA hardware device or replacement of the user's audio
+service. Host audio buffering/device negotiation stays outside MCU/DSP/board
+behavior. No host synthesizer substitutes for the firmware's audio generation.
+
+USB remains MIDI-only. Do not add USB Audio descriptors, endpoints or a virtual
+USB sound card. Host audio playback is independent of the emulated USB link.
+Waldorf confirms that Blofeld USB carries MIDI and cannot stream live audio:
+  https://waldorfmusic.com/faq-blofeld-keyboard/
+PipeWire host/client/device routing is described at:
+  https://docs.pipewire.org/page_overview.html
+
+Existing CLI reference runners, inspection, trace/WAV export and samples commands
+are optional development tools. They are not the normal-operation interface and
+do not establish complete boot, device enumeration or live audio. Source and
+reference artifacts remain separate; manufacturer firmware/assets stay local.
+
+Display snapshots and live GUI access use ordinary PNG/text files below
+$XDG_RUNTIME_DIR/blofeld-emu/. Atomic replacement and directory change events
+permit live GUI refresh as well as screenshots; see display-export.txt.
+
+Current evidence and missing requirements
+coverage.txt retains the full acceptance scope. Keyboard/Desktop normal startup,
+complete original boot, host USB-MIDI enumeration and live host audio remain
+unqualified. Conditional original MCU/DSP MIDI/F4 fixtures and serial PCM/WAV
+gates are component evidence. Real hardware equivalence, update/recovery and
+realtime behavior still require their own complete validation.
