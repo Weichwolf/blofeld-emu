@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/gpio_pads.hpp"
+
 #include <cstdint>
 #include <string>
 
@@ -27,6 +29,7 @@ struct DspGpioDrive {
 struct DspGpioSample {
   std::uint32_t known = 0;
   std::uint32_t levels = 0;
+  std::uint32_t conflicts = 0;
 };
 
 struct DspGpioOutputs {
@@ -45,6 +48,7 @@ public:
                                    std::uint32_t mask = DspGpioWrite::word_mask) const;
   void write(DspGpioWrite access);
   void set_drive(DspGpioDrive drive);
+  void attach_pad_source(GpioPadReader reader);
   [[nodiscard]] DspGpioOutputs outputs() const;
   [[nodiscard]] DspGpioSample observe_pads(std::uint32_t mask) const;
   void validate_peripheral_drive(DspGpioDrive drive) const;
@@ -53,6 +57,7 @@ private:
   [[nodiscard]] std::uint32_t pin_mask() const;
   [[nodiscard]] std::string address(DspGpioRegister reg) const;
   [[nodiscard]] DspGpioSample resolve(std::uint32_t mask) const;
+  [[nodiscard]] DspGpioSample resolve_local(std::uint32_t mask) const;
   void write_checked(DspGpioWrite access);
   DspPort port_;
   std::uint32_t control_ = 0;
@@ -60,6 +65,7 @@ private:
   std::uint32_t latch_ = 0;
   std::uint32_t latch_known_ = 0;
   DspGpioDrive external_;
+  GpioPadBinding pads_;
 };
 
 }

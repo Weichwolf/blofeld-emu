@@ -79,6 +79,9 @@ include(cmake/Hc12Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
+add_library(blofeld_gpio_pads src/gpio_pads.cpp)
+target_include_directories(blofeld_gpio_pads PUBLIC include)
+target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
 add_library(blofeld_private_files src/private_file.cpp)
 target_include_directories(blofeld_private_files PUBLIC include)
 target_link_libraries(blofeld_private_files PUBLIC blofeld_firmware)
@@ -105,7 +108,7 @@ add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cp
   src/mcu_usb_control.cpp
   src/mcu_usb_ique_control.cpp src/mcu_usb_reset.cpp src/mcu_usb_host.cpp)
 target_include_directories(blofeld_mcu PUBLIC include)
-target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage)
+target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage blofeld_gpio_pads)
 add_library(blofeld_usb_host src/usb_transfer.cpp src/usb_host.cpp src/usb_host_packets.cpp
   src/usb_device_probe.cpp src/usb_descriptors.cpp)
 target_include_directories(blofeld_usb_host PUBLIC include)
@@ -158,7 +161,7 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
   src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp
   src/dsp_run_clock.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
-target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware)
+target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
 add_library(blofeld_dsp src/dsp_core.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
   src/dsp_interrupt_timing.cpp
   src/dsp_machine.cpp src/dsp_scheduled_run.cpp
@@ -796,6 +799,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-mcu-request-release.trace")
   set_tests_properties(original_mcu_request_release PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-gpio-pair-test test/original_gpio_pair_test.cpp)
+  target_link_libraries(blofeld-original-gpio-pair-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_gpio_pair COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_pair.py"
+    $<TARGET_FILE:blofeld-original-gpio-pair-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-pair.report")
+  set_tests_properties(original_gpio_pair PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_executable(blofeld-dsp-dispatch-cache-test test/dsp_dispatch_cache_test.cpp)
   target_link_libraries(blofeld-dsp-dispatch-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dispatch_cache COMMAND blofeld-dsp-dispatch-cache-test)
@@ -1247,6 +1258,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-gpio-unknown-driver-test test/gpio_unknown_driver_test.cpp)
   target_link_libraries(blofeld-gpio-unknown-driver-test PRIVATE blofeld_mcu blofeld_dsp_peripherals)
   add_test(NAME gpio_unknown_drivers COMMAND blofeld-gpio-unknown-driver-test)
+  add_executable(blofeld-gpio-pad-source-test test/gpio_pad_source_test.cpp)
+  target_link_libraries(blofeld-gpio-pad-source-test PRIVATE blofeld_mcu blofeld_dsp_peripherals)
+  add_test(NAME gpio_pad_sources COMMAND blofeld-gpio-pad-source-test)
   add_executable(blofeld-clock-test test/mcu_clock_test.cpp)
   target_link_libraries(blofeld-clock-test PRIVATE blofeld_core)
   add_test(NAME mcu_clock COMMAND blofeld-clock-test
@@ -1398,7 +1412,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test

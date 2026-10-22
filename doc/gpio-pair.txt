@@ -1,0 +1,41 @@
+Original native request/response pair: component acceptance
+
+original_gpio_pair executes both unchanged original request handlers together
+in 32 declared contexts: eight field/source routes, both same-time write orders
+and two DSP epoch phases. The MCU executes its original clock prefix and native
+GPIO-setup suffix before an own RAM caller with an explicit stack/RAM context.
+The DSP uses an own prefix with firmware-derived PLL operands and all 44000 delay
+iterations, followed by unchanged original vector/request program records.
+This is neither the full startup initializer nor a boot-from-reset test.
+
+The first seven cases use independently declared source value42. The last loads
+the entire unique original X-data record containing the startup signature;127
+is asserted as an expectation, never written as a host-generated reply. Each
+case checks the actual native source-load register effect, MCU return value,
+DSP cleanup/foreground return, unchanged source data and program records, whole
+MCU flash bytes/knowledge/freshness and healthy native execution.
+
+The shared low-byte GPIO and J0-to-IRQA route is an explicit direct-link
+hypothesis. A common1080MHz reference represents the declared nominal MCU30MHz
+and DSP54/216MHz rates; instruction completion/vector estimates and selected
+tie orders do not establish physical pipeline, synchronization or pad timing.
+No PC gate, fabricated IRQ acknowledgement or host reply completes the request.
+
+Local register intent and actual queried pads remain separate (gpio-pads.txt).
+Every native pad query must be known and conflict-free. Intermediate unknown
+latches, opposed full/reduced outputs and a brief unqualified peripheral-output
+selection remain visible in the net audit. The experiment represents that
+peripheral selection as an unknown active driver, never a successful peripheral
+model. Every case must reject board qualification even after both helpers return.
+Successful protocol consumption does not prove the electrical intervals safe.
+
+  cmake --build --preset strict --target blofeld-original-gpio-pair-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_pair$'
+
+The Python oracle pins the official firmware and all127 record identities before
+native execution. It cross-checks case ordering, source addresses/values, complete
+query/net audits, preservation outcomes and mandatory board rejection. Eight
+fixed evidence corruptions must fail. Manufacturer bytes, detailed source
+analysis and traces remain local. No fuzzing or physical traffic is performed.
+Full original boot, real board routing/timing, normal MIDI/audio, Desktop/Keyboard
+differences and update/recovery/hardware safety retain their separate requirements.

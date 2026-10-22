@@ -2,6 +2,7 @@
 #include "blofeld/mcu_bus.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/gpio_pads.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_clock.hpp"
 #include "blofeld/mcu_flash.hpp"
@@ -345,6 +346,14 @@ PinOutputs McuBus::gpio_outputs(const McuPort port) const {
     throw Fault("MCU GPIO output observation pc=" + hex(context_.pc) +
                 " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
   }
+}
+
+PinBiases McuBus::gpio_biases(const McuPort port) const {
+  return gpio_.biases(port);
+}
+
+void McuBus::attach_gpio_pad_source(const McuPort port, GpioPadReader reader) {
+  gpio_.attach_pad_source(port, std::move(reader));
 }
 
 void McuBus::begin_instruction(const ExecutionContext context) {

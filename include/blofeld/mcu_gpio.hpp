@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/bus.hpp"
+#include "blofeld/gpio_pads.hpp"
 
 #include <array>
 #include <cstddef>
@@ -31,6 +32,12 @@ struct PinFunction {
 struct PinSample {
   std::uint8_t known = 0;
   std::uint8_t levels = 0;
+  std::uint8_t conflicts = 0;
+};
+
+struct PinBiases {
+  std::uint8_t up = 0;
+  std::uint8_t down = 0;
 };
 
 struct PinOutputs {
@@ -53,10 +60,12 @@ public:
   void set_drive(McuPort port, PinDrive drive);
   void update_drive(McuPort port, std::uint8_t affected, PinDrive drive);
   void set_function(McuPort port, PinFunction function);
+  void attach_pad_source(McuPort port, GpioPadReader reader);
   [[nodiscard]] std::uint8_t read_pad(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
   // Intended local drivers only; excludes peer levels and weak input pulls.
   [[nodiscard]] PinOutputs outputs(McuPort port) const;
+  [[nodiscard]] PinBiases biases(McuPort port) const;
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
   void write(ByteWrite write);
@@ -77,9 +86,11 @@ private:
 
   [[nodiscard]] std::uint8_t sample(McuPort port, std::uint8_t requested) const;
   [[nodiscard]] PinSample resolve(McuPort port, std::uint8_t requested) const;
+  [[nodiscard]] unsigned pull_enable(McuPort port) const;
   [[nodiscard]] std::uint8_t data(McuPort port) const;
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
   std::array<PortState, port_count> ports_{};
+  std::array<GpioPadBinding, port_count> pads_{};
   std::uint8_t routing_ = 0;
   std::uint8_t assignment_e_ = 0;
   std::uint8_t pull_control_ = 0;

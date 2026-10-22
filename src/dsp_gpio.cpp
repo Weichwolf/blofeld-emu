@@ -2,11 +2,13 @@
 #include "blofeld/dsp_gpio.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/gpio_pads.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace blofeld {
 namespace {
@@ -58,6 +60,14 @@ DspGpioOutputs DspGpio::outputs() const {
 }
 
 DspGpioSample DspGpio::resolve(const std::uint32_t mask) const {
+  if (pads_.required()) {
+    const auto sample = pads_.sample(mask);
+    return {.known = sample.known, .levels = sample.levels, .conflicts = sample.conflicts};
+  }
+  return resolve_local(mask);
+}
+
+DspGpioSample DspGpio::resolve_local(const std::uint32_t mask) const {
   const auto output = outputs();
   const auto conflict = mask & output.known & external_.mask & (output.levels ^ external_.levels);
   if (conflict != 0) {
@@ -79,6 +89,10 @@ DspGpioSample DspGpio::observe_pads(const std::uint32_t mask) const {
 }
 
 void DspGpio::validate_peripheral_drive(const DspGpioDrive drive) const {
+  if (pads_.required()) {
+    throw Fault("Unqualified DSP peripheral drive with resolved pad source at " +
+                address(DspGpioRegister::data));
+  }
   if ((drive.mask & ~outputs().peripheral) != 0 || (drive.levels & ~drive.mask) != 0 ||
       drive.floating != 0 || drive.unknown != 0) {
     throw Fault("Invalid DSP peripheral output mask at " + address(DspGpioRegister::data));
@@ -104,7 +118,8 @@ std::uint32_t DspGpio::read(const DspGpioRegister reg, const std::uint32_t mask)
       const auto retained = disconnected & latch_known_;
       const auto unknown = requested & ~((sample.known & gpio) | retained);
       if (unknown != 0) {
-        throw Fault("Unknown DSP GPIO data read at " + address(reg) + " mask=" + hex(unknown, 6));
+        throw Fault("Unknown DSP GPIO data read at " + address(reg) + " mask=" + hex(unknown, 6) +
+                    " conflicts=" + hex(sample.conflicts, 6));
       }
       return ((sample.levels & gpio) | (latch_ & retained)) & requested;
     }
@@ -136,16 +151,33 @@ void DspGpio::write_checked(const DspGpioWrite access) {
   if (port_ == DspPort::f && (control_ & direction_) != 0) {
     throw Fault("Reserved DSP Port F pin function selected by write at " + address(access.reg));
   }
-  static_cast<void>(resolve(pin_mask()));
+  // A register write updates intended drivers. An attached board owns actual
+  // pad resolution/audit; no pad value is consumed by this write. Keep the
+  // existing immediate legacy-peer contention check otherwise unchanged.
+  static_cast<void>(resolve_local(pin_mask()));
 }
 
 void DspGpio::write(const DspGpioWrite access) {
   auto next = *this;
   next.write_checked(access);
-  *this = next;
+  control_ = next.control_;
+  direction_ = next.direction_;
+  latch_ = next.latch_;
+  latch_known_ = next.latch_known_;
+}
+
+void DspGpio::attach_pad_source(GpioPadReader reader) {
+  if ((external_.mask | external_.floating | external_.unknown) != 0) {
+    throw Fault("DSP GPIO pad source conflicts with existing external observations at " +
+                address(DspGpioRegister::data));
+  }
+  pads_.attach(std::move(reader));
 }
 
 void DspGpio::set_drive(const DspGpioDrive drive) {
+  if (pads_.required()) {
+    throw Fault("Resolved GPIO pad source owns DSP port at " + address(DspGpioRegister::data));
+  }
   if (((drive.mask | drive.floating | drive.unknown) & ~pin_mask()) != 0 ||
       (drive.unknown & (drive.mask | drive.floating)) != 0 || (drive.levels & ~drive.mask) != 0 ||
       (drive.mask & drive.floating) != 0) {

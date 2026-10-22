@@ -16,7 +16,7 @@ supplies declared GPIO/RTI observations and pauses at the original main WAI.
 It has no attached DSP or live MIDI/audio. Its original bad-DSP diagnostic is
 expected for that fixture and is evidence against complete-runtime acceptance.
 
-Separate original CPU-pair experiments have not completed the parameter read.
+Earlier original CPU-pair experiments did not complete the parameter read.
 Forty discrete interleavings and sixteen nominal elapsed-clock direct-link
 profiles stop on unknown input or opposed output drivers. Those observations
 constrain the declared direct data/IRQ wiring; they do not establish the actual
@@ -46,6 +46,14 @@ pull-downs on the Q inputs. The native setup suffix and driver metadata retain
 those conditions. Earlier CPU-pair fixtures omitted them; their equal-drive and
 unbiased-input assumptions therefore do not establish real pad behavior. Reduced
 strength does not itself define conflict voltage, release a driver or prove a reply.
+
+A separate native pair regression now distinguishes register intent from shared
+pad voltage. Both original helpers return in32 declared source/order/phase cases,
+including Global0x4c from the unchanged original signature data record. All actual
+pad queries must be known; unresolved intermediate output/peripheral states
+remain recorded and force every board qualification to fail. This is evidence
+for the original component protocol, not healthy startup or electrical safety.
+The explicit caller/RAM/clock setup and missing boot path remain in gpio-pair.txt.
 
 The reset-to-runtime path separately stops at the original first-stage reserved
 Y:002000 store. The documented map does not establish discard/alias behavior.
