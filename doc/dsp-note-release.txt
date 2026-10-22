@@ -1,0 +1,35 @@
+Original MIDI release and active-entry retirement
+
+original_dsp_note_release supplies four declared held entries and feeds real
+Note Off / zero-velocity Note On bytes through the unchanged primary parser.
+592 cases cover all16 envelope-hold masks, two input-channel edges, matching,
+unmatched and duplicate notes, fragments, running status and channel filtering.
+Single-part dispatch normalizes the staged channel tag to0; the differently
+tagged held entry must remain untouched. Gathered entries use the real priority
+routine, including held amplifier envelopes.
+
+Three original four-envelope calls process the first declared entry. With
+explicit zero converted controls, release first truncates to0, then selects
+retirement, then installs idle/raises collection. Held ADSR callbacks remain.
+The actual collector removes only an idle amplifier entry and clears matching
+owners with the original reversed bit mask. Other slots/owners remain intact.
+Removal tail-returns after one entry and retains the collection flag; a second
+scan reaching the terminator clears it. Both native calls are checked.
+An independent integer/list model checks complete state after every stage,
+actual call counts and four corrupted-trace controls. Native guards check all
+unrelated held-slot words, genuine returns and original program words.
+
+  cmake --build --preset strict --target blofeld-original-dsp-note-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_note(_release)?$'
+
+The wrapper pins all127 local original records before execution. Report/trace:
+Testing/original-dsp-note-release.*. Missing firmware skips; changed identities
+or native diagnostics fail. No fuzzing or physical traffic runs.
+
+Scope: independently declared active headers/ADSR state, owner table and zero
+converted Y controls. Only the first entry's envelopes are advanced; the other
+entries test matching, prioritization and preservation. This does not establish
+positive-note allocation, complete voice scheduling/audio, boot or hardware
+equivalence. The separate strict Y:ffffff allocation frontier remains intact.
+dsp-release-ring.txt additionally follows actual idle MIDI release through the
+original foreground/voice retirement and later decoded ring/audio output.

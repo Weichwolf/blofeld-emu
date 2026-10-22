@@ -42,3 +42,11 @@ The separate original_dsp_ring_midi_audio matrix retains all eight contexts with
 ten blocks per source and CC7 changes during real idle waits. Its1280 exact
 monitor frames,192 idle polls,72 trace corruptions, eight monitor corruptions
 and eight rejected foreign claims share the same direct path; see dsp-idle-midi.txt.
+
+The separate original_dsp_ring_release_audio check uses one source-owned context
+(normal pitch, RM0, parallel routing). Its ten blocks include real idle-wait
+NoteOff, six rendered bodies, retirement and four subsequent empty blocks. The
+independent release/ring oracle predicts all160 directly decoded monitor frames;
+ten trace corruptions, one monitor corruption and one foreign claim must reject.
+The offline release-ring matrix covers all eight contexts; direct host release
+playback currently covers only the first. See dsp-release-ring.txt for the limits.

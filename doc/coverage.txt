@@ -463,6 +463,10 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,
                                           code mutation and bounded DO/REP tested.
+                                          Paged host dispatch retains 24-bit
+                                          addresses, boundary code changes and
+                                          trusted restore; guest maps unchanged
+                                          (dsp-dispatch-cache.txt).
                                           REP targets reject extended/flow words
                                           before effects; legal one-word latch,
                                           per-iteration data reads and preview
@@ -985,6 +989,18 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           Destination switching is checked;
                                           smoothing clock, normal host MIDI and
                                           NoteOn allocation remain unqualified.
+                                          Declared active-note release additionally
+                                          checks raw MIDI, held-envelope modes,
+                                          prioritization, retirement and owner
+                                          cleanup (dsp-note-release.txt); positive
+                                          allocation and scheduled audio stay open.
+                                          Original foreground release now retains
+                                          48 voice/80 body blocks through eight
+                                          retirements and32 empty bodies,1280
+                                          decoded frames and a direct160-frame
+                                          monitor prefix (dsp-release-ring.txt).
+                                          Untimed held-entry scope; physical
+                                          scheduling/boot/live MIDI stay open.
                                           32 conditional original foreground
                                           iterations now compose MIDI, held voice
                                           and scheduler smoothing with original

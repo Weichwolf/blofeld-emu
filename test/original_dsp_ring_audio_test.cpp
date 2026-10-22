@@ -32,7 +32,8 @@ void reject_other_source(blofeld::PcmFrameSink &output) {
 int main(const int count, char **arguments) {
   try {
     const bool midi = count == 6 && std::string_view(arguments[5]) == "midi";
-    if ((count != 4 && count != 5 && !midi) ||
+    const bool release = count == 6 && std::string_view(arguments[5]) == "release";
+    if ((count != 4 && count != 5 && !midi && !release) ||
         !std::string_view(arguments[3]).starts_with("unix:")) {
       throw blofeld::Fault("Expected firmware, private trace and explicit private audio server");
     }
@@ -42,19 +43,16 @@ int main(const int count, char **arguments) {
     constexpr unsigned reference_timebase = 24576000;
     constexpr unsigned unchanged_frames = 96;
     constexpr unsigned midi_frames = 160;
-    const auto expected_frames = midi ? midi_frames : unchanged_frames;
+    const auto expected_frames = midi || release ? midi_frames : unchanged_frames;
+    auto input = blofeld::test::VoiceInput::stream;
+    if (midi) { input = blofeld::test::VoiceInput::stream_midi; }
+    if (release) { input = blofeld::test::VoiceInput::stream_release; }
     blofeld::AudioRuntime output({.output = {.pcm = {.frame_sync_high = false},
                                              .timebase_hz = reference_timebase,
                                              .sample_rate = playback_rate,
                                              .server = arguments[3]}});
     const auto result = blofeld::test::run_voice_test(
-        3,
-        arguments,
-        false,
-        true,
-        false,
-        {.direct = &output, .stream_case_index = index},
-        midi ? blofeld::test::VoiceInput::stream_midi : blofeld::test::VoiceInput::stream);
+        3, arguments, false, true, false, {.direct = &output, .stream_case_index = index}, input);
     if (result != 0) { return result; }
     reject_other_source(output);
     output.finish();

@@ -51,15 +51,20 @@
 +		uint32_t exec() noexcept override { return MaxDelayCycles; }
 --- a/source/dsp56kEmu/dsp.h
 +++ b/source/dsp56kEmu/dsp.h
-@@ -3,0 +4 @@
+@@ -3,0 +4,3 @@
 +#include <stdexcept>
-@@ -40 +41 @@
++
++#include "blofeld/dsp_dispatch_cache.hpp"
+@@ -40 +43 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept;
 +	void dspExecInterrupts(DSP* _dsp);
-@@ -86 +87 @@
+@@ -86 +89 @@
 -		typedef void (*TInterruptFunc)(DSP*) noexcept;
 +		typedef void (*TInterruptFunc)(DSP*);
-@@ -162,0 +164,60 @@
+@@ -135 +138 @@
+-		std::vector<OpcodeCacheEntry>	m_opcodeCache;
++		blofeld::DspDispatchCache<OpcodeCacheEntry>	m_opcodeCache;
+@@ -162,0 +166,60 @@
 +		bool m_referenceAttempt = false;
 +		bool m_referenceMode = false;
 +		bool m_referenceVectorActive = false;
@@ -120,10 +125,10 @@
 +		void restoreReferenceState(const ReferenceState& state);
 +	private:
 +		void verifyReferenceCheckpoint() const;
-@@ -189 +250 @@
+@@ -189 +252 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +269,12 @@
+@@ -208 +271,12 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
@@ -137,7 +142,7 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +483,13 @@
+@@ -411,2 +485,13 @@
 -		TWord	fetchOpWordB()
 -		{
 +		TWord memReadExtension(TWord offset) const
@@ -153,10 +158,10 @@
 +				throw std::runtime_error("Unexpected extension in single-word reference REP");
 +			if(!m_referenceVectorActive)
 +				extension = memReadExtension(pcCurrentInstruction + 1);
-@@ -416 +499 @@
+@@ -416 +501 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523,15 +606,8 @@
+@@ -523,15 +608,8 @@
 -		void	sr_s_update				()
 -		{
 -			if( sr_test_noCache(CCR_S) )
@@ -180,7 +185,7 @@
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -610,11 +686,37 @@
+@@ -610,11 +688,37 @@
 -		void sr_v_update( const int64_t& _notLimitedResult, TReg56& _result )
 -		{
 -			if( sr_test_noCache(SR_SM) )
@@ -229,11 +234,11 @@
 +			auto& result = ab ? reg.b : reg.a;
 +			finishArithmeticResult(result, false);
 +			setCCRDirty(ab, result, CCR_E | CCR_U | CCR_N);
-@@ -726,0 +829 @@
+@@ -726,0 +831 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +839 @@
+@@ -735,0 +841 @@
 +			sr_s_update(reg.b);
-@@ -809,19 +913,12 @@
+@@ -809,19 +915,12 @@
 -		void limit_arithmeticSaturation( TReg56& _dst )
 -		{
 -			if( !sr_test_noCache(SR_SM) )
@@ -265,17 +270,17 @@
 +			if(rounded && selector < 4) limit = sixteen ? 0x007fff00000000ull : 0x007fffff000000ull;
 +			result.var = static_cast<TInt64>(limit << g_aluShift);
 +			return true;
-@@ -975,0 +1073 @@
+@@ -975,0 +1075 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1103 @@
+@@ -1004,0 +1105 @@
 +			sr_s_update(_src);
-@@ -1098 +1197 @@
+@@ -1098 +1199 @@
 -		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate );
 +		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate, bool _round = false );
-@@ -1101 +1200 @@
+@@ -1101 +1202 @@
 -		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu );
 +		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu, bool _round = false );
-@@ -1468,0 +1568 @@
+@@ -1468,0 +1570 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -722,16 +727,24 @@
 @@ -1156 +1552 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1306,3 +1702 @@
+@@ -1187 +1583,2 @@
+-			m_opcodeCache[_addr].op = &DSP::op_ResolveCache;
++			if(auto* entry = m_opcodeCache.find(_addr))
++				entry->op = &DSP::op_ResolveCache;
+@@ -1306,3 +1703 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
-@@ -1341,3 +1735 @@
+@@ -1341,3 +1736 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, value == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, value == minimum);
+@@ -1484,2 +1877 @@
+-		m_opcodeCache.clear();
+-		m_opcodeCache.resize(mem.sizeP(), {&DSP::op_ResolveCache});
++		m_opcodeCache.reset(mem.sizeP(), {&DSP::op_ResolveCache});
 @@ -1570,0 +1963,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);

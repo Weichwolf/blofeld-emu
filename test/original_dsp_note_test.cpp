@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Execute original MIDI note dispatch up to its strict reserved-read boundary.
+// Execute original note allocation boundaries and declared active-note release.
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
@@ -18,6 +18,7 @@
 #include <ostream>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -82,6 +83,36 @@ constexpr unsigned guard = 0x13579b;
 constexpr unsigned original_records = 127;
 constexpr unsigned instruction_limit = 4096;
 constexpr unsigned entry_adjust = 0x105;
+constexpr unsigned held_slots = 4;
+constexpr unsigned release_handler = 0xdca;
+constexpr unsigned prioritize_entry = 0x4af;
+constexpr unsigned envelope_dispatch = 0x7cb;
+constexpr unsigned release_envelope = 0x160f;
+constexpr unsigned retire_envelope = 0x1609;
+constexpr unsigned decay_envelope = 0x1639;
+constexpr unsigned collect_entries = 0x466;
+constexpr unsigned clear_mask_owners = 0x2b7b;
+constexpr unsigned owner_mask = 0x2f1c;
+constexpr unsigned owner_base = 0x2f1e;
+constexpr unsigned owner_count = 24;
+constexpr unsigned release_scratch = 0x860;
+constexpr unsigned scratch_pointer = 0x12;
+constexpr unsigned current_entry_context = 0x14;
+constexpr unsigned envelope_controls = 0x26;
+constexpr unsigned first_envelope = 56;
+constexpr unsigned envelope_stride = 6;
+constexpr unsigned first_mode = 196;
+constexpr unsigned mode_stride = 12;
+constexpr unsigned initial_envelope = 0x400000;
+constexpr unsigned envelope_value_stride = 0x1000;
+constexpr unsigned slot_value_stride = 0x10000;
+constexpr unsigned slot_release_velocity = 19;
+constexpr unsigned slot_note = 9;
+constexpr unsigned slot_channel = 10;
+constexpr unsigned hold_mode = 2;
+constexpr unsigned mode_combinations = 16;
+constexpr std::array<unsigned, held_slots> held_notes{64, 65, 64, 64};
+constexpr std::array<unsigned, held_slots> held_channels{0, 0, 1, 0};
 
 std::string rejected(const auto &operation) {
   try {
@@ -97,6 +128,8 @@ struct Counts {
   unsigned allocations = 0;
   unsigned setups = 0;
   unsigned voices = 0;
+  unsigned releases = 0, priorities = 0, envelopes = 0, retirements = 0, collections = 0,
+           owner_clears = 0, decays = 0;
 };
 
 struct NoteInput {
@@ -114,7 +147,10 @@ struct Message {
 enum class Delivery : std::uint8_t { complete, fragmented, running };
 
 struct Fixture {
-  Fixture(const blofeld::Firmware &firmware, std::ostream &trace) : trace_(trace) {
+  Fixture(const blofeld::Firmware &firmware,
+          std::ostream &trace,
+          const std::optional<unsigned> release_modes = std::nullopt)
+      : trace_(trace) {
     require(firmware.dsp.size() == original_records, "All ordered original records are supplied");
     auto &bus = machine.bus();
     bus.observe_omr(memory_mode);
@@ -157,8 +193,82 @@ struct Fixture {
             "Original primary ring starts empty");
     run(parser); // Execute the own memory switch and genuine empty-ring return after reset.
     verify_unallocated();
+    if (release_modes.has_value()) { initialize_release(release_modes.value()); }
     inputs_only_ = true;
   }
+
+  void initialize_release(const unsigned modes) {
+    require(modes < mode_combinations, "Four declared hold-mode bits");
+    for (unsigned envelope = 0; envelope < 4; ++envelope) {
+      write(x,
+            sound + first_mode + (mode_stride * envelope),
+            (modes & (1U << envelope)) != 0 ? hold_mode : 0U);
+    }
+    for (unsigned i = 0; i < 16; ++i) { write(y, envelope_controls + i, 0); }
+    write(x, current_entry_context, entry);
+    for (unsigned slot = 0; slot < held_slots; ++slot) {
+      const auto base = entry + (entry_stride * slot);
+      write(x, list + slot, base);
+      write(x, base + 8, sound);
+      write(x, base + slot_note, held_notes[slot] << byte_shift);
+      write(x, base + slot_channel, held_channels[slot]);
+      for (unsigned envelope = 0; envelope < 4; ++envelope) {
+        const auto state = base + first_envelope + (envelope_stride * envelope);
+        write(x, state, decay_envelope);
+        write(x,
+              state + 1,
+              initial_envelope + (slot * slot_value_stride) + (envelope * envelope_value_stride));
+        write(x, state + 2, sound + first_mode + (mode_stride * envelope));
+      }
+      for (unsigned i = 0; i < entry_stride; ++i) { release_initial_[slot][i] = read(x, base + i); }
+      write(y, release_scratch + slot, guard ^ slot);
+    }
+    write(x, owner_mask, word_mask);
+    for (unsigned i = 0; i < owner_count; ++i) {
+      write(x, owner_base + i, entry + ((i % held_slots) * entry_stride));
+    }
+    require(read(x, scratch_pointer) == release_scratch && read(x, list + held_slots) == 0,
+            "Pinned scratch pointer and actual zero list terminator remain");
+  }
+
+  void release_state(const unsigned stage) {
+    trace_ << "RELEASE_STATE " << std::hex << stage << ' ' << read(x, 6);
+    for (unsigned i = 0; i <= held_slots; ++i) { trace_ << ' ' << read(x, list + i); }
+    trace_ << ' ' << read(x, owner_mask);
+    for (unsigned i = 0; i < owner_count; ++i) { trace_ << ' ' << read(x, owner_base + i); }
+    for (unsigned slot = 0; slot < held_slots; ++slot) {
+      const auto base = entry + (entry_stride * slot);
+      trace_ << ' ' << read(x, base + slot_release_velocity);
+      for (unsigned envelope = 0; envelope < 4; ++envelope) {
+        const auto state = base + first_envelope + (envelope_stride * envelope);
+        trace_ << ' ' << read(x, state) << ' ' << read(x, state + 1);
+      }
+      for (unsigned i = 0; i < entry_stride; ++i) {
+        const bool envelope_word = i >= first_envelope &&
+                                   i < first_envelope + (4 * envelope_stride) &&
+                                   (i - first_envelope) % envelope_stride < 2;
+        require(i == slot_release_velocity || envelope_word ||
+                    read(x, base + i) == release_initial_[slot][i],
+                "Original release must preserve every unrelated held-slot word");
+      }
+    }
+    trace_ << '\n' << std::dec;
+    if (stage == 6) {
+      for (const auto &[at, value] : original_program_) {
+        require(machine.bus().peek_program(at) == value, "Original release program word changed");
+      }
+    }
+  }
+
+  void release_counts() {
+    trace_ << "RELEASE_COUNTS " << counts.handlers << ' ' << counts.begins << ' '
+           << counts.transforms << ' ' << counts.allocations << ' ' << counts.setups << ' '
+           << counts.voices << ' ' << counts.releases << ' ' << counts.priorities << ' '
+           << counts.envelopes << ' ' << counts.retirements << ' ' << counts.collections << ' '
+           << counts.owner_clears << ' ' << counts.decays << '\n';
+  }
+
+  void release_envelopes() { run(envelope_call_); }
 
   void write(const blofeld::DspSpace space, const unsigned at, const unsigned value) {
     require(!inputs_only_ ||
@@ -292,6 +402,11 @@ struct Fixture {
     code.emit("nop");
     code.word(absolute_jump);
     code.word(begin);
+    envelope_call_ = code.pc();
+    code.immediate("r5",
+                   entry + 1); // Original callback dispatcher takes the envelope pointer slot.
+    code.emit("jsr " + blofeld::test::number(envelope_dispatch));
+    code.emit("rts");
     code.install(machine.bus());
   }
 
@@ -302,6 +417,13 @@ struct Fixture {
     counts.allocations += static_cast<unsigned>(state.pc == allocator);
     counts.setups += static_cast<unsigned>(state.pc == entry_setup);
     counts.voices += static_cast<unsigned>(state.pc == voice);
+    counts.releases += static_cast<unsigned>(state.pc == release_handler);
+    counts.priorities += static_cast<unsigned>(state.pc == prioritize_entry);
+    counts.envelopes += static_cast<unsigned>(state.pc == release_envelope);
+    counts.retirements += static_cast<unsigned>(state.pc == retire_envelope);
+    counts.collections += static_cast<unsigned>(state.pc == collect_entries);
+    counts.owner_clears += static_cast<unsigned>(state.pc == clear_mask_owners);
+    counts.decays += static_cast<unsigned>(state.pc == decay_envelope);
   }
 
   void run(const unsigned target, const std::optional<unsigned> end = std::nullopt) {
@@ -314,7 +436,7 @@ struct Fixture {
     while (machine.cpu().state().pc != end.value_or(stop_) || steps == 0) {
       require(steps++ < instruction_limit, "Original note experiment instruction bound");
       const auto state = machine.cpu().state();
-      if (target == parser) { observe(state); }
+      observe(state);
       try {
         machine.cpu().step(observer);
         machine.bus().advance_instruction_cycles(1);
@@ -359,7 +481,9 @@ struct Fixture {
   std::optional<blofeld::DspState> failed_state_;
   std::vector<blofeld::DspNativeAccess> accesses_;
   unsigned stop_ = 0;
+  unsigned envelope_call_ = 0;
   bool inputs_only_ = false;
+  std::array<std::array<unsigned, entry_stride>, held_slots> release_initial_{};
 };
 
 void accepted(Fixture &fixture,
@@ -405,14 +529,97 @@ void completed(Fixture &fixture,
   fixture.send(message);
   fixture.verify_completed(input, filtered);
 }
+
+struct ReleaseInput {
+  unsigned modes = 0;
+  unsigned channel = 0;
+  unsigned note = 64;
+  bool zero = false;
+  Delivery delivery = Delivery::complete;
+  bool filtered = false;
+};
+
+void release_case(Fixture &fixture,
+                  const blofeld::DspCheckpoint &initial,
+                  const ReleaseInput input,
+                  std::ostream &trace) {
+  fixture.machine.restore(initial);
+  fixture.clear_observations();
+  fixture.write(x, channel_setting, input.filtered ? 1U : input.channel + 1);
+  trace << "RELEASE_CASE " << input.modes << ' ' << input.channel << ' ' << input.note << ' '
+        << input.zero << ' ' << static_cast<unsigned>(input.delivery) << ' ' << input.filtered
+        << '\n';
+  fixture.release_state(0);
+  const std::array message{
+      (input.zero ? note_on : note_off) | input.channel, input.note, input.zero ? 0U : 64U};
+  unsigned offset = 0;
+  if (input.delivery == Delivery::fragmented) {
+    for (unsigned i = 0; i < 2; ++i) {
+      fixture.send(std::span(message).subspan(i, 1));
+      require(fixture.counts.handlers == 0, "Incomplete release bytes cannot dispatch");
+      fixture.release_state(0);
+    }
+    offset = 2;
+  } else if (input.delivery == Delivery::running) {
+    const std::array prefix{message[0], midi_max, message[2]};
+    fixture.send(prefix); // Unmatched note establishes genuine running status.
+    fixture.clear_observations();
+    fixture.release_state(0);
+    offset = 1;
+  }
+  fixture.send(std::span(message).subspan(offset));
+  fixture.release_state(1);
+  for (unsigned iteration = 0; iteration < 3; ++iteration) {
+    fixture.release_envelopes();
+    fixture.release_state(iteration + 2);
+  }
+  fixture.run(collect_entries);
+  fixture.release_state(5);
+  fixture.run(collect_entries);
+  fixture.release_state(6);
+  fixture.release_counts();
+}
+
+void release_matrix(const blofeld::Firmware &firmware, std::ostream &trace) {
+  for (unsigned modes = 0; modes < mode_combinations; ++modes) {
+    Fixture fixture(firmware, trace, modes);
+    const auto initial = fixture.machine.checkpoint();
+    for (const unsigned channel : {0U, channel_count - 1}) {
+      for (const unsigned note : {64U, 65U, 67U}) {
+        for (const bool zero : {false, true}) {
+          for (const auto delivery :
+               {Delivery::complete, Delivery::fragmented, Delivery::running}) {
+            release_case(fixture,
+                         initial,
+                         {.modes = modes,
+                          .channel = channel,
+                          .note = note,
+                          .zero = zero,
+                          .delivery = delivery},
+                         trace);
+          }
+        }
+      }
+    }
+    release_case(
+        fixture, initial, {.modes = modes, .channel = channel_count - 1, .filtered = true}, trace);
+  }
+  std::cout << "Original MIDI releases and selected held-envelope retirement executed.\n";
+}
 }
 
 int main(const int count, char **arguments) {
   try {
-    require(count == 3, "Usage: original-dsp-note-test original-firmware trace");
+    const bool release = count == 4 && std::string_view(arguments[3]) == "release";
+    require(count == 3 || release,
+            "Usage: original-dsp-note-test original-firmware trace [release]");
     const auto firmware = blofeld::Firmware::load(arguments[1]);
     std::ofstream trace(arguments[2]);
     trace.exceptions(std::ios::badbit | std::ios::failbit);
+    if (release) {
+      release_matrix(firmware, trace);
+      return 0;
+    }
     Fixture fixture(firmware, trace);
     const auto initial = fixture.machine.checkpoint();
     for (const unsigned note : {0U, 64U, midi_max}) {

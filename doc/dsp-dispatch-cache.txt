@@ -1,0 +1,24 @@
+Host DSP dispatch cache
+
+The native interpreter retains its complete 24-bit program-address space. Its
+three-member-function dispatch entries now occupy demand-allocated 1024-word
+pages instead of one dense 16M-entry vector. Cold code invalidation allocates
+nothing; clearing or restoring the interpreter discards all resident pages.
+Entry references remain stable while other pages are created.
+
+This is host decoder storage, independent of guest P/X/Y memory and physical
+instruction caches. Strict bus checks, missing-ROM faults, REP latching,
+instruction/cycle counters and architectural checkpoints retain their existing
+contracts. The separate native cycle-count vector is unchanged.
+
+  ctest --test-dir build/strict -R '^(native_dsp|dsp_dispatch_cache|dsp_checkpoint)$' --output-on-failure
+
+Own instruction tests execute P:ffffff, cross a page boundary with an immediate
+operand, replace operands/opcodes and replay a coordinated checkpoint. Host
+storage tests cover cold probes, all 24 address bits, stable member pointers,
+partial pages, rejected bounds and reset. Manufacturer program bytes are absent.
+
+First use can allocate and throw. This does not qualify DSP execution for a
+real-time audio callback or establish physical cache/pipeline timing, complete
+firmware boot or hardware equivalence. Native dependency licenses and separate
+sanitizer instrumentation remain required.
