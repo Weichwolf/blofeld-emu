@@ -233,6 +233,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           DSP PCTL command/PINIT reset and target
                                           ratios tested against NXP worked example;
                                           ED57 sequence guard (dsp-pll.txt).
+                                          Original MCU/DSP clock prefixes retain
+                                          their native source selection, complete
+                                          runtime delay and nominal PLL changes;
+                                          an independent ledger checks timebase
+                                          refusal/restoration (runtime-clocks.txt).
                                           Optional DSP clock owner retains nominal
                                           native units, exact declared PLL ticks,
                                           CLK/2 residue and memory-switch delays.

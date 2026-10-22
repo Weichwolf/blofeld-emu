@@ -1,0 +1,45 @@
+Original firmware clock-prefix checks
+
+original_runtime_clocks executes the unchanged MCU reset prefix through its
+first PHY clock selection. E2/E3 loopback and a complete15-edge PHY detector
+window are declared inputs, not observed board wiring or a host-written LOCK.
+The35 instructions retire76 bus cycles. CLKSEL commits at cycle75; the final
+BSET rPwO slot already uses the selected source. At nominal12 MHz OSC the first
+75 cycles take750 reference ticks and the final slot takes2, totaling752.
+
+The complete original29-word DSP clock component is preloaded locally. An own
+native caller enters its unchanged P:100 address; no original instruction is
+patched or skipped. The actual44,000-iteration REP/NOP delay completes before
+the second PLL command. At declared12 MHz EXTAL the requested rates are54 MHz
+and216 MHz; the entry starts at reset/bypass12 MHz. These are nominal register
+targets, not measured oscillator, PLL lock or physical execution frequencies.
+The final runtime reset vector bypasses this prefix; it is not the NAND loader's
+initial entry. The test does not establish that loader/caller provenance.
+
+A1080 MHz integer timebase represents12/54/216 MHz with90/20/5 ticks per nominal
+unit and converts MCU60 MHz reference ticks by18. The previous540 MHz boot
+timebase cannot represent216 MHz without fractions. Its negative case accepts
+the genuine PLL command, then fails before the next original instruction;
+there is no rounding, ignored command or fabricated continuation.
+
+Independent instruction costs use DSP56300FM Rev5 table A-1 (A-4/A-6/A-7/A-8).
+The MCU BSET slots follow S12CPU15UG. Primary document identities are pinned in
+hardware/sources.json. A native mid-REP checkpoint reproduces the complete CPU
+and clock endpoint. Two nonintegral fault/restores and five fixed corrupted
+reports must reject. All127 firmware record identities remain hash-pinned;
+manufacturer programs, disassembly and traces remain local.
+
+  cmake --build --preset strict --target blofeld-original-runtime-clocks-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_runtime_clocks$'
+
+Testing/original-runtime-clocks.* contains the private ledger/report. Missing
+firmware skips; changed identities, ledger values or native diagnostics fail.
+No automatic fuzzing, physical traffic or new concurrent processing is involved.
+
+A separate local16-profile request experiment uses the original MCU clock
+prefix and firmware-derived native DSP setup, including every delay iteration.
+Driver-only coupling and original request routines retain their previous scope.
+All sixteen still reach the original reply attempt and reject known opposition;
+reset/bypass clocks alone do not explain that declared direct-link conflict.
+Measured clocks, interlocks, physical pin timing/wiring, full reset/NAND boot,
+MIDI/audio and hardware equivalence remain unqualified (startup-dsp.txt).

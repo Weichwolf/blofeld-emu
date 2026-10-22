@@ -780,6 +780,14 @@ if(BUILD_TESTING)
   add_test(NAME dsp_operand_bounds COMMAND blofeld-dsp-instruction-test --operand-bounds)
   set_tests_properties(dsp_operand_bounds PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
+  add_executable(blofeld-original-runtime-clocks-test test/original_runtime_clocks.cpp)
+  target_link_libraries(blofeld-original-runtime-clocks-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_runtime_clocks COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_runtime_clocks.py"
+    $<TARGET_FILE:blofeld-original-runtime-clocks-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-runtime-clocks.trace")
+  set_tests_properties(original_runtime_clocks PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-dsp-dispatch-cache-test test/dsp_dispatch_cache_test.cpp)
   target_link_libraries(blofeld-dsp-dispatch-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dispatch_cache COMMAND blofeld-dsp-dispatch-cache-test)
@@ -1361,7 +1369,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-original-runtime-clocks-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test
