@@ -159,6 +159,7 @@ class Voice:
         self.sound_base = sound_base
         self.controller = RESET_LEVEL
         self.stack_base = 0
+        self.tick = 0
         self.parameters = filter_parameters(ydata, varied, drives)
         self.gains = [v & WORD_MASK for pair in controls(ydata, varied) for v in pair]
         self.coefficients = coefficient_model(controls(ydata, varied))
@@ -267,7 +268,7 @@ class Voice:
                     full_b = -2 * self.damping[osc] * magnitude
                     main = full_b // W & WORD_MASK
                     full_b += ((main & 255) - main) * W
-                    full_b += sample * 256 * W
+                    full_b += (self.tick + sample * 256) * W
                     self.cursor = full_b // W & WORD_MASK
         return (output, wraps, syncs)
 

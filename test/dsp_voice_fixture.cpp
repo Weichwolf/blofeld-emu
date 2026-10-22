@@ -5,11 +5,13 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
+#include "blofeld/dsp_machine.hpp"
 #include "blofeld/firmware.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_voice_capture.hpp"
 #include "dsp_voice_master.hpp"
 #include "dsp_voice_pcm.hpp"
+#include "dsp_voice_repeat.hpp"
 
 #include <algorithm>
 #include <array>
@@ -75,6 +77,11 @@ constexpr unsigned response_ring = 0xed98;
 constexpr unsigned active_list = 0x6d2;
 constexpr unsigned first_effect_type = 128;
 constexpr unsigned second_effect_type = 144;
+constexpr unsigned master_completed = 0x1aa;
+constexpr unsigned mix_completed = 0x228;
+constexpr unsigned master_history = 0x46;
+constexpr unsigned mixed_bus = 0x620;
+constexpr unsigned chain_gain = 0x6a0;
 constexpr std::array<unsigned, 13> foreground_stages{main_loop,
                                                      midi_parser,
                                                      0xc5d,
@@ -288,6 +295,7 @@ void harness(blofeld::DspBus &bus,
              unsigned &stop,
              blofeld::test::VoiceMaster &master,
              blofeld::test::VoicePcm &pcm,
+             blofeld::test::VoiceRepeat &repeat,
              const unsigned sound) {
   blofeld::test::DspProgram code;
   code.immediate("x1", memory_mode);
@@ -311,6 +319,7 @@ void harness(blofeld::DspBus &bus,
   code.word(begin);
   master.append(code);
   pcm.append(code);
+  repeat.append(code);
   code.install(bus);
 }
 
@@ -322,12 +331,14 @@ unsigned initial_bus_word(const unsigned index, const bool varied) {
 }
 
 struct Fixture {
-  blofeld::DspBus bus;
+  blofeld::DspMachine machine;
+  blofeld::DspBus &bus;
   const unsigned sound;
   unsigned stop = 0;
   blofeld::test::VoiceMaster master;
   blofeld::test::VoicePcm pcm;
-  blofeld::DspCore cpu;
+  blofeld::test::VoiceRepeat repeat;
+  blofeld::DspCore &cpu;
   const Source &source;
   std::ostream &trace;
   std::set<unsigned> visited;
@@ -340,6 +351,7 @@ struct Fixture {
   bool pcm_enabled = false;
   bool midi_enabled = false;
   bool foreground_enabled = false;
+  bool stream_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
   Case configuration{};
   bool drive_pending = false;
@@ -369,8 +381,9 @@ struct Fixture {
                                unsigned &stop,
                                blofeld::test::VoiceMaster &master,
                                blofeld::test::VoicePcm &pcm,
+                               blofeld::test::VoiceRepeat &repeat,
                                const unsigned sound_base) {
-    harness(bus, stop, master, pcm, sound_base);
+    harness(bus, stop, master, pcm, repeat, sound_base);
     bus.observe_omr(memory_mode);
     bus.advance_instruction_cycles(3);
     for (const auto &r : s.records) {
@@ -382,12 +395,17 @@ struct Fixture {
   }
 
   Fixture(const Source &s, std::ostream &output, const blofeld::test::VoiceInput input)
-      : sound(input == blofeld::test::VoiceInput::none ? fixture_sound : primary_sound),
-        cpu(load(bus, s, stop, master, pcm, sound)),
+      : bus(machine.bus()),
+        sound(input == blofeld::test::VoiceInput::none ? fixture_sound : primary_sound),
+        cpu(machine.cpu()),
         source(s),
         trace(output),
         midi_enabled(input != blofeld::test::VoiceInput::none),
-        foreground_enabled(input == blofeld::test::VoiceInput::foreground) {}
+        foreground_enabled(input == blofeld::test::VoiceInput::foreground ||
+                           input == blofeld::test::VoiceInput::stream),
+        stream_enabled(input == blofeld::test::VoiceInput::stream) {
+    static_cast<void>(load(bus, s, stop, master, pcm, repeat, sound));
+  }
 
   void put(blofeld::DspSpace space, unsigned at, unsigned v) {
     require(!rendering ||
@@ -652,6 +670,7 @@ struct Fixture {
 
   void reset_stream(bool twos) {
     using enum blofeld::DspSpace;
+    if (stream_enabled) { cpu.reset_spi_boot(); }
     // Load with the source image's switched mapping, then reset CPU and bus
     // together. The real harness performs the next switch with its delay NOPs.
     bus.observe_omr(memory_mode);
@@ -798,7 +817,8 @@ struct Fixture {
     require(cpu.state().sp == expected_sp && get(x, entry + mixer_callback) == steady_mixer &&
                 shared == shared_samples_per_block && continues == 16,
             "Original three-oscillator loop/mixer return differs");
-    require(get(x, 0xd) == byte_mask && get(x, 4) == 0,
+    const auto counter = stream_enabled ? block * 0x1000U : 0U;
+    require(get(x, 0xd) == byte_mask && get(x, 4) == counter,
             "Original low-byte mask or declared block counter changed");
     for (const auto &[at, v] : source.program) {
       require(bus.peek_program(at) == v, "Original runtime executable changed");
@@ -875,6 +895,10 @@ struct Fixture {
     prepare_output(input);
     if (midi_enabled) { initialize_midi(input.twos); }
     if (master_enabled) { blofeld::test::VoiceMaster::initialize(bus); }
+    if (stream_enabled) {
+      stream_case(input);
+      return;
+    }
     if (foreground_enabled) {
       foreground_case(input);
       return;
@@ -946,11 +970,11 @@ struct Fixture {
     put(x, dma_source, declared_source); // Disabled DMA; no fabricated transfer/clock.
   }
 
-  void foreground_input(const bool repeat) {
+  void foreground_input(const bool commit_then_repeat) {
     using enum blofeld::DspSpace;
-    const auto value = repeat ? parameter_max : 0U;
+    const auto value = commit_then_repeat ? parameter_max : 0U;
     std::vector<unsigned> bytes{midi_controller_status, midi_volume, value};
-    if (repeat) { bytes.insert(bytes.end(), {midi_wheel, 0, midi_volume, value}); }
+    if (commit_then_repeat) { bytes.insert(bytes.end(), {midi_wheel, 0, midi_volume, value}); }
     trace << "FOREGROUND_INPUT" << std::hex;
     for (unsigned i = 0; i < bytes.size(); ++i) {
       put(x, midi_ring + i, bytes[i] << midi_byte_shift);
@@ -969,8 +993,7 @@ struct Fixture {
     observe_stages(s);
     observe_oscillators(s, configuration.twos);
     const auto seed = get(x, shared_seed);
-    cpu.step();
-    bus.advance_instruction_cycles(1);
+    foreground_instruction();
     if (get(x, shared_seed) != seed) {
       trace << "SEED_WRITE " << std::hex << s.pc << ' ' << seed << ' ' << get(x, shared_seed)
             << '\n'
@@ -1012,18 +1035,24 @@ struct Fixture {
     }
   }
 
-  void foreground_case(const Case input) {
-    initialize_foreground(input);
-    foreground_input(input.varied);
-    run({.target = main_loop, .end = main_loop, .twos = input.twos});
-    rendering = true;
-    begin_block(0);
+  void foreground_instruction() {
+    if (stream_enabled) {
+      blofeld::test::VoiceRepeat::instruction(machine);
+    } else {
+      cpu.step();
+      bus.advance_instruction_cycles(1);
+    }
+  }
+
+  void foreground_iteration(const unsigned block) {
+    begin_block(block);
     bool in_voice = false;
     unsigned voices = 0;
     unsigned steps = 0;
     do {
       require(steps++ < instruction_limit, "Original foreground iteration bound");
       const auto pc = cpu.state().pc;
+      if (stream_enabled) { stream_observe(pc); }
       if (std::ranges::find(foreground_stages, pc) != foreground_stages.end()) {
         trace << "FOREGROUND_STAGE " << std::hex << pc << ' ' << cpu.state().sp << '\n' << std::dec;
       }
@@ -1032,7 +1061,7 @@ struct Fixture {
         ++voices;
       }
       if (in_voice && pc == active_entry_next) {
-        check_block(0, 2);
+        check_block(block, 2);
         emit_samples();
         emit_state();
         in_voice = false;
@@ -1040,13 +1069,82 @@ struct Fixture {
       if (in_voice) {
         foreground_voice_step();
       } else {
-        cpu.step();
-        bus.advance_instruction_cycles(1);
+        foreground_instruction();
       }
       ++total_steps;
     } while (cpu.state().pc != main_loop);
     require(!in_voice && voices == 1, "Original foreground must actually render the held entry");
     foreground_state();
+  }
+
+  void stream_row(const char *label, const unsigned base) {
+    trace << label << std::hex;
+    for (unsigned i = 0; i < stereo_words; ++i) {
+      trace << ' ' << get(blofeld::DspSpace::x, base + i);
+    }
+    trace << '\n' << std::dec;
+  }
+
+  void stream_observe(const unsigned pc) {
+    using enum blofeld::DspSpace;
+    if (pc == master_completed) {
+      stream_row("REPEAT_MASTER", declared_source + get(x, phase_word));
+      trace << "REPEAT_HISTORY" << std::hex;
+      for (const auto space : {x, y}) {
+        for (unsigned i = 0; i < 2; ++i) { trace << ' ' << get(space, master_history + i); }
+      }
+      trace << '\n' << std::dec;
+    }
+    if (pc == mix_completed) {
+      stream_row("REPEAT_MIX", mixed_bus);
+      stream_row("REPEAT_CLEARED", output_bus);
+      trace << "REPEAT_GAINS " << std::hex << get(x, chain_gain) << ' ' << get(x, chain_gain + 1)
+            << '\n'
+            << std::dec;
+    }
+  }
+
+  void foreground_case(const Case input) {
+    initialize_foreground(input);
+    foreground_input(input.varied);
+    run({.target = main_loop, .end = main_loop, .twos = input.twos});
+    rendering = true;
+    foreground_iteration(0);
+    rendering = false;
+  }
+
+  void stream_case(const Case input) {
+    using enum blofeld::DspSpace;
+    initialize_foreground(input);
+    foreground_input(input.varied);
+    // This finite reference window has no due part-clock/countdown service.
+    put(x, scheduler_period, positive_limit);
+    put(x, block_countdown, 0);
+    for (unsigned i = 0; i < stereo_words; ++i) { put(x, output_bus + i, 0); }
+    run({.target = pcm.setup, .end = stop, .twos = input.twos});
+    repeat.begin(bus);
+    put(x, caller_target, repeat.entry);
+    put(x, caller_status, input.twos ? rounding_mode : 0);
+    unsigned steps = 0;
+    do {
+      require(steps++ < instruction_limit, "Own repeating DMA entry bound");
+      blofeld::test::VoiceRepeat::instruction(machine);
+    } while (cpu.state().pc != main_loop);
+    const auto before = cpu.debug_state();
+    bool refused = false;
+    try {
+      bus.advance_instruction_cycles(1);
+    } catch (const blofeld::Fault &error) {
+      refused = std::string(error.what()).contains("Unqualified automatic DSP DMA bus timing");
+    }
+    require(refused && cpu.debug_state() == before,
+            "Automatic DMA timing rejection remains intact in the explicit untimed profile");
+    trace << "REPEAT_AUTOMATIC_REJECTED 1\n";
+    rendering = true;
+    for (unsigned block = 0; block < input.blocks; ++block) {
+      foreground_iteration(block);
+      repeat.drain(bus, cpu, trace);
+    }
     rendering = false;
   }
 
@@ -1147,6 +1245,21 @@ void drive_matrix(Fixture &fixture) {
     }
   }
 }
+
+void stream_matrix(Fixture &fixture) {
+  for (const bool high : {false, true}) {
+    for (const bool twos : {false, true}) {
+      for (const bool serial : {false, true}) {
+        fixture.sample_case({.high = high,
+                             .twos = twos,
+                             .color = parameter_max,
+                             .varied = high,
+                             .serial = serial,
+                             .blocks = 6});
+      }
+    }
+  }
+}
 }
 
 namespace blofeld::test {
@@ -1167,7 +1280,9 @@ int run_voice_test(const int count,
     fixture.master_enabled = master;
     fixture.pcm_enabled = pcm;
     fixture.capture = capture;
-    if (drive) {
+    if (input == VoiceInput::stream) {
+      stream_matrix(fixture);
+    } else if (drive) {
       drive_matrix(fixture);
     } else {
       baseline(fixture);

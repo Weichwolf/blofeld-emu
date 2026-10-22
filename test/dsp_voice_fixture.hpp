@@ -5,7 +5,7 @@
 
 namespace blofeld::test {
 struct VoicePcmCapture;
-enum class VoiceInput : std::uint8_t { none, controllers, foreground };
+enum class VoiceInput : std::uint8_t { none, controllers, foreground, stream };
 [[nodiscard]] int run_voice_test(int count,
                                  char **arguments,
                                  bool drive,

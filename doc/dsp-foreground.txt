@@ -31,6 +31,9 @@ The DMA source is not advanced or reported as a transfer. This establishes one
 foreground iteration, not continuous DMA/arbitration, physical time, original
 NoteOn allocation, full boot, live MIDI/audio or hardware equivalence.
 
+dsp-foreground-ring.txt adds consecutive original foreground iterations with enabled
+repeating DMA under an explicit untimed, paused-core serial interleave.
+
   cmake --build --preset strict --target blofeld-original-dsp-foreground-test
   ctest --test-dir build/strict --output-on-failure -R '^original_dsp_foreground$'
 
