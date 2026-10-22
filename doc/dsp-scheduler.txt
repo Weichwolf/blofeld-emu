@@ -36,6 +36,10 @@ adds scheduler primitive coverage; the held-note voice streams still keep tick
 zero and accumulate their output buses. Full boot and hardware equivalence are
 not established, and the reserved-read note frontier remains unchanged.
 
+dsp-foreground.txt additionally qualifies one conditional original foreground
+iteration with held voice and parameter smoothing, including actual parent
+frames. Continuous DMA and wall-clock scheduling remain unqualified.
+
 The complete matrix resets the native core for every case. CTest runs this
 diagnostic serially to isolate its execution resources. All 304 cases and the
 240-second native execution bound are retained. Host audio performance remains

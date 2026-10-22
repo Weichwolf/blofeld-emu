@@ -978,6 +978,18 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           Destination switching is checked;
                                           smoothing clock, normal host MIDI and
                                           NoteOn allocation remain unqualified.
+                                          32 conditional original foreground
+                                          iterations now compose MIDI, held voice
+                                          and scheduler smoothing with original
+                                          parent frames (dsp-foreground.txt).
+                                          Another 256 real idle polls consume
+                                          running-status volume input, stage its
+                                          target and preserve the independently
+                                          checked voice/audio state until the
+                                          actual DMA half-cursor changes.
+                                          Effects Off, declared prior phase and
+                                          disabled DMA; continuous scheduling,
+                                          boot and live playback remain open.
                                           Original scheduler primitives check
                                           seed/tick/timer/countdown arithmetic,
                                           real conditional-call/RTS frames and

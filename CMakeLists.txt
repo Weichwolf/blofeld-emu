@@ -901,6 +901,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-voice-midi.trace")
   set_tests_properties(original_dsp_voice_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-foreground-test test/original_dsp_foreground_test.cpp)
+  target_link_libraries(blofeld-original-dsp-foreground-test PRIVATE blofeld_voice_fixture)
+  add_test(NAME original_dsp_foreground COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_foreground.py"
+    $<TARGET_FILE:blofeld-original-dsp-foreground-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-foreground.trace")
+  set_tests_properties(original_dsp_foreground PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-original-dsp-voice-audio-test test/original_dsp_voice_audio_test.cpp)
   target_link_libraries(blofeld-original-dsp-voice-audio-test PRIVATE
     blofeld_voice_fixture blofeld_audio_runtime)
@@ -1373,6 +1381,7 @@ add_custom_target(quality
     blofeld-original-dsp-voice-host-test
     blofeld-original-dsp-voice-audio-test
     blofeld-original-dsp-voice-midi-test
+    blofeld-original-dsp-foreground-test
     blofeld-original-dsp-drive-voice-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test

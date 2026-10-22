@@ -158,6 +158,7 @@ class Voice:
         self.drives = drives
         self.sound_base = sound_base
         self.controller = RESET_LEVEL
+        self.stack_base = 0
         self.parameters = filter_parameters(ydata, varied, drives)
         self.gains = [v & WORD_MASK for pair in controls(ydata, varied) for v in pair]
         self.coefficients = coefficient_model(controls(ydata, varied))

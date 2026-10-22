@@ -25,8 +25,14 @@ int main(const int count, char **arguments) {
                                              .sample_rate = playback_rate,
                                              .server = arguments[3]}});
     std::array<char *, 4> inputs{arguments[0], arguments[1], arguments[2], nullptr};
-    const auto result = blofeld::test::run_voice_test(
-        3, inputs.data(), false, true, true, {.direct = &output}, midi);
+    const auto result = blofeld::test::run_voice_test(3,
+                                                      inputs.data(),
+                                                      false,
+                                                      true,
+                                                      true,
+                                                      {.direct = &output},
+                                                      midi ? blofeld::test::VoiceInput::controllers
+                                                           : blofeld::test::VoiceInput::none);
     if (result != 0) { return result; }
     output.finish();
     const auto status = output.status();
