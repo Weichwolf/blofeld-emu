@@ -36,6 +36,10 @@ Native access suspension allocates/throws and cannot run in an audio callback.
 Full boot, NoteOn allocation, live host MIDI/audio and hardware equivalence remain
 open; firmware and peripheral boundaries are not relaxed.
 
+dsp-ring-audio.txt additionally checks direct per-half delivery of these decoded
+frames through AudioRuntime to an isolated host monitor. Playback waits for EOF;
+this does not establish realtime production or original board startup.
+
   cmake --build --preset strict --target blofeld-original-dsp-repeat-test
   ctest --test-dir build/strict --output-on-failure -R '^original_dsp_repeat$'
 

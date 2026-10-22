@@ -1,0 +1,39 @@
+Original foreground/ring matrix to source-owned audio workers
+
+original_dsp_ring_audio checks all eight pitch/RM/filter-routing contexts from
+dsp-foreground-ring.txt. Each independent native process initializes one held
+entry and six unchanged original foreground iterations. Context indices0..7 map
+to pitch bit2, RM bit1 and routing bit0; the expected case identities are checked
+independently. Existing one-context and offline32-stream tests keep their scope.
+
+Each context binds a fresh AudioRuntime before execution and claims its own
+source identity outside peripheral checkpoints. Actual ESAI-decoded frames are
+submitted directly after each verified half and held-word replay. No completed
+capture or trace supplies playback samples. A distinct source claim must reject
+without retiring the original source; its96 frames must still finish normally.
+This checks eight real source bindings and eight rejected attempts to share them.
+
+Independent voice, smoothing, previous-mix/master and ring equations predict all
+48 blocks and768 S32LE stereo frames. A single private monitor must contain the
+eight complete sources in order, with only zero-valued service gaps. Truncated,
+duplicated, stale or extra nonzero data fails. All32 fixed trace corruptions and
+eight monitor corruptions must reject. Archive/MID and all127 record identities
+remain hash-pinned; native traces/PCM and reference assets remain local.
+
+The continuously enabled64-word DMA ring observes real source-half changes under
+explicit untimed access admissions and paused-core HCKT/grants. Automatic active-
+DMA timing still rejects. Each96-frame source is below the4096-frame prebuffer
+and starts on EOF. Playback48000 Hz/timebase24576000 are laboratory conventions.
+This establishes neither sustained RT nor calibrated physical timing, complete
+boot, normal USB-MIDI, original NoteOn allocation or hardware equivalence.
+Native client/codecs and project code run separately under ASan/UBSan and TSan.
+The monitor/service are private; session routes and physical devices are untouched.
+
+  cmake --build --preset strict --target blofeld-original-dsp-ring-audio-test
+  ctest --test-dir build/strict -R '^original_dsp_ring_audio$' --output-on-failure
+
+Repeat with the thread preset. Testing/original-dsp-ring-audio/ holds per-context
+traces/logs, complete monitor PCM and result counts. The whole-test timeout covers
+eight native runs; each run retains its bounded instruction and control deadlines.
+Missing private references/tools skip; changed identities or diagnostics fail.
+No automatic fuzzing runs.

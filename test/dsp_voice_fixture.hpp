@@ -19,6 +19,8 @@ enum class VoiceInput : std::uint8_t { none, controllers, foreground, stream };
 struct VoiceOutputOptions {
   PcmFrameSink *direct = nullptr;
   VoicePcmCapture *capture = nullptr;
+  // Direct stream context: pitch bit2, rounding bit1, filter-routing bit0.
+  unsigned stream_case_index = 0;
 };
 
 [[nodiscard]] int run_voice_test(int count,

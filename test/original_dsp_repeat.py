@@ -150,7 +150,7 @@ def validate(text, xdata, ydata, program):
     return totals
 
 
-def negative_controls(text, xdata, ydata, program):
+def negative_controls(text, xdata, ydata, program, validator=validate):
     for label in ('REPEAT_MASTER', 'REPEAT_MIX', 'REPEAT_DMA', 'REPEAT_FRAME'):
         def corrupt(match):
             words = match[1].split()
@@ -160,7 +160,7 @@ def negative_controls(text, xdata, ydata, program):
         if count != 1:
             raise ValueError('Missing repeating oracle negative control')
         try:
-            validate(changed, xdata, ydata, program)
+            validator(changed, xdata, ydata, program)
         except ValueError as error:
             if label not in str(error):
                 raise ValueError('Wrong repeating negative-control failure') from error

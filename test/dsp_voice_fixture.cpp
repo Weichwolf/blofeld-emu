@@ -8,6 +8,7 @@
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/firmware.hpp"
 #include "blofeld/pcm_sink.hpp"
+#include "blofeld/serial_pcm.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_voice_capture.hpp"
 #include "dsp_voice_master.hpp"
@@ -21,8 +22,10 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <ostream>
 #include <set>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -288,6 +291,22 @@ struct Case {
   unsigned blocks = 8;
   bool drive_case = false;
 };
+
+constexpr unsigned stream_contexts = 8;
+
+Case stream_configuration(const unsigned index) {
+  require(index < stream_contexts, "Original ring context index exceeds its declared matrix");
+  constexpr unsigned pitch_bit = 4;
+  constexpr unsigned rounding_bit = 2;
+  constexpr unsigned routing_bit = 1;
+  const bool high = (index & pitch_bit) != 0;
+  return {.high = high,
+          .twos = (index & rounding_bit) != 0,
+          .color = parameter_max,
+          .varied = high,
+          .serial = (index & routing_bit) != 0,
+          .blocks = 6};
+}
 
 struct Call {
   unsigned target;
@@ -891,8 +910,20 @@ struct Fixture {
           << '\n';
   }
 
+  void publish_frames(const std::span<const blofeld::SerialPcmFrame> decoded,
+                      const unsigned count) const {
+    require(count <= decoded.size(), "Decoded frame count exceeds the verified buffer");
+    if (stream_output == nullptr) { return; }
+    // External output follows the final verified DMA/ESAI replay branch, once.
+    // It never becomes part of modeled bus/receiver checkpoints.
+    for (unsigned frame = 0; frame < count; ++frame) { stream_output->accept(decoded[frame]); }
+  }
+
   void sample_case(const Case input) {
     if (capture != nullptr) { capture->begin(); }
+    if (stream_output != nullptr) {
+      stream_output->claim_source(std::make_shared<const bool>(true));
+    }
     rendering = false;
     configuration = input;
     reset_stream(input.twos);
@@ -927,13 +958,7 @@ struct Fixture {
         require(cpu.state().sp == 0, "Original copy/mix/master calls must genuinely return");
         if (pcm_enabled) {
           run({.target = pcm.transfer, .end = stop, .twos = input.twos});
-          if (stream_output != nullptr) {
-            // Publish only after real DMA/ESAI completion and any held-word
-            // replay. External audio is never copied into peripheral snapshots.
-            for (unsigned frame = 0; frame < pcm.frames; ++frame) {
-              stream_output->accept(pcm.decoded.at(frame));
-            }
-          }
+          publish_frames(pcm.decoded, pcm.frames);
         }
       }
     }
@@ -1233,12 +1258,7 @@ struct Fixture {
       if (stream_output != nullptr) { stream_output->check(); }
       foreground_iteration(block);
       repeat.drain(bus, cpu, trace);
-      if (stream_output != nullptr) {
-        // External delivery occurs once, after any native held-word replay.
-        for (unsigned frame = 0; frame < repeat.frames; ++frame) {
-          stream_output->accept(repeat.decoded.at(frame));
-        }
-      }
+      publish_frames(repeat.decoded, repeat.frames);
     }
     rendering = false;
   }
@@ -1342,17 +1362,8 @@ void drive_matrix(Fixture &fixture) {
 }
 
 void stream_matrix(Fixture &fixture) {
-  for (const bool high : {false, true}) {
-    for (const bool twos : {false, true}) {
-      for (const bool serial : {false, true}) {
-        fixture.sample_case({.high = high,
-                             .twos = twos,
-                             .color = parameter_max,
-                             .varied = high,
-                             .serial = serial,
-                             .blocks = 6});
-      }
-    }
+  for (unsigned index = 0; index < stream_contexts; ++index) {
+    fixture.sample_case(stream_configuration(index));
   }
 }
 }
@@ -1379,6 +1390,10 @@ int run_voice_test(const int count,
              input != VoiceInput::controllers) ||
                 (!drive && master && (pcm || input == VoiceInput::stream)),
             "An external source requires the original voice/master/PCM composition");
+    require(output.stream_case_index < stream_contexts &&
+                (output.stream_case_index == 0 ||
+                 (stream_output != nullptr && input == VoiceInput::stream)),
+            "A selected ring context requires direct stream output");
     if (stream_output != nullptr) { stream_output->check(); }
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
@@ -1391,12 +1406,7 @@ int run_voice_test(const int count,
     fixture.stream_output = stream_output;
     if (stream_output != nullptr) {
       if (input == VoiceInput::stream) {
-        fixture.sample_case({.high = false,
-                             .twos = false,
-                             .color = parameter_max,
-                             .varied = false,
-                             .serial = false,
-                             .blocks = 6});
+        fixture.sample_case(stream_configuration(output.stream_case_index));
       } else {
         fixture.sample_case({});
       }

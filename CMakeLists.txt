@@ -521,6 +521,7 @@ if(BUILD_TESTING)
     --audio-binary $<TARGET_FILE:blofeld-audio-runtime-test>
     --audio-binary $<TARGET_FILE:blofeld-original-dsp-voice-host-test>
     --audio-binary $<TARGET_FILE:blofeld-original-dsp-voice-audio-test>
+    --audio-binary $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
     --mode "${BLOFELD_SANITIZER}"
     --nm "${BLOFELD_LLVM_NM}" --readelf "${BLOFELD_LLVM_READELF}"
     --native zlibstatic=$<TARGET_FILE:zlibstatic>
@@ -924,6 +925,16 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-repeat.trace")
   set_tests_properties(original_dsp_repeat PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+  add_executable(blofeld-original-dsp-ring-audio-test test/original_dsp_ring_audio_test.cpp)
+  target_link_libraries(blofeld-original-dsp-ring-audio-test PRIVATE
+    blofeld_voice_fixture blofeld_audio_runtime)
+  add_test(NAME original_dsp_ring_audio COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
+    $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-audio")
+  set_tests_properties(original_dsp_ring_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
+    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
   add_executable(blofeld-original-dsp-voice-audio-test test/original_dsp_voice_audio_test.cpp)
   target_link_libraries(blofeld-original-dsp-voice-audio-test PRIVATE
     blofeld_voice_fixture blofeld_audio_runtime)
@@ -1398,6 +1409,7 @@ add_custom_target(quality
     blofeld-original-dsp-voice-midi-test
     blofeld-original-dsp-foreground-test
     blofeld-original-dsp-repeat-test
+    blofeld-original-dsp-ring-audio-test
     blofeld-original-dsp-drive-voice-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test
