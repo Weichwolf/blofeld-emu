@@ -688,7 +688,14 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           RX, FOSC clocks, audio IRQ and
                                           chip profile remain pending;
                                           no combined MCU/DSP board boot.
-MCU–DSP communication             partial  Synthetic native HC12/SHI exchanges exact
+MCU–DSP communication             partial  Local MCU output masks/knownness are
+                                          observable separately from resolved pads,
+                                          peer levels and weak pulls. Directed
+                                          mcu_gpio_outputs checks retain unknown
+                                          latches, strict pad faults and read-only
+                                          state; this is a link-building interface,
+                                          not complete bidirectional startup.
+                                          Synthetic native HC12/SHI exchanges exact
                                           words in both directions. Original cold MCU
                                           sends its 97 frames through 7275 GPIO stores
                                           to native DSP ROM, which loads all94 stage

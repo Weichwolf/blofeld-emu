@@ -64,6 +64,7 @@ public:
   void set_pin_drive(McuPort port, PinDrive drive);
   void update_pin_drive(McuPort port, std::uint8_t affected, PinDrive drive);
   [[nodiscard]] PinSample observe_pads(McuPort port, std::uint8_t mask) const;
+  [[nodiscard]] PinOutputs gpio_outputs(McuPort port) const;
   void observe_phy(PhyClockWindow window);
   [[nodiscard]] McuRunClockRoute run_clock_route() const;
   // Qualified system clocks continue through WAI; unsupported CRG gates fail.

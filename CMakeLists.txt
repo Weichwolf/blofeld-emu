@@ -1180,6 +1180,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-test test/mcu_model_test.cpp)
   target_link_libraries(blofeld-mcu-test PRIVATE blofeld_core)
   add_test(NAME mcu_model COMMAND blofeld-mcu-test)
+  add_executable(blofeld-gpio-output-test test/mcu_gpio_output_test.cpp)
+  target_link_libraries(blofeld-gpio-output-test PRIVATE blofeld_mcu)
+  add_test(NAME mcu_gpio_outputs COMMAND blofeld-gpio-output-test)
   add_executable(blofeld-clock-test test/mcu_clock_test.cpp)
   target_link_libraries(blofeld-clock-test PRIVATE blofeld_core)
   add_test(NAME mcu_clock COMMAND blofeld-clock-test
@@ -1331,7 +1334,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-headless blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-gpio-output-test blofeld-headless blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test

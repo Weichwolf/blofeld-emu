@@ -1,5 +1,17 @@
 MCU peripheral pin routing
 
+Local output drivers and resolved pad samples are separate observations.
+McuBus::gpio_outputs returns local driven/known/level masks, including current
+alternate-function ownership. It excludes peer input voltages and weak input
+pulls, so a board link can propagate actual drivers without clearing external
+inputs or feeding a receiver's resolved pad back as a second strong source.
+Unknown local latches remain driven but unknown. Unsupported ECLK and package
+tied-input configurations fail explicitly. Driver observation does not resolve
+contention, change GPIO/clock/NVM state or establish physical board wiring.
+Existing architectural reads and contention failures retain their behavior.
+
+  ctest --test-dir build/strict --output-on-failure -R '^mcu_gpio_outputs$'
+
 McuBus caches the derived GPIO alternate-function assignments. The complete
 key contains MODRR, all timer input/output/level/unknown masks, SCI receiver
 enable and the optional SCI transmit level. An unchanged key avoids rebuilding

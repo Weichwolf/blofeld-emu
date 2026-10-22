@@ -136,6 +136,28 @@ PinSample McuGpio::observe_pads(const McuPort port, const std::uint8_t mask) con
   return resolve(port, mask);
 }
 
+PinOutputs McuGpio::outputs(const McuPort port) const {
+  const auto index = port_index(port);
+  if (tied_low(port) != 0) {
+    throw Fault("Unqualified MCU package GPIO output observation at " + hex(specs[index].base));
+  }
+  if (port == McuPort::e && (assignment_e_ & port_e_clock_disable) == 0) {
+    throw Fault("Unimplemented MCU ECLK output observation at " + hex(hc12::porte));
+  }
+  const auto &state = ports_[index];
+  const auto &function = state.function;
+  const auto functions = static_cast<unsigned>(function.inputs) | function.outputs;
+  const auto direction = (state.direction & ~functions) | function.outputs;
+  const auto latch = (state.latch & ~static_cast<unsigned>(function.outputs)) | function.levels;
+  const auto latch_known = (static_cast<unsigned>(state.latch_known) | function.outputs) &
+                           ~static_cast<unsigned>(function.unknown);
+  const auto mask = direction & specs[index].valid;
+  const auto known = mask & latch_known;
+  return {.mask = static_cast<std::uint8_t>(mask),
+          .known = static_cast<std::uint8_t>(known),
+          .levels = static_cast<std::uint8_t>(latch & known)};
+}
+
 std::uint8_t McuGpio::tied_low(const McuPort port) const {
   if ((routing_ & 3U) != 3) { return 0; }
   switch (port) {
