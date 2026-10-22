@@ -1,0 +1,37 @@
+Original master-output stage
+
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-original-dsp-master-output-test
+  ctest --test-dir build/strict -R '^original_dsp_master_output$' --output-on-failure
+
+The complete original core record is loaded from the locally pinned official
+1.25 archive. All 127 records and the ZIP/MID identities are checked first.
+Program bytes and scalar assets remain local; the oracle reads three scalar
+extensions from the pinned record. No manufacturer program bytes are embedded.
+
+An own native caller executes the unchanged P:027b..0297 routine with linear
+modifiers, declared input/output histories and mixed X words. The independent
+integer lane recurrence checks signed fractional products, floor/limiting,
+the first right-history scaling asymmetry, full A/B, returned data/address
+registers, sticky L, both buffer halves and every real output/history store.
+All 128 volume words cross three transfer scales, two phases, both RM modes
+and four fixed input patterns: 6144 calls. Six dependent four-block streams
+retain native histories and alternate output halves without host repair.
+
+Each call retires 145 original instructions: 14 setup, 16*8 loop body, three
+tail instructions. DSP56300FM Rev.5 DO uses the after-loop label minus one;
+the two output-history stores follow the loop. The full data footprint is
+134 reads and 68 writes, including 33 X mix reads and the unused Y:0660 read.
+Twelve mid-DO restores reproduce complete CPU state and access prefixes.
+Five missing-input cases fail with native address/PC and quarantine execution;
+trusted restore permits the final independently checked recovery call.
+Totals: 6169 complete calls, 197408 output words, 18 coordinated restores.
+
+This qualifies the isolated master stage, not original startup, upstream voices/
+mixing, DMA/ESAI scheduling, host PCM, physical timing or device equivalence.
+No clock, reserved memory behavior, initialization or hard mute is substituted.
+The original Y:002000 boot boundary remains strict. No fuzzing runs.
+
+Reference identities and scope: dsp-master-output-reference.json.
+Primary arithmetic/loop reference: DSP56300FM Rev.5, DO pp.13-56..13-58 and
+full-accumulator data-shifter/limiting rules (hardware/sources.json).
