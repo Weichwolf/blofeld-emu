@@ -1,0 +1,43 @@
+Original PCM through the host audio worker
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-original-dsp-voice-audio-test
+  ctest --test-dir build/strict -R '^original_dsp_voice_audio$' --output-on-failure
+  cmake --preset thread -DBLOFELD_FUZZING=OFF
+  cmake --build --preset thread --target blofeld-original-dsp-voice-audio-test
+  ctest --test-dir build/thread -R '^original_dsp_voice_audio$' --output-on-failure
+
+The unchanged original voice/copy/mix/master and actual DMA/ESAI path from
+dsp-voice-pcm.txt produces 32 streams of 128 complete SerialPcmFrame objects.
+A bounded offline collector retains the actual objects after each completed
+peripheral replay. Delivery sees only the final branch, once. No samples or
+timestamps are reconstructed from the trace or synthesized by the host.
+The collector stays outside modeled checkpoints and is immutable during playback.
+
+After all rendering finishes, each source gets a fresh AudioRuntime worker.
+It accepts all 128 frames and closes/drains the actual native service stream.
+The short closed source starts without padding; accepted/written counts must
+both equal 128. Existing worker rules reject underruns before complete EOF.
+No source identity, clock or prior host stream is reused across native resets.
+
+The private PulseAudio null sink uses norewinds=1, stereo S32LE and 48000 Hz.
+The declared timebase is 24576000 ticks/s: eight ticks/bit, 64 bits/frame.
+This assigns a laboratory playback rate to the existing edge ordinals;
+it establishes neither physical Blofeld frequency nor realtime rendering.
+The test connects only its private service/monitor; the user's service, default
+output, routes and hardware remain untouched. Debian tools: pulseaudio-utils,
+pulseaudio. Missing tools or private firmware skip explicitly.
+
+Archive/MID and all 127 ordered record identities are checked first. Independent
+voice/mix/master equations check 8192 DMA words and 4096 frames before playback.
+Those equations also produce every expected native S32 container. The monitor
+must contain all
+32 complete streams in order, with only zero-valued service gaps around them;
+truncated, missing, duplicated, stale or additional nonzero samples fail.
+Traces, monitor PCM, counts and exact offsets stay under build/Testing/.
+
+ASan/UBSan and TSan run separately, including instrumented native client/codecs.
+No new concurrency mechanism, sanitizer suppression or successful device stub
+is introduced. Existing parser, boot, allocator and DMA qualification faults
+remain. Whole boot, live MIDI allocation, continuous realtime production,
+PipeWire/device moves/rewinds and physical device equivalence remain open.

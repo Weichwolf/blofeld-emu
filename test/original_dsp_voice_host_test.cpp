@@ -11,7 +11,8 @@
 
 int main(const int count, char **arguments) {
   try {
-    if (count != 4 || !std::string_view(arguments[3]).starts_with("unix:")) {
+    const bool midi = count == 5 && std::string_view(arguments[4]) == "midi";
+    if ((count != 4 && !midi) || !std::string_view(arguments[3]).starts_with("unix:")) {
       throw blofeld::Fault("Expected firmware, private trace and explicit private audio server");
     }
     // A declared host-playback rate for laboratory edge ordinals, not a
@@ -24,7 +25,8 @@ int main(const int count, char **arguments) {
                                              .sample_rate = playback_rate,
                                              .server = arguments[3]}});
     std::array<char *, 4> inputs{arguments[0], arguments[1], arguments[2], nullptr};
-    const auto result = blofeld::test::run_voice_test(3, inputs.data(), false, true, true, &output);
+    const auto result = blofeld::test::run_voice_test(
+        3, inputs.data(), false, true, true, {.direct = &output}, midi);
     if (result != 0) { return result; }
     output.finish();
     const auto status = output.status();

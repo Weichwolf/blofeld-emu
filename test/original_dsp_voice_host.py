@@ -17,6 +17,7 @@ from dsp_voice_validation import new_totals, validate_stream
 from host_audio import require, service, terminate, until
 from original_dsp_voice import original_records
 from original_dsp_voice_master import Output
+from original_dsp_voice_midi import Midi, SOUND
 from original_dsp_voice_pcm import Pcm
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ class Capture(Pcm):
         self.blocks += 1
 
 
-def expected_payload(text, xdata, ydata, program):
+def expected_payload(text, xdata, ydata, program, midi=False):
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
     identity = ('normal', '0', '0', '0', '0')
@@ -44,12 +45,34 @@ def expected_payload(text, xdata, ydata, program):
     capture = Capture()
     output = Output(program, capture)
     totals = new_totals()
+    controller = Midi() if midi else None
     validate_stream(cases[0][5], xdata, ydata, {False: waveform_model(ydata, False)},
-                    identity, totals, after_block=output)
-    require(totals['blocks'] == 8 and capture.blocks == 8 and output.nonzero == 256 and
+                    identity, totals, after_block=output, before_block=controller,
+                    sound_base=SOUND if midi else 0x1000)
+    require(totals['blocks'] == 8 and capture.blocks == 8 and output.nonzero > 0 and
             len(capture.payload) == 128 * 8,
             "Every original voice/mix/master/DMA/serial block must reach its independent oracle")
+    require(controller.calls == 19 if midi else output.nonzero == 256,
+            "The complete declared controller or default stream must execute")
     return bytes(capture.payload)
+
+
+def controller_controls(text, xdata, ydata, program):
+    for label, index in (('MIDI_BYTES', -1), ('MIDI_RETURN', -3),
+                         ('OUTPUT_BUS', 0), ('PCM_FRAME', -1)):
+        def corrupt(match):
+            words = match[1].split()
+            words[index] = format(int(words[index], 16) ^ 1, 'x')
+            return label + ' ' + ' '.join(words)
+        changed, count = re.subn('^' + label + r' ([^\n]+)$', corrupt, text, count=1, flags=re.M)
+        require(count == 1, 'Missing direct controller/audio negative control')
+        try:
+            expected_payload(changed, xdata, ydata, program, midi=True)
+        except ValueError as error:
+            require(('MIDI' if label.startswith('MIDI') else label) in str(error),
+                    'Wrong direct controller/audio negative-control failure')
+        else:
+            raise ValueError('The direct controller/audio oracle accepted corrupted trace data')
 
 
 def check_monitor(recorded, expected):
@@ -61,7 +84,7 @@ def check_monitor(recorded, expected):
             "The private monitor contains extra, stale, duplicated or altered source samples")
 
 
-def run(binary, firmware, directory, xdata, ydata, program):
+def run(binary, firmware, directory, xdata, ydata, program, midi):
     with service(directory) as (daemon, server, env):
         recorded = directory / "monitor.pcm"
         with recorded.open("wb") as samples, (directory / "monitor.log").open("w") as log:
@@ -77,14 +100,20 @@ def run(binary, firmware, directory, xdata, ydata, program):
 
                 until(ready, daemon, "the original voice monitor")
                 trace = directory / "native.trace"
-                result = subprocess.run([str(binary), str(firmware), str(trace), server], env=env,
+                command = [str(binary), str(firmware), str(trace), server]
+                if midi:
+                    command.append('midi')
+                result = subprocess.run(command, env=env,
                                         capture_output=True, text=True,
                                         timeout=90 if env.get("BLOFELD_TEST_SANITIZER") == "thread" else 30)
                 (directory / "native.log").write_text(result.stdout + result.stderr)
                 require(result.returncode == 0 and not result.stderr and
                         "original-decoded-host-frames=128" in result.stdout,
                         f"Original native host handoff failed: {result.stdout}{result.stderr}")
-                expected = expected_payload(trace.read_text(), xdata, ydata, program)
+                text = trace.read_text()
+                expected = expected_payload(text, xdata, ydata, program, midi)
+                if midi:
+                    controller_controls(text, xdata, ydata, program)
                 time.sleep(0.1)
             finally:
                 terminate(monitor)
@@ -100,16 +129,21 @@ def run(binary, firmware, directory, xdata, ydata, program):
             raise ValueError("The monitor oracle accepted a corrupted source word")
         return {"passed": True, "original_blocks": 8, "decoded_frames": 128,
                 "exact_independent_monitor_match": True, "monitor_negative_controls": 1,
+                "original_controller_parser_calls": 19 if midi else 0,
+                "controller_trace_negative_controls": 4 if midi else 0,
                 "declared_playback_rate": 48000, "physical_sample_clock_qualified": False,
                 "fuzz_execution": False, "physical_audio": False,
                 "scope": "One declared original voice/mix/master stream through actual finite "
                 "DMA, ESAI pins, serial receiver and bounded audio worker/private service. "
-                "No full boot, MIDI allocation, automatic arbitration or RT/hardware claim."}
+                "Optional original CC7/CC1 parser path uses own ring transport and a held "
+                "voice. No full boot, MIDI allocation, automatic arbitration or RT/hardware claim."}
 
 
 def main():
-    require(len(sys.argv) == 4, "Expected native test, private firmware and artifact directory")
-    binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:])
+    midi = len(sys.argv) == 5 and sys.argv[4] == 'midi'
+    require(len(sys.argv) == 4 or midi,
+            "Expected native test, private firmware, artifact directory and optional midi mode")
+    binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:4])
     if not firmware.is_file():
         print("SKIP original host voice: private firmware absent")
         return 77
@@ -124,7 +158,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="blofeld-original-host-") as temporary:
         directory = Path(temporary)
         try:
-            result = run(binary, firmware, directory, xdata, ydata, program)
+            result = run(binary, firmware, directory, xdata, ydata, program, midi)
             (directory / "result.json").write_text(json.dumps(result, indent=2) + "\n")
             print(json.dumps(result, indent=2))
         finally:

@@ -64,3 +64,6 @@ playback or normal-runtime boot is supplied. Concurrency runs separately under
 TSan; the same private service/client instrumentation rules as audio-runtime.txt
 apply. Full original MIDI allocation, automatic DMA and stock equivalence remain
 pending.
+
+The separate dsp-voice-audio.txt fixture delivers these actual decoded objects
+through the native host worker to an exact private service monitor.

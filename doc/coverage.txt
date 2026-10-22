@@ -44,8 +44,13 @@ Host audio output                partial  Native client plus bounded SPSC handof
                                           starvation and service failures have
                                           directed sanitizer checks; concurrency
                                           is checked separately with TSan.
-                                          Original firmware voices, normal startup,
-                                          PipeWire, ordinary device moves/rewinds
+                                          Offline original voice/DMA/ESAI frames
+                                          now reach the actual native worker and
+                                          private monitor: all 4096 frames match
+                                          independent equations, in 32 complete
+                                          streams (dsp-voice-audio.txt). Normal
+                                          startup/live production, PipeWire,
+                                          ordinary device moves/rewinds
                                           and sustained realtime behavior remain
                                           unqualified. No USB Audio function.
 Optional Spectre sample tools     partial  samples subcommand edits XML 0.5 program
@@ -961,6 +966,18 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           fallback/eviction snapshot replay
                                           (dsp-workspace.txt). Declared setup does
                                           not resolve upstream note allocation.
+                                          Original CC7/CC1 bytes now control held
+                                          voices through master/DMA/ESAI PCM:
+                                          608 parser returns, 256 blocks and 4096
+                                          independent frames (dsp-voice-midi.txt).
+                                          One default controller stream also
+                                          sends 128 actual decoded frames to
+                                          AudioRuntime and an exact isolated
+                                          service monitor, with 19 parser calls
+                                          and five fixed corruption controls.
+                                          Destination switching is checked;
+                                          smoothing clock, normal host MIDI and
+                                          NoteOn allocation remain unqualified.
                                           Original scheduler primitives check
                                           seed/tick/timer/countdown arithmetic,
                                           real conditional-call/RTS frames and

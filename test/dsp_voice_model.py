@@ -151,10 +151,13 @@ def initial_bus(varied):
 class Voice:
     """Static held-note parameters, with all inter-block histories retained."""
 
-    def __init__(self, xdata, ydata, table, high, twos, color, varied, serial, drives=None):
+    def __init__(self, xdata, ydata, table, high, twos, color, varied, serial, drives=None,
+                 sound_base=0x1000):
         self.xdata, self.data, self.table = (xdata, ydata, table)
         self.high, self.twos, self.color, self.serial = (high, twos, color, serial)
         self.drives = drives
+        self.sound_base = sound_base
+        self.controller = RESET_LEVEL
         self.parameters = filter_parameters(ydata, varied, drives)
         self.gains = [v & WORD_MASK for pair in controls(ydata, varied) for v in pair]
         self.coefficients = coefficient_model(controls(ydata, varied))
@@ -207,7 +210,7 @@ class Voice:
         for base in (196, 208, 220, 232):
             if self.sound[base] & 7 or self.sound[base + 3] != 0 or self.data[5832] != H - 1:
                 raise ValueError('Changed zero-attack ADSR declarations')
-            self.envelopes.extend((5726, H - 1, 4096 + base, self.sound[base + 4] * 65536, self.data[5832 - self.sound[base + 7]], self.sound[base + 8] * 65536))
+            self.envelopes.extend((5726, H - 1, self.sound_base + base, self.sound[base + 4] * 65536, self.data[5832 - self.sound[base + 7]], self.sound[base + 8] * 65536))
         self.advance_lfos()
         return writes
 
