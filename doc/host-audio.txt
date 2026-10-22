@@ -1,0 +1,44 @@
+Session audio transport
+
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-host-audio-test
+  ctest --test-dir build/strict -R '^host_audio$' --output-on-failure
+
+Dependencies: pkg-config, libpulse-dev; integration test additionally uses
+pulseaudio, pulseaudio-utils and dbus-daemon. The client uses the session server
+and default sink unless an explicit test target is supplied. It changes no
+host routes and requires no exclusive ALSA device or USB Audio interface.
+
+HostAudio accepts complete stereo signed 24-bit SerialPcmFrames in blocks of
+1..256. Declared timebase/rate must give an integral serial bit period. Every
+frame must retain the declared precision, uniform bit period, complete slot
+span and continuity with the accepted prefix. Validation covers the whole
+block before output; invalid input sends nothing and leaves the stream usable.
+Samples become S32NE with their original 24 bits in the high bits; no clipping,
+channel mixing, silence fill or emulator-side resampling is performed.
+
+PulseAudio Simple API writes/drain block. This host transport belongs outside
+CPU/peripheral execution and RT callbacks; it adds no project thread/callback.
+System client libraries use their own internals. Playback state is external,
+noncopyable and excluded from board snapshots. A connection/write/drain error
+fails visibly; failed I/O poisons further writes/drains. Destruction frees the
+stream without an implicit drain. frames_written counts accepted client frames,
+not a hardware playback confirmation. Session audio servers may resample.
+
+The isolated test starts its own D-Bus, PulseAudio server and null sink with
+rewinds disabled so monitor frame counts describe one forward stream. Actual
+native DSP MOVEP, both ESAI instances and the serial receiver produce an
+independently checked stereo pair under a declared 48 kHz reference clock.
+Repeated blocks yield 8192 exact monitor frames; separate min/max, unit, zero
+and channel-order vectors check signed conversion. Invalid final frames reject
+whole blocks; a real server shutdown verifies failure and poisoned retries.
+No user routing, physical audio, manufacturer firmware or fuzzing is involved.
+
+Pending: normal runtime integration, bounded producer/host scheduling, sustained
+underrun/latency/load tests, PipeWire-specific execution and original firmware
+voice/audio output. Default-sink rewind/latency behavior is not qualified by the
+private forward-only sink. This component does not make the current preview playable.
+
+API references:
+  https://www.freedesktop.org/software/pulseaudio/doxygen/simple.html
+  https://www.freedesktop.org/software/pulseaudio/doxygen/sample_8h.html

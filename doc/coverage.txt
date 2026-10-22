@@ -24,12 +24,15 @@ LCD screenshots/live export      partial  Read-only controller capture, digital
                                           tests. Normal-runtime publication and
                                           MIDI-driven UI regression remain pending
                                           (display-export.txt). No separate CLI.
-Host audio output                missing  Original DSP audio must feed the normal
-                                          session audio host/default output, e.g.
-                                          PipeWire. No exclusive ALSA requirement
-                                          and no emulated USB Audio function.
-                                          Current serial PCM/WAV fixtures do not
-                                          establish live application audio.
+Host audio output                partial  Separate session/default-sink transport;
+                                          strict complete stereo PCM blocks and
+                                          explicit clock. Native own DSP/ESAI ->
+                                          serial receiver -> private audio server
+                                          checks 8192 exact frames, precision
+                                          boundaries and real server disconnect.
+                                          Normal runtime, original voice/audio,
+                                          PipeWire and sustained latency/load
+                                          remain pending (host-audio.txt).
 Optional Spectre sample tools     partial  samples subcommand edits XML 0.5 program
                                           collections and sample metadata.
                                           WAV decoding/import, declared root/loops

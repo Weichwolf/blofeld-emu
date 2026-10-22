@@ -138,6 +138,11 @@ target_link_libraries(blofeld_serial_pcm PUBLIC blofeld_firmware)
 add_library(blofeld_pcm_transport src/pcm_recording.cpp src/pcm_wave.cpp src/pcm_wave_file.cpp)
 target_include_directories(blofeld_pcm_transport PUBLIC include)
 target_link_libraries(blofeld_pcm_transport PUBLIC blofeld_serial_pcm PRIVATE blofeld_private_files)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PULSE_SIMPLE REQUIRED IMPORTED_TARGET libpulse-simple)
+add_library(blofeld_host_audio src/host_audio.cpp)
+target_include_directories(blofeld_host_audio PUBLIC include)
+target_link_libraries(blofeld_host_audio PUBLIC blofeld_serial_pcm PRIVATE PkgConfig::PULSE_SIMPLE)
 add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
@@ -312,6 +317,12 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-pcm-transport-test PRIVATE blofeld_pcm_transport blofeld_private_files)
   add_test(NAME pcm_transport COMMAND blofeld-pcm-transport-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/pcm-transport")
+  add_executable(blofeld-host-audio-test test/host_audio_test.cpp test/host_audio_native.cpp)
+  target_link_libraries(blofeld-host-audio-test PRIVATE blofeld_host_audio blofeld_dsp blofeld_dsp_native)
+  add_test(NAME host_audio COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio.py" $<TARGET_FILE:blofeld-host-audio-test>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio")
+  set_tests_properties(host_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
   add_executable(blofeld-serial-pcm-test test/serial_pcm_test.cpp test/serial_pcm_native.cpp)
   target_link_libraries(blofeld-serial-pcm-test PRIVATE blofeld_serial_pcm blofeld_dsp blofeld_dsp_native)
   add_test(NAME serial_pcm COMMAND blofeld-serial-pcm-test)
@@ -1197,6 +1208,7 @@ add_custom_target(quality
     blofeld-midi-timed-test
     blofeld-original-host-midi-test
     blofeld-pcm-transport-test
+    blofeld-host-audio-test
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test

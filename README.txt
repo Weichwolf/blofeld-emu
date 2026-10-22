@@ -15,7 +15,9 @@ Requirements: LLVM 19 (clang, clang-tidy, clang-format, llvm-nm, llvm-readelf an
 sanitizer runtime), CMake >= 3.25, Ninja, Git, GNU patch, Python 3 and Ghidra 12.1.2
 including its native SLEIGH sources and compiler. Set GHIDRA_ROOT if it is not
 installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java at
-runtime.
+runtime. Host audio also requires pkg-config and the system PulseAudio client
+development library (Debian: libpulse-dev). The isolated host_audio integration
+test uses pulseaudio, pulseaudio-utils and dbus-daemon; no physical sink is opened.
 DSP56300_ROOT must point to a clean checkout of the revision in
 doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
 The pinned zlib source archive is built locally; a system zlib package is not used.

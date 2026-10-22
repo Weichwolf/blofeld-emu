@@ -30,6 +30,14 @@ DSP56300:
   accompany any redistributable binary package as required by their licenses.
   The reference core is integrated; combined MCU/DSP board boot remains pending.
 
+PulseAudio client libraries:
+  https://www.freedesktop.org/wiki/Software/PulseAudio/
+  Lennart Poettering, Pierre Ossman and contributors; LGPL-2.1-or-later.
+  System libpulse-simple/libpulse are dynamically linked by the host audio
+  transport. Their source/notices remain with the system packages. No server
+  or client library source is vendored; native emulator dependencies above
+  retain their separate sanitizer builds.
+
 Optional offline DSP assembly tool:
   https://github.com/xemu-project/dsp56300
   dsp56300-asm 1.0.0, Matt Borgerson, MIT license.
