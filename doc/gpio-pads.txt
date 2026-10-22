@@ -1,0 +1,44 @@
+Local GPIO registers and resolved board pads
+
+A chip's output latch, direction and drive-strength registers describe intended
+drivers. They do not establish the voltage on a shared board net. GpioPadBinding
+allows an explicitly declared board experiment to provide that separate pad
+observation. Its source is exclusive with legacy external peer observations.
+There is no automatic attachment or change to the normal runtime.
+
+resolve_gpio_net combines two declared drivers and passive input pulls. Unknown
+active latches defeat pull knowledge. Opposing known active outputs remain
+unknown with an explicit conflict mask, including full/reduced output pairs.
+An approximate current ratio does not select a voltage winner. Opposing passive
+pulls are also unresolved. Unconnected, unbiased pins remain unknown.
+
+Defined GPIO register writes update local intent without consuming a pad value.
+MCU output-latch reads also need no pad observation. Actual pin-input reads and
+DSP pad-dependent reads still reject unknown bits with bus address and execution
+context. The board can inspect unknown/conflicting observations without replacing
+them with levels. require_known_gpio_pads rejects every unresolved selected bit.
+An experiment must audit intermediate states as well as values actually read;
+successful original helper returns do not qualify unresolved electrical intervals.
+Legacy peer-driven contention checks retain their immediate failures.
+
+Reset retains the attached board source. Copy/move/checkpoint state retains the
+obligation to reconnect but drops callbacks into the old live board. Detached
+pin reads fail; local register state remains usable. Restored owners explicitly
+attach fresh sources. DSP peripheral output with this source is unqualified and
+fails; it must not bypass the existing peripheral-drive validator.
+
+  cmake --build --preset strict --target blofeld-gpio-pad-source-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^gpio_pad_sources$'
+
+The directed regression uses independent level/conflict expectations, unknown
+reads, source ownership, reset and detached/reconnected copies. It contains no
+manufacturer program bytes. Physical wiring, synchronizers, electrical safety,
+original startup and normal USB-MIDI/audio retain separate acceptance gates.
+
+gpio_pad_checkpoints executes own native MCU LDAA and DSP MOVEP input reads
+through actual machine snapshots. Captures retain no callback ownership;
+replacement destroys the old connection and detached reads/captures reject.
+Freshly attached inputs drive independent register/flag expectations. The clocked
+DSP replays identical native state/time, then retains the fresh connection across
+an explicit reference reset epoch. MCU NVM remains unchanged. These are trusted
+in-process checkpoints, not serialized board state or measured reset timing.

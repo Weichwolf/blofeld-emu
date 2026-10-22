@@ -16,13 +16,18 @@ drivers, independently of their latch knowledge. Input/released bits export no
 drive strength. This is an output-current selection, not a weak input pull or
 an open-drain mode. S12UF32PIMV2 V02.05 specifies about1/6 of full drive for RDR
 bits1; no current/voltage winner or safe conflicting-pad level is inferred.
-Pad resolution still rejects known opposing strong drivers. No grace period,
-hidden buffer gate, automatic acknowledgement or fixed firmware response is introduced.
+Legacy peer-driven pad resolution rejects known opposing strong drivers. No grace
+period, hidden buffer gate, automatic acknowledgement or fixed reply is introduced.
 
 Reset retains external observations; copies and MCU partial updates preserve
 unknown peer bits. Reference MIDI and SHI-return route guards include unknown
 drivers when checking explicit route ownership. The text input grammar is
 unchanged; this field serves programmatic board coupling.
+
+An explicitly attached, exclusive board pad source can instead separate local
+register intent from unknown shared voltage (gpio-pads.txt). It does not change
+the default peer-driven path. Actual unknown pin reads and unqualified peripheral
+accesses still fail; unresolved intermediate nets cannot qualify a board.
 
 The original request routine creates a direction-before-latch transition in a
 declared caller/RAM fixture. Keeping it unknown permits faithful observation of

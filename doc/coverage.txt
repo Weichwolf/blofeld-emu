@@ -664,6 +664,25 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           route/clock, board-level F4 turnaround,
                                           later deferred queue/bulk response,
                                           voice/audio and full update remain open.
+                                          Native paired original requests now
+                                          return in32 declared route/order/phase
+                                          contexts, including the original startup
+                                          signature data record (gpio-pair.txt).
+                                          Program/source/NVM retention and every
+                                          known pad query are checked. Unresolved
+                                          intermediate states force all32 board
+                                          qualifications to fail; original reset,
+                                          physical routing/timing and complete
+                                          startup remain unqualified.
+                                          Declared external pad sources separate
+                                          local register intent from shared net
+                                          voltage (gpio-pads.txt). Opposing active
+                                          full/reduced drivers remain unresolved;
+                                          pin reads fail and board qualification
+                                          requires all audited bits to be known.
+                                          Reset retains the source; copies require
+                                          explicit reconnection. No default board
+                                          attachment or physical net is qualified.
                                           Explicitly floating C0..11 pads use
                                           documented weak pull-downs; unobserved
                                           pins, cold output latches and unmodeled

@@ -2,6 +2,7 @@
 #include "blofeld/mcu_gpio.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/gpio_pads.hpp"
 #include "blofeld/hc12_registers.hpp"
 
 #include <array>
@@ -9,6 +10,7 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <utility>
 
 namespace blofeld {
 namespace {
@@ -93,12 +95,26 @@ void McuGpio::reset() {
 
 void McuGpio::set_drive(const McuPort port, const PinDrive drive) {
   const auto index = port_index(port);
+  if (pads_[index].required()) {
+    throw Fault("Resolved GPIO pad source owns MCU port at " + hex(specs[index].base));
+  }
   if ((drive.mask & drive.floating) != 0 || (drive.levels & ~drive.mask) != 0 ||
       (drive.unknown & (drive.mask | drive.floating)) != 0 ||
       ((drive.mask | drive.floating | drive.unknown) & ~specs[index].valid) != 0) {
     throw Fault("Invalid MCU GPIO external drive masks");
   }
   ports_[index].external = drive;
+}
+
+void McuGpio::attach_pad_source(const McuPort port, GpioPadReader reader) {
+  const auto index = port_index(port);
+  static_cast<void>(outputs(port));
+  const auto &external = ports_[index].external;
+  if ((external.mask | external.floating | external.unknown) != 0) {
+    throw Fault("MCU GPIO pad source conflicts with existing external observations at " +
+                hex(specs[index].base));
+  }
+  pads_[index].attach(std::move(reader));
 }
 
 void McuGpio::update_drive(const McuPort port, const std::uint8_t affected, const PinDrive drive) {
@@ -163,6 +179,24 @@ PinOutputs McuGpio::outputs(const McuPort port) const {
           .reduced_drive = static_cast<std::uint8_t>(mask & state.reduced_drive)};
 }
 
+unsigned McuGpio::pull_enable(const McuPort port) const {
+  const auto &state = ports_[port_index(port)];
+  if (port == McuPort::a) { return (pull_control_ & 1U) != 0 ? byte_mask : 0; }
+  if (port == McuPort::b) { return (pull_control_ & 2U) != 0 ? byte_mask : 0; }
+  if (port == McuPort::e) {
+    return (pull_control_ & port_e_clock_disable) != 0 ? port_e_pull_mask : 0;
+  }
+  return state.pull_enable;
+}
+
+PinBiases McuGpio::biases(const McuPort port) const {
+  const auto &state = ports_[port_index(port)];
+  const auto enabled = pull_enable(port) & ~static_cast<unsigned>(outputs(port).mask) &
+                       specs[port_index(port)].valid;
+  return {.up = static_cast<std::uint8_t>(enabled & ~static_cast<unsigned>(state.pull_down)),
+          .down = static_cast<std::uint8_t>(enabled & state.pull_down)};
+}
+
 std::uint8_t McuGpio::tied_low(const McuPort port) const {
   if ((routing_ & 3U) != 3) { return 0; }
   switch (port) {
@@ -183,6 +217,13 @@ std::uint8_t McuGpio::tied_low(const McuPort port) const {
 
 PinSample McuGpio::resolve(const McuPort port, const std::uint8_t requested) const {
   const auto index = port_index(port);
+  if (pads_[index].required()) {
+    static_cast<void>(outputs(port));
+    const auto result = pads_[index].sample(requested);
+    return {.known = static_cast<std::uint8_t>(result.known),
+            .levels = static_cast<std::uint8_t>(result.levels),
+            .conflicts = static_cast<std::uint8_t>(result.conflicts)};
+  }
   const auto &state = ports_[index];
   const auto tied = static_cast<unsigned>(tied_low(port));
   const auto &function = state.function;
@@ -200,14 +241,8 @@ PinSample McuGpio::resolve(const McuPort port, const std::uint8_t requested) con
   if ((conflict & requested) != 0) {
     throw Fault("MCU GPIO output contention at " + hex(specs[index].base));
   }
-  auto pull_enable = static_cast<unsigned>(state.pull_enable);
-  if (port == McuPort::a) { pull_enable = (pull_control_ & 1U) != 0 ? byte_mask : 0; }
-  if (port == McuPort::b) { pull_enable = (pull_control_ & 2U) != 0 ? byte_mask : 0; }
-  if (port == McuPort::e) {
-    pull_enable = (pull_control_ & port_e_clock_disable) != 0 ? port_e_pull_mask : 0;
-  }
   const auto weak =
-      state.external.floating & pull_enable & ~static_cast<unsigned>(direction) & ~tied;
+      state.external.floating & pull_enable(port) & ~static_cast<unsigned>(direction) & ~tied;
   known |= weak;
   value |= weak & ~static_cast<unsigned>(state.pull_down);
   known = known & ~unknown_output & ~static_cast<unsigned>(state.external.unknown) & requested &
@@ -226,7 +261,8 @@ std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) c
   const auto observation = resolve(port, requested);
   const auto unknown = requested & ~static_cast<unsigned>(observation.known) & specs[index].valid;
   if (unknown != 0) {
-    throw Fault("Unknown MCU GPIO input at " + hex(specs[index].base) + " mask=" + hex(unknown, 2));
+    throw Fault("Unknown MCU GPIO input at " + hex(specs[index].base) + " mask=" + hex(unknown, 2) +
+                " conflicts=" + hex(observation.conflicts, 2));
   }
   return observation.levels;
 }
