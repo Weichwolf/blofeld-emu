@@ -777,6 +777,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
   set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250 RUN_SERIAL TRUE)
+  add_executable(blofeld-original-dsp-download-test test/original_dsp_download_test.cpp)
+  target_link_libraries(blofeld-original-dsp-download-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_download COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_download.py"
+    $<TARGET_FILE:blofeld-original-dsp-download-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-download.trace")
+  set_tests_properties(original_dsp_download PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-original-dsp-request-queue-test test/original_dsp_request_queue_test.cpp)
   target_link_libraries(blofeld-original-dsp-request-queue-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_dsp_request_queue COMMAND ${Python3_EXECUTABLE}
@@ -1087,6 +1096,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-headless blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-original-dsp-download-test
     blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test
