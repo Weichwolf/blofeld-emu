@@ -33,6 +33,8 @@ constexpr unsigned fixture_sound = 0x1000, entry = 0xc500, mask = 0xffffff,
                    rounding_mode = 1U << 21U;
 constexpr unsigned primary_sound = 0x936;
 constexpr unsigned midi_parser = 0xc53;
+constexpr unsigned midi_secondary_parser = 0xc5d;
+constexpr unsigned response_parser = 0x2407;
 constexpr unsigned midi_ring = 0x2f80;
 constexpr unsigned midi_ring_size = 64;
 constexpr unsigned midi_producer = 0x3b;
@@ -84,10 +86,12 @@ constexpr unsigned mix_completed = 0x228;
 constexpr unsigned master_history = 0x46;
 constexpr unsigned mixed_bus = 0x620;
 constexpr unsigned chain_gain = 0x6a0;
+constexpr unsigned idle_burst_pairs = 24; // 48 bytes fit the 64-word input ring and cross its end.
+constexpr unsigned midi_stream_blocks = 10; // Retain the delayed output of all idle CC changes.
 constexpr std::array<unsigned, 13> foreground_stages{main_loop,
                                                      midi_parser,
-                                                     0xc5d,
-                                                     0x2407,
+                                                     midi_secondary_parser,
+                                                     response_parser,
                                                      0x27b,
                                                      0x2a20,
                                                      0x298,
@@ -332,6 +336,11 @@ unsigned initial_bus_word(const unsigned index, const bool varied) {
   return static_cast<unsigned>(((static_cast<long long>(index) - 16) * 65536) + 0x1000000LL) & mask;
 }
 
+struct MemoryRange {
+  unsigned base = 0;
+  unsigned count = 0;
+};
+
 struct Fixture {
   blofeld::DspMachine machine;
   blofeld::DspBus &bus;
@@ -354,6 +363,7 @@ struct Fixture {
   bool midi_enabled = false;
   bool foreground_enabled = false;
   bool stream_enabled = false;
+  bool idle_midi_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
   blofeld::PcmFrameSink *direct = nullptr;
   Case configuration{};
@@ -405,8 +415,11 @@ struct Fixture {
         trace(output),
         midi_enabled(input != blofeld::test::VoiceInput::none),
         foreground_enabled(input == blofeld::test::VoiceInput::foreground ||
-                           input == blofeld::test::VoiceInput::stream),
-        stream_enabled(input == blofeld::test::VoiceInput::stream) {
+                           input == blofeld::test::VoiceInput::stream ||
+                           input == blofeld::test::VoiceInput::stream_midi),
+        stream_enabled(input == blofeld::test::VoiceInput::stream ||
+                       input == blofeld::test::VoiceInput::stream_midi),
+        idle_midi_enabled(input == blofeld::test::VoiceInput::stream_midi) {
     static_cast<void>(load(bus, s, stop, master, pcm, repeat, sound));
   }
 
@@ -1005,14 +1018,9 @@ struct Fixture {
     }
   }
 
-  void foreground_state() {
+  void foreground_ram(const char *label) {
     using enum blofeld::DspSpace;
-    const auto s = cpu.state();
-    require(s.sp == 1 && s.stack_pc == stop,
-            "Original foreground retains the own native entry frame; no fabricated RTS");
-    trace << "FOREGROUND_END" << std::hex << ' ' << s.pc << ' ' << s.sp << ' ' << s.a << ' ' << s.b
-          << ' ' << s.x << ' ' << s.y << ' ' << s.r[0] << ' ' << s.sr << '\n';
-    trace << "FOREGROUND_RAM";
+    trace << label << std::hex;
     for (const auto at : {4U,
                           shared_seed,
                           runtime_flags,
@@ -1029,7 +1037,18 @@ struct Fixture {
                           dma_source}) {
       trace << ' ' << get(x, at);
     }
-    trace << '\n' << "FOREGROUND_PREVIOUS_OUTPUT";
+    trace << '\n' << std::dec;
+  }
+
+  void foreground_state() {
+    using enum blofeld::DspSpace;
+    const auto s = cpu.state();
+    require(s.sp == 1 && s.stack_pc == stop,
+            "Original foreground retains the own native entry frame; no fabricated RTS");
+    trace << "FOREGROUND_END" << std::hex << ' ' << s.pc << ' ' << s.sp << ' ' << s.a << ' ' << s.b
+          << ' ' << s.x << ' ' << s.y << ' ' << s.r[0] << ' ' << s.sr << '\n';
+    foreground_ram("FOREGROUND_RAM");
+    trace << "FOREGROUND_PREVIOUS_OUTPUT" << std::hex;
     for (unsigned i = 0; i < stereo_words; ++i) {
       trace << ' ' << get(x, declared_source + stereo_words + i);
     }
@@ -1117,6 +1136,108 @@ struct Fixture {
     rendering = false;
   }
 
+  [[nodiscard]] std::vector<unsigned> idle_audio_state() {
+    using enum blofeld::DspSpace;
+    std::vector<unsigned> values;
+    const auto range = [&](const auto space, const MemoryRange interval) {
+      for (unsigned i = 0; i < interval.count; ++i) {
+        values.push_back(get(space, interval.base + i));
+      }
+    };
+    range(x, {.base = entry, .count = readable_entry_words});
+    range(x, {.base = first_oscillator_buffer, .count = 4 * stereo_words});
+    range(x, {.base = mixed_bus, .count = 4 * stereo_words});
+    range(x, {.base = output_bus + stereo_words, .count = 2});
+    range(y, {.base = coefficient_buffer, .count = (2 * stereo_words) + 1});
+    for (const auto space : {x, y}) {
+      range(space, {.base = master_history, .count = 2});
+      range(space, {.base = first_filter_history, .count = 4});
+      range(space, {.base = second_filter_history, .count = 4});
+    }
+    for (const auto at : {sound + output_controller, dma_source - 3, dma_source - 2}) {
+      range(x, {.base = at, .count = 1});
+    }
+    return values;
+  }
+
+  void idle_iteration(const unsigned ordinal) {
+    using enum blofeld::DspSpace;
+    const auto audio = idle_audio_state();
+    const auto wire = repeat;
+    trace << "IDLE_BEGIN " << std::hex << ordinal << '\n' << std::dec;
+    unsigned steps = 0;
+    do {
+      require(steps++ < instruction_limit, "Original idle foreground iteration bound");
+      const auto pc = cpu.state().pc;
+      if (std::ranges::find(foreground_stages, pc) != foreground_stages.end()) {
+        require(pc == main_loop || pc == midi_parser || pc == midi_secondary_parser ||
+                    pc == response_parser,
+                "Original idle foreground must not render or advance the scheduler");
+        trace << "IDLE_STAGE " << std::hex << pc << ' ' << cpu.state().sp << '\n' << std::dec;
+      }
+      foreground_instruction();
+      ++total_steps;
+    } while (cpu.state().pc != main_loop);
+    const auto s = cpu.state();
+    require(s.sp == 1 && s.stack_pc == stop && repeat == wire && idle_audio_state() == audio,
+            "Idle MIDI polling must preserve audio state, native frame and serial/DMA phase");
+    trace << "IDLE_END " << std::hex << s.pc << ' ' << s.sp << ' ' << s.a << ' ' << s.b << ' '
+          << s.sr << '\n';
+    trace << "IDLE_MIDI " << get(x, midi_producer) << ' ' << get(x, midi_consumer);
+    for (unsigned at = midi_staged_status; at < midi_staged_status + 3; ++at) {
+      trace << ' ' << get(x, at);
+    }
+    trace << ' ' << get(x, transition_destination) << ' ' << get(x, transition_target) << ' '
+          << (get(x, runtime_flags) & transition_flag) << ' ' << get(x, sound + output_controller)
+          << ' ' << get(x, sound + modulation_controller) << ' ' << s.sp << '\n'
+          << std::dec;
+    foreground_ram("IDLE_RAM");
+  }
+
+  void idle_chunk(const std::vector<unsigned> &bytes, unsigned &ordinal) {
+    using enum blofeld::DspSpace;
+    auto cursor = get(x, midi_producer);
+    require(cursor == get(x, midi_consumer) && bytes.size() < midi_ring_size,
+            "Idle MIDI transport requires an empty bounded input ring");
+    trace << "IDLE_BYTES" << std::hex;
+    for (const auto byte : bytes) {
+      require(byte <= byte_mask, "Idle MIDI transport supplies bytes");
+      put(x, cursor, byte << midi_byte_shift);
+      cursor = midi_ring + ((cursor - midi_ring + 1) % midi_ring_size);
+      trace << ' ' << byte;
+    }
+    put(x, midi_producer, cursor);
+    trace << '\n' << std::dec;
+    idle_iteration(ordinal++);
+    idle_iteration(ordinal++);
+  }
+
+  void stream_idle(const unsigned block) {
+    unsigned ordinal = 0;
+    if (block == 0) {
+      idle_chunk({midi_volume, 64}, ordinal);
+    } else if (block == 1) {
+      idle_chunk({midi_volume}, ordinal);
+      idle_chunk({0}, ordinal);
+    } else if (block == 2) {
+      idle_chunk({midi_controller_status | 1U, midi_volume, parameter_max}, ordinal);
+      idle_chunk({midi_controller_status, midi_volume, 1}, ordinal);
+    } else if (block == 3) {
+      idle_chunk({midi_volume, parameter_max, midi_volume, 32}, ordinal);
+    } else if (block == 4) {
+      std::vector<unsigned> burst;
+      for (unsigned value = 0; value < idle_burst_pairs; ++value) {
+        burst.insert(burst.end(), {midi_volume, value});
+      }
+      idle_chunk(burst, ordinal);
+    } else {
+      idle_chunk({}, ordinal);
+    }
+    for (const auto &[at, value] : source.program) {
+      require(bus.peek_program(at) == value, "Original idle foreground executable changed");
+    }
+  }
+
   void stream_case(const Case input) {
     using enum blofeld::DspSpace;
     initialize_foreground(input);
@@ -1148,6 +1269,7 @@ struct Fixture {
     for (unsigned block = 0; block < input.blocks; ++block) {
       if (direct != nullptr) { direct->check(); }
       foreground_iteration(block);
+      if (idle_midi_enabled) { stream_idle(block); }
       repeat.drain(bus, cpu, trace);
       if (direct != nullptr) {
         // Publish only the final, verified branch after any held-word replay.
@@ -1264,7 +1386,7 @@ void stream_matrix(Fixture &fixture) {
                              .color = parameter_max,
                              .varied = high,
                              .serial = serial,
-                             .blocks = 6});
+                             .blocks = fixture.idle_midi_enabled ? midi_stream_blocks : 6});
       }
     }
   }
@@ -1281,8 +1403,10 @@ int run_voice_test(const int count,
                    const VoiceInput input) {
   try {
     require(count == 3, "Expected original firmware and private voice trace");
-    require(output.direct == nullptr || (output.capture == nullptr && input == VoiceInput::stream &&
-                                         !drive && master && !pcm),
+    require(output.direct == nullptr ||
+                (output.capture == nullptr &&
+                 (input == VoiceInput::stream || input == VoiceInput::stream_midi) && !drive &&
+                 master && !pcm),
             "Direct output requires one ring stream and excludes offline capture");
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
@@ -1299,8 +1423,8 @@ int run_voice_test(const int count,
                            .color = parameter_max,
                            .varied = false,
                            .serial = false,
-                           .blocks = 6});
-    } else if (input == VoiceInput::stream) {
+                           .blocks = fixture.idle_midi_enabled ? midi_stream_blocks : 6});
+    } else if (input == VoiceInput::stream || input == VoiceInput::stream_midi) {
       stream_matrix(fixture);
     } else if (drive) {
       drive_matrix(fixture);

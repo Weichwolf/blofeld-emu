@@ -1,0 +1,32 @@
+Original MIDI during the foreground DMA wait
+
+original_dsp_idle_midi retains ten original foreground blocks in eight pitch,
+rounding and filter-route contexts. Between each body and the next paused-core
+serial phase, raw bytes enter only the primary ring and producer pointer. Two
+real idle polls per chunk execute the unchanged parser and equal-half gate.
+Running status, fragmented CC7, another channel, coalesced targets and a 48-byte
+burst cross the 64-word input ring. Empty polls must retain parser staging.
+
+Independent MIDI/63:64 smoothing/voice/master equations check 192 idle polls,
+80 body blocks, 2560 DMA words and 1280 stereo frames. The target changes while
+idle; current gain, scheduler counters, seed, audio RAM, enabled DMA and serial
+state remain unchanged until their actual next body/transfer. Original program
+words and native caller frames are checked. Nine corrupt trace controls reject.
+
+original_dsp_ring_midi_audio submits one such ten-block stream directly to
+AudioRuntime: all 160 independently predicted S32LE stereo frames must match
+an isolated no-rewind monitor under ASan/UBSan and separately TSan. The client
+submits actual pin-decoded frames per half, without reading a trace or capture.
+
+  cmake --build --preset strict --target blofeld-original-dsp-idle-midi-test blofeld-original-dsp-ring-audio-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_(idle_midi|ring_midi_audio)$'
+
+Reports/traces are under Testing/original-dsp-idle-midi.* and
+Testing/original-dsp-ring-midi-audio/. Missing firmware/tools skip, changed
+identities or native diagnostics fail. Manufacturer assets remain local.
+
+Scope: untimed native reference admissions alternate with paused-core HCKT/DMA
+phases. Effects Off, held entry, readable initial RAM and non-due part clock are
+explicit fixture inputs. Playback starts at EOF below the host prebuffer. This
+does not establish physical arbitration/clocks, realtime production, full boot,
+live host MIDI, NoteOn allocation or real-device equivalence. No fuzzing runs.

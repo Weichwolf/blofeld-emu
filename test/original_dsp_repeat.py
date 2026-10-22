@@ -24,6 +24,7 @@ class Pipeline:
         self.target = 512 * 127 ** 2 if varied else 0
         self.current = self.target if varied else RESET_LEVEL
         self.pending = True
+        self.cursor = 0x2f80 + (7 if varied else 3)
         self.master = Output(program)
         self.mix = [0] * 32
         self.halves = [[0] * 32, [0] * 32]
@@ -86,11 +87,10 @@ class Pipeline:
         if len(state) != 8 or state[7] & ((1 << 21) | 0xc00) != int(self.twos) << 21:
             raise ValueError('FOREGROUND_END mode differs')
         seed = (voice.seed >> 1) ^ (0x840000 if voice.seed & 1 else 0)
-        byte_count = 7 if self.varied else 3
         check('FOREGROUND_RAM', [(block + 1) * 0x1000, seed, 0x80 if self.pending else 0,
                                 SOUND + 404, self.target, 0, 0x7fffff,
                                 (block + 1) * 0x4800, 0, self.current,
-                                0x2f80 + byte_count, 0x2f80 + byte_count,
+                                self.cursor, self.cursor,
                                 (1 - block % 2) * 32, 0x660 + block % 2 * 32], text)
         check('FOREGROUND_PREVIOUS_OUTPUT', self.halves[1], text)
         voice.seed = seed

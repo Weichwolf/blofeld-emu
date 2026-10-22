@@ -40,6 +40,7 @@ class Midi:
         self.destination = self.target = 0
         self.volume, self.wheel = RESET_LEVEL, 0
         self.calls = 0
+        self.pending = False
 
     def deliver(self, chunk):
         for byte in chunk:
@@ -63,9 +64,10 @@ class Midi:
                     else:
                         self.wheel = self.target
                 self.destination, self.target = destination, target
+                self.pending = True
         self.calls += 1
         return [self.cursor, self.cursor, self.status << 16, self.first << 16,
-                self.second << 16, self.destination, self.target, 0x80,
+                self.second << 16, self.destination, self.target, 0x80 if self.pending else 0,
                 self.volume, self.wheel, 0]
 
     def __call__(self, voice, text, block):

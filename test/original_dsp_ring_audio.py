@@ -15,20 +15,22 @@ from dsp_voice_model import signed, waveform_model
 from dsp_voice_validation import new_totals, validate_stream
 from host_audio import require, service, terminate, until
 from original_dsp_foreground import row
+from original_dsp_idle_midi import BLOCKS as MIDI_BLOCKS, IdlePipeline
+from original_dsp_idle_midi import negative_controls as midi_negative_controls
 from original_dsp_repeat import BLOCKS, Pipeline, SOUND, negative_controls
 from original_dsp_voice import original_records
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def expected_payload(text, xdata, ydata, program):
+def expected_payload(text, xdata, ydata, program, midi=False):
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
     identity = ('normal', '0', '127', '0', '0')
     require(len(cases) == 1 and tuple(cases[0][:5]) == identity,
             'Direct audio must select one complete declared original ring stream')
 
-    class Capture(Pipeline):
+    class Capture(IdlePipeline if midi else Pipeline):
         def __init__(self):
             super().__init__(False, False, program)
             self.payload = bytearray()
@@ -46,11 +48,12 @@ def expected_payload(text, xdata, ydata, program):
     require([ydata[0x1e25 + index] & 255 for index in (129, 145)] == [0, 0],
             'Changed original factory FX Mix0/0 profile')
     totals = new_totals()
+    blocks = MIDI_BLOCKS if midi else BLOCKS
     validate_stream(stream, xdata, ydata, {False: waveform_model(ydata, False)}, identity,
-                    totals, block_count=BLOCKS, before_block=capture.before,
+                    totals, block_count=blocks, before_block=capture.before,
                     after_block=capture.after, sound_base=SOUND)
-    require(totals['blocks'] == 6 and totals['dependent_blocks'] == 5 and
-            capture.nonzero > 0 and len(capture.payload) == 96 * 8,
+    require(totals['blocks'] == blocks and totals['dependent_blocks'] == blocks - 1 and
+            capture.nonzero > 0 and len(capture.payload) == blocks * 16 * 8,
             'Every native original ring block must reach the independent audio oracle')
     return bytes(capture.payload)
 
@@ -65,7 +68,9 @@ def check_monitor(recorded, expected):
     return position
 
 
-def playback(binary, firmware, trace, directory, xdata, ydata, program):
+def playback(binary, firmware, trace, directory, xdata, ydata, program, midi=False):
+    blocks = MIDI_BLOCKS if midi else BLOCKS
+    frames = blocks * 16
     with service(directory) as (daemon, server, env):
         recorded = directory / 'monitor.pcm'
         with recorded.open('wb') as samples, (directory / 'monitor.log').open('w') as log:
@@ -80,7 +85,8 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program):
                     return bool(outputs.stdout.strip())
 
                 until(ready, daemon, 'the direct original ring monitor')
-                result = subprocess.run([str(binary), str(firmware), str(trace), server], env=env,
+                command = [str(binary), str(firmware), str(trace), server, *(['midi'] if midi else [])]
+                result = subprocess.run(command, env=env,
                                         capture_output=True, text=True, check=False,
                                         timeout=240 if env.get('BLOFELD_TEST_SANITIZER') == 'thread' else 90)
                 diagnostics = result.stdout + result.stderr
@@ -90,18 +96,23 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program):
                                 ('AddressSanitizer', 'LeakSanitizer', 'ThreadSanitizer', 'runtime error:')),
                         'Direct original ring audio failed: ' + diagnostics)
                 require(re.findall(r'^direct-ring-frames=(\d+) playback-rate=48000 '
-                                   r'physical-clock=unqualified$', result.stdout, re.M) == ['96'],
-                        'The actual worker must accept, write and finish all 96 decoded frames')
+                                   r'physical-clock=unqualified$', result.stdout, re.M) == [str(frames)],
+                        f'The actual worker must accept, write and finish all {frames} decoded frames')
                 time.sleep(0.1)
             finally:
                 terminate(monitor)
         require(not (directory / 'monitor.log').read_text(), 'Private monitor failed')
         text = trace.read_text()
-        expected = expected_payload(text, xdata, ydata, program)
-        negative_controls(text, xdata, ydata, program, validator=expected_payload)
+        def validator(text, xdata, ydata, program):
+            return expected_payload(text, xdata, ydata, program, midi=midi)
+
+        expected = validator(text, xdata, ydata, program)
+        controls = midi_negative_controls if midi else negative_controls
+        controls(text, xdata, ydata, program, validator=validator)
         position = check_monitor(recorded.read_bytes(), expected)
-        return {'passed': True, 'original_foreground_blocks': 6, 'accepted_frames': 96,
-                'exact_host_frames': 96, 'oracle_negative_controls': 4,
+        return {'passed': True, 'original_foreground_blocks': blocks, 'accepted_frames': frames,
+                'exact_host_frames': frames, 'oracle_negative_controls': 9 if midi else 4,
+                'idle_midi': midi,
                 'monitor_offset_bytes': position, 'reference_sample_rate': 48000,
                 'reference_timebase': 24576000, 'fuzz_execution': False, 'physical_audio': False,
                 'scope': 'Direct original controller/foreground/repeating DMA/ESAI frames '
@@ -112,7 +123,9 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program):
 
 
 def main():
-    binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:])
+    midi = sys.argv[4:] == ['midi']
+    require(len(sys.argv) == 4 or midi, 'Expected binary, firmware, artifacts and optional midi')
+    binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:4])
     artifacts.mkdir(parents=True, exist_ok=True)
     report = artifacts / 'result.json'
     report.unlink(missing_ok=True)
@@ -130,9 +143,9 @@ def main():
         directory = Path(temporary)
         try:
             result = playback(binary, firmware, artifacts / 'native.trace', directory,
-                              xdata, ydata, program)
+                              xdata, ydata, program, midi=midi)
             report.write_text(json.dumps(result, indent=2) + '\n')
-            print('Verified 96 direct original ring frames at the private host audio monitor; '
+            print(f"Verified {result['exact_host_frames']} direct original ring frames at the private host audio monitor; "
                   'full boot, realtime playback and live host MIDI remain open.')
         finally:
             for file in directory.rglob('*'):

@@ -15,6 +15,9 @@ The private no-rewind server must receive exactly 96 accepted/written stereo
 frames, with no extra nonzero source data. Idle monitor zeros are allowed.
 Four corrupted native trace-word controls must fail. Original firmware/program
 identities retain their existing pins; manufacturer traces/assets stay local.
+The separate original_dsp_ring_midi_audio profile extends the same direct path
+to 160 frames with CC7 changes during idle waits; see dsp-idle-midi.txt. The
+original six-block profile and its independent expectations remain in place.
 
 This is a short offline producer. Its 96 frames remain below the 4096-frame host
 prebuffer, so playback starts on EOF after native computation. Playback 48kHz and
