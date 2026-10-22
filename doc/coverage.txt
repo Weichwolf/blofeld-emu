@@ -30,6 +30,9 @@ Host audio output                partial  Separate session/default-sink transpor
                                           serial receiver -> private audio server
                                           checks 8192 exact frames, precision
                                           boundaries and real server disconnect.
+                                          Nonblocking bounded output and 128
+                                          coupled MCU/DSP frames, joint FIFO
+                                          restore/stale transport retirement.
                                           Normal runtime, original voice/audio,
                                           PipeWire and sustained latency/load
                                           remain pending (host-audio.txt).

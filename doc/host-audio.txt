@@ -1,44 +1,56 @@
 Session audio transport
 
   cmake --preset strict
-  cmake --build --preset strict --target blofeld-host-audio-test
-  ctest --test-dir build/strict -R '^host_audio$' --output-on-failure
+  cmake --build --preset strict --target blofeld-host-audio-test blofeld-reference-checkpoint-test
+  ctest --test-dir build/strict -R '^(host_audio|reference_checkpoint)$' --output-on-failure
 
-Dependencies: pkg-config, libpulse-dev; integration test additionally uses
-pulseaudio, pulseaudio-utils and dbus-daemon. The client uses the session server
-and default sink unless an explicit test target is supplied. It changes no
-host routes and requires no exclusive ALSA device or USB Audio interface.
+Dependencies: pkg-config, libpulse-dev; integration additionally uses pulseaudio,
+pulseaudio-utils and dbus-daemon. The asynchronous client uses the session server
+and default sink unless a test target is declared; it never spawns a server or
+changes routing. No exclusive ALSA device or USB Audio interface is required.
 
-HostAudio accepts complete stereo signed 24-bit SerialPcmFrames in blocks of
-1..256. Declared timebase/rate must give an integral serial bit period. Every
-frame must retain the declared precision, uniform bit period, complete slot
-span and continuity with the accepted prefix. Validation covers the whole
-block before output; invalid input sends nothing and leaves the stream usable.
-Samples become S32NE with their original 24 bits in the high bits; no clipping,
-channel mixing, silence fill or emulator-side resampling is performed.
+HostAudio::write validates and enqueues 1..256 complete stereo signed 24-bit
+SerialPcmFrames without host I/O, waiting or allocation on success. Its FIFO
+holds 4096 frames. Full/invalid blocks reject before changing the accepted
+prefix. Declared timebase/rate must give an integral serial bit period; each
+frame retains precision, uniform bit period, slot span and continuity. Host
+submission converts to S32NE without clipping, mixing, fill or local resampling.
 
-PulseAudio Simple API writes/drain block. This host transport belongs outside
-CPU/peripheral execution and RT callbacks; it adds no project thread/callback.
-System client libraries use their own internals. Playback state is external,
-noncopyable and excluded from board snapshots. A connection/write/drain error
-fails visibly; failed I/O poisons further writes/drains. Destruction frees the
-stream without an implicit drain. frames_written counts accepted client frames,
-not a hardware playback confirmation. Session audio servers may resample.
+poll admits an explicit owner/restore revision/monotonic modeled timestamp,
+executes one nonblocking PulseAudio main-loop iteration and submits at most
+256 frames subject to actual server capacity. finish closes input and requests
+asynchronous drain after the FIFO empties. Completion requires further polls.
+The C completion callback only stores flags, is noexcept and allocates nothing.
+All operations have one caller; there is no project worker thread. System API
+allocation belongs outside emulated execution and future RT callbacks. This is
+not a hard realtime deadline guarantee. Destruction/retire cancels pending I/O
+without draining. Connection/stream errors poison subsequent operations.
+frames_written counts successful client submissions, not physical playback.
 
-The isolated test starts its own D-Bus, PulseAudio server and null sink with
-rewinds disabled so monitor frame counts describe one forward stream. Actual
-native DSP MOVEP, both ESAI instances and the serial receiver produce an
-independently checked stereo pair under a declared 48 kHz reference clock.
-Repeated blocks yield 8192 exact monitor frames; separate min/max, unit, zero
-and channel-order vectors check signed conversion. Invalid final frames reject
-whole blocks; a real server shutdown verifies failure and poisoned retries.
-No user routing, physical audio, manufacturer firmware or fuzzing is involved.
+Reference Board Execution.live_audio explicitly enables a separate 256-frame
+native-output FIFO. Only completed actual serial frames enter it. Overflow
+fails with MCU/DSP context; execution cannot silently continue or fill audio. poll_audio transfers a bounded block at an inactive operation
+boundary, including after the execution budget ends. It changes no native CPU,
+clock, peripheral or NVM state. The FIFO is part of coordinated snapshots;
+already submitted playback is external. Restore/foreign owner/backward time
+retires the old transport before another host callback. A fresh transport must
+consume restored output. Automatic reference replay rejects live audio.
 
-Pending: normal runtime integration, bounded producer/host scheduling, sustained
-underrun/latency/load tests, PipeWire-specific execution and original firmware
-voice/audio output. Default-sink rewind/latency behavior is not qualified by the
-private forward-only sink. This component does not make the current preview playable.
+The test uses private D-Bus/server/null-sink/monitor processes, with rewinds
+disabled for exact forward frame counts. Both native DSP ESAI routes supply
+8192 repeated transport frames; separate precision/channel-order vectors and
+a real server shutdown check conversion and failure. Two actual coupled MCU
+WAI/DSP runs supply 128 additional frames without host synthesis or repetition.
+Two joint restores retain native/output state and retire stale playback before
+progress. A withheld consumer stops native frame257 with both PCs, retains the
+256-frame prefix and leaves NVM intact. Manufacturer firmware and physical audio
+are not used; no fuzzing runs.
+
+Pending: normal Keyboard/Desktop startup integration, wall-clock pacing,
+sustained underrun/latency/load and default-sink rewind tests, PipeWire-specific
+execution and original firmware voice/audio output. The current LCD preview
+remains without live MIDI/audio.
 
 API references:
-  https://www.freedesktop.org/software/pulseaudio/doxygen/simple.html
-  https://www.freedesktop.org/software/pulseaudio/doxygen/sample_8h.html
+  https://www.freedesktop.org/software/pulseaudio/doxygen/mainloop_8h.html
+  https://www.freedesktop.org/software/pulseaudio/doxygen/stream_8h.html

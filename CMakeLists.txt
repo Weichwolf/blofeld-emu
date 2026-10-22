@@ -139,10 +139,10 @@ add_library(blofeld_pcm_transport src/pcm_recording.cpp src/pcm_wave.cpp src/pcm
 target_include_directories(blofeld_pcm_transport PUBLIC include)
 target_link_libraries(blofeld_pcm_transport PUBLIC blofeld_serial_pcm PRIVATE blofeld_private_files)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(PULSE_SIMPLE REQUIRED IMPORTED_TARGET libpulse-simple)
-add_library(blofeld_host_audio src/host_audio.cpp)
+pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
+add_library(blofeld_host_audio src/host_audio.cpp src/host_audio_poll.cpp)
 target_include_directories(blofeld_host_audio PUBLIC include)
-target_link_libraries(blofeld_host_audio PUBLIC blofeld_serial_pcm PRIVATE PkgConfig::PULSE_SIMPLE)
+target_link_libraries(blofeld_host_audio PUBLIC blofeld_serial_pcm PRIVATE PkgConfig::PULSE)
 add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC include)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
@@ -180,7 +180,7 @@ add_executable(blofeld-headless src/main.cpp src/reference_config.cpp
   src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
   src/reference_midi.cpp src/reference_dsp_midi.cpp src/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_mcu_dsp blofeld_private_files blofeld_pcm_transport
-  blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library blofeld_usbip_tcp)
+  blofeld_mcu_midi blofeld_host_midi blofeld_midi_timed blofeld_sample_library blofeld_usbip_tcp blofeld_host_audio)
 
 if(BUILD_TESTING)
   add_executable(blofeld-hc12-ccr-test test/hc12_ccr_test.cpp)
@@ -321,8 +321,8 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-host-audio-test PRIVATE blofeld_host_audio blofeld_dsp blofeld_dsp_native)
   add_test(NAME host_audio COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio.py" $<TARGET_FILE:blofeld-host-audio-test>
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio")
-  set_tests_properties(host_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio" $<TARGET_FILE:blofeld-reference-checkpoint-test>)
+  set_tests_properties(host_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-serial-pcm-test test/serial_pcm_test.cpp test/serial_pcm_native.cpp)
   target_link_libraries(blofeld-serial-pcm-test PRIVATE blofeld_serial_pcm blofeld_dsp blofeld_dsp_native)
   add_test(NAME serial_pcm COMMAND blofeld-serial-pcm-test)
@@ -348,14 +348,14 @@ if(BUILD_TESTING)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
-  add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp
+  add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp test/reference_host_audio.cpp test/host_audio_native.cpp
     src/reference_config.cpp src/reference_board.cpp src/reference_wiring.cpp
     src/reference_returns.cpp src/reference_checkpoint.cpp src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp
     src/reference_midi.cpp src/reference_dsp_midi.cpp)
   target_include_directories(blofeld-reference-checkpoint-test PRIVATE src)
   target_link_libraries(blofeld-reference-checkpoint-test PRIVATE
     blofeld_mcu_dsp blofeld_private_files blofeld_dsp_native blofeld_pcm_transport blofeld_mcu_midi
-    blofeld_midi_timed blofeld_usbip_tcp)
+    blofeld_midi_timed blofeld_usbip_tcp blofeld_host_audio)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}

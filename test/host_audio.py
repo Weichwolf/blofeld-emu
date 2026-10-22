@@ -37,7 +37,7 @@ def stop(process):
         process.wait(timeout=3)
 
 
-def verify_capture(result, directory):
+def verify_capture(result, directory, board_result):
     samples = (directory / "capture.raw").read_bytes()
     # Independent signed S32LE bytes for the two actual native 24-bit words.
     pair = bytes.fromhex("009fc3a500563412")
@@ -48,18 +48,28 @@ def verify_capture(result, directory):
     if counts != [4096, 4096] or len(samples) % 8:
         raise AssertionError("Missing both native ESAI routes or complete monitor frames")
     actual = sum(samples[index:index + 8] == pair for index in range(0, len(samples), 8))
-    if actual != sum(counts):
-        raise AssertionError(f"Monitor retained {actual} of {sum(counts)} exact stereo frames")
+    if actual != sum(counts) + 2:
+        raise AssertionError(f"Monitor retained {actual} of {sum(counts) + 2} exact native pairs")
+    board_rows = [tuple(map(int, line.split()[1:])) for line in board_result.stdout.splitlines()
+                  if line.startswith("BOARD ")]
+    repeated = bytes.fromhex("0056341200563412")
+    if board_rows != [(0, 64), (1, 64)] or sum(
+            samples[index:index + 8] == repeated for index in range(0, len(samples), 8)) != 126:
+        raise AssertionError("Both actual board runs must retain exactly their 64 original frames")
+    if board_result.stdout.splitlines().count("OVERFLOW 256") != 1:
+        raise AssertionError("Missing actual native producer overflow and retained 256-frame prefix")
     edges = EXPECTED_EDGES
     if "EDGES 4\n" not in result.stdout or samples.find(edges) < 0:
         raise AssertionError("Missing exact min/max, unit, zero and channel-order boundary frames")
-    allowed = {pair, bytes(8), *(edges[index:index + 8] for index in range(0, len(edges), 8))}
+    allowed = {pair, repeated, bytes(8), *(edges[index:index + 8] for index in range(0, len(edges), 8))}
     if any(samples[index:index + 8] not in allowed for index in range(0, len(samples), 8)):
         raise AssertionError("Monitor contains altered, swapped or unexpected PCM")
-    for edge in allowed - {pair, bytes(8)}:
+    for edge in allowed - {pair, repeated, bytes(8)}:
         if sum(samples[index:index + 8] == edge for index in range(0, len(samples), 8)) != 1:
             raise AssertionError("A nonzero precision boundary frame is missing or duplicated")
-    return {"passed": True, "native_routes": 2, "exact_frames": actual,
+    return {"passed": True, "native_routes": 2, "exact_frames": sum(counts),
+            "coupled_board_frames": 128, "restore_retirements": 2,
+            "native_overflow_stopped": True,
             "boundary_frames": 4, "monitor_bytes": len(samples), "sample_rate": 48000,
             "format": "signed 32-bit stereo; original 24-bit precision",
             "fuzz_execution": False, "physical_audio": False,
@@ -108,7 +118,7 @@ def private_bus(directory):
         raise
 
 
-def run(binary, directory):
+def run(binary, directory, board_binary):
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     directory.chmod(0o700)
     (directory / "verification.json").unlink(missing_ok=True)
@@ -167,10 +177,19 @@ def run(binary, directory):
                 if result.returncode or any(marker in result.stderr for marker in (
                         "AddressSanitizer", "LeakSanitizer", "runtime error:")):
                     raise RuntimeError(f"Host audio client failed: {result.stdout}{result.stderr}")
+                board_result = subprocess.run([str(board_binary), "--host-audio", server],
+                                              env=environment, capture_output=True, text=True,
+                                              timeout=60, check=False)
+                (directory / "board.log").write_text(board_result.stdout + board_result.stderr)
+                if board_result.returncode or any(marker in board_result.stderr for marker in (
+                        "AddressSanitizer", "LeakSanitizer", "runtime error:")):
+                    raise RuntimeError(f"Coupled board audio failed: {board_result.stdout}{board_result.stderr}")
                 wait_for(lambda: EXPECTED_EDGES in (directory / "capture.raw").read_bytes(),
                          monitor)
+                wait_for(lambda: (directory / "capture.raw").read_bytes().count(
+                    bytes.fromhex("0056341200563412")) >= 126, monitor)
                 stop(monitor)
-            verification = verify_capture(result, directory)
+            verification = verify_capture(result, directory, board_result)
             verify_disconnect(binary, server, environment, daemon, directory)
             verification["real_disconnect_rejected"] = True
             (directory / "verification.json").write_text(json.dumps(verification, indent=2) + "\n")
@@ -179,9 +198,9 @@ def run(binary, directory):
         stop(daemon)
         stop(bus)
     print("Verified both native DSP ESAI routes through the actual private audio server; "
-          "8192 exact stereo frames, strict clock/block validation, no physical audio.")
+          "8192 exact transport frames, 128 coupled-board frames, restore retirement; no physical audio.")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(run(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()))
+    sys.exit(run(*(Path(argument).resolve() for argument in sys.argv[1:4])))

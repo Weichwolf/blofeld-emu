@@ -13,6 +13,7 @@
 #include "blofeld/midi_serial.hpp"
 #include "blofeld/usbip_runtime.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "host_audio_fixture.hpp"
 #include "reference_board.hpp"
 
 #include <array>
@@ -544,6 +545,10 @@ void test_usb_transport_epoch_does_not_rewind(const std::filesystem::path &speci
 
 int main(const int argc, char **argv) {
   try {
+    if (argc == 3 && std::string_view(argv[1]) == "--host-audio") {
+      blofeld::test::reference_host_audio(argv[2]);
+      return 0;
+    }
     if (argc != 2) { throw blofeld::Fault("Usage: reference-checkpoint artifact-directory"); }
     const std::filesystem::path root(argv[1]);
     std::filesystem::create_directories(root);

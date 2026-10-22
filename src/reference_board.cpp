@@ -65,16 +65,7 @@ Board::Board(const Config &config, const Execution &execution)
   native_->dsp.bus().install_rom({.start = bootstrap_base, .words = execution.rom});
   native_->dsp.bus().pll().observe_pinit(config.pinit);
   native_->dsp.cpu().reset_spi_boot();
-  if (config.pcm) {
-    if (config.pcm->instance > 1 || config.pcm->lane > 5) {
-      throw Fault("Invalid PCM output route");
-    }
-    control_.pcm.emplace(config.pcm->format);
-  }
-  if (execution.audio) {
-    if (!config.pcm) { throw Fault("WAV output requires pcm-receive in the reference board"); }
-    control_.recording = PcmRecording(config.pcm->format, execution.audio->maximum_frames);
-  }
+  initialize_pcm();
   for (const auto &entry : config.initial) { apply(entry); }
   for (const auto &entry : config.dsp_initial) { apply_dsp(entry); }
   update_wiring();

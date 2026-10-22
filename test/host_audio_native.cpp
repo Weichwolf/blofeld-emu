@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace blofeld::test {
 namespace {
@@ -57,6 +58,17 @@ DspProgram program(const bool secondary) {
   result.word(loop);
   return result;
 }
+}
+
+std::vector<std::uint32_t> host_audio_native_program(const bool secondary) {
+  DspBus bus;
+  const auto code = program(secondary);
+  code.install(bus);
+  std::vector<std::uint32_t> words;
+  for (unsigned address = boot; address < code.pc(); ++address) {
+    words.push_back(bus.read({.space = DspSpace::p, .address = address}));
+  }
+  return words;
 }
 
 SerialPcmFrame host_audio_native_frame(const bool secondary) {

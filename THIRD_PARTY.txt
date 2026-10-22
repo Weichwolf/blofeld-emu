@@ -33,7 +33,7 @@ DSP56300:
 PulseAudio client libraries:
   https://www.freedesktop.org/wiki/Software/PulseAudio/
   Lennart Poettering, Pierre Ossman and contributors; LGPL-2.1-or-later.
-  System libpulse-simple/libpulse are dynamically linked by the host audio
+  System libpulse is dynamically linked by the host audio
   transport. Their source/notices remain with the system packages. No server
   or client library source is vendored; native emulator dependencies above
   retain their separate sanitizer builds.

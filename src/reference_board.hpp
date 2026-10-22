@@ -15,6 +15,7 @@
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_sci.hpp"
 #include "blofeld/midi_timed.hpp"
+#include "blofeld/pcm_queue.hpp"
 #include "blofeld/pcm_recording.hpp"
 #include "blofeld/serial_pcm.hpp"
 
@@ -32,6 +33,7 @@
 #include <vector>
 
 namespace blofeld {
+class HostAudio;
 class UsbipRuntime;
 }
 
@@ -163,6 +165,7 @@ struct Execution {
   std::ostream *trace = nullptr;
   std::uint64_t instructions = 0;
   std::optional<AudioOutput> audio = std::nullopt;
+  bool live_audio = false;
 };
 
 class Board;
@@ -207,6 +210,7 @@ struct Status {
   std::optional<SerialPcmStamp> pcm_stamp;
   std::optional<SerialPcmFrame> last_pcm;
   PcmRecording recording;
+  std::optional<PcmQueue<256>> pending_audio;
   std::size_t midi_queued = 0;
   std::uint64_t midi_bytes = 0;
   bool midi_started = false;
@@ -236,6 +240,8 @@ public:
   void enqueue_midi(std::span<const std::uint8_t> bytes);
   // Non-real-time input admission at an inactive native MCU operation boundary.
   void poll_usb(UsbipRuntime &runtime);
+  // Nonblocking output admission at an inactive operation boundary, including final drain.
+  void poll_audio(HostAudio &audio);
   [[nodiscard]] Checkpoint checkpoint() const;
   // Strong exception guarantee; restores native owners and all wiring together.
   void restore(const Checkpoint &checkpoint);
@@ -275,6 +281,7 @@ private:
     std::optional<SerialPcmStamp> pcm_stamp;
     std::optional<SerialPcmFrame> last_pcm;
     PcmRecording recording;
+    std::optional<PcmQueue<256>> pending_audio;
     std::optional<McuClockedMidiInput> midi;
     std::optional<MidiTimedInput> midi_dsp;
     std::uint64_t midi_bytes = 0;
@@ -319,6 +326,7 @@ private:
   void apply_dsp(const DspInput &input);
   void trace_dsp_input(const DspInput &input, std::uint64_t at);
   void trace_dsp_midi(std::uint64_t at);
+  void initialize_pcm();
   void observe_pcm(std::uint64_t at, std::string_view source);
   [[nodiscard]] SerialPcmPins pcm_pins() const;
   void trace_pcm(SerialPcmStamp stamp,
