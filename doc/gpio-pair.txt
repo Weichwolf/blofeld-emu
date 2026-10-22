@@ -66,3 +66,35 @@ all36 successful returns. There are36 joint restores,72 detached-source refusals
 These are trusted in-process component snapshots. They do not provide a portable
 whole-board file, physical recovery procedure, flash/power-loss qualification,
 safe conflicting voltages or a successful original boot.
+
+Continuous original requests
+
+  cmake --build --preset strict --target blofeld-original-gpio-sequence-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_sequence$'
+
+Four order/phase contexts each execute16 requests on the same native owners,
+GPIO/IRQA state and schedule: all eight routes forward and backward. An own
+unrolled MCU caller writes its arguments with actual indexed SP stores, calls
+the unchanged original routine and stores each native return into own RAM.
+Its17-byte entries follow the independent S12CPU15UG v1.2 encodings for LDAB,
+STAB, LDAA, STAA, LDD and JSR. A native write-cycle observation plus checked
+post-instruction RAM/PC state identifies each returned result. The existing
+M-W observer covers I/O; it is not evidence for RAM write cycles.
+
+Only initial setup seeds the seven own source fields (0,1,7,63,64,126,127).
+The signature word127 comes from the original record loaded at initial setup;
+the fixture never overwrites that word. Between requests the host changes no
+CPU registers, argument RAM, GPIO, IRQ, clock or source data and never resets
+the DSP. Only oracle metadata advances; the executing own caller supplies every
+actual argument and return store.
+Both native clock counters must increase between successive results.
+
+The oracle checks64 native source loads/returns, all256 original data writes
+against the independent packet matrix, all64 native caller write slots and
+post-store values, known pad queries and the complete unresolved net audit.
+Original loaded program/source values, own caller code and whole MCU NVM remain
+unchanged. Final original cleanup releases the data inputs to their actual
+configured pull-downs. Eight fixed evidence corruptions must reject.
+Every whole-stream board qualification still rejects unresolved intermediate
+voltages. This short declared stream is not full boot, physical timing, normal
+MIDI/audio or long-run/realtime qualification.

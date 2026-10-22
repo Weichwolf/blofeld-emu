@@ -684,6 +684,16 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           reject72 pin observations; saved
                                           own RAM, native states/time and every
                                           suffix event are retained (gpio-pair.txt).
+                                          Four continuous native request streams
+                                          also execute64 returns across all eight
+                                          routes forward/backward. An own native
+                                          MCU caller supplies arguments/stores;
+                                          no per-request CPU/GPIO/IRQ/clock reset.
+                                          Independent packets, native RAM write
+                                          slots, increasing time and unchanged
+                                          source/program/NVM are checked. All four
+                                          board qualifications remain rejected;
+                                          long-run/RT is not established.
                                           Declared external pad sources separate
                                           local register intent from shared net
                                           voltage (gpio-pads.txt). Opposing active

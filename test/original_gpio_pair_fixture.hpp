@@ -157,6 +157,7 @@ struct OriginalGpioPair {
   Case input;
   ClockInputs clocks;
   unsigned foreground = 0;
+  unsigned completion_pc = caller + 3;
   std::ostream &trace;
   LinkState link;
 
@@ -446,9 +447,10 @@ struct OriginalGpioPair {
             "Original request must preserve its source data");
   }
 
-  [[nodiscard]] bool done() const { return mcu.cpu().state().pc == caller + 3; }
+  [[nodiscard]] bool done() const { return mcu.cpu().state().pc == completion_pc; }
 
-  void start(const McuDspTieOrder order, const unsigned phase) {
+  void start(const McuDspTieOrder order, const unsigned phase, const unsigned end = caller + 3) {
+    completion_pc = end;
     schedule = std::make_unique<McuDspSchedule>(
         McuDspScheduleInputs{
             .dsp = {.epoch_ticks = phase,
@@ -458,8 +460,10 @@ struct OriginalGpioPair {
             .maximum_dsp_steps_per_cycle = 16},
         mcu,
         dsp);
-    mcu.bus().write(caller + 3, branch_opcode);
-    mcu.bus().write(caller + 4, branch_self);
+    if (end == caller + 3) {
+      mcu.bus().write(caller + 3, branch_opcode);
+      mcu.bus().write(caller + 4, branch_self);
+    }
     attach_observers();
   }
 
@@ -493,14 +497,16 @@ struct OriginalGpioPair {
     }};
   }
 
+  void on_cycle(const Hc12BusCycle cycle) {
+    const bool write = cycle.kind == 'w' || cycle.kind == 'W';
+    const bool shared =
+        write && cycle.address && *cycle.address >= io_begin && *cycle.address < io_end;
+    schedule->begin_cycle(
+        cycle, shared, [this](const auto &step) { before_step(step); }, completed());
+  }
+
   void attach_observers() {
-    mcu.set_cycle_observer([this](const Hc12BusCycle cycle) {
-      const bool write = cycle.kind == 'w' || cycle.kind == 'W';
-      const bool shared =
-          write && cycle.address && *cycle.address >= io_begin && *cycle.address < io_end;
-      schedule->begin_cycle(
-          cycle, shared, [this](const auto &step) { before_step(step); }, completed());
-    });
+    mcu.set_cycle_observer([this](const Hc12BusCycle cycle) { on_cycle(cycle); });
     mcu.bus().set_observer([this](const BusEvent &event) {
       if (!event.write) { return; }
       if (event.address == hc12::ptq) { ++link.data_writes; }
