@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include <cstdint>
+
 namespace blofeld::test {
 struct VoicePcmCapture;
+enum class VoiceInput : std::uint8_t { none, controllers, foreground };
 [[nodiscard]] int run_voice_test(int count,
                                  char **arguments,
                                  bool drive,
                                  bool master = false,
                                  bool pcm = false,
                                  VoicePcmCapture *capture = nullptr,
-                                 bool midi = false);
+                                 VoiceInput input = VoiceInput::none);
 }

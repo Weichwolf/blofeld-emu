@@ -1,0 +1,38 @@
+Conditional original DSP foreground iteration
+
+original_dsp_foreground enters unchanged P:0198 and executes through its actual
+return-to-loop jump. No callee, instruction, CPU continuation or RTS is replaced.
+The original primary/secondary MIDI readers, host-event drain, master output,
+report queue, Effects Off copy/mix, note-event drain, active-entry service,
+held-voice routine, scheduler tail and parameter smoothing execute together.
+Their order and native stack depths have independent expectations.
+
+32 contexts cover both RM modes, low/high pitch, noise endpoints, two mixer
+profiles and serial/parallel filters. One original voice block per context is
+checked with the existing independent oscillator/control/noise/filter/output
+equations. The parent adds two actual call frames; older direct-call assertions
+retain their original depths. The parent consumes the old voice bus before
+rendering. Its earlier master call writes the declared zero previous block,
+not the voice just rendered; no current-block playback is claimed.
+
+CC7=0 leaves a pending transition from the native controller-reset value.
+CC7=127, CC1=0, CC7=127 commits then reselects the same target. Independent
+Q23 equations check the 63/64 one-pole MACR result, threshold250, exact target
+snap/flag clearing, full A/B/X/Y, selected RAM and scheduler seed/tick/countdown.
+There are 16 active and 16 settled outcomes; four corrupted trace-word controls
+must fail. All 127 original records remain hash-pinned and executable words
+unchanged. Manufacturer bytes and detailed traces remain local.
+
+Setup declares sixteen readable part blocks (factory defaults for parts1..15),
+Effects Off, one held entry, empty transport/event/report queues, previous phase0
+and disabled DMA source0660. Original part reset, FX descriptor initialization
+and event initialization run. These are fixture inputs, not recovered boot RAM.
+The DMA source is not advanced or reported as a transfer. This establishes one
+foreground iteration, not continuous DMA/arbitration, physical time, original
+NoteOn allocation, full boot, live MIDI/audio or hardware equivalence.
+
+  cmake --build --preset strict --target blofeld-original-dsp-foreground-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_foreground$'
+
+Testing/original-dsp-foreground.json records scope/counts. Missing private
+firmware skips; changed reference identity fails. No automatic fuzzing runs.

@@ -101,15 +101,15 @@ def validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
     check('HISTORIES', voice.history_words(), block)
     check('ROUTE_OUTPUT', routed, block)
     check('ROUTE_COEFFICIENTS', [v & WORD_MASK for v in route_coefs], block)
-    check('FILTER_ENDPOINT', [1442 if serial else 1425, 1, WORD_MASK if serial else 32771], block)
+    check('FILTER_ENDPOINT', [1442 if serial else 1425, 1 + voice.stack_base, WORD_MASK if serial else 32771], block)
     check('ROUTE', [int(serial)], block)
     filters = [[int(v, 16) for v in row.split()] for row in re.findall('^FILTER ([^\\n]+)', block, re.M)]
-    if filters != [[1408, 864, 24, 2], [1424, 872, 29, 2]]:
+    if filters != [[1408, 864, 24, 2 + voice.stack_base], [1424, 872, 29, 2 + voice.stack_base]]:
         raise ValueError('Original dependent filter call context differs')
     cores = [[int(v, 16) for v in row.split()] for row in re.findall('^CORE ([^\\n]+)', block, re.M)]
     expected_cores = []
     for i, c in enumerate(coefs):
-        expected_cores.append([4947 if c[5] else 4919, 1408 if i < 2 else 1424, (864 if i < 2 else 872) + 2 * (i % 2), (24 if i < 2 else 29) + (1 if i % 2 == 0 else 0), 3 if i % 2 == 0 else 2, *[v & WORD_MASK for v in c[:5]]])
+        expected_cores.append([4947 if c[5] else 4919, 1408 if i < 2 else 1424, (864 if i < 2 else 872) + 2 * (i % 2), (24 if i < 2 else 29) + (1 if i % 2 == 0 else 0), (3 if i % 2 == 0 else 2) + voice.stack_base, *[v & WORD_MASK for v in c[:5]]])
     actual_inputs = [[int(v, 16) for v in row.split()] for row in re.findall('^CORE_INPUT ([^\\n]+)', block, re.M)]
     if cores != expected_cores or actual_inputs != inputs:
         raise ValueError('Dependent cascade coefficients/intermediate inputs differ')
@@ -129,7 +129,7 @@ def validate_block(voice, number, block, xdata, ydata, check, twos, color, high,
     out = output_model(voice.gain, envelope, voice.controller, routed, voice.bus)
     check('OUTPUT_BUS', out['bus'], block)
     check('FINAL_GAIN', [out['stored_target']], block)
-    check('OUTPUT_KERNEL', [signed(voice.gain) * W & FULL_MASK, out['delta'] & FULL_MASK, out['stored_target'], 2176, 50621, 1440, 1], block)
+    check('OUTPUT_KERNEL', [signed(voice.gain) * W & FULL_MASK, out['delta'] & FULL_MASK, out['stored_target'], 2176, 50621, 1440, 1 + voice.stack_base], block)
     check('OUTPUT_END', [out['end_gain'], out['last_full'], 2209, 50621, 1472, envelope, out['step'], 1193047, out['last_gain']], block)
     totals['changed_prefetch_blocks'] += voice.bus[:2] != initial_bus(varied)[:2]
     voice.bus, voice.gain = (out['bus'], out['stored_target'])
