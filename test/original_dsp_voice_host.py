@@ -19,6 +19,8 @@ from original_dsp_voice import original_records
 from original_dsp_voice_master import Output
 from original_dsp_voice_midi import Midi, SOUND
 from original_dsp_voice_pcm import Pcm
+from original_dsp_foreground import row
+from original_dsp_repeat import BLOCKS, Pipeline
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,12 +38,50 @@ class Capture(Pcm):
         self.blocks += 1
 
 
-def expected_payload(text, xdata, ydata, program, midi=False):
+class RepeatCapture(Pipeline):
+    def __init__(self, program):
+        super().__init__(False, False, program)
+        self.payload = bytearray()
+
+    def after(self, voice, text, check):
+        super().after(voice, text, check)
+        stages = [[int(v, 16) for v in values.split()]
+                  for values in re.findall(r'^FOREGROUND_STAGE ([^\n]+)$', text, re.M)]
+        expected = [[0x198, 1], *[[0xc53, 2]] * (4 if self.block == 0 else 1),
+                    [0xc5d, 2], [0x2407, 2], [0x27b, 2], [0x2a20, 2],
+                    [0x298, 2], [0x251, 2], [0x298, 2], [0x1cc1, 2],
+                    [0x436, 2], [0x4df, 3], [0x22d, 1], [0x246, 1]]
+        require(stages == expected, 'FOREGROUND_STAGE repeating parent order/frame differs')
+        for raw in self.halves[self.block % 2]:
+            self.payload.extend(struct.pack('<i', signed(raw) * 256))
+
+
+def expected_repeat(stream, xdata, ydata, program, identity):
+    require(row('REPEAT_AUTOMATIC_REJECTED', stream) == [1],
+            'Automatic active-DMA timing rejection must remain strict')
+    require(row('FOREGROUND_INPUT', stream) == [0xb0, 7, 0],
+            'FOREGROUND_INPUT repeating source bytes differ')
+    require([ydata[0x1e25 + index] & 255 for index in (129, 145)] == [0, 0],
+            'Changed original factory FX Mix0/0 profile')
+    capture = RepeatCapture(program)
+    totals = new_totals()
+    validate_stream(stream, xdata, ydata, {False: waveform_model(ydata, False)},
+                    identity, totals, block_count=BLOCKS, before_block=capture.before,
+                    after_block=capture.after, sound_base=SOUND)
+    require(totals['blocks'] == BLOCKS and capture.nonzero > 0 and
+            len(capture.payload) == 96 * 8,
+            'Incomplete original repeating parent/DMA/serial source')
+    return bytes(capture.payload)
+
+
+def expected_payload(text, xdata, ydata, program, midi=False, stream=False):
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
-    identity = ('normal', '0', '0', '0', '0')
+    identity = ('normal', '0', '127' if stream else '0', '0', '0')
     require(len(cases) == 1 and tuple(cases[0][:5]) == identity,
             "Host handoff must select exactly one declared default voice stream")
+    if stream:
+        return expected_repeat(cases[0][5], xdata, ydata, program, identity)
     capture = Capture()
     output = Output(program, capture)
     totals = new_totals()
@@ -57,9 +97,11 @@ def expected_payload(text, xdata, ydata, program, midi=False):
     return bytes(capture.payload)
 
 
-def controller_controls(text, xdata, ydata, program):
-    for label, index in (('MIDI_BYTES', -1), ('MIDI_RETURN', -3),
-                         ('OUTPUT_BUS', 0), ('PCM_FRAME', -1)):
+def trace_controls(text, xdata, ydata, program, stream):
+    labels = (('REPEAT_MASTER', -1), ('REPEAT_MIX', -1),
+              ('REPEAT_DMA', -1), ('REPEAT_FRAME', -1)) if stream else (
+              ('MIDI_BYTES', -1), ('MIDI_RETURN', -3), ('OUTPUT_BUS', 0), ('PCM_FRAME', -1))
+    for label, index in labels:
         def corrupt(match):
             words = match[1].split()
             words[index] = format(int(words[index], 16) ^ 1, 'x')
@@ -67,7 +109,7 @@ def controller_controls(text, xdata, ydata, program):
         changed, count = re.subn('^' + label + r' ([^\n]+)$', corrupt, text, count=1, flags=re.M)
         require(count == 1, 'Missing direct controller/audio negative control')
         try:
-            expected_payload(changed, xdata, ydata, program, midi=True)
+            expected_payload(changed, xdata, ydata, program, midi=not stream, stream=stream)
         except ValueError as error:
             require(('MIDI' if label.startswith('MIDI') else label) in str(error),
                     'Wrong direct controller/audio negative-control failure')
@@ -84,7 +126,7 @@ def check_monitor(recorded, expected):
             "The private monitor contains extra, stale, duplicated or altered source samples")
 
 
-def run(binary, firmware, directory, xdata, ydata, program, midi):
+def run(binary, firmware, directory, xdata, ydata, program, midi, stream):
     with service(directory) as (daemon, server, env):
         recorded = directory / "monitor.pcm"
         with recorded.open("wb") as samples, (directory / "monitor.log").open("w") as log:
@@ -101,19 +143,23 @@ def run(binary, firmware, directory, xdata, ydata, program, midi):
                 until(ready, daemon, "the original voice monitor")
                 trace = directory / "native.trace"
                 command = [str(binary), str(firmware), str(trace), server]
-                if midi:
+                if stream:
+                    command.append('stream')
+                elif midi:
                     command.append('midi')
+                threaded = env.get('BLOFELD_TEST_SANITIZER') == 'thread'
+                timeout = (240 if threaded else 90) if stream else (90 if threaded else 30)
                 result = subprocess.run(command, env=env,
                                         capture_output=True, text=True,
-                                        timeout=90 if env.get("BLOFELD_TEST_SANITIZER") == "thread" else 30)
+                                        timeout=timeout)
                 (directory / "native.log").write_text(result.stdout + result.stderr)
                 require(result.returncode == 0 and not result.stderr and
-                        "original-decoded-host-frames=128" in result.stdout,
+                        f"original-decoded-host-frames={96 if stream else 128}" in result.stdout,
                         f"Original native host handoff failed: {result.stdout}{result.stderr}")
                 text = trace.read_text()
-                expected = expected_payload(text, xdata, ydata, program, midi)
-                if midi:
-                    controller_controls(text, xdata, ydata, program)
+                expected = expected_payload(text, xdata, ydata, program, midi, stream)
+                if midi or stream:
+                    trace_controls(text, xdata, ydata, program, stream)
                 time.sleep(0.1)
             finally:
                 terminate(monitor)
@@ -127,21 +173,27 @@ def run(binary, firmware, directory, xdata, ydata, program, midi):
             pass
         else:
             raise ValueError("The monitor oracle accepted a corrupted source word")
-        return {"passed": True, "original_blocks": 8, "decoded_frames": 128,
+        return {"passed": True, "original_blocks": 6 if stream else 8,
+                "decoded_frames": 96 if stream else 128,
                 "exact_independent_monitor_match": True, "monitor_negative_controls": 1,
-                "original_controller_parser_calls": 19 if midi else 0,
+                "original_controller_parser_calls": (len(re.findall(
+                    r"^FOREGROUND_STAGE c53 2$", text, re.M)) if stream else 19 if midi else 0),
                 "controller_trace_negative_controls": 4 if midi else 0,
+                "repeating_trace_negative_controls": 4 if stream else 0,
+                "original_foreground_iterations": 6 if stream else 0,
                 "declared_playback_rate": 48000, "physical_sample_clock_qualified": False,
                 "fuzz_execution": False, "physical_audio": False,
-                "scope": "One declared original voice/mix/master stream through actual finite "
+                "scope": "One declared original voice/mix/master stream through actual "
                 "DMA, ESAI pins, serial receiver and bounded audio worker/private service. "
-                "Optional original CC7/CC1 parser path uses own ring transport and a held "
+                "Optional original repeating foreground uses untimed native access tickets "
+                "and paused-core serial phases. Original CC7/CC1 uses own ring input and a held "
                 "voice. No full boot, MIDI allocation, automatic arbitration or RT/hardware claim."}
 
 
 def main():
     midi = len(sys.argv) == 5 and sys.argv[4] == 'midi'
-    require(len(sys.argv) == 4 or midi,
+    stream = len(sys.argv) == 5 and sys.argv[4] == 'stream'
+    require(len(sys.argv) == 4 or midi or stream,
             "Expected native test, private firmware, artifact directory and optional midi mode")
     binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:4])
     if not firmware.is_file():
@@ -158,7 +210,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="blofeld-original-host-") as temporary:
         directory = Path(temporary)
         try:
-            result = run(binary, firmware, directory, xdata, ydata, program, midi)
+            result = run(binary, firmware, directory, xdata, ydata, program, midi, stream)
             (directory / "result.json").write_text(json.dumps(result, indent=2) + "\n")
             print(json.dumps(result, indent=2))
         finally:

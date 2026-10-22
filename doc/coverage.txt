@@ -990,6 +990,19 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           Effects Off, declared prior phase and
                                           disabled DMA; continuous scheduling,
                                           boot and live playback remain open.
+                                          Eight six-block original foreground
+                                          streams retain an enabled 64-word DMA
+                                          ring: 48 iterations,1536 DMA words and
+                                          768 stereo frames
+                                          (dsp-foreground-ring.txt).
+                                          One six-iteration source also hands
+                                          96 actual decoded frames directly to
+                                          AudioRuntime and an exact isolated
+                                          monitor, retaining the delayed pipeline
+                                          and five fixed corruption controls.
+                                          Untimed admissions alternate with
+                                          paused-core HCKT/grants; physical bus
+                                          timing and original boot remain open.
                                           Original scheduler primitives check
                                           seed/tick/timer/countdown arithmetic,
                                           real conditional-call/RTS frames and

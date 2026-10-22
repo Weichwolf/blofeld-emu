@@ -1,0 +1,69 @@
+Persistent original foreground and repeating DMA ring
+
+original_dsp_repeat executes six consecutive original foreground iterations in
+eight held-voice contexts: both pitch profiles, RM modes and filter routings.
+The original primary MIDI parser, voice, copy/mix/master, scheduler seed/tick
+and controller smoothing retain state throughout each stream. Effects are Off;
+the pinned original parameter defaults supply both zero FX mix gains.
+
+Own native MOVEP instructions configure DMA0 once: the 64-word X:0660..069f ring,
+documented offsets/count, fixed ESAI_1 TX0 and enabled repeating mode5. The
+original foreground observes actual DSR0 half changes. No phase toggles, ring
+refills, per-block reconfiguration, CPU continuation or successful callee are
+substituted. Native reference access tickets retire every foreground instruction.
+Between iterations the core is genuinely paused while explicit HCKT/grant phases
+transfer/decode 32 words. The next real request is held until foreground work
+finishes; DE remains set. No simultaneous CPU/peripheral clock is inferred.
+
+Independent integer models check 48 original voice/scheduler blocks, previous-mix
+master recurrence, opposite-half writes and delayed ring reads, 1536 DMA addresses/
+payloads, 768 stereo frames/edge ordinals and both counter reload halves. The
+original scheduler's extra noise-seed feedback and nonzero block tick are inputs
+to the next voice; the wrap cursor includes that tick. Older zero-tick assertions
+retain their default. Four corrupted trace-word controls must fail. Eight restores
+after a source read reproduce the held word, ring state and actual PCM without
+executing the paused core. Original program words remain unchanged.
+
+Each fixture explicitly declares readable part/history/queue RAM, one held entry,
+zero initial buses/ring, previous phase0, no due part-clock/countdown service,
+ESAI setup and receiver polarity. It loads 127 hash-pinned original records rather
+than booting the complete board. Manufacturer bytes/traces remain local.
+
+This is an untimed semantic interleave. It does not qualify physical bus phases,
+arbitration, clock ratios, elapsed stalls, realtime audio or original startup.
+The test separately verifies that automatic active-DMA timing still rejects.
+Native access suspension allocates/throws and cannot run in an audio callback.
+Full boot, NoteOn allocation, live host MIDI/audio and hardware equivalence remain
+open; firmware and peripheral boundaries are not relaxed.
+
+  cmake --build --preset strict --target blofeld-original-dsp-repeat-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_repeat$'
+
+Testing/original-dsp-repeat.json records counts/scope. Missing private firmware
+skips; changed identities fail. No fuzzing or physical MIDI/audio traffic runs.
+
+Direct session-output regression
+
+original_dsp_repeat_host supplies the 96 actual pin-decoded frames of one
+six-iteration normal/RM0/noise127/parallel case directly to AudioRuntime after
+each completed peripheral replay. The generic sink stays outside all checkpoints
+and knows no native audio API. The full eight-context ring matrix remains intact.
+
+Independent previous-mix/master/serial equations produce the expected S32LE
+monitor payload; no observed output word is used as an expected sample. Original
+parent call order and frame depths are checked in all six iterations. The first
+three zero blocks and subsequent nonzero output retain their actual pipeline
+delay. Exact monitor matching rejects missing, duplicated or altered nonzero
+samples; accepted/written counts must both be96. Four fixed trace corruptions
+and one monitor corruption must fail. This is a short corked source, with no
+padding or claim of sustained realtime production.
+
+The isolated no-rewind service uses the declared48000 Hz playback rate and
+24576000 edge ordinals/s from dsp-voice-pcm.txt, not measured Blofeld clocks.
+The user's audio service/output, physical MIDI and device routing are untouched.
+ASan/UBSan and TSan run separately; instrumentation/dependency rules remain the
+same as audio-runtime.txt. Normal runtime, USB-MIDI and NoteOn remain open.
+
+  cmake --build --preset strict --target blofeld-original-dsp-voice-host-test
+  ctest --test-dir build/strict -R '^original_dsp_repeat_host$' --output-on-failure
+  ctest --test-dir build/thread -R '^original_dsp_repeat_host$' --output-on-failure

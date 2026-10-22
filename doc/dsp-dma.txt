@@ -85,5 +85,8 @@ These bounds and explicit reference phases do not qualify original firmware audi
 An isolated original voice/mix/master composition now supplies finite DMA0
 transfers and pin-decoded frames (dsp-voice-pcm.txt); original repeating DMA
 and automatic core arbitration remain unqualified.
+Consecutive original foreground iterations now consume an enabled repeating
+ring under explicit untimed admissions/paused-core serial phases (dsp-foreground-ring.txt).
+This does not qualify the original initialization or automatic physical timing.
 The DAX fixture independently checks native two/three-register line transfers,
 per-line requests, destination rewind and DE clear before/after a line starts.
