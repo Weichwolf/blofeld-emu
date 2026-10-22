@@ -18,7 +18,7 @@ from .watch import DisplayWatch
 
 
 def paint(context, width, height, frame):
-    context.set_source_rgb(0.12, 0.12, 0.12)
+    context.set_source_rgb(0.94, 0.95, 0.96)
     context.paint()
     if frame is None:
         return
@@ -27,9 +27,6 @@ def paint(context, width, height, frame):
     context.translate((width - WIDTH * scale) // 2, (height - HEIGHT * scale) // 2)
     context.scale(scale, scale)
     context.set_antialias(cairo.ANTIALIAS_NONE)
-    context.set_source_rgb(0.94, 0.95, 0.96)
-    context.rectangle(0, 0, WIDTH, HEIGHT)
-    context.fill()
     context.set_source_rgb(0.04, 0.05, 0.06)
     for y in range(HEIGHT):
         for x in range(WIDTH):
