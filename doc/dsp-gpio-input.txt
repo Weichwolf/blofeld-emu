@@ -27,3 +27,7 @@ clock/synchronizer timing, F4 request/response, parser dispatch, full original
 boot, normal MIDI/audio and complete update/recovery remain open. In particular,
 the separate first-helper experiment's static high ACK observation is not made
 a board default or a successful whole-request release here.
+
+The separate original_gpio_midi integration (gpio-midi.txt) adds native MCU
+senders, the original secondary-ring consumer/pitch callback and joint owner
+snapshot replay under explicitly declared caller/wiring/interleaving profiles.

@@ -1,0 +1,43 @@
+Original MCU senders through GPIO IRQA and the DSP MIDI parser
+
+  cmake --build --preset strict --target blofeld-original-gpio-midi-test
+  ctest --test-dir build/strict -R '^original_gpio_midi$' --output-on-failure
+
+The optional wrapper pins the local original ZIP/MID, all 127 DSP records, the
+complete MCU image and all three sender/strobe spans. The four complete original
+vector/GPIO/parameter/message programs execute unchanged. Hashes and fixed
+coverage totals are in gpio-midi-reference.json; code bytes/traces stay local.
+
+Own native MCU callers invoke the real frame sender or USB-event forwarder.
+Actual Q outputs and J0 observations supply the original GPIO IRQA producer;
+its real ring stores feed the original secondary consumer and pitch callback.
+No host writes received bytes/cursors, invokes a producer or substitutes a
+callback result. Original code alone clears USB headers, advances its caller
+pointer, updates flags/directions and executes all JSR/RTS/vector/RTI frames.
+
+Twenty fixed profiles cross both explicit J0/IRQA polarities, selected untimed
+instruction ratios and omni/channel-5 settings. Sixteen channels each send min,
+center and max pitch plus F8; raw frames use running status. The secondary ring wraps in both transports.
+Every native byte/cursor/store/IRQ/RTI, all ring cells, boundaries, timestamp,
+interrupted visible CPU state, channel-filtered 14-bit result, retained parser
+contexts and original program words are checked independently. All declared
+MCU RAM is guarded; NVM bytes/knownness/erase-program history remain unchanged.
+Two profiles capture both trusted native owners inside a genuine parser IRQ
+with a partial message, then independently recheck and compare whole CPU/debug
+state, watched DSP RAM, all declared MCU RAM and scenario bookkeeping on replay.
+A separate one-to-one raw-frame profile rejects its exact data mismatch.
+
+Independent original MCU instruction expectations are 2326 for the 128-byte
+frame, and 5747 for 48 triple events plus 16 clock events in three native calls.
+The original GPIO ISR uses 19 native steps per byte plus two per F8. Coverage
+contains 2944 profile bytes, 320 stamps and 510 accepted pitch callbacks; replay
+suffixes are checked separately. These are fixed offline tests, without fuzzing.
+
+Declared caller inputs include mapped DSP memory, linear modifiers, GPIO modes,
+IRQA edge IPL1, MCU GPIO/latch/RAM state and inactive MCU IRQ/XIRQ observations.
+Q[7:0]/C[7:0] form an explicit isolated data candidate; released inputs resolve
+qualified DSP weak pull-downs. Both strobe polarities and instruction ratios
+remain hypotheses. This has no physical synchronizer or common-clock calibration.
+Actual USB endpoint/ISR entry, original initializer/boot/DMA, F4 turnaround,
+allocated voices/audio, full update/recovery and real Desktop/Keyboard comparison
+remain required. No physical-device traffic or programming occurs.
