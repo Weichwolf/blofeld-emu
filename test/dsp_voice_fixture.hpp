@@ -15,7 +15,8 @@ enum class VoiceInput : std::uint8_t {
   foreground,
   stream,
   stream_midi,
-  stream_release
+  stream_release,
+  stream_sustain
 };
 
 // External output remains outside peripheral snapshots. Select at most one.

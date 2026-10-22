@@ -1,0 +1,31 @@
+Original sustain through foreground, retirement and host audio
+
+Eight original streams retain the equal-half DMA gate. CC64=1/127 arrives
+after body 0; Note Off/zero-velocity Note On arrives after body 2 and remains
+latched without changing envelope callbacks. After body 4, fragmented CC64=0
+releases the entry only when its last byte arrives. No host supplies callbacks,
+slot/list/phase changes, decoded frames or a manufactured return.
+
+Factory release controls stay 0/0/64/64. Original envelopes retire the first
+two callbacks in body 7; the real collector removes the held entry. Four empty
+bodies retain the master-filter tail and continuously enabled DMA/ESAI output.
+Independent models check 64 full voice returns, 96 foreground bodies, 32 empty
+bodies, eight retirements and 1536 stereo frames. Twelve corrupted traces reject.
+Sustain scalar/flag/latches, idle parser state, full envelope/cache histories,
+source/list/flags, scheduler endpoints and serial/DMA phases are checked.
+The model retains the original post-scan parser status 0x70 from shared scratch;
+it does not repair that context or qualify later running-status traffic.
+
+One direct 192-frame stream reaches AudioRuntime per decoded half and must match
+a private no-rewind monitor. Both sanitizers use the actual native source;
+no trace or completed-stream capture supplies the client.
+
+  cmake --build --preset strict --target blofeld-original-dsp-sustain-ring-test blofeld-original-dsp-ring-audio-test
+  ctest --test-dir build/strict -R '^original_dsp_(sustain_ring|ring_sustain_audio)$' --output-on-failure
+
+Firmware, original program bytes and run artifacts remain local. Shared voice
+hashes qualify all original records before execution. Declared held entry/RAM,
+zero owners, Effects Off and untimed admissions remain explicit. Playback starts
+on EOF below the host prebuffer. Positive allocation, normal boot, live host
+MIDI, realtime scheduling and hardware equivalence remain open. No fuzz or
+physical traffic runs. See dsp-sustain.txt and dsp-release-ring.txt.

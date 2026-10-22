@@ -920,6 +920,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-release-ring.trace")
   set_tests_properties(original_dsp_release_ring PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+  add_executable(blofeld-original-dsp-sustain-ring-test test/original_dsp_sustain_ring_test.cpp)
+  target_link_libraries(blofeld-original-dsp-sustain-ring-test PRIVATE blofeld_voice_fixture)
+  add_test(NAME original_dsp_sustain_ring COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sustain_ring.py"
+    $<TARGET_FILE:blofeld-original-dsp-sustain-ring-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sustain-ring.trace")
+  set_tests_properties(original_dsp_sustain_ring PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
   add_executable(blofeld-original-dsp-ring-audio-test test/original_dsp_ring_audio_test.cpp)
   target_link_libraries(blofeld-original-dsp-ring-audio-test PRIVATE
     blofeld_voice_fixture blofeld_audio_runtime)
@@ -943,6 +951,13 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-release-audio" release)
   set_tests_properties(original_dsp_ring_release_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300
+    ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
+  add_test(NAME original_dsp_ring_sustain_audio COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_ring_audio.py"
+    $<TARGET_FILE:blofeld-original-dsp-ring-audio-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-ring-sustain-audio" sustain)
+  set_tests_properties(original_dsp_ring_sustain_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300
     ENVIRONMENT "BLOFELD_TEST_SANITIZER=${BLOFELD_SANITIZER}")
   add_executable(blofeld-original-dsp-voice-audio-test test/original_dsp_voice_audio_test.cpp)
   target_link_libraries(blofeld-original-dsp-voice-audio-test PRIVATE
@@ -1430,7 +1445,7 @@ add_custom_target(quality
     blofeld-original-dsp-foreground-test
     blofeld-original-dsp-repeat-test
     blofeld-original-dsp-idle-midi-test
-    blofeld-original-dsp-release-ring-test
+    blofeld-original-dsp-release-ring-test blofeld-original-dsp-sustain-ring-test
     blofeld-original-dsp-ring-audio-test
     blofeld-original-dsp-drive-voice-test
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test

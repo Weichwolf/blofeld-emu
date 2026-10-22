@@ -469,6 +469,10 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           960 directed held-entry cases check
                                           every note bit and native retirement
                                           (dsp-sustain.txt).
+                                          Sustain additionally defers native
+                                          release through 96 foreground bodies,
+                                          1536 DMA/ESAI frames and a direct 192-frame
+                                          private monitor (dsp-sustain-ring.txt).
                                           REP targets reject extended/flow words
                                           before effects; legal one-word latch,
                                           per-iteration data reads and preview

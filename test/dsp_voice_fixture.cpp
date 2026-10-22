@@ -90,6 +90,13 @@ constexpr unsigned idle_burst_pairs = 24; // 48 bytes fit the 64-word input ring
 constexpr unsigned midi_stream_blocks = 10; // Retain the delayed output of all idle CC changes.
 constexpr unsigned release_input_block = 2;
 constexpr unsigned release_retirement_block = 5;
+constexpr unsigned sustain_release_block = 4;
+constexpr unsigned sustain_stream_blocks = 12;
+constexpr unsigned sustain_controller = 64;
+constexpr unsigned sustain_scalar = 394;
+constexpr unsigned sustain_flag = 395;
+constexpr unsigned first_note_latch = 396;
+constexpr unsigned note_latch_words = 8;
 constexpr unsigned owner_mask = 0x2f1c;
 constexpr unsigned owner_base = 0x2f1e;
 constexpr unsigned owner_count = 24;
@@ -359,7 +366,8 @@ struct MemoryRange {
 
 bool stream_profile(const blofeld::test::VoiceInput input) {
   using enum blofeld::test::VoiceInput;
-  return input == stream || input == stream_midi || input == stream_release;
+  return input == stream || input == stream_midi || input == stream_release ||
+         input == stream_sustain;
 }
 
 struct Fixture {
@@ -386,6 +394,7 @@ struct Fixture {
   bool stream_enabled = false;
   bool idle_midi_enabled = false;
   bool release_enabled = false;
+  bool sustain_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
   blofeld::PcmFrameSink *direct = nullptr;
   Case configuration{};
@@ -439,7 +448,9 @@ struct Fixture {
         foreground_enabled(input == blofeld::test::VoiceInput::foreground || stream_profile(input)),
         stream_enabled(stream_profile(input)),
         idle_midi_enabled(input == blofeld::test::VoiceInput::stream_midi),
-        release_enabled(input == blofeld::test::VoiceInput::stream_release) {
+        release_enabled(input == blofeld::test::VoiceInput::stream_release ||
+                        input == blofeld::test::VoiceInput::stream_sustain),
+        sustain_enabled(input == blofeld::test::VoiceInput::stream_sustain) {
     static_cast<void>(load(bus, s, stop, master, pcm, repeat, sound));
   }
 
@@ -873,10 +884,12 @@ struct Fixture {
   }
 
   void check_control_counts(const unsigned block) const {
-    const bool releasing = release_enabled && block > release_input_block;
-    const auto release_callbacks = block == release_retirement_block ? 2U : 4U;
+    const auto request = sustain_enabled ? sustain_release_block : release_input_block;
+    const auto retirement = request + (release_retirement_block - release_input_block);
+    const bool releasing = release_enabled && block > request;
+    const auto release_callbacks = block == retirement ? 2U : 4U;
     const auto releases = releasing ? release_callbacks : 0U;
-    const auto retirements = releasing && block == release_retirement_block ? 2U : 0U;
+    const auto retirements = releasing && block == retirement ? 2U : 0U;
     require(lfo_waves == (block == 0 ? 6U : 3U) && envelope_starts == (block == 0 ? 4U : 0U) &&
                 envelope_attacks == (block == 0 ? 8U : 0U) &&
                 envelope_finishes == (block == 0 ? 4U : 0U) &&
@@ -1104,7 +1117,8 @@ struct Fixture {
 
   void foreground_iteration(const unsigned block) {
     begin_block(block);
-    const auto expected_voices = release_enabled && block > release_retirement_block ? 0U : 1U;
+    const auto retirement = sustain_enabled ? sustain_release_block + 3 : release_retirement_block;
+    const auto expected_voices = release_enabled && block > retirement ? 0U : 1U;
     const auto frozen = expected_voices == 0 ? entry_payload() : Words{};
     bool in_voice = false;
     unsigned voices = 0;
@@ -1327,6 +1341,10 @@ struct Fixture {
 
   void release_input(const unsigned block) {
     release_state("RELEASE_AFTER_BODY");
+    if (sustain_enabled) {
+      sustain_input(block);
+      return;
+    }
     if (block != release_input_block) { return; }
     unsigned ordinal = 0;
     const auto status = configuration.serial ? zero_note_on_status : note_off_status;
@@ -1337,7 +1355,42 @@ struct Fixture {
     release_state("RELEASE_AFTER_INPUT");
   }
 
+  void sustain_state(const char *label) {
+    using enum blofeld::DspSpace;
+    trace << label << std::hex << ' ' << get(x, sound + sustain_scalar) << ' '
+          << get(x, sound + sustain_flag);
+    for (unsigned i = 0; i < note_latch_words; ++i) {
+      trace << ' ' << get(x, sound + first_note_latch + i);
+    }
+    trace << '\n' << std::dec;
+  }
+
+  void sustain_input(const unsigned block) {
+    sustain_state("SUSTAIN_AFTER_BODY");
+    unsigned ordinal = 0;
+    if (block == 0) {
+      idle_chunk(
+          {midi_controller_status, sustain_controller, configuration.serial ? parameter_max : 1U},
+          ordinal);
+    } else if (block == release_input_block) {
+      idle_chunk({configuration.serial ? zero_note_on_status : note_off_status,
+                  0,
+                  configuration.serial ? 0U : 64U},
+                 ordinal);
+    } else if (block == sustain_release_block) {
+      idle_chunk({midi_controller_status, sustain_controller}, ordinal);
+      idle_chunk({0}, ordinal, true);
+      require(get(blofeld::DspSpace::y, coefficient_buffer) == entry,
+              "Pedal release gathers the held entry through the actual aliased scratch");
+    } else {
+      return;
+    }
+    release_state("RELEASE_AFTER_INPUT");
+    sustain_state("SUSTAIN_AFTER_INPUT");
+  }
+
   [[nodiscard]] unsigned stream_block_count() const {
+    if (sustain_enabled) { return sustain_stream_blocks; }
     return idle_midi_enabled || release_enabled ? midi_stream_blocks : 6U;
   }
 
