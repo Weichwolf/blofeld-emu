@@ -22,6 +22,7 @@
 #include <ostream>
 #include <span>
 #include <string>
+#include <string_view>
 
 namespace {
 constexpr unsigned bootstrap_base = 0xff0000;
@@ -44,11 +45,13 @@ void require(const bool condition, const std::string &message) {
   if (!condition) { throw blofeld::Fault(message); }
 }
 
-blofeld::DspRunContract contract() {
+blofeld::DspRunContract contract(const bool reset) {
   return {.clock = {.extal_hz = extal_hz,
                     .timebase_hz = timebase_hz,
                     .switch_timing = blofeld::DspClockSwitch::reference_instruction_boundary},
-          .timing = blofeld::DspRunTiming::native_internal_estimates};
+          .timing = blofeld::DspRunTiming::native_internal_estimates,
+          .resets = reset ? blofeld::DspResetTiming::reference_instruction_boundary
+                          : blofeld::DspResetTiming::unqualified};
 }
 
 class Runner {
@@ -154,24 +157,13 @@ struct Inputs {
   std::filesystem::path firmware;
   std::filesystem::path rom;
   std::filesystem::path trace;
+  bool reset = false;
 };
 
-void run(const Inputs &inputs) {
-  const auto firmware = blofeld::Firmware::load(inputs.firmware);
-  const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
-  blofeld::DspMachine machine(contract());
-  machine.bus().install_rom({.start = bootstrap_base, .words = rom});
-  // Explicit reference EXTAL/PINIT inputs, not measured Blofeld reset or clock data.
-  machine.bus().pll().observe_pinit(false);
-  machine.cpu().reset_spi_boot();
-  machine.bus().shi().observe_spi({.mosi = false});
-  require(machine.bus().pll().read() == initial_pctl, "Declared low PINIT selects bypass at reset");
-  std::ofstream trace(inputs.trace);
-  trace.exceptions(std::ios::failbit | std::ios::badbit);
-  Runner runner(machine);
+void load_stage(blofeld::DspMachine &machine,
+                Runner &runner,
+                const std::span<const std::uint8_t> frame) {
   while ((machine.bus().shi().read(hcsr) & 1U) == 0) { runner.step(); }
-  const auto frame =
-      std::span<const std::uint8_t>(firmware.mcu).subspan(frame_offset, (stage_words + 2) * 3);
   for (unsigned offset = 0; offset < frame.size(); offset += 3) {
     runner.send(
         blofeld::test::dsp_boot_word(std::span<const std::uint8_t, 3>(frame.subspan(offset, 3))));
@@ -183,6 +175,79 @@ void run(const Inputs &inputs) {
     require(machine.bus().read({.address = stage_base + static_cast<unsigned>(index)}) == expected,
             "Executed ROM loads every unmodified stage word from its wire input");
   }
+}
+
+void verify_frontier(blofeld::DspMachine &machine) {
+  const auto state = machine.cpu().state();
+  require(
+      state.pc == clear_pc && state.r[4] == mapped_pairs &&
+          state.lc == clear_count - mapped_pairs && state.omr == original_omr &&
+          machine.bus().pll().read() == stage_pctl && !machine.timing_faulted(),
+      "Actual original clear count, memory mode and PLL command reach the same strict frontier");
+  for (const auto space : {blofeld::DspSpace::x, blofeld::DspSpace::y}) {
+    for (unsigned address = 0; address < mapped_pairs; ++address) {
+      require(machine.bus().read({.space = space, .address = address}) == 0,
+              "Native stores clear all mapped pairs without a broad RAM or dropped-write shortcut");
+    }
+  }
+}
+
+void record_epoch(const std::string &name,
+                  const blofeld::DspMachine &machine,
+                  std::ostream &trace) {
+  const auto &clock = machine.run_clock();
+  trace << name << " epoch=" << clock.native_epoch()
+        << " native=" << machine.cpu().debug_state().native_cycles
+        << " local=" << clock.epoch_native_cycle_units() << " units=" << clock.native_cycle_units()
+        << " ticks=" << clock.elapsed_ticks() << " edges=" << clock.timer_clk2_edges()
+        << " faulted=" << static_cast<unsigned>(machine.timing_faulted()) << '\n';
+}
+
+void reboot(blofeld::DspMachine &machine,
+            const std::span<const std::uint8_t> frame,
+            const std::filesystem::path &path,
+            std::ostream &trace) {
+  record_epoch("before_reset", machine, trace);
+  machine.cpu().reset_spi_boot();
+  machine.bus().shi().observe_spi({.mosi = false});
+  require(machine.bus().pll().read() == initial_pctl,
+          "Native reset resamples the declared low PINIT");
+  record("reset", machine, trace);
+  record_epoch("reset_epoch", machine, trace);
+  Runner repeated(machine);
+  load_stage(machine, repeated, frame);
+  repeated.finish_clear(mapped_pairs);
+  verify_frontier(machine);
+  record("reset_frontier", machine, trace);
+  record_epoch("reset_complete", machine, trace);
+  repeated.write(path.string() + ".reset-census.jsonl");
+  try {
+    machine.cpu().step();
+  } catch (const blofeld::Fault &fault) {
+    require(std::string_view(fault.what()).contains("Y:0x002000") && machine.timing_faulted(),
+            "The next original reserved store must retain its actual contextual failure");
+    record_epoch("reset_rejected", machine, trace);
+    return;
+  }
+  throw blofeld::Fault("Reset must not turn the original reserved store into a successful access");
+}
+
+void run(const Inputs &inputs) {
+  const auto firmware = blofeld::Firmware::load(inputs.firmware);
+  const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
+  blofeld::DspMachine machine(contract(inputs.reset));
+  machine.bus().install_rom({.start = bootstrap_base, .words = rom});
+  // Explicit reference EXTAL/PINIT inputs, not measured Blofeld reset or clock data.
+  machine.bus().pll().observe_pinit(false);
+  machine.cpu().reset_spi_boot();
+  machine.bus().shi().observe_spi({.mosi = false});
+  require(machine.bus().pll().read() == initial_pctl, "Declared low PINIT selects bypass at reset");
+  std::ofstream trace(inputs.trace);
+  trace.exceptions(std::ios::failbit | std::ios::badbit);
+  Runner runner(machine);
+  const auto frame =
+      std::span<const std::uint8_t>(firmware.mcu).subspan(frame_offset, (stage_words + 2) * 3);
+  load_stage(machine, runner, frame);
   constexpr unsigned partial_pairs = 4096;
   runner.finish_clear(partial_pairs);
   record("partial", machine, trace);
@@ -190,19 +255,7 @@ void run(const Inputs &inputs) {
   const auto partial_runner = runner.checkpoint();
   const auto continue_to_frontier = [&] {
     runner.finish_clear(mapped_pairs);
-    const auto state = machine.cpu().state();
-    require(
-        state.pc == clear_pc && state.r[4] == mapped_pairs &&
-            state.lc == clear_count - mapped_pairs && state.omr == original_omr &&
-            machine.bus().pll().read() == stage_pctl && !machine.timing_faulted(),
-        "Actual original clear count, memory mode and PLL command reach the same strict frontier");
-    for (const auto space : {blofeld::DspSpace::x, blofeld::DspSpace::y}) {
-      for (unsigned address = 0; address < mapped_pairs; ++address) {
-        require(
-            machine.bus().read({.space = space, .address = address}) == 0,
-            "Native stores clear all mapped pairs without a broad RAM or dropped-write shortcut");
-      }
-    }
+    verify_frontier(machine);
   };
   continue_to_frontier();
   const auto expected_cpu = machine.cpu().debug_state();
@@ -218,15 +271,17 @@ void run(const Inputs &inputs) {
               machine.run_clock().elapsed_ticks() == expected_ticks,
           "Coordinated native REP/PLL/CLK2/memory-map replay preserves state and reference time");
   record("replay", machine, trace);
+  if (inputs.reset) { reboot(machine, frame, inputs.trace, trace); }
 }
 }
 
 int main(const int count, char **arguments) {
   try {
-    if (count != 4) {
+    const bool reset = count == 5 && std::string_view(arguments[4]) == "reset";
+    if (count != 4 && !reset) {
       throw blofeld::Fault("Usage: dsp-clock-test firmware.zip private-rom.bin private.trace");
     }
-    run({.firmware = arguments[1], .rom = arguments[2], .trace = arguments[3]});
+    run({.firmware = arguments[1], .rom = arguments[2], .trace = arguments[3], .reset = reset});
     std::cout << "Original DSP ROM/stage, declared cycle/PLL reference and mid-REP replay passed; "
                  "reserved-write/physical timing/full board boot remain unqualified.\n";
     return 0;

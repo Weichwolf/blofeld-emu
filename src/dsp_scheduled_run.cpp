@@ -44,6 +44,7 @@ DspScheduledRun::DspScheduledRun(const DspScheduleInputs inputs, const DspMachin
   state_.timebase_hz_ = clock.timebase_hz();
   state_.completed_ticks_ = clock.elapsed_ticks();
   state_.completed_cycles_ = clock.native_cycle_units();
+  state_.native_epoch_ = clock.native_epoch();
   state_.horizon_ = inputs.epoch_ticks + clock.elapsed_ticks();
 }
 
@@ -51,7 +52,8 @@ void DspScheduledRun::verify(const DspScheduleCheckpoint &state, const DspMachin
   const auto &clock = machine.run_clock();
   if (machine.timing_faulted() || clock.active() || clock.timebase_hz() != state.timebase_hz_ ||
       clock.elapsed_ticks() != state.completed_ticks_ ||
-      clock.native_cycle_units() != state.completed_cycles_) {
+      clock.native_cycle_units() != state.completed_cycles_ ||
+      clock.native_epoch() != state.native_epoch_) {
     throw Fault("DSP scheduler/owner clock state requires coordinated recovery");
   }
   if (state.pending_) {
@@ -89,7 +91,7 @@ void DspScheduledRun::complete(DspMachine &machine,
   }
   const auto &clock = machine.run_clock();
   if (clock.elapsed_ticks() != plan.start_ticks + plan.duration_ticks ||
-      clock.native_cycle_units() != plan.before.native_cycles + plan.native_cycle_units) {
+      clock.native_cycle_units() != state_.completed_cycles_ + plan.native_cycle_units) {
     throw Fault("DSP completed duration differs from its native instruction preview");
   }
   state_.completed_ticks_ = clock.elapsed_ticks();

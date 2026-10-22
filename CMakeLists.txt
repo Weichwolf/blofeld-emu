@@ -1221,6 +1221,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
   target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
+  add_executable(blofeld-dsp-reset-epoch-test test/dsp_reset_epoch_test.cpp)
+  target_link_libraries(blofeld-dsp-reset-epoch-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_reset_epoch COMMAND blofeld-dsp-reset-epoch-test)
   add_executable(blofeld-dsp-irq-clock-test test/dsp_irq_clock_test.cpp)
   target_link_libraries(blofeld-dsp-irq-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_irq_clock COMMAND blofeld-dsp-irq-clock-test)
@@ -1241,6 +1244,13 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clock.trace")
   set_tests_properties(original_dsp_clock PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME original_dsp_reset_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_reset_clock.py"
+    $<TARGET_FILE:blofeld-original-dsp-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-reset-clock.trace")
+  set_tests_properties(original_dsp_reset_clock PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-clocked-midi-test test/mcu_clocked_midi_test.cpp)
   target_link_libraries(blofeld-clocked-midi-test PRIVATE blofeld_mcu_midi)
   add_test(NAME mcu_clocked_midi COMMAND blofeld-clocked-midi-test)
@@ -1399,7 +1409,7 @@ add_custom_target(quality
     blofeld-hc12-flash-cycles-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
-    blofeld-dsp-run-clock-test
+    blofeld-dsp-run-clock-test blofeld-dsp-reset-epoch-test
     blofeld-dsp-irq-clock-test
     blofeld-dsp-irq-admission-test
     blofeld-dsp-scheduled-run-test

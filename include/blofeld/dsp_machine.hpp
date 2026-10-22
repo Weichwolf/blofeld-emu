@@ -16,11 +16,13 @@ namespace blofeld {
 
 enum class DspRunTiming : std::uint8_t { unqualified, native_internal_estimates };
 enum class DspInterruptTiming : std::uint8_t { unqualified, native_vector_estimates };
+enum class DspResetTiming : std::uint8_t { unqualified, reference_instruction_boundary };
 
 struct DspRunContract {
   DspRunClockInputs clock;
   DspRunTiming timing = DspRunTiming::unqualified;
   DspInterruptTiming interrupts = DspInterruptTiming::unqualified;
+  DspResetTiming resets = DspResetTiming::unqualified;
   bool operator==(const DspRunContract &) const = default;
 };
 

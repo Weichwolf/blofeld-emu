@@ -795,6 +795,10 @@ ROM wavetables and other assets   partial  Original basic oscillator table gener
                                           startup and hardware remain unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
+                                          Explicit nominal DSP reset epochs retain
+                                          lifetime time and reject stale schedules;
+                                          original ROM/stage reloads twice before
+                                          the same reserved write (dsp-reset.txt).
                                           Additional CPU-cycle adapter runs the
                                           same original 90314-instruction MCU
                                           bootloader with SCI/TIM clocks in
