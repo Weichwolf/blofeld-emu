@@ -801,7 +801,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-saturation-test test/dsp_saturation_test.cpp
     test/dsp_saturation_oracle.cpp test/dsp_saturation_cases.cpp)
   target_link_libraries(blofeld-dsp-saturation-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  foreach(scope IN ITEMS regressions arithmetic multiply accumulate rounding exceptions mac-host-overflow)
+  foreach(scope IN ITEMS regressions arithmetic increment decrement multiply accumulate rounding exceptions mac-host-overflow)
     add_test(NAME dsp_saturation_${scope} COMMAND blofeld-dsp-saturation-test ${scope})
     set_tests_properties(dsp_saturation_${scope} PROPERTIES TIMEOUT 120)
   endforeach()

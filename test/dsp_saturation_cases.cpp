@@ -109,6 +109,15 @@ std::vector<Input> arithmetic_cases() {
   return result;
 }
 
+std::vector<Input> unit_step_cases(const Operation operation) {
+  std::vector<Input> result;
+  for (const auto destination : values) {
+    variants(result,
+             {.operation = operation, .destination = destination, .source = other_accumulator});
+  }
+  return result;
+}
+
 void product_form(std::vector<Input> &result, Input input) {
   const bool round = input.operation == Operation::multiply_round ||
                      input.operation == Operation::accumulate_round;
@@ -303,6 +312,8 @@ std::vector<Input> regressions() {
 std::vector<Input> cases(const std::string_view scope) {
   if (scope == "regressions") { return regressions(); }
   if (scope == "arithmetic") { return arithmetic_cases(); }
+  if (scope == "increment") { return unit_step_cases(Operation::increment); }
+  if (scope == "decrement") { return unit_step_cases(Operation::decrement); }
   if (scope == "multiply") { return product_cases(false); }
   if (scope == "accumulate") { return product_cases(true); }
   if (scope == "rounding") { return rounding_cases(); }
