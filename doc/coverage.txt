@@ -1240,6 +1240,11 @@ Original update validation        partial  Thirteen original main-updater valida
                                           cases check checksum/marker branches,
                                           exact operand reads and missing data.
                                           No programming or helper transfer;
+                                          Twelve secondary-checksum cases also
+                                          check2817 summed words, extra prefetch,
+                                          unchecked page selector and unknown-read
+                                          quarantine. Own post-identification entry;
+                                          no successful NAND setup/programming.
                                           see original-update-validation.txt.
 Original update and recovery      partial  Isolated original DSP command record:
                                           144 fixed cases / 1240 actual calls check

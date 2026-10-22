@@ -28,7 +28,29 @@ without changing native registers, stack or counters until reset.
 
 Archive/MIDI and all 127 runtime-record identities are checked before execution.
 Original bytes, traces and reports remain local. This isolated validation does
-not establish preceding transport/boot, secondary updater validation, helper
-forwarding, NAND layout/timing, complete update/recovery or physical behavior.
+not establish preceding transport/boot, helper forwarding, NAND layout/timing, complete update/recovery or physical behavior.
 No fuzzing or physical traffic runs. See original-update-restarts.txt,
 nand-write.txt and objective.txt for the remaining update requirements.
+
+Secondary checksum after declared identification
+
+  ctest --test-dir build/strict -R '^original_secondary_update_validation$' --output-on-failure
+
+The same native test binary also loads the unchanged 388-word secondary helper.
+An own JSR enters its checksum subsection at P:2e0f, with explicitly declared
+post-identification registers and switched payload RAM. The preceding original
+GPIO/identification calls and delay are not executed or replaced by success.
+This is a checksum component test, not a complete secondary updater run.
+
+Twelve fixed cases check the original payload, first/last damage, compensating
+changes, 24-bit wrap, changed page selector/prefetch and missing first/last/
+prefetch/page words. The independent oracle checks all2817 summed Y words plus
+its required extra prefetch, actual PCs, accumulator/sign extension, zero flag,
+cursor, native instruction count and accepted/error branch before any GPIO
+transfer or programming. The starting-page selector is outside this checksum;
+even its absence does not reject until later original code consumes it.
+Unknown required words quarantine execution. Program/payload guards and six
+fixed evidence corruptions supplement the original main-updater regression.
+The shared main mode must preserve its previous byte-exact execution trace.
+Complete NAND setup, seventeenth-page behavior, helper forwarding, update/
+recovery/power-loss and physical validation retain separate requirements.
