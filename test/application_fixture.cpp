@@ -7,11 +7,13 @@
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
+#include "blofeld/mcu_machine.hpp"
 #include "lcd_fixture.hpp"
 #include "parallel_update_fixture.hpp"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <ostream>
 #include <string_view>
 
@@ -66,10 +68,17 @@ void observe_startup(McuBus &bus, const unsigned pc) {
   if (pc == release_inputs) { bus.set_pin_drive(McuPort::b, {.mask = released_b_inputs}); }
 }
 
-void qualify_pm3(
-    McuBus &bus, Hc12 &cpu, const ApplicationRun &run, const bool high, std::ostream &trace) {
+void qualify_pm3(McuMachine &machine,
+                 std::unique_ptr<LcdFixture> &display,
+                 const ApplicationRun &run,
+                 const bool high,
+                 std::ostream &trace) {
   require(run.instructions == fault_instructions && run.interrupts == periods_to_wait,
           "Original countdown finishes before the first PM3 input observation");
+  const auto checkpoint = machine.checkpoint();
+  const LcdFixture saved_display(machine.bus(), *display);
+  auto &bus = machine.bus();
+  auto &cpu = machine.cpu();
   const auto before = cpu.state();
   const auto revision = bus.revision();
   const auto initial = bus.power_off_flash_image();
@@ -85,12 +94,25 @@ void qualify_pm3(
     rejected = true;
   }
   require(rejected && same_state(cpu.state(), before) && bus.revision() == revision,
-          "An unknown plain input read has no visible register or bus mutation before retry");
+          "An unknown plain input read has no visible register or bus mutation");
+  bool stopped = false;
+  try {
+    cpu.step();
+  } catch (const Fault &fault) {
+    stopped = std::string_view(fault.what()).contains("requires coordinated recovery");
+  }
+  require(stopped && same_state(cpu.state(), before) && bus.revision() == revision,
+          "A failed PM3 read cannot implicitly resume even with unchanged visible registers");
   check_nvm(bus, initial);
   require((bus.read(hc12::ddrm) & pm3_mask) == 0 && (bus.read(pm3_pull) & pm3_mask) == 0,
           "Native PM3 is an input with its pull device disabled");
-  bus.set_pin_drive(McuPort::m,
-                    {.mask = pm3_mask, .levels = static_cast<std::uint8_t>(high ? pm3_mask : 0)});
+  machine.restore(checkpoint);
+  display = std::make_unique<LcdFixture>(machine.bus(), saved_display);
+  machine.bus().set_observer([&display](const BusEvent &event) { display->observe(event); });
+  require(same_state(machine.cpu().state(), before),
+          "Joint recovery restores the complete pre-read CPU boundary");
+  machine.bus().set_pin_drive(
+      McuPort::m, {.mask = pm3_mask, .levels = static_cast<std::uint8_t>(high ? pm3_mask : 0)});
 }
 
 void check_wait(McuBus &bus, const Hc12 &cpu, const CpuState &before) {
@@ -118,28 +140,33 @@ void check_wait(McuBus &bus, const Hc12 &cpu, const CpuState &before) {
 }
 }
 
-ApplicationRun start_application(
-    McuBus &bus, Hc12 &cpu, LcdFixture &display, std::ostream &trace, const bool pm3_high) {
-  const auto initial = bus.power_off_flash_image();
-  boot(bus, cpu, trace);
-  bus.set_pin_drive(McuPort::q, {.floating = byte_mask});
-  bus.observe_usb_decoder({});
-  bus.set_pin_drive(McuPort::e, {.mask = e_fixture_mask, .levels = 3, .floating = enable_pad});
-  bus.set_pin_drive(McuPort::b, {.mask = other_serial_inputs});
-  bus.set_observer([&display](const BusEvent &event) { display.observe(event); });
+ApplicationRun start_application(McuMachine &machine,
+                                 std::unique_ptr<LcdFixture> &display,
+                                 std::ostream &trace,
+                                 const bool pm3_high) {
+  const auto initial = machine.bus().power_off_flash_image();
+  boot(machine.bus(), machine.cpu(), trace);
+  machine.bus().set_pin_drive(McuPort::q, {.floating = byte_mask});
+  machine.bus().observe_usb_decoder({});
+  machine.bus().set_pin_drive(McuPort::e,
+                              {.mask = e_fixture_mask, .levels = 3, .floating = enable_pad});
+  machine.bus().set_pin_drive(McuPort::b, {.mask = other_serial_inputs});
+  machine.bus().set_observer([&display](const BusEvent &event) { display->observe(event); });
   ApplicationRun run;
   bool deliver_rti = true;
   bool observed_pm3 = false;
   CpuState before_wait;
-  for (unsigned steps = 0; !cpu.waiting() || cpu.pending_interrupt(); ++steps) {
+  for (unsigned steps = 0; !machine.cpu().waiting() || machine.cpu().pending_interrupt(); ++steps) {
     require(steps < step_limit, "Original application must reach a bounded wait or visible fault");
-    const auto before = cpu.state();
-    observe_startup(bus, before.pc);
+    const auto before = machine.cpu().state();
+    observe_startup(machine.bus(), before.pc);
     if (before.pc == pm3_read) {
       require(!observed_pm3, "Native startup observes PM3 once without host redirects");
-      qualify_pm3(bus, cpu, run, pm3_high, trace);
+      qualify_pm3(machine, display, run, pm3_high, trace);
       observed_pm3 = true;
     }
+    auto &bus = machine.bus();
+    auto &cpu = machine.cpu();
     const bool clock_slot = before.pc == startup_poll || before.pc == countdown_poll;
     if (clock_slot && deliver_rti && !cpu.pending_interrupt()) {
       const auto cycles = bus.oscillator_cycles_until_rti();
@@ -166,8 +193,10 @@ ApplicationRun start_application(
       trace.flush();
     }
   }
+  auto &bus = machine.bus();
+  const auto &cpu = machine.cpu();
   check_wait(bus, cpu, before_wait);
-  const auto counts = display.counts();
+  const auto counts = display->counts();
   constexpr unsigned commands = 344;
   constexpr unsigned writes = 4194;
   constexpr unsigned reads = 2244;

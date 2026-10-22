@@ -8,11 +8,14 @@
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
+#include "blofeld/mcu_machine.hpp"
+#include "lcd_fixture.hpp"
 #include "parallel_update_fixture.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <ostream>
 #include <span>
 #include <string_view>
@@ -116,7 +119,14 @@ void begin_request(McuBus &bus, Hc12 &cpu) {
   bus.set_pin_drive(McuPort::e, {.mask = e_mask, .levels = 2, .floating = released_e_pads});
 }
 
-void check_unknown_sample(McuBus &bus, Hc12 &cpu, const McuFlashImage &nvm, std::ostream &trace) {
+void check_unknown_sample(McuMachine &machine,
+                          std::unique_ptr<LcdFixture> &display,
+                          const McuFlashImage &nvm,
+                          std::ostream &trace) {
+  const auto checkpoint = machine.checkpoint();
+  const LcdFixture saved_display(machine.bus(), *display);
+  auto &bus = machine.bus();
+  auto &cpu = machine.cpu();
   bus.set_pin_drive(McuPort::q, {.mask = 0x40});
   const auto before = cpu.state();
   const auto revision = bus.revision();
@@ -132,8 +142,21 @@ void check_unknown_sample(McuBus &bus, Hc12 &cpu, const McuFlashImage &nvm, std:
     rejected = true;
   }
   require(rejected && same_state(before, cpu.state()) && bus.revision() == revision,
-          "Rejected plain data read preserves visible CPU and bus state before pin-only retry");
+          "Rejected plain data read preserves visible CPU and bus state");
+  bool stopped = false;
+  try {
+    cpu.step();
+  } catch (const Fault &error) {
+    stopped = std::string_view(error.what()).contains("requires coordinated recovery");
+  }
+  require(stopped && same_state(before, cpu.state()) && bus.revision() == revision,
+          "A failed update data read requires explicit recovery before another CPU step");
   check_nvm(bus, nvm);
+  machine.restore(checkpoint);
+  display = std::make_unique<LcdFixture>(machine.bus(), saved_display);
+  machine.bus().set_observer([&display](const BusEvent &event) { display->observe(event); });
+  require(same_state(before, machine.cpu().state()),
+          "Joint recovery restores the pre-withdrawal CPU boundary before fresh peer data");
 }
 
 class Peer {
@@ -144,22 +167,28 @@ public:
         payload_(original_helper(firmware.update_blocks.at(object == Object::prepare ? 0 : 4),
                                  object == Object::prepare ? helper_bytes : main_helper_bytes)) {}
 
-  void before(McuBus &bus, Hc12 &cpu, const McuFlashImage &nvm, std::ostream &trace) {
-    const auto state = cpu.state();
+  void before(McuMachine &machine,
+              std::unique_ptr<LcdFixture> &display,
+              const McuFlashImage &nvm,
+              std::ostream &trace) {
+    const auto state = machine.cpu().state();
     if (state.pc == q_output_enabled) {
-      bus.set_pin_drive(McuPort::q, {.mask = external_mask, .levels = mode});
+      machine.bus().set_pin_drive(McuPort::q, {.mask = external_mask, .levels = mode});
     }
     if (state.pc == sample_pc) {
-      const auto pins = bus.observe_pads(McuPort::q, strobe);
+      const auto pins = machine.bus().observe_pads(McuPort::q, strobe);
       require(pins.known == strobe && pins.levels == (consumed_ % 2 == 0 ? strobe : 0),
               "Every six-bit observation follows the original alternating Q7 strobe");
       require(consumed_ < samples_.size(), "Original code cannot read past the supplied channel");
       if (consumed_ == 0) {
-        check_unknown_sample(bus, cpu, nvm, trace);
+        check_unknown_sample(machine, display, nvm, trace);
         ++retries_;
       }
-      bus.set_pin_drive(McuPort::q, {.mask = external_mask, .levels = samples_[consumed_++]});
+      machine.bus().set_pin_drive(McuPort::q,
+                                  {.mask = external_mask, .levels = samples_[consumed_++]});
     }
+    auto &bus = machine.bus();
+    const auto &cpu = machine.cpu();
     if (state.pc == helper) { check_helper(bus, cpu, trace); }
     if (state.pc == helper_return) {
       require(object_ == Object::prepare && returns_ == 0 && state.sp == main_stack - 10 &&
@@ -199,7 +228,7 @@ public:
   void verify(const Hc12 &cpu, std::ostream &trace) const {
     require(entries_ == 1 && irq_returns_ == 1 && helpers_ == 1 && retries_ == 1 &&
                 consumed_ == samples_.size(),
-            "Each native request loads exactly one unchanged helper with one GPIO-only retry");
+            "Each native request loads one unchanged helper with one coordinated read recovery");
     if (object_ == Object::prepare) {
       require(cpu.waiting() && cpu.state().pc == main_resume && cpu.state().sp == wai_stack &&
                   returns_ == 1 && drains_ == 9 && releases_ == 1 &&
@@ -246,36 +275,42 @@ private:
   unsigned releases_ = 0;
 };
 
-void run_object(
-    McuBus &bus, Hc12 &cpu, const Firmware &firmware, const Object object, std::ostream &trace) {
-  const auto initial = bus.power_off_flash_image();
+void run_object(McuMachine &machine,
+                std::unique_ptr<LcdFixture> &display,
+                const Firmware &firmware,
+                const Object object,
+                std::ostream &trace) {
+  const auto initial = machine.bus().power_off_flash_image();
   Peer peer(firmware, object);
-  begin_request(bus, cpu);
+  begin_request(machine.bus(), machine.cpu());
   unsigned instructions = 0;
   unsigned steps = 0;
   while (true) {
     require(steps < phase_limit, "Native update entry must reach a bounded completion or frontier");
-    const auto before = cpu.state();
+    const auto before = machine.cpu().state();
     if (object == Object::main && before.pc == flash_frontier) { break; }
-    peer.before(bus, cpu, initial, trace);
+    peer.before(machine, display, initial, trace);
+    auto &bus = machine.bus();
+    auto &cpu = machine.cpu();
     const auto result = cpu.step();
     peer.after(bus, cpu, before, result);
     if (result.instruction_executed) { ++instructions; }
     ++steps;
     if (object == Object::prepare && cpu.waiting() && !cpu.pending_interrupt()) { break; }
   }
-  peer.verify(cpu, trace);
-  check_nvm(bus, initial);
+  peer.verify(machine.cpu(), trace);
+  check_nvm(machine.bus(), initial);
   trace << "native-update instructions=" << instructions << " steps=" << steps << '\n';
 }
 }
 
-void verify_application_update(McuBus &bus,
-                               Hc12 &cpu,
+void verify_application_update(McuMachine &machine,
+                               std::unique_ptr<LcdFixture> &display,
                                const Firmware &firmware,
                                std::ostream &trace) {
-  run_object(bus, cpu, firmware, Object::prepare, trace);
-  run_object(bus, cpu, firmware, Object::main, trace);
+  run_object(machine, display, firmware, Object::prepare, trace);
+  run_object(machine, display, firmware, Object::main, trace);
+  auto &bus = machine.bus();
   require(bus.read(hc12::flash_clock_divider) == loaded_divider &&
               bus.read(flash_status) == idle_flash && bus.read(flash_command) == 0,
           "Original main updater configures its divider but has launched no flash command");
