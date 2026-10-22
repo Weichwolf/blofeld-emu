@@ -5,7 +5,9 @@ Its JIT is disabled in this reference path. No host synthesizer or host bootstra
 loader supplies executed DSP program words. Original chip data remain external
 local inputs. The default headless CLI runs the MCU; its optional reference-board
 profile coordinates MCU/DSP under explicit reference inputs and scheduling
-(reference-board.txt). Complete board boot and host audio remain unimplemented.
+(reference-board.txt). Complete original board boot/audio remain unqualified.
+The session transport is separate (host-audio.txt); isolated original master
+output arithmetic and access scope are tested in dsp-master-output.txt.
 
 Native adaptation
 patches/dsp56300-reference-bus.patch adds unconditional board-owned memory hooks,

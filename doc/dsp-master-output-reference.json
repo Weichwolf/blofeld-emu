@@ -1,0 +1,32 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "program_record": {
+    "record": 44,
+    "space": 0,
+    "address": 285,
+    "words": 793,
+    "sha256": "1d89ccd829af81c3e1f6ed53f00094f9ad830db6d64d34fe4737a44a2e9f0f64"
+  },
+  "entry": 635,
+  "end_exclusive": 664,
+  "source_review": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "1d6460937ed00bcdd39ab1bb2744415a80ea78f0",
+    "document": "doc/dsp_core_runtime.txt"
+  },
+  "qualification": "Isolated unmodified master-output routine with own native caller, linear modifiers and declared mixed inputs/history. All documented volume words, three transfer scales, two phases and rounding modes; independent lane recurrence, exact output/access/register/history checks, dependent blocks and trusted mid-DO/fault restores. No full boot, upstream mixing/voices, original peripheral/DMA scheduling, host PCM, physical timing or hardware equivalence proof.",
+  "expected": {
+    "matrix_calls": 6144,
+    "dependent_streams": 6,
+    "dependent_blocks": 24,
+    "recovery_calls": 1,
+    "total_calls": 6169,
+    "words_per_call": 32,
+    "original_instructions_per_call": 145,
+    "reads_per_call": 134,
+    "writes_per_call": 68,
+    "mid_loop_restores": 12,
+    "total_restores": 18,
+    "missing_data_failures": 5
+  }
+}

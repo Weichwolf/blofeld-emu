@@ -501,6 +501,14 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           starts (dsp-filter-replay.txt). This
                                           is standalone callback coverage; full
                                           runtime and audio remain unproven.
+                                          Original master output: 6169 complete
+                                          calls and 197408 independent output
+                                          words; all volume words, three scales,
+                                          both phases/RM modes, native dependent
+                                          history/buffer ownership, 18 restores
+                                          and five strict missing-data failures
+                                          (dsp-master-output.txt). Original boot,
+                                          voice-to-PCM and DMA timing remain open.
                                           Bounded native instruction fixture checks
                                           independent arithmetic/memory outcomes,
                                           REP progress and strict faults. Five

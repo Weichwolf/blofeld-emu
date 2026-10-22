@@ -790,6 +790,15 @@ if(BUILD_TESTING)
   add_test(NAME dsp_cmpm_words COMMAND blofeld-dsp-cmpm-test --word)
   add_test(NAME dsp_cmpm_minimum COMMAND blofeld-dsp-cmpm-test --minimum)
   set_tests_properties(dsp_cmpm_accumulators dsp_cmpm_words dsp_cmpm_minimum PROPERTIES TIMEOUT 120)
+  add_executable(blofeld-original-dsp-master-output-test test/original_dsp_master_output_test.cpp
+    test/dsp_master_output_fixture.cpp)
+  target_link_libraries(blofeld-original-dsp-master-output-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_master_output COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_master_output.py"
+    $<TARGET_FILE:blofeld-original-dsp-master-output-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-master-output.trace")
+  set_tests_properties(original_dsp_master_output PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_executable(blofeld-original-dsp-filters-test test/original_dsp_filters_test.cpp
     test/dsp_filter_model.cpp test/dsp_filter_fixture.cpp)
   target_link_libraries(blofeld-original-dsp-filters-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1268,6 +1277,7 @@ add_custom_target(quality
     blofeld-dsp-power-test
     blofeld-dsp-cmpm-test
     blofeld-original-dsp-filters-test
+    blofeld-original-dsp-master-output-test
     blofeld-original-dsp-waveforms-test
     blofeld-original-dsp-envelopes-test
     blofeld-original-dsp-voice-test
