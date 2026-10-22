@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Output:
-    def __init__(self, program):
+    def __init__(self, program, consume=None):
         self.current = qword(2 * (512 * 127 ** 2) * signed(program[0x27d]))
         self.previous = qword(2 * (512 * 127 ** 2) * signed(program[0x27f]))
         self.feedback = signed(program[0x285])
@@ -24,6 +24,7 @@ class Output:
         self.halves = [[0] * 32, [0] * 32]
         self.blocks = 0
         self.nonzero = 0
+        self.consume = consume
 
     def __call__(self, voice, text, check):
         check('MASTER_COPY', voice.bus, text)
@@ -49,6 +50,8 @@ class Output:
         next_full = 2 * self.feedback * self.history[0]
         check('MASTER_RETURN', [next_full & FULL_MASK, full & FULL_MASK, 1,
                                0x641, 0x660 + phase, 0x47, 0x680 + phase], text)
+        if self.consume is not None:
+            self.consume(output, text, self.blocks)
         self.halves[phase // 32] = output
         self.nonzero += sum(value != 0 for value in output)
         self.blocks += 1
@@ -56,7 +59,7 @@ class Output:
         voice.bus = [0] * 32
 
 
-def validate(text, xdata, ydata, program, reference):
+def validate(text, xdata, ydata, program, reference, consumer=None):
     tables = {mode: waveform_model(ydata, mode) for mode in (False, True)}
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
@@ -67,7 +70,7 @@ def validate(text, xdata, ydata, program, reference):
     totals = new_totals()
     totals['master_blocks'] = totals['nonzero_output_words'] = 0
     for *identity, stream in cases:
-        output = Output(program)
+        output = Output(program, consumer() if consumer is not None else None)
         validate_stream(stream, xdata, ydata, tables, tuple(identity), totals,
                         after_block=output)
         if output.blocks != 8 or output.nonzero == 0:

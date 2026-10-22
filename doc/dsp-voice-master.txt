@@ -37,3 +37,6 @@ This establishes an original synthesis-to-master data path under declared
 caller inputs. Original boot, MIDI allocation, part/effect scheduling, DMA
 arbitration, ESAI/host PCM, physical sample rate and hardware equivalence remain
 open. It does not bypass the strict Y:002000 bootstrap boundary. No fuzzing.
+
+The separate dsp-voice-pcm.txt fixture carries these words through finite DMA
+and actual ESAI_1 pins. It supplies no original scheduler or automatic DMA timing.
