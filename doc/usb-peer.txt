@@ -1,0 +1,71 @@
+Conditional original USB-MIDI OUT and parallel peer GPIO execution
+
+original_usb_peer executes the unchanged original FFC8/BE7A OUT ISR, B8B0
+forwarder, B870 frame writer, B6D0 strobe and ordinary peer route in B352.
+The official local MCU image and six code/data spans, including the payload-
+length table, are hash-pinned. Tests supply own payloads and independent state/
+pad/write expectations; manufacturer program bytes and analysis remain local.
+
+The fixture declares RAM/caller state, own valid full-speed 64-byte endpoint
+settings and GPIO directions: J=07, T=0F, S=FF, initially released Q with latch
+5A. These are valid PIM inputs, not original startup or established board wiring.
+No peer/DSP receives fabricated data or success. Native instructions are untimed;
+the original settling NOPs execute but do not establish electrical timings.
+
+169 fixed cases have two joint restores each (338 restores):
+- All sixteen first header values 0..15 with independent literal payload lengths,
+  RTIE enabled/disabled and both post-loop phase states.
+- Multiple events, zero/zero-length stopping headers, a complete 64-byte OUT,
+  actual zero-byte OUT and repeated accepted DATA0/DATA1 packets.
+- Direct forwarder count boundaries 0/1/2/3/5/7/127/128/255, using declared RAM
+  records. These do not bypass the USB endpoint's 64-byte packet limit.
+- Frame counts 0/1/2/3/8, zero X and masked/unmasked IRQ inputs, plus ordinary
+  selector-8 peer dispatch for every channel class including writable C/D tails.
+- Three missing-J-direction faults and three truncated OUT payloads, replayed
+  with exact failing read addresses/PC/context and unchanged architectural CPU.
+
+Real decoded OUT data sets the native completion and selects the original ISR.
+Literal NXP hardware-frame bytes and complete foreground restoration are checked.
+The real ISR clears completion with its own whole-word acknowledgment; RX size
+and ACK-owned DATA PID remain. Duplicate old PIDs must ACK without replacing
+already cleared headers or redelivering. New PIDs NAK while the receive buffer
+is occupied, then accept after actual native release.
+
+The original consumes whole four-byte records even for short positive remaining
+counts. Its raw signed remaining-byte test skips processing at 128..255. Header
+zero returns without GPIO/post-phase action; a nonzero zero-length header stops
+after setup. Headers are checked clear before their actual payload strobe.
+Activity/multibyte flags, pointer publication, post-loop RTIE/phase behavior,
+all GPIO writes and known/unknown pad state are compared independently.
+
+The frame writer preloads Q before enabling outputs, sends one byte even for
+count zero, releases DDRQ and always executes CLI. The forwarder enables DDRQ
+before writing its first byte and retains output direction. Repeated OUT does
+not restore the initial Q latch: its previous data/unstrobed FB value survives.
+The conditional T=03/Q=FB pair is preserved without assigning a broader protocol
+meaning or counting an invented strobe.
+
+Missing GPIO knowledge fails at PTJ read 0250/PC B6D3. Truncated received data
+fails at the first unknown 03C1/03C2/03C3 byte at PC B8FE. The original partial
+header/flag/GPIO effects remain. An indexed load can also expose its actual
+post-increment prefix without retiring. Further CPU steps reject until explicit
+recovery; the OUT buffer is not acknowledged/released. This is explicit emulator knowledge
+failure, not a claim about uninitialized silicon SRAM contents. Unknown USB
+bytes are never filled with successful dummy values.
+
+Joint restores retain CPU, all 5120 RAM bytes, all 256 local USB byte values/
+unknown states, GPIO observations, PID and native write/strobe history. Unrelated
+RAM and every NVM byte/knowledge/erase-history bit remain guarded. Captured
+prefix instructions/IRQs/strobes count once rather than once per replay.
+
+Original startup, USTB/NISOF/automatic status behavior, normal host enumeration,
+USB-MIDI binding, natural peer/DSP coupling, audio, Wine Spectre/keyboard routing,
+physical clocks and device equivalence remain open. No fuzzing, physical traffic,
+module loading or system routing is used. Raw headers above 15 remain
+unqualified; this gate does not normalize a cable nibble.
+
+  cmake --build --preset strict --target blofeld-original-usb-peer-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_usb_peer$'
+
+Testing/original-usb-peer.json records exact matrix/native counts. Missing local
+firmware skips; changed reference identities fail.

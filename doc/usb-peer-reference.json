@@ -1,0 +1,50 @@
+{
+  "qualification": "Unchanged original OUT ISR, forwarder, peer frame/strobe and ordinary peer dispatcher under explicit own RAM/GPIO directions/valid endpoint descriptions. Untimed logical pads only; no original startup, normal enumeration, physical peer/DSP wiring, wire timing, complete boot/audio or hardware equivalence. Expected unknown GPIO/truncated-buffer faults remain strict.",
+  "source_review": {
+    "repository": "https://github.com/Weichwolf/blofeld-src",
+    "commit": "0d58291ef3b77c8cbb93f11a0348dd97ed67fd14",
+    "documents": [
+      "doc/midi_forwarding.txt",
+      "doc/c_peer_frame.txt"
+    ]
+  },
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [
+    {
+      "entry": 48762,
+      "bytes": 33,
+      "name": "usb_midi_out_interrupt",
+      "sha256": "62b8821b4996c8403995360e4b4e7c22bcb9e8865df8a44106c30f1bea5df303"
+    },
+    {
+      "entry": 47280,
+      "bytes": 136,
+      "name": "forward_usb_midi_events",
+      "sha256": "cd18e553d60c3345aaf4e26572643d7a500dae6fea910e584923cad47288d6db"
+    },
+    {
+      "entry": 47216,
+      "bytes": 64,
+      "name": "write_peer_frame",
+      "sha256": "a2acc005c60710d619c9926023de82f8d4328e4b2d503f8845cbda5f788e3bc3"
+    },
+    {
+      "entry": 46800,
+      "bytes": 12,
+      "name": "strobe_peer_byte",
+      "sha256": "a6ad58e9bc0df022e953617f2c2f887fa2ffe1366e64cd7e503ae83a0b61fa7d"
+    },
+    {
+      "entry": 45906,
+      "bytes": 155,
+      "name": "transmit_midi_bytes",
+      "sha256": "c7c80a35a233ec537bba2b26c22df79b886bd3dc52e85b7c67b91a4e8859429f"
+    },
+    {
+      "entry": 63589,
+      "bytes": 16,
+      "name": "packet_payload_lengths",
+      "sha256": "a63f9436528bbf6a40efef2285773cd0c95d23343d281cd4347fa1608c97e034"
+    }
+  ]
+}

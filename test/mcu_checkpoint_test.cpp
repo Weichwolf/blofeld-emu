@@ -174,6 +174,46 @@ void test_fault_and_active_guards() {
   machine.bus().write(2, 0);
 }
 
+void test_failed_postincrement_retry() {
+  // Own LDAA 1,X+ (A6 30), CPU12 indexed post-increment encoding.
+  constexpr std::array<std::uint8_t, 2> code{0xa6, 0x30};
+  constexpr unsigned following_byte = 0xa5;
+  constexpr unsigned supplied_byte = 0x3c;
+  constexpr unsigned result_d = 0x3c34;
+  constexpr unsigned result_ccr = 0xc1;
+  constexpr CpuState initial{
+      .pc = entry, .d = 0x1234, .x = ram, .y = 0x9abc, .sp = stack, .ccr = 0xc5};
+  McuMachine machine(checkpoint_image(code), BLOFELD_DEFAULT_SLA);
+  drive_interrupts(machine.bus());
+  machine.bus().write(ram + 1, following_byte);
+  machine.cpu().set_state(initial);
+  const auto checkpoint = machine.checkpoint();
+  reject([&machine] { machine.cpu().step(); }, "Unknown indexed operand must fail visibly");
+  const auto partial = machine.cpu().state();
+  require(partial.pc == entry && partial.x == ram + 1 && partial.d == initial.d &&
+              partial.y == initial.y && partial.sp == initial.sp && partial.ccr == initial.ccr,
+          "The unretired native translation exposes only its actual post-increment prefix");
+  reject([&machine] { static_cast<void>(machine.checkpoint()); },
+         "Partial execution cannot become a completed checkpoint");
+  reject([&machine] { machine.cpu().step(); },
+         "A failed post-increment load cannot resume at the next known byte");
+  const auto stopped = machine.cpu().state();
+  require(stopped.pc == partial.pc && stopped.x == partial.x && stopped.d == partial.d &&
+              stopped.y == partial.y && stopped.sp == partial.sp && stopped.ccr == partial.ccr,
+          "Refused retry cannot change the failed instruction prefix");
+  machine.restore(checkpoint);
+  require(machine.cpu().state().x == ram && machine.cpu().state().pc == entry,
+          "Coordinated restore recovers the actual pre-read CPU and unknown operand");
+  machine.bus().write(ram, supplied_byte);
+  machine.cpu().step();
+  const auto recovered = machine.cpu().state();
+  require(
+      recovered.pc == entry + code.size() && recovered.x == ram + 1 && recovered.d == result_d &&
+          recovered.ccr == result_ccr && recovered.y == initial.y && recovered.sp == initial.sp &&
+          machine.bus().read(ram + 1) == following_byte,
+      "Recovery executes the original address once instead of silently skipping its unknown byte");
+}
+
 void test_lifetime_and_empty_handle() {
   std::optional<McuCheckpoint> checkpoint;
   {
@@ -232,6 +272,7 @@ int main(const int count, char **arguments) {
     blofeld::test::test_unmask_delay();
     blofeld::test::test_code_ram_and_pending_mapping();
     blofeld::test::test_fault_and_active_guards();
+    blofeld::test::test_failed_postincrement_retry();
     blofeld::test::test_lifetime_and_empty_handle();
     blofeld::test::test_backend_failure_atomicity(arguments[1]);
     blofeld::test::test_checkpoint_peripherals();

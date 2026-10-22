@@ -58,6 +58,8 @@ public:
   [[nodiscard]] bool waiting() const;
   [[nodiscard]] std::string disassemble() const;
   [[nodiscard]] std::optional<InterruptRequest> pending_interrupt() const;
+  // A failed unretired step cannot resume its partial CPU/bus prefix. Reset,
+  // explicit debug state or coordinated restore must establish a fresh boundary.
   CpuStep step();
 
 private:

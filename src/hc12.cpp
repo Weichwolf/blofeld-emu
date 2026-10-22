@@ -652,6 +652,10 @@ CpuStep Hc12::step() {
     throw Fault("HC12 wait clock failure requires coordinated recovery");
   }
   const ExecutionGuard guard(impl_->active);
+  if (!impl_->checkpointable) {
+    throw Fault("HC12 incomplete execution at " + hex(state().pc) +
+                " requires coordinated recovery before stepping");
+  }
   impl_->checkpointable = false;
   try {
     const auto before = state();

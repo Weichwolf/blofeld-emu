@@ -350,6 +350,20 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           stack history (midi-dispatch.txt).
                                           No original startup or host USB binding
                                           follows from these explicit fixtures.
+                                          Original OUT ISR, forwarder and peer
+                                          frame/strobe have 169 conditional cases/
+                                          338 restores, actual decoded packets,
+                                          logical GPIO data/directions, PID retries
+                                          and six strict input faults (usb-peer.txt).
+                                          Own GPIO/endpoint/caller prerequisites
+                                          and untimed execution remain explicit.
+                                          A failed unretired HC12 step now rejects
+                                          retry before another bus access; native
+                                          partial prefixes remain visible until
+                                          coordinated recovery. Own indexed-load
+                                          regression proves the former unknown-byte
+                                          skip and snapshot recovery at its actual
+                                          operand (mcu-checkpoints.txt).
 Original DSP runtime              partial  127 checked records extracted; DSP56300
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,
