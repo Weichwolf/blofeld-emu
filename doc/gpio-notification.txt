@@ -19,8 +19,9 @@ Octave values17,65,127 are rejected and read back as the initial64. The MCU stil
 notifies all three incoming Octave values. Notification is an outgoing request
 value, not proof that the DSP accepted it. For these mapped fields both policies
 use the original ordinary selector3 UART branch. The real code returns after CC;
-the test rejects an additional USB queue call. SysEx and unmapped-field fallback
-remain separate unqualified requirements.
+the test rejects an additional direct USB queue call. The original main-loop
+mirror service, actual endpoint packets and lost-ACK retries have a separate gate
+in gpio-usb-notification.txt. SysEx and unmapped-field fallback remain unqualified.
 
 One genuine DSP policy read per stream inserts the original MCU cache entry;
 later writes use actual cache hits. The UART ring starts at61 so nine bytes cross

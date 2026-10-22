@@ -717,7 +717,16 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           (gpio-notification.txt). Rejected
                                           writes still notify incoming values;
                                           notification is not DSP acceptance.
-                                          SysEx/unmapped fallback and host-visible
+                                          Original mirror/USB event/endpoint
+                                          execution adds12 events,8 ACKed packets
+                                          and4 unchanged lost-ACK retries while
+                                          the same SCI stream drains.8 original
+                                          USB interrupts, ring wrap/guards and
+                                          final NAK checked under own declared
+                                          endpoint/decoder setup
+                                          (gpio-usb-notification.txt). This is
+                                          not original enumeration. SysEx/
+                                          unmapped fallback and host-visible
                                           output remain unqualified.
                                           Other write classes, settle waits,
                                           real boot/initialization,
