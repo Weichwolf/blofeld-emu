@@ -15,13 +15,14 @@ enum class VoiceInput : std::uint8_t {
   foreground,
   stream,
   stream_midi,
-  stream_release
+  stream_release,
+  stream_sustain
 };
 
 // Output objects stay outside peripheral snapshots and must outlive the call.
 // A direct sink selects one default eight-block stream; capture retains the full
 // matrix. Choose at most one; neither option changes the original PCM path.
-// Stream modes select one six-block or ten-block idle-MIDI ring for direct delivery;
+// Stream modes select six steady, ten MIDI/release or twelve sustain blocks;
 // its full matrix remains available without an external sink.
 struct VoiceOutputOptions {
   PcmFrameSink *direct = nullptr;

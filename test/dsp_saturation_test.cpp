@@ -183,6 +183,8 @@ std::string instruction(const Input &input) {
     case Operation::subtract_right: return "subr " + source + ',' + destination;
     case Operation::absolute: return "abs " + destination;
     case Operation::negate: return "neg " + destination;
+    case Operation::increment: return "inc " + destination;
+    case Operation::decrement: return "dec " + destination;
     case Operation::shift_left: return "asl " + destination;
     case Operation::shift_right: return "asr " + destination;
     case Operation::bfu_left: return "asl #1," + destination + ',' + destination;

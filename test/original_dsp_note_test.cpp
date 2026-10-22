@@ -111,6 +111,15 @@ constexpr unsigned slot_note = 9;
 constexpr unsigned slot_channel = 10;
 constexpr unsigned hold_mode = 2;
 constexpr unsigned mode_combinations = 16;
+constexpr unsigned control_change = 0xb0;
+constexpr unsigned sustain_controller = 64;
+constexpr unsigned sustain_scalar = 394;
+constexpr unsigned sustain_flag = 395;
+constexpr unsigned first_note_latch = 396;
+constexpr unsigned note_latch_words = 8;
+constexpr unsigned sustain_update = 0xd2c;
+constexpr unsigned clear_latches = 0xd33;
+constexpr unsigned dispatch_note_event = 0x1ea8;
 constexpr std::array<unsigned, held_slots> held_notes{64, 65, 64, 64};
 constexpr std::array<unsigned, held_slots> held_channels{0, 0, 1, 0};
 
@@ -130,6 +139,7 @@ struct Counts {
   unsigned voices = 0;
   unsigned releases = 0, priorities = 0, envelopes = 0, retirements = 0, collections = 0,
            owner_clears = 0, decays = 0;
+  unsigned sustain_updates = 0, latch_clears = 0, note_dispatches = 0;
 };
 
 struct NoteInput {
@@ -253,7 +263,7 @@ struct Fixture {
       }
     }
     trace_ << '\n' << std::dec;
-    if (stage == 6) {
+    if (stage == 6 || stage == 10) {
       for (const auto &[at, value] : original_program_) {
         require(machine.bus().peek_program(at) == value, "Original release program word changed");
       }
@@ -269,6 +279,34 @@ struct Fixture {
   }
 
   void release_envelopes() { run(envelope_call_); }
+
+  void sustain_stage(const unsigned stage) { sustain_stage_ = stage; }
+
+  void sustain_state(const unsigned stage) {
+    trace_ << "SUSTAIN_STATE " << std::hex << stage << ' ' << read(x, sound + sustain_scalar) << ' '
+           << read(x, sound + sustain_flag);
+    for (unsigned i = 0; i < note_latch_words; ++i) {
+      trace_ << ' ' << read(x, sound + first_note_latch + i);
+    }
+    trace_ << '\n' << std::dec;
+    release_state(stage);
+  }
+
+  void sustain_call(const unsigned stage) {
+    trace_ << "SUSTAIN_CALL " << std::hex << stage << ' ' << read(x, staged_note) << ' '
+           << read(x, staged_status) << ' ' << read(x, staged_velocity) << ' '
+           << read(x, sound + sustain_scalar) << ' ' << read(x, sound + sustain_flag);
+    for (unsigned i = 0; i < note_latch_words; ++i) {
+      trace_ << ' ' << read(x, sound + first_note_latch + i);
+    }
+    trace_ << '\n' << std::dec;
+  }
+
+  void sustain_counts() {
+    trace_ << "SUSTAIN_COUNTS " << counts.sustain_updates << ' ' << counts.latch_clears << ' '
+           << counts.note_dispatches << '\n';
+    release_counts();
+  }
 
   void write(const blofeld::DspSpace space, const unsigned at, const unsigned value) {
     require(!inputs_only_ ||
@@ -424,6 +462,10 @@ struct Fixture {
     counts.collections += static_cast<unsigned>(state.pc == collect_entries);
     counts.owner_clears += static_cast<unsigned>(state.pc == clear_mask_owners);
     counts.decays += static_cast<unsigned>(state.pc == decay_envelope);
+    counts.sustain_updates += static_cast<unsigned>(state.pc == sustain_update);
+    counts.latch_clears += static_cast<unsigned>(state.pc == clear_latches);
+    counts.note_dispatches += static_cast<unsigned>(state.pc == dispatch_note_event);
+    if (sustain_stage_ && state.pc == release_handler) { sustain_call(*sustain_stage_); }
   }
 
   void run(const unsigned target, const std::optional<unsigned> end = std::nullopt) {
@@ -480,6 +522,7 @@ struct Fixture {
   std::map<unsigned, unsigned> original_program_;
   std::optional<blofeld::DspState> failed_state_;
   std::vector<blofeld::DspNativeAccess> accesses_;
+  std::optional<unsigned> sustain_stage_;
   unsigned stop_ = 0;
   unsigned envelope_call_ = 0;
   bool inputs_only_ = false;
@@ -606,16 +649,123 @@ void release_matrix(const blofeld::Firmware &firmware, std::ostream &trace) {
   }
   std::cout << "Original MIDI releases and selected held-envelope retirement executed.\n";
 }
+
+struct SustainInput {
+  unsigned modes = 0;
+  unsigned level = 1;
+  unsigned channel = 0;
+  unsigned note = 64;
+  bool zero = false;
+  Delivery delivery = Delivery::complete;
+  bool filtered = false;
+  bool chord = false;
+};
+
+void sustain_send(Fixture &fixture, const std::span<const unsigned> bytes, const unsigned stage) {
+  fixture.sustain_stage(stage);
+  fixture.send(bytes);
+  fixture.sustain_state(stage);
+}
+
+void sustain_note(Fixture &fixture, const SustainInput input, const unsigned note) {
+  const std::array message{
+      (input.zero ? note_on : note_off) | input.channel, note, input.zero ? 0U : 64U};
+  unsigned offset = 0;
+  if (input.delivery == Delivery::fragmented) {
+    for (unsigned i = 0; i < 2; ++i) { sustain_send(fixture, std::span(message).subspan(i, 1), 2); }
+    offset = 2;
+  } else if (input.delivery == Delivery::running) {
+    const std::array prefix{message[0], midi_max, message[2]};
+    sustain_send(fixture, prefix, 3);
+    offset = 1;
+  }
+  sustain_send(fixture, std::span(message).subspan(offset), 3);
+}
+
+void sustain_case(Fixture &fixture,
+                  const blofeld::DspCheckpoint &initial,
+                  const SustainInput input,
+                  std::ostream &trace) {
+  fixture.machine.restore(initial);
+  fixture.clear_observations();
+  fixture.write(x, channel_setting, input.filtered ? 1U : input.channel + 1);
+  trace << "SUSTAIN_CASE " << input.modes << ' ' << input.level << ' ' << input.channel << ' '
+        << input.note << ' ' << input.zero << ' ' << static_cast<unsigned>(input.delivery) << ' '
+        << input.filtered << ' ' << input.chord << '\n';
+  fixture.sustain_state(0);
+  const std::array pressed{control_change | input.channel, sustain_controller, input.level};
+  sustain_send(fixture, pressed, 1);
+  if (input.chord) {
+    constexpr std::array chord{127U, 112U, 65U, 64U, 63U, 16U, 15U, 0U, 64U};
+    for (const auto note : chord) { sustain_note(fixture, input, note); }
+  } else {
+    sustain_note(fixture, input, input.note);
+  }
+  const std::array released{control_change | input.channel, sustain_controller, 0U};
+  sustain_send(fixture, released, 4);
+  sustain_send(fixture, released, 5);
+  for (unsigned i = 0; i < 3; ++i) {
+    fixture.release_envelopes();
+    fixture.sustain_state(6 + i);
+  }
+  for (unsigned i = 0; i < 2; ++i) {
+    fixture.run(collect_entries);
+    fixture.sustain_state(9 + i);
+  }
+  fixture.sustain_counts();
+}
+
+void sustain_matrix(const blofeld::Firmware &firmware, std::ostream &trace) {
+  for (unsigned modes = 0; modes < mode_combinations; ++modes) {
+    Fixture fixture(firmware, trace, modes);
+    const auto initial = fixture.machine.checkpoint();
+    if (modes == 0) {
+      constexpr std::array levels{0U, 1U, 63U, 64U, midi_max};
+      for (const auto level : levels) {
+        for (unsigned note = 0; note <= midi_max; ++note) {
+          sustain_case(fixture, initial, {.modes = modes, .level = level, .note = note}, trace);
+        }
+      }
+    }
+    for (const auto level : {1U, midi_max}) {
+      for (const auto channel : {0U, channel_count - 1}) {
+        for (const bool zero : {false, true}) {
+          for (const auto delivery : {Delivery::fragmented, Delivery::running}) {
+            sustain_case(fixture,
+                         initial,
+                         {.modes = modes,
+                          .level = level,
+                          .channel = channel,
+                          .zero = zero,
+                          .delivery = delivery},
+                         trace);
+          }
+        }
+      }
+      sustain_case(fixture,
+                   initial,
+                   {.modes = modes, .level = level, .channel = channel_count - 1, .filtered = true},
+                   trace);
+      sustain_case(fixture, initial, {.modes = modes, .level = level, .chord = true}, trace);
+    }
+  }
+  std::cout << "Original CC64, packed release latches and held-entry retirement executed.\n";
+}
 }
 
 int main(const int count, char **arguments) {
   try {
     const bool release = count == 4 && std::string_view(arguments[3]) == "release";
-    require(count == 3 || release,
-            "Usage: original-dsp-note-test original-firmware trace [release]");
+    const bool sustain = count == 4 && std::string_view(arguments[3]) == "sustain";
+    require(count == 3 || release || sustain,
+            "Usage: original-dsp-note-test original-firmware trace [release|sustain]");
     const auto firmware = blofeld::Firmware::load(arguments[1]);
     std::ofstream trace(arguments[2]);
     trace.exceptions(std::ios::badbit | std::ios::failbit);
+    if (sustain) {
+      sustain_matrix(firmware, trace);
+      return 0;
+    }
     if (release) {
       release_matrix(firmware, trace);
       return 0;

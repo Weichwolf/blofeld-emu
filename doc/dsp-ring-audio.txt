@@ -50,3 +50,10 @@ independent release/ring oracle predicts all160 directly decoded monitor frames;
 ten trace corruptions, one monitor corruption and one foreign claim must reject.
 The offline release-ring matrix covers all eight contexts; direct host release
 playback currently covers only the first. See dsp-release-ring.txt for the limits.
+
+The separate original_dsp_ring_sustain_audio check retains one source-owned
+192-frame context with native CC64, deferred NoteOff and fragmented pedal release.
+Its twelve trace corruptions, one monitor corruption and one foreign-source
+claim reject independently. All eight contexts remain covered by the offline
+sustain-ring matrix; direct sustain playback covers the first. Neither path
+establishes boot, positive allocation or physical timing. See dsp-sustain-ring.txt.

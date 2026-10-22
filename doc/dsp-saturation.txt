@@ -9,7 +9,7 @@ V reports saturation, L is sticky, and E/U/N/Z describe the limited result.
 Transfer saturation on the data buses is a separate operation.
 
 The native reference patch applies this rule before result flags are cached.
-Single-bit ALU ASL/ASR and NORM participate; counted ASL/ASR use the BFU and
+Single-bit ALU ASL/ASR, NORM and INC/DEC participate; counted ASL/ASR use the BFU and
 remain exempt even for count1. TFR/Tcc, mixed/unsigned MPY/MAC/DMAC and other
 BFU operations also retain their documented exceptions. Products, accumulation
 and rounding use unpadded signed host integers with enough headroom for the
@@ -20,13 +20,21 @@ Deterministic checks (no fuzz or physical-device traffic)
   cmake --build --preset strict --target blofeld-dsp-saturation-test blofeld-dsp-corpus-test
   ctest --test-dir build/strict -R '^dsp_(saturation_.*|hardware_corpus)$' --output-on-failure
 
-Seven groups contain 81687 fixed cases: eight named regressions, 24330 arithmetic,
+Nine groups contain 82767 fixed cases: eight named regressions, 24330 arithmetic,
 11448 multiply, 24948 accumulate, 6912 rounding, 14040 exception/transfer cases,
-and one preserved legal MAC host-overflow input. Cases cross A/B, SM off/on,
+540 increments, 540 decrements, and one preserved legal MAC host-overflow input.
+Cases cross A/B, SM off/on,
 three scaling modes and CCR seeds, with RM off/on for rounded instructions.
-The first six groups cover both signed endpoints, all table3-1 selector rows,
+Together they cover both signed endpoints, all table3-1 selector rows,
 unused extension bits, carry/borrow, sticky flags, rounding ties and signedness.
 Power coefficients use the explicitly documented n=1,8,22 encodings.
+
+INC/DEC add/subtract one at the full 56-bit accumulator LSB (FM13-51/77).
+Their result follows table3-1 when SM=1; they are not BFU exceptions under
+section3.1.5. Carry/borrow remains the full-width unsigned carry/borrow, and S
+is unchanged. Both new groups fail on the previous core at the positive INC
+and negative DEC 48-bit rails. Expected operands, result, complete CPU/stack
+state and every defined flag are independent of the native implementation.
 
 An independent oracle uses signed integer range/division/remainders and a
 literal eight-row saturation table. Real native setup instructions supply all
@@ -36,8 +44,8 @@ oracle under the manual's qualification; all other fields remain checked.
 Handwritten documented product and counted-shift words avoid ambiguous or
 unsupported helper-assembler aliases. No manufacturer program bytes are added.
 
-Before the correction, all seven groups failed, including UBSan for the legal
-MAC input D=7fffffffffffff, X0=Y0=7fffff. The private corrected native candidate
+Before the original saturation correction, all seven original groups failed, including UBSan for the legal
+MAC input D=7fffffffffffff, X0=Y0=7fffff. The corrected native implementation
 passes every case. All 17 unchanged b9 MCPX capture cases match 748 observed
 register values, alongside the four previously adopted banks. Memory and stack
 are unobserved in b9 and are not inferred as zero (dsp-validation.txt). These are selected

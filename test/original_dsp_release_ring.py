@@ -116,11 +116,14 @@ class ReleasePipeline(Pipeline):
         self.scheduler(voice, text, check)
         check('RELEASE_RENDERED', [int(self.active)], text)
         check('RELEASE_AFTER_BODY', self.entry_state(voice), text)
+        self.after_input(voice, text, check)
+        self.serial(text, check)
+
+    def after_input(self, voice, text, check):
         if self.block == REQUEST_BLOCK:
             self.input(voice, text, check)
         elif re.search(r'^(IDLE_|RELEASE_AFTER_INPUT)', text, re.M):
             raise ValueError('Unexpected release input outside its original wait')
-        self.serial(text, check)
 
     def serial(self, text, check):
         super().serial(text, check)
@@ -128,14 +131,15 @@ class ReleasePipeline(Pipeline):
             self.payload.extend(struct.pack('<i', signed(raw) * 256))
 
 
-def validate_context(stream, xdata, ydata, program, identity, totals):
+def validate_context(stream, xdata, ydata, program, identity, totals,
+                     pipeline_type=ReleasePipeline, block_count=BLOCKS):
     if [ydata[0x1e25 + field] & 255 for field in (129, 145)] != [0, 0]:
         raise ValueError('Changed original factory Effects Off mix profile')
     kind, mode, color, varied, routing = identity
     high, twos, varied, serial = kind == 'sync', mode == '1', varied == '1', routing == '1'
     voice = ReleaseVoice(xdata, ydata, waveform_model(ydata, twos), high, twos, int(color),
                          varied, serial, sound_base=SOUND)
-    pipeline = ReleasePipeline(varied, twos, program, serial)
+    pipeline = pipeline_type(varied, twos, program, serial)
 
     def check(label, expected, text):
         if row(label, text) != expected:
@@ -148,7 +152,7 @@ def validate_context(stream, xdata, ydata, program, identity, totals):
     check('REPEAT_AUTOMATIC_REJECTED', [1], prefix)
     check('FOREGROUND_INPUT', [0xb0, 7, 127, 1, 0, 7, 127] if varied else [0xb0, 7, 0], prefix)
     blocks = re.findall(r'^BLOCK (\d+)\n([\s\S]*?)(?=^BLOCK |\Z)', stream, re.M)
-    if [int(number) for number, _ in blocks] != list(range(BLOCKS)):
+    if [int(number) for number, _ in blocks] != list(range(block_count)):
         raise ValueError('Incomplete original release foreground stream')
     for raw, text in blocks:
         block = int(raw)
@@ -164,7 +168,8 @@ def validate_context(stream, xdata, ydata, program, identity, totals):
             check('HISTORY_INIT', voice.history_words(), text)
             pipeline.empty_blocks += 1
         pipeline.after(voice, text, check)
-    if pipeline.empty_blocks != 4 or not pipeline.retired or voice.block != 6 or not pipeline.nonzero:
+    if (pipeline.empty_blocks != 4 or not pipeline.retired
+            or voice.block != block_count - 4 or not pipeline.nonzero):
         raise ValueError('Original release must retire and retain four subsequent empty blocks')
     return pipeline
 

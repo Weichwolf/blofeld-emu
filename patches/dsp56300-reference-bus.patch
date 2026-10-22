@@ -1247,62 +1247,78 @@
 +		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
 @@ -741,0 +598 @@
 +		finishSingleShift(D, previousLimit);
-@@ -959,0 +817,4 @@
+@@ -859 +716 @@
+-		// Unsigned, so that the wrap is defined. DEC overflows only by wrapping the minimum round to the maximum and
++		// Unsigned, so that the wrap is defined. Without SM, DEC overflows only by wrapping the minimum round to the maximum and
+@@ -868,3 +725 @@
+-		sr_z_update(d);
+-		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == maximum);
+-		sr_l_update_by_v();
++		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == maximum);
+@@ -959,0 +815,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACT width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -985,0 +847,4 @@
+@@ -985,0 +845,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACTU width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -1064,0 +930,4 @@
+@@ -1028 +891 @@
+-		// Unsigned, so that the wrap is defined. INC overflows only by wrapping the maximum round to the minimum and
++		// Unsigned, so that the wrap is defined. Without SM, INC overflows only by wrapping the maximum round to the minimum and
+@@ -1036,3 +899 @@
+-		sr_z_update(d);
+-		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
+-		sr_l_update_by_v();
++		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
+@@ -1064,0 +926,4 @@
 +		// FM13-78: normal source width <= 24 and offset + width <= 56.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && (widthField > 24 || widthField + offsetField > 56))
 +			throw std::runtime_error("Unqualified DSP reference INSERT width=" + std::to_string(widthField) +
 +				" offset=" + std::to_string(offsetField));
-@@ -1072 +941 @@
+@@ -1072 +937 @@
 -		else
 +		else if(widthField)
-@@ -1164,0 +1034,4 @@
+@@ -1164,0 +1030,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MAC coefficient=" + std::to_string(sssss));
 +
-@@ -1179,4 +1052 @@
+@@ -1179,4 +1048 @@
 -		alu_mpy( ab, reg, s, negate, _accumulate );
 -
 -		if(_round)
 -			alu_rnd( ab );
 +		alu_mpy(ab, reg, s, negate, _accumulate, _round);
-@@ -1198 +1068 @@
+@@ -1198 +1064 @@
 -		alu_mac( ab, s1, s2, negate, uu );
 +		alu_mpysuuu(ab, s1, s2, negate, true, uu);
-@@ -1210,0 +1081,4 @@
+@@ -1210,0 +1077,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MACR coefficient=" + std::to_string(sssss));
 +
-@@ -1214,2 +1088 @@
+@@ -1214,2 +1084 @@
 -		alu_mac( ab, s1, s2, negate, false );
 -		alu_rnd( ab );
 +		alu_mac(ab, s1, s2, negate, false, true);
-@@ -1304,0 +1178,4 @@
+@@ -1304,0 +1174,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MPY coefficient=" + std::to_string(sssss));
 +
-@@ -1336,0 +1214,4 @@
+@@ -1336,0 +1210,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MPYR coefficient=" + std::to_string(sssss));
 +
-@@ -1340,2 +1221 @@
+@@ -1340,2 +1217 @@
 -		alu_mpy( ab, s1, s2, negate, false );
 -		alu_rnd( ab );
 +		alu_mpy(ab, s1, s2, negate, false, true);
-@@ -1450,7 +1330,14 @@
+@@ -1450,7 +1326,14 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -1324,7 +1340,7 @@
 +		// C uses the subtraction's borrow. Shift-overflow C remains unqualified.
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1458,5 +1345,2 @@
+@@ -1458,5 +1341,2 @@
 -		// Carry bit note: "The Carry bit (C) is set correctly if the source operand does not overflow as a result of the left shift operation.", we do not care at the moment
 -		sr_toggle(CCR_V, bittest(old, 55 + g_aluShift) != bittest(d, 55 + g_aluShift));
 -		sr_z_update(d);
@@ -1332,7 +1348,7 @@
 -		sr_c_update_arithmetic(old, d);
 +		finishArithmeticResult(d, overflow);
 +		sr_toggle(CCR_C, borrow);
-@@ -1468,7 +1352,12 @@
+@@ -1468,7 +1348,12 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -1352,13 +1368,13 @@
 +		const bool overflow = ((shifted ^ source) & (shifted ^ res) & signBit) != 0;
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1476,3 +1365,2 @@
+@@ -1476,3 +1361,2 @@
 -		sr_z_update(d);
 -		//sr_l_update_by_v();
 -		sr_c_update_arithmetic(old, d);
 +		finishArithmeticResult(d, overflow);
 +		sr_toggle(CCR_C, borrow);
-@@ -1493,0 +1382,12 @@
+@@ -1493,0 +1378,12 @@
 +		if(m_referenceMode) {
 +			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
 +			const auto source = getFieldValue<Vsl, Field_S>(op);
@@ -1371,7 +1387,7 @@
 +			memWrite(MemArea_Y, address, low);
 +			return;
 +		}
-@@ -1495,2 +1395 @@
+@@ -1495,2 +1391 @@
 -	}
 -}
 +	}}

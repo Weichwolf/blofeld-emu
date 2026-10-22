@@ -103,6 +103,12 @@ Arithmetic unary(const Input &input) {
     result.value = destination < 0 ? -destination : destination;
   } else if (input.operation == Operation::negate) {
     result.value = -destination;
+  } else if (input.operation == Operation::increment) {
+    result.value = destination + 1;
+    result.carry_bit = input.destination == accumulator_mask;
+  } else if (input.operation == Operation::decrement) {
+    result.value = destination - 1;
+    result.carry_bit = input.destination == 0;
   } else if (input.operation == Operation::shift_left || input.operation == Operation::bfu_left) {
     result.value = destination * 2;
     result.carry_bit = (input.destination & sign_bit) != 0;
@@ -233,6 +239,8 @@ Arithmetic operation(const Input &input) {
     case Operation::subtract_right: return shifted(input, false, true);
     case Operation::absolute:
     case Operation::negate:
+    case Operation::increment:
+    case Operation::decrement:
     case Operation::shift_left:
     case Operation::shift_right:
     case Operation::bfu_left:

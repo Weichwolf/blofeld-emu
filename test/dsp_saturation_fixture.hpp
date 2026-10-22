@@ -24,6 +24,8 @@ enum class Operation : unsigned char {
   subtract_right,
   absolute,
   negate,
+  increment,
+  decrement,
   shift_left,
   shift_right,
   bfu_left,

@@ -22,6 +22,9 @@ from original_dsp_repeat import BLOCKS, Pipeline, SOUND, negative_controls
 from original_dsp_release_ring import (BLOCKS as RELEASE_BLOCKS,
                                        expected_payload as release_payload,
                                        negative_controls as release_negative_controls)
+from original_dsp_sustain_ring import (BLOCKS as SUSTAIN_BLOCKS,
+                                       expected_payload as sustain_payload,
+                                       negative_controls as sustain_negative_controls)
 from original_dsp_voice import original_records
 from original_dsp_voice_audio import compare
 
@@ -31,7 +34,11 @@ IDENTITIES = tuple((kind, mode, '127', str(int(kind == 'sync')), routing)
                                                                ('0', '1'), ('0', '1')))
 
 
-def expected_payload(text, xdata, ydata, program, identity, midi=False, release=False):
+def expected_payload(text, xdata, ydata, program, identity,
+                     midi=False, release=False, sustain=False):
+    if sustain:
+        require(identity == IDENTITIES[0], 'Direct sustain oracle covers only the first context')
+        return sustain_payload(text, xdata, ydata, program)
     if release:
         require(identity == IDENTITIES[0], 'Direct release oracle covers only the first context')
         return release_payload(text, xdata, ydata, program)
@@ -75,9 +82,9 @@ def expected_payload(text, xdata, ydata, program, identity, midi=False, release=
 
 
 def render(binary, firmware, trace, server, env, directory, index, xdata, ydata, program,
-           midi, release=False):
+           midi, release=False, sustain=False):
     result = subprocess.run([str(binary), str(firmware), str(trace), server, str(index),
-                             *(['release'] if release else ['midi'] if midi else [])],
+                             *(['sustain'] if sustain else ['release'] if release else ['midi'] if midi else [])],
                             env=env, capture_output=True, text=True, check=False,
                             timeout=240 if env.get('BLOFELD_TEST_SANITIZER') == 'thread' else 90)
     diagnostics = result.stdout + result.stderr
@@ -89,16 +96,19 @@ def render(binary, firmware, trace, server, env, directory, index, xdata, ydata,
     require(re.findall(r'^direct-ring-frames=(\d+) playback-rate=48000 '
                        r'physical-clock=unqualified source-reuse-rejected=1$',
                        result.stdout, re.M) ==
-            [str((RELEASE_BLOCKS if release else MIDI_BLOCKS if midi else BLOCKS) * 16)],
+            [str((SUSTAIN_BLOCKS if sustain else RELEASE_BLOCKS if release else MIDI_BLOCKS if midi else BLOCKS) * 16)],
             'Every worker must retain one source and accept/write/finish all decoded frames')
     text = trace.read_text()
     identity = IDENTITIES[index]
-    expected = expected_payload(text, xdata, ydata, program, identity, midi=midi, release=release)
+    expected = expected_payload(text, xdata, ydata, program, identity,
+                                midi=midi, release=release, sustain=sustain)
 
     def validate(changed, xdata, ydata, program):
-        return expected_payload(changed, xdata, ydata, program, identity, midi=midi, release=release)
+        return expected_payload(changed, xdata, ydata, program, identity,
+                                midi=midi, release=release, sustain=sustain)
 
-    controls = release_negative_controls if release else midi_negative_controls if midi else negative_controls
+    controls = (sustain_negative_controls if sustain else release_negative_controls if release
+                else midi_negative_controls if midi else negative_controls)
     controls(text, xdata, ydata, program, validator=validate)
     return expected
 
@@ -117,9 +127,10 @@ def monitor_controls(recorded, expected):
             raise ValueError('Private monitor accepted a corrupted original ring stream')
 
 
-def playback(binary, firmware, artifacts, directory, xdata, ydata, program, midi, release=False):
-    blocks = RELEASE_BLOCKS if release else MIDI_BLOCKS if midi else BLOCKS
-    count = 1 if release else len(IDENTITIES)
+def playback(binary, firmware, artifacts, directory, xdata, ydata, program,
+             midi, release=False, sustain=False):
+    blocks = SUSTAIN_BLOCKS if sustain else RELEASE_BLOCKS if release else MIDI_BLOCKS if midi else BLOCKS
+    count = 1 if release or sustain else len(IDENTITIES)
     with service(directory) as (daemon, server, env):
         recorded = directory / 'monitor.pcm'
         expected = []
@@ -138,7 +149,7 @@ def playback(binary, firmware, artifacts, directory, xdata, ydata, program, midi
                 for index in range(count):
                     expected.append(render(binary, firmware, artifacts / f'case-{index}.trace',
                                            server, env, directory, index, xdata, ydata, program,
-                                           midi, release))
+                                           midi, release, sustain))
                 time.sleep(0.1)
             finally:
                 terminate(monitor)
@@ -151,9 +162,9 @@ def playback(binary, firmware, artifacts, directory, xdata, ydata, program, midi
                 'host_streams': count, 'accepted_frames': count * blocks * 16,
                 'exact_host_frames': count * blocks * 16,
                 'rejected_foreign_sources': count,
-                'oracle_negative_controls': count * (10 if release else 9 if midi else 4),
+                'oracle_negative_controls': count * (12 if sustain else 10 if release else 9 if midi else 4),
                 'idle_midi': midi, 'idle_polls': count * 24 if midi else 0,
-                'release_midi': release,
+                'release_midi': release, 'sustain_midi': sustain,
                 'monitor_negative_controls': count, 'monitor_offsets_bytes': offsets,
                 'reference_sample_rate': 48000, 'reference_timebase': 24576000,
                 'fuzz_execution': False, 'physical_audio': False,
@@ -168,8 +179,9 @@ def playback(binary, firmware, artifacts, directory, xdata, ydata, program, midi
 def main():
     midi = sys.argv[4:] == ['midi']
     release = sys.argv[4:] == ['release']
-    require(len(sys.argv) == 4 or midi or release,
-            'Expected binary, firmware, artifacts and optional midi or release')
+    sustain = sys.argv[4:] == ['sustain']
+    require(len(sys.argv) == 4 or midi or release or sustain,
+            'Expected binary, firmware, artifacts and optional midi/release/sustain')
     binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:4])
     artifacts.mkdir(parents=True, exist_ok=True)
     report = artifacts / 'result.json'
@@ -188,7 +200,7 @@ def main():
         directory = Path(temporary)
         try:
             result = playback(binary, firmware, artifacts, directory, xdata, ydata, program,
-                              midi, release)
+                              midi, release, sustain)
             report.write_text(json.dumps(result, indent=2) + '\n')
             print(f"Verified {result['host_streams']} source-owned workers, "
                   f"{result['exact_host_frames']} original ring frames and "
