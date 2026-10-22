@@ -31,3 +31,5 @@ converted Y controls. Only the first entry's envelopes are advanced; the other
 entries test matching, prioritization and preservation. This does not establish
 positive-note allocation, complete voice scheduling/audio, boot or hardware
 equivalence. The separate strict Y:ffffff allocation frontier remains intact.
+dsp-release-ring.txt additionally follows actual idle MIDI release through the
+original foreground/voice retirement and later decoded ring/audio output.

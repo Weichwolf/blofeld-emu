@@ -971,6 +971,13 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           prioritization, retirement and owner
                                           cleanup (dsp-note-release.txt); positive
                                           allocation and scheduled audio stay open.
+                                          Original foreground release now retains
+                                          48 voice/80 body blocks through eight
+                                          retirements and32 empty bodies,1280
+                                          decoded frames and a direct160-frame
+                                          monitor prefix (dsp-release-ring.txt).
+                                          Untimed held-entry scope; physical
+                                          scheduling/boot/live MIDI stay open.
                                           32 conditional original foreground
                                           iterations now compose MIDI, held voice
                                           and scheduler smoothing with original

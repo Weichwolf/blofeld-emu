@@ -10,7 +10,8 @@
 int main(const int count, char **arguments) {
   try {
     const bool midi = count == 5 && std::string_view(arguments[4]) == "midi";
-    if ((count != 4 && !midi) || !std::string_view(arguments[3]).starts_with("unix:")) {
+    const bool release = count == 5 && std::string_view(arguments[4]) == "release";
+    if ((count != 4 && !midi && !release) || !std::string_view(arguments[3]).starts_with("unix:")) {
       throw blofeld::Fault("Expected firmware, private trace and explicit private audio server");
     }
     // Declared playback rate for laboratory edge ordinals; not a physical clock.
@@ -18,13 +19,17 @@ int main(const int count, char **arguments) {
     constexpr unsigned reference_timebase = 24576000;
     constexpr unsigned unchanged_frames = 96;
     constexpr unsigned midi_frames = 160;
-    const auto expected_frames = midi ? midi_frames : unchanged_frames;
+    const auto expected_frames = midi || release ? midi_frames : unchanged_frames;
     blofeld::AudioRuntime output({.output = {.pcm = {.frame_sync_high = false},
                                              .timebase_hz = reference_timebase,
                                              .sample_rate = playback_rate,
                                              .server = arguments[3]}});
-    const auto input =
-        midi ? blofeld::test::VoiceInput::stream_midi : blofeld::test::VoiceInput::stream;
+    auto input = blofeld::test::VoiceInput::stream;
+    if (midi) {
+      input = blofeld::test::VoiceInput::stream_midi;
+    } else if (release) {
+      input = blofeld::test::VoiceInput::stream_release;
+    }
     const auto result =
         blofeld::test::run_voice_test(3, arguments, false, true, false, {.direct = &output}, input);
     if (result != 0) { return result; }

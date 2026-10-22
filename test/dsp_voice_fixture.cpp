@@ -88,6 +88,19 @@ constexpr unsigned mixed_bus = 0x620;
 constexpr unsigned chain_gain = 0x6a0;
 constexpr unsigned idle_burst_pairs = 24; // 48 bytes fit the 64-word input ring and cross its end.
 constexpr unsigned midi_stream_blocks = 10; // Retain the delayed output of all idle CC changes.
+constexpr unsigned release_input_block = 2;
+constexpr unsigned release_retirement_block = 5;
+constexpr unsigned owner_mask = 0x2f1c;
+constexpr unsigned owner_base = 0x2f1e;
+constexpr unsigned owner_count = 24;
+constexpr unsigned first_envelope_callback = 56;
+constexpr unsigned envelope_state_stride = 6;
+constexpr unsigned release_velocity_field = 19;
+constexpr unsigned release_note_field = 9;
+constexpr unsigned release_tag_field = 10;
+constexpr unsigned note_off_status = 0x80;
+constexpr unsigned zero_note_on_status = 0x90;
+constexpr std::array<unsigned, 4> release_parameters{205, 217, 229, 241};
 constexpr std::array<unsigned, 13> foreground_stages{main_loop,
                                                      midi_parser,
                                                      midi_secondary_parser,
@@ -115,6 +128,8 @@ constexpr unsigned envelope_start = 0x167b;
 constexpr unsigned envelope_attack = 0x165e;
 constexpr unsigned envelope_finish = 0x1668;
 constexpr unsigned envelope_decay = 0x1639;
+constexpr unsigned envelope_release = 0x160f;
+constexpr unsigned envelope_retire = 0x1609;
 constexpr unsigned output_dispatch = 0x620;
 constexpr unsigned output_dispatch_end = 0x62e;
 constexpr unsigned output_accumulator = 0x78d;
@@ -163,6 +178,7 @@ constexpr unsigned register_prefix_end = 0x11d;
 constexpr unsigned waveform_initializer = 0x2ec3;
 constexpr unsigned controller_reset = 0xd1e;
 constexpr unsigned entry_initializer = 0xe58;
+constexpr unsigned entry_list_initializer = 0x44a;
 constexpr unsigned pointer_prefix = 0x17e;
 constexpr unsigned pointer_prefix_end = 0x185;
 constexpr unsigned shared_seed = 0x11;
@@ -341,6 +357,11 @@ struct MemoryRange {
   unsigned count = 0;
 };
 
+bool stream_profile(const blofeld::test::VoiceInput input) {
+  using enum blofeld::test::VoiceInput;
+  return input == stream || input == stream_midi || input == stream_release;
+}
+
 struct Fixture {
   blofeld::DspMachine machine;
   blofeld::DspBus &bus;
@@ -364,6 +385,7 @@ struct Fixture {
   bool foreground_enabled = false;
   bool stream_enabled = false;
   bool idle_midi_enabled = false;
+  bool release_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
   blofeld::PcmFrameSink *direct = nullptr;
   Case configuration{};
@@ -371,7 +393,7 @@ struct Fixture {
   unsigned drive_return = 0;
   unsigned drive_buffer = 0;
   unsigned lfo_waves = 0, envelope_starts = 0, envelope_attacks = 0, envelope_finishes = 0,
-           envelope_decays = 0;
+           envelope_decays = 0, envelope_releases = 0, envelope_retirements = 0;
   unsigned gain_entries = 0, noise_entries = 0, render_entries = 0, lfo_entries = 0,
            core_entries = 0, filter_entries = 0, drive_entries = 0;
 
@@ -414,12 +436,10 @@ struct Fixture {
         source(s),
         trace(output),
         midi_enabled(input != blofeld::test::VoiceInput::none),
-        foreground_enabled(input == blofeld::test::VoiceInput::foreground ||
-                           input == blofeld::test::VoiceInput::stream ||
-                           input == blofeld::test::VoiceInput::stream_midi),
-        stream_enabled(input == blofeld::test::VoiceInput::stream ||
-                       input == blofeld::test::VoiceInput::stream_midi),
-        idle_midi_enabled(input == blofeld::test::VoiceInput::stream_midi) {
+        foreground_enabled(input == blofeld::test::VoiceInput::foreground || stream_profile(input)),
+        stream_enabled(stream_profile(input)),
+        idle_midi_enabled(input == blofeld::test::VoiceInput::stream_midi),
+        release_enabled(input == blofeld::test::VoiceInput::stream_release) {
     static_cast<void>(load(bus, s, stop, master, pcm, repeat, sound));
   }
 
@@ -449,6 +469,8 @@ struct Fixture {
     envelope_attacks += static_cast<unsigned>(s.pc == envelope_attack);
     envelope_finishes += static_cast<unsigned>(s.pc == envelope_finish);
     envelope_decays += static_cast<unsigned>(s.pc == envelope_decay);
+    envelope_releases += static_cast<unsigned>(s.pc == envelope_release);
+    envelope_retirements += static_cast<unsigned>(s.pc == envelope_retire);
     if (s.pc == output_dispatch) {
       trace << "PRIOR_BUS" << std::hex;
       for (unsigned i = 0; i < lfo_words; ++i) { trace << ' ' << get(x, output_bus + i); }
@@ -812,6 +834,7 @@ struct Fixture {
     callbacks("CALLBACKS_BEFORE");
     output_seen = false;
     lfo_waves = envelope_starts = envelope_attacks = envelope_finishes = envelope_decays = 0;
+    envelope_releases = envelope_retirements = 0;
     trace << "HISTORY_INIT" << std::hex;
     for (const unsigned base : {first_filter_history, second_filter_history}) {
       for (auto space : {x, y}) {
@@ -846,10 +869,19 @@ struct Fixture {
             "Missing real filter/drive calls");
     require(output_seen, "Missing original output fallthrough");
     require(!drive_pending, "Original Drive callback has not actually returned");
+    check_control_counts(block);
+  }
+
+  void check_control_counts(const unsigned block) const {
+    const bool releasing = release_enabled && block > release_input_block;
+    const auto release_callbacks = block == release_retirement_block ? 2U : 4U;
+    const auto releases = releasing ? release_callbacks : 0U;
+    const auto retirements = releasing && block == release_retirement_block ? 2U : 0U;
     require(lfo_waves == (block == 0 ? 6U : 3U) && envelope_starts == (block == 0 ? 4U : 0U) &&
                 envelope_attacks == (block == 0 ? 8U : 0U) &&
                 envelope_finishes == (block == 0 ? 4U : 0U) &&
-                envelope_decays == (block == 0 ? 0U : 4U),
+                envelope_decays == (block == 0 || releasing ? 0U : 4U) &&
+                envelope_releases == releases && envelope_retirements == retirements,
             "Original per-block control callback counts differ");
   }
 
@@ -908,6 +940,9 @@ struct Fixture {
     rendering = false;
     configuration = input;
     reset_stream(input.twos);
+    if (release_enabled) {
+      run({.target = entry_list_initializer, .end = stop, .twos = input.twos});
+    }
     configure_sound(input);
     prepare_output(input);
     if (midi_enabled) { initialize_midi(input.twos); }
@@ -1069,6 +1104,8 @@ struct Fixture {
 
   void foreground_iteration(const unsigned block) {
     begin_block(block);
+    const auto expected_voices = release_enabled && block > release_retirement_block ? 0U : 1U;
+    const auto frozen = expected_voices == 0 ? entry_payload() : Words{};
     bool in_voice = false;
     unsigned voices = 0;
     unsigned steps = 0;
@@ -1096,8 +1133,20 @@ struct Fixture {
       }
       ++total_steps;
     } while (cpu.state().pc != main_loop);
-    require(!in_voice && voices == 1, "Original foreground must actually render the held entry");
+    require(!in_voice && voices == expected_voices,
+            "Original foreground must follow the actual retained or retired entry");
+    require(frozen.empty() || entry_payload() == frozen,
+            "An empty active list must preserve the retired slot's complete payload");
+    if (release_enabled) { trace << "RELEASE_RENDERED " << voices << '\n'; }
     foreground_state();
+  }
+
+  [[nodiscard]] Words entry_payload() {
+    Words words;
+    for (unsigned i = 0; i < readable_entry_words; ++i) {
+      words.push_back(get(blofeld::DspSpace::x, entry + i));
+    }
+    return words;
   }
 
   void stream_row(const char *label, const unsigned base) {
@@ -1136,12 +1185,19 @@ struct Fixture {
     rendering = false;
   }
 
-  [[nodiscard]] std::vector<unsigned> idle_audio_state() {
+  [[nodiscard]] std::vector<unsigned> idle_audio_state(const bool releasing = false) {
     using enum blofeld::DspSpace;
     std::vector<unsigned> values;
     const auto range = [&](const auto space, const MemoryRange interval) {
       for (unsigned i = 0; i < interval.count; ++i) {
-        values.push_back(get(space, interval.base + i));
+        const auto at = interval.base + i;
+        const bool callback = at >= entry + first_envelope_callback &&
+                              at < entry + first_envelope_callback + (4 * envelope_state_stride) &&
+                              (at - entry - first_envelope_callback) % envelope_state_stride == 0;
+        const bool release_write =
+            releasing && ((space == x && (callback || at == entry + release_velocity_field)) ||
+                          (space == y && at == coefficient_buffer));
+        if (!release_write) { values.push_back(get(space, at)); }
       }
     };
     range(x, {.base = entry, .count = readable_entry_words});
@@ -1160,9 +1216,9 @@ struct Fixture {
     return values;
   }
 
-  void idle_iteration(const unsigned ordinal) {
+  void idle_iteration(const unsigned ordinal, const bool releasing = false) {
     using enum blofeld::DspSpace;
-    const auto audio = idle_audio_state();
+    const auto audio = idle_audio_state(releasing);
     const auto wire = repeat;
     trace << "IDLE_BEGIN " << std::hex << ordinal << '\n' << std::dec;
     unsigned steps = 0;
@@ -1179,7 +1235,8 @@ struct Fixture {
       ++total_steps;
     } while (cpu.state().pc != main_loop);
     const auto s = cpu.state();
-    require(s.sp == 1 && s.stack_pc == stop && repeat == wire && idle_audio_state() == audio,
+    require(s.sp == 1 && s.stack_pc == stop && repeat == wire &&
+                idle_audio_state(releasing) == audio,
             "Idle MIDI polling must preserve audio state, native frame and serial/DMA phase");
     trace << "IDLE_END " << std::hex << s.pc << ' ' << s.sp << ' ' << s.a << ' ' << s.b << ' '
           << s.sr << '\n';
@@ -1194,7 +1251,8 @@ struct Fixture {
     foreground_ram("IDLE_RAM");
   }
 
-  void idle_chunk(const std::vector<unsigned> &bytes, unsigned &ordinal) {
+  void
+  idle_chunk(const std::vector<unsigned> &bytes, unsigned &ordinal, const bool releasing = false) {
     using enum blofeld::DspSpace;
     auto cursor = get(x, midi_producer);
     require(cursor == get(x, midi_consumer) && bytes.size() < midi_ring_size,
@@ -1208,8 +1266,8 @@ struct Fixture {
     }
     put(x, midi_producer, cursor);
     trace << '\n' << std::dec;
-    idle_iteration(ordinal++);
-    idle_iteration(ordinal++);
+    idle_iteration(ordinal++, releasing);
+    idle_iteration(ordinal++, releasing);
   }
 
   void stream_idle(const unsigned block) {
@@ -1238,10 +1296,56 @@ struct Fixture {
     }
   }
 
+  void initialize_release_stream() {
+    using enum blofeld::DspSpace;
+    require(get(x, entry + release_note_field) == 0 && get(x, entry + release_tag_field) == 0 &&
+                get(x, owner_mask) == 0,
+            "Release stream declares the existing zero note/tag and empty owner mask");
+    for (unsigned i = 0; i < release_parameters.size(); ++i) {
+      require(get(x, sound + release_parameters[i]) == (i < 2 ? 0U : 64U),
+              "Release stream retains the original factory release controls");
+    }
+    for (unsigned i = 0; i < owner_count; ++i) { put(x, owner_base + i, 0); }
+  }
+
+  void release_state(const char *label) {
+    using enum blofeld::DspSpace;
+    trace << label << std::hex;
+    for (const auto at : {entry + release_note_field,
+                          entry + release_tag_field,
+                          entry + release_velocity_field,
+                          active_list,
+                          active_list + 1,
+                          runtime_flags,
+                          owner_mask}) {
+      trace << ' ' << get(x, at);
+    }
+    for (unsigned i = 0; i < envelope_words; ++i) { trace << ' ' << get(x, envelope_state + i); }
+    for (unsigned i = 0; i < owner_count; ++i) { trace << ' ' << get(x, owner_base + i); }
+    trace << '\n' << std::dec;
+  }
+
+  void release_input(const unsigned block) {
+    release_state("RELEASE_AFTER_BODY");
+    if (block != release_input_block) { return; }
+    unsigned ordinal = 0;
+    const auto status = configuration.serial ? zero_note_on_status : note_off_status;
+    const auto velocity = configuration.serial ? 0U : 64U;
+    idle_chunk({status, 0, velocity}, ordinal, true);
+    require(get(blofeld::DspSpace::y, coefficient_buffer) == entry,
+            "Original release must gather the actual held pointer in its aliased Y scratch");
+    release_state("RELEASE_AFTER_INPUT");
+  }
+
+  [[nodiscard]] unsigned stream_block_count() const {
+    return idle_midi_enabled || release_enabled ? midi_stream_blocks : 6U;
+  }
+
   void stream_case(const Case input) {
     using enum blofeld::DspSpace;
     initialize_foreground(input);
     foreground_input(input.varied);
+    if (release_enabled) { initialize_release_stream(); }
     // This finite reference window has no due part-clock/countdown service.
     put(x, scheduler_period, positive_limit);
     put(x, block_countdown, 0);
@@ -1270,6 +1374,7 @@ struct Fixture {
       if (direct != nullptr) { direct->check(); }
       foreground_iteration(block);
       if (idle_midi_enabled) { stream_idle(block); }
+      if (release_enabled) { release_input(block); }
       repeat.drain(bus, cpu, trace);
       if (direct != nullptr) {
         // Publish only the final, verified branch after any held-word replay.
@@ -1386,7 +1491,7 @@ void stream_matrix(Fixture &fixture) {
                              .color = parameter_max,
                              .varied = high,
                              .serial = serial,
-                             .blocks = fixture.idle_midi_enabled ? midi_stream_blocks : 6});
+                             .blocks = fixture.stream_block_count()});
       }
     }
   }
@@ -1404,9 +1509,7 @@ int run_voice_test(const int count,
   try {
     require(count == 3, "Expected original firmware and private voice trace");
     require(output.direct == nullptr ||
-                (output.capture == nullptr &&
-                 (input == VoiceInput::stream || input == VoiceInput::stream_midi) && !drive &&
-                 master && !pcm),
+                (output.capture == nullptr && stream_profile(input) && !drive && master && !pcm),
             "Direct output requires one ring stream and excludes offline capture");
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
@@ -1423,8 +1526,8 @@ int run_voice_test(const int count,
                            .color = parameter_max,
                            .varied = false,
                            .serial = false,
-                           .blocks = fixture.idle_midi_enabled ? midi_stream_blocks : 6});
-    } else if (input == VoiceInput::stream || input == VoiceInput::stream_midi) {
+                           .blocks = fixture.stream_block_count()});
+    } else if (stream_profile(input)) {
       stream_matrix(fixture);
     } else if (drive) {
       drive_matrix(fixture);

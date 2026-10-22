@@ -18,12 +18,17 @@ from original_dsp_foreground import row
 from original_dsp_idle_midi import BLOCKS as MIDI_BLOCKS, IdlePipeline
 from original_dsp_idle_midi import negative_controls as midi_negative_controls
 from original_dsp_repeat import BLOCKS, Pipeline, SOUND, negative_controls
+from original_dsp_release_ring import BLOCKS as RELEASE_BLOCKS
+from original_dsp_release_ring import expected_payload as release_payload
+from original_dsp_release_ring import negative_controls as release_negative_controls
 from original_dsp_voice import original_records
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def expected_payload(text, xdata, ydata, program, midi=False):
+def expected_payload(text, xdata, ydata, program, midi=False, release=False):
+    if release:
+        return release_payload(text, xdata, ydata, program)
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
     identity = ('normal', '0', '127', '0', '0')
@@ -68,8 +73,8 @@ def check_monitor(recorded, expected):
     return position
 
 
-def playback(binary, firmware, trace, directory, xdata, ydata, program, midi=False):
-    blocks = MIDI_BLOCKS if midi else BLOCKS
+def playback(binary, firmware, trace, directory, xdata, ydata, program, midi=False, release=False):
+    blocks = RELEASE_BLOCKS if release else MIDI_BLOCKS if midi else BLOCKS
     frames = blocks * 16
     with service(directory) as (daemon, server, env):
         recorded = directory / 'monitor.pcm'
@@ -85,7 +90,8 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program, midi=Fal
                     return bool(outputs.stdout.strip())
 
                 until(ready, daemon, 'the direct original ring monitor')
-                command = [str(binary), str(firmware), str(trace), server, *(['midi'] if midi else [])]
+                option = ['release'] if release else ['midi'] if midi else []
+                command = [str(binary), str(firmware), str(trace), server, *option]
                 result = subprocess.run(command, env=env,
                                         capture_output=True, text=True, check=False,
                                         timeout=240 if env.get('BLOFELD_TEST_SANITIZER') == 'thread' else 90)
@@ -104,15 +110,15 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program, midi=Fal
         require(not (directory / 'monitor.log').read_text(), 'Private monitor failed')
         text = trace.read_text()
         def validator(text, xdata, ydata, program):
-            return expected_payload(text, xdata, ydata, program, midi=midi)
+            return expected_payload(text, xdata, ydata, program, midi=midi, release=release)
 
         expected = validator(text, xdata, ydata, program)
-        controls = midi_negative_controls if midi else negative_controls
+        controls = release_negative_controls if release else midi_negative_controls if midi else negative_controls
         controls(text, xdata, ydata, program, validator=validator)
         position = check_monitor(recorded.read_bytes(), expected)
         return {'passed': True, 'original_foreground_blocks': blocks, 'accepted_frames': frames,
-                'exact_host_frames': frames, 'oracle_negative_controls': 9 if midi else 4,
-                'idle_midi': midi,
+                'exact_host_frames': frames, 'oracle_negative_controls': 10 if release else 9 if midi else 4,
+                'idle_midi': midi, 'release_midi': release,
                 'monitor_offset_bytes': position, 'reference_sample_rate': 48000,
                 'reference_timebase': 24576000, 'fuzz_execution': False, 'physical_audio': False,
                 'scope': 'Direct original controller/foreground/repeating DMA/ESAI frames '
@@ -124,7 +130,9 @@ def playback(binary, firmware, trace, directory, xdata, ydata, program, midi=Fal
 
 def main():
     midi = sys.argv[4:] == ['midi']
-    require(len(sys.argv) == 4 or midi, 'Expected binary, firmware, artifacts and optional midi')
+    release = sys.argv[4:] == ['release']
+    require(len(sys.argv) == 4 or midi or release,
+            'Expected binary, firmware, artifacts and optional midi/release')
     binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:4])
     artifacts.mkdir(parents=True, exist_ok=True)
     report = artifacts / 'result.json'
@@ -143,7 +151,7 @@ def main():
         directory = Path(temporary)
         try:
             result = playback(binary, firmware, artifacts / 'native.trace', directory,
-                              xdata, ydata, program, midi=midi)
+                              xdata, ydata, program, midi=midi, release=release)
             report.write_text(json.dumps(result, indent=2) + '\n')
             print(f"Verified {result['exact_host_frames']} direct original ring frames at the private host audio monitor; "
                   'full boot, realtime playback and live host MIDI remain open.')

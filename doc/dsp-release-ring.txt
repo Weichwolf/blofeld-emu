@@ -1,0 +1,41 @@
+Original MIDI release through foreground, retirement and audio
+
+original_dsp_release_ring executes ten original foreground bodies in eight
+pitch/rounding/filter-route contexts. The original list initializer supplies the
+unused list tail before voice setup. After body2, actual Note Off or zero-velocity
+Note On bytes enter the primary ring during the equal-half wait.
+The original parser gathers the held entry using its aliased Y coefficient
+scratch and replaces the four envelope callbacks. No host updates the slot,
+gain, list, phase, DMA or CPU continuation after rendering begins.
+
+Original factory releases remain0/0/64/64. The first two envelopes truncate
+to0, select retirement on the next call, then become idle. Body5 removes the
+entry through the original collector/owner helper and retains the collection
+flag. Body6 clears it after the empty scan. Four subsequent empty-list bodies
+continue original mix/master/scheduler and continuously enabled DMA/ESAI output.
+The master filter's tail is predicted; silence is not substituted for it.
+
+Independent integer models check48 complete voice returns,80 foreground bodies,
+32 empty bodies, eight retirements and1280 stereo frames. Full envelope/cache
+state, native call counts, source/list/flags, scheduler endpoints, DMA addresses
+and delayed serial halves are checked. Empty bodies must preserve the entire
+retired slot. Ten corrupted trace controls reject. Original program words and
+the automatic-DMA timing refusal remain checked.
+
+original_dsp_ring_release_audio submits one actual decoded ten-body stream to
+AudioRuntime per half;160 independently predicted S32LE frames must match a
+private no-rewind monitor under ASan/UBSan and separately TSan. No trace or
+completed-stream capture supplies the native client.
+
+  cmake --build --preset strict --target blofeld-original-dsp-release-ring-test blofeld-original-dsp-ring-audio-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_(release_ring|ring_release_audio)$'
+
+Reports/traces: Testing/original-dsp-release-ring.* and
+Testing/original-dsp-ring-release-audio/. Missing firmware/tools skip; changed
+identities or native diagnostics fail. Manufacturer bytes remain local.
+
+Scope: declared held entry/readable RAM, zero owners and Effects Off. Untimed
+reference admissions alternate with paused-core serial/grant phases; playback
+starts at EOF below the host prebuffer. Positive allocation, complete boot,
+physical timing, realtime, live host MIDI and hardware equivalence remain open.
+No fuzzing or physical traffic runs.

@@ -18,6 +18,8 @@ identities retain their existing pins; manufacturer traces/assets stay local.
 The separate original_dsp_ring_midi_audio profile extends the same direct path
 to 160 frames with CC7 changes during idle waits; see dsp-idle-midi.txt. The
 original six-block profile and its independent expectations remain in place.
+original_dsp_ring_release_audio follows original release, retirement and four
+later empty bodies through the same160-frame direct path (dsp-release-ring.txt).
 
 This is a short offline producer. Its 96 frames remain below the 4096-frame host
 prebuffer, so playback starts on EOF after native computation. Playback 48kHz and

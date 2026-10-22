@@ -9,7 +9,14 @@ class PcmFrameSink;
 
 namespace blofeld::test {
 struct VoicePcmCapture;
-enum class VoiceInput : std::uint8_t { none, controllers, foreground, stream, stream_midi };
+enum class VoiceInput : std::uint8_t {
+  none,
+  controllers,
+  foreground,
+  stream,
+  stream_midi,
+  stream_release
+};
 
 // External output remains outside peripheral snapshots. Select at most one.
 // A direct sink selects one ring stream; capture retains the selected matrix.

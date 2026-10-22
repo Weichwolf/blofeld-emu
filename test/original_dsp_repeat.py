@@ -25,6 +25,8 @@ class Pipeline:
         self.current = self.target if varied else RESET_LEVEL
         self.pending = True
         self.cursor = 0x2f80 + (7 if varied else 3)
+        self.extra_flags = 0
+        self.service_return = 0x6d4
         self.master = Output(program)
         self.mix = [0] * 32
         self.halves = [[0] * 32, [0] * 32]
@@ -82,12 +84,12 @@ class Pipeline:
             state = row('FOREGROUND_END', text)
             if (state[:4] != [0x198, 1, (block + 1) * 0x4800 * W, 0]
                     or state[4] & WORD_MASK or state[5] != 0x840000 * W + 0x7fffff
-                    or state[6] != 0x6d4):
+                    or state[6] != self.service_return):
                 raise ValueError('FOREGROUND_END idle scheduler registers differ')
         if len(state) != 8 or state[7] & ((1 << 21) | 0xc00) != int(self.twos) << 21:
             raise ValueError('FOREGROUND_END mode differs')
         seed = (voice.seed >> 1) ^ (0x840000 if voice.seed & 1 else 0)
-        check('FOREGROUND_RAM', [(block + 1) * 0x1000, seed, 0x80 if self.pending else 0,
+        check('FOREGROUND_RAM', [(block + 1) * 0x1000, seed, (0x80 if self.pending else 0) | self.extra_flags,
                                 SOUND + 404, self.target, 0, 0x7fffff,
                                 (block + 1) * 0x4800, 0, self.current,
                                 self.cursor, self.cursor,
