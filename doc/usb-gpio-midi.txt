@@ -1,0 +1,44 @@
+Original USB OUT through MCU IRQ, GPIO and the DSP MIDI parser
+
+  cmake --build --preset strict --target blofeld-original-gpio-midi-test
+  ctest --test-dir build/strict -R '^original_usb_gpio_midi$' --output-on-failure
+
+The local original 1.25 archive, full MCU image, OUT ISR and sender/strobe spans,
+all 127 DSP records and the four complete executing DSP programs are hash pinned.
+usb-gpio-midi-reference.json contains identities and independent coverage totals;
+manufacturer code and native traces remain local references.
+
+Four actual decoded 64-byte OUT packets enter the modeled endpoint. The host
+advances its payload cursor/PID only after ACK and verifies unchanged ownership
+and PID on NAK. No received payload or own caller is written to MCU RAM. Original
+vector entry, OUT ISR, forwarder and GPIO strobes alone deliver 160 MIDI bytes to
+the original DSP IRQA producer, secondary-ring consumer and pitch callback.
+After each native endpoint release the next packet can queue before RTI. The
+first interrupt pushes the independently checked nine-byte foreground frame;
+three actual original RTIs reuse that frame for the next OUT. Every retired
+instruction, maximum 22-byte stack, restored foreground register, flag, endpoint
+state, ring cell/cursor, timestamp, interrupted DSP state and pitch is checked.
+
+Twelve fixed profiles cross two declared J0/IRQA polarities, instruction ratios
+1/2/4 and omni/channel-5 filters. All sixteen MIDI channels send min/center/max
+pitch plus F8. There are 1920 profile bytes, 192 timestamps, 306 pitch callbacks,
+48 accepted packets/MCU OUT interrupts and 36 actual RTI frame reuses. Per profile,
+independent native MCU counts are 4*14 ISR + 4*15 forwarder entry + 48*101 triple
++ 16*51 clock + 4*8 return + 2*4 alternate phase = 5820. The unchanged GPIO ISR
+executes 19*160 + 2*16 = 3072 steps. Replay suffixes are counted separately.
+
+One joint MCU/DSP snapshot inside an actual parser interrupt and partial message
+replays whole CPU/debug state, all declared MCU RAM, all USB local-buffer values
+and unknownness, watched DSP RAM and host packet/backpressure bookkeeping. All
+5120 declared MCU RAM bytes are guarded except original stack/flag writes. The
+original code clears only the accepted USB headers; other local buffers retain
+their prior values/unknownness. NVM bytes/knowledge/history and all four original
+DSP programs remain unchanged. Tests are deterministic and offline, without fuzzing.
+
+A valid endpoint is deliberately preconfigured through the existing own USB
+fixture; original cold boot and enumeration are not executed. Mapped DSP memory,
+registers, RAM, GPIO directions/IRQA and the isolated Q/C mapping are declared
+inputs shared with gpio-midi.txt. Both pin polarities and untimed instruction
+ratios remain hypotheses. USTB/NISOF, electrical timing/routing, F4 turnaround,
+voice allocation/audio, full update/recovery and real hardware comparison remain
+open. No physical-device traffic or programming occurs.

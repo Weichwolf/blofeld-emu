@@ -390,6 +390,17 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           and six strict input faults (usb-peer.txt).
                                           Own GPIO/endpoint/caller prerequisites
                                           and untimed execution remain explicit.
+                                          The shared GPIO/parser fixture adds 12
+                                          actual decoded OUT profiles with 48
+                                          accepted packets/MCU interrupts, 36 RTI
+                                          frame reuses and one joint in-flight
+                                          snapshot replay (usb-gpio-midi.txt).
+                                          Original ISR/strobes deliver 1920 bytes,
+                                          192 F8 stamps and 306 pitch callbacks;
+                                          all declared MCU RAM/USB buffers and
+                                          NVM/history remain guarded. Own valid
+                                          endpoint setup excludes cold boot and
+                                          enumeration/USTB/NISOF qualification.
                                           A failed unretired HC12 step now rejects
                                           retry before another bus access; native
                                           partial prefixes remain visible until
@@ -529,15 +540,24 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           uses its unchanged vector/producer for
                                           255 fixed values, including F8 timestamp
                                           and real ring wrap (dsp-gpio-input.txt).
+                                          Original MCU frame/USB-event senders,
+                                          GPIO IRQA and secondary-ring parser/
+                                          pitch callback execute together in 20
+                                          fixed profiles (gpio-midi.txt). Ring
+                                          wrap, running status, channel filtering,
+                                          actual parser preemption and two joint
+                                          native owner snapshot replays checked.
+                                          The 12 actual USB OUT/ISR profiles above
+                                          also use this shared DSP/parser fixture.
                                           F4 native requests cover four immediate
                                           source routes, deferred-tag publication,
                                           both waits, unknown sources/pins and
-                                          contention in 22 fixed cases with 59 joint
-                                          restores (dsp-gpio-request.txt). Later
-                                          deferred queue/bulk response, actual MCU
-                                          GPIO sender, initializer/DMA execution,
-                                          physical route/clock and full parser/
-                                          update chain remain open.
+                                          contention in 22 cases with 59 joint
+                                          restores (dsp-gpio-request.txt). Original
+                                          initializer/DMA execution, physical
+                                          route/clock, board-level F4 turnaround,
+                                          later deferred queue/bulk response,
+                                          voice/audio and full update remain open.
                                           Explicitly floating C0..11 pads use
                                           documented weak pull-downs; unobserved
                                           pins, cold output latches and unmodeled

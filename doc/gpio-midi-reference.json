@@ -1,0 +1,61 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "records": [
+    {
+      "record": 50,
+      "space": 0,
+      "address": 2056,
+      "words": 351,
+      "sha256": "d89ff1a134a3a9684fdc3c8b66bd44fb81ad8621e3f3188ef5064f10a67fc288"
+    },
+    {
+      "record": 52,
+      "space": 0,
+      "address": 2407,
+      "words": 1092,
+      "sha256": "603cd0a98101a15a7994a2d9f2d946f39890865ebf566f84161a7d9cf0a2dc5f"
+    },
+    {
+      "record": 107,
+      "space": 0,
+      "address": 16,
+      "words": 2,
+      "sha256": "22089578d5b848a5f8efb09337f0c7da1853f51d81cd60a906c893b69826ce43"
+    },
+    {
+      "record": 109,
+      "space": 0,
+      "address": 9826,
+      "words": 182,
+      "sha256": "88a6198abf9301809729a6e7cfb8134d4a550700b005424968a89895873a98bd"
+    }
+  ],
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [
+    {
+      "entry": 47216,
+      "bytes": 64,
+      "sha256": "a2acc005c60710d619c9926023de82f8d4328e4b2d503f8845cbda5f788e3bc3"
+    },
+    {
+      "entry": 47280,
+      "bytes": 136,
+      "sha256": "cd18e553d60c3345aaf4e26572643d7a500dae6fea910e584923cad47288d6db"
+    },
+    {
+      "entry": 46800,
+      "bytes": 12,
+      "sha256": "a6ad58e9bc0df022e953617f2c2f887fa2ffe1366e64cd7e503ae83a0b61fa7d"
+    }
+  ],
+  "expected": {
+    "profiles": 20,
+    "replays": 2,
+    "slow_rejections": 1,
+    "profile_bytes": 2944,
+    "profile_clocks": 320,
+    "profile_callbacks": 510,
+    "profile_producer_steps": 56576
+  },
+  "qualification": "Unchanged native MCU frame/USB-event sender and strobe, original DSP IRQA vector/GPIO producer, secondary-ring consumer and pitch callback under own native caller/RAM/map/GPIO/priority settings. Explicit isolated Q/C data mapping, both J0/IRQA polarities and fixed untimed instruction ratios are laboratory hypotheses. Ring wrap, running status, channel filtering, original F8 timestamps, actual IRQ/frame/RTI preemption, protected program images, complete declared MCU RAM and NVM/history, and joint trusted owner snapshot replay are checked independently. Full original boot/initializer, actual USB endpoint/ISR entry, calibrated physical timing/routing, F4, voice/audio, full update/recovery and real Desktop/Keyboard equivalence remain unqualified."
+}

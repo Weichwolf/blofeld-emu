@@ -32,3 +32,10 @@ a board default or a successful whole-request release here.
 
 The separate conditional original F4 component gate is described in
 dsp-gpio-request.txt; it does not establish that board-level path.
+
+The separate original_gpio_midi integration (gpio-midi.txt) adds native MCU
+senders, the original secondary-ring consumer/pitch callback and joint owner
+snapshot replay under explicitly declared caller/wiring/interleaving profiles.
+
+The same fixture also checks actual modeled OUT packets through the original MCU
+ISR (original_usb_gpio_midi; usb-gpio-midi.txt), under own valid endpoint setup.
