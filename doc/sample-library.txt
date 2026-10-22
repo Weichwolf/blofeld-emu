@@ -86,6 +86,22 @@ expectations remain unchanged. Own finite codec/segment controls always run;
 the reference comparison skips explicitly when official local assets are absent.
 These checks execute no Spectre client instructions or device transactions.
 
+  python3 tools/wpc_catalogue.py
+  ctest --test-dir build/strict -R '^wpc_catalogue(_reference)?$' --output-on-failure
+
+The bounded logical reader checks 41 programs, 136 unique sample streams and
+12,264,746 BE16 PCM frames, including 105 loop starts and seven declared rates.
+Program key ranges, header/data/loop extents and exact PCM identities follow the
+original Spectre reader interpretation; 22 own directed rejection controls cover
+truncation, invalid references/loops and resource limits. Each stream begins with
+225 inline frames, then 264 frames per data page. Only logical sample frames enter
+its hash; the original client's additional interpolation lookahead is separate.
+Input and aggregate PCM analysis are each limited to 64 MiB, with 128 programs;
+these are diagnostic resource limits, not hardware capacities. Names, PCM and
+detailed client analysis stay local. This supplies reference identities, not an
+editor import, original client execution or firmware playback. Existing whole-page
+WPC/MIDI mismatch counts and unqualified physical mappings remain unchanged.
+
 Original WPC catalog/sample semantics, physical page/spare/ECC contents,
 bad-block handling and flash history remain unqualified. Neither the XOR codec
 nor the matching subsets identify a complete physical NAND image.

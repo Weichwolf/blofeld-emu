@@ -92,8 +92,12 @@ Standard sample library           partial  Official MIDI/WPC download and contai
                                           page decoding now identifies 29117 exact
                                           WPC/MIDI page matches and 17475 unresolved
                                           WPC pages (wpc_reference); masks/assets
-                                          stay local. Complete catalog/physical
-                                          NAND mapping remains unqualified.
+                                          stay local. Logical WPC catalogue/PCM
+                                          identities cover 41 programs, 136 sample
+                                          streams and 12264746 frames with bounded
+                                          key/data/loop spans. Native client
+                                          execution and complete physical NAND
+                                          mapping remain unqualified.
                                           Routine original_sample_preparation
                                           checks all 1488 groups/47616 pages and
                                           25141248 independent bytes under declared

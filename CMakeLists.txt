@@ -1205,6 +1205,12 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_reference.py"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/wpc-reference.json")
   set_tests_properties(wpc_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_test(NAME wpc_catalogue COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_catalogue_test.py" --synthetic)
+  add_test(NAME wpc_catalogue_reference COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_catalogue_test.py"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/wpc-catalogue.json")
+  set_tests_properties(wpc_catalogue_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-coupled-boot-test test/original_coupled_boot_test.cpp
     test/coupled_boot_fixture.cpp)
   target_link_libraries(blofeld-coupled-boot-test PRIVATE blofeld_core blofeld_dsp)
