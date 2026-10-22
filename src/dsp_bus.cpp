@@ -34,6 +34,9 @@ constexpr unsigned msw = 0x600000;
 constexpr unsigned switch_cycles = 3;
 constexpr unsigned bcr_reset = 0x1fffff;
 constexpr unsigned port_f_bus_control = 0x01ffff;
+constexpr unsigned dma_first_vector = 0x18;
+constexpr unsigned dma_last_vector = 0x22;
+constexpr unsigned dma_channels = 6;
 
 std::uint32_t
 change_bit(const std::uint32_t value, const std::uint32_t mask, const DspBitOperation operation) {
@@ -392,6 +395,10 @@ std::optional<DspInterruptRequest> DspBus::interrupt_request(const unsigned mask
   std::vector<std::uint32_t> pending;
   const auto irqa = interrupts_.irqa_request(mask);
   if (irqa) { pending.push_back(irqa->vector); }
+  const auto dma = dma_.interrupt_sources();
+  for (unsigned channel = 0; channel < dma_channels; ++channel) {
+    if ((dma & (1U << channel)) != 0) { pending.push_back(dma_first_vector + (2 * channel)); }
+  }
   const auto shi_level = interrupts_.priority(shi_receive);
   if (shi_level && *shi_level >= mask) {
     const auto shi = shi_.interrupt_vectors();
@@ -413,6 +420,9 @@ bool DspBus::interrupt_source_pending(const DspInterruptRequest request) const {
   constexpr unsigned irqa_vector = 0x10;
   constexpr unsigned first_timer = 0x54;
   if (request.vector == irqa_vector) { return interrupts_.irqa_request(request.level) == request; }
+  if (request.vector >= dma_first_vector && request.vector <= dma_last_vector) {
+    return (dma_.interrupt_sources() & (1U << ((request.vector - dma_first_vector) / 2))) != 0;
+  }
   const auto pending =
       request.vector >= first_timer ? timers_.interrupt_vectors() : shi_.interrupt_vectors();
   return std::ranges::find(pending, request.vector) != pending.end();
@@ -456,6 +466,8 @@ void DspBus::acknowledge_latched_interrupt(const DspInterruptRequest request) {
   }
   if (request.vector == irqa_vector) {
     interrupts_.acknowledge_irqa();
+  } else if (request.vector >= dma_first_vector && request.vector <= dma_last_vector) {
+    dma_.acknowledge_interrupt((request.vector - dma_first_vector) / 2);
   } else if (request.vector >= first_timer) {
     timers_.acknowledge_interrupt(request.vector);
   }

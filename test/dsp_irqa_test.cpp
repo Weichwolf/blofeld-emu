@@ -133,7 +133,7 @@ void test_register_rejections() {
   DspInterrupts controller;
   controller.observe_irqa(true);
   controller.write(iprc, edge_ipl1);
-  for (const auto value : {8U, 0x4000U, 0x1000000U, 2U}) {
+  for (const auto value : {8U, 0x40U, 0x1000000U, 2U}) {
     static_cast<void>(rejects([&] { controller.write(iprc, value); },
                               "Unsupported fields/live trigger-mode changes must reject"));
     require(controller.read(iprc) == edge_ipl1, "A rejected change preserves IPRC");

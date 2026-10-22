@@ -52,6 +52,11 @@ Peer::Peer(const Firmware &firmware, const Scenario scenario, const Source &sour
       source_(source),
       machine_(McuFlashImage::from_known(firmware.mcu), BLOFELD_DEFAULT_SLA) {
   prepare();
+  if (scenario_.transport == Transport::endpoint) {
+    before_buffers_ = endpoint_buffers();
+    evidence_ = machine_.bus().usb_host_evidence();
+    configuration_ = machine_.bus().usb_host_configuration();
+  }
   flash_ = machine_.bus().power_off_flash_image();
   for (unsigned address = ram_begin; address < ram_end; ++address) {
     before_.push_back(machine_.bus().read(static_cast<std::uint16_t>(address)));
@@ -74,6 +79,10 @@ void Peer::prepare() {
   bus.set_pin_drive(McuPort::q, {.floating = all_bits});
   for (const auto address : {activity, midi_activity, transfer_flags}) {
     bus.write(static_cast<std::uint16_t>(address), 0);
+  }
+  if (scenario_.transport == Transport::endpoint) {
+    prepare_endpoint();
+    return;
   }
   require(data + source_.storage.size() < midi_activity, "Own source stays below native flags");
   for (unsigned index = 0; index < source_.storage.size(); ++index) {
@@ -129,6 +138,10 @@ void Peer::synchronize(DspBus &dsp) {
 }
 
 void Peer::step() {
+  if (scenario_.transport == Transport::endpoint) {
+    step_endpoint();
+    return;
+  }
   require(steps_ < instruction_limit, "Unchanged native sender must terminate within its bound");
   const auto before = machine_.cpu().state();
   const auto pc = before.pc;
@@ -154,7 +167,8 @@ void Peer::step() {
 }
 
 bool Peer::done() const {
-  return machine_.cpu().state().pc == finished_;
+  return scenario_.transport == Transport::endpoint ? endpoint_done()
+                                                    : machine_.cpu().state().pc == finished_;
 }
 
 unsigned Peer::byte(const unsigned index) const {
@@ -166,7 +180,12 @@ Peer::Saved Peer::save() const {
           .steps = steps_,
           .calls = calls_,
           .transitions = transitions_,
-          .irq = last_irq_};
+          .irq = last_irq_,
+          .cursor = cursor_,
+          .data1 = data1_,
+          .usb_irqs = usb_irqs_,
+          .naks = naks_,
+          .frame_reuses = frame_reuses_};
 }
 
 void Peer::restore(const Saved &saved) {
@@ -175,9 +194,18 @@ void Peer::restore(const Saved &saved) {
   calls_ = saved.calls;
   transitions_ = saved.transitions;
   last_irq_ = saved.irq;
+  cursor_ = saved.cursor;
+  data1_ = saved.data1;
+  usb_irqs_ = saved.usb_irqs;
+  naks_ = saved.naks;
+  frame_reuses_ = saved.frame_reuses;
 }
 
 void Peer::verify() {
+  if (scenario_.transport == Transport::endpoint) {
+    verify_endpoint();
+    return;
+  }
   auto &bus = machine_.bus();
   const bool usb = scenario_.transport == Transport::usb;
   const auto expected_flags = usb ? multibyte | alternate_phase : 0U;
@@ -222,6 +250,8 @@ Peer::Result Peer::result() {
   Result result{.cpu = {state.pc, state.d, state.x, state.y, state.sp, state.ccr},
                 .ram = {},
                 .ports = {},
+                .buffers = {},
+                .usb = {},
                 .steps = steps_,
                 .calls = calls_,
                 .transitions = transitions_};
@@ -236,6 +266,7 @@ Peer::Result Peer::result() {
                   bus.observe_pads(McuPort::t, 3).levels,
                   q.known,
                   q.levels};
+  if (scenario_.transport == Transport::endpoint) { endpoint_result(result); }
   return result;
 }
 }

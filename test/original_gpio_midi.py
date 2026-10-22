@@ -59,8 +59,7 @@ def validate(text, expected):
     return totals
 
 
-def main():
-    binary, firmware, trace = map(Path, sys.argv[1:])
+def run(binary, firmware, trace, reference_name, validator, arguments=()):
     trace.parent.mkdir(parents=True, exist_ok=True)
     report = trace.with_suffix('.json')
     for path in (trace, report, trace.with_suffix('.log')):
@@ -68,7 +67,7 @@ def main():
     if not firmware.is_file():
         print('SKIP native GPIO/MIDI: private original firmware absent')
         return 77
-    reference = json.loads((ROOT / 'doc/gpio-midi-reference.json').read_text())
+    reference = json.loads((ROOT / 'doc' / reference_name).read_text())
     complete = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
     original_records(firmware, complete)
     original_mcu(firmware, reference)
@@ -77,20 +76,25 @@ def main():
     for record in reference['records']:
         if record != complete['records'][record['record']]:
             raise ValueError('Changed final complete original GPIO/parser record selection')
-    result = subprocess.run([str(binary.resolve()), str(firmware.resolve()), str(trace.resolve())],
+    result = subprocess.run([str(binary.resolve()), str(firmware.resolve()), str(trace.resolve()), *arguments],
                             check=False, capture_output=True, text=True, timeout=280)
     diagnostics = result.stdout + result.stderr
     trace.with_suffix('.log').write_text(diagnostics)
     if result.returncode or any(marker in diagnostics for marker in (
             'AddressSanitizer', 'LeakSanitizer', 'UndefinedBehaviorSanitizer', 'runtime error:')):
         raise ValueError(f'Original native GPIO/MIDI integration failed: {diagnostics}')
-    totals = validate(trace.read_text(), reference['expected'])
+    totals = validator(trace.read_text(), reference['expected'])
     report.write_text(json.dumps({'passed': True, **totals,
                                   'trace_sha256': hashlib.sha256(trace.read_bytes()).hexdigest(),
                                   'qualification': reference['qualification'],
                                   'fuzz_execution': False, 'physical_traffic': False}, indent=2) + '\n')
-    print('Verified 20 original native MCU/GPIO/parser profiles and two joint snapshot replays')
+    print(f"Verified {totals['profiles']} original native MCU/GPIO/parser profiles and "
+          f"{totals['replays']} joint snapshot replays")
     return 0
+
+
+def main():
+    return run(*map(Path, sys.argv[1:]), 'gpio-midi-reference.json', validate)
 
 
 if __name__ == '__main__':

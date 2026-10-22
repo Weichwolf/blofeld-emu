@@ -11,6 +11,7 @@
 #include <iostream>
 #include <ostream>
 #include <string>
+#include <string_view>
 
 namespace blofeld::test::gpio_midi {
 namespace {
@@ -44,12 +45,13 @@ void packet(Source &source, const std::array<unsigned, 4> bytes) {
 
 Source make_source(const Scenario scenario) {
   Source source;
+  const auto padding = scenario.transport == Transport::endpoint ? 0U : unused_padding;
   for (unsigned channel = 0; channel < channels; ++channel) {
     if (scenario.transport == Transport::frame) { append(source, pitch_status | channel); }
     for (const auto value : {0U, center, highest}) {
       const auto lsb = value & data_mask;
       const auto msb = value >> 7U;
-      if (scenario.transport == Transport::usb) {
+      if (scenario.transport != Transport::frame) {
         append(source, pitch_status | channel);
         packet(source, {pitch_header, pitch_status | channel, lsb, msb});
       }
@@ -62,8 +64,8 @@ Source make_source(const Scenario scenario) {
       }
     }
     append(source, clock_byte);
-    if (scenario.transport == Transport::usb) {
-      packet(source, {clock_header, clock_byte, unused_padding, unused_padding});
+    if (scenario.transport != Transport::frame) {
+      packet(source, {clock_header, clock_byte, padding, padding});
     }
   }
   if (scenario.transport == Transport::frame) {
@@ -112,7 +114,28 @@ void run_case(const Firmware &firmware, const Scenario scenario, std::ostream &t
         << " clocks=" << stats.timestamps << " callbacks=" << stats.callbacks
         << " pitches=" << stats.pitches << " producer-steps=" << stats.producer_steps
         << " mcu-steps=" << result.peer.steps << " transitions=" << result.peer.transitions
-        << " preemptions=" << stats.preemptions << " replay=" << checkpoint << '\n';
+        << " preemptions=" << stats.preemptions << " replay=" << checkpoint;
+  if (scenario.transport == Transport::endpoint) {
+    trace << " usb-packets=" << result.peer.calls << " usb-irqs=" << result.peer.usb[3]
+          << " usb-naks=" << result.peer.usb[4] << " mcu-frame-reuses=" << result.peer.usb[5];
+  }
+  trace << '\n';
+}
+
+void endpoint_profiles(const Firmware &firmware, std::ostream &trace) {
+  for (const auto inverted : {false, true}) {
+    for (const auto ratio : {1U, 2U, 4U}) {
+      for (const auto channel : {0U, channel_selector}) {
+        run_case(firmware,
+                 {.transport = Transport::endpoint,
+                  .inverted = inverted,
+                  .ratio = ratio,
+                  .channel = channel},
+                 trace);
+      }
+    }
+  }
+  trace << "RESULT endpoint-profiles=12 joint-replays=1\n";
 }
 
 void slow_profile_rejects(const Firmware &firmware, std::ostream &trace) {
@@ -135,11 +158,17 @@ void slow_profile_rejects(const Firmware &firmware, std::ostream &trace) {
 int main(const int count, char **arguments) {
   using namespace blofeld::test::gpio_midi;
   try {
-    require(count == 3, "Usage: original-gpio-midi firmware.zip private.trace");
+    const bool endpoint = count == 4 && std::string_view(arguments[3]) == "endpoint";
+    require(count == 3 || endpoint,
+            "Usage: original-gpio-midi firmware.zip private.trace [endpoint]");
     const auto firmware = blofeld::Firmware::load(std::filesystem::path(arguments[1]));
     std::ofstream trace(arguments[2]);
     require(trace.is_open(), "Cannot create private GPIO/MIDI integration trace");
     trace.exceptions(std::ios::failbit | std::ios::badbit);
+    if (endpoint) {
+      endpoint_profiles(firmware, trace);
+      return 0;
+    }
     for (const auto transport : {Transport::frame, Transport::usb}) {
       for (const auto inverted : {false, true}) {
         for (const auto ratio : {1U, 2U, 4U}) {

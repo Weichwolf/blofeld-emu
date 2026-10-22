@@ -1,0 +1,46 @@
+DSP56371 DMA interrupt events and native service
+
+  cmake --build --preset strict --target blofeld-dsp-dma-interrupt-test
+  ctest --test-dir build/strict -R '^(dsp_dma_interrupts|dsp_dma|dsp_interrupts|dsp_irqa|dsp_checkpoint)$' --output-on-failure
+
+Primary references: DSP56300FM Rev5 table10-5 (DIE), table10-10 (DTD), and
+section2.3.2; DSP56371UM Rev2.1 figures4-1/4-2 and tables4-4/4-5/4-6.
+URLs, sizes and hashes are retained in hardware/sources.json; PDFs remain local.
+
+IPRC bits12..23 contain six independent two-bit DMA IPL fields. Encoding0
+disables; 1/2/3 select IPL0/1/2. Relative vectors18/1a/1c/1e/20/22 identify
+DMA0..5. Within equal IPL, IRQA precedes DMA0..5, which precede SHI and TIM.
+The original initializer's4006 selects IRQA edge IPL1 and DMA1 IPL0; it is
+accepted through modeled fields rather than an ignored initialization write.
+
+DIE in DCR bit22 enables end-of-block interrupts. An actual final destination
+store and counter reload latch the request. Explicit DE clear also requests
+service, after a captured word finishes its destination phase. A source read,
+denied grant or failed destination cannot assert completion. The six independent
+latches are not derived from reset DTD=1 or the repeating-mode DTD lifetime,
+which remains unqualified. Repeated completions coalesce in the pending latch.
+
+Native vector service acknowledges the selected channel after both vector words
+are fetched, clearing its captured request without clearing DTD or other channels.
+DIE gates delivery;
+clearing it does not erase an already captured request. Enabling DIE over an
+uncaptured old done status does not invent an end-of-block event. Reset clears
+the latches. Trusted machine snapshots retain both DMA phase and IRQ state.
+The conservative admitted/reference-vector source-hold checks also apply to
+DMA; a withdrawn/changed source before acknowledgement requires coordinated
+recovery rather than a fabricated successful service.
+
+Fixed tests cover every field/CPU mask, all channel priority pairs, IRQA/DMA/
+SHI/TIM tie order, all six channels in modes1/2/3/5 with DIE on/off, one- and
+two-word block boundaries/counter reload, destination
+wait/failure, explicit stop before/after a captured word, live DIE changes,
+reset/copy, repeated events, and actual native fast/long vectors with real RTI.
+Joint snapshots retain held data and pending requests; missing vector words and
+suspended acknowledgement retain strict failures and recover through snapshots.
+
+This extends the explicit standalone DMA reference phases, not automatic
+native core/DMA bus arbitration. DCON/other transfer modes, missing inputs,
+reserved accesses, unknown repeating DTD and unsupported physical timing still
+fail. A successful priority write does not establish original initialization,
+full MCU/DSP boot, live USB-MIDI, audio or hardware equivalence. No fuzzing or
+physical traffic is run by these fixed regressions.

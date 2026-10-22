@@ -92,7 +92,7 @@ void strict_inputs_and_configuration() {
   }
   static_cast<void>(rejects([&] { test.dma.write(control0, word_copy | 0x20000); }));
   constexpr std::array unsupported{
-      0xc80244U, 0x890244U, 0x800244U, 0x88ba44U, 0x880264U, 0x880247U, 0x88024cU, 0xa8b634U};
+      0xc90244U, 0x890244U, 0x800244U, 0x88ba44U, 0x880264U, 0x880247U, 0x88024cU, 0xa8b634U};
   for (const auto control : unsupported) {
     DspDma invalid;
     configure(invalid, word_copy & ~enable);

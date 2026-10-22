@@ -41,6 +41,8 @@ constexpr unsigned clock_byte = 0xf8;
 constexpr unsigned byte_values = 256;
 constexpr unsigned last_byte = 255;
 constexpr unsigned limit = 128;
+constexpr unsigned original_irq_priorities = 0x4006; // IRQA edge IPL1 and DMA1 IPL0.
+constexpr unsigned irq_priority_register = 0xffffff;
 
 void install(DspBus &bus, const Firmware &firmware) {
   unsigned programs = 0;
@@ -97,7 +99,7 @@ public:
     program.emit("movep #>$f00,x:<<$ffffbe");
     program.emit("movep #>0,x:<<$ffffbd");
     program.emit("movep #>$ff,x:<<$ffffbf");
-    program.emit("movep #>6,x:<<$ffffff");
+    program.emit("movep #>" + blofeld::test::number(original_irq_priorities) + ",x:<<$ffffff");
     foreground_ = program.pc();
     program.emit("nop");
     program.install(bus);
@@ -106,6 +108,10 @@ public:
       if (machine_.cpu().state().pc == mapped) { bus.advance_instruction_cycles(3); }
       machine_.cpu().step();
     }
+    require(bus.read({.space = DspSpace::x, .address = irq_priority_register}) ==
+                    original_irq_priorities &&
+                !bus.interrupt_request(0),
+            "Native priority setup retains original4006 without fabricating reset DMA events");
   }
 
   void run(std::ostream &trace) {

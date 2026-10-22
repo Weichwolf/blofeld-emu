@@ -6,6 +6,7 @@
 #include "blofeld/firmware.hpp"
 #include "blofeld/flash_image.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/mcu_usb.hpp"
 
 #include <array>
 #include <cstdint>
@@ -21,7 +22,7 @@ inline constexpr unsigned field_seed = 0x13579b;
 inline constexpr unsigned clock_count = 16;
 using Bytes = std::vector<std::uint8_t>;
 
-enum class Transport : std::uint8_t { frame, usb };
+enum class Transport : std::uint8_t { frame, usb, endpoint };
 
 struct Scenario {
   Transport transport;
@@ -48,12 +49,19 @@ public:
     unsigned calls;
     unsigned transitions;
     std::optional<bool> irq;
+    unsigned cursor = 0;
+    bool data1 = false;
+    unsigned usb_irqs = 0;
+    unsigned naks = 0;
+    unsigned frame_reuses = 0;
   };
 
   struct Result {
     std::array<unsigned, 6> cpu;
     Bytes ram;
     std::array<unsigned, 7> ports;
+    std::vector<unsigned> buffers;
+    std::array<unsigned, 6> usb{};
     unsigned steps;
     unsigned calls;
     unsigned transitions;
@@ -73,6 +81,14 @@ public:
 
 private:
   void prepare();
+  void prepare_endpoint();
+  void submit();
+  void check_usb_frame();
+  void step_endpoint();
+  [[nodiscard]] bool endpoint_done() const;
+  void verify_endpoint();
+  [[nodiscard]] std::vector<unsigned> endpoint_buffers();
+  void endpoint_result(Result &result);
   Scenario scenario_;
   const Source &source_;
   McuMachine machine_;
@@ -83,6 +99,14 @@ private:
   unsigned calls_ = 0;
   unsigned transitions_ = 0;
   std::optional<bool> last_irq_;
+  unsigned cursor_ = 0;
+  bool data1_ = false;
+  unsigned usb_irqs_ = 0;
+  unsigned naks_ = 0;
+  unsigned frame_reuses_ = 0;
+  std::vector<unsigned> before_buffers_;
+  UsbHostEvidence evidence_;
+  UsbConfigurationInfo configuration_;
 };
 
 struct Stats {

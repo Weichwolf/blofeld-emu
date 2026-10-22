@@ -65,6 +65,9 @@ public:
   void write(unsigned address, std::uint32_t value);
   [[nodiscard]] std::uint32_t requested_sources() const;
   [[nodiscard]] bool active() const;
+  // End-of-block requests latch independently of DTD's repeating-mode lifetime.
+  [[nodiscard]] std::uint8_t interrupt_sources() const;
+  void acknowledge_interrupt(unsigned channel);
   [[nodiscard]] std::optional<DspDmaWord> advance(DspDmaInputs inputs, const DspDmaIo &io);
 
 private:
@@ -80,6 +83,7 @@ private:
     bool done = true;
     bool done_known = true;
     bool first_sample = false;
+    bool interrupt_pending = false;
   };
 
   struct Layout {

@@ -38,6 +38,10 @@ IRQA edge IPL1, MCU GPIO/latch/RAM state and inactive MCU IRQ/XIRQ observations.
 Q[7:0]/C[7:0] form an explicit isolated data candidate; released inputs resolve
 qualified DSP weak pull-downs. Both strobe polarities and instruction ratios
 remain hypotheses. This has no physical synchronizer or common-clock calibration.
-Actual USB endpoint/ISR entry, original initializer/boot/DMA, F4 turnaround,
+Original initializer/boot/DMA, F4 turnaround,
 allocated voices/audio, full update/recovery and real Desktop/Keyboard comparison
 remain required. No physical-device traffic or programming occurs.
+
+The separate original_usb_gpio_midi test (usb-gpio-midi.txt) supplies real modeled
+OUT/PID/backpressure and original MCU ISR entry to this same DSP/board fixture.
+Its preconfigured endpoint does not qualify original startup or enumeration.

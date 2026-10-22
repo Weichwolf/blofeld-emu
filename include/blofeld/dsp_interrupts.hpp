@@ -12,7 +12,7 @@ struct DspInterruptRequest {
   bool operator==(const DspInterruptRequest &) const = default;
 };
 
-// DSP56371 IRQA/SHI/TIM priorities. Other enabled sources fail.
+// DSP56371 IRQA/DMA/SHI/TIM priorities. Other enabled sources fail.
 class DspInterrupts {
 public:
   void reset();

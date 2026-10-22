@@ -9,8 +9,10 @@ complete unchanged GPIO input program. Record identities are in
 dsp-gpio-input-reference.json. Firmware bytes and execution traces stay ignored.
 
 An own native caller declares the mapped P/X context, linear modifiers, saved
-registers, GPIO input modes and IRQA IPL1/falling-edge control. Logical external
-observations supply each byte and its IRQ transition. Native vector/JSR, original
+registers, GPIO input modes and IRQA IPL1/falling-edge control. The own caller
+writes the original IPRC value0x4006, including DMA1 IPL0; all DMA channels retain
+reset state, so no completion event is fabricated. Logical external observations
+supply each byte and its IRQ transition. Native vector/JSR, original
 producer instructions and RTI perform the actual transfer; the host does not
 write received data, set a queue result or replace CPU/frame state.
 
@@ -22,7 +24,7 @@ boundaries, timestamp, saved foreground state and genuine frame/return.
 The original 182-word record is retained, not rewritten to a simplified receiver.
 
 This qualifies a GPIO-producer component, not a native MCU sender or physical
-MIDI wire. The preceding original initializer/DMA priority, true pin routing,
+MIDI wire. The preceding original initializer/actual DMA execution, true pin routing,
 clock/synchronizer timing, F4 request/response, parser dispatch, full original
 boot, normal MIDI/audio and complete update/recovery remain open. In particular,
 the separate first-helper experiment's static high ACK observation is not made
@@ -31,3 +33,6 @@ a board default or a successful whole-request release here.
 The separate original_gpio_midi integration (gpio-midi.txt) adds native MCU
 senders, the original secondary-ring consumer/pitch callback and joint owner
 snapshot replay under explicitly declared caller/wiring/interleaving profiles.
+
+The same fixture also checks actual modeled OUT packets through the original MCU
+ISR (original_usb_gpio_midi; usb-gpio-midi.txt), under own valid endpoint setup.

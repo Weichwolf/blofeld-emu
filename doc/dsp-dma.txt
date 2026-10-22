@@ -12,9 +12,12 @@ Counter modes A/B/C/D/E, independent source/destination address modes, modular
 24-bit addressing and counter reloads follow tables10-2/3/4/6/7/8/9. Offsets replace
 the ordinary increment at a line/plane boundary. DE clear retains a captured word
 request and an already-read word until its real destination access completes.
-Busy address/counter/offset/configuration changes reject. Word modes1/5,
+Busy address/counter/offset/configuration changes reject; DIE may change without
+reconfiguring a transfer. Word modes1/5,
 request-driven line mode2 and software-triggered block mode3 are supported;
-other modes, DIE and DCON reject when enabled. Unknown preloads, reserved
+other modes and DCON reject when enabled. DIE enables real end-of-block and
+explicit-stop interrupt events on each channel (dsp-dma-interrupts.txt).
+Unknown preloads, reserved
 spaces/modes/request sources and missing
 inputs fail visibly. Reset DSTR is00003f; DE's DTD clear has the documented three
 additional reference-cycle delay. Repeating-mode DTD lifetime after a block is

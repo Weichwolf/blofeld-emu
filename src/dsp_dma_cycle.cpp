@@ -126,6 +126,7 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
   const bool disabled = (channel.control & dma::enable) == 0;
   if (last && mode(channel) != 5) { channel.control &= ~dma::enable; }
   if (last || disabled) {
+    if ((channel.control & dma::interrupt) != 0) { channel.interrupt_pending = true; }
     channel.settling = 0;
     channel.done = true;
     // The manual does not pin the repeating-mode DTD lifetime between triggers.

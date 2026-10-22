@@ -205,7 +205,7 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Compare/reload-boundary TRM changes
                                           remain explicitly unqualified.
                                           Native ready polls and RESET checked.
-                                          SHI/TIM IPRP arbitration, CPU masking,
+                                          IRQA/SHI/TIM priority arbitration, CPU masking,
                                           native fast/long and nested entry,
                                           exact JSR/RTI frames, VBA relocation and
                                           DO/REP interaction checked
@@ -213,7 +213,11 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           access continuation admits vector words,
                                           acknowledgement and native effects once;
                                           later higher-priority sources retain
-                                          their own pending state. Other sources,
+                                          their own pending state. Six-channel
+                                          DMA completion/explicit-stop latches,
+                                          IPRC priorities and real vector service
+                                          are checked separately
+                                          (dsp-dma-interrupts.txt). Other sources,
                                           stack extension and full latency pending.
                                           Conditional native CPU-cycle SCI/TIM
                                           execution now includes live reception,
@@ -386,6 +390,17 @@ Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           and six strict input faults (usb-peer.txt).
                                           Own GPIO/endpoint/caller prerequisites
                                           and untimed execution remain explicit.
+                                          The shared GPIO/parser fixture adds 12
+                                          actual decoded OUT profiles with 48
+                                          accepted packets/MCU interrupts, 36 RTI
+                                          frame reuses and one joint in-flight
+                                          snapshot replay (usb-gpio-midi.txt).
+                                          Original ISR/strobes deliver 1920 bytes,
+                                          192 F8 stamps and 306 pitch callbacks;
+                                          all declared MCU RAM/USB buffers and
+                                          NVM/history remain guarded. Own valid
+                                          endpoint setup excludes cold boot and
+                                          enumeration/USTB/NISOF qualification.
                                           A failed unretired HC12 step now rejects
                                           retry before another bus access; native
                                           partial prefixes remain visible until

@@ -79,9 +79,9 @@ std::uint32_t DspDma::read(const unsigned address, const std::uint32_t mask) con
 }
 
 void DspDma::validate_enable(const Channel &channel) const {
-  if ((channel.control & (dma::interrupt | dma::continuous)) != 0 ||
+  if ((channel.control & dma::continuous) != 0 ||
       (mode(channel) != 1 && mode(channel) != 2 && mode(channel) != 3 && mode(channel) != 5)) {
-    throw Fault("Unsupported DSP DMA interrupt/continuous/transfer mode");
+    throw Fault("Unsupported DSP DMA continuous/transfer mode");
   }
   constexpr unsigned last_device_request = 22;
   if (mode(channel) != 3 && request(channel) > last_device_request) {
@@ -103,7 +103,7 @@ void DspDma::write_control(const unsigned index, const unsigned value) {
   auto &channel = channels_.at(index);
   const bool enabled = (value & dma::enable) != 0;
   const bool old_enabled = (channel.control & dma::enable) != 0;
-  if (busy(index) && ((value ^ channel.control) & ~dma::enable) != 0) {
+  if (busy(index) && ((value ^ channel.control) & ~(dma::enable | dma::interrupt)) != 0) {
     throw Fault("DSP DMA configuration changed while busy");
   }
   channel.control = value;
@@ -123,6 +123,7 @@ void DspDma::write_control(const unsigned index, const unsigned value) {
     if (!channel.pending && (!active_ || active_->channel != index)) {
       channel.done = true;
       channel.done_known = true;
+      if ((channel.control & dma::interrupt) != 0) { channel.interrupt_pending = true; }
     }
   }
 }
@@ -186,5 +187,24 @@ bool DspDma::active() const {
     if (busy(index)) { return true; }
   }
   return false;
+}
+
+std::uint8_t DspDma::interrupt_sources() const {
+  unsigned sources = 0;
+  for (unsigned index = 0; index < channels_.size(); ++index) {
+    const auto &channel = channels_.at(index);
+    if (channel.interrupt_pending && (channel.control & dma::interrupt) != 0) {
+      sources |= 1U << index;
+    }
+  }
+  return static_cast<std::uint8_t>(sources);
+}
+
+void DspDma::acknowledge_interrupt(const unsigned channel) {
+  if (channel >= channels_.size() || (interrupt_sources() & (1U << channel)) == 0) {
+    throw Fault("DSP DMA interrupt acknowledgement has no pending channel=" +
+                std::to_string(channel));
+  }
+  channels_.at(channel).interrupt_pending = false;
 }
 }
