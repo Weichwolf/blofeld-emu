@@ -29,7 +29,10 @@ Host audio output                partial  Native client plus bounded SPSC handof
                                           audio-runtime.txt). Own native coupled
                                           MCU/DSP/ESAI frames reach a private
                                           no-rewind monitor, with unchanged modeled
-                                          state/ticks. Continuous own vectors,
+                                          state/ticks (64 frames per native route).
+                                          Foreign-source rejection and actual
+                                          bounded-queue saturation retain the
+                                          accepted prefix/NVM. Continuous own vectors,
                                           final closure, restored-stream retirement,
                                           starvation and service failures have
                                           directed sanitizer checks; concurrency

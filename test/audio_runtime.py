@@ -31,7 +31,8 @@ def invoke(binary, mode, server, env, extra=()):
 def expected_pcm(mode):
     first = struct.pack("<ii", -5913697 * 256, 1193046 * 256)
     if mode.startswith("board"):
-        return first + struct.pack("<ii", 1193046 * 256, 1193046 * 256)
+        count = 64 if mode == "board" else 2
+        return first + struct.pack("<ii", 1193046 * 256, 1193046 * 256) * (count - 1)
     count = {"short": 1, "tail": 1025, "paced": 8192}[mode]
     return first + b"".join(struct.pack("<ii", ((index % 4093) - 2046) * 256,
                                        (2046 - (index % 4093)) * 256)
@@ -70,7 +71,7 @@ def monitor_case(binary, mode, directory, extra=()):
                 "client_output": output.strip()}
 
 
-def board_inputs(directory, generator, index):
+def board_inputs(directory, generator, index, frames=2):
     directory.mkdir()
     config, rom, nvm = (directory / name for name in ("board.bfboard", "own-rom.bin", "own.bfnvm"))
     subprocess.run([str(generator), f"esai{index}-refill", str(rom)], check=True,
@@ -80,12 +81,12 @@ clock 12000000 0 12000000 138240000000 reference-boundaries
 ordering dsp-before-mcu dsp-before-mcu 16
 spi-b 02 04 10 clock-before-select
 dsp-release 115200 low
-operations 400
+operations {frames * 200}
 initial drive B 16 02 00
 initial drive E 03 03 00
 dsp-input-order input-before-dsp 16
 dsp-initial esai {index} unknown unknown low reference-reset-edges
-dsp-clock esai {index} hckt 512000 5625 1032 reference-reset-edges
+dsp-clock esai {index} hckt 512000 5625 {frames * 512 + 8} reference-reset-edges
 pcm-receive esai {index} tx 0 after 307200 rising 32 24 2 high
 """)
     nvm.write_bytes(image(bytes.fromhex("cf2000 3e")))
@@ -110,7 +111,7 @@ def run(binary, generator, directory):
         results.append({"mode": mode, "passed": True})
     results += [failure_case(binary, mode, directory / mode) for mode in ("death", "stopped")]
     for index in (0, 1):
-        inputs = board_inputs(directory / f"board-inputs-{index}", generator, index)
+        inputs = board_inputs(directory / f"board-inputs-{index}", generator, index, frames=64)
         results.append(monitor_case(binary, "board", directory / f"board-{index}", inputs))
     inputs = board_inputs(directory / "restore-inputs", generator, 1)
     results.append(monitor_case(binary, "board-restore", directory / "board-restore", inputs))
@@ -120,6 +121,11 @@ def run(binary, generator, directory):
         with service(folder) as (_, server, env):
             (folder / "client.log").write_text(invoke(binary, mode, server, env, inputs))
         results.append({"mode": mode, "passed": True})
+    inputs = board_inputs(directory / "full-inputs", generator, 0, frames=3)
+    output = invoke(binary, "board-full", "unused", os.environ.copy(), inputs)
+    (directory / "full-inputs/client.log").write_text(output)
+    results.append({"mode": "board-full", "accepted_frames": 2, "rejected_frame": 3,
+                    "prefix_and_nvm_retained": True})
     invoke(binary, "missing", "unix:" + str(directory / "missing"), os.environ.copy())
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
         endpoint = directory / "stalled"

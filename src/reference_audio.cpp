@@ -14,6 +14,7 @@ void Board::attach_pcm_output(PcmFrameSink &sink) {
   if (config_.checkpoint) { throw Fault("External audio rejects automatic checkpoint replay"); }
   if (pcm_output_ == &sink) { throw Fault("External audio sink is already bound"); }
   sink.check();
+  sink.claim_source(identity_);
   retire_pcm_output();
   pcm_output_ = &sink;
 }

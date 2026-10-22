@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/flash_file.hpp"
 #include "blofeld/flash_image.hpp"
+#include "blofeld/pcm_queue.hpp"
 #include "blofeld/pcm_sink.hpp"
 #include "blofeld/serial_pcm.hpp"
 #include "reference_board.hpp"
@@ -38,6 +39,22 @@ struct Probe final : PcmFrameSink {
   bool retired = false;
 };
 
+struct Queued final : PcmFrameSink {
+  void accept(const SerialPcmFrame &frame) override {
+    check();
+    if (!frames.try_push(frame)) { throw Fault("Native PCM handoff full"); }
+  }
+
+  void check() const override {
+    if (retired) { throw Fault("Native PCM handoff retired"); }
+  }
+
+  void invalidate() noexcept override { retired = true; }
+
+  PcmQueue frames{2};
+  bool retired = false;
+};
+
 struct Machine {
   Machine(reference::Config configuration,
           std::vector<std::uint32_t> program,
@@ -64,20 +81,30 @@ void complete(reference::Board &board) {
   while (!board.finished()) { board.advance(); }
 }
 
-void expected_frames(const Probe &probe) {
+void expected_frames(const Probe &probe, const unsigned count = 2) {
   constexpr std::int32_t first = -5913697;
   constexpr std::int32_t next = 1193046;
   constexpr std::uint64_t first_tick_expected = 568250;
   constexpr std::uint64_t first_end = 3403250;
   constexpr std::uint64_t next_tick = 3448250;
   constexpr std::uint64_t next_end = 6283250;
-  pcm::require(probe.frames.size() == 2 && probe.frames[0].samples[0] == first &&
+  pcm::require(probe.frames.size() == count && count >= 2 && probe.frames[0].samples[0] == first &&
                    probe.frames[0].samples[1] == next && probe.frames[1].samples[0] == next &&
                    probe.frames[1].samples[1] == next &&
                    probe.frames[0].first_tick == first_tick_expected &&
                    probe.frames[0].last_tick == first_end &&
                    probe.frames[1].first_tick == next_tick && probe.frames[1].last_tick == next_end,
                "Actual coupled MCU/DSP/ESAI output must retain literal serial words and ticks");
+  constexpr std::uint64_t frame_period_expected = 2880000;
+  constexpr std::uint64_t bit_period = 45000;
+  for (unsigned index = 1; index < count; ++index) {
+    const auto &frame = probe.frames.at(index);
+    pcm::require(frame.samples[0] == next && frame.samples[1] == next && frame.channels == 2 &&
+                     frame.uniform_clock && frame.bit_ticks == bit_period &&
+                     frame.first_tick == first_tick_expected + (index * frame_period_expected) &&
+                     frame.last_tick == first_end + (index * frame_period_expected),
+                 "Every native refill frame retains independently specified words and timing");
+  }
 }
 
 AudioRuntimeOptions output_options(const reference::Config &config, const std::string &server) {
@@ -120,6 +147,8 @@ void binding_controls(const reference::Config &config,
                       const std::vector<std::uint32_t> &program,
                       const McuFlashImage &image) {
   Probe probe;
+  pcm::require(pcm::rejects([&] { probe.claim_source({}); }).find("identity") != std::string::npos,
+               "Missing source ownership rejects before a real board claims the output");
   auto missing = config;
   missing.pcm.reset();
   Machine without_route(missing, program, image);
@@ -146,6 +175,49 @@ void binding_controls(const reference::Config &config,
                        std::string::npos &&
                    !probe.retired,
                "An invalid replacement must preserve the old healthy binding");
+  Probe other;
+  Machine foreign(config, program, image);
+  foreign.board.attach_pcm_output(other);
+  const auto before = foreign.board.status();
+  pcm::require(pcm::rejects([&] {
+                 foreign.board.attach_pcm_output(probe);
+               }).find("another board") != std::string::npos &&
+                   foreign.board.status() == before && !other.retired && !probe.retired,
+               "A foreign source cannot steal a sink or retire either valid binding");
+  complete(valid.board);
+  expected_frames(probe);
+  pcm::require(other.frames.empty(), "Rejected source ownership cannot publish foreign audio");
+}
+
+void saturation(const reference::Config &config,
+                const std::vector<std::uint32_t> &program,
+                const McuFlashImage &image) {
+  Queued sink;
+  Machine machine(config, program, image);
+  const auto nvm = machine.board.status().cold_nvm;
+  machine.board.attach_pcm_output(sink);
+  const auto failure = pcm::rejects([&] { complete(machine.board); });
+  const auto stopped = machine.board.status();
+  pcm::require(failure.find("handoff full") != std::string::npos &&
+                   failure.find("clock=") != std::string::npos &&
+                   failure.find("data=") != std::string::npos &&
+                   failure.find("mcu-pc=") != std::string::npos &&
+                   failure.find("dsp-pc=") != std::string::npos && sink.retired &&
+                   stopped.faulted && stopped.pcm && stopped.pcm->completed_frames() == 3 &&
+                   stopped.cold_nvm == nvm,
+               "The third actual native frame stops execution without dropping the prefix or NVM");
+  Probe prefix;
+  SerialPcmFrame frame;
+  for (unsigned index = 0; index < 2; ++index) {
+    pcm::require(sink.frames.try_pop(frame), "A full handoff retains every accepted native frame");
+    prefix.accept(frame);
+  }
+  expected_frames(prefix);
+  pcm::require(!sink.frames.try_pop(frame) && stopped.last_pcm == prefix.frames.back(),
+               "The rejected third frame cannot replace the last admitted frame or escape later");
+  static_cast<void>(pcm::rejects([&] { machine.board.advance(); }));
+  pcm::require(machine.board.status() == stopped,
+               "A faulted native producer cannot execute another operation after saturation");
 }
 }
 
@@ -160,6 +232,10 @@ void board_cases(const BoardInputs &inputs) {
     binding_controls(config, program, image);
     return;
   }
+  if (mode == "board-full") {
+    saturation(config, program, image);
+    return;
+  }
   if (mode == "board-unknown") { config.pcm->lane = 1; }
   if (mode == "board-unknown" || mode == "board-reject") {
     Probe probe;
@@ -171,10 +247,12 @@ void board_cases(const BoardInputs &inputs) {
   AudioRuntime initial(output_options(config, server));
   Machine machine(config, program, image);
   Probe probe;
+  const unsigned total = mode == "board" ? 64 : 2;
+  probe.capacity = total;
   Machine baseline(config, program, image);
   baseline.board.attach_pcm_output(probe);
   complete(baseline.board);
-  expected_frames(probe);
+  expected_frames(probe, total);
   machine.board.attach_pcm_output(initial);
   if (mode == "board-restore") {
     restore_and_rebind(machine, initial);
@@ -187,10 +265,11 @@ void board_cases(const BoardInputs &inputs) {
   } else {
     complete(machine.board);
     initial.finish();
-    pcm::require(initial.status().written == 2, "The host receives actual board-decoded PCM");
+    pcm::require(initial.status().written == total, "The host receives actual board-decoded PCM");
   }
   pcm::require(machine.board.status() == baseline.board.status(),
                "The live worker cannot change native clocks, instructions, state or decoded PCM");
-  std::cout << "board frames=2 exact-native-state=1 original-firmware-audio=unqualified\n";
+  std::cout << "board frames=" << total
+            << " exact-native-state=1 original-firmware-audio=unqualified\n";
 }
 }

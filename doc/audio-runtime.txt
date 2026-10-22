@@ -43,7 +43,12 @@ audio. The retired binding fails visibly until a fresh healthy sink is explicitl
 attached. An invalid candidate cannot retire the previous valid binding. Missing
 routes, duplicate bindings and automatic replay branches reject attachment.
 The bound sink must outlive its board binding. Closed sessions reject check and
-cannot replace a still-valid live binding. Retirement closes admission
+cannot replace a still-valid live binding. Each sink retains its first board's
+identity, outside modeled snapshots. Missing/foreign identities reject before
+retiring either existing binding; the retained token prevents address reuse
+from assigning a new board to the old external stream. Source admission runs
+on the emulation owner thread, not concurrently with another producer.
+Retirement closes admission
 immediately; a native call already in flight can finish before the worker notices
 retirement. Existing host-buffered audio cannot be recalled. Worker shutdown is
 bounded by the native client's deadlines, not a hard real-time cancellation SLA.
@@ -77,12 +82,18 @@ without a write-progress bound remained live on1025 queued frames after4 seconds
 the fixed directed regression requires the specific failure within5 seconds.
 
 Two native coupled MCU/DSP reference boards exercise primary/secondary ESAI at
-an explicit48000-frame/s reference clock. Their two frames have independent
-literal words/ticks; live output must leave the complete native board status
+an explicit48000-frame/s reference clock. Each produces64 actual native frames;
+independent literal words, bit periods and frame timestamps check every refill.
+Live output must leave the complete native board status
 identical to an observed control run. Restore retires a queued corked prefix;
 reusing that sink fails with context, while a new binding delivers the replay
-exactly once. Unknown source data, output rejection and binding controls cannot
-silently produce audio. These programs/flash inputs are project-owned vectors,
+exactly once. A two-slot actual SPSC sink with no consumer stops the third native
+frame, retaining both accepted frames, the last admitted frame and unchanged
+encoded NVM/protection/history. A second advance cannot alter the faulted state.
+Missing/foreign source admission preserves both valid bindings and their full
+native state; the original owner still produces the expected frames afterward.
+Unknown source data, output rejection and binding controls cannot silently
+produce audio. These programs/flash inputs are project-owned vectors,
 not manufacturer firmware. Native SLEIGH/DSP/PulseAudio/libsndfile and all other
 linked native dependencies retain the selected instrumentation. TSan runs
 separately from ASan/UBSan. No fuzzing or physical playback occurs.
