@@ -1,0 +1,32 @@
+Direct original foreground/ring frames to the native audio worker
+
+original_dsp_ring_audio binds AudioRuntime before a six-block original DSP
+foreground stream. Actual ESAI pin-decoded frames are submitted after each
+verified half, once the held-word replay has finished. The native client never
+reads its trace or reconstructs audio from it. No completed-stream capture is
+used for this direct handoff. The sink claims one source identity; source failure
+invalidates it. External output remains outside bus/peripheral snapshots.
+
+The unchanged primary MIDI parser consumes CC7=0. The original held voice,
+controller smoothing, copy/mix/master, scheduler and continuously enabled 64-word
+DMA ring retain state. Independent equations check all six blocks, delayed ring
+halves and serial words before predicting the complete S32LE monitor prefix.
+The private no-rewind server must receive exactly 96 accepted/written stereo
+frames, with no extra nonzero source data. Idle monitor zeros are allowed.
+Four corrupted native trace-word controls must fail. Original firmware/program
+identities retain their existing pins; manufacturer traces/assets stay local.
+
+This is a short offline producer. Its 96 frames remain below the 4096-frame host
+prebuffer, so playback starts on EOF after native computation. Playback 48kHz and
+timebase 24576000 are declared for laboratory edge ordinals, not measured Blofeld
+clocks. The test changes no session routing and sends no physical MIDI/audio.
+No realtime production, physical DMA arbitration, full boot, live host MIDI,
+NoteOn allocation or whole-device equivalence is established.
+
+  cmake --build --preset strict --target blofeld-original-dsp-ring-audio-test
+  ctest --test-dir build/strict --output-on-failure -R '^original_dsp_ring_audio$'
+
+Run the same target/gate separately with the thread preset. Result/counts,
+private trace, client/server logs and monitor PCM are retained under
+Testing/original-dsp-ring-audio/. Missing firmware/service tools skip; changed
+identities or native diagnostics fail. No automatic fuzzing runs.

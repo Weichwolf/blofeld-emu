@@ -7,6 +7,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/firmware.hpp"
+#include "blofeld/pcm_sink.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_voice_capture.hpp"
 #include "dsp_voice_master.hpp"
@@ -20,6 +21,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <ostream>
 #include <set>
 #include <string>
@@ -353,6 +355,7 @@ struct Fixture {
   bool foreground_enabled = false;
   bool stream_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
+  blofeld::PcmFrameSink *direct = nullptr;
   Case configuration{};
   bool drive_pending = false;
   unsigned drive_return = 0;
@@ -888,6 +891,7 @@ struct Fixture {
 
   void sample_case(const Case input) {
     if (capture != nullptr) { capture->begin(); }
+    if (direct != nullptr) { direct->claim_source(std::make_shared<const bool>(true)); }
     rendering = false;
     configuration = input;
     reset_stream(input.twos);
@@ -1142,8 +1146,13 @@ struct Fixture {
     trace << "REPEAT_AUTOMATIC_REJECTED 1\n";
     rendering = true;
     for (unsigned block = 0; block < input.blocks; ++block) {
+      if (direct != nullptr) { direct->check(); }
       foreground_iteration(block);
       repeat.drain(bus, cpu, trace);
+      if (direct != nullptr) {
+        // Publish only the final, verified branch after any held-word replay.
+        for (const auto &frame : repeat.decoded) { direct->accept(frame); }
+      }
     }
     rendering = false;
   }
@@ -1268,10 +1277,13 @@ int run_voice_test(const int count,
                    const bool drive,
                    const bool master,
                    const bool pcm,
-                   VoicePcmCapture *const capture,
+                   const VoiceOutputOptions output,
                    const VoiceInput input) {
   try {
     require(count == 3, "Expected original firmware and private voice trace");
+    require(output.direct == nullptr || (output.capture == nullptr && input == VoiceInput::stream &&
+                                         !drive && master && !pcm),
+            "Direct output requires one ring stream and excludes offline capture");
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
     require(trace.is_open(), "Cannot write private original voice trace");
@@ -1279,8 +1291,16 @@ int run_voice_test(const int count,
     Fixture fixture(source, trace, input);
     fixture.master_enabled = master;
     fixture.pcm_enabled = pcm;
-    fixture.capture = capture;
-    if (input == VoiceInput::stream) {
+    fixture.capture = output.capture;
+    fixture.direct = output.direct;
+    if (output.direct != nullptr) {
+      fixture.sample_case({.high = false,
+                           .twos = false,
+                           .color = parameter_max,
+                           .varied = false,
+                           .serial = false,
+                           .blocks = 6});
+    } else if (input == VoiceInput::stream) {
       stream_matrix(fixture);
     } else if (drive) {
       drive_matrix(fixture);
@@ -1296,6 +1316,7 @@ int run_voice_test(const int count,
         << "Original voice streams executed; independent numerical verification is separate.\n";
     return 0;
   } catch (const std::exception &error) {
+    if (output.direct != nullptr) { output.direct->invalidate(); }
     std::cerr << error.what() << '\n';
     return 1;
   }

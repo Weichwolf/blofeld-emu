@@ -3,5 +3,5 @@
 
 int main(const int count, char **arguments) {
   return blofeld::test::run_voice_test(
-      count, arguments, false, true, false, nullptr, blofeld::test::VoiceInput::stream);
+      count, arguments, false, true, false, {}, blofeld::test::VoiceInput::stream);
 }

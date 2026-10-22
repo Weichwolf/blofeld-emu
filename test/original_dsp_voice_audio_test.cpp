@@ -48,7 +48,8 @@ int main(const int count, char **arguments) {
     blofeld::test::require(count == 4,
                            "Expected original firmware, private trace and private server");
     blofeld::test::VoicePcmCapture capture;
-    const auto result = blofeld::test::run_voice_test(3, arguments, false, true, true, &capture);
+    const auto result =
+        blofeld::test::run_voice_test(3, arguments, false, true, true, {.capture = &capture});
     if (result != 0) { return result; }
     blofeld::test::deliver(capture, arguments[3]);
     return 0;
