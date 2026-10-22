@@ -1,0 +1,37 @@
+Original MCU request direction turnaround
+
+original_mcu_request_release executes unchanged MCU request/strobe helpers with
+an own native caller and declared RAM/stack/port state. The original reset clock
+prefix runs first, with explicit E2/E3 loopback and PHY observations. This is a
+bounded component fixture, not a reset-to-runtime or physical clock claim.
+
+Eight independent packet expectations cover Sound, Multi, metadata and Global
+requests, maximum field bytes, location bits and the startup Global field0x4c.
+The native helper reloads its caller's payload after each strobe. The second
+field's ready bit is later cleared by a real data-latch write, while the port
+still drives, before the original DDR-Q input write actually releases it.
+
+S12CPU15UG/D v1.2 gives STAB EXT PwO, JSR EXT SPPP, NOP O, BSET EXT
+rPwP, RTS UfPPP, LDAB IDX rPf and CLR EXT PwO. Their independent ledger
+predicts37 whole-tail cycles: the last request-byte write commits after2,
+the unflagged payload write after33, and DDR-Q release after36. Therefore the
+last field remains actively driven for34 cycles; its final latch change is
+three cycles before release. All observed driver masks/levels and write times
+must agree. The fixture ends after cycle37, before any data-port input poll.
+NVM bytes/knowledge/history must remain unchanged. Five fixed corruptions of
+inputs, clock, writes, steps and endpoint data-read count must reject.
+
+The nominal30MHz bus derives from the original prefix and declared sources.
+It does not measure a Blofeld oscillator, GPIO pad delay or external driver.
+Separate native CPU-pair experiments attempt a DSP reply before this release
+under an explicit direct-link/completion-boundary hypothesis. That observation
+requires a better board-net contract; it does not authorize suppressing driver
+conflicts, manufacturing acknowledgements or changing original instructions.
+The real cross-processor transaction and complete boot remain unqualified.
+
+  cmake --build --preset strict --target blofeld-original-mcu-request-release-test
+  ctest --test-dir build/strict -R '^original_mcu_request_release$' --output-on-failure
+
+The original archive and all127 DSP record identities are checked before native
+execution. Manufacturer program bytes/traces remain local. No fuzzing or
+physical traffic runs. See startup-dsp.txt and gpio-drivers.txt.

@@ -17,6 +17,8 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    profiles. Separate cores, board model, host transport and time-critical audio.
    Unknown/unsupported accesses fail with address, operation, PC and context;
    observed behavior, hypotheses and hardware-proven facts remain distinct.
+   Reconstruct board behavior from firmware accesses and supporting PCB images;
+   obtaining a schematic is not a prerequisite for this work.
 3. Provide reproducible tests for CPU/DSP instructions, flags/addressing/state,
    memory maps, interrupts, timers, interprocessor communication, cold start,
    reset, MIDI, voice management, audio and persistent storage. Independent
@@ -75,6 +77,11 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
     caused by MIDI; unknown pixels, display modes and unqualified panel mapping
     remain explicit. See display-export.txt. Live GUI refresh does not establish
     hardware display timing or realtime audio/board equivalence.
+
+Functional acceptance includes every documented Blofeld function on both
+profiles, exercised through unmodified firmware with observable MIDI, audio,
+display and persistent-state results. Track feature coverage against the manual;
+isolated helper execution does not establish a complete instrument function.
 
 Completion requires evidence for the whole emulator and both profiles, original
 MIDI/audio, full update/recovery behavior, reproducible failure/performance tests

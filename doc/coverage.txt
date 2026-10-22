@@ -16,6 +16,16 @@ Standalone runtime interface     pending  Keyboard must be the default; --deskto
                                           its bad-DSP diagnostic is not successful
                                           startup. Genuine bidirectional startup
                                           remains open (startup-dsp.txt).
+Documented instrument functions  pending  Every documented function must execute
+                                          through the original firmware on both
+                                          profiles. Component tests below do not
+                                          establish whole-function acceptance.
+Original request direction       partial  Eight native MCU request prefixes cover
+                                          all immediate routes and startup0x4c;
+                                          an independent34-cycle driven interval
+                                          ends at actual DDR-Q input selection,
+                                          before any reply read. No peer or full
+                                          transaction (mcu-request-release.txt).
 LCD screenshots/live export      partial  Read-only controller capture, digital
                                           modes, unknownness and 1-bit PBM/text/
                                           saved PNG encoders tested. Atomic host
