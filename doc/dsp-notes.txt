@@ -35,6 +35,8 @@ at P:011d/P:0185 before diagnostic resets. This does not establish boot RAM,
 complete Desktop/Keyboard startup, successful allocation, stealing, live release,
 scheduled rendering, PCM transport, real audio or hardware equivalence. The
 separate held-note voice regression retains its independent numerical scope.
+The separate note-release profile follows real MIDI release from declared active
+entries through original envelope retirement/collection (dsp-note-release.txt).
 
   cmake --build --preset strict --target blofeld-original-dsp-note-test
   ctest --test-dir build/strict -R '^original_dsp_note$' --output-on-failure

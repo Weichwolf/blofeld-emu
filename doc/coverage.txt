@@ -966,6 +966,11 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           Destination switching is checked;
                                           smoothing clock, normal host MIDI and
                                           NoteOn allocation remain unqualified.
+                                          Declared active-note release additionally
+                                          checks raw MIDI, held-envelope modes,
+                                          prioritization, retirement and owner
+                                          cleanup (dsp-note-release.txt); positive
+                                          allocation and scheduled audio stay open.
                                           32 conditional original foreground
                                           iterations now compose MIDI, held voice
                                           and scheduler smoothing with original
