@@ -1,0 +1,66 @@
+Original synthesis through DMA and ESAI pins
+
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-original-dsp-voice-pcm-test
+  ctest --test-dir build/strict -R '^original_dsp_voice_pcm$' --output-on-failure
+
+The pinned original voice/copy/mix/master composition (dsp-voice-master.txt)
+now feeds actual DMA0 reads, ESAI_1 TX0 writes, generated clock/data pins and
+SerialPcmReceiver. No host copies the rendered samples into TX or constructs
+frames from RAM. The independent voice/mix/master equations check all 8192
+DMA words and 4096 decoded stereo frames across 32 eight-block streams.
+Every source/destination, selected half, payload word, frame order, bit period
+and first/last timestamp is checked. Corrupted DMA and PCM trace words reject.
+
+An own native MOVEP caller configures the documented 24-bit/32-bit-slot,
+two-slot network format and TCCR_1=0x640301. It preserves the mix signal on
+Port E bit 9. A finite DTM1/DRS22 transfer reads 32 linear X words to fixed
+Y:ffff80, then disables itself. This is not the original repeating DMA setup.
+The own native caller selects the just-rendered half from its actual phase
+word; no host supplies DMA source data, pointer progress or completion flags.
+
+The core pauses after the native DE write until the finite transfer and
+complete frames finish. Explicit consecutive DMA grants use an empty known
+core footprint. HCKT edges are declared reference inputs; only the genuine
+ESAI TDE request drives DMA. Held TDE is serviced before the next slot.
+Native core state stays identical throughout peripheral progression. The
+automatic clocked-native DMA rejection remains active; no guard is bypassed.
+
+Native setup primes TX0 with zero. The receiver observes that preceding slot
+before locking to active-low word-length FS. This declares laboratory channel
+alignment, not measured codec polarity/wiring. TCCR's divide-by-four and two
+supplied HCKT edges per period give eight edge ordinals per serial bit.
+The first decoded sample is ordinal 267; each frame spans 64 sampled bits.
+Ordinals exclude paused-core work and do not establish wall time/sample rate.
+
+For every stream, a bus/receiver checkpoint after the first source read retains
+the actual held word before its TX write. Replay reproduces all words, frames,
+receiver alignment, edges and declared register endpoints: 32 restores.
+No underrun is accepted. Original program/state checks remain; no CPU reset or synthesis-state
+repair occurs between blocks. Traces/reports stay under build/Testing/.
+
+Full boot, original peripheral initialization, repeating DMA, automatic core/
+DMA arbitration, live MIDI allocation, host playback, physical timing/channel
+mapping and hardware equivalence remain open. No fuzzing or physical playback.
+
+Private session-output integration
+  cmake --build --preset strict --target blofeld-original-dsp-voice-host-test
+  ctest --test-dir build/strict -R '^original_dsp_voice_host$' --output-on-failure
+
+One default eight-block original stream now hands its 128 actual pin-decoded
+frames to the separate AudioRuntime worker. The generic sink stays outside all
+peripheral snapshots; frames publish once after held-word replay/verification.
+The fixture knows no native audio API. Other voice/drive/master/PCM test modes
+retain their full matrices and have no external sink.
+
+The private no-rewind service monitor must match independently computed signed
+S32 stereo bytes exactly, with no extra nonzero prefix/suffix. A corrupted
+monitor payload rejects. The source is finite and corked until complete; this
+does not qualify a sustained realtime producer. The declared 48000-frame/s
+playback rate and 24576000 reference ticks/s merely give the existing eight
+edge ordinals per serial bit. They do not establish physical HCKT/core/sample
+frequency. No host resampling, sample copying from RAM, invented frames, physical
+playback or normal-runtime boot is supplied. Concurrency runs separately under
+TSan; the same private service/client instrumentation rules as audio-runtime.txt
+apply. Full original MIDI allocation, automatic DMA and stock equivalence remain
+pending.

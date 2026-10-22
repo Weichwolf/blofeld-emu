@@ -6,8 +6,10 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/firmware.hpp"
+#include "blofeld/pcm_sink.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_voice_master.hpp"
+#include "dsp_voice_pcm.hpp"
 
 #include <array>
 #include <cstdint>
@@ -219,7 +221,10 @@ struct Call {
   bool twos;
 };
 
-void harness(blofeld::DspBus &bus, unsigned &stop, blofeld::test::VoiceMaster &master) {
+void harness(blofeld::DspBus &bus,
+             unsigned &stop,
+             blofeld::test::VoiceMaster &master,
+             blofeld::test::VoicePcm &pcm) {
   blofeld::test::DspProgram code;
   code.immediate("x1", memory_mode);
   code.emit("move x1,omr");
@@ -241,6 +246,7 @@ void harness(blofeld::DspBus &bus, unsigned &stop, blofeld::test::VoiceMaster &m
   code.word(absolute_jump); // DSP56300FM long absolute JMP plus its target extension.
   code.word(begin);
   master.append(code);
+  pcm.append(code);
   code.install(bus);
 }
 
@@ -255,6 +261,7 @@ struct Fixture {
   blofeld::DspBus bus;
   unsigned stop = 0;
   blofeld::test::VoiceMaster master;
+  blofeld::test::VoicePcm pcm;
   blofeld::DspCore cpu;
   const Source &source;
   std::ostream &trace;
@@ -265,6 +272,8 @@ struct Fixture {
   bool output_seen = false;
   bool rendering = false;
   bool master_enabled = false;
+  bool pcm_enabled = false;
+  blofeld::PcmFrameSink *stream_output = nullptr;
   Case configuration{};
   bool drive_pending = false;
   unsigned drive_return = 0;
@@ -288,9 +297,12 @@ struct Fixture {
     trace << '\n' << std::dec;
   }
 
-  static blofeld::DspBus &
-  load(blofeld::DspBus &bus, const Source &s, unsigned &stop, blofeld::test::VoiceMaster &master) {
-    harness(bus, stop, master);
+  static blofeld::DspBus &load(blofeld::DspBus &bus,
+                               const Source &s,
+                               unsigned &stop,
+                               blofeld::test::VoiceMaster &master,
+                               blofeld::test::VoicePcm &pcm) {
+    harness(bus, stop, master, pcm);
     bus.observe_omr(memory_mode);
     bus.advance_instruction_cycles(3);
     for (const auto &r : s.records) {
@@ -302,7 +314,7 @@ struct Fixture {
   }
 
   Fixture(const Source &s, std::ostream &output)
-      : cpu(load(bus, s, stop, master)), source(s), trace(output) {}
+      : cpu(load(bus, s, stop, master, pcm)), source(s), trace(output) {}
 
   void put(blofeld::DspSpace space, unsigned at, unsigned v) {
     require(!rendering ||
@@ -540,6 +552,9 @@ struct Fixture {
       const auto old_seed = get(x, shared_seed);
       try {
         cpu.step();
+        if (pcm_enabled && target == pcm.transfer && cpu.state().pc == pcm.enabled) {
+          pcm.drain(bus, cpu, trace);
+        }
         bus.advance_instruction_cycles(1);
         ++total_steps;
       } catch (const std::exception &e) {
@@ -776,8 +791,14 @@ struct Fixture {
     configure_sound(input);
     prepare_output(input);
     if (master_enabled) { blofeld::test::VoiceMaster::initialize(bus); }
+    if (pcm_enabled) {
+      pcm.begin(bus);
+      run({.target = pcm.setup, .end = stop, .twos = input.twos});
+      pcm.baseline(bus);
+    }
     rendering = true;
     for (unsigned block = 0; block < input.blocks; ++block) {
+      if (stream_output != nullptr) { stream_output->check(); }
       begin_block(block);
       run({.target = voice_entry, .end = stop, .twos = input.twos});
       check_block(block);
@@ -786,6 +807,16 @@ struct Fixture {
       if (master_enabled) {
         run({.target = master.entry, .end = stop, .twos = input.twos});
         require(cpu.state().sp == 0, "Original copy/mix/master calls must genuinely return");
+        if (pcm_enabled) {
+          run({.target = pcm.transfer, .end = stop, .twos = input.twos});
+          if (stream_output != nullptr) {
+            // Publish only after real DMA/ESAI completion and any held-word
+            // replay. External audio is never copied into peripheral snapshots.
+            for (unsigned frame = 0; frame < pcm.frames; ++frame) {
+              stream_output->accept(pcm.decoded.at(frame));
+            }
+          }
+        }
       }
     }
     rendering = false;
@@ -843,16 +874,28 @@ void drive_matrix(Fixture &fixture) {
 }
 
 namespace blofeld::test {
-int run_voice_test(const int count, char **arguments, const bool drive, const bool master) {
+int run_voice_test(const int count,
+                   char **arguments,
+                   const bool drive,
+                   const bool master,
+                   const bool pcm,
+                   PcmFrameSink *stream_output) {
   try {
     require(count == 3, "Expected original firmware and private voice trace");
+    require(stream_output == nullptr || (!drive && master && pcm),
+            "An external source requires the original voice/master/PCM composition");
+    if (stream_output != nullptr) { stream_output->check(); }
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
     require(trace.is_open(), "Cannot write private original voice trace");
     trace.exceptions(std::ios::failbit | std::ios::badbit);
     Fixture fixture(source, trace);
     fixture.master_enabled = master;
-    if (drive) {
+    fixture.pcm_enabled = pcm;
+    fixture.stream_output = stream_output;
+    if (stream_output != nullptr) {
+      fixture.sample_case({});
+    } else if (drive) {
       drive_matrix(fixture);
     } else {
       baseline(fixture);
@@ -866,6 +909,7 @@ int run_voice_test(const int count, char **arguments, const bool drive, const bo
         << "Original voice streams executed; independent numerical verification is separate.\n";
     return 0;
   } catch (const std::exception &error) {
+    if (stream_output != nullptr) { stream_output->invalidate(); }
     std::cerr << error.what() << '\n';
     return 1;
   }

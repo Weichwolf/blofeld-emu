@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+"""Match pin-decoded original synthesis to an isolated service's actual monitor."""
+
+import json
+from pathlib import Path
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+
+from dsp_voice_model import signed, waveform_model
+from dsp_voice_validation import new_totals, validate_stream
+from host_audio import require, service, terminate, until
+from original_dsp_voice import original_records
+from original_dsp_voice_master import Output
+from original_dsp_voice_pcm import Pcm
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class Capture(Pcm):
+    def __init__(self):
+        self.payload = bytearray()
+        self.blocks = 0
+
+    def __call__(self, expected, text, block):
+        super().__call__(expected, text, block)
+        for index in range(16):
+            self.payload.extend(struct.pack("<ii", signed(expected[2 * index]) * 256,
+                                            signed(expected[2 * index + 1]) * 256))
+        self.blocks += 1
+
+
+def expected_payload(text, xdata, ydata, program):
+    cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
+                       r'(?=CASE |Entry-streams visited PCs:)', text)
+    identity = ('normal', '0', '0', '0', '0')
+    require(len(cases) == 1 and tuple(cases[0][:5]) == identity,
+            "Host handoff must select exactly one declared default voice stream")
+    capture = Capture()
+    output = Output(program, capture)
+    totals = new_totals()
+    validate_stream(cases[0][5], xdata, ydata, {False: waveform_model(ydata, False)},
+                    identity, totals, after_block=output)
+    require(totals['blocks'] == 8 and capture.blocks == 8 and output.nonzero == 256 and
+            len(capture.payload) == 128 * 8,
+            "Every original voice/mix/master/DMA/serial block must reach its independent oracle")
+    return bytes(capture.payload)
+
+
+def check_monitor(recorded, expected):
+    position = recorded.find(expected)
+    require(len(recorded) % 8 == 0 and position >= 0 and position % 8 == 0,
+            "The monitor is missing a complete aligned original PCM prefix")
+    require(not recorded[:position].strip(b'\0') and
+            not recorded[position + len(expected):].strip(b'\0'),
+            "The private monitor contains extra, stale, duplicated or altered source samples")
+
+
+def run(binary, firmware, directory, xdata, ydata, program):
+    with service(directory) as (daemon, server, env):
+        recorded = directory / "monitor.pcm"
+        with recorded.open("wb") as samples, (directory / "monitor.log").open("w") as log:
+            monitor = subprocess.Popen(["parec", "--raw", "--format=s32le", "--rate=48000",
+                                        "--channels=2", "--device=fixture.monitor",
+                                        "--latency-msec=5"], env=env, stdout=samples, stderr=log)
+            try:
+                def ready():
+                    result = subprocess.run(["pactl", "--server", server, "list", "short",
+                                             "source-outputs"], env=env, capture_output=True,
+                                            text=True, timeout=2, check=True)
+                    return bool(result.stdout.strip())
+
+                until(ready, daemon, "the original voice monitor")
+                trace = directory / "native.trace"
+                result = subprocess.run([str(binary), str(firmware), str(trace), server], env=env,
+                                        capture_output=True, text=True,
+                                        timeout=90 if env.get("BLOFELD_TEST_SANITIZER") == "thread" else 30)
+                (directory / "native.log").write_text(result.stdout + result.stderr)
+                require(result.returncode == 0 and not result.stderr and
+                        "original-decoded-host-frames=128" in result.stdout,
+                        f"Original native host handoff failed: {result.stdout}{result.stderr}")
+                expected = expected_payload(trace.read_text(), xdata, ydata, program)
+                time.sleep(0.1)
+            finally:
+                terminate(monitor)
+        require(not (directory / "monitor.log").read_text(), "The source monitor reported a fault")
+        check_monitor(recorded.read_bytes(), expected)
+        corrupted = bytearray(expected)
+        corrupted[0] ^= 1
+        try:
+            check_monitor(bytes(corrupted), expected)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("The monitor oracle accepted a corrupted source word")
+        return {"passed": True, "original_blocks": 8, "decoded_frames": 128,
+                "exact_independent_monitor_match": True, "monitor_negative_controls": 1,
+                "declared_playback_rate": 48000, "physical_sample_clock_qualified": False,
+                "fuzz_execution": False, "physical_audio": False,
+                "scope": "One declared original voice/mix/master stream through actual finite "
+                "DMA, ESAI pins, serial receiver and bounded audio worker/private service. "
+                "No full boot, MIDI allocation, automatic arbitration or RT/hardware claim."}
+
+
+def main():
+    require(len(sys.argv) == 4, "Expected native test, private firmware and artifact directory")
+    binary, firmware, artifacts = map(lambda value: Path(value).resolve(), sys.argv[1:])
+    if not firmware.is_file():
+        print("SKIP original host voice: private firmware absent")
+        return 77
+    for command in ("pulseaudio", "parec", "pactl"):
+        if shutil.which(command) is None:
+            print(f"SKIP original host voice: {command} absent")
+            return 77
+    reference = json.loads((ROOT / "doc/dsp-voice-reference.json").read_text())
+    program = {}
+    xdata, ydata = original_records(firmware, reference, program)
+    artifacts.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="blofeld-original-host-") as temporary:
+        directory = Path(temporary)
+        try:
+            result = run(binary, firmware, directory, xdata, ydata, program)
+            (directory / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            print(json.dumps(result, indent=2))
+        finally:
+            for path in directory.rglob("*"):
+                if path.is_file() and path.suffix in (".log", ".trace", ".pcm", ".json"):
+                    destination = artifacts / directory.name / path.relative_to(directory)
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(path, destination)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

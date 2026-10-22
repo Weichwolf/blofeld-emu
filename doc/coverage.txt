@@ -30,6 +30,13 @@ Host audio output                partial  Native client plus bounded SPSC handof
                                           MCU/DSP/ESAI frames reach a private
                                           no-rewind monitor, with unchanged modeled
                                           state/ticks (64 frames per native route).
+                                          A caller-qualified original voice stream
+                                          also reaches the private session monitor
+                                          through actual finite DMA, ESAI pins,
+                                          receiver and bounded worker;128 frames
+                                          match independent equations. The declared
+                                          playback rate is not a physical clock
+                                          (dsp-voice-pcm.txt).
                                           Foreign-source rejection and actual
                                           bounded-queue saturation retain the
                                           accepted prefix/NVM. Continuous own vectors,
@@ -517,8 +524,9 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           both phases/RM modes, native dependent
                                           history/buffer ownership, 18 restores
                                           and five strict missing-data failures
-                                          (dsp-master-output.txt). Original boot,
-                                          voice-to-PCM and DMA timing remain open.
+                                          (dsp-master-output.txt). Isolated original
+                                          voice-to-PCM follows dsp-voice-pcm.txt;
+                                          original boot and DMA timing remain open.
                                           Bounded native instruction fixture checks
                                           independent arithmetic/memory outcomes,
                                           REP progress and strict faults. Five
@@ -925,6 +933,13 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           all 8192 master words, both halves and
                                           full A/B have independent expectations
                                           (dsp-voice-master.txt). No DMA/PCM claim.
+                                          Original voice-to-pin PCM adds 8192
+                                          actual finite DMA words and 4096 decoded
+                                          stereo frames, independent payload/time
+                                          equations and 32 held-word restores
+                                          (dsp-voice-pcm.txt). Own native setup,
+                                          paused core, grants/HCKT and receiver
+                                          polarity; no automatic DMA/clock proof.
                                           Nonzero Drive adds64 four-block streams
                                           through all13 curves/3 reserved slots,
                                           both RM modes and serial/parallel LP24:
@@ -989,9 +1004,11 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           external SCKT/generated FST, late joining
                                           and native
                                           mux-loss failures are checked
-                                          (reference-board.txt). Host audio
-                                          and original active-voice audio remain
-                                          pending.
+                                          (reference-board.txt). Original voices
+                                          reach PCM under the isolated inputs in
+                                          dsp-voice-pcm.txt. Normal-runtime voice
+                                          playback remains pending; host transport
+                                          qualification is in host-audio.txt.
                                           Optional bounded PCM recording now
                                           retains full output history across
                                           joint snapshots/replays. Standalone

@@ -82,5 +82,8 @@ independent map test distinguishes all three DAX data addresses from forbidden
 status/control DMA. A real
 clocked native DE write faults instead of bypassing unsupported bus arbitration.
 These bounds and explicit reference phases do not qualify original firmware audio.
+An isolated original voice/mix/master composition now supplies finite DMA0
+transfers and pin-decoded frames (dsp-voice-pcm.txt); original repeating DMA
+and automatic core arbitration remain unqualified.
 The DAX fixture independently checks native two/three-register line transfers,
 per-line requests, destination rewind and DE clear before/after a line starts.
