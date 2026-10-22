@@ -776,7 +776,7 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-original-dsp-scheduler-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
-  set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250)
+  set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250 RUN_SERIAL TRUE)
   add_executable(blofeld-original-dsp-request-queue-test test/original_dsp_request_queue_test.cpp)
   target_link_libraries(blofeld-original-dsp-request-queue-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_dsp_request_queue COMMAND ${Python3_EXECUTABLE}

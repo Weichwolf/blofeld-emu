@@ -33,8 +33,10 @@ void DspShi::capture_bit(const bool value) {
   const auto low = shi::word_bits - width();
   const auto mask = (shi::word_mask << low) & shi::word_mask;
   const auto incoming = (value ? 1U : 0U) << low;
-  shift_ = ((shift_ << 1U) | incoming) & mask;
-  shift_known_ = ((shift_known_ << 1U) | (1U << low)) & mask;
+  // Only the upper 8/16/24 bits form the active IOSR (DSP56371UM 7.4.1).
+  // Inactive HTX padding must not shift into the first received bit.
+  shift_ = (((shift_ & mask) << 1U) | incoming) & mask;
+  shift_known_ = (((shift_known_ & mask) << 1U) | (1U << low)) & mask;
   ++captured_;
   if (captured_ == width()) { finish_word(); }
 }
@@ -92,6 +94,13 @@ void DspShi::clock_edge(const SpiInputs &pins) {
 }
 
 void DspShi::observe_spi(const SpiInputs pins) {
+  if (reset_configuration_changed_) {
+    if (pins.selected) {
+      throw Fault("Unqualified DSP SHI SPI selection during reset reconfiguration at X:0xffff91");
+    }
+    pins_ = pins;
+    return;
+  }
   if (!active_) {
     pins_ = pins;
     return;
@@ -127,6 +136,10 @@ ShiOutputs DspShi::outputs() const {
   if (pins_->selected) { result.miso = {.driven = true, .level = miso_}; }
   const auto request = (control_ >> 7U) & 3U;
   if (request == 0) { return result; }
+  if (reset_configuration_changed_) {
+    result.request.driven = true;
+    return result; // FIFO/word-size transition: ownership known, readiness unknown.
+  }
   if (!phase() && complete_ && pins_->selected) {
     // The precise HREQ reassertion point before the required SS release is uncalibrated.
     result.request.driven = true;

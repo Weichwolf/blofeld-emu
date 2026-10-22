@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Pin original SHI source records before the native tagged-reception regression."""
+"""Pin original SHI records before native reception and nested reset regressions."""
 import hashlib
 import json
 from pathlib import Path
@@ -31,26 +31,29 @@ def main():
     if result.returncode:
         return result.returncode
     text = trace.read_text()
-    expected = ("cases=8 runs=16 wire=196 received=194 queued=182 idle=12 lost=2 "
-                "overwrites=138 steps=3480 units=7348")
+    expected = ("cases=18 runs=36 wire=396 received=392 queued=324 processed=362 resets=22 flushed=30 idle=16 lost=4 "
+                "overwrites=256 steps=12322 units=19824")
     if re.findall(r"^RESULT (.+)$", text, re.M) != [expected]:
-        raise ValueError("Incomplete original tagged SHI scope")
+        raise ValueError("Incomplete original SHI reception/reset scope")
     names = ("one-tagged", "one-idle", "three-tagged", "three-idle", "mixed",
-             "full-fifo", "overrun", "ring-alias")
+             "full-fifo", "overrun", "ring-alias", "reset-zero", "reset-word", "reset-flush",
+             "tag-before-reset", "reset-overrun", "reset-after-wrap", "repeated-reset",
+             "mixed-reset", "zero-after-tag", "recover-after-reset")
     if re.findall(r"^CASE (\S+) replay=([01])$", text, re.M) != [
             (name, str(replay)) for name in names for replay in range(2)]:
         raise ValueError("Changed original SHI case/restore matrix")
     trace.with_suffix(".json").write_text(json.dumps({
-        "passed": True, "cases": 8, "runs": 16, "received": 194,
-        "pending_overwrites": 138, "handler_steps": 3480, "nominal_units": 7348,
+        "passed": True, "cases": 18, "runs": 36, "received": 392,
+        "processed": 362, "resets": 22, "reset_flushed_words": 30,
+        "pending_overwrites": 256, "handler_steps": 12322, "nominal_units": 19824,
         "records": selected, "trace_sha256": hashlib.sha256(trace.read_bytes()).hexdigest(),
-        "qualification": "Unmodified original initializer/vectors/tagged receiver; explicit own "
+        "qualification": "Unmodified original initializer/vectors/receiver/nested reset; explicit own "
                          "native caller, nominal CPU clock/IRQ estimates and untimed SPI inputs. "
                          "Independent wire/FIFO/ring/flags/register/order/return expectations. "
-                         "No original caller/boot provenance, untagged reset qualification, "
+                         "No original caller/boot provenance, selected or transitional SPI reset qualification, "
                          "physical timing, complete MIDI/audio, update/recovery or hardware proof."
     }, indent=2) + "\n")
-    print("Verified eight original tagged SHI cases and sixteen native runs")
+    print("Verified eighteen original SHI cases and thirty-six native runs")
     return 0
 
 

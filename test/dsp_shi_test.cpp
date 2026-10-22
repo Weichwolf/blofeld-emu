@@ -386,6 +386,169 @@ void test_abort_reset_and_invalid_pin_observations() {
   require(shi.read(hrx) == inbound, "Rejected unknown edge did not consume a bit");
 }
 
+void test_inactive_shift_bits() {
+  for (unsigned mode = 0; mode < 4; ++mode) {
+    for (unsigned size = 0; size < 2; ++size) {
+      for (const unsigned padding_bit : {0U, 1U}) {
+        blofeld::DspShi shi;
+        Peer peer(shi, mode);
+        const auto width = (size + 1) * 8U;
+        const auto padding = word_bits - width;
+        const auto inactive = padding_bit << (padding - 1);
+        shi.write({.address = hcsr, .value = 1U | (size << 2U)});
+        shi.write({.address = htx, .value = inactive});
+        require(peer.word({.value = 0, .bits = width}) == 0,
+                "Inactive HTX bits never enter the transmitted upper byte/word");
+        require(shi.read(hrx) == 0,
+                "Inactive HTX bits never contaminate a completely zero receive word");
+        require(peer.word({.value = 0, .bits = width}) == 0 && shi.read(hrx) == 0,
+                "The next unprimed IOSR echo also retains only the active word width");
+      }
+    }
+  }
+}
+
+struct ResetFormat {
+  unsigned mode;
+  unsigned size;
+  bool fifo;
+};
+
+void verify_reconfigured_receive(blofeld::DspShi &shi, Peer &peer, const ResetFormat format) {
+  const auto size = format.size;
+  const auto capacity = format.fifo ? 10U : 1U;
+  constexpr unsigned fresh_outbound = 0x5ea3c8;
+  constexpr unsigned fresh_inbound = 0x765432;
+  const auto width = (size + 1) * 8U;
+  const auto padding = word_bits - width;
+  shi.write({.address = htx, .value = fresh_outbound});
+  require(peer.word({.value = fresh_inbound, .bits = width}) == (fresh_outbound >> padding),
+          "Re-enable uses fresh HTX, not either discarded transmit buffer");
+  const auto received = shi.read(hrx);
+  require(received == ((fresh_inbound >> padding) << padding),
+          "Re-enabled receive mode=" + std::to_string(format.mode) +
+              " size=" + std::to_string(size) + " fifo=" + (format.fifo ? "ten" : "one") +
+              " actual=" + blofeld::hex(received, 6) +
+              " expected=" + blofeld::hex((fresh_inbound >> padding) << padding, 6));
+  reject([&shi] { static_cast<void>(shi.read(hrx)); }, "Only the new word survived reset");
+  for (unsigned index = 0; index <= capacity; ++index) {
+    peer.word({.value = (index + 1) << (word_bits - 8), .bits = width});
+  }
+  require((shi.read(hcsr) & (rx_full | overrun)) == (rx_full | overrun),
+          "The new receive capacity overflows at its independent first excess word");
+  for (unsigned index = 0; index < capacity; ++index) {
+    require(shi.read(hrx) == (index + 1) << (word_bits - 8),
+            "The new FIFO preserves its exact independent first words");
+  }
+  reject([&shi] { static_cast<void>(shi.read(hrx)); }, "The new excess word was discarded");
+}
+
+void verify_reset_transition(const ResetFormat format) {
+  const auto mode = format.mode;
+  const auto size = format.size;
+  const bool fifo = format.fifo;
+  blofeld::DspShi shi;
+  Peer peer(shi, mode);
+  constexpr unsigned interrupts = 0x1800;
+  constexpr unsigned receive_request = 0x80;
+  constexpr unsigned fifo_bit = 0x20;
+  constexpr unsigned programmed_slave = 0xa40000;
+  const auto control = 1U | (size << 2U) | (fifo ? fifo_bit : 0U) | interrupts;
+  const auto next_size = (size + 1) % 3;
+  const auto reset_control =
+      (next_size << 2U) | (!fifo ? fifo_bit : 0U) | receive_request | interrupts;
+  shi.write({.address = hsar, .value = programmed_slave});
+  shi.write({.address = hcsr, .value = control});
+  const auto old_capacity = fifo ? 10U : 1U;
+  for (unsigned index = 0; index <= old_capacity; ++index) {
+    peer.word({.value = inbound, .bits = (size + 1) * 8U});
+  }
+  shi.write({.address = htx, .value = outbound});
+  shi.write({.address = htx, .value = inbound});
+  require(shi.read(hcsr) == (0x200U | control | rx_full | rx_nonempty | underrun | overrun),
+          "Reset starts with full RX, both errors armed and both real transmit buffers occupied");
+  shi.write({.address = hcsr, .value = reset_control});
+  const auto checkpoint = shi;
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    shi = checkpoint;
+    shi.advance_instruction_cycles(0);
+    reject([&shi] { static_cast<void>(shi.read(hcsr)); },
+           "Changed FIFO/word-size flags during the reset delay are not fabricated");
+    reject([&shi] { static_cast<void>(shi.read(hrx)); },
+           "Unqualified receive geometry cannot consume a pending word");
+    reject([&shi] { shi.write({.address = htx, .value = 0}); },
+           "Unqualified reset-transition HTX writes cannot fabricate successful transmission");
+    reject([&shi] { static_cast<void>(shi.interrupt_vectors()); },
+           "Unqualified transitional flags cannot fabricate an interrupt request");
+    reject([&shi, reset_control] { shi.write({.address = hcsr, .value = reset_control | 1U}); },
+           "Re-enable requires the actual reset cycle");
+    reject([&shi, mode] { shi.write({.address = hckr, .value = mode ^ 1U}); },
+           "A changed HCKR still requires completed reset");
+    const auto clock = (mode & 2U) != 0;
+    shi.observe_spi({.clock = clock});
+    reject([&shi, clock] { shi.observe_spi({.selected = true, .clock = clock, .mosi = false}); },
+           "A selected transfer during reconfiguration remains an explicit failure");
+    const auto pins = shi.outputs();
+    require(!pins.miso.driven && pins.request.driven && !pins.request.level,
+            "Idle MISO is tri-stated; transitional HREQ ownership cannot imply known readiness");
+    require(shi.read(hckr) == mode && shi.read(hsar) == programmed_slave,
+            "The independent clock and slave-address controls remain readable and retained");
+    shi.advance_instruction_cycles(replay == 0 ? 1 : 7);
+    require(shi.read(hcsr) == (idle_empty | reset_control) && shi.read(hckr) == mode &&
+                shi.read(hsar) == programmed_slave && shi.interrupt_vectors().empty() &&
+                !shi.outputs().miso.driven && !shi.outputs().request.driven,
+            "One actual instruction cycle clears paths/errors, disables pins and retains controls");
+    reject([&shi] { static_cast<void>(shi.read(hrx)); }, "Reset leaves an actually empty FIFO");
+    shi.write({.address = hcsr, .value = reset_control | 1U});
+    verify_reconfigured_receive(shi, peer, {.mode = mode, .size = next_size, .fifo = !fifo});
+  }
+}
+
+void test_idle_reset_reconfiguration() {
+  for (unsigned mode = 0; mode < 4; ++mode) {
+    for (unsigned size = 0; size < 3; ++size) {
+      for (unsigned fifo = 0; fifo < 2; ++fifo) {
+        verify_reset_transition({.mode = mode, .size = size, .fifo = fifo != 0});
+      }
+    }
+  }
+  blofeld::DspShi shi;
+  const Peer peer(shi, 1);
+  shi.write({.address = hcsr, .value = fifo24});
+  shi.write({.address = hcsr, .value = 0});
+  shi.reset();
+  shi.advance_instruction_cycles(0);
+  require(shi.read(hcsr) == idle_empty && shi.read(hckr) == 1,
+          "Hardware reset cancels a pending reconfiguration and restores hardware controls");
+}
+
+void test_reset_reconfiguration_rejections() {
+  for (unsigned mode = 0; mode < 4; ++mode) {
+    blofeld::DspShi shi;
+    Peer peer(shi, mode);
+    shi.write({.address = hcsr, .value = fifo24});
+    peer.select();
+    peer.bits({.value = inbound, .bits = 3});
+    const auto before = shi.read(hcsr);
+    reject([&shi] { shi.write({.address = hcsr, .value = 0}); },
+           "HM changes require known HBUSY=0 even when HEN is cleared");
+    require(shi.read(hcsr) == before, "Rejected busy reset reconfiguration leaves flags intact");
+    constexpr unsigned word_mask = 0xffffff;
+    peer.bits({.value = (inbound << 3U) & word_mask, .bits = word_bits - 3});
+    peer.deselect();
+    require(shi.read(hrx) == inbound, "Rejected reconfiguration does not change a live word");
+    reject([&shi] { shi.write({.address = hcsr, .value = 1}); },
+           "Configuration changes with HEN still set remain unqualified");
+  }
+  blofeld::DspShi unknown;
+  unknown.write({.address = hcsr, .value = fifo24});
+  reject([&unknown] { unknown.write({.address = hcsr, .value = 0}); },
+         "A missing pin baseline cannot establish idle reset reconfiguration");
+  unknown.observe_spi({.mosi = false});
+  require(unknown.read(hcsr) == (idle_empty | fifo24),
+          "Rejected unknown-idle reconfiguration preserves the actual control word");
+}
+
 void test_phase_one_continuous_words_and_phase_zero_framing() {
   blofeld::DspShi shi;
   Peer peer(shi, 1);
@@ -469,6 +632,9 @@ int main() {
     test_underrun_clear_and_host_request();
     test_interrupt_encoding_errors_and_mask_latency();
     test_abort_reset_and_invalid_pin_observations();
+    test_inactive_shift_bits();
+    test_idle_reset_reconfiguration();
+    test_reset_reconfiguration_rejections();
     test_phase_one_continuous_words_and_phase_zero_framing();
     test_request_boundary_and_register_rejections();
     test_capture_edge_knowledge_in_all_clock_modes();

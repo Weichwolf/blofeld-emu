@@ -30,6 +30,11 @@ constexpr unsigned idle_steps = 17;
 constexpr unsigned tagged_steps = 18;
 constexpr unsigned idle_units = 36;
 constexpr unsigned tagged_units = 38;
+// Original initializer: nine non-NOP instructions and 256 repeated NOP steps.
+constexpr unsigned initializer_steps = 265;
+// Nominal table: 256 NOPs, seven two-unit MOVEs, REP=5, RTS=3.
+// BSCLR already has a fixed five-unit estimate on either conditional path.
+constexpr unsigned initializer_units = 256 + (7 * 2) + 5 + 3;
 constexpr unsigned rx_vector = 0x44;
 constexpr unsigned error_vector = 0x4a;
 constexpr unsigned initializer = 0x2462;
@@ -63,6 +68,7 @@ constexpr unsigned note_on = 0x903c64;
 constexpr unsigned note_off = 0x803c00;
 constexpr unsigned controller = 0xb0077f;
 constexpr unsigned tagged_note_zero = 0x800001;
+constexpr unsigned reset_word = 0x123456;
 constexpr unsigned address_seed = 0x123450;
 constexpr unsigned offset_seed = 0x246870;
 constexpr unsigned a_low = 0x654321;
@@ -87,6 +93,22 @@ std::vector<std::uint32_t> tagged_words(const unsigned count) {
     result.push_back(pattern[index % pattern.size()]);
   }
   return result;
+}
+
+std::span<const std::uint32_t> processed_words(const std::span<const std::uint32_t> words) {
+  std::size_t count = 0;
+  for (const auto word : words.first(std::min<std::size_t>(words.size(), fifo_capacity))) {
+    ++count;
+    if ((word & idle_marker) == 0) { break; } // Original reset discards the remaining FIFO.
+  }
+  return words.first(count);
+}
+
+std::vector<std::uint32_t> wrapped_reset_words() {
+  auto words = tagged_words(ring_words);
+  words.push_back(0);
+  words.push_back(note_on);
+  return words;
 }
 
 blofeld::DspRunContract contract() {
@@ -127,6 +149,9 @@ struct Counts {
   unsigned runs = 0;
   unsigned wire = 0;
   unsigned received = 0;
+  unsigned processed = 0;
+  unsigned resets = 0;
+  unsigned flushed = 0;
   unsigned queued = 0;
   unsigned idle = 0;
   unsigned lost = 0;
@@ -242,14 +267,30 @@ struct Experiment {
             "Real interrupt/RTI preserves the independent caller register contract");
   }
 
+  void verify_reset_writes(const std::size_t first) const {
+    const std::array values{0U, config, idle_marker, idle_marker};
+    const std::array addresses{hcsr, hcsr, htx, htx};
+    for (std::size_t item = 0; item < values.size(); ++item) {
+      const auto &event = events[first + item];
+      require(event.kind == Kind::write && event.address == addresses[item] &&
+                  event.value == values[item],
+              "The original nested initializer actually resets, configures and primes SHI");
+    }
+    require(events[first].pc == initializer, "Actual original reset entry performs HCSR=0");
+  }
+
   void verify_events(const std::span<const std::uint32_t> words, Counts &counts) const {
     const auto accepted = std::min<std::size_t>(words.size(), fifo_capacity);
-    require(events.size() == accepted * 3 && vectors.size() == accepted * 2,
+    const auto processed = processed_words(words);
+    const bool reset = (processed.back() & idle_marker) == 0;
+    require(events.size() == processed.size() * 3 + (reset ? 4U : 0U) &&
+                vectors.size() == processed.size() * 2,
             "Every actual receive has both vector fetches and HCSR/HRX/HTX accesses");
-    for (std::size_t index = 0; index < accepted; ++index) {
+    for (std::size_t index = 0; index < processed.size(); ++index) {
       const auto &status = events[index * 3];
       const auto &receive = events[(index * 3) + 1];
-      const auto &transmit = events[(index * 3) + 2];
+      const bool calls_reset = (words[index] & idle_marker) == 0;
+      const auto &transmit = events[(index * 3) + 2 + (calls_reset ? 4U : 0U)];
       const bool overrun = index == 0 && words.size() > fifo_capacity;
       const auto vector = overrun ? error_vector : rx_vector;
       const unsigned expected = config | idle_flag | rx_nonempty | (index < 2 ? tx_empty : 0U) |
@@ -263,7 +304,11 @@ struct Experiment {
                   transmit.address == htx && transmit.pc == original_transmit &&
                   transmit.value == idle_marker,
               "Independent FIFO/error/vector/order/transmit expectations match original execution");
-      if (index >= 2) { ++counts.overwrites; }
+      if (calls_reset) {
+        verify_reset_writes((index * 3) + 2);
+        ++counts.resets;
+      }
+      if (index >= 2 || calls_reset) { ++counts.overwrites; }
     }
   }
 
@@ -291,15 +336,21 @@ struct Experiment {
     verify_events(words, counts);
     unsigned expected_steps = 0;
     unsigned expected_units = 0;
-    for (const auto word : words.first(std::min<std::size_t>(words.size(), fifo_capacity))) {
-      const bool idle = word == idle_marker;
+    for (const auto word : processed_words(words)) {
+      const bool idle = (word & ~idle_marker) == 0;
       // Source path: one vector JSR plus 16/17 body instructions; nominal vector/mnemonic costs.
       expected_steps += idle ? idle_steps : tagged_steps;
       expected_units += idle ? idle_units : tagged_units;
+      if ((word & idle_marker) == 0) {
+        expected_steps += initializer_steps;
+        expected_units += initializer_units;
+      }
     }
     const auto units = machine.run_clock().native_cycle_units() - start;
     require(steps == expected_steps && units == expected_units,
-            "Independent source paths and nominal IRQ instruction-cycle ledger are retained");
+            "Original IRQ ledger steps=" + std::to_string(steps) + " expected=" +
+                std::to_string(expected_steps) + " nominal-units=" + std::to_string(units) +
+                " expected=" + std::to_string(expected_units));
     require(machine.bus().read({.space = x, .address = hcsr}) == (config | idle_flag),
             "Original reads/writes empty RX, clear errors and leave HTX pending");
     counts.handler_steps += steps;
@@ -330,18 +381,21 @@ struct Experiment {
       const auto accepted = std::min<std::size_t>(words.size(), fifo_capacity);
       counts.received += static_cast<unsigned>(accepted);
       counts.lost += static_cast<unsigned>(words.size() - accepted);
-      for (const auto word : words.first(accepted)) {
+      const auto processed = processed_words(words);
+      counts.processed += static_cast<unsigned>(processed.size());
+      counts.flushed += static_cast<unsigned>(accepted - processed.size());
+      for (const auto word : processed) {
         expected[writer - ring_base] = word; // Even an idle word performs this original store.
-        if (word == idle_marker) {
-          ++counts.idle;
-        } else {
+        if ((word & idle_marker) == 0) { writer = ring_base; }
+        if (word == idle_marker) { ++counts.idle; }
+        if ((word & idle_marker) != 0 && (word & ~idle_marker) != 0) {
           writer = ring_base + ((writer - ring_base + 1) % ring_words);
           ++counts.queued;
         }
       }
       require(machine.bus().read({.space = x, .address = read_cursor}) == ring_base &&
                   machine.bus().read({.space = x, .address = write_cursor}) == writer,
-              "Independent modulo-64 publication preserves idle stores and full-ring aliasing");
+              "Independent stores precede reset rewind, idle filtering and modulo-64 publication");
       for (unsigned index = 0; index < ring_words; ++index) {
         const auto &cell = expected[index];
         if (cell) {
@@ -371,7 +425,33 @@ void run(const blofeld::Firmware &firmware, std::ostream &trace) {
            .burst = 5},
       Case{.name = "full-fifo", .words = tagged_words(10), .burst = 10},
       Case{.name = "overrun", .words = tagged_words(11), .burst = 11},
-      Case{.name = "ring-alias", .words = tagged_words(ring_words), .burst = 8}};
+      Case{.name = "ring-alias", .words = tagged_words(ring_words), .burst = 8},
+      Case{.name = "reset-zero", .words = {0}, .burst = 1},
+      Case{.name = "reset-word", .words = {reset_word}, .burst = 1},
+      Case{.name = "reset-flush", .words = {reset_word, note_on, controller}, .burst = 3},
+      Case{.name = "tag-before-reset", .words = {note_on, reset_word, controller}, .burst = 3},
+      Case{.name = "reset-overrun",
+           .words = {reset_word,
+                     note_on,
+                     note_off,
+                     controller,
+                     tagged_note_zero,
+                     note_on,
+                     note_off,
+                     controller,
+                     tagged_note_zero,
+                     note_on,
+                     note_off},
+           .burst = 11},
+      Case{.name = "reset-after-wrap", .words = wrapped_reset_words(), .burst = 8},
+      Case{.name = "repeated-reset",
+           .words = {note_on, reset_word, idle_marker, 0, controller},
+           .burst = 1},
+      Case{.name = "mixed-reset",
+           .words = {note_on, idle_marker, reset_word, tagged_note_zero},
+           .burst = 4},
+      Case{.name = "zero-after-tag", .words = {note_on, 0, controller}, .burst = 3},
+      Case{.name = "recover-after-reset", .words = {reset_word, note_on, controller}, .burst = 1}};
   Counts counts;
   for (const auto &item : cases) {
     trace << "SETUP " << item.name << '\n';
@@ -385,8 +465,10 @@ void run(const blofeld::Firmware &firmware, std::ostream &trace) {
   }
   trace << "RESULT cases=" << std::dec << cases.size() << " runs=" << counts.runs
         << " wire=" << counts.wire << " received=" << counts.received << " queued=" << counts.queued
-        << " idle=" << counts.idle << " lost=" << counts.lost << " overwrites=" << counts.overwrites
-        << " steps=" << counts.handler_steps << " units=" << counts.units << '\n';
+        << " processed=" << counts.processed << " resets=" << counts.resets
+        << " flushed=" << counts.flushed << " idle=" << counts.idle << " lost=" << counts.lost
+        << " overwrites=" << counts.overwrites << " steps=" << counts.handler_steps
+        << " units=" << counts.units << '\n';
 }
 }
 
@@ -397,7 +479,8 @@ int main(int count, char **arguments) {
     require(static_cast<bool>(trace), "Cannot write private original SHI trace");
     run(blofeld::Firmware::load(arguments[1]), trace);
     require(static_cast<bool>(trace), "Incomplete original SHI trace");
-    std::cout << "Original tagged SHI reception, FIFO, transmit and native RTI checks passed\n";
+    std::cout
+        << "Original SHI reception, nested reset, FIFO, transmit and native RTI checks passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

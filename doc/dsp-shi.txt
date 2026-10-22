@@ -7,7 +7,9 @@ register and serial behavior; no manufacturer bootstrap/program bytes are includ
 
 DspShi receives explicit SS/SCK/MOSI observations. It shifts MSB first in all four
 CPOL/CPHA modes and handles 8/16/24-bit words, with short receives left-aligned and
-zero-padded. CPHA=0 requires SS release between words; CPHA=1 supports continuous
+zero-padded. Only those upper bits participate in shifting: inactive HTX padding
+cannot propagate into received data or the later IOSR echo (section 7.4.1).
+CPHA=0 requires SS release between words; CPHA=1 supports continuous
 words. Early SS release discards the incomplete received word. MISO is tri-stated
 when deselected/disabled; an uninitialized active output remains unknown.
 
@@ -25,14 +27,24 @@ point after the final data edge but before SS release is uncalibrated: the outpu
 is explicitly unknown during that interval. A board that reads it must preserve
 that unknown state instead of inventing a ready flag. Simultaneous SS/SCK changes,
 unknown MOSI at a sampling edge, unsupported I2C/master operation, reserved modes
-and changes to HCKR without completed individual reset fail explicitly. Mode
-changes are conservatively limited to individual reset; HRQE changes require idle.
+and changes to HCKR without completed individual reset fail explicitly. Changes
+with HEN remaining set are conservatively unsupported. Clearing HEN may also
+change configuration when HBUSY is known zero (sections 7.4.6.1..5); busy/unknown
+configuration changes fail. HRQE changes require idle.
 
 HCSR reports the specified reset HIDLE/HTDE state; HCKR resets with CPHA set and
 CPOL clear, HSAR with the documented default address. Individual reset and clearing
 interrupt enables require one explicitly supplied DSP instruction cycle. These are
 the manual's instruction-cycle units, not an assumption of one tick per executed
-opcode. No CPU/clock conversion or analog edge/setup/hold timing is inferred.
+opcode. During a configuration-changing reset delay, HCSR/HRX/HTX access and
+interrupt selection fail explicitly instead of guessing the transitional FIFO
+geometry; a new SPI selection also fails. Idle pin observations remain accepted.
+MISO remains tri-stated while idle; an enabled HREQ has known ownership but
+unknown readiness until reset completes. HEN-only reset retains its existing
+one-cycle status/output behavior. Completed individual reset clears paths/errors
+and output drivers and retains written HCSR/HCKR/HSAR controls. Hardware reset
+cancels pending reconfiguration and restores the documented hardware controls.
+No CPU/clock conversion or analog edge/setup/hold timing is inferred.
 Stop-state behavior is not modeled. Reset retains externally observed wire levels.
 
 Polling and interrupt-request selection are covered: HRIE=01 selects nonempty,
@@ -52,6 +64,13 @@ priority encodings, including abort/reset, both error-clear sequences and unknow
 signals. Fixed pending-overwrite cases cover all four clock modes and three word
 widths before clocking and after one bit, including zero data, both real buffers,
 retained IOSR echo and HCSR-read/HTX-write underrun acknowledgement. Separate
+short-word tests use both values of the first inactive HTX bit in every clock
+mode and both short widths, with independent zero receive/echo expectations.
+Twenty-four reset mode/width/FIFO combinations each replay a pending component
+copy with zero and actual elapsed cycles, retained controls, full/error RX and
+two occupied transmit buffers, rejected transitional access, fresh data and the
+new FIFO capacity. Busy/unknown-idle failures and hardware-reset cancellation
+are also checked. These are fixed directed tests, not fuzz runs. Separate
 vectors leave MOSI unknown on every non-capture edge, checking
 that each clock mode samples only its specified edge. The second executes
 the project's own HC12 diagnostic program: real
@@ -94,7 +113,7 @@ trailing data, mapped clears, checkpoint replay and strict pin failures under an
 explicit receiver pad-order experiment. This does not qualify the physical
 route, reset or elapsed clocks; see coupled-boot.txt for exact inputs and limits.
 
-Original tagged receive interrupts are separately qualified with their actual
-stored vectors, initializer, software ring writes and RTI (dsp-shi-receive.txt).
-An untagged receive still exposes the conservative HCSR reset/mode-change guard;
-this unresolved path is not silently accepted.
+Original receive interrupts, including the nested untagged reset while SS is
+deasserted, are separately qualified with their actual stored vectors,
+initializer, software ring writes and RTI (dsp-shi-receive.txt). Selected or
+transitional SPI reset behavior, physical timing and full boot remain unqualified.
