@@ -21,7 +21,8 @@ value, not proof that the DSP accepted it. For these mapped fields both policies
 use the original ordinary selector3 UART branch. The real code returns after CC;
 the test rejects an additional direct USB queue call. The original main-loop
 mirror service, actual endpoint packets and lost-ACK retries have a separate gate
-in gpio-usb-notification.txt. SysEx and unmapped-field fallback remain unqualified.
+in gpio-usb-notification.txt. Selected SysEx/unmapped-field and disabled-policy
+paths have a separate component gate in gpio-sysex.txt.
 
 One genuine DSP policy read per stream inserts the original MCU cache entry;
 later writes use actual cache hits. The UART ring starts at61 so nine bytes cross

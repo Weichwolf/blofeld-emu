@@ -725,9 +725,16 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           final NAK checked under own declared
                                           endpoint/decoder setup
                                           (gpio-usb-notification.txt). This is
-                                          not original enumeration. SysEx/
-                                          unmapped fallback and host-visible
-                                          output remain unqualified.
+                                          not original enumeration. Selected
+                                          SysEx paths add6 actual DeviceID
+                                          requests/notifications,24 USB events,
+                                          72 raw serial bytes and4 suppressed
+                                          off/unmapped-CC cases (gpio-sysex.txt).
+                                          Caller spare bytes are independently
+                                          derived and preserved; raw bytes after
+                                          F7 are not qualified message data.
+                                          Host-visible output and complete
+                                          instrument functions remain open.
                                           Other write classes, settle waits,
                                           real boot/initialization,
                                           host MIDI/audio and physical safety
