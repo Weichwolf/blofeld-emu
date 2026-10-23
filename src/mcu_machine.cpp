@@ -248,6 +248,15 @@ void McuMachine::validate_run_boundary() const {
   state_->check_clock_boundary();
 }
 
+void McuMachine::validate_reset_boundary() const {
+  if (!system_reset_active()) {
+    throw Fault("MCU reset boundary requires an asserted system reset");
+  }
+  state_->check_inactive();
+  state_->check_clock_boundary();
+  static_cast<void>(run_clock().next_reset_edge_ticks());
+}
+
 void McuMachine::set_cycle_observer(std::function<void(Hc12BusCycle)> observer) {
   state_->check_inactive();
   state_->observer = std::move(observer);
@@ -329,7 +338,7 @@ McuCheckpoint McuMachine::checkpoint() const {
   if (state_->reset_advancing) { throw Fault("Cannot checkpoint during MCU reset advancement"); }
   std::optional<Hc12Checkpoint> cpu_state;
   if (system_reset_active()) {
-    if (state_->cpu.executing()) { throw Fault("Cannot capture active MCU reset execution"); }
+    validate_reset_boundary();
   } else {
     cpu_state = state_->cpu.checkpoint();
   }

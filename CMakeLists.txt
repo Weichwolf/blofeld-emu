@@ -706,6 +706,17 @@ if(BUILD_TESTING)
   add_executable(blofeld-flash-test test/mcu_flash_test.cpp)
   target_link_libraries(blofeld-flash-test PRIVATE blofeld_core)
   add_test(NAME flash_commands COMMAND blofeld-flash-test)
+  add_executable(blofeld-flash-stop-test test/mcu_flash_stop_test.cpp)
+  target_link_libraries(blofeld-flash-stop-test PRIVATE blofeld_core)
+  add_test(NAME flash_stop COMMAND blofeld-flash-stop-test)
+  add_executable(blofeld-original-flash-stop-test test/original_flash_stop_test.cpp)
+  target_link_libraries(blofeld-original-flash-stop-test PRIVATE blofeld_core)
+  add_test(NAME original_flash_stop COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-flash-stop-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-flash-stop.trace")
+  set_tests_properties(original_flash_stop PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-flash-test test/original_flash_commands_test.cpp)
   target_link_libraries(blofeld-original-flash-test PRIVATE blofeld_core)
   add_test(NAME original_flash_commands COMMAND ${Python3_EXECUTABLE}
@@ -1027,6 +1038,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-master-output.trace")
   set_tests_properties(original_dsp_master_output PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  add_executable(blofeld-original-dsp-sample-test test/original_dsp_sample_test.cpp)
+  target_link_libraries(blofeld-original-dsp-sample-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_sample COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample.py"
+    $<TARGET_FILE:blofeld-original-dsp-sample-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample.trace")
+  set_tests_properties(original_dsp_sample PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_executable(blofeld-original-dsp-filters-test test/original_dsp_filters_test.cpp
     test/dsp_filter_model.cpp test/dsp_filter_fixture.cpp)
   target_link_libraries(blofeld-original-dsp-filters-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1756,6 +1776,7 @@ add_custom_target(quality
     blofeld-dsp-cmpm-test
     blofeld-original-dsp-filters-test
     blofeld-original-dsp-master-output-test
+    blofeld-original-dsp-sample-test
     blofeld-original-dsp-waveforms-test
     blofeld-original-dsp-envelopes-test
     blofeld-original-dsp-voice-test
@@ -1780,7 +1801,7 @@ add_custom_target(quality
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-mcu-sender-test
     blofeld-flash-config-test blofeld-original-flash-config-test
-    blofeld-flash-test
+    blofeld-flash-test blofeld-flash-stop-test blofeld-original-flash-stop-test
     blofeld-flash-backdoor-test
     blofeld-original-flash-test
     blofeld-original-flash-restart-test

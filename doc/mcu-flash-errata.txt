@@ -42,8 +42,10 @@ another mask's list is not evidence that its silicon follows nominal behavior.
 Current McuFlash checks the S12FTS32KV1 nominal normal-mode reference; it does
 not select a measured UF32 mask or implement these silicon anomalies. In
 particular, byte-write ACCERR and immediate protection-error tests are nominal
-module expectations, not hardware equivalence. STOP/BDM remain unsupported;
-no emulator BDM mass-erase recovery guarantee exists. CPU, timer, SCI, IQUE and
+module expectations, not hardware equivalence. An explicitly selected nominal
+active-command Flash STOP reference exists (mcu-flash-stop.txt); native CPU
+STOP/wake, mask anomalies and BDM remain unsupported. No emulator BDM mass-erase
+recovery guarantee exists. CPU, timer, SCI, IQUE and
 other entries in these sheets require separate qualification.
 
 The original helper's forced SEC=10 path is tested conditionally on explicit

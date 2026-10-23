@@ -199,6 +199,12 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           executing/buffered jobs and interruption
                                           unknownness use explicit reference
                                           milestones (mcu-flash-commands.txt).
+                                          Explicit nominal active Flash STOP cuts,
+                                          pending cancellation, unknown extents,
+                                          clone/reset/repair and native helper
+                                          false-success/unknown-read checks
+                                          (mcu-flash-stop.txt); no native CPU
+                                          STOP/wake or physical timing proof.
                                           Nominal module expectations only:
                                           UF32 mask-dependent flash flags and
                                           STOP/BDM anomalies remain unimplemented;
@@ -362,6 +368,9 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           COP timeout preemption now caps both
                                           owners at the actual OSC edge; failed
                                           bus/idle slots and writes stay incomplete.
+                                          Joint reset snapshots cover drive,
+                                          settling/hold phases, source/fraction
+                                          mismatch and original COP suffix replay.
                                           Propagation/POR, STOP/BDM and physical
                                           latency remain open.
 USB device/transport              partial  PHY control and register/data-side enable.
@@ -975,6 +984,15 @@ ROM wavetables and other assets   partial  Original basic oscillator table gener
                                           expectations (dsp-waveforms.txt). Additional
                                           wavetable/ROM/NAND dependencies, actual
                                           startup and hardware remain unresolved.
+Original sample interpolation     partial  144384 unchanged native callback calls;
+                                          all32768 fractions/four coefficient banks,
+                                          windows from136 logical official samples,
+                                          signed/FM corners and exact eight-tap
+                                          memory accesses (dsp-sample.txt).
+                                          Slot/continuation/modifier guards checked.
+                                          Native header/NAND/refill path, rate/bank
+                                          preparation, full voices/audio and board
+                                          timing remain unqualified.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Explicit nominal DSP reset epochs retain

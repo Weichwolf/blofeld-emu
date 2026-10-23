@@ -17,7 +17,11 @@
 #include "dsp_norm_fixture.hpp"
 #include "original_update_forward_fixture.hpp"
 
+#include <array>
 #include <cstdint>
+#include <ostream>
+#include <sstream>
+#include <streambuf>
 #include <string>
 #include <string_view>
 
@@ -26,6 +30,22 @@ namespace forward = update_forward;
 constexpr unsigned reset_edges = 195, reset_ticks = 1024, oscillator_delta = 205;
 constexpr unsigned resident_entry = 0x8000, vector_cycles = 5, instruction_limit = 64;
 constexpr unsigned strobe = 0x80, all_bits = 0xff, waiting_chunk = 0x2e6b, cursor = 0x144ba;
+constexpr unsigned checkpoint_edges = 131, remaining_edges = 64;
+
+class Redirect {
+public:
+  Redirect(std::ostream &stream, std::ostream &capture)
+      : stream_(stream), previous_(stream.rdbuf(capture.rdbuf())) {}
+
+  ~Redirect() { stream_.rdbuf(previous_); }
+
+  Redirect(const Redirect &) = delete;
+  Redirect &operator=(const Redirect &) = delete;
+
+private:
+  std::ostream &stream_;
+  std::streambuf *previous_;
+};
 
 struct Continuation {
   explicit Continuation(forward::Forward &owner, const McuFlashImage &image)
@@ -50,6 +70,10 @@ struct Continuation {
     run.attach_interrupt_pads();
     run.pair.attach_observers();
     run.pair.sync();
+    attach();
+  }
+
+  void attach() {
     run.pair.mcu.set_cycle_observer([this](const Hc12BusCycle cycle) {
       if (run.pair.mcu.system_reset_active()) {
         slots += cycle.kind;
@@ -64,6 +88,59 @@ struct Continuation {
     });
   }
 
+  [[nodiscard]] std::array<unsigned, 4> irq_state() const {
+    return {run.irq_queries, run.unknown_irq_queries, run.last_irq_known, run.last_irq_levels};
+  }
+
+  void finish_pulse() {
+    require(run.pair.mcu.advance_system_reset(remaining_edges, McuResetPad::high) ==
+                remaining_edges,
+            "The remaining64 reset edges and native vector execute after the saved drive interval");
+    run.pair.schedule->end_system_reset();
+  }
+
+  void replay_pulse() {
+    require(run.pair.mcu.advance_system_reset(checkpoint_edges, McuResetPad::unknown) ==
+                checkpoint_edges,
+            "The native joint reset reaches the exact131-edge drive/settle boundary");
+    const auto saved = run.pair.checkpoint();
+    const auto irq = irq_state();
+    std::ostringstream first;
+    {
+      const Redirect redirect(run.pair.trace, first);
+      finish_pulse();
+    }
+    const auto cpu = forward::registers(run.pair.mcu.cpu().state());
+    const auto dsp = run.pair.dsp.cpu().debug_state();
+    const auto mcu_time = run.pair.mcu.run_clock().elapsed_ticks();
+    const auto dsp_time = run.pair.dsp.run_clock().elapsed_ticks();
+    const auto irq_after = irq_state();
+    run.pair.restore_owners(saved);
+    run.pair.reconnect(saved);
+    run.attach_interrupt_pads();
+    run.irq_queries = irq[0];
+    run.unknown_irq_queries = irq[1];
+    run.last_irq_known = irq[2];
+    run.last_irq_levels = irq[3];
+    run.pair.sync();
+    periods = checkpoint_edges;
+    slots.clear();
+    vector = 0;
+    attach();
+    std::ostringstream second;
+    {
+      const Redirect redirect(run.pair.trace, second);
+      finish_pulse();
+    }
+    require(first.str() == second.str() && forward::registers(run.pair.mcu.cpu().state()) == cpu &&
+                run.pair.dsp.cpu().debug_state() == dsp && irq_state() == irq_after &&
+                run.pair.mcu.run_clock().elapsed_ticks() == mcu_time &&
+                run.pair.dsp.run_clock().elapsed_ticks() == dsp_time,
+            "Actual original COP reset replays every remaining native pad/clock/vector event");
+    run.pair.trace << second.str();
+    run.pair.trace << "RESET_REPLAY cut=131 remaining=64 native=1 pins=1 trace=1\n";
+  }
+
   void storage() const {
     const auto after = run.pair.mcu.bus().power_off_flash_image();
     require(after.bytes == nvm.bytes && after.known == nvm.known && after.fresh == nvm.fresh,
@@ -72,9 +149,7 @@ struct Continuation {
 
   void pulse() {
     auto &mcu = run.pair.mcu;
-    require(mcu.advance_system_reset(reset_edges, McuResetPad::high) == reset_edges,
-            "All195 explicit reset periods advance through the live DSP schedule");
-    run.pair.schedule->end_system_reset();
+    replay_pulse();
     const auto dsp_steps = run.pair.dsp.cpu().debug_state().native_instructions - instructions;
     require(!mcu.system_reset_active() && !mcu.timing_faulted() && !run.pair.schedule->faulted() &&
                 slots == "VfPPP" && vector == hc12::cop_reset_vector && periods == reset_edges &&

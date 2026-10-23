@@ -15,6 +15,8 @@ namespace blofeld {
 // Explicit reference-state transitions, not timed clocks or observed silicon
 // latencies. A future qualified scheduler must determine when these occur.
 enum class FlashMilestone : std::uint8_t { transfer_buffer, complete_command };
+enum class FlashStopTransition : std::uint8_t { enter, resume };
+enum class FlashStopContract : std::uint8_t { unqualified, nominal_active_abort };
 
 struct FlashClockRates {
   std::uint32_t oscillator_hz = 0;
@@ -33,6 +35,9 @@ public:
   void stage(MemoryWrite physical_word);
   void advance(FlashMilestone milestone);
   void observe_clock(FlashClockRates rates);
+  // Explicit nominal active-command observation; not a whole-MCU STOP/wake model.
+  void observe_stop(FlashStopTransition transition,
+                    FlashStopContract contract = FlashStopContract::unqualified);
   void check_array_read() const;
   [[nodiscard]] bool interrupt_pending() const;
   [[nodiscard]] McuFlashImage power_off_image() const;
@@ -58,6 +63,7 @@ private:
   void write_key(MemoryWrite physical_word);
   void transfer();
   void complete();
+  void require_running() const;
   static constexpr unsigned key_access = 0x20;
   McuMemory &memory_;
   McuFlashConfig config_;
@@ -71,6 +77,8 @@ private:
   unsigned key_words_ = 0;
   bool key_locked_ = false;
   std::optional<FlashClockRates> clock_;
+  bool stopped_ = false;
+  bool command_known_ = true;
 };
 
 }

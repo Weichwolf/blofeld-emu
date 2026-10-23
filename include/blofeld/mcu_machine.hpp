@@ -88,6 +88,8 @@ public:
   [[nodiscard]] std::optional<McuResetState> system_reset_state() const;
   // Validate a healthy inactive native clock boundary without copying state.
   void validate_run_boundary() const;
+  // Pure check for an inactive, healthy edge boundary while system reset holds the CPU.
+  void validate_reset_boundary() const;
   // Explicit pre-cycle pad observations; external callbacks are never checkpointed.
   void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
   void set_wait_observer(std::function<void(McuWaitCycle)> observer);

@@ -43,6 +43,7 @@ constexpr unsigned wai_opcode = 0x3e, branch_self = 0xfe, store_opcode = 0x7a;
 constexpr unsigned store_target = 0x1200, stored_value = 0x5a;
 constexpr unsigned nominal_reset_edges = 195, nominal_reset_ticks = 1025;
 constexpr unsigned interrupted_store_ticks = 65, interrupted_store_common = 585;
+constexpr unsigned invalid_cop_service = 0xf0;
 enum class Program : std::uint8_t { nop, branch, wait, store };
 
 std::string rejected(const auto &operation) {
@@ -168,9 +169,7 @@ void test_all_phases_and_checkpoint() {
   for (unsigned sync = minimum_sync; sync <= maximum_sync; ++sync) {
     Fixture fixture;
     fixture.begin(sync);
-    require(
-        rejected([&] { static_cast<void>(fixture.schedule.checkpoint()); }).contains("mid-reset"),
-        "Joint snapshots cannot silently omit board reset state");
+    static_cast<void>(fixture.schedule.checkpoint());
     const auto count = drive + sync + settle;
     require(fixture.mcu.advance_system_reset(count, McuResetPad::high) == count,
             "All195..198 reset edges execute before the real native vector sequence");
@@ -236,6 +235,10 @@ void test_unknown_pad_and_reentrancy() {
     }
     fixture.schedule.begin_reset_period(
         period, {}, {.observe = [&](const auto &event) { fixture.record(event); }});
+    require(rejected([&] {
+              static_cast<void>(fixture.schedule.checkpoint());
+            }).contains("inactive CPU"),
+            "Joint reset capture cannot enter a live MCU edge callback");
   });
   fixture.mcu.advance_system_reset(drive + minimum_sync + settle - 1, McuResetPad::unknown);
   const auto mcu_ticks = fixture.mcu.run_clock().elapsed_ticks();
@@ -296,6 +299,114 @@ void check_literal_dsp_time(const Fixture &fixture) {
               fixture.dsp.run_clock().elapsed_ticks() == fixture.units * native_unit_ticks &&
               fixture.dsp.run_clock().native_epoch() == 1,
           "Independent 1/4-unit NOP/JMP costs bound DSP progress at the exact COP/reset horizon");
+}
+
+struct ResetSnapshot {
+  McuCheckpoint mcu;
+  DspCheckpoint dsp;
+  McuDspScheduleCheckpoint schedule;
+  std::uint64_t units, steps, edges, cycles;
+};
+
+ResetSnapshot capture(const Fixture &fixture) {
+  return {.mcu = fixture.mcu.checkpoint(),
+          .dsp = fixture.dsp.checkpoint(),
+          .schedule = fixture.schedule.checkpoint(),
+          .units = fixture.units,
+          .steps = fixture.steps,
+          .edges = fixture.reset_edges,
+          .cycles = fixture.native_cycles};
+}
+
+void restore(Fixture &fixture, const ResetSnapshot &saved) {
+  fixture.mcu.restore(saved.mcu);
+  fixture.dsp.restore(saved.dsp);
+  fixture.schedule.restore(saved.schedule);
+  fixture.units = saved.units;
+  fixture.steps = saved.steps;
+  fixture.reset_edges = saved.edges;
+  fixture.native_cycles = saved.cycles;
+  fixture.attach();
+}
+
+void test_mid_reset_replay() {
+  for (unsigned sync = minimum_sync; sync <= maximum_sync; ++sync) {
+    const auto count = drive + sync + settle;
+    for (const unsigned cut : {0U, 1U, drive + sync, count - 1, count}) {
+      Fixture fixture;
+      fixture.mcu.bus().write(store_target, stored_value);
+      fixture.begin(sync);
+      fixture.mcu.advance_system_reset(cut, cut == count ? McuResetPad::low : McuResetPad::unknown);
+      const auto saved = capture(fixture);
+      const auto remaining = cut == count ? 1U : count - cut;
+      const auto edges = cut + remaining;
+      fixture.mcu.advance_system_reset(remaining, McuResetPad::high);
+      fixture.schedule.end_system_reset();
+      const auto dsp = fixture.dsp.cpu().debug_state();
+      const auto mcu_ticks = fixture.mcu.run_clock().elapsed_ticks();
+      const auto dsp_ticks = fixture.dsp.run_clock().elapsed_ticks();
+      check_literal_dsp_time(fixture);
+      for (unsigned replay = 0; replay < 2; ++replay) {
+        restore(fixture, saved);
+        require(fixture.mcu.advance_system_reset(remaining, McuResetPad::high) == remaining,
+                "Restored drive/settle/external-hold boundary reaches native reset release");
+        fixture.schedule.end_system_reset();
+        require(fixture.dsp.cpu().debug_state() == dsp &&
+                    fixture.mcu.run_clock().elapsed_ticks() == mcu_ticks &&
+                    fixture.dsp.run_clock().elapsed_ticks() == dsp_ticks &&
+                    mcu_ticks == initial_ticks + (edges * 5ULL) + vector_ticks &&
+                    fixture.reset_edges == edges && fixture.native_cycles == reset_cycles &&
+                    fixture.mcu.cpu().state().pc == entry &&
+                    fixture.mcu.cpu().state().ccr == hc12::reset_ccr &&
+                    fixture.mcu.bus().read(store_target) == stored_value &&
+                    fixture.mcu.run_clock().native_epoch() == 2 && !fixture.schedule.faulted(),
+                "Joint reset replay matches independent lifetime/vector time, native DSP and SRAM");
+        check_literal_dsp_time(fixture);
+      }
+    }
+  }
+}
+
+void test_mid_reset_recovery_and_mismatch() {
+  Fixture fixture;
+  fixture.begin();
+  fixture.mcu.advance_system_reset(nominal_reset_edges - 1, McuResetPad::unknown);
+  const auto saved = capture(fixture);
+  static_cast<void>(rejected([&] { fixture.mcu.advance_system_reset(1, McuResetPad::unknown); }));
+  require(fixture.schedule.faulted() && rejected([&] {
+                                          static_cast<void>(fixture.schedule.checkpoint());
+                                        }).contains("healthy"),
+          "An unknown reset-source sample cannot produce a healthy joint snapshot");
+  fixture.mcu.restore(saved.mcu);
+  fixture.dsp.cpu().step();
+  require(rejected([&] { fixture.schedule.restore(saved.schedule); }).contains("DSP"),
+          "Restoring only the MCU cannot hide a different native DSP position");
+  restore(fixture, saved);
+  fixture.mcu.advance_system_reset(1, McuResetPad::high);
+  fixture.schedule.end_system_reset();
+  check_literal_dsp_time(fixture);
+  require(!fixture.schedule.faulted(),
+          "Trusted joint reset restore recovers the known pre-error edge");
+
+  Fixture external;
+  external.begin();
+  const auto wrong_source = external.schedule.checkpoint();
+  Fixture shifted(false, Program::nop, 3);
+  shifted.begin();
+  require(
+      rejected([&] { shifted.schedule.restore(wrong_source); }).contains("coordinated native MCU"),
+      "Equal elapsed time and reset phase cannot hide a different initial OSC fraction");
+  Fixture cop;
+  cop.mcu.bus().write(hc12::cop_control, 1);
+  static_cast<void>(rejected([&] { cop.mcu.bus().write(hc12::cop_service, invalid_cop_service); }));
+  cop.schedule.begin_system_reset(
+      McuResetSource::cop, minimum_sync, McuDspResetOrder::dsp_before_mcu);
+  const auto before = cop.dsp.cpu().debug_state();
+  const auto reset = cop.mcu.system_reset_state();
+  require(
+      rejected([&] { cop.schedule.restore(wrong_source); }).contains("coordinated native MCU") &&
+          cop.dsp.cpu().debug_state() == before && reset && reset->requested == McuResetSource::cop,
+      "Equal clocks/epochs cannot substitute a different MCU reset cause");
 }
 
 void test_timeout(const bool waiting, const bool phy, const unsigned phase) {
@@ -390,6 +501,8 @@ int main() {
     test_unknown_pad_and_reentrancy();
     test_unconsumed_boundaries();
     test_dsp_failure_prefix();
+    test_mid_reset_replay();
+    test_mid_reset_recovery_and_mismatch();
     for (const bool waiting : {false, true}) {
       for (const bool phy : {false, true}) {
         for (const unsigned phase : {0U, 3U}) { test_timeout(waiting, phy, phase); }

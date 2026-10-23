@@ -31,6 +31,9 @@ time advances1024 ticks/205 OSC edges including five CPU bus cycles. The SAME
 DSP executes737/738 original handshake-wait instructions, retaining its epoch,
 clock phase and pending schedule. Fresh readers reconnect native GPIO state;
 no DSP GPIO initialization or artificial peer reset is reapplied.
+All four cases also save both native owners, schedule/reset state and the
+external link/IRQ-reader state after131 reset edges. Replaying the remaining64
+and native vector fetch preserves the complete suffix trace and final states.
 
 Normal-single-chip PEAR resets to10, as specified by MEBI. The resident loader
 then enables PortQ pull-ups before its later pull-down selection. The native DSP
@@ -52,7 +55,7 @@ no host register/RAM repair supplies that status. Clock alignment uses the own
 native MCU busy loop, then restores its declared initial caller context before
 live coupling. The DSP epoch is retained; this is not continuous whole-board boot.
 
-Four nominal order/phase contexts and sixteen fixed oracle corruptions cover these
+Four nominal order/phase contexts and seventeen fixed oracle corruptions cover these
 conditions. Earlier declared-byte-only diagnostics keep their strict Y:0144b9
 fault and exact traces. Shared transport/display fixtures retain default behavior.
 Original assets, packet bodies, text, screenshots and traces remain local.

@@ -65,7 +65,7 @@ def inputs(firmware, destination):
 def collect(path):
     cases, current, preload = [], None, None
     tags = {'SOURCE', 'CHUNK', 'CONSUMER', 'IRQ_PAD', 'IRQ_ENTRY', 'IRQ_RETURN', 'RESULT',
-            'RESET_BEGIN', 'SYSTEM_RESET', 'RESET_BOOT', 'RESET_BOOT_FAULT', 'COP_ENABLED', 'COP_REQUEST', 'ENTRY_FLAGS', 'CLEAR', 'TEXT', 'RECTANGLE', 'PREPARED', 'FAULT_STATE', 'COUPLED_FAULT', 'QUARANTINE', 'COUPLED_RESULT'}
+            'RESET_BEGIN', 'RESET_REPLAY', 'SYSTEM_RESET', 'RESET_BOOT', 'RESET_BOOT_FAULT', 'COP_ENABLED', 'COP_REQUEST', 'ENTRY_FLAGS', 'CLEAR', 'TEXT', 'RECTANGLE', 'PREPARED', 'FAULT_STATE', 'COUPLED_FAULT', 'QUARANTINE', 'COUPLED_RESULT'}
     with path.open() as stream:
         for line in stream:
             tag = line.split(' ', 1)[0]
@@ -213,6 +213,8 @@ def validate(cases, blocks, texts, counts):
                 or result['queries'] != case['coupled_pads'] or result['irq-queries'] <= prefix['irq-queries']
                 or result['unresolved-events'] != case['coupled_nets'] or not case['nets'] or case['delay'] != 30000):
             raise ValueError('COUPLED_RESULT raster, complete delay, storage or pad audit differs')
+        if single(case, 'RESET_REPLAY') != dict(cut=131, remaining=64, native=1, pins=1, trace=1):
+            raise ValueError('RESET_REPLAY native joint pulse continuation differs')
         if single(case, 'RESET_BEGIN') != {'mcu-epoch': 2, 'dsp-epoch': 1}:
             raise ValueError('RESET_BEGIN MCU/DSP epoch continuity differs')
         # Predicted from the fixed original prefix and25-common-tick BRCLR loop,
@@ -244,13 +246,13 @@ def validate(cases, blocks, texts, counts):
                 packet_calls=17316, native_helper_entries=4, native_error_frames=4,
                 original_text_callbacks=8, original_rectangles=4, actual_lcd_writes=counts['writes'] * 4,
                 actual_lcd_reads=counts['reads'] * 4, native_delay_iterations=120000,
-                joint_reset_clock_periods=780, native_reset_dsp_steps=2950, actual_consumed_pad_faults=4, cop_reset_requests=4, mcu_reset_pulses=4, native_cop_vector_fetches=4, resident_loader_continuations=4, native_source_reads=264, native_output_chunks=1048, native_input_samples=1024,
+                joint_reset_replays=4, joint_reset_clock_periods=780, native_reset_dsp_steps=2950, actual_consumed_pad_faults=4, cop_reset_requests=4, mcu_reset_pulses=4, native_cop_vector_fetches=4, resident_loader_continuations=4, native_source_reads=264, native_output_chunks=1048, native_input_samples=1024,
                 board_rejections=4)
 
 
 def controls(cases, blocks, texts, counts, frame):
     for tag, key in (('SOURCE', 'value'), ('CHUNK', 'value'), ('RECTANGLE', 'height'),
-                     ('PREPARED', 'flags'), ('COP_ENABLED', 'control'), ('COP_REQUEST', 'phase'), ('SYSTEM_RESET', 'vector'), ('SYSTEM_RESET', 'dsp-steps'), ('RESET_BOOT', 'pad-conflicts'), ('RESET_BOOT', 'stop'), ('QUARANTINE', 'joint'), ('COUPLED_RESULT', 'delay')):
+                     ('PREPARED', 'flags'), ('COP_ENABLED', 'control'), ('COP_REQUEST', 'phase'), ('RESET_REPLAY', 'remaining'), ('SYSTEM_RESET', 'vector'), ('SYSTEM_RESET', 'dsp-steps'), ('RESET_BOOT', 'pad-conflicts'), ('RESET_BOOT', 'stop'), ('QUARANTINE', 'joint'), ('COUPLED_RESULT', 'delay')):
         changed = list(cases)
         changed[0] = copy.deepcopy(cases[0])
         line = changed[0]['rows'][tag][0]
@@ -281,7 +283,7 @@ def controls(cases, blocks, texts, counts, frame):
         pass
     else:
         raise ValueError('Coupled oracle accepted a flipped native raster pixel')
-    return 16
+    return 17
 
 
 def main():

@@ -44,6 +44,20 @@ void McuBus::observe_flash_clock(const FlashClockRates rates) {
   flash_.observe_clock(rates);
 }
 
+void McuBus::observe_flash_stop(const FlashStopTransition transition,
+                                const FlashStopContract contract) {
+  try {
+    if (notifying_) { throw Fault("Flash STOP observation requires an inactive bus observer"); }
+    flash_.observe_stop(transition, contract);
+  } catch (const Fault &fault) {
+    throw Fault("MCU flash STOP observation transition=" +
+                std::to_string(static_cast<unsigned>(transition)) + " pc=" + hex(context_.pc) +
+                " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+  }
+  ++revision_;
+  ++code_revision_;
+}
+
 void McuBus::power_cycle() {
   memory_.power_cycle();
   reset();

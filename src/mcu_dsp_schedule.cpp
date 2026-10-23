@@ -337,15 +337,24 @@ void McuDspSchedule::end_system_reset() {
 
 McuDspScheduleCheckpoint McuDspSchedule::checkpoint() const {
   healthy();
-  if (resetting_) { throw Fault("Joint mid-reset checkpoints require board reset state"); }
-  mcu_.validate_run_boundary();
+  if (resetting_) {
+    mcu_.validate_reset_boundary();
+  } else {
+    mcu_.validate_run_boundary();
+  }
   consumed();
   if (offered_ || shared_write_ || waiting_) {
     throw Fault("MCU/DSP schedule capture requires a completed instruction observation");
   }
   McuDspScheduleCheckpoint result(dsp_schedule_.checkpoint(dsp_));
   result.inputs_ = inputs_;
-  result.mcu_ = mcu_.cpu().state();
+  if (resetting_) {
+    result.reset_ = mcu_.system_reset_state();
+    result.reset_edge_ticks_ = mcu_.run_clock().next_reset_edge_ticks();
+    result.reset_oscillator_hz_ = mcu_.run_clock().oscillator_hz();
+  } else {
+    result.mcu_ = mcu_.cpu().state();
+  }
   result.timebase_hz_ = timebase_hz_;
   result.end_ticks_ = end_ticks_;
   result.mcu_cycles_ = expected_mcu_cycles_;
@@ -357,13 +366,21 @@ McuDspScheduleCheckpoint McuDspSchedule::checkpoint() const {
 
 void McuDspSchedule::restore(const McuDspScheduleCheckpoint &checkpoint) {
   if (active_) { throw Fault("Cannot restore an active MCU/DSP schedule"); }
-  mcu_.validate_run_boundary();
+  if (checkpoint.reset_) {
+    mcu_.validate_reset_boundary();
+  } else {
+    mcu_.validate_run_boundary();
+  }
   if (checkpoint.inputs_ != inputs_ || checkpoint.timebase_hz_ != timebase_hz_ ||
       mcu_ticks() != checkpoint.end_ticks_ ||
       mcu_.run_clock().bus_cycles() != checkpoint.mcu_cycles_ ||
       mcu_.run_clock().native_epoch() != checkpoint.mcu_epoch_ ||
       mcu_.idle_bus_cycles() != checkpoint.mcu_idle_cycles_ ||
-      !same_cpu(mcu_.cpu().state(), checkpoint.mcu_)) {
+      (checkpoint.reset_
+           ? mcu_.system_reset_state() != checkpoint.reset_ ||
+                 mcu_.run_clock().next_reset_edge_ticks() != checkpoint.reset_edge_ticks_ ||
+                 mcu_.run_clock().oscillator_hz() != checkpoint.reset_oscillator_hz_
+           : !same_cpu(mcu_.cpu().state(), checkpoint.mcu_))) {
     throw Fault("MCU/DSP schedule restore requires compatible inputs and coordinated native MCU");
   }
   dsp_schedule_.restore(checkpoint.dsp_, dsp_);
@@ -377,7 +394,7 @@ void McuDspSchedule::restore(const McuDspScheduleCheckpoint &checkpoint) {
   waiting_ = false;
   wait_context_.reset();
   reset_context_.reset();
-  resetting_ = false;
+  resetting_ = checkpoint.reset_.has_value();
   cop_deadline_ = false;
   faulted_ = false;
 }

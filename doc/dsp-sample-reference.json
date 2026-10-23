@@ -1,0 +1,40 @@
+{
+  "program_entry": 10686,
+  "program_end": 10723,
+  "records": [
+    {
+      "record": 39,
+      "space": 1,
+      "address": 56982,
+      "words": 1032,
+      "sha256": "0e0e7b4b7b261286403fc7892e71c29b65b05afeadb4da65a6b88da256be7479"
+    },
+    {
+      "record": 40,
+      "space": 1,
+      "address": 59830,
+      "words": 996,
+      "sha256": "7cc7649579baf592c05405686c616ecea179162722acff0b659235a4a9b045d9"
+    },
+    {
+      "record": 114,
+      "space": 0,
+      "address": 10008,
+      "words": 1086,
+      "sha256": "2faf9d21168e2566ed128f33ddffa3a0b6249bcdff644f86072746271e295fe2"
+    }
+  ],
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "model_source": "Original sampler: one MPY plus seven MACs (eight products); source prose claiming nine is contradicted by its instructions. Phase folding from blofeld-src/doc/dsp_sample_stream.txt; DSP56300FM Rev5 IFcc and word-transfer semantics.",
+  "source_commit": "93bc49782ed14a7013b06fc5c46613ed0ca68993",
+  "qualification": "Unmodified isolated sampler under explicit slot, ring, FM, linear coefficient addressing and unscaled arithmetic inputs. Logical WPC PCM windows are supplied as declared high-aligned ring words; no physical NAND/header mapping, install, boot, scheduling, resampler rate preparation or physical audio equivalence.",
+  "products": 8,
+  "instruction_starts": 36,
+  "program_words": 37,
+  "coefficient_l1_bounds": [
+    2767021,
+    2132450,
+    2097150,
+    2097150
+  ]
+}

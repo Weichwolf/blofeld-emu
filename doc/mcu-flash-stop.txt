@@ -1,0 +1,47 @@
+FTS32K nominal active-command STOP reference
+
+Source: S12FTS32KV1/D V01.03 section 4.3, in the official UF32 archive pinned
+by hardware/sources.json. McuFlash::observe_stop requires the explicit
+nominal_active_abort contract. The default is unqualified and fails visibly.
+This is a Flash-module reference event, not execution of a CPU STOP instruction,
+a whole-board clock gate, a wake source or a selected/measured silicon mask.
+See mcu-flash-errata.txt for the distinct idle and physical-completion anomalies.
+
+The caller supplies enter and resume between CPU instructions. Entry requires
+CCIF low from a launched or executing command. An idle entry, partial unlaunched
+successor, duplicate entry, early resume or event inside a bus observer fails
+without selecting an outcome. An accepted entry:
+- invalidates only an executing program word, erase sector or mass-erase block;
+  erase verify and untransferred buffers change no cells;
+- discards executing and pending work, sets ACCERR and CCIF, and prevents later
+  milestones from completing the cancelled jobs;
+- retains unknown bytes and lost erase history across clone, reset and NVM export.
+
+Held array/register accesses, command milestones and clock changes fail. CCIF's
+enabled interrupt is known asserted; CBEIF alone is unknown until resume and
+fails if needed for interrupt arbitration. Resume supplies the documented
+CBEIF=1. Software must clear ACCERR before another command. FCMD readback after
+abort remains unknown until a new command selection or reset. Reset restores
+volatile command knowledge, never damaged cells; unknown option bytes still
+prevent reset. Actual erase/program operations can recover the affected extent.
+
+Validation
+  ctest --test-dir build/strict -R '^(flash_stop|original_flash_stop)$' --output-on-failure
+
+flash_stop checks four commands at launched, executing and queued-successor
+positions, independent full-array byte/knowledge/history expectations, held
+clone/resume, all four interrupt-enable combinations, rejected partial sequences,
+reset/repair and actual cached native instruction fetch after an aborted erase.
+
+original_flash_stop pins the private 1.25 ZIP and executes its unchanged 632-byte
+RAM helper from an own caller. After one busy-poll iteration, an explicit nominal
+Flash STOP/resume observation aborts its command. The program case returns B=1
+while ACCERR remains set and its target word is unknown: the original poll tests
+CCIF without testing ACCERR. The erase case clears errors, then its native word
+read fails on the unknown sector. Both cases compare the whole physical image
+and every helper byte; private instruction traces remain under build/.
+
+These are conditional original-code findings. The firmware does not execute
+STOP in these fixtures. Native STOP/wake integration, physical phase timing,
+target mask and complete original update/recovery remain unqualified. The idle
+FSTAT/CBEIF initialization frontier is unchanged (mcu-flash-commands.txt).

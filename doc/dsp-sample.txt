@@ -1,0 +1,32 @@
+Original sample interpolation reference
+
+  cmake --build --preset strict --target blofeld-original-dsp-sample-test
+  ctest --test-dir build/strict -R '^original_dsp_sample$' --output-on-failure
+
+The private firmware, MID and all DSP records are hash-checked before execution.
+dsp-sample-reference.json selects the unchanged sampler program and coefficient
+records. An own ROM caller supplies explicit unscaled arithmetic, slot/FM inputs,
+linear coefficient addressing and an aligned 512-word ring. The original callback
+updates phase, reads the ring with modulo512 and jumps through its real continuation.
+
+The 37 program words contain 36 instruction starts and EIGHT products: one MPY
+and seven MACs, with eight coefficient and eight sample reads. Earlier source-side
+prose claiming nine taps contradicts those instructions. Firmware and interpreter instructions remain unchanged.
+
+The independent Python model checks signed phase/FM arithmetic, raw A1 storage,
+folded coefficient rows/stride and the truncated full-accumulator dot product.
+144384 complete calls cover all32768 fractions in four banks,13056 logical PCM
+windows from all136 official sample headers, and256 signed/zero/FM corner cases.
+Actual native accesses must match every coefficient address and PCM word. Output
+and exposed sample agree; slot/output guards, continuation, cursor updates and
+M5-to-M1 restoration are checked. The ninth supplied word is never read.
+
+Independent row L1 maxima are2767021,2132450,2097150,2097150. Every bound is below
+8388608, so these original tables cannot clip the eight-tap result for signed24
+samples in this unscaled mode. FM intermediate limiting is exercised separately.
+
+WPC/Spectre identities and decoded logical PCM follow sample-library.txt. Each
+declared PCM word is high-aligned from signed16; no WPC-to-physical-NAND or native
+header conversion is inferred. Rate/bank preparation, requests/refills, sample
+installation, continuous voices, board scheduling, physical audio and full boot
+remain unqualified. Reserved Y:002000 and other unknown accesses remain strict.
