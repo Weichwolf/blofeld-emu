@@ -242,6 +242,42 @@ void test_fractional_phy_edges() {
       "Bus/clock copies retain the unfinished source-clock fraction and independent service state");
 }
 
+void test_pure_deadline_offers() {
+  constexpr std::array<unsigned, 5> oscillator_ticks{5, 4, 3, 2, 1};
+  constexpr std::array<unsigned, 5> phy_ticks{2, 2, 2, 2, 1};
+  for (unsigned phase = 0; phase < oscillator_ticks.size(); ++phase) {
+    auto inputs = contract().clock;
+    inputs.initial_oscillator_phase_ticks = phase;
+    const McuRunClock clock(inputs);
+    McuBus bus(blofeld::test::checkpoint_image());
+    bus.write(control_address, 1);
+    bus.advance_oscillator(first_period - 1);
+    const auto before = bus.cop_state();
+    const auto offer = clock.next_period(bus);
+    require(offer.duration_ticks == oscillator_ticks.at(phase) && offer.cop_deadline &&
+                clock.next_cycle_ticks(bus) == 10 && bus.cop_state() == before &&
+                clock.elapsed_ticks() == 0 && clock.bus_cycles() == 0,
+            "A pure COP offer preserves state and caps the native period at its literal OSC edge");
+    bus.write(hc12::usb_control, 0x40);
+    bus.observe_phy({.edges = 15});
+    auto held_bus = bus.clone(); // COPWAI is write-once: qualify its first write independently.
+    bus.write(hc12::clock_select, window);
+    const auto phy = clock.next_period(bus);
+    require(phy.duration_ticks == phy_ticks.at(phase) && phy.cop_deadline == (phase >= 3),
+            "A fractional PHY offer distinguishes no deadline, exact-end timeout and partial slot");
+    held_bus->write(hc12::clock_select, window | 1U);
+    const auto held = clock.next_period(*held_bus, true);
+    require(held.duration_ticks == 2 && !held.cop_deadline && bus.cop_state() == before,
+            "COPWAI gates only native WAI offers, without consuming or clearing the counter");
+  }
+  const McuRunClock clock(contract().clock);
+  McuBus bus(blofeld::test::checkpoint_image());
+  bus.write(control_address, 1);
+  bus.advance_oscillator(first_period - 2);
+  require(clock.next_period(bus).duration_ticks == 10 && clock.next_period(bus).cop_deadline,
+          "A timeout exactly at the IPBus endpoint still prevents the bus cycle from completing");
+}
+
 void test_native_invalid_service() {
   // Own LDAA#1; STAA COPCTL; LDAA#F0; STAA ARMCOP; NOP, with literal generic CPU opcodes.
   constexpr std::array<std::uint8_t, 11> code{
@@ -335,6 +371,7 @@ int main() {
     test_window_edges_and_invalid_bytes();
     test_clock_deadline_and_relocation();
     test_fractional_phy_edges();
+    test_pure_deadline_offers();
     test_native_invalid_service();
     test_wait_gate_checkpoint_and_wake();
     test_wait_timeout_is_not_a_reset_stub();

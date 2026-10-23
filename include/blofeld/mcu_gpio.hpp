@@ -50,7 +50,7 @@ struct PinOutputs {
   bool operator==(const PinOutputs &) const = default;
 };
 
-// Logical GPIO and explicit external drives, with unknown inputs tracked.
+// Normal-single-chip MEBI GPIO and explicit external drives, with unknown inputs tracked.
 // Electrical transition/synchronizer timing and alternate peripheral functions
 // are not yet a complete board model.
 class McuGpio {

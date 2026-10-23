@@ -25,15 +25,21 @@ four controller pages. Original native code sets flags0xd1, then executes all
 normal counter; the original invalid ARMCOP=0xf0 write at003f, PC129c/CCRb8
 then requests a COP system reset. Exact OSC edges since the enable transaction
 match the counter phase. The request first fails visibly before later
-instructions. An explicitly isolated MCU reset then drives128+3 SYSCLK edges,
-settles64, observes a high RESET pad and natively fetchesfffa to8000 in VfPPP.
-Lifetime time advances1024 ticks/205 OSC edges including the five CPU bus cycles.
-The unchanged resident loader retires its first instruction, then its register
-write at8002/0012 fails on the unqualified ECLK/GPIO reset-board observation
-at0008. Operation/address/PC are checked; no pin voltage or ECLK phase is guessed.
-The diagnostic LCD fixture is detached after its saved frame; DSP state/time stay
-held. The old joint scheduler rejects the new MCU epoch. This separate MCU-only
-reset scope is not continuous whole-board reset (mcu-system-reset.txt).
+instructions. The explicit joint reset path drives128+3 SYSCLK edges, settles64,
+observes a high RESET pad and natively fetchesfffa to8000 in VfPPP. MCU lifetime
+time advances1024 ticks/205 OSC edges including five CPU bus cycles. The SAME
+DSP executes737/738 original handshake-wait instructions, retaining its epoch,
+clock phase and pending schedule. Fresh readers reconnect native GPIO state;
+no DSP GPIO initialization or artificial peer reset is reapplied.
+
+Normal-single-chip PEAR resets to10, as specified by MEBI. The resident loader
+then enables PortQ pull-ups before its later pull-down selection. The native DSP
+consumes an opposed-pull Q7 voltage and fails at its original branch. STAA EXT
+uses PwO, so its write precedes the final O. At the phase0 MCU-before-DSP tie,
+failure occurs in w; other declared contexts fail in O. MCU PC8006/8009 retains
+the actual partial effects; both owners and joint scheduling reject further work.
+The prior LCD fixture is detached after capture; unknown pin voltage/reset
+propagation is not replaced by a guess (mcu-reset-coupling.txt).
 
 At the pre-reset request boundary, MCU execution and joint scheduling reject
 further advancement without changing CPU/clock state. The independent DSP remains healthy but held in its native
@@ -46,7 +52,7 @@ no host register/RAM repair supplies that status. Clock alignment uses the own
 native MCU busy loop, then restores its declared initial caller context before
 live coupling. The DSP epoch is retained; this is not continuous whole-board boot.
 
-Four nominal order/phase contexts and fourteen fixed oracle corruptions cover these
+Four nominal order/phase contexts and sixteen fixed oracle corruptions cover these
 conditions. Earlier declared-byte-only diagnostics keep their strict Y:0144b9
 fault and exact traces. Shared transport/display fixtures retain default behavior.
 Original assets, packet bodies, text, screenshots and traces remain local.

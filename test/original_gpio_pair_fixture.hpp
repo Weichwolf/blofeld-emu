@@ -433,8 +433,10 @@ struct OriginalGpioPair {
     }
     link.last_net = observation;
     const auto irq = mcu.bus().gpio_outputs(McuPort::j);
-    require((irq.mask & irq.known & 1) == 1, "MCU IRQ driver must be known");
-    dsp.bus().observe_irqa((irq.levels & 1) != 0);
+    dsp.bus().observe_irqa_driver({.active = irq.mask & 1U,
+                                   .known = irq.known & 1U,
+                                   .levels = irq.levels & 1U,
+                                   .reduced = irq.reduced_drive & 1U});
   }
 
   void reject_board_qualification() const {
@@ -570,9 +572,13 @@ struct OriginalGpioPair {
     throw Fault("clocked pair instruction budget");
   }
 
-  void connect_pads() {
+  void connect_mcu_pads() {
     mcu.bus().attach_gpio_pad_source(
         McuPort::q, [this](const std::uint32_t bits) { return pads(false, bits); });
+  }
+
+  void connect_pads() {
+    connect_mcu_pads();
     dsp.bus().gpio(DspPort::c).attach_pad_source([this](const std::uint32_t bits) {
       return pads(true, bits);
     });

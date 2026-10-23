@@ -89,7 +89,8 @@ void McuGpio::reset() {
                      .external = external};
   }
   routing_ = 0;
-  assignment_e_ = 0;
+  // S12MEBIV3 figure3-9: normal single-chip reset selects GPIO, not ECLK.
+  assignment_e_ = port_e_clock_disable;
   pull_control_ = core_pull_reset;
 }
 

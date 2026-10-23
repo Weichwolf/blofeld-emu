@@ -226,6 +226,11 @@ struct Forward {
     state.ccr = foreground_ccr;
     pair.mcu.cpu().set_state(state);
     pair.mcu.bus().set_pin_drive(McuPort::e, {});
+    attach_interrupt_pads();
+    pair.sync();
+  }
+
+  void attach_interrupt_pads() {
     pair.mcu.bus().attach_gpio_pad_source(McuPort::e, [this](const std::uint32_t bits) {
       const auto drive = pair.dsp.bus().gpio(DspPort::e).outputs();
       const auto local = pair.mcu.bus().gpio_outputs(McuPort::e);
@@ -248,7 +253,6 @@ struct Forward {
       }
       return GpioPadSample{.known = known_bits, .levels = resolved};
     });
-    pair.sync();
   }
 
   void observe(const DspScheduledStep &step) {

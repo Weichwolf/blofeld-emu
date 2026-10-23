@@ -1,0 +1,71 @@
+Joint MCU reset and continuing DSP reference time
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-reset-test
+  ctest --test-dir build/strict -R '^mcu_dsp_reset$' --output-on-failure
+
+McuDspSchedule::begin_system_reset(source,n,dsp_before_mcu) admits an explicit
+inactive reset event only at a consumed MCU/DSP time boundary. It advances the
+MCU epoch through the actual owned reset API; DSP state, epoch, clock fraction,
+instruction counts and pending scheduled work remain continuous. It does not
+assert a DSP reset pin or assign a new CPU PC. Unconsumed/overshot time, pending
+idle/shared-write offers and poisoned DSP state reject rather than retime/rewind.
+Reset propagation still requires board qualification.
+
+McuRunClock::next_period offers a pure COP-aware duration. A timeout shortens
+the reference period to its actual OSC edge, including an exact-end deadline;
+the failed IPBus/idle period never counts as completed. Joint DSP execution stops
+at that same boundary. A preempted shared write has no bus transfer or observation
+to complete. Only the actual owned timeout permits discarding this pending offer
+when beginning explicit reset; unrelated faults/missing time still reject.
+COPWAI gates idle offers only. Existing DSP-before-MCU reference observation order
+remains an explicit scheduling contract, not measured reset-pin timing.
+
+After reset assertion, reconnect required GPIO sources and native observers.
+McuMachine::set_reset_period_observer receives qualified McuResetPeriod inputs
+before each committed SYSCLK edge. begin_reset_period advances native DSP and
+external events through that exact common-time boundary, without inventing a CPU
+bus slot. Once pad arbitration permits release, ordinary cycle observation clocks
+the real native VfPPP reset sequence. end_system_reset validates its completed
+boundary. The observer cannot restore, checkpoint or recursively advance the
+active MCU owner. A failed peer operation preserves its actual completed prefix
+and quarantines joint scheduling. An unknown final RESET sample advances neither
+owner for that unqualified edge.
+
+Completed joint-reset checkpoints replay in the new MCU epoch. External callbacks
+remain outside snapshots. Joint mid-reset board snapshots still reject; the
+separate owned MCU pulse checkpoints do not establish a whole-board snapshot.
+
+Two documented electrical/reset facts remove false prerequisites:
+- The fixed normal-single-chip MEBI profile resets PEAR.NECLK to1 (PEAR10),
+  releasing PE4 as GPIO. It does not start with ECLK selected. MODE strap sampling,
+  other MEBI modes and explicitly selected ECLK remain unqualified.
+- DspBus::observe_irqa_driver resolves the post-boot IRQA input against its
+  documented internal pull-up. A released MCU driver becomes a deasserted level;
+  known strong low dominates. Unknown active drivers or opposed passive pulls
+  remain unknown, with enabled consumption failing through the IRQ controller.
+
+Independent own-program tests check all four3..6-cycle synchronization choices,
+NOP/JMP instruction costs, exact edge/vector/lifetime ledgers, completed reset
+replay, missing offers, reentrancy, unknown pad sampling and native peer faults.
+Eight natural timeout contexts combine running BRA/WAI, OSC/PHY and two initial
+OSC phases; literal lifetime/partial-cycle/DSP ledgers and subsequent native COP
+reset are checked. A separate STAA PwO case proves a timeout inside w leaves
+SRAM unchanged. Pure offers cover all five phase residues and COPWAI write-once
+setup without consuming time or counter state.
+original_update_coupled additionally executes four unchanged download/helper
+paths through real COP request,195 reset edges and native vector fetch. The same
+DSP executes737/738 original BRCLR instructions across the reset, not a host pause.
+Fresh GPIO readers retain the documented IRQA/PortC biases and native directions.
+
+The resident loader enables PERQ pull-ups while PPSQ is still0. Its STAA EXT
+uses PwO: the write precedes the final O slot. The DSP then consumes opposed
+passive pulls on Q7 and fails at its original branch. Shared-write order/phase
+selects failure at the write tie or trailing O; partial CPU PC8006/8009 is retained
+but cannot resume. NVM bytes/knowledge/history and earlier error-frame pixels are
+checked. No voltage winner, GPIO latch initialization or DSP reset is invented.
+Physical reset wiring, passive-bias transfer/latency and coupled power-on behavior
+remain unknown; this is not full board boot, MIDI/audio or recovery qualification.
+
+References: S12MEBIV3 figure3-9, 9S12UF32DGV1 section4.2.1.1, S12UF32PIMV2
+figures3-30/3-31, S12CPUV2 STAA EXT bus sequence; DSP56371UM tables2-6/2-8.
+Official bundles/hashes: doc/hardware/sources.json.

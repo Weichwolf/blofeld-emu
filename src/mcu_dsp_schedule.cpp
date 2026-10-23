@@ -8,8 +8,11 @@
 #include "blofeld/dsp_scheduled_run.hpp"
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_cycles.hpp"
+#include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_cop.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/mcu_reset.hpp"
 #include "blofeld/mcu_run_clock.hpp"
 
 #include <cstdint>
@@ -17,6 +20,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <tuple>
 
 namespace blofeld {
@@ -117,6 +121,11 @@ void McuDspSchedule::advance(const DspScheduleBoundary boundary,
                              after_dsp,
                              external);
   } catch (const Fault &fault) {
+    if (reset_context_) {
+      throw Fault("Scheduled reset peer execution mcu-request-pc=" + hex(reset_context_->pc) +
+                  " dsp-pc=" + hex(dsp_.cpu().state().pc, 6) +
+                  " mcu-end=" + std::to_string(end_ticks_) + ": " + fault.what());
+    }
     if (wait_context_) {
       throw Fault("Scheduled idle peer execution mcu-pc=" + hex(wait_context_->pc) +
                   " dsp-pc=" + hex(dsp_.cpu().state().pc, 6) +
@@ -130,15 +139,16 @@ void McuDspSchedule::advance(const DspScheduleBoundary boundary,
   }
 }
 
-void McuDspSchedule::offer_period() {
+void McuDspSchedule::offer_period(const bool waiting) {
   const auto factor = timebase_hz_ / mcu_.run_clock().timebase_hz();
-  const auto period = mcu_.run_clock().next_cycle_ticks(mcu_.bus());
+  const auto period = mcu_.run_clock().next_period(mcu_.bus(), waiting);
   if (expected_mcu_cycles_ == std::numeric_limits<std::uint64_t>::max() ||
-      period > (std::numeric_limits<std::uint64_t>::max() - end_ticks_) / factor) {
+      period.duration_ticks > (std::numeric_limits<std::uint64_t>::max() - end_ticks_) / factor) {
     throw Fault("MCU/DSP next native MCU period exhausted common time");
   }
-  end_ticks_ += period * factor;
-  ++expected_mcu_cycles_;
+  end_ticks_ += period.duration_ticks * factor;
+  cop_deadline_ = period.cop_deadline;
+  if (!cop_deadline_) { ++expected_mcu_cycles_; }
 }
 
 void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
@@ -149,6 +159,15 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
   healthy();
   const Guard guard(*this);
   consumed();
+  if (resetting_) {
+    const auto reset = mcu_.system_reset_state();
+    if (!reset || reset->phase != McuResetPhase::ready || shared_write || cycle.context.pc != 0 ||
+        cycle.context.ccr != hc12::reset_ccr ||
+        std::string_view("VfP").find(cycle.kind) == std::string_view::npos) {
+      throw Fault(
+          "MCU/DSP reset permits only the native CPU vector sequence after pad arbitration");
+    }
+  }
   if (waiting_) { throw Fault("MCU/DSP wait slice requires a completed idle boundary"); }
   if (shared_write_) { throw Fault("MCU/DSP shared write observation was not delivered"); }
   const bool write = cycle.kind == 'w' || cycle.kind == 'W';
@@ -158,8 +177,8 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
   cycle_ = cycle;
   offer_period();
   offered_ = true;
-  shared_write_ = shared_write;
-  if (!shared_write) {
+  shared_write_ = shared_write && !cop_deadline_;
+  if (!shared_write_) {
     advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
     return;
   }
@@ -206,6 +225,7 @@ void McuDspSchedule::observe_write(const BusEvent &event,
 void McuDspSchedule::end_instruction() {
   healthy();
   const Guard guard(*this);
+  if (resetting_) { throw Fault("MCU/DSP system reset requires explicit reset completion"); }
   if (waiting_) { throw Fault("MCU/DSP wait slice requires an explicit idle completion"); }
   finish_boundary();
 }
@@ -218,6 +238,7 @@ void McuDspSchedule::begin_wait_period(const McuWaitPeriod period,
   const Guard guard(*this);
   consumed();
   const auto state = mcu_.cpu().state();
+  if (resetting_) { throw Fault("MCU/DSP WAI cannot clock an asserted system reset"); }
   if (inputs_.wait_order != McuDspWaitOrder::dsp_before_mcu || !mcu_.cpu().waiting() || offered_ ||
       shared_write_ || state.pc != period.context.pc || state.ccr != period.context.ccr) {
     throw Fault("MCU/DSP idle period requires native WAI and an explicit DSP-before-MCU contract");
@@ -227,8 +248,8 @@ void McuDspSchedule::begin_wait_period(const McuWaitPeriod period,
   }
   waiting_ = true;
   wait_context_ = period.context;
-  offer_period();
-  ++expected_idle_cycles_;
+  offer_period(true);
+  if (!cop_deadline_) { ++expected_idle_cycles_; }
   advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
   wait_context_.reset();
 }
@@ -236,6 +257,7 @@ void McuDspSchedule::begin_wait_period(const McuWaitPeriod period,
 void McuDspSchedule::end_wait() {
   healthy();
   const Guard guard(*this);
+  if (resetting_) { throw Fault("MCU/DSP WAI cannot clock an asserted system reset"); }
   if (inputs_.wait_order != McuDspWaitOrder::dsp_before_mcu || !mcu_.cpu().waiting() || offered_) {
     throw Fault(
         "MCU/DSP idle completion requires native WAI and its explicit observation contract");
@@ -256,8 +278,66 @@ void McuDspSchedule::finish_boundary() {
   offered_ = false;
 }
 
+void McuDspSchedule::begin_system_reset(const McuResetSource source,
+                                        const unsigned synchronization_cycles,
+                                        const McuDspResetOrder order) {
+  if (active_ || faulted_ || resetting_ || dsp_.timing_faulted() ||
+      mcu_.run_clock().native_epoch() != expected_mcu_epoch_ ||
+      order != McuDspResetOrder::dsp_before_mcu) {
+    throw Fault(
+        "MCU/DSP reset requires an inactive coordinated epoch and explicit DSP-before-MCU order");
+  }
+  const Guard guard(*this);
+  consumed();
+  if ((waiting_ && !cop_deadline_) || shared_write_) {
+    throw Fault("MCU/DSP reset cannot discard an unconsumed idle/shared-write offer");
+  }
+  if (cop_deadline_ &&
+      (!mcu_.run_clock().faulted() || mcu_.bus().cop_state().reset != McuCopReset::timeout)) {
+    throw Fault("MCU/DSP shortened period requires the actual owned COP timeout");
+  }
+  mcu_.begin_system_reset(source, synchronization_cycles);
+  expected_mcu_epoch_ = mcu_.run_clock().native_epoch();
+  offered_ = false;
+  waiting_ = false;
+  cop_deadline_ = false;
+  resetting_ = true;
+}
+
+void McuDspSchedule::begin_reset_period(const McuResetPeriod period,
+                                        const DspObserver &before_dsp,
+                                        const DspCompletionObserver &after_dsp,
+                                        const DspExternalEvents &external) {
+  healthy();
+  const Guard guard(*this);
+  consumed();
+  if (!resetting_ || !mcu_.system_reset_active() || period.native_epoch != expected_mcu_epoch_ ||
+      period.duration_ticks != mcu_.run_clock().next_reset_edge_ticks()) {
+    throw Fault("MCU/DSP reset edge must match its owned SYSCLK duration and epoch");
+  }
+  const auto factor = timebase_hz_ / mcu_.run_clock().timebase_hz();
+  if (period.duration_ticks > (std::numeric_limits<std::uint64_t>::max() - end_ticks_) / factor) {
+    throw Fault("MCU/DSP reset edge exhausted common time");
+  }
+  end_ticks_ += period.duration_ticks * factor;
+  reset_context_ = period.context;
+  advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
+  reset_context_.reset();
+}
+
+void McuDspSchedule::end_system_reset() {
+  healthy();
+  const Guard guard(*this);
+  if (!resetting_ || mcu_.system_reset_active()) {
+    throw Fault("MCU/DSP reset completion requires its completed native vector boundary");
+  }
+  finish_boundary();
+  resetting_ = false;
+}
+
 McuDspScheduleCheckpoint McuDspSchedule::checkpoint() const {
   healthy();
+  if (resetting_) { throw Fault("Joint mid-reset checkpoints require board reset state"); }
   mcu_.validate_run_boundary();
   consumed();
   if (offered_ || shared_write_ || waiting_) {
@@ -296,6 +376,9 @@ void McuDspSchedule::restore(const McuDspScheduleCheckpoint &checkpoint) {
   shared_write_ = false;
   waiting_ = false;
   wait_context_.reset();
+  reset_context_.reset();
+  resetting_ = false;
+  cop_deadline_ = false;
   faulted_ = false;
 }
 }

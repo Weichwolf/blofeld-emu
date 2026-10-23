@@ -3,19 +3,16 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/firmware.hpp"
 #include "blofeld/flash_image.hpp"
-#include "blofeld/hc12_cycles.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/lcd_image.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_cop.hpp"
-#include "blofeld/mcu_machine.hpp"
-#include "blofeld/mcu_reset.hpp"
-#include "blofeld/mcu_run_clock.hpp"
 #include "blofeld/private_file.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "original_gpio_pair_fixture.hpp"
 #include "original_update_display_fixture.hpp"
 #include "original_update_forward_fixture.hpp"
+#include "original_update_reset_fixture.hpp"
 #include "original_update_transport_fixture.hpp"
 
 #include <cstdint>
@@ -257,76 +254,6 @@ void quarantine(forward::Forward &run) {
   run.pair.trace << "QUARANTINE mcu=1 joint=1 dsp-held=1 dsp-faulted=0\n";
 }
 
-void reset_continuation(forward::Forward &run, const blofeld::McuFlashImage &nvm) {
-  constexpr unsigned reset_edges = 195;
-  constexpr unsigned oscillator_delta = 205;
-  constexpr unsigned reset_ticks = 1024;
-  constexpr unsigned vector_cycles = 5;
-  constexpr unsigned resident_entry = 0x8000;
-  constexpr unsigned first_write = 0x8002;
-
-  const auto dsp = run.pair.dsp.cpu().debug_state();
-  const auto dsp_ticks = run.pair.dsp.run_clock().elapsed_ticks();
-  auto &mcu = run.pair.mcu;
-  const auto ticks = mcu.run_clock().elapsed_ticks();
-  const auto osc = mcu.run_clock().oscillator_cycles();
-  const auto bus = mcu.run_clock().bus_cycles();
-  run.display.reset(); // Finished screenshot fixture; it must not retain a replaced bus reference.
-  mcu.begin_system_reset(blofeld::McuResetSource::cop, 3);
-  unsigned vector = 0;
-  std::string slots;
-  mcu.set_cycle_observer([&](const blofeld::Hc12BusCycle cycle) {
-    slots += cycle.kind;
-    if (cycle.kind == 'V' && cycle.address) { vector = *cycle.address; }
-  });
-  require(
-      mcu.advance_system_reset(reset_edges, blofeld::McuResetPad::high) == reset_edges &&
-          !mcu.system_reset_active() && !mcu.timing_faulted() && slots == "VfPPP" &&
-          vector == blofeld::hc12::cop_reset_vector && mcu.cpu().state().pc == resident_entry &&
-          mcu.cpu().state().sp == blofeld::hc12::reset_sp &&
-          mcu.cpu().state().ccr == blofeld::hc12::reset_ccr &&
-          mcu.run_clock().elapsed_ticks() - ticks == reset_ticks &&
-          mcu.run_clock().oscillator_cycles() - osc == oscillator_delta &&
-          mcu.run_clock().bus_cycles() - bus == vector_cycles &&
-          mcu.run_clock().native_epoch() == 2,
-      "Original helper request applies the qualified MCU-only pulse and native COP vector fetch");
-  bool refused = false;
-  try {
-    run.pair.schedule->end_instruction();
-  } catch (const blofeld::Fault &) { refused = true; }
-  require(refused && run.pair.schedule->faulted(),
-          "Old board scheduling cannot reuse a changed MCU epoch");
-  const auto after = mcu.bus().power_off_flash_image();
-  require(after.bytes == nvm.bytes && after.known == nvm.known && after.fresh == nvm.fresh,
-          "Actual MCU reset preserves every NVM byte, known bit and erase-history bit");
-  run.pair.trace
-      << "SYSTEM_RESET edges=195 vector=" << vector
-      << " target=32768 ticks=1024 osc=205 bus=5 epoch=2 dsp-held=1 storage=1 joint-refused=1\n";
-  mcu.set_cycle_observer({});
-  mcu.cpu().step();
-  require(
-      mcu.cpu().state().pc == first_write,
-      "Unmodified resident loader retires its first instruction before the first register write");
-  bool unknown = false;
-  try {
-    mcu.cpu().step();
-  } catch (const blofeld::Fault &error) {
-    const std::string_view message(error.what());
-    unknown = message.contains("MCU write at 0x0012") && message.contains("pc=0x8002") &&
-              message.contains("Unimplemented MCU ECLK output observation at 0x0008");
-    require(unknown,
-            "Only the unqualified reset-board observation may stop native startup: " +
-                std::string(error.what()));
-    run.pair.trace << "RESET_BOOT_FAULT " << error.what() << '\n';
-  }
-  require(unknown && mcu.timing_faulted() && run.pair.dsp.cpu().debug_state() == dsp &&
-              run.pair.dsp.run_clock().elapsed_ticks() == dsp_ticks,
-          "Post-reset wiring remains unprovided; the independent DSP is held without guessed reset "
-          "coupling");
-  run.pair.trace
-      << "RESET_BOOT start=32768 stop=32770 instructions=1 next-observation-unqualified=1\n";
-}
-
 void continuation(forward::Forward &run,
                   const blofeld::McuFlashImage &nvm,
                   const std::vector<transport::Block> &blocks,
@@ -387,7 +314,7 @@ void continuation(forward::Forward &run,
                      << " irq-unknown=" << run.unknown_irq_queries
                      << " unresolved-events=" << run.pair.link.unresolved_events
                      << " storage=1 unknown-tail=" << complete_source << " helper-returned=0\n";
-      reset_continuation(run, nvm);
+      blofeld::test::update_reset::execute(run, nvm);
       return;
     }
   }
@@ -429,8 +356,7 @@ int main(const int argc, char **argv) {
                      cop);
       }
     }
-    std::cout
-        << "Four native downloads, COP reset pulses and resident-loader continuations verified.\n";
+    std::cout << "Four native downloads and jointly clocked COP reset continuations verified.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

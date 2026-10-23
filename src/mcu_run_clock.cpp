@@ -59,22 +59,31 @@ std::uint64_t McuRunClock::next_cycle_ticks(const McuBus &bus) const {
   return (timebase_hz_ / source_hz) * route.bus_divider;
 }
 
+McuRunPeriod McuRunClock::next_period(const McuBus &bus, const bool waiting) const {
+  const auto ticks = next_cycle_ticks(bus);
+  const auto remaining = bus.oscillator_cycles_until_cop();
+  const auto enabled = !waiting || bus.wait_clock_gates().cop;
+  if (enabled && remaining != 0 && remaining <= (oscillator_phase_ + ticks) / oscillator_period_) {
+    return {.duration_ticks = (remaining * oscillator_period_) - oscillator_phase_,
+            .cop_deadline = true};
+  }
+  return {.duration_ticks = ticks};
+}
+
 void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, const bool waiting) {
   if (faulted_) { throw Fault("MCU run clock requires coordinated recovery after a failed cycle"); }
   bus.begin_instruction(context);
   try {
     const auto gates = waiting ? bus.wait_clock_gates() : McuWaitClockGates{};
-    const auto ticks = next_cycle_ticks(bus);
+    const auto period = next_period(bus, waiting);
+    const auto ticks = period.duration_ticks;
     const auto oscillator_total = oscillator_phase_ + ticks;
     const auto edges = oscillator_total / oscillator_period_;
     if (ticks > std::numeric_limits<std::uint64_t>::max() - elapsed_ticks_ ||
         bus_cycles_ == std::numeric_limits<std::uint64_t>::max()) {
       throw Fault("MCU run clock counter exhausted");
     }
-    const auto cop_remaining = bus.oscillator_cycles_until_cop();
-    if (gates.cop && cop_remaining != 0 && cop_remaining <= edges) {
-      advance_to_cop_deadline(bus, cop_remaining);
-    }
+    if (period.cop_deadline) { advance_to_cop_deadline(bus, static_cast<unsigned>(edges)); }
     if (gates.sci) { bus.advance_sci(1); }
     if (gates.timer) { bus.advance_timer(1); }
     bus.advance_oscillator(static_cast<unsigned>(edges), gates.cop);
@@ -108,9 +117,13 @@ void McuRunClock::begin_reset_epoch() {
   faulted_ = false;
 }
 
-void McuRunClock::advance_reset_edge() {
+std::uint64_t McuRunClock::next_reset_edge_ticks() const {
   if (!resetting_ || faulted_) { throw Fault("MCU reset clock is not active"); }
-  const auto ticks = oscillator_period_ - oscillator_phase_;
+  return oscillator_period_ - oscillator_phase_;
+}
+
+void McuRunClock::advance_reset_edge() {
+  const auto ticks = next_reset_edge_ticks();
   if (ticks > std::numeric_limits<std::uint64_t>::max() - elapsed_ticks_ ||
       reset_edges_ == std::numeric_limits<std::uint64_t>::max() ||
       oscillator_cycles_ == std::numeric_limits<std::uint64_t>::max()) {

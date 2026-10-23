@@ -9,6 +9,7 @@
 #include "blofeld/dsp_pll.hpp"
 #include "blofeld/dsp_shi.hpp"
 #include "blofeld/dsp_timers.hpp"
+#include "blofeld/gpio_pads.hpp"
 
 #include <array>
 #include <cstddef>
@@ -108,6 +109,9 @@ public:
   [[nodiscard]] DspCodeChanges take_code_changes();
   [[nodiscard]] std::optional<DspInterruptRequest> interrupt_request(unsigned mask) const;
   void observe_irqa(std::optional<bool> level);
+  // Post-boot IRQA driver plus the DSP56371UM table2-6 internal pull-up.
+  // Opposed passive pulls or unknown active drivers preserve an unknown level.
+  void observe_irqa_driver(GpioNetDriver driver);
   void acknowledge_interrupt(DspInterruptRequest request);
   // Explicit nominal admission: later higher-priority requests stay pending.
   void validate_admitted_interrupt(DspInterruptRequest request) const;

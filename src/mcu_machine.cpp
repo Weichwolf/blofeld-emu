@@ -27,6 +27,19 @@
 
 namespace blofeld {
 namespace {
+class ResetAdvance {
+public:
+  explicit ResetAdvance(bool &active) : active_(active) { active_ = true; }
+
+  ~ResetAdvance() { active_ = false; }
+
+  ResetAdvance(const ResetAdvance &) = delete;
+  ResetAdvance &operator=(const ResetAdvance &) = delete;
+
+private:
+  bool &active_;
+};
+
 struct RunState {
   std::optional<McuRunContract> contract;
   std::optional<McuRunClock> clock;
@@ -150,7 +163,7 @@ struct McuMachine::State {
   }
 
   void check_inactive() const {
-    if (cpu.executing() || bus->notifying_) {
+    if (cpu.executing() || bus->notifying_ || reset_advancing) {
       throw Fault("MCU run configuration requires an inactive CPU and bus observer");
     }
     if (!timed) { throw Fault("MCU machine has no reference run clock"); }
@@ -171,6 +184,8 @@ struct McuMachine::State {
   std::function<void(Hc12BusCycle)> observer;
   std::function<void(McuWaitCycle)> wait_observer;
   std::function<void(McuWaitPeriod)> wait_period_observer;
+  std::function<void(McuResetPeriod)> reset_period_observer;
+  bool reset_advancing = false;
   Hc12 cpu;
 };
 
@@ -248,6 +263,11 @@ void McuMachine::set_wait_period_observer(std::function<void(McuWaitPeriod)> obs
   state_->wait_period_observer = std::move(observer);
 }
 
+void McuMachine::set_reset_period_observer(std::function<void(McuResetPeriod)> observer) {
+  state_->check_inactive();
+  state_->reset_period_observer = std::move(observer);
+}
+
 void McuMachine::set_sci_receive_reference(const std::optional<SciReceiveReference> reference) {
   state_->check_inactive();
   state_->check_clock_boundary();
@@ -306,6 +326,7 @@ void McuMachine::check_specification() const {
 }
 
 McuCheckpoint McuMachine::checkpoint() const {
+  if (state_->reset_advancing) { throw Fault("Cannot checkpoint during MCU reset advancement"); }
   std::optional<Hc12Checkpoint> cpu_state;
   if (system_reset_active()) {
     if (state_->cpu.executing()) { throw Fault("Cannot capture active MCU reset execution"); }
@@ -319,7 +340,7 @@ McuCheckpoint McuMachine::checkpoint() const {
 }
 
 void McuMachine::restore(const McuCheckpoint &checkpoint) {
-  if (state_->cpu.executing() || state_->bus->notifying_) {
+  if (state_->cpu.executing() || state_->bus->notifying_ || state_->reset_advancing) {
     throw Fault("Cannot restore during active MCU execution or bus observation");
   }
   if (!checkpoint.storage_) { throw Fault("Cannot restore an empty MCU checkpoint"); }
@@ -389,6 +410,7 @@ unsigned McuMachine::advance_system_reset(const unsigned maximum_sysclk_edges,
   auto &reset = run.reset;
   auto &clock = run.clock;
   if (!reset || !clock) { throw Fault("MCU reset requires its sequence and reference clock"); }
+  const ResetAdvance advancing(state_->reset_advancing);
   auto &sequence = *reset;
   auto &reset_clock = *clock;
   unsigned completed = 0;
@@ -396,6 +418,11 @@ unsigned McuMachine::advance_system_reset(const unsigned maximum_sysclk_edges,
     while (completed < maximum_sysclk_edges) {
       auto next = sequence;
       next.edge(pad); // Qualify before committing this edge or its elapsed time.
+      if (state_->reset_period_observer) {
+        state_->reset_period_observer({.context = run.reset_context,
+                                       .duration_ticks = reset_clock.next_reset_edge_ticks(),
+                                       .native_epoch = reset_clock.native_epoch()});
+      }
       reset_clock.advance_reset_edge();
       sequence = next;
       ++completed;

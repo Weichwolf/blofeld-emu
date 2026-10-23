@@ -355,7 +355,14 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           nativefffa/fffe fetch, lifetime clocks,
                                           checkpoints and ten flash interruption
                                           contexts checked (mcu-system-reset.txt).
-                                          Whole-board reset, STOP/BDM and physical
+                                          Joint SYSCLK reset periods now advance the
+                                          same DSP through MCU epoch changes;
+                                          native vector slots, replay and fault
+                                          prefixes checked (mcu-reset-coupling.txt).
+                                          COP timeout preemption now caps both
+                                          owners at the actual OSC edge; failed
+                                          bus/idle slots and writes stay incomplete.
+                                          Propagation/POR, STOP/BDM and physical
                                           latency remain open.
 USB device/transport              partial  PHY control and register/data-side enable.
                                           UEPCSELR/UUCFGR banks and ordered 16-bit
@@ -1380,13 +1387,17 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           MCU003f/PC129c. Exact elapsed OSC edges
                                           match the COP phase. Joint execution
                                           stops at the reset request; an explicit
-                                          isolated MCU pulse/nativefffa fetch then
-                                          retires the original loader first instruction;
-                                          its first register write at8002/0012 stops
-                                          at unqualified ECLK/GPIO observation0008.
-                                          DSP stays held;
-                                          stale joint epoch rejects. Whole-board
-                                          reset and helper return remain open
+                                          joint reset then continues the same DSP
+                                          through780 MCU SYSCLK reset
+                                          edges and native vector fetches across
+                                          four cases. Normal-single-chip PEAR10
+                                          removes the false ECLK requirement.
+                                          The original loader's PERQ write then
+                                          produces opposed passive Q7 pulls; a
+                                          native DSP read fails with both contexts.
+                                          Time/partial PC/write-tie ordering and
+                                          NVM checked. Physical reset propagation,
+                                          whole boot and helper return remain open
                                           (original-update-coupled.txt).
                                           Separate declared TIO0 wire path: 30 cases,
                                           1050 bytes / 9450 original IRQs/RTIs feed
