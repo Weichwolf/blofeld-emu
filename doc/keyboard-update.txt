@@ -42,7 +42,12 @@ controller image, its instruction set, address map, boot ROM or preserved data.
 The package README distinguishes keybed revisions and explicitly provides no
 host-queryable installation-success indication (function-acceptance.txt).
 
-Helper bodies, the external controller, actual scanner/main interaction, sample
+The MCU programming-helper receiver/init prefix is separately checked under
+explicit caller/pin conditions (keyboard-receiver.txt). Its three initial bytes
+must be aligned with the remaining object checksum, not the following contents.
+The actual coupled handoff and remainder of the helper are still unqualified.
+
+Remaining helper bodies, the external controller, actual scanner/main interaction, sample
 or main-NVM writes, every programming interruption/recovery phase, calibrated
 timing and normal Keyboard startup/MIDI/audio remain unqualified. Desktop use
 of this controller update is not supported. No host controller/scanner substitute,

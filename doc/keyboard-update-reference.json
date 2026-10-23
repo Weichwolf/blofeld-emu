@@ -90,5 +90,12 @@
       "opaque_tail_sha256": "a063c4e3cf62bc433dbbd673144600c6ab64c5bb59edc70c01b63d07fca6b5c3"
     }
   ],
-  "qualification": "Four isolated unchanged transfer bodies decoded by the original1.25 DSP command handler. Short messages and SMF channel events retain identity but are not executed. Container checksums do not establish the architecture, address map, completeness or recovery of the external keyboard controller."
+  "qualification": "Four isolated unchanged transfer bodies decoded by the original1.25 DSP command handler. Short messages and SMF channel events retain identity but are not executed. Container checksums do not establish the architecture, address map, completeness or recovery of the external keyboard controller.",
+  "receiver_entry": {
+    "source_byte_offset": 1020,
+    "container_end": 1023,
+    "bytes": 3,
+    "sha256": "150c006b433067769f4cc50341fc606ed5a88c0a34e55caba69f9ad43e3867fb",
+    "qualification": "Length-prefixed helper alignment and native receiver prefix; complete original DSP sender/MCU copy handoff remains unqualified."
+  }
 }

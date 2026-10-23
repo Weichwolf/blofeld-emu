@@ -1664,6 +1664,13 @@ Desktop/Keyboard differences      pending  Both requested with 1.25; Keyboard is
                                           controller image/ISA/completeness,
                                           programming/recovery and scanner/main
                                           behavior remain open (keyboard-update.txt).
+                                          Native MCU programming-helper receiver:
+                                          777 independent directed words, missing
+                                          chunks, mid-word replay and original
+                                          delay/address/flag checks. Target PE7
+                                          stays unknown after release; no controller
+                                          programming or normal boot is established
+                                          (keyboard-receiver.txt).
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

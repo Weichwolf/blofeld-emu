@@ -1,0 +1,52 @@
+Original Keyboard programming-helper receiver and first target input
+
+  cmake --build --preset strict --target blofeld-original-keyboard-receiver-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_receiver$' --output-on-failure
+
+The optional gate verifies both local official archives, extracts the unchanged
+1018-byte HC12 helper and runs its real entry under an own LDD/JSR caller.
+keyboard-update-reference.json pins the helper/container identities and the
+remaining checksum-word position. No manufacturer instructions or data bytes
+are embedded in the test. Missing archives explicitly skip; changed inputs fail.
+
+The initial three original receiver calls produce one complete word through
+four actual six-bit Port Q reads. Their first two returned bytes are immediately
+discarded by argument reloads; the third precedes controller initialization.
+For a stream starting at block 2 byte 0, the two-byte length plus 1018 copied bytes
+end exactly on a word boundary at byte 1020. The remaining three bytes are the
+object checksum before the separate opaque trailing contents at byte 1023.
+This is a container/copy-alignment derivation, not a verified coupled DSP/MCU
+handoff. Do not start that entry fixture at the following controller-content word.
+
+777 directed word cases cover every byte value in each of three positions, eight
+corners and the pinned authentic checksum word. Independent shifts/masks predict
+all 2331 returned bytes, the two-byte cache, cursor and native argument/return
+frames. No host writes supply decoded guest results. Withdrawing each of the four
+chunks fails at its actual original GPIO read, without a fabricated byte/return.
+Failed clocked owners remain quarantined; NVM contents/knowledge/erase history,
+original helper and own caller stay unchanged. Two trusted mid-word restores
+rebind the external source and reproduce every logged native register/time/GPIO
+suffix byte; independent byte expectations also apply to both continuations.
+
+Caller conditions are explicit lab inputs: SRAM mapping, callback-table pointer,
+masked interrupts, declared Q7 output/Q6..0 data source, B-port latch/direction,
+PE4/7 output and known unrelated E inputs. The source responds at native Q7
+writes in this instruction-boundary experiment; it is not an original DSP sender
+or calibrated electrical propagation. No default board configuration is changed.
+The clock uses 12 MHz OSC with disabled reset TIM. These are reference conditions,
+not measured post-boot Blofeld PLL or target programming pulse timings.
+
+Two controller prefixes use different declared unrelated E input levels. The
+original code executes both 255-iteration nests, including 256 byte-decrement
+iterations per inner call. Independent HC12 expectations check 261120 actual
+DBNE steps across both paths: byte wrap, unchanged CCR, branch and three bus
+cycles; LEAY old-X addressing and TBNE non-destructive tests are also checked.
+The original helper releases PE7, then its first PE7 input observation fails
+because the target level is unknown. No fifth Q request/controller payload byte
+is consumed and no peer acknowledgement is invented. A separate case withdraws
+the unrelated E inputs and fails earlier, before either delay nest.
+
+This qualifies a receiver/init prefix, not the full helper, external-controller
+ISA/image, programming, recovery or physical wiring. Boot, actual DSP/copy entry,
+short-message effects, all documented functions, MIDI/audio, complete update and
+every power-loss phase remain pending in objective.txt/coverage.txt.
