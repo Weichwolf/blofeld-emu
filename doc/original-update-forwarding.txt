@@ -1,0 +1,43 @@
+Original main-update error helper: native DSP-to-MCU forwarding
+
+  cmake --build --preset strict --target blofeld-original-update-forward-test
+  ctest --test-dir build/strict -R '^original_update_forwarding$' --output-on-failure
+
+The unchanged400-word main DSP updater starts through an own native ROM caller.
+An explicitly damaged in-RAM marker selects its original error-forwarding path.
+The original sender supplies request0C, pulses DSP PE9, waits on actual MCU Q7,
+reads original Y words and emits four six-bit groups through Port C per word.
+A declared direct PE9-to-PE0/XIRQ route updates the real MCU interrupt controller.
+Its unchanged vector/handler samples the request, clears Q7 and sets its own
+software flag. No host request flag or acknowledgement supplies that handshake.
+
+An own twelve-byte MCU busy loop (LDAB/ANDB/BEQ/JSR/BRA) waits for that flag and
+calls the unchanged receiver. This avoids inventing WAI elapsed clocks or a
+complete application startup. Starting directly at the receiver misses the
+preceding IRQ handshake; its independent scripted-peer tests retain that scope.
+The decoder/copy/JSR reconstructs the188-byte original error helper at RAM1200,
+passes D=F81B and saves returnBB56 at the real stack frame. Execution stops before
+the helper body; no display/error callback or complete recovery is qualified.
+
+Four contexts cover both nominal same-time write orders and epoch phases0/18.
+The oracle checks65 actual original source loads,256 native MOVEP output groups,
+256 actual MCU input samples and all260 native Q7 writes per context. Sixty-four
+words supply the two-byte length,188 helper bytes and two padding bytes; one
+further original word is prefetched. It stays inside the195-byte source object.
+Every loaded helper byte, caller, original DSP program and prepared payload word,
+whole MCU NVM/knowledge/history, native IRQ/RTI and call-frame effect is checked.
+The original code is neither patched nor replaced by a host decoder. Eight fixed
+trace corruptions must reject; manufacturer bytes/traces remain local.
+
+GPIO/clock preconditions are laboratory hypotheses: the existing own PLL prefix,
+loaded runtime/request records, explicit caller/RAM, initial MCU Q7 high output,
+initial known-high DSP PE9 output, direct C/Q link and PE9/XIRQ route. Output
+latches are initialized only after selecting output mode; writing an input does
+not qualify its latch. The board delivers resolved interrupt-pad observations
+at native DSP completion boundaries, including while masked (gpio-pads.txt).
+Physical wiring, pulse/synchronizer timing, electrical safety and both stock
+profiles remain unverified. The recorded intermediate unknown output interval
+requires every board qualification to reject, despite known consumed inputs.
+Full boot, original application dispatch, secondary sender, helper execution,
+NAND programming, complete update/recovery/power-loss and hardware validation
+retain separate requirements. No fuzzing or physical-device traffic runs.

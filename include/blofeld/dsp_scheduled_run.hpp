@@ -50,6 +50,7 @@ private:
   std::uint64_t horizon_ = 0;
   std::uint64_t completed_ticks_ = 0;
   std::uint64_t completed_cycles_ = 0;
+  std::uint64_t native_epoch_ = 0;
   std::uint64_t steps_ = 0;
   DspScheduleBoundary boundary_ = DspScheduleBoundary::through;
   std::optional<DspStepPlan> pending_;

@@ -24,6 +24,12 @@ retain their default. Four corrupted trace-word controls must fail. Eight restor
 after a source read reproduce the held word, ring state and actual PCM without
 executing the paused core. Original program words remain unchanged.
 
+Program integrity is checked after every foreground body and again after the
+separate idle window. original_dsp_program_guard deliberately changes one
+unexecuted word in each offline profile; both callers must reject after the
+first body, before a second block. Normal reference runs retain the original
+words; the damaged images and traces remain local.
+
 Each fixture explicitly declares readable part/history/queue RAM, one held entry,
 zero initial buses/ring, previous phase0, no due part-clock/countdown service,
 ESAI setup and receiver polarity. It loads 127 hash-pinned original records rather

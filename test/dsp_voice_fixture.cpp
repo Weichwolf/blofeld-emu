@@ -397,6 +397,34 @@ bool release_callback(const unsigned address) {
          (address - entry - first_envelope_callback) % envelope_state_stride == 0;
 }
 
+void validate_voice_output(const bool drive,
+                           const bool master,
+                           const bool pcm,
+                           const blofeld::test::VoiceOutputOptions output,
+                           const blofeld::test::VoiceInput input) {
+  using blofeld::test::VoiceInput;
+  auto *const stream_output = output.direct;
+  const bool ring = stream_profile(input);
+  require(output.direct == nullptr || output.capture == nullptr,
+          "Choose direct delivery or the complete offline matrix");
+  require(input != VoiceInput::foreground ||
+              (!drive && master && !pcm && output.direct == nullptr && output.capture == nullptr),
+          "Foreground reference requires declared disabled DMA and no external PCM output");
+  require(!ring || (!drive && master && !pcm && output.capture == nullptr),
+          "Repeating reference requires declared ring setup and no offline collector");
+  require(
+      (stream_output == nullptr && output.capture == nullptr && input != VoiceInput::controllers) ||
+          (!drive && master && (pcm || ring)),
+      "An external source requires the original voice/master/PCM composition");
+  require(output.stream_case_index < stream_contexts &&
+              (output.stream_case_index == 0 || (stream_output != nullptr && ring)),
+          "A selected ring context requires direct stream output");
+  require(!output.program_guard_negative ||
+              (stream_output == nullptr && output.capture == nullptr &&
+               (input == VoiceInput::foreground || ring)),
+          "Program guard negative control requires offline foreground or ring execution");
+}
+
 struct Fixture {
   blofeld::DspMachine machine;
   blofeld::DspBus &bus;
@@ -424,6 +452,8 @@ struct Fixture {
   bool release_enabled = false;
   bool sustain_enabled = false;
   blofeld::test::VoicePcmCapture *capture = nullptr;
+  bool program_guard_negative = false;
+  bool program_guard_mutated = false;
   Case configuration{};
   bool drive_pending = false;
   unsigned drive_return = 0;
@@ -1121,6 +1151,29 @@ struct Fixture {
       trace << ' ' << get(x, declared_source + stereo_words + i);
     }
     trace << '\n' << std::dec;
+    if (program_guard_negative && !program_guard_mutated) {
+      // The runtime caller bypasses this original clock prefix (runtime-clocks.txt).
+      constexpr unsigned unexecuted_prefix = 0x100;
+      const auto expected = source.program.find(unexecuted_prefix);
+      require(expected != source.program.end() &&
+                  bus.peek_program(unexecuted_prefix) == expected->second,
+              "Program guard negative control requires an unchanged original word");
+      bus.write({.address = unexecuted_prefix, .value = expected->second ^ 1U});
+      program_guard_mutated = true;
+      trace << "PROGRAM_GUARD_CORRUPTED " << std::hex << unexecuted_prefix << '\n' << std::dec;
+    }
+    verify_program();
+  }
+
+  void verify_program() {
+    for (const auto &[at, value] : source.program) {
+      if (bus.peek_program(at) != value) {
+        const auto state = cpu.state();
+        throw blofeld::Fault(
+            "Original foreground executable word changed at P:" + blofeld::hex(at, 6) +
+            " pc=" + blofeld::hex(state.pc, 6) + " omr=" + blofeld::hex(state.omr, 6));
+      }
+    }
   }
 
   void foreground_words(const char *label) {
@@ -1305,9 +1358,7 @@ struct Fixture {
     rendering = true;
     foreground_iteration(0);
     foreground_idle();
-    for (const auto &[at, value] : source.program) {
-      require(bus.peek_program(at) == value, "Original foreground executable word changed");
-    }
+    verify_program();
     rendering = false;
   }
 
@@ -1661,20 +1712,7 @@ int run_voice_test(const int count,
   const bool ring = stream_profile(input);
   try {
     require(count == 3, "Expected original firmware and private voice trace");
-    require(output.direct == nullptr || output.capture == nullptr,
-            "Choose direct delivery or the complete offline matrix");
-    require(input != VoiceInput::foreground ||
-                (!drive && master && !pcm && output.direct == nullptr && output.capture == nullptr),
-            "Foreground reference requires declared disabled DMA and no external PCM output");
-    require(!ring || (!drive && master && !pcm && output.capture == nullptr),
-            "Repeating reference requires declared ring setup and no offline collector");
-    require((stream_output == nullptr && output.capture == nullptr &&
-             input != VoiceInput::controllers) ||
-                (!drive && master && (pcm || ring)),
-            "An external source requires the original voice/master/PCM composition");
-    require(output.stream_case_index < stream_contexts &&
-                (output.stream_case_index == 0 || (stream_output != nullptr && ring)),
-            "A selected ring context requires direct stream output");
+    validate_voice_output(drive, master, pcm, output, input);
     if (stream_output != nullptr) { stream_output->check(); }
     const Source source(arguments[1]);
     std::ofstream trace(arguments[2]);
@@ -1684,6 +1722,7 @@ int run_voice_test(const int count,
     fixture.master_enabled = master;
     fixture.pcm_enabled = pcm;
     fixture.capture = output.capture;
+    fixture.program_guard_negative = output.program_guard_negative;
     fixture.stream_output = stream_output;
     if (stream_output != nullptr) {
       if (ring) {

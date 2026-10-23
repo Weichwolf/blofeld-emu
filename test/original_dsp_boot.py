@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 
-def main() -> int:
+def main(extra=()) -> int:
     binary, firmware, rom, trace = map(Path, sys.argv[1:])
     if not firmware.is_file() or not rom.is_file():
         print("SKIP DSP reference: private firmware/document-derived ROM prefix absent")
@@ -22,7 +22,8 @@ def main() -> int:
     if hashlib.sha256(rom.read_bytes()).hexdigest() != prefix_sha256:
         raise ValueError("Document-derived SPI bootstrap prefix identity does not match")
     trace.parent.mkdir(parents=True, exist_ok=True)
-    return subprocess.run([str(binary.resolve()), str(firmware), str(rom), str(trace)], check=False).returncode
+    return subprocess.run([str(binary.resolve()), str(firmware), str(rom), str(trace), *extra],
+                          check=False).returncode
 
 
 if __name__ == "__main__":

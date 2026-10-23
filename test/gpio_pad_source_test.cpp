@@ -123,6 +123,62 @@ void mcu_register_and_pad() {
   require(samples == after_reset + 1, "MCU reset retains the actual board connection");
 }
 
+void mcu_interrupt_pads() {
+  constexpr unsigned pins = 3;
+  constexpr unsigned x_mask = 0x40;
+  constexpr unsigned all_masked = 0xd0;
+  constexpr unsigned edge_enabled = 0xc0;
+  constexpr unsigned xirq_vector = 0xfff4;
+  constexpr unsigned irq_vector = 0xfff2;
+  blofeld::McuBus bus(flash);
+  constexpr unsigned eclk_disable = 0x10;
+  bus.write(reg::pear, eclk_disable);
+  blofeld::GpioPadSample source{.known = pins, .levels = pins};
+  unsigned observations = 0;
+  bus.attach_gpio_pad_source(blofeld::McuPort::e, [&](const std::uint32_t bits) {
+    ++observations;
+    return blofeld::GpioPadSample{.known = source.known & bits, .levels = source.levels & bits};
+  });
+  require(observations == 1 && !bus.interrupt_request(0),
+          "Attachment establishes the live IRQ/XIRQ input baseline");
+  source.levels = 2;
+  bus.observe_interrupt_pads();
+  const auto xirq = bus.interrupt_request(0);
+  require(xirq && xirq->vector == xirq_vector && !bus.interrupt_request(x_mask),
+          "A changed resolved XIRQ level reaches selection and respects its mask");
+  source.levels = pins;
+  bus.observe_interrupt_pads();
+  require(!bus.interrupt_request(0), "Observed XIRQ release removes the level request");
+  bus.write(reg::irq_control, edge_enabled);
+  source.levels = 1;
+  bus.observe_interrupt_pads();
+  require(!bus.interrupt_request(all_masked), "A masked IRQ observation does not enter the CPU");
+  source.levels = pins;
+  bus.observe_interrupt_pads();
+  const auto edge = bus.interrupt_request(x_mask);
+  require(edge && edge->vector == irq_vector,
+          "A complete observed IRQ pulse remains pending after release while masked");
+  const auto clone = bus.clone();
+  const auto before = observations;
+  rejects([&] { clone->observe_interrupt_pads(); }, "Detached");
+  require(observations == before, "A detached IRQ source cannot call the old live board");
+  clone->attach_gpio_pad_source(blofeld::McuPort::e, [](const std::uint32_t bits) {
+    return blofeld::GpioPadSample{.known = bits, .levels = bits};
+  });
+  const auto restored = clone->interrupt_request(x_mask);
+  require(restored && restored->vector == irq_vector,
+          "Fresh source attachment retains the snapshot's already latched IRQ edge");
+  clone->acknowledge_interrupt(irq_vector);
+  require(!clone->interrupt_request(x_mask), "The real IRQ acknowledgement consumes that edge");
+  bus.acknowledge_interrupt(irq_vector);
+  require(!bus.interrupt_request(x_mask), "The original owner remains independent of its clone");
+  source.known = 2;
+  source.levels = 2;
+  bus.observe_interrupt_pads();
+  rejects([&] { static_cast<void>(bus.interrupt_request(0)); }, "Unknown external XIRQ");
+  require(!bus.interrupt_request(all_masked), "Masked unknown input is not a fabricated request");
+}
+
 void dsp_register_and_pad() {
   using enum blofeld::DspGpioRegister;
   blofeld::DspGpio gpio(blofeld::DspPort::c);
@@ -166,6 +222,7 @@ int main() {
     net_expectations();
     binding_lifetime();
     mcu_register_and_pad();
+    mcu_interrupt_pads();
     dsp_register_and_pad();
     std::cout << "GPIO local registers and externally resolved unknown pads remain distinct.\n";
     return 0;

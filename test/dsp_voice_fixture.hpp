@@ -29,6 +29,8 @@ struct VoiceOutputOptions {
   VoicePcmCapture *capture = nullptr;
   // Direct stream context: pitch bit2, rounding bit1, filter-routing bit0.
   unsigned stream_case_index = 0;
+  // Offline negative control: corrupt one unexecuted word after a foreground body.
+  bool program_guard_negative = false;
 };
 
 [[nodiscard]] int run_voice_test(int count,

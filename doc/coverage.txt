@@ -92,8 +92,12 @@ Standard sample library           partial  Official MIDI/WPC download and contai
                                           page decoding now identifies 29117 exact
                                           WPC/MIDI page matches and 17475 unresolved
                                           WPC pages (wpc_reference); masks/assets
-                                          stay local. Complete catalog/physical
-                                          NAND mapping remains unqualified.
+                                          stay local. Logical WPC catalogue/PCM
+                                          identities cover 41 programs, 136 sample
+                                          streams and 12264746 frames with bounded
+                                          key/data/loop spans. Native client
+                                          execution and complete physical NAND
+                                          mapping remain unqualified.
                                           Routine original_sample_preparation
                                           checks all 1488 groups/47616 pages and
                                           25141248 independent bytes under declared
@@ -915,6 +919,10 @@ ROM wavetables and other assets   partial  Original basic oscillator table gener
                                           startup and hardware remain unresolved.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
+                                          Explicit nominal DSP reset epochs retain
+                                          lifetime time and reject stale schedules;
+                                          original ROM/stage reloads twice before
+                                          the same reserved write (dsp-reset.txt).
                                           Additional CPU-cycle adapter runs the
                                           same original 90314-instruction MCU
                                           bootloader with SCI/TIM clocks in
@@ -1272,6 +1280,26 @@ MCU security key access           partial  Nominal enabled-KEYEN four-word compa
                                           unsupported access combinations fail.
                                           Original recovery, BDM, physical mask and
                                           persistent unsecuring remain unqualified.
+Original update validation        partial  Thirteen original main-updater validation
+                                          cases check checksum/marker branches,
+                                          exact operand reads and missing data.
+                                          No programming or helper transfer;
+                                          Twelve secondary-checksum cases also
+                                          check2817 summed words, extra prefetch,
+                                          unchecked page selector and unknown-read
+                                          quarantine. Own post-identification entry;
+                                          no successful NAND setup/programming.
+                                          see original-update-validation.txt.
+Original error-helper forwarding  partial  Original main bad-marker branch and DSP
+                                          sender drive native MCU XIRQ/RTI, normal
+                                          copy and RAM JSR in four nominal contexts.
+                                          All188 helper bytes,256 six-bit groups,
+                                          native source/register effects, frame and
+                                          guards checked per case. Explicit caller,
+                                          loaded data, initial Q7/PE9 outputs and
+                                          direct routes; no helper-body execution
+                                          or whole update/physical qualification
+                                          (original-update-forwarding.txt).
 Original update and recovery      partial  Isolated original DSP command record:
                                           144 fixed cases / 1240 actual calls check
                                           live P patches, exact P/X/Y payload and

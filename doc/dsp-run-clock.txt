@@ -32,8 +32,9 @@ Reference contract
 - A rejected step quarantines CPU/clock state; completed reference time is a
   prefix, not permission to retry the partially executed instruction. Coordinated
   restore recovers the native CPU, bus, timer phase and clock together. A live
-  external reset cannot silently zero elapsed time: a new owner epoch or trusted
-  restore is required. Continuous-time external reset remains pending.
+  external reset cannot silently zero elapsed time. Explicit nominal reset
+  epochs now preserve lifetime counters and invalidate stale schedules;
+  the default remains strict (dsp-reset.txt). Physical reset timing is pending.
 - Checkpoints retain the exact run contract and reject incompatible owners.
   They are trusted process-local objects; external wire/scheduler state still
   belongs to the caller. Restore invalidates CPU/bus references.

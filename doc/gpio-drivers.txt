@@ -16,8 +16,8 @@ drivers, independently of their latch knowledge. Input/released bits export no
 drive strength. This is an output-current selection, not a weak input pull or
 an open-drain mode. S12UF32PIMV2 V02.05 specifies about1/6 of full drive for RDR
 bits1; no current/voltage winner or safe conflicting-pad level is inferred.
-Legacy peer-driven known opposition still fails immediately. No grace period, hidden
-buffer gate, automatic acknowledgement or fixed firmware response is introduced.
+Legacy peer-driven pad resolution rejects known opposing strong drivers. No grace
+period, hidden buffer gate, automatic acknowledgement or fixed reply is introduced.
 
 Reset retains external observations; copies and MCU partial updates preserve
 unknown peer bits. Reference MIDI and SHI-return route guards include unknown

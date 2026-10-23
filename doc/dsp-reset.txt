@@ -1,0 +1,35 @@
+DSP reset with retained reference time
+
+DspRunContract::resets defaults to unqualified: a live clocked reset still
+rejects. Explicit reference_instruction_boundary permits a zero-duration native
+hardware reset at a healthy completed instruction boundary. This is a nominal
+experiment, not a measured reset pulse, PLL lock, held-reset clock or board route.
+
+The existing CPU reset executes its normal bus/peripheral/native reset path.
+Completed lifetime ticks, native units and CLK2 edges remain monotonic. Native
+epoch units restart at zero; the declared nominal CLK2 phase starts afresh.
+RAM/ROM retain their existing reset semantics. PINIT is resampled by the normal
+PLL model; subsequent instructions use the resulting requested clock ratio.
+Failed or partially timed execution still requires coordinated trusted recovery.
+
+Every accepted reset advances an epoch identity, including a reset before any
+instruction. Scheduler checkpoints and pending instructions from a different
+epoch reject. Callers must explicitly retire/rearm their schedules at the known
+completed boundary; reset does not invent elapsed hold time or cancel external
+events. Trusted owner/schedule restore retains the original epoch together.
+Resetting an owner from a completion observer remains a visible schedule fault.
+
+Own native expectations cover two odd-phase resets, literal time/rate ledgers,
+timer loading, retained memory, native boot entry, partial-epoch replay, default
+refusal, failed-step quarantine and both scheduler admission modes.
+The original reference additionally reloads all94 stage words from wire inputs
+twice, reaches8192 mapped clear pairs each time and retains the second reserved
+Y:002000 failure. Five corrupted report fields reject independently.
+
+  cmake --build --preset strict --target blofeld-dsp-reset-epoch-test blofeld-original-dsp-clock-test
+  ctest --test-dir build/strict -R '^(dsp_reset_epoch|original_dsp_reset_clock)$' --output-on-failure
+
+No firmware instructions, RAM maps or unsupported-access checks are changed.
+Physical reset duration, asynchronous assertion, hardware latency, normal full
+startup and real-device equivalence remain open. Reference bytes/traces stay
+local; no fuzz or physical traffic runs.

@@ -576,6 +576,30 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write.trace")
   set_tests_properties(original_nand_write PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-update-validation-test test/original_update_validation_test.cpp)
+  target_link_libraries(blofeld-original-update-validation-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_update_validation COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_validation.py"
+    $<TARGET_FILE:blofeld-original-update-validation-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-validation.trace")
+  set_tests_properties(original_update_validation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-update-forward-test test/original_update_forward_test.cpp)
+  target_link_libraries(blofeld-original-update-forward-test PRIVATE
+    blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_update_forwarding COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_forward.py"
+    $<TARGET_FILE:blofeld-original-update-forward-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-forward.trace")
+  set_tests_properties(original_update_forwarding PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_test(NAME original_secondary_update_validation COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_secondary_update_validation.py"
+    $<TARGET_FILE:blofeld-original-update-validation-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-secondary-update-validation.trace")
+  set_tests_properties(original_secondary_update_validation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_test(NAME nand_store_processes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/nand_store_processes.py"
     $<TARGET_FILE:blofeld-original-nand-write-test>
@@ -1013,6 +1037,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-foreground.trace")
   set_tests_properties(original_dsp_foreground PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-dsp-program-guard-test test/original_dsp_program_guard_test.cpp)
+  target_link_libraries(blofeld-original-dsp-program-guard-test PRIVATE blofeld_voice_fixture)
+  add_test(NAME original_dsp_program_guard COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_program_guard.py"
+    $<TARGET_FILE:blofeld-original-dsp-program-guard-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-program-guard")
+  set_tests_properties(original_dsp_program_guard PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-repeat-test test/original_dsp_repeat_test.cpp)
   target_link_libraries(blofeld-original-dsp-repeat-test PRIVATE blofeld_voice_fixture)
   add_test(NAME original_dsp_repeat COMMAND ${Python3_EXECUTABLE}
@@ -1254,6 +1286,12 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_reference.py"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/wpc-reference.json")
   set_tests_properties(wpc_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_test(NAME wpc_catalogue COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_catalogue_test.py" --synthetic)
+  add_test(NAME wpc_catalogue_reference COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/wpc_catalogue_test.py"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/wpc-catalogue.json")
+  set_tests_properties(wpc_catalogue_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-coupled-boot-test test/original_coupled_boot_test.cpp
     test/coupled_boot_fixture.cpp)
   target_link_libraries(blofeld-coupled-boot-test PRIVATE blofeld_core blofeld_dsp)
@@ -1327,6 +1365,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-gpio-pad-source-test test/gpio_pad_source_test.cpp)
   target_link_libraries(blofeld-gpio-pad-source-test PRIVATE blofeld_mcu blofeld_dsp_peripherals)
   add_test(NAME gpio_pad_sources COMMAND blofeld-gpio-pad-source-test)
+  add_executable(blofeld-gpio-pad-checkpoint-test test/gpio_pad_checkpoint_test.cpp)
+  target_link_libraries(blofeld-gpio-pad-checkpoint-test PRIVATE
+    blofeld_core blofeld_dsp blofeld_dsp_native)
+  add_test(NAME gpio_pad_checkpoints COMMAND blofeld-gpio-pad-checkpoint-test)
   add_executable(blofeld-clock-test test/mcu_clock_test.cpp)
   target_link_libraries(blofeld-clock-test PRIVATE blofeld_core)
   add_test(NAME mcu_clock COMMAND blofeld-clock-test
@@ -1341,6 +1383,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
   target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
+  add_executable(blofeld-dsp-reset-epoch-test test/dsp_reset_epoch_test.cpp)
+  target_link_libraries(blofeld-dsp-reset-epoch-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_reset_epoch COMMAND blofeld-dsp-reset-epoch-test)
   add_executable(blofeld-dsp-irq-clock-test test/dsp_irq_clock_test.cpp)
   target_link_libraries(blofeld-dsp-irq-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_irq_clock COMMAND blofeld-dsp-irq-clock-test)
@@ -1361,6 +1406,13 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clock.trace")
   set_tests_properties(original_dsp_clock PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME original_dsp_reset_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_reset_clock.py"
+    $<TARGET_FILE:blofeld-original-dsp-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-reset-clock.trace")
+  set_tests_properties(original_dsp_reset_clock PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-clocked-midi-test test/mcu_clocked_midi_test.cpp)
   target_link_libraries(blofeld-clocked-midi-test PRIVATE blofeld_mcu_midi)
   add_test(NAME mcu_clocked_midi COMMAND blofeld-clocked-midi-test)
@@ -1479,6 +1531,7 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-gpio-pad-checkpoint-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test
@@ -1519,7 +1572,7 @@ add_custom_target(quality
     blofeld-hc12-flash-cycles-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
-    blofeld-dsp-run-clock-test
+    blofeld-dsp-run-clock-test blofeld-dsp-reset-epoch-test
     blofeld-dsp-irq-clock-test
     blofeld-dsp-irq-admission-test
     blofeld-dsp-scheduled-run-test
@@ -1545,6 +1598,8 @@ add_custom_target(quality
     blofeld-nand-store-test
     blofeld-nand-gpio-write-test
     blofeld-original-nand-write-test
+    blofeld-original-update-validation-test
+    blofeld-original-update-forward-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-instruction-test
@@ -1570,6 +1625,7 @@ add_custom_target(quality
     blofeld-original-dsp-voice-audio-test
     blofeld-original-dsp-voice-midi-test
     blofeld-original-dsp-foreground-test
+    blofeld-original-dsp-program-guard-test
     blofeld-original-dsp-repeat-test
     blofeld-original-dsp-idle-midi-test
     blofeld-original-dsp-release-ring-test blofeld-original-dsp-sustain-ring-test

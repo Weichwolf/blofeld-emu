@@ -119,7 +119,7 @@ void McuBus::reset() {
   usb_.reset();
   interrupts_.reset();
   context_ = {};
-  interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
+  observe_interrupt_pads();
 }
 
 bool McuBus::reserved_register(const std::uint16_t offset) {
@@ -231,7 +231,7 @@ void McuBus::write(const std::uint16_t address, const std::uint8_t value) {
     try {
       const auto name = write_register({.address = location.offset, .value = value});
       sync_peripheral_pins();
-      interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
+      observe_interrupt_pads();
       notify({.write = true, .address = address, .value = value, .name = name});
     } catch (const Fault &fault) {
       throw Fault("MCU write at " + hex(address) + " (register offset " + hex(location.offset) +
@@ -325,14 +325,14 @@ void McuBus::retire_instruction() {
 
 void McuBus::set_pin_drive(const McuPort port, const PinDrive drive) {
   gpio_.set_drive(port, drive);
-  if (port == McuPort::e) { interrupts_.observe_pins(gpio_.observe_pads(port, 3)); }
+  if (port == McuPort::e) { observe_interrupt_pads(); }
 }
 
 void McuBus::update_pin_drive(const McuPort port,
                               const std::uint8_t affected,
                               const PinDrive drive) {
   gpio_.update_drive(port, affected, drive);
-  if (port == McuPort::e) { interrupts_.observe_pins(gpio_.observe_pads(port, 3)); }
+  if (port == McuPort::e) { observe_interrupt_pads(); }
 }
 
 PinSample McuBus::observe_pads(const McuPort port, const std::uint8_t mask) const {
@@ -354,6 +354,11 @@ PinBiases McuBus::gpio_biases(const McuPort port) const {
 
 void McuBus::attach_gpio_pad_source(const McuPort port, GpioPadReader reader) {
   gpio_.attach_pad_source(port, std::move(reader));
+  if (port == McuPort::e) { observe_interrupt_pads(); }
+}
+
+void McuBus::observe_interrupt_pads() {
+  interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
 }
 
 void McuBus::begin_instruction(const ExecutionContext context) {

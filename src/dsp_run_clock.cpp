@@ -72,17 +72,28 @@ void DspRunClock::finish_step(DspBus &bus, const unsigned native_cycles) {
   if (faulted_ || !active_) { throw Fault("DSP reference clock has no healthy prepared step"); }
   try {
     const auto ticks = duration_ticks(native_cycles, period_ticks_);
-    const auto edges = ((cycles_ & 1U) + native_cycles) / 2;
+    const auto edges = ((epoch_native_cycle_units() & 1U) + native_cycles) / 2;
     bus.advance_instruction_cycles(native_cycles);
     bus.timers().advance_clk2(edges);
     ticks_ += ticks;
     cycles_ += native_cycles;
+    clk2_edges_ += edges;
     active_ = false;
   } catch (const std::exception &error) {
     fail();
     throw Fault("DSP clock finish" + context_text(context_) +
                 " completed-native-cycle-units=" + std::to_string(cycles_) + ": " + error.what());
   }
+}
+
+void DspRunClock::restart_native_epoch() {
+  if (faulted_ || active_ || epoch_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("DSP reset epoch requires a healthy inactive representable boundary");
+  }
+  epoch_start_ = cycles_;
+  ++epoch_;
+  period_ticks_ = 0;
+  context_ = {};
 }
 
 void DspRunClock::fail() noexcept {

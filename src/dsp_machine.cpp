@@ -31,6 +31,10 @@ RunState initial_run(const std::optional<DspRunContract> contract) {
       contract->interrupts != DspInterruptTiming::native_vector_estimates) {
     throw Fault("Unsupported DSP interrupt timing contract");
   }
+  if (contract->resets != DspResetTiming::unqualified &&
+      contract->resets != DspResetTiming::reference_instruction_boundary) {
+    throw Fault("Unsupported DSP reset timing contract");
+  }
   return {.contract = contract, .clock = DspRunClock(contract->clock)};
 }
 }
@@ -57,27 +61,39 @@ struct DspMachine::State {
                  if ((interrupt && !vector_estimates) || (state.sr & compatibility) != 0) {
                    throw Fault("Unqualified DSP interrupt or compatibility-mode timing");
                  }
-                 if (cpu.native_cycles() != run.clock->native_cycle_units()) {
+                 if (cpu.native_cycles() != run.clock->epoch_native_cycle_units()) {
                    throw Fault("DSP clock/native counters require coordinated recovery");
                  }
                  run.clock->begin_step(bus, {.pc = state.pc, .omr = state.omr});
                },
            .complete = [this](const auto cycles) { run.clock->finish_step(bus, cycles); },
            .failed = [this] { run.clock->fail(); },
-           .reset =
-               [this] {
-                 if (run.clock->faulted() || run.clock->native_cycle_units() != 0) {
-                   throw Fault("Clocked DSP reset requires a new epoch or coordinated restore");
-                 }
-               },
+           .reset = [this] { reset_clock(); },
            .vector_estimates = vector_estimates});
     }
+  }
+
+  void reset_clock() {
+    if (!run.clock || !run.contract) { throw Fault("Clocked DSP reset lost its timing contract"); }
+    auto &clock = run.clock.value();
+    const auto context = cpu.state();
+    if (clock.faulted() || clock.active() || cpu.faulted() ||
+        cpu.native_cycles() != clock.epoch_native_cycle_units()) {
+      throw Fault("Clocked DSP reset requires coordinated recovery pc=" + hex(context.pc, 6) +
+                  " omr=" + hex(context.omr, 6));
+    }
+    if (clock.native_cycle_units() != 0 &&
+        run.contract.value().resets != DspResetTiming::reference_instruction_boundary) {
+      throw Fault("Clocked DSP reset requires explicit reference reset timing pc=" +
+                  hex(context.pc, 6) + " omr=" + hex(context.omr, 6));
+    }
+    clock.restart_native_epoch();
   }
 
   void check_boundary() const {
     const auto &clock = run.clock;
     if (clock && (clock->faulted() || clock->active() ||
-                  cpu.native_cycles() != clock->native_cycle_units())) {
+                  cpu.native_cycles() != clock->epoch_native_cycle_units())) {
       throw Fault("DSP checkpoint requires coordinated healthy reference clock counters");
     }
   }
