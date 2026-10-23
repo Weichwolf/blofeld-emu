@@ -43,5 +43,7 @@ recovery/power-loss behavior remain open. No fuzzing or physical traffic runs.
 
 original_update_transport separately proves that the full official main download
 writes Y:0144b9/0144ba from complete transport-padding words. They are absent only
-from this declared-byte fixture. Preserve its strict fault; carry the real decoder
-writes into a future coupled continuation (original-update-transport.txt).
+from this declared-byte fixture, whose strict fault remains. The same native DSP
+now carries those decoder writes into original_update_coupled, reaching the
+original XOR highlight/prepared flag/delay and strict COPCTL frontier. See
+original-update-transport.txt and original-update-coupled.txt.

@@ -11,10 +11,10 @@
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/private_file.hpp"
-#include "blofeld/st7565.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "lcd_fixture.hpp"
 #include "original_gpio_pair_fixture.hpp"
+#include "original_update_display_fixture.hpp"
 #include "original_update_forward_fixture.hpp"
 
 #include <cstdint>
@@ -27,37 +27,17 @@
 namespace {
 using namespace blofeld;
 using namespace blofeld::test::update_forward;
+using namespace blofeld::test::update_display;
 constexpr unsigned continuation_limit = 200000;
 constexpr unsigned display_clear = 0x8d70;
 constexpr unsigned clear_return = 0x1209;
 constexpr unsigned text_entry = 0xa6ee;
 constexpr unsigned word_argument = 2;
-constexpr unsigned string_limit = 32;
 constexpr unsigned y_argument = 4;
 constexpr unsigned x_argument = 5;
 constexpr unsigned font_argument = 6;
 constexpr unsigned missing_source = source + prefetched_words;
-constexpr unsigned visible_columns = 128;
-constexpr unsigned visible_pages = 8;
 constexpr unsigned prepared_flag = 0x40;
-
-void check_clear(const Forward &run) {
-  blofeld::test::require(run.display->counts().writes == visible_columns * visible_pages &&
-                             run.display->counts().reads == 0,
-                         "Original error callback clears1024 cells without display reads");
-  for (unsigned page = 0; page < visible_pages; ++page) {
-    for (unsigned column = 0; column < St7565::columns; ++column) {
-      const auto cell = run.display->controller().ram(page, column);
-      blofeld::test::require(column < visible_columns ? cell.known == mask && cell.value == 0
-                                                      : cell.known == 0,
-                             "Literal blank frame and untouched spare columns must match");
-    }
-  }
-  for (unsigned column = 0; column < St7565::columns; ++column) {
-    blofeld::test::require(run.display->controller().ram(visible_pages, column).known == 0,
-                           "Original error clear leaves the icon page unknown");
-  }
-}
 
 void storage_guards(Forward &run, const McuFlashImage &nvm) {
   const auto after = run.pair.mcu.bus().power_off_flash_image();
@@ -115,16 +95,6 @@ void quarantine(Forward &run) {
                              run.pair.dsp.cpu().debug_state() == dsp,
                          "Both failed clocked owners reject all further native progress");
   run.pair.trace << "QUARANTINE mcu=1 dsp=1 unchanged=1\n";
-}
-
-std::string read_text(McuBus &bus, const unsigned address) {
-  std::string result;
-  for (unsigned n = 0; n < string_limit; ++n) {
-    const auto value = bus.read(static_cast<std::uint16_t>(address + n));
-    if (value == 0) { return result; }
-    result.push_back(static_cast<char>(value));
-  }
-  throw Fault("Unbounded diagnostic text");
 }
 
 void diagnostic(Forward &run, const McuFlashImage &nvm, const std::string &path) {

@@ -23,6 +23,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -126,6 +127,8 @@ inline auto registers(const CpuState &state) {
   return std::tuple(state.pc, state.d, state.x, state.y, state.sp, state.ccr);
 }
 
+using PayloadPreparation = std::function<void(OriginalGpioPair &)>;
+
 struct Forward {
   OriginalGpioPair pair;
   const Firmware &firmware;
@@ -133,11 +136,19 @@ struct Forward {
   std::unique_ptr<blofeld::test::LcdFixture> display;
   std::optional<CpuState> interrupted;
   std::vector<unsigned> samples;
+  const std::vector<unsigned> transport_tail;
   unsigned sent = 0, received = 0, loaded = 0, irq_entries = 0, irq_returns = 0;
   unsigned irq_queries = 0, unknown_irq_queries = 0, last_irq_known = 0, last_irq_levels = 0;
 
-  Forward(const Firmware &image, std::ostream &trace, const bool diagnostic = false)
-      : pair(image, cases.back(), trace), firmware(image), own_caller(caller_program(diagnostic)) {
+  Forward(const Firmware &image,
+          std::ostream &trace,
+          const bool diagnostic = false,
+          const PayloadPreparation &prepare = {},
+          const std::vector<unsigned> &tail = {})
+      : pair(image, cases.back(), trace),
+        firmware(image),
+        own_caller(caller_program(diagnostic)),
+        transport_tail(tail) {
     if (diagnostic) {
       pair.mcu.bus().set_pin_drive(McuPort::b, {.mask = 8}); // Explicit idle B3 input.
       display = std::make_unique<blofeld::test::LcdFixture>(pair.mcu.bus());
@@ -154,11 +165,25 @@ struct Forward {
       samples.push_back((packed >> (first_chunk_shift - ((index % chunks_per_word) * chunk_bits))) &
                         data_mask);
     }
-    install();
+    for (const auto value : transport_tail) {
+      for (const unsigned shift : {18U, 12U, 6U, 0U}) {
+        samples.push_back((value >> shift) & data_mask);
+      }
+    }
+    install(prepare);
     pair.additional_completion.observe = [this](const DspScheduledStep &step) { observe(step); };
   }
 
-  void install() {
+  void install(const PayloadPreparation &prepare) {
+    if (prepare) {
+      prepare(pair);
+    } else {
+      install_source();
+    }
+    install_connections();
+  }
+
+  void install_source() {
     const auto &helper = firmware.update_blocks.at(helper_block);
     const auto &payload = firmware.update_blocks.at(payload_block);
     require(helper.size() == static_cast<std::size_t>(helper_words) * word_bytes,
@@ -172,13 +197,6 @@ struct Forward {
           {.space = DspSpace::y, .address = payload_base + n, .value = word(payload, n)});
     }
     pair.dsp.bus().write({.space = DspSpace::y, .address = marker, .value = 0});
-    // Declared pre-existing GPIO output state; input writes do not qualify latches.
-    pair.dsp.bus()
-        .gpio(DspPort::e)
-        .write({.reg = DspGpioRegister::direction, .value = port_e_strobe, .mask = port_e_strobe});
-    pair.dsp.bus()
-        .gpio(DspPort::e)
-        .write({.reg = DspGpioRegister::data, .value = port_e_strobe, .mask = port_e_strobe});
     blofeld::test::DspProgram caller_code;
     caller_code.immediate("sr", masked_sr);
     caller_code.word(absolute_call);
@@ -188,6 +206,16 @@ struct Forward {
     caller_code.install(pair.dsp.bus());
     const std::array<std::uint32_t, branch_bytes> jump{absolute_jump, blofeld::test::boot};
     pair.dsp.bus().install_rom({.start = pair.foreground, .words = jump});
+  }
+
+  void install_connections() {
+    // Declared pre-existing GPIO output state; input writes do not qualify latches.
+    pair.dsp.bus()
+        .gpio(DspPort::e)
+        .write({.reg = DspGpioRegister::direction, .value = port_e_strobe, .mask = port_e_strobe});
+    pair.dsp.bus()
+        .gpio(DspPort::e)
+        .write({.reg = DspGpioRegister::data, .value = port_e_strobe, .mask = port_e_strobe});
     // Own native busy loop waits for the original IRQ handler's request flag.
     for (unsigned n = 0; n < own_caller.size(); ++n) {
       pair.mcu.bus().write(static_cast<std::uint16_t>(caller + n), own_caller[n]);
@@ -230,7 +258,11 @@ struct Forward {
       const auto address = step.plan.before.cpu.r[1];
       const auto value = (pair.dsp.cpu().state().a >> word_bits) & word_mask;
       const auto &bytes = firmware.update_blocks.at(payload_block);
-      require(address == source + loaded && value == word(bytes, source - payload_base + loaded) &&
+      const auto index = source - payload_base + loaded;
+      const auto original_words = static_cast<unsigned>(bytes.size() / word_bytes);
+      const auto expected =
+          index < original_words ? word(bytes, index) : transport_tail.at(index - original_words);
+      require(address == source + loaded && value == expected &&
                   pair.dsp.cpu().state().r[1] == address + 1 &&
                   pair.dsp.cpu().state().pc == stream_read + 1,
               "Actual original source read/register/cursor must match the next original word");

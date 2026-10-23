@@ -33,8 +33,9 @@ six-byte SHA256 is0e5f2951c001499dfdf1cc3ff93d4d4cfdce99df086f280bbedf81261b695d
 This establishes their official transport origin without guessing RAM contents.
 The earlier error-helper diagnostic intentionally supplies only declared bytes,
 so its missing-word failure remains valid for that narrower initial state.
-Coupling these native download writes to the MCU/DSP error-helper run remains
-separate; no full transport/boot, helper return, COP restart, flash programming,
+original_update_coupled now carries the actual native writes and launch frame
+into the MCU/DSP error-helper path, stopping at unimplemented COPCTL (see
+original-update-coupled.txt). No full transport/boot, helper return, COP restart, flash programming,
 whole update/recovery/power-loss or hardware equivalence is established.
 Independent own opcode expectations require the offline assembler in
 dsp-download.txt. No fuzzing or physical-device traffic runs.

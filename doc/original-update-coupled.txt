@@ -1,0 +1,45 @@
+Native download continuity into the original MCU error/restart helper
+
+  cmake --build --preset strict --target blofeld-original-update-coupled-test
+  ctest --test-dir build/strict -R '^original_update_coupled$' --output-on-failure
+
+One clocked DSP executes the original main-payload download, then the helper
+program download and its real JMP. Its CPU, RAM, stack, native epoch and lifetime
+instruction count continue into the existing resolved GPIO/XIRQ/MCU copy path.
+No DSP checkpoint import, host target-memory copy, PC reassignment or reset bridges
+the stages. Own caller ROM and high-aligned input-buffer packet delivery remain
+explicit component preconditions, without upstream wire reception/dispatch.
+
+The input contains one declared damaged marker word at Y:014477. Its packet is
+re-encoded with a corrected transport XOR; original MCU/DSP instructions remain
+unchanged. Every download store is checked against independent packet decoding.
+The real padding write at Y:0144b9 is subsequently prefetched and its first two
+six-bit groups are sent. Y:0144ba is present but not consumed; Y:0144bb remains
+unknown. Neither a test canary nor guessed padding supplies those boundaries.
+
+The transferred188-byte MCU helper runs its original clear, two text calls and
+XOR rectangle at x0/y23/width128/height18. Independent font/rectangle bit math
+predicts every PBM pixel,1768 writes and1488 reads per case. The rectangle spans
+four controller pages. Original native code sets flags0xd1, then executes all
+30000 delay increments and one GPIO wait poll. Its next write is COPCTL=1 at
+003c, PC1298/CCRb0; this peripheral operation remains unimplemented and fails
+visibly. ARMCOP servicing, a watchdog reset and helper return are not executed.
+
+MCU execution and joint scheduling reject further advancement without changing
+CPU/clock state. The independent DSP remains healthy but held in its native
+chunk wait at P:2e6b, R1=144ba. This is not a claim that its standalone API faults.
+Downloaded payload/program/padding, original decoder/context outside live patches,
+own callers, MCU helper/RAM tail and all MCU NVM/knowledge/history remain exact.
+The native status19 write updates only the fixture's expected source metadata;
+no host register/RAM repair supplies that status. Clock alignment uses the own
+native MCU busy loop, then restores its declared initial caller context before
+live coupling. The DSP epoch is retained; this is not continuous whole-board boot.
+
+Four nominal order/phase contexts and ten fixed oracle corruptions cover these
+conditions. Earlier declared-byte-only diagnostics keep their strict Y:0144b9
+fault and exact traces. Shared transport/display fixtures retain default behavior.
+Original assets, packet bodies, text, screenshots and traces remain local.
+Full boot, calibrated timing/wiring, Desktop/Keyboard equivalence, normal live
+MIDI/audio, COP behavior and whole flash update/recovery/power-loss remain open.
+No fuzzing or physical traffic runs. See original-update-transport.txt,
+original-update-diagnostic.txt and objective.txt for scope and remaining gates.

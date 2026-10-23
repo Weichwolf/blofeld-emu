@@ -1275,8 +1275,15 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           final-packet interruptions retain their prefix;
                                           three real helper JMP frames stop before body
                                           execution. Main padding establishes Y:0144b9/
-                                          0144ba, not yet coupled to the error-helper
-                                          fixture (original-update-transport.txt).
+                                          0144ba (original-update-transport.txt).
+                                          Same clocked DSP now downloads both main
+                                          blocks and launches the coupled error helper
+                                          without reset/copy/PC repair. Four contexts
+                                          check original XOR highlight, prepared bit,
+                                          30000 delay increments and strict COPCTL=1
+                                          write fault at MCU003c/PC1298. Joint execution
+                                          stops; watchdog reset/return remain open
+                                          (original-update-coupled.txt).
                                           Separate declared TIO0 wire path: 30 cases,
                                           1050 bytes / 9450 original IRQs/RTIs feed
                                           real SysEx collection and manufacturer

@@ -67,61 +67,64 @@ def collect(path):
     return blocks
 
 
+def validate_block(block, expected, layout, caller_base=0xff0000, setup_instructions=4):
+    mode, address, declared, stored, count = layout
+    rows = iter(block['rows'])
+    def take(tag):
+        actual_tag, value = next(rows, ('MISSING', {}))
+        if actual_tag != tag:
+            raise ValueError(tag + ' missing or out of original execution order')
+        return value
+    setup = take('SETUP')
+    if setup != dict(instructions=setup_instructions, pc=caller_base + 5, omr=0x600389):
+        raise ValueError('SETUP native OMR instruction and three settling NOPs differ')
+    header = take('PACKET')
+    returned = caller_base + 0x36
+    if (header['index'] != 0 or header['stored'] or header['cursor'] != address
+            or header['sequence'] or header['sp'] or header['prefetches']
+            or header['pc'] != returned):
+        raise ValueError('HEADER original configuration/caller differs')
+    steps = setup['instructions'] + header['steps']
+    written = 0
+    for packet in range(1, count + 1):
+        if packet == count:
+            if take('INTERRUPTED') != dict(stored=written, cursor=address + written):
+                raise ValueError('INTERRUPTED no final-packet destination words may exist yet')
+        original = expected['packets'][packet]
+        prefetched = take('PREFETCH')
+        if (prefetched['packet'] != packet or prefetched['address'] != 0x778 + len(original) - 1
+                or prefetched['value'] != original[-1] << 16
+                or not 0x2361 <= prefetched['pc'] <= 0x23d7):
+            raise ValueError('PREFETCH exact original trailing checksum read differs')
+        for _ in range(expected['sizes'][packet - 1]):
+            if take('STORE') != dict(index=written, space=0 if mode == 0 else 2,
+                                     address=address + written,
+                                     value=expected['words'][written], pc=0x23c6):
+                raise ValueError('STORE native ordered address/value/space differs')
+            written += 1
+        state = take('PACKET')
+        launch = mode == 0 and packet == count
+        fixed = {key: value for key, value in state.items() if key != 'steps'}
+        if (fixed != dict(index=packet, stored=written, cursor=address + written,
+                          sequence=(packet % 128) << 16, pc=address if launch else returned,
+                          sp=int(launch), prefetches=packet)
+                or not 0 < state['steps'] < 2048):
+            raise ValueError('PACKET original cursor/sequence/return or real launch frame differs')
+        steps += state['steps']
+    result = take('RESULT')
+    if result != dict(stored=stored, declared=declared, extra=stored - declared,
+                      prefetches=count, steps=steps, launched=int(mode == 0), guards=1):
+        raise ValueError('RESULT complete original padding, storage guards or launch differs')
+    if next(rows, None) is not None:
+        raise ValueError('RESULT unexpected execution after transfer boundary')
+    return steps
+
+
 def validate(observed, reference):
     if [block['index'] for block in observed] != list(range(6)):
         raise ValueError('BLOCK all six isolated original transfers are required')
-    total_steps = 0
-    for block, expected, (mode, address, declared, stored, count) in zip(
-            observed, reference, LAYOUTS, strict=True):
-        rows = iter(block['rows'])
-        def take(tag):
-            actual_tag, value = next(rows, ('MISSING', {}))
-            if actual_tag != tag:
-                raise ValueError(tag + ' missing or out of original execution order')
-            return value
-        setup = take('SETUP')
-        if setup != dict(instructions=4, pc=0xff0005, omr=0x600389):
-            raise ValueError('SETUP native OMR instruction and three settling NOPs differ')
-        header = take('PACKET')
-        returned = header['pc']
-        if (header['index'] != 0 or header['stored'] or header['cursor'] != address
-                or header['sequence'] or header['sp'] or header['prefetches']
-                or not 0xff0000 <= returned < 0xff0080):
-            raise ValueError('HEADER original configuration/caller differs')
-        steps = setup['instructions'] + header['steps']
-        written = 0
-        for packet in range(1, count + 1):
-            if packet == count:
-                if take('INTERRUPTED') != dict(stored=written, cursor=address + written):
-                    raise ValueError('INTERRUPTED no final-packet destination words may exist yet')
-            original = expected['packets'][packet]
-            prefetched = take('PREFETCH')
-            if (prefetched['packet'] != packet or prefetched['address'] != 0x778 + len(original) - 1
-                    or prefetched['value'] != original[-1] << 16
-                    or not 0x2361 <= prefetched['pc'] <= 0x23d7):
-                raise ValueError('PREFETCH exact original trailing checksum read differs')
-            for _ in range(expected['sizes'][packet - 1]):
-                if take('STORE') != dict(index=written, space=0 if mode == 0 else 2,
-                                         address=address + written,
-                                         value=expected['words'][written], pc=0x23c6):
-                    raise ValueError('STORE native ordered address/value/space differs')
-                written += 1
-            state = take('PACKET')
-            launch = mode == 0 and packet == count
-            fixed = {key: value for key, value in state.items() if key != 'steps'}
-            if (fixed != dict(index=packet, stored=written, cursor=address + written,
-                              sequence=(packet % 128) << 16, pc=address if launch else returned,
-                              sp=int(launch), prefetches=packet)
-                    or not 0 < state['steps'] < 2048):
-                raise ValueError('PACKET original cursor/sequence/return or real launch frame differs')
-            steps += state['steps']
-        result = take('RESULT')
-        if result != dict(stored=stored, declared=declared, extra=stored - declared,
-                          prefetches=count, steps=steps, launched=int(mode == 0), guards=1):
-            raise ValueError('RESULT complete original padding, storage guards or launch differs')
-        if next(rows, None) is not None:
-            raise ValueError('RESULT unexpected execution after transfer boundary')
-        total_steps += steps
+    total_steps = sum(validate_block(block, expected, layout)
+                      for block, expected, layout in zip(observed, reference, LAYOUTS, strict=True))
     return dict(blocks=6, packet_calls=4847, checksum_prefetches=4841,
                 destination_stores=33876, declared_words=33871, complete_padding_words=5,
                 interrupted_prefixes=6, helper_entries=3, native_steps=total_steps)

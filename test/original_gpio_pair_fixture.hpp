@@ -367,7 +367,7 @@ struct OriginalGpioPair {
           << " timebase=" << dsp.run_clock().timebase_hz() << '\n';
   }
 
-  void align_prefix() {
+  void align_prefix(const unsigned limit = step_limit) {
     auto &bus = mcu.bus();
     const auto original_context = mcu.cpu().state();
     bus.write(alignment_caller, branch_opcode);
@@ -377,7 +377,7 @@ struct OriginalGpioPair {
     require(common_hz % mcu.run_clock().timebase_hz() == 0, "Integral common clock conversion");
     const auto ratio = common_hz / mcu.run_clock().timebase_hz();
     while (mcu.run_clock().elapsed_ticks() * ratio < dsp.run_clock().elapsed_ticks()) {
-      require(++padding < step_limit, "explicit own prefix clock alignment");
+      require(++padding < limit, "explicit own prefix clock alignment");
       mcu.cpu().step();
     }
     mcu.cpu().set_state(original_context);

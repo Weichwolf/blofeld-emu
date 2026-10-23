@@ -588,6 +588,15 @@ if(BUILD_TESTING)
   add_executable(blofeld-original-update-forward-test test/original_update_forward_test.cpp)
   target_link_libraries(blofeld-original-update-forward-test PRIVATE
     blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture)
+  add_executable(blofeld-original-update-coupled-test test/original_update_coupled_test.cpp)
+  target_link_libraries(blofeld-original-update-coupled-test PRIVATE
+    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
+  add_test(NAME original_update_coupled COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_coupled.py"
+    $<TARGET_FILE:blofeld-original-update-coupled-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-coupled.trace")
+  set_tests_properties(original_update_coupled PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 540)
   add_executable(blofeld-original-update-diagnostic-test test/original_update_diagnostic_test.cpp)
   target_link_libraries(blofeld-original-update-diagnostic-test PRIVATE
     blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
@@ -1578,6 +1587,7 @@ add_custom_target(quality
     blofeld-original-update-validation-test
     blofeld-original-update-forward-test
     blofeld-original-update-diagnostic-test
+    blofeld-original-update-coupled-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-instruction-test
