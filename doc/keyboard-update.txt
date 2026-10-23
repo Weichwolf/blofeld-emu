@@ -78,6 +78,11 @@ halt/resume and incomplete/failed command ownership are checked independently.
 This does not execute the original HC12 bit transport or qualify physical reset,
 clocking or whole-package ordering (hcs08-bdc.txt).
 
+The original C0/E0 byte functions now exchange actual GPIO waveforms with the
+clocked BKGD/BDC target, including independently seeded replies. Their explicit
+post-SYNC delay/phase/ratio fixture does not execute the reset/SYNC caller,
+controller RAM upload or complete helper (hcs08-bdc-wire.txt).
+
 Remaining helper bodies, the external controller, actual scanner/main interaction, sample
 or main-NVM writes, every programming interruption/recovery phase, calibrated
 timing and normal Keyboard startup/MIDI/audio remain unqualified. Desktop use

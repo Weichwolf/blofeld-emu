@@ -53,4 +53,5 @@ part, clocks, original whole-package sequencing, full boot/MIDI/audio, update
 recovery and all118 function contracts remain open in objective.txt/coverage.txt.
 
 Primary reference: MC9S08GT16A/GT8A Rev.1 chapters4/15 (hash in hcs08-reference.json).
+Clocked BKGD and original HC12 byte-function integration: hcs08-bdc-wire.txt.
 No physical traffic, automatic fuzzing or hardware flashing is part of these gates.

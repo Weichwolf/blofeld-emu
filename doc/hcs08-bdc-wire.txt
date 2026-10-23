@@ -1,0 +1,66 @@
+HCS08 BKGD wire and original HC12 byte helpers
+
+  cmake --build --preset strict --target blofeld-hcs08-bdc-wire-test \
+    blofeld-original-keyboard-bdc-wire-test
+  ctest --test-dir build/strict -j1 \
+    -R '^(hcs08_bdc_wire|original_keyboard_bdc_wire)$' --output-on-failure
+
+The separate wire component consumes every BDC clock edge and host drive
+change under an explicit reference clock cadence/phase. Exact tick timestamps
+keep asynchronous host edges distinct from their next-clock perception.
+Nominal bit completion uses sixteen actual periods from the observed falling
+edge; it does not add another synchronization interval. One tick below this
+boundary rejects. Host timestamps cannot skip clock edges or run backward.
+Passive line reads never advance time, bits, target commands or memory.
+
+Host data is sampled ten clocks after the perceived start, MSB first. Target
+replies come from the actual BDC transaction owner: zero drives low for thirteen
+cycles, with one-cycle speedup pulses at seven/thirteen for one/zero. Opposing
+active drives and unknown inputs fail with pin/context/time. The candidate
+GT8A internal pull-up applies after active drivers. SYNC recognizes the long
+host-low request, waits sixteen perceived clocks after release, then drives
+128 low clocks and one high speedup clock. A512-period communication timeout
+aborts pending framing without resetting CPU mode or undoing committed writes.
+
+The named reference_command_delay contract services complete commands on the
+first supplied clock at/after their nominal coding delay. This is not a claim
+about silicon bus arbitration or command execution latency. Unsupported running
+memory access still rejects in the separate BDC owner. Opaque wire checkpoints
+retain exact bit/drive/time/deadline state; CPU, BDC, memory and external host
+must be restored separately. Two fresh joint mid-response suffixes reproduce
+every clock/level/drive and endpoint, with an independent expected reply byte.
+
+The original helper gate loads all1018 unchanged HC12 bytes from the pinned
+official package. Its actual WRITE_BYTE/READ_BYTE routines execute beneath an
+own native JSR caller. GPIO latch/direction writes feed the wire; resolved target
+drives feed actual GPIO reads. No callback supplies decoded host bytes or host
+return values. The target mapping independently checks the written byte, then
+receives a different own byte for the readback expectation. The HCS08 CPU stays
+genuinely held throughout; no controller instructions are needed for BDC RAM access.
+
+Explicit caller inputs include the post-SYNC9/12 software delays, active-reset
+BDC mode and eight host bus periods per BDC period. Eight half-host-cycle phases
+avoid coincident-edge ordering. Two phases cover all256 byte values; six cover
+four bit corners:536 pairs,1072 commands,3752 received bytes,536 replies,
+132928 actual GPIO writes and1998744 native HC12 instructions. Independent
+frame/value/latch/direction expectations and recorded bus-cycle waveform offsets
+cover every transfer. Original helper bytes and MCU NVM/knownness/erase history
+remain unchanged. A separate directed gate covers every byte value, SYNC,
+timeouts, conflicts, exact asynchronous boundaries and trusted replay.
+
+An earlier native failure exposed incorrect perceived-clock bit retirement:
+133 host cycles at the declared ratio satisfy the nominal interval, although
+the next perceived-clock interval has not ended. Exact edge timestamps correct
+this without allowing shorter bits. Adapter signed-mask/driver-description
+failures are also preserved locally; no net validation or sanitizer was weakened.
+
+This gate does not execute the original reset/SYNC caller, complete helper,
+controller RAM upload/programming, target application, DSP sender or whole update.
+Its clock ratio is not a measured board rate and cannot be combined with the
+independent6MHz FLASH fixture as a calibrated board profile. Actual timer/clock
+history, part/revision, wiring/analog propagation and physical recovery remain
+unqualified. Full boot/MIDI/audio, all118 manual functions and every update/power
+loss phase remain required by objective.txt/coverage.txt. No physical traffic,
+automatic fuzzing, whole-suite run or hardware flashing is part of these gates.
+
+Primary reference: MC9S08GT16A/GT8A Rev.1 chapter15, hash/URL in hcs08-reference.json.

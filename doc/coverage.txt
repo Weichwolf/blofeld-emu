@@ -1775,6 +1775,13 @@ Keyboard BDC transaction owner    partial  Actual native halt/register/GO/BGND,
                                           with saved trim under explicit FLASH
                                           hypotheses. Wire/HC12/timing/arbitration,
                                           whole update and physical recovery open.
+Keyboard BKGD byte transport      partial  Clocked wire/SYNC/timeout/replay and
+                                          original HC12 GPIO C0/E0 routines reach
+                                          actual target RAM/replies across eight
+                                          declared phases (hcs08-bdc-wire.txt).
+                                          Reset/SYNC caller, complete helper,
+                                          controller execution/programming and
+                                          physical timing/wiring remain open.
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring
