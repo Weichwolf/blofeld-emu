@@ -17,6 +17,8 @@ constexpr unsigned core_priority = 0xffffff;
 constexpr unsigned shi_mask = 0x0c;
 constexpr unsigned timer_mask = 0x300;
 constexpr unsigned timer_shift = 8;
+constexpr unsigned esai_mask = 3, esai1_mask = 0xc00, esai1_shift = 10;
+constexpr unsigned esai_first = 0x38, esai_last = 0x3c, esai1_first = 0x78;
 constexpr unsigned timer_first = 0x54;
 constexpr unsigned irqa_vector = 0x10;
 constexpr unsigned irqa_priority_mask = 3;
@@ -26,25 +28,9 @@ constexpr unsigned dma_priority_shift = 12;
 constexpr unsigned dma_first = 0x18;
 constexpr unsigned dma_last = 0x22;
 // DSP56371UM table4-5, not numeric vector-address order.
-constexpr std::array<unsigned, 19> priorities{irqa_vector,
-                                              0x18,
-                                              0x1a,
-                                              0x1c,
-                                              0x1e,
-                                              0x20,
-                                              0x22,
-                                              0x4c,
-                                              0x4a,
-                                              0x42,
-                                              0x48,
-                                              0x40,
-                                              0x44,
-                                              0x56,
-                                              0x54,
-                                              0x5a,
-                                              0x58,
-                                              0x5e,
-                                              0x5c};
+constexpr std::array<unsigned, 25> priorities{
+    irqa_vector, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22, 0x3c, 0x3a, 0x38, 0x4c, 0x4a, 0x42,
+    0x48,        0x40, 0x44, 0x56, 0x54, 0x5a, 0x58, 0x5e, 0x5c, 0x7c, 0x7a, 0x78};
 }
 
 void DspInterrupts::reset() {
@@ -70,7 +56,7 @@ void DspInterrupts::write(const std::uint32_t address, const std::uint32_t value
     throw Fault("Invalid DSP interrupt-priority write at X:" + hex(address, 6));
   }
   const auto allowed = address == core_priority ? irqa_priority_mask | irqa_mode | dma_priority_mask
-                                                : shi_mask | timer_mask;
+                                                : shi_mask | timer_mask | esai_mask | esai1_mask;
   if ((value & ~allowed) != 0) {
     throw Fault("Unimplemented DSP interrupt-priority fields at X:" + hex(address, 6) +
                 " value=" + hex(value, 6));
@@ -164,7 +150,14 @@ std::optional<unsigned> DspInterrupts::priority(const std::uint32_t vector) cons
     const auto encoded = (core_ >> shift) & field_mask;
     return encoded == 0 ? std::nullopt : std::optional<unsigned>(encoded - 1);
   }
-  const auto shift = vector >= timer_first ? timer_shift : 2U;
+  unsigned shift = 2;
+  if (vector >= esai1_first) {
+    shift = esai1_shift;
+  } else if (vector >= timer_first) {
+    shift = timer_shift;
+  } else if (vector >= esai_first && vector <= esai_last) {
+    shift = 0;
+  }
   const auto encoded = (peripheral_ >> shift) & field_mask;
   if (encoded == 0) { return std::nullopt; }
   return encoded - 1;

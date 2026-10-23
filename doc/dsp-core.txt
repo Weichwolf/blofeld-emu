@@ -52,8 +52,9 @@ DSP56371 memory and peripheral scope
   switch time fail. Other switched layouts remain unsupported.
   The linear X:10000..11fff to P:1000..2fff word correspondence is inferred from
   the window sizes; its physical word order still needs hardware calibration.
-- SHI uses the separately tested model in dsp-shi.txt. SHI/TIM priority fields
-  arbitrate actual native fast/long interrupt entry; see dsp-interrupts.txt. Other
+- SHI uses the separately tested model in dsp-shi.txt. SHI/TIM and both ESAI
+  transmit priority fields arbitrate native interrupt entry; see dsp-interrupts.txt
+  and esai-interrupts.txt. Other
   enabled IPRP/IPRC fields remain unsupported. No pipeline latency is implied.
 - OGDB writes latch the 24-bit debug value (DSP56300FM 7.2.4/7.2.5). DSP reads,
   JTAG/debug commands, security behavior and debug interrupts remain unimplemented.

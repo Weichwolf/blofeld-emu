@@ -7,12 +7,16 @@ The manuals remain private inputs identified in doc/hardware/sources.json.
 Implemented subset
 External IRQA now has an explicit logical level/falling-edge input and native
 vector10 support; see dsp-irqa.txt for fields, detection and qualified limits.
-X:fffffe (IPRP) accepts SHI[3:2] and TIM[9:8]. Each field encodes disabled,
+X:fffffe (IPRP) accepts ESAI[1:0], SHI[3:2], TIM[9:8] and ESAI_1[11:10].
+ESAI data/even/exception transmit requests and their native service are described
+in esai-interrupts.txt; receive and last-slot sources remain unsupported.
+Each field encodes disabled,
 IPL0, IPL1 or IPL2 as 00, 01, 10 or 11. SR I1:I0 is the actual native CPU mask:
 mask 0 admits levels 0..2, mask 1 admits 1..2, mask 2 admits 2 and mask 3 none.
 The greatest eligible IPL wins. Ties use the documented fixed order, independent
-of source-arrival order: SHI bus error, overrun, underrun, full, transmit, nonempty;
-then timer 0 overflow/compare, timer 1 overflow/compare, timer 2 overflow/compare.
+of source-arrival order: IRQA, DMA0..5, primary ESAI exception/even/data,
+SHI bus error/overrun/underrun/full/transmit/nonempty, timer 0..2 overflow/compare,
+then secondary ESAI exception/even/data.
 SHI bus error has a priority slot but remains an unsupported I2C/master source.
 Disabled/masked sources are not probed during arbitration or acknowledgement;
 this does not turn unobserved peripheral inputs into known values.
@@ -27,7 +31,8 @@ DspCore arbitrates at explicit reference instruction boundaries. The native
 reference entry fetches two real program words through the strict bus. Unknown
 first or second contents fail before acknowledging a timer or pushing a frame.
 Once both are fetched, a timer clears only its serviced flag. SHI acknowledgement
-does not drain its FIFO or clear errors: the handler must perform the modeled
+does not drain its FIFO or clear errors; ESAI acknowledgement retains its data
+and error state. The handler must perform the modeled
 peripheral's actual read/write sequence. No generic host interrupt FIFO is used.
 
 Both vector words are latched before either executes. A first-slot P store

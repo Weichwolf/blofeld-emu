@@ -34,7 +34,7 @@ struct DspEsaiOutputs {
 };
 
 // DSP56371UM chapters8/9: normal/network transmitter with explicit clock inputs.
-// No implicit board clock, RX data, DMA, interrupt delivery or host audio synthesis.
+// No implicit board clock, RX data, DMA timing or host audio synthesis.
 class DspEsai {
 public:
   explicit DspEsai(DspEsaiInstance instance);
@@ -49,6 +49,8 @@ public:
   [[nodiscard]] DspEsaiClockOutputs clock_outputs() const;
   [[nodiscard]] unsigned required_clock_pads() const;
   [[nodiscard]] bool transmit_request() const;
+  // Pure data/even-data/exception request; does not read SAISR or clear TUE.
+  [[nodiscard]] std::optional<std::uint32_t> interrupt_vector() const;
 
   [[nodiscard]] bool needs_transmit_clock() const;
 

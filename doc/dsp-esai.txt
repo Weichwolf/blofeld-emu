@@ -80,8 +80,10 @@ buffers, shifts, pin phase, pending sync, mask versions and error-clear history.
 
 Receiver enable/configuration, FOSC-derived clocks, external word-length/relative
 frame sync, generated relative frame sync, AC97/on-demand modes, serial flag
-outputs/external buffer controls and interrupt enables remain unsupported and
-reject. Receiver-disabled reset controls/masks can be inspected without
+outputs/external buffer controls, receive/last-slot interrupt enables remain
+unsupported and reject. Data/even/exception transmitter requests and native
+service are separately qualified (esai-interrupts.txt).
+Receiver-disabled reset controls/masks can be inspected without
 fabricating received data. In particular,
 word-length external frame-sync behavior affected by ES140 is not qualified.
 No board route, codec, host PCM sink, real-time callback or original audio is

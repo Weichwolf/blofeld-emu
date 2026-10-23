@@ -365,6 +365,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-esai-test test/dsp_esai_test.cpp test/dsp_esai_native.cpp)
   target_link_libraries(blofeld-esai-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_esai COMMAND blofeld-esai-test)
+  add_executable(blofeld-esai-interrupt-test
+    test/dsp_esai_interrupt_test.cpp test/dsp_esai_interrupt_native.cpp)
+  target_link_libraries(blofeld-esai-interrupt-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_esai_interrupts COMMAND blofeld-esai-interrupt-test)
   add_executable(blofeld-esai-clock-test test/dsp_esai_clock_test.cpp test/dsp_esai_clock_native.cpp)
   target_link_libraries(blofeld-esai-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_esai_clock COMMAND blofeld-esai-clock-test)
@@ -1689,6 +1693,7 @@ add_custom_target(quality
     blofeld-original-keyboard-transport-test
     blofeld-original-keyboard-receiver-test
     blofeld-original-keyboard-handoff-test
+    blofeld-esai-interrupt-test
     blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test

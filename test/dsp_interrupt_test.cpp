@@ -184,7 +184,7 @@ void test_priority_rejections_and_reset() {
   blofeld::DspInterrupts controller;
   constexpr unsigned known_priorities = 0x204;
   controller.write(iprp, known_priorities);
-  constexpr std::array<unsigned, 5> unsupported{1, 16, 0x400, 0x10000, 0x1000000};
+  constexpr std::array<unsigned, 5> unsupported{16, 0x20, 0x40, 0x10000, 0x1000000};
   for (const auto value : unsupported) {
     static_cast<void>(
         reject([&controller, value] { controller.write(iprp, value); },

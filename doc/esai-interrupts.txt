@@ -1,0 +1,46 @@
+ESAI transmitter data interrupts
+
+  cmake --build --preset strict --target blofeld-esai-interrupt-test
+  ctest --test-dir build/strict -j1 -R '^dsp_esai_interrupts$' --output-on-failure
+
+Reference: DSP56371UM Rev. 2.1 tables 4-4..4-6, sections 8.3.2.16..18,
+8.4.3 and matching chapter 9 sections. hardware/sources.json pins the local PDF:
+https://www.nxp.com/docs/en/user-guide/DSP56371UM.pdf
+
+IPRP ESL[1:0] and ESL1[11:10] route the two transmitter groups. Normal, even-data
+and exception vectors are 0x38/0x3a/0x3c and 0x78/0x7a/0x7c. TDE plus the matching TCR enable
+raises data requests; enabled TUE exception takes precedence over even-data,
+which takes precedence over normal data. The existing fixed cross-device rank
+and native CPU IPL mask apply. Disabled/masked groups do not probe unknown clocks.
+
+Request observation is const and does not read SAISR, arm error clearing, consume
+data or acknowledge a source. Vector acknowledgement also retains these level
+requests. Actual TX writes for every enabled lane, or TSR, clear data-empty flags.
+TUE requires the real SAISR-read/write sequence. An eligible source with missing
+clock knowledge fails with its status address and native PC/OMR context; it never
+becomes a fabricated request or successful data transfer.
+
+TIE and TEIE can change during operation, as allowed by sections 8.4.2/9.4.2.
+TEDIE works in initial/personal-reset configuration; its live change remains
+unqualified because those sections' exception lists omit it. Configuration
+changes use the existing explicit reset sequence. Last-slot TLIE, receive-side
+interrupts and other unsupported fields still reject. Recognition latency and
+sub-instruction hardware timing remain reference-boundary limitations.
+
+The directed gate covers 128 combinations of two instances, eight enable masks
+and eight lane sets; normal/even/underrun states, partial refills, read-clear
+purity, masked slots, live enables, personal/peripheral reset and clock faults.
+Independent priority expectations cover 64 group/mask combinations and 105 ranked
+source pairs. Twelve native source/entry contexts each restore twice: actual
+vector reads, JSR, SAISR/MOVEP service and RTI retain independently predicted
+PC/SR/SP, instruction counts and next serial words. Both atomic and explicitly
+suspended vector-fetch/acknowledgement paths execute. Two further native cases
+check missing clocks, quarantine, rejected retry and trusted recovery.
+
+These are own instruction/peripheral callers with explicit pin observations,
+not recovered original startup or measured board clocks. No host synthesizer,
+physical traffic or fuzzing is involved. Table 3-8 marks Y:ffffff
+reserved; its chip read value remains unknown. The allocator's unused parallel
+read still faults in this emulator.
+Full boot, original continuous audio and all documented instrument functions
+remain open in objective.txt/coverage.txt.

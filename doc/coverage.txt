@@ -872,6 +872,13 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           register maps, six lanes, normal/network
                                           formats/masks/flags, native MOVEP and
                                           partial-word checkpoints (dsp-esai.txt).
+                                          Both ESAI transmit groups now route
+                                          actual data/even/exception requests to
+                                          native vector/ISR/RTI service, including
+                                          pure acknowledgement, partial refills,
+                                          missing clocks and trusted replay.
+                                          RX/last-slot IRQ and physical latency
+                                          remain unqualified (esai-interrupts.txt).
                                           Timed external events now merge between
                                           native completions, including 625-tick
                                           ESAI half-periods and native MOVEP word

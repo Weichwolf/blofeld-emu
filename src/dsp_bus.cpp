@@ -95,6 +95,14 @@ std::string address_text(const DspAddress access) {
   constexpr std::array<const char *, 3> names{"P:", "X:", "Y:"};
   return std::string(names.at(bank(access.space))) + hex(access.address, 6);
 }
+
+std::optional<std::size_t> esai_interrupt_bank(const std::uint32_t vector) {
+  constexpr std::array<unsigned, 3> primary{0x38, 0x3a, 0x3c};
+  constexpr std::array<unsigned, 3> secondary{0x78, 0x7a, 0x7c};
+  if (std::ranges::find(primary, vector) != primary.end()) { return 0; }
+  if (std::ranges::find(secondary, vector) != secondary.end()) { return 1; }
+  return std::nullopt;
+}
 }
 
 DspBus::DspBus() {
@@ -400,6 +408,13 @@ std::optional<DspInterruptRequest> DspBus::interrupt_request(const unsigned mask
   for (unsigned channel = 0; channel < dma_channels; ++channel) {
     if ((dma & (1U << channel)) != 0) { pending.push_back(dma_first_vector + (2 * channel)); }
   }
+  constexpr std::array<unsigned, 2> esai_vectors{0x38, 0x78};
+  for (std::size_t index = 0; index < esai_.size(); ++index) {
+    const auto level = interrupts_.priority(esai_vectors.at(index));
+    if (level && *level >= mask) {
+      if (const auto vector = esai_.at(index).interrupt_vector()) { pending.push_back(*vector); }
+    }
+  }
   const auto shi_level = interrupts_.priority(shi_receive);
   if (shi_level && *shi_level >= mask) {
     const auto shi = shi_.interrupt_vectors();
@@ -428,6 +443,9 @@ bool DspBus::interrupt_source_pending(const DspInterruptRequest request) const {
   if (request.vector == irqa_vector) { return interrupts_.irqa_request(request.level) == request; }
   if (request.vector >= dma_first_vector && request.vector <= dma_last_vector) {
     return (dma_.interrupt_sources() & (1U << ((request.vector - dma_first_vector) / 2))) != 0;
+  }
+  if (const auto bank = esai_interrupt_bank(request.vector)) {
+    return esai_.at(*bank).interrupt_vector() == request.vector;
   }
   const auto pending =
       request.vector >= first_timer ? timers_.interrupt_vectors() : shi_.interrupt_vectors();
@@ -470,6 +488,8 @@ void DspBus::acknowledge_latched_interrupt(const DspInterruptRequest request) {
     throw Fault("DSP latched interrupt source withdrew before acknowledgement vector=" +
                 hex(request.vector, 6));
   }
+  // These level requests clear only through native TX/TSR/status service.
+  if (esai_interrupt_bank(request.vector)) { return; }
   if (request.vector == irqa_vector) {
     interrupts_.acknowledge_irqa();
   } else if (request.vector >= dma_first_vector && request.vector <= dma_last_vector) {

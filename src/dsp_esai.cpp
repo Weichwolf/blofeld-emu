@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -129,6 +130,25 @@ bool DspEsai::transmit_request() const {
   return (status_ & esai::empty) != 0;
 }
 
+std::optional<std::uint32_t> DspEsai::interrupt_vector() const {
+  if (!active_ || (control_ & esai::personal_reset) != 0 ||
+      (control_ & esai::interrupt_enables) == 0) {
+    return std::nullopt;
+  }
+  require_observed_clock();
+  if ((status_ & esai::empty) == 0) { return std::nullopt; }
+  constexpr unsigned primary_vector = 0x38;
+  constexpr unsigned secondary_vector = 0x78;
+  const auto base = instance_ == DspEsaiInstance::primary ? primary_vector : secondary_vector;
+  if ((control_ & esai::exception_interrupt) != 0 && (status_ & esai::underrun) != 0) {
+    return base + 4;
+  }
+  if ((control_ & esai::even_interrupt) != 0 && (status_ & esai::even_empty) != 0) {
+    return base + 2;
+  }
+  return (control_ & esai::data_interrupt) != 0 ? std::optional<std::uint32_t>(base) : std::nullopt;
+}
+
 void DspEsai::require_observed_clock() const {
   if (needs_transmit_clock() && (clock_generator() || frame_generator()) &&
       observed_.timing != DspEsaiClockTiming::reference_reset_edges) {
@@ -224,13 +244,14 @@ void DspEsai::write_control(const std::uint32_t value) {
   constexpr unsigned format_fields = 0x7c00;
   constexpr unsigned supported = esai::channels | esai::shift_lsb | esai::right_align |
                                  esai::network | format_fields | esai::bit_sync | esai::zero_pad |
-                                 esai::personal_reset;
+                                 esai::personal_reset | esai::interrupt_enables;
   if ((value & ~supported) != 0) {
     throw Fault("Unimplemented/reserved DSP ESAI TCR fields at " + address(esai::tcr));
   }
   const auto old = enabled();
   if (active_ && (control_ & esai::personal_reset) == 0 &&
-      ((value ^ control_) & ~(esai::channels | esai::personal_reset)) != 0) {
+      ((value ^ control_) & ~(esai::channels | esai::personal_reset | esai::data_interrupt |
+                              esai::exception_interrupt)) != 0) {
     throw Fault("DSP ESAI configuration requires individual reset at " + address(esai::tcr));
   }
   control_ = value;
