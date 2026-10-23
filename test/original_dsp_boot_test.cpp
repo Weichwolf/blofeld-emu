@@ -5,6 +5,7 @@
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/firmware.hpp"
+#include "dsp_boot_context.hpp"
 #include "dsp_boot_reference.hpp"
 #include "original_dsp_reference.hpp"
 
@@ -106,6 +107,10 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
   bus.shi().observe_spi({.mosi = false});
   auto &cpu = machine.cpu();
   cpu.reset_spi_boot();
+  std::ofstream context(inputs.trace.string() + ".boot-context.trace");
+  context.exceptions(std::ios::failbit | std::ios::badbit);
+  blofeld::test::boot_context::record(
+      blofeld::test::boot_context::Phase::reset, cpu.debug_state(), context);
   std::ofstream trace(inputs.trace);
   require(trace.is_open(), "Cannot create private DSP bootstrap trace");
   trace.exceptions(std::ios::failbit | std::ios::badbit);
@@ -123,6 +128,8 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
         blofeld::test::dsp_boot_word(std::span<const std::uint8_t, 3>(frame.subspan(offset, 3))));
   }
   while (cpu.state().pc != stage_base) { runner.step(); }
+  blofeld::test::boot_context::record(
+      blofeld::test::boot_context::Phase::loaded, cpu.debug_state(), context);
   require(cpu.state().sp == 0 && cpu.state().r[0] == stage_base + stage_words &&
               cpu.state().r[1] == stage_base,
           "Native ROM DO loop, stack and jump complete without host PC patching");
@@ -143,11 +150,15 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
   runner.step();
   require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count,
           "Fractional short immediate X0 supplies the full 24-bit REP count, not integer two");
+  blofeld::test::boot_context::record(
+      blofeld::test::boot_context::Phase::clear, cpu.debug_state(), context);
   while (cpu.state().r[4] != known_long_ram_end - 1) { runner.step(); }
   const auto last_pair = machine.checkpoint();
   runner.step();
   require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count - known_long_ram_end,
           "Bounded native REP yields at the first reserved Y address without skipping iterations");
+  blofeld::test::boot_context::record(
+      blofeld::test::boot_context::Phase::frontier, cpu.debug_state(), context);
   for (const auto space : {blofeld::DspSpace::x, blofeld::DspSpace::y}) {
     for (unsigned address = 0; address < known_long_ram_end; ++address) {
       require(bus.read({.space = space, .address = address}) == 0,
@@ -155,6 +166,7 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
     }
   }
   if (execution == Execution::instruction) {
+    blofeld::test::boot_context::check_switch(machine, context);
     std::ofstream access_trace(inputs.trace.string() + ".reference-access.trace");
     access_trace.exceptions(std::ios::failbit | std::ios::badbit);
     blofeld::test::verify_original_reference_access(last_pair, machine, access_trace);

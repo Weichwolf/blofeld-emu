@@ -210,6 +210,10 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           (dsp-core.txt).
                                           Original DSP RAM clear reaches reserved
                                           Y:002000; write/alias behavior unverified.
+                                          Documented-prefix entry registers and
+                                          native failure before/after X-to-P switch
+                                          checked; no hidden modulo/scaling state
+                                          supplied (dsp-core.txt).
                                           Other DSP layouts and full timing pending.
 Digital GPIO coupling            partial  Local driver intent is separate from pad
                                           voltage and weak pulls. Explicit unknown
