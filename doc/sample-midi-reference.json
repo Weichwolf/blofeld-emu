@@ -1,0 +1,45 @@
+{
+  "archive": "Standard_Factory_Sample_Content_V1.0_for_License_SL_as_MID_File.zip",
+  "prepared_frames": {
+    "bytes": 25182912,
+    "sha256": "6c42685cbc7ed9e0d3eeca4c0aa9f91da778e2b5af919a351f6594eb7cc85cb6"
+  },
+  "first_program": 12288,
+  "program_count": 41,
+  "expected": {
+    "groups": 1488,
+    "declared_pages": 47616,
+    "spans": [
+      [
+        12288,
+        12352
+      ],
+      [
+        13312,
+        60864
+      ]
+    ],
+    "programs": 41,
+    "samples": 142,
+    "client_view_pcm_frames": 13144311,
+    "distinct_native_client_ends": 76,
+    "rates": {
+      "11025": 1,
+      "22050": 3,
+      "22254": 7,
+      "29400": 24,
+      "32000": 4,
+      "44100": 102,
+      "48000": 1
+    },
+    "unresolved_ranges": 13,
+    "unresolved_keys": 265,
+    "unresolved_targets": [
+      0,
+      16777215
+    ],
+    "catalogue_sha256": "ef840002e4f4b3c3f7d247f0121543ec11555555437a4e678829f199f8851b51",
+    "payload_sha256": "dd4df3342269b582a27aa09835bbcae0cdb9d762f1226c2d718bbd2654755a22"
+  },
+  "qualification": "Declared original sample-MIDI target rows and explicit41-program reference extent. Native end fields and a separate Spectre-style client PCM view are retained distinctly; that client view is not a proven MIDI playback-length contract. Unknown pages and unresolved references stay explicit. No physical NAND/address translation, bad-block/ECC map, installation or full boot/playback proof."
+}

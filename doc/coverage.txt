@@ -999,6 +999,16 @@ Original sample receive chain     partial  Native C100 Port-F reads for136 raw W
                                           timer-busy queue are explicit; original
                                           request/turnaround/NAND/refill delivery,
                                           physical timing and full boot remain open.
+Declared sample-MIDI pages        partial  47616 explicit target pages, bounded
+                                          sparse reads and strict missing rows;
+                                          fixed41-program view references142
+                                          headers and retains265 unresolved keys.
+                                          Native/client end fields remain distinct
+                                          in76 cases (sample-midi-pages.txt).
+                                          All142 native receive/prepare/refill/sample
+                                          paths, five byte cuts and ten replays
+                                          checked. No physical NAND/address/ECC,
+                                          programming or full-playback proof.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Explicit nominal DSP reset epochs retain

@@ -39,7 +39,7 @@ constexpr unsigned word_bits = 24, accumulator_bits = 48, a0_seed = 0x2468ac;
 constexpr unsigned x1_seed = 0x123456, b1_seed = 0x765432, a2_seed = 0x12;
 constexpr unsigned r1_seed = 0xaaa, r2_seed = 0xbbb;
 constexpr unsigned page_bytes = 528, step_limit = 16000, absolute_jump = 0x0af080;
-constexpr unsigned maximum_pages = 136, sample_request = 0xc100, ring_request = 0x8100;
+constexpr unsigned maximum_pages = 142, sample_request = 0xc100, ring_request = 0x8100;
 constexpr unsigned pitch_correction = 0xc29c, minimum_end = 0x3400, maximum_end = 0x20000;
 constexpr unsigned active_header = 0x2b, service_counter = 0x2c;
 constexpr unsigned read_inputs = 0x3ff, upper_inputs = 0x300, full_read = 0x700;

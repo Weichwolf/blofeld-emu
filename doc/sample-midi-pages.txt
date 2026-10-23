@@ -1,0 +1,37 @@
+Declared sample-MIDI pages and native receive reference
+
+  ctest --test-dir build/strict -R '^(sample_midi_pages|sample_midi_reference|original_dsp_sample_receiver_midi)$' --output-on-failure
+
+The pinned official MID and all preparation frames are verified through the
+existing sample-preparation reference. Each group contains 32 complete 528-byte
+pages plus its original row/marker trailer. The bounded reader preserves 47616
+declared pages: [3000,3040) and [3400,edc0), hexadecimal. Missing rows fail by
+address; no zero/erased filling, alias, relocation or overwrite precedence is
+invented. Staging sequence, group completeness, alignment and overlap are checked.
+The 24-bit row domain is the helper argument width, not a hardware geometry claim.
+
+An explicit fixed 41-program extent yields 142 referenced sample headers and
+13 unresolved key ranges covering 265 keys, with targets0/ffffff. Unresolved
+references stay separate from known samples; reading either target still fails.
+The extent does not establish a general firmware directory-termination protocol.
+
+The native end field (header word13) and the separate client-style extent field
+(word16) differ in 76 headers. Both are retained. The Spectre-style client PCM
+view totals13144311 frames and is hash-pinned; it is not a proven MIDI playback
+length or native end-condition contract. WPC's136-header catalogue remains a
+separate reference; a single offset is not assumed to convert its contents.
+
+original_dsp_sample_receiver_midi supplies all142 original declared header pages
+to the unchanged native receiver/prepare/queue/callback fixture. Each consumes
+528 actual GPIO bytes. All142 pass the real end-address gates, derive their rate
+from the original curve, publish their first264-word refill and produce an
+independently checked sample value. No header field is rewritten to achieve this.
+Five missing-byte cuts and ten trusted owner/peer replays retain the existing
+complete-word/field, native JSR/RTI context and six-record integrity checks.
+The original136-page WPC gate remains unchanged apart from extending the bounded
+private input capacity to142 pages.
+
+Declared target rows are not observed physical NAND contents. Bad-block/ECC and
+address translation, actual programming, complete transmit turnaround, delivered
+refills, Timer1 IRQ recognition, full boot and physical playback remain open.
+The existing Port-F and reserved Y:002000 qualification faults remain strict.
