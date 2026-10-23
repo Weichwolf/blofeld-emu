@@ -54,7 +54,9 @@ McuFlash::McuFlash(McuMemory &memory, const McuFlash &source)
       blank_(source.blank_),
       key_words_(source.key_words_),
       key_locked_(source.key_locked_),
-      clock_(source.clock_) {}
+      clock_(source.clock_),
+      stopped_(source.stopped_),
+      command_known_(source.command_known_) {}
 
 FlashRange McuFlash::affected(const Job job) {
   if (job.command == mass_erase) { return {.size = array_bytes}; }
@@ -77,7 +79,40 @@ void McuFlash::reset() {
   key_words_ = 0;
   key_locked_ = false;
   clock_.reset();
+  stopped_ = false;
+  command_known_ = true;
   config_.reset(options(memory_));
+}
+
+void McuFlash::require_running() const {
+  if (stopped_) { throw Fault("Unqualified MCU flash access while nominal STOP is held"); }
+}
+
+void McuFlash::observe_stop(const FlashStopTransition transition,
+                            const FlashStopContract contract) {
+  if (contract != FlashStopContract::nominal_active_abort) {
+    throw Fault("MCU flash STOP requires the explicit nominal active-abort contract");
+  }
+  if (transition == FlashStopTransition::resume) {
+    if (!stopped_) { throw Fault("MCU flash STOP resume requires an observed entry"); }
+    stopped_ = false;
+    return;
+  }
+  if (transition != FlashStopTransition::enter || stopped_) {
+    throw Fault("Invalid or duplicate MCU flash STOP entry");
+  }
+  if ((!active_ && buffer_state_ != BufferState::launched) || buffer_state_ == BufferState::word ||
+      buffer_state_ == BufferState::command) {
+    throw Fault("Unqualified MCU flash STOP without active command or with partial successor");
+  }
+  // S12FTS32KV1 section4.3: active data is lost; pending work must not execute.
+  if (active_ && active_->command != erase_verify) { memory_.invalidate_flash(affected(*active_)); }
+  active_.reset();
+  buffer_state_ = BufferState::empty;
+  buffered_ = {};
+  errors_ |= access_error;
+  command_known_ = false; // No post-abort FCMD readback value is inferred.
+  stopped_ = true;
 }
 
 std::string_view McuFlash::register_name(const std::uint16_t offset) {
@@ -99,6 +134,10 @@ std::uint8_t McuFlash::status() const {
 }
 
 std::uint8_t McuFlash::read(const std::uint16_t offset) const {
+  require_running();
+  if (offset == command_register && !command_known_) {
+    throw Fault("Unknown MCU flash FCMD readback after STOP abort");
+  }
   constexpr unsigned complete_keys = 4;
   if (offset == hc12::flash_security && (control_ & key_access) != 0 &&
       key_words_ == complete_keys && !key_locked_) {
@@ -124,6 +163,7 @@ void McuFlash::reject_sequence(const std::uint8_t flag) {
 }
 
 void McuFlash::stage(const MemoryWrite word) {
+  require_running();
   if ((control_ & key_access) != 0) {
     write_key(word);
     return;
@@ -152,6 +192,7 @@ void McuFlash::write_command(const std::uint8_t value) {
     return;
   }
   command_ = static_cast<std::uint8_t>(value & command_mask);
+  command_known_ = true;
   if (command_ != word_program && command_ != sector_erase && command_ != mass_erase &&
       command_ != erase_verify) {
     reject_sequence(access_error);
@@ -185,6 +226,7 @@ void McuFlash::write_status(const std::uint8_t value) {
 }
 
 void McuFlash::write(const ByteWrite access) {
+  require_running();
   if (register_name(access.address).empty()) {
     throw Fault("Unknown MCU flash register write at " + hex(access.address));
   }
@@ -263,6 +305,7 @@ void McuFlash::complete() {
 }
 
 void McuFlash::advance(const FlashMilestone milestone) {
+  require_running();
   std::string target = "none";
   if (milestone == FlashMilestone::transfer_buffer) {
     if (buffer_state_ == BufferState::launched) { target = hex(buffered_.offset); }
@@ -281,6 +324,7 @@ void McuFlash::advance(const FlashMilestone milestone) {
 }
 
 void McuFlash::check_array_read() const {
+  require_running();
   if ((control_ & key_access) != 0) {
     throw Fault("Invalid MCU flash array read while KEYACC is set");
   }
@@ -290,6 +334,14 @@ void McuFlash::check_array_read() const {
 }
 
 bool McuFlash::interrupt_pending() const {
+  if (stopped_) {
+    // CCIF is set on abort. Only CBEIF is unspecified before STOP exit.
+    if ((control_ & command_complete) != 0) { return true; }
+    if ((control_ & buffer_empty) != 0) {
+      throw Fault("Unknown MCU flash CBEIF interrupt while nominal STOP is held");
+    }
+    return false;
+  }
   return (control_ & status() & (buffer_empty | command_complete)) != 0;
 }
 
@@ -300,6 +352,7 @@ McuFlashImage McuFlash::power_off_image() const {
 }
 
 void McuFlash::observe_clock(const FlashClockRates rates) {
+  require_running();
   if (active_ || buffer_state_ == BufferState::launched) {
     throw Fault("Unqualified MCU flash clock change while a command is in progress");
   }

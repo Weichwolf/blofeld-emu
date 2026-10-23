@@ -409,7 +409,12 @@ std::optional<InterruptRequest> McuBus::interrupt_request(const std::uint8_t ccr
   if (clock_.lock_interrupt_pending()) { append(pll_vector); }
   if (clock_.realtime_interrupt_pending()) { append(realtime_vector); }
   constexpr unsigned flash_vector = 0xffb8;
-  if (flash_.interrupt_pending()) { append(flash_vector); }
+  try {
+    if (flash_.interrupt_pending()) { append(flash_vector); }
+  } catch (const Fault &fault) {
+    throw Fault("MCU flash interrupt observation vector=" + hex(flash_vector) +
+                " pc=" + hex(context_.pc) + " ccr=" + hex(ccr, 2) + ": " + fault.what());
+  }
   constexpr std::array<std::uint16_t, 8> usb_vectors{
       0xffd4, 0xffd2, 0xffd0, 0xffbe, 0xffce, 0xffcc, 0xffca, 0xffc8};
   const auto usb_sources = usb_.interrupt_sources();

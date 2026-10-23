@@ -194,6 +194,12 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           executing/buffered jobs and interruption
                                           unknownness use explicit reference
                                           milestones (mcu-flash-commands.txt).
+                                          Explicit nominal active Flash STOP cuts,
+                                          pending cancellation, unknown extents,
+                                          clone/reset/repair and native helper
+                                          false-success/unknown-read checks
+                                          (mcu-flash-stop.txt); no native CPU
+                                          STOP/wake or physical timing proof.
                                           Nominal module expectations only:
                                           UF32 mask-dependent flash flags and
                                           STOP/BDM anomalies remain unimplemented;

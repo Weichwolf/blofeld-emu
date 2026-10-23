@@ -107,6 +107,8 @@ public:
   void power_cycle();
   void observe_flash_clock(FlashClockRates rates);
   void advance_flash(FlashMilestone milestone);
+  void observe_flash_stop(FlashStopTransition transition,
+                          FlashStopContract contract = FlashStopContract::unqualified);
 
 private:
   friend class McuMachine;
