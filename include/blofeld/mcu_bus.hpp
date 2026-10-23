@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/flash_image.hpp"
 #include "blofeld/mcu_clock.hpp"
+#include "blofeld/mcu_cop.hpp"
 #include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_interrupts.hpp"
@@ -33,6 +34,7 @@ struct BusEvent {
 struct McuWaitClockGates {
   bool sci = true;
   bool timer = true;
+  bool cop = true;
 };
 
 // Initial strict bring-up model. Unimplemented reads fail rather than returning
@@ -88,7 +90,10 @@ public:
 
   [[nodiscard]] UsbHostEvidence usb_host_evidence() const { return usb_.host_evidence(); }
 
-  void advance_oscillator(unsigned cycles);
+  void advance_oscillator(unsigned cycles, bool cop_running = true);
+
+  [[nodiscard]] McuCopState cop_state() const { return clock_.cop_state(); }
+
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   void advance_sci(unsigned bus_cycles);
   void sample_timer_inputs(std::uint8_t mask);
@@ -101,6 +106,7 @@ public:
 private:
   friend class McuMachine;
   void notify(const BusEvent &event);
+  void check_cop_reset() const;
 
   struct CloneState {};
 

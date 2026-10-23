@@ -73,7 +73,7 @@ void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, con
     }
     if (gates.sci) { bus.advance_sci(1); }
     if (gates.timer) { bus.advance_timer(1); }
-    bus.advance_oscillator(static_cast<unsigned>(edges));
+    bus.advance_oscillator(static_cast<unsigned>(edges), gates.cop);
     elapsed_ticks_ += ticks;
     oscillator_phase_ = oscillator_total % oscillator_period_;
     oscillator_cycles_ += edges;

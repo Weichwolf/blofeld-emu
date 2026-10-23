@@ -3,7 +3,10 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/firmware.hpp"
 #include "blofeld/flash_image.hpp"
+#include "blofeld/hc12_registers.hpp"
 #include "blofeld/lcd_image.hpp"
+#include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_cop.hpp"
 #include "blofeld/private_file.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "original_gpio_pair_fixture.hpp"
@@ -15,6 +18,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -28,8 +32,8 @@ constexpr unsigned main_payload = 4, main_program = 5;
 constexpr unsigned continuation_limit = 240000, alignment_limit = 1000000;
 constexpr unsigned clear_entry = 0x8d70, clear_return = 0x1209, text_entry = 0xa6ee;
 constexpr unsigned rectangle_entry = 0x8bfd, rectangle_return = 0x124e, prepared_entry = 0x1256;
-constexpr unsigned delay_entry = 0x128b, wait_entry = 0x1291, cop_entry = 0x1298;
-constexpr unsigned delay_iterations = 30000, prepared_flags = 0xd1;
+constexpr unsigned delay_entry = 0x128b, wait_entry = 0x1291, cop_entry = 0x129c;
+constexpr unsigned delay_iterations = 30000, prepared_flags = 0xd1, restart_accumulators = 0xf001;
 constexpr unsigned rectangle_y = 23, rectangle_height = 18;
 constexpr unsigned lcd_writes = 1768, lcd_reads = 1488;
 constexpr unsigned complete_source = 0x144bb, waiting_chunk = 0x2e6b;
@@ -72,6 +76,33 @@ void preload(blofeld::test::gpio_pair::OriginalGpioPair &pair,
         << pair.dsp.bus().read({.space = blofeld::DspSpace::x, .address = transport::status_slot})
         << " r0=" << pair.dsp.cpu().state().r[0] << " sp=" << pair.dsp.cpu().state().sp << '\n';
 }
+
+struct CopObservation {
+  std::optional<std::uint64_t> enabled;
+
+  void bind(forward::Forward &run) {
+    const auto previous = run.pair.additional_bus_write;
+    run.pair.additional_bus_write = [this, &run, previous](const blofeld::BusEvent &event) {
+      if (previous) { previous(event); }
+      if (event.address != blofeld::hc12::cop_control) { return; }
+      const auto state = run.pair.mcu.bus().cop_state();
+      require(!enabled && event.value == 1 && state.control == 1 && state.phase == 0,
+              "Original COP enable transaction starts the normal counter once");
+      enabled = run.pair.mcu.run_clock().oscillator_cycles();
+      run.pair.trace << "COP_ENABLED control=1 phase=0 oscillator=" << *enabled << '\n';
+    };
+  }
+
+  void verify(forward::Forward &run) const {
+    const auto state = run.pair.mcu.bus().cop_state();
+    const auto oscillator = run.pair.mcu.run_clock().oscillator_cycles();
+    require(enabled && state.control == 1 && state.phase == oscillator - *enabled &&
+                state.phase < 16384 && state.reset == blofeld::McuCopReset::invalid_service,
+            "Original invalid service requests reset after exactly the observed OSC edges");
+    run.pair.trace << "COP_REQUEST control=1 phase=" << state.phase << " oscillator=" << oscillator
+                   << " invalid-service=1 service=240\n";
+  }
+};
 
 struct Drawing {
   unsigned texts = 0, rectangles = 0, delay = 0, waits = 0;
@@ -226,7 +257,8 @@ void continuation(forward::Forward &run,
                   const blofeld::McuFlashImage &nvm,
                   const std::vector<transport::Block> &blocks,
                   const std::vector<unsigned> &caller,
-                  const std::string &path) {
+                  const std::string &path,
+                  const CopObservation &cop) {
   Drawing drawing;
   constexpr unsigned entry_flags = 0x91;
   const auto initial_flags = run.pair.mcu.bus().read(forward::bus_flags);
@@ -246,16 +278,18 @@ void continuation(forward::Forward &run,
                      << " cursor=" << dsp.r[1] << " delay=" << drawing.delay
                      << " waits=" << drawing.waits << '\n';
       require(
-          message.contains("MCU write at 0x003c") && message.contains("pc=0x1298") &&
-              message.contains("Unimplemented MCU peripheral write at 0x003c") &&
+          message.contains("MCU write at 0x003f") && message.contains("pc=0x129c") &&
+              message.contains("Unqualified MCU COP system reset (invalid ARMCOP service)") &&
               drawing.prepared && drawing.delay == delay_iterations && drawing.waits == 1 &&
               mcu.pc == cop_entry && mcu.x == delay_iterations && mcu.sp == forward::stack - 14 &&
-              (mcu.d & forward::mask) == 1 && dsp.pc == waiting_chunk &&
+              mcu.d == restart_accumulators && dsp.pc == waiting_chunk &&
               dsp.r[1] == complete_source - 1 && run.loaded == forward::prefetched_words + 1 &&
               run.sent == forward::stream_samples + 2 && run.received == forward::expected_samples,
-          "Only the real COPCTL attempt after all30000 delay iterations may end this path: " +
+          "Only the original invalid ARMCOP service after all30000 delay iterations ends this "
+          "path: " +
               std::string(error.what()));
       run.pair.trace << "COUPLED_FAULT " << error.what() << '\n';
+      cop.verify(run);
       quarantine(run);
       storage(run, nvm, blocks, caller);
       const auto image =
@@ -305,19 +339,22 @@ int main(const int argc, char **argv) {
         const forward::PayloadPreparation prepare = [&](auto &pair) {
           preload(pair, firmware, blocks, templates, caller, trace);
         };
+        CopObservation cop;
         forward::Forward run(firmware, trace, true, prepare, tail);
         const auto nvm = run.pair.mcu.bus().power_off_flash_image();
         run.execute(order, phase);
         run.verify(nvm);
+        cop.bind(run);
         continuation(run,
                      nvm,
                      blocks,
                      caller,
                      std::string(argv[4]) + "." + std::to_string(order) + "." +
-                         std::to_string(phase));
+                         std::to_string(phase),
+                     cop);
       }
     }
-    std::cout << "Four native downloads and coupled error-helper COPCTL frontiers verified.\n";
+    std::cout << "Four native downloads and coupled error-helper COP reset requests verified.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

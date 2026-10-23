@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/hc12_registers.hpp"
+#include "blofeld/mcu_cop.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -43,6 +44,7 @@ void McuClock::reset() {
   rti_control_ = 0;
   rti_phase_ = 0;
   cop_wait_written_ = false;
+  cop_.reset();
   lock_known_ = true;
 }
 
@@ -54,6 +56,8 @@ std::string_view McuClock::register_name(const std::uint16_t offset) {
     case hc12::crg_interrupts: return "CRGINT";
     case hc12::clock_select: return "CLKSEL";
     case hc12::rti_control: return "RTICTL";
+    case hc12::cop_control: return "COPCTL";
+    case hc12::cop_service: return "ARMCOP";
     case hc12::usb_control: return "UMCR high";
     case hc12::usb_control + 1: return "UMCR low";
     default: return {};
@@ -88,6 +92,8 @@ std::uint8_t McuClock::read(const std::uint16_t offset) const {
     case hc12::clock_select: return clock_select_;
     case hc12::crg_interrupts: return interrupt_enable_;
     case hc12::rti_control: return rti_control_;
+    case hc12::cop_control: return cop_.state().control;
+    case hc12::cop_service: return 0;
     case hc12::usb_control: return static_cast<std::uint8_t>(usb_control_ >> 8U);
     case hc12::usb_control + 1: return static_cast<std::uint8_t>(usb_control_ & byte_mask);
     case hc12::crg_test_flags: return 0;
@@ -171,6 +177,8 @@ UsbControlCommand McuClock::write(const ByteWrite write) {
       flags_ = static_cast<std::uint8_t>(flags_ & ~(write.value & clearable_flags));
       return UsbControlCommand::none;
     case hc12::clock_select: write_clock_select(write.value); return UsbControlCommand::none;
+    case hc12::cop_control: cop_.write_control(write.value); return UsbControlCommand::none;
+    case hc12::cop_service: cop_.service(write.value); return UsbControlCommand::none;
     case hc12::usb_control:
     case hc12::usb_control + 1: return write_usb(write);
     case hc12::crg_test_flags:
@@ -209,10 +217,14 @@ unsigned McuClock::oscillator_cycles_until_rti() const {
   return period == 0 ? 0 : period - rti_phase_;
 }
 
-void McuClock::advance_oscillator(const unsigned cycles) {
+void McuClock::advance_oscillator(const unsigned cycles, const bool cop_running) {
+  if (cop_.state().reset != McuCopReset::none && cycles != 0) {
+    throw Fault("Cannot advance MCU clocks beyond a pending COP reset");
+  }
+  const auto elapsed = cop_running ? cop_.advance(cycles) : cycles;
   const auto period = rti_period();
-  if (period == 0 || cycles == 0) { return; }
-  const auto total = static_cast<std::uint64_t>(rti_phase_) + cycles;
+  if (period == 0 || elapsed == 0) { return; }
+  const auto total = static_cast<std::uint64_t>(rti_phase_) + elapsed;
   if (total >= period) { flags_ = static_cast<std::uint8_t>(flags_ | rti_flag); }
   rti_phase_ = static_cast<unsigned>(total % period);
 }

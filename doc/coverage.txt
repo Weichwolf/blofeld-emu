@@ -336,8 +336,14 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           with mid-wait checkpoint replay and
                                           independent instruction/phase ledger.
                                           Calibrated whole-board clocks pending.
-                                          Analog startup, whole-board CPU/bus clocks,
-                                          COP, wait/stop and full latency pending.
+                                          Analog startup and whole-board CPU/bus
+                                          clocks remain unqualified.
+                                          COP normal registers/rates/service/window,
+                                          WAI gating, fractional OSC edges and
+                                          checkpoint state checked (mcu-cop.txt).
+                                          Timeout/invalid service latch a request;
+                                          system-reset execution, STOP/BDM and
+                                          full latency pending.
 USB device/transport              partial  PHY control and register/data-side enable.
                                           UEPCSELR/UUCFGR banks and ordered 16-bit
                                           staging/commit tested (mcu-usb.txt).
@@ -1280,9 +1286,12 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           blocks and launches the coupled error helper
                                           without reset/copy/PC repair. Four contexts
                                           check original XOR highlight, prepared bit,
-                                          30000 delay increments and strict COPCTL=1
-                                          write fault at MCU003c/PC1298. Joint execution
-                                          stops; watchdog reset/return remain open
+                                          30000 delay increments, COPCTL=1 enable and
+                                          original invalid ARMCOP=0xf0 service at
+                                          MCU003f/PC129c. Exact elapsed OSC edges
+                                          match the COP phase. Joint execution
+                                          stops at the unapplied reset request;
+                                          system-reset execution/return remain open
                                           (original-update-coupled.txt).
                                           Separate declared TIO0 wire path: 30 cases,
                                           1050 bytes / 9450 original IRQs/RTIs feed

@@ -25,7 +25,7 @@ Behavior
   writes and peripheral bus-clock advances do not supply oscillator elapsed time.
 
 Evidence and limits
-Run build/strict/blofeld-rti-test or the complete quality target. Tests cover
+Run ctest --test-dir build/strict -R '^mcu_rti$' --output-on-failure. Tests cover
 all 128 implemented register values against an independent literal prescaler
 table, exact boundaries, repeated periods, same/different control writes,
 reset/relocation, enable/W1C behavior, and a UINT32_MAX clock slice. A synthetic
@@ -54,7 +54,8 @@ explicit ideal-boundary switch/phase contract. original_run_clock executes the
 first original RTI entry, acknowledgement and foreground restoration without
 poll-slot period injection (mcu-run-clock.txt). The long countdown regression
 above retains its separate untimed fixture; full elapsed-time startup remains open.
-Wait/stop clock gates, active BDM gating, pad/interrupt latency and qualified
+COP normal-run/WAI behavior is covered separately in mcu-cop.txt. CRG stop
+clock gates, active BDM gating, pad/interrupt latency and qualified
 physical source transitions remain unimplemented. The ambiguous RTI/HPRIO
 replacement wording in S12INTV1 still fails explicitly for the unresolved
 multi-source arbitration case described in mcu-interrupts.txt. Stock hardware

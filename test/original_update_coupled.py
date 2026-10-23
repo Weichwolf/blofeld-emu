@@ -65,7 +65,7 @@ def inputs(firmware, destination):
 def collect(path):
     cases, current, preload = [], None, None
     tags = {'SOURCE', 'CHUNK', 'CONSUMER', 'IRQ_PAD', 'IRQ_ENTRY', 'IRQ_RETURN', 'RESULT',
-            'ENTRY_FLAGS', 'CLEAR', 'TEXT', 'RECTANGLE', 'PREPARED', 'FAULT_STATE', 'COUPLED_FAULT', 'QUARANTINE', 'COUPLED_RESULT'}
+            'COP_ENABLED', 'COP_REQUEST', 'ENTRY_FLAGS', 'CLEAR', 'TEXT', 'RECTANGLE', 'PREPARED', 'FAULT_STATE', 'COUPLED_FAULT', 'QUARANTINE', 'COUPLED_RESULT'}
     with path.open() as stream:
         for line in stream:
             tag = line.split(' ', 1)[0]
@@ -173,14 +173,21 @@ def validate(cases, blocks, texts, counts):
             raise ValueError('RECTANGLE original XOR band differs')
         if single(case, 'PREPARED') != dict(flags=0xd1):
             raise ValueError('PREPARED native status bit differs')
-        if single(case, 'FAULT_STATE') != {'mcu-pc': 0x1298, 'mcu-d': 0x301, 'mcu-sp': 0x21f2,
+        if single(case, 'FAULT_STATE') != {'mcu-pc': 0x129c, 'mcu-d': 0xf001, 'mcu-sp': 0x21f2,
                                            'mcu-x': 30000, 'dsp-pc': 0x2e6b, 'cursor': 0x144ba,
                                            'delay': 30000, 'waits': 1}:
             raise ValueError('FAULT_STATE native failed-write registers or complete loop differ')
         faults = case['rows'].get('COUPLED_FAULT', [])
-        if (len(faults) != 1 or 'MCU write at 0x003c' not in faults[0] or 'pc=0x1298 ccr=0xb0' not in faults[0]
-                or 'Unimplemented MCU peripheral write at 0x003c' not in faults[0]):
-            raise ValueError('FAULT exact native COPCTL write/context differs')
+        if (len(faults) != 1 or 'MCU write at 0x003f' not in faults[0] or 'pc=0x129c ccr=0xb8' not in faults[0]
+                or 'Unqualified MCU COP system reset (invalid ARMCOP service)' not in faults[0]):
+            raise ValueError('FAULT exact native ARMCOP reset request/context differs')
+        enabled = single(case, 'COP_ENABLED')
+        request = single(case, 'COP_REQUEST')
+        if (enabled != dict(control=1, phase=0, oscillator=enabled['oscillator']) or
+                request != dict(control=1, phase=request['oscillator'] - enabled['oscillator'],
+                                oscillator=request['oscillator'], **{'invalid-service': 1, 'service': 0xf0}) or
+                not 0 < request['phase'] < 16384):
+            raise ValueError('COP original enable/service sequence and exact elapsed OSC edges differ')
         if single(case, 'QUARANTINE') != {'mcu': 1, 'joint': 1, 'dsp-held': 1, 'dsp-faulted': 0}:
             raise ValueError('QUARANTINE MCU/joint refusal and held independent DSP differ')
         result = single(case, 'COUPLED_RESULT')
@@ -197,13 +204,13 @@ def validate(cases, blocks, texts, counts):
                 packet_calls=17316, native_helper_entries=4, native_error_frames=4,
                 original_text_callbacks=8, original_rectangles=4, actual_lcd_writes=counts['writes'] * 4,
                 actual_lcd_reads=counts['reads'] * 4, native_delay_iterations=120000,
-                copctl_faults=4, native_source_reads=264, native_output_chunks=1048, native_input_samples=1024,
+                cop_reset_requests=4, native_source_reads=264, native_output_chunks=1048, native_input_samples=1024,
                 board_rejections=4)
 
 
 def controls(cases, blocks, texts, counts, frame):
     for tag, key in (('SOURCE', 'value'), ('CHUNK', 'value'), ('RECTANGLE', 'height'),
-                     ('PREPARED', 'flags'), ('QUARANTINE', 'joint'), ('COUPLED_RESULT', 'delay')):
+                     ('PREPARED', 'flags'), ('COP_ENABLED', 'control'), ('COP_REQUEST', 'phase'), ('QUARANTINE', 'joint'), ('COUPLED_RESULT', 'delay')):
         changed = list(cases)
         changed[0] = copy.deepcopy(cases[0])
         line = changed[0]['rows'][tag][0]
@@ -222,7 +229,7 @@ def controls(cases, blocks, texts, counts, frame):
         elif kind == 'PRELOAD_END':
             changed[0]['preload_end']['epoch'] += 1
         else:
-            changed[0]['rows']['COUPLED_FAULT'][0] = changed[0]['rows']['COUPLED_FAULT'][0].replace('0x003c', '0x003d')
+            changed[0]['rows']['COUPLED_FAULT'][0] = changed[0]['rows']['COUPLED_FAULT'][0].replace('0x003f', '0x003e')
         try:
             validate(changed, blocks, texts, counts)
         except ValueError:
@@ -234,7 +241,7 @@ def controls(cases, blocks, texts, counts, frame):
         pass
     else:
         raise ValueError('Coupled oracle accepted a flipped native raster pixel')
-    return 10
+    return 12
 
 
 def main():
@@ -257,7 +264,7 @@ def main():
                             capture_output=True, text=True, timeout=480, check=False)
     output = native.stdout + native.stderr
     trace.with_suffix('.log').write_text(output)
-    allowed = 'Four native downloads and coupled error-helper COPCTL frontiers verified.'
+    allowed = 'Four native downloads and coupled error-helper COP reset requests verified.'
     if native.returncode or any(line and line != allowed and not re.fullmatch(r'Jit@\d+: No profiler detected', line)
                                for line in output.splitlines()):
         raise ValueError('Native coupled update failed: ' + output)
@@ -279,10 +286,10 @@ def main():
         scope='Same clocked DSP executes original main download/padding and helper launch without reset, '
               'then native GPIO/XIRQ/copy/MCU error-helper rendering and30000 delay iterations. '
               'One declared marker word is corrupted in the input packet with recomputed framing checksum. '
-              'Own caller/clock/routes/LCD context; strict unimplemented COPCTL write quarantines MCU/joint '
-              'scheduling while independent DSP state is held. No upstream wire producer/dispatch, '
+              'Own caller/clock/routes/LCD context; original COPCTL enable and invalid ARMCOP service request reset, '
+              'quarantining MCU/joint scheduling while independent DSP state is held. No upstream wire producer/dispatch, '
               'watchdog reset, full boot, whole flash update/recovery/power-loss or physical qualification.'), indent=2) + '\n')
-    print('Verified4 native download/error-helper continuations and4 strict COPCTL frontiers.')
+    print('Verified4 native download/error-helper continuations and4 original COP reset requests.')
     return 0
 
 

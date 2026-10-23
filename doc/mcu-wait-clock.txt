@@ -9,10 +9,13 @@ advance_wait never retires instructions, changes PC/CCR or pushes another frame.
 An interrupt supplied by the pre-period observer or timer-input sample stops
 before another period. Existing pending interrupts consume no idle time.
 
-The native CLKSEL wait bits must be zero; PLLSEL may select the already qualified
-source. CRG shutdown modes, oscillator-amplitude reduction, COP wait/reset and
-physical gate/switch latency remain unqualified and fail with the live relocated
-CLKSEL address and CPU context. SCI SCISWAI and TIM TSWAI independently stop their
+CLKSEL.COPWAI independently freezes the COP counter during WAI; native WAI
+entry and interrupt wake cycles still clock it. Mid-service counter/clock state
+survives trusted checkpoints. An ungated timeout latches a reset request and
+faults the owner before an unqualified system reset (mcu-cop.txt). Other CLKSEL
+wait bits must be zero; PLLSEL may select the already qualified source. CRG
+shutdown modes, oscillator-amplitude reduction and physical gate/switch latency
+remain unqualified and fail with the live relocated CLKSEL address and CPU context. SCI SCISWAI and TIM TSWAI independently stop their
 modules during WAI. They do not gate normal CPU execution or interrupt wake.
 A stopped SCI retains its in-flight sample/bit/divider state until normal wake.
 Changing only SCISWAI while busy is permitted; active data-format changes still
