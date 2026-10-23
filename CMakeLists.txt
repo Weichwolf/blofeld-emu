@@ -98,6 +98,9 @@ add_library(blofeld_nand src/nand.cpp src/nand_write.cpp src/nand_array.cpp src/
   src/nand_image.cpp src/nand_image_codec.cpp)
 target_include_directories(blofeld_nand PUBLIC include)
 target_link_libraries(blofeld_nand PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
+add_library(blofeld_nand_read_timing src/nand_read_timing.cpp)
+target_include_directories(blofeld_nand_read_timing PUBLIC include)
+target_link_libraries(blofeld_nand_read_timing PUBLIC blofeld_nand)
 add_library(blofeld_nand_store src/nand_file.cpp src/nand_store.cpp)
 target_include_directories(blofeld_nand_store PUBLIC include)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
@@ -543,6 +546,18 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-read-test test/nand_read_test.cpp)
   target_link_libraries(blofeld-nand-read-test PRIVATE blofeld_nand)
   add_test(NAME nand_read COMMAND blofeld-nand-read-test)
+  add_executable(blofeld-nand-read-timing-test test/nand_read_timing_test.cpp)
+  target_link_libraries(blofeld-nand-read-timing-test PRIVATE blofeld_nand_read_timing)
+  add_test(NAME nand_read_timing COMMAND blofeld-nand-read-timing-test)
+  add_executable(blofeld-original-nand-read-timing-test test/original_nand_read_timing_test.cpp)
+  target_link_libraries(blofeld-original-nand-read-timing-test PRIVATE
+    blofeld_nand_read_timing blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_read_timing COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-nand-read-timing-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-read-timing.trace")
+  set_tests_properties(original_nand_read_timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-nand-image-test test/nand_image_test.cpp)
   target_link_libraries(blofeld-nand-image-test PRIVATE blofeld_nand)
   add_test(NAME nand_image COMMAND blofeld-nand-image-test)
@@ -1594,6 +1609,7 @@ add_custom_target(quality
     blofeld-original-owned-clock-test
     blofeld-midi-serial-test blofeld-mcu-midi-test blofeld-clocked-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
+    blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
     blofeld-nand-image-test
     blofeld-nand-store-test
     blofeld-nand-gpio-write-test

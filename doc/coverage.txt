@@ -789,8 +789,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           Isolated original command/address/poll
                                           execution exposes unqualified data
                                           turnaround and upper Port F writes
-                                          (nand-read.txt). No original NAND data
-                                          transfer or default board route proven.
+                                          (nand-read.txt). Separately prepared
+                                          original byte-helper calls read all 528
+                                          bytes with bounded output timing; missing
+                                          contents and early native sampling reject
+                                          (nand-read-timing.txt). Full original
+                                          refill/default board route unproven.
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.

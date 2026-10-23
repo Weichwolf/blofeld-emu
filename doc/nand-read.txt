@@ -68,6 +68,12 @@ asserts RE while data outputs are still enabled; accepting that transition would
 require measured pad timing/drive behavior. Its later Port F mode transition
 also requires qualification. Neither failure is ignored or patched around.
 
+A separate original_nand_read_timing regression calls the original byte helper
+from explicitly released data-pin/ready-page conditions. It reads all 528 bytes
+through the candidate output timing model and native JSR/RTS; missing contents
+and an own premature sampler fail. This does not execute the earlier refill
+turnaround. See nand-read-timing.txt for reference timing contracts and limits.
+
 Candidate test-only routing: C8 RE, C9 WE, C10 CLE, C11 ALE, F0..7 data and
 TIO1 ready. Chip-select is an explicit held-active laboratory observation, not an
 inferred GPIO route. In particular, F10 is not assumed to be CE; its role remains
