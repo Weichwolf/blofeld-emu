@@ -62,6 +62,10 @@ public:
     try {
       const auto control = machine_.bus().gpio(DspPort::c).observe_pads(nand_controls);
       if (control.known == nand_controls) {
+        if ((control.levels & nand_we) == 0) {
+          throw Fault("Unqualified NAND write-enable in prepared-page read-only route page=" +
+                      hex(nand_.page(), 6) + " column=" + hex(nand_.column(), 3));
+        }
         timing_.observe(ticks, {.ce_n = false, .re_n = (control.levels & nand_re) != 0}, [&] {
           const auto value = nand_.read();
           ++reads_;

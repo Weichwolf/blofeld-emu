@@ -59,6 +59,9 @@ The separate original_nand_pack regression extends this entry contract through
 the original 176-word packing loop and all buffered-only getter calls, including
 their parallel prefetches, shared-tail stores and joint mid-read restoration.
 See nand-pack.txt for exact scope and the independently retained BIU frontier.
+The prepared-page pin fixture explicitly rejects asserted write-enable; it does
+not silently accept unsupported NAND command cycles. The separate original
+first-page record experiment reaches that boundary (nand-first-records.txt).
 
 This does not change the older untimed NandLink fixture or qualify physical chip
 identity, timing, CE routing, actual contents, original refill turnaround/reserved

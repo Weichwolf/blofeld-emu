@@ -801,6 +801,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           joint mid-read replay matches exactly.
                                           Missing BIU setup still rejects the first
                                           original refill F access (nand-pack.txt).
+                                          Actual first runtime page supplies 14
+                                          complete records and one partial record:
+                                          131 native stores across P/X/Y, 15 actual
+                                          store-template patches and exact restored
+                                          live-code continuation. Next write strobe
+                                          still rejects (nand-first-records.txt).
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.

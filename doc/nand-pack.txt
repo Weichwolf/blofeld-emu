@@ -48,3 +48,7 @@ and Desktop/Keyboard hardware comparison remain open in coverage.txt.
 
 Private traces are Testing/original-nand-pack.trace. The older complete byte-read
 and bootstrap traces stay unchanged after their shared fixture extraction.
+
+original_nand_records connects the packing loop to the actual first runtime
+page's record parser and self-modifying P/X/Y stores. Its bounded original
+refill failure and live-code restoration are described in nand-first-records.txt.
