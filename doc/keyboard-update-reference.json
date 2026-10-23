@@ -1,0 +1,94 @@
+{
+  "archive_manifest": "downloads.json",
+  "archive": "BlofeldKBC14.zip",
+  "member": "BlofeldKBC14.mid",
+  "midi_bytes": 8670,
+  "midi_sha256": "43eb3b21eaed55518f9ea4353002f5dd048c01c92a46c057e9d4c78cff7a580d",
+  "smf": {
+    "format": 0,
+    "tracks": 1,
+    "division": 48,
+    "events": {
+      "ff": 3,
+      "f0": 251,
+      "90": 1,
+      "80": 1
+    }
+  },
+  "message_count": 251,
+  "unclassified_short_message_positions": [
+    17,
+    250
+  ],
+  "unclassified_short_message_bytes": 2,
+  "unclassified_short_message_sha256": "743eb787b3af29a536459a13e9b574f81cbad05df0fa9bdc498316a8e7969659",
+  "blocks": [
+    {
+      "block": 0,
+      "mode": 3,
+      "declared_bytes": 126,
+      "address_words": 61184,
+      "packets": 6,
+      "declared_sha256": "866c4516655abde0dc508fc259fedbaec597da824e98ab5cf98e2670c8c94594",
+      "stored_words": 42,
+      "stored_sha256": "866c4516655abde0dc508fc259fedbaec597da824e98ab5cf98e2670c8c94594",
+      "transport_padding_bytes": 0,
+      "transport_padding_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "block": 1,
+      "mode": 0,
+      "declared_bytes": 189,
+      "address_words": 11776,
+      "packets": 9,
+      "declared_sha256": "cdf9dae5f3bc90caa6a299ef0022e1b7c31089e7a40e5c6d6c75ea5996cd436a",
+      "stored_words": 63,
+      "stored_sha256": "cdf9dae5f3bc90caa6a299ef0022e1b7c31089e7a40e5c6d6c75ea5996cd436a",
+      "transport_padding_bytes": 0,
+      "transport_padding_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "block": 2,
+      "mode": 3,
+      "declared_bytes": 4626,
+      "address_words": 61184,
+      "packets": 221,
+      "declared_sha256": "970c75568d96ce4c789709448c1bd01164725c8063b49c3cf9c88be671d4f0b5",
+      "stored_words": 1542,
+      "stored_sha256": "970c75568d96ce4c789709448c1bd01164725c8063b49c3cf9c88be671d4f0b5",
+      "transport_padding_bytes": 1,
+      "transport_padding_sha256": "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89"
+    },
+    {
+      "block": 3,
+      "mode": 0,
+      "declared_bytes": 171,
+      "address_words": 11776,
+      "packets": 9,
+      "declared_sha256": "dbe5a8acfa89fd3401a175a658752aef57c4b71b769846b924cb7c535776a8a6",
+      "stored_words": 58,
+      "stored_sha256": "f24c49fc4a651f28ba2466e2f16934c2da737ed62e8340b61f50141a3564aa77",
+      "transport_padding_bytes": 4,
+      "transport_padding_sha256": "847ea2dfc4ae1c7664329a24a9a832909b228f66918f77647a1b95f4aad48ae8"
+    }
+  ],
+  "hc12_objects": [
+    {
+      "block": 0,
+      "helper_bytes": 119,
+      "helper_sha256": "622d3a2fce2326a9a8717551334013780f26d488f9f14a6bc4b383db5806fe3c",
+      "checked_container_bytes": 126,
+      "opaque_tail_bytes": 0,
+      "opaque_tail_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "block": 2,
+      "helper_bytes": 1018,
+      "helper_sha256": "bc5c60ddc3e6b2bdc481355fec70cbe214260f2a61b004392b8a7d4946b4b4b0",
+      "checked_container_bytes": 1023,
+      "opaque_tail_bytes": 3603,
+      "opaque_tail_sha256": "a063c4e3cf62bc433dbbd673144600c6ab64c5bb59edc70c01b63d07fca6b5c3"
+    }
+  ],
+  "qualification": "Four isolated unchanged transfer bodies decoded by the original1.25 DSP command handler. Short messages and SMF channel events retain identity but are not executed. Container checksums do not establish the architecture, address map, completeness or recovery of the external keyboard controller."
+}

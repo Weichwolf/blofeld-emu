@@ -1646,6 +1646,13 @@ Desktop/Keyboard differences      pending  Both requested with 1.25; Keyboard is
                                           the normal default, with --desktop for
                                           Desktop. Keyboard scanner and profile
                                           differences remain unresolved.
+                                          Separate Controller1.4 transport has
+                                          four native original packet-body paths:
+                                          1705 exact stores, including one complete
+                                          padding word. Short-message effects,
+                                          controller image/ISA/completeness,
+                                          programming/recovery and scanner/main
+                                          behavior remain open (keyboard-update.txt).
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

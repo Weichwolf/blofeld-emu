@@ -25,12 +25,16 @@ def references(firmware, destination):
     original_records(firmware, json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text()))
     midi, _ = load_input(firmware)
     blocks = split_blocks(read_smf(midi)[0])
-    result, lines = [], [str(len(LAYOUTS))]
-    for block, (mode, address, declared, stored, count) in zip(blocks, LAYOUTS, strict=True):
+    return packet_references(blocks, LAYOUTS, destination)
+
+
+def packet_references(blocks, layouts, destination):
+    result, lines = [], [str(len(layouts))]
+    for block, (mode, address, declared, stored, count) in zip(blocks, layouts, strict=True):
         _, data, info = decode_block(block)
         if (info['mode'], info['address_words'], len(data) // 3, len(block['packets'])) != (
                 mode, address, declared, count):
-            raise ValueError('Changed original six-block transfer layout')
+            raise ValueError('Changed declared original transfer layout')
         packets = [block['header'][:-1]] + [packet[:-1] for packet in block['packets']]
         words, sizes = [], []
         for packet in packets[1:]:
@@ -120,24 +124,28 @@ def validate_block(block, expected, layout, caller_base=0xff0000, setup_instruct
     return steps
 
 
-def validate(observed, reference):
-    if [block['index'] for block in observed] != list(range(6)):
-        raise ValueError('BLOCK all six isolated original transfers are required')
+def validate(observed, reference, layouts=LAYOUTS):
+    if [block['index'] for block in observed] != list(range(len(layouts))):
+        raise ValueError('BLOCK every declared isolated original transfer is required')
     total_steps = sum(validate_block(block, expected, layout)
-                      for block, expected, layout in zip(observed, reference, LAYOUTS, strict=True))
-    return dict(blocks=6, packet_calls=4847, checksum_prefetches=4841,
-                destination_stores=33876, declared_words=33871, complete_padding_words=5,
-                interrupted_prefixes=6, helper_entries=3, native_steps=total_steps)
+                      for block, expected, layout in zip(observed, reference, layouts, strict=True))
+    return dict(blocks=len(layouts), packet_calls=sum(row[4] + 1 for row in layouts),
+                checksum_prefetches=sum(row[4] for row in layouts),
+                destination_stores=sum(row[3] for row in layouts),
+                declared_words=sum(row[2] for row in layouts),
+                complete_padding_words=sum(row[3] - row[2] for row in layouts),
+                interrupted_prefixes=len(layouts),
+                helper_entries=sum(row[0] == 0 for row in layouts), native_steps=total_steps)
 
 
-def controls(observed, reference):
+def controls(observed, reference, layouts=LAYOUTS):
     for tag, key in (('STORE', 'value'), ('STORE', 'address'), ('PREFETCH', 'value'),
                      ('PACKET', 'sequence'), ('INTERRUPTED', 'stored'), ('RESULT', 'extra')):
         changed = copy.deepcopy(observed)
-        row = next(value for name, value in changed[4]['rows'] if name == tag)
+        row = next(value for name, value in changed[-2]['rows'] if name == tag)
         row[key] += 1
         try:
-            validate(changed, reference)
+            validate(changed, reference, layouts)
         except ValueError:
             continue
         raise ValueError('Transfer oracle accepted fixed ' + tag + ' corruption')

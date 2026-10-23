@@ -1234,6 +1234,16 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-transport.trace")
   set_tests_properties(original_update_transport PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-keyboard-transport-test test/original_keyboard_transport_test.cpp)
+  target_link_libraries(blofeld-original-keyboard-transport-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_keyboard_transport COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_transport.py"
+    $<TARGET_FILE:blofeld-original-keyboard-transport-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-transport.trace")
+  set_tests_properties(original_keyboard_transport PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-download-test test/original_dsp_download_test.cpp)
   target_link_libraries(blofeld-original-dsp-download-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
@@ -1634,6 +1644,7 @@ add_custom_target(quality
     blofeld-original-gpio-midi-test
     blofeld-original-dsp-download-test
     blofeld-original-update-transport-test
+    blofeld-original-keyboard-transport-test
     blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test

@@ -15,6 +15,7 @@
 #include <iostream>
 #include <istream>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -60,11 +61,13 @@ inline unsigned number(std::istream &stream, const unsigned maximum) {
   return value;
 }
 
-inline std::vector<Block> read_blocks(const char *path) {
+inline std::vector<Block> read_blocks(const char *path,
+                                      const std::span<const Layout> plans = layouts) {
   std::ifstream stream(path);
-  require(number(stream, layouts.size()) == layouts.size(), "Expected all six original blocks");
+  require(number(stream, static_cast<unsigned>(plans.size())) == plans.size(),
+          "Expected every declared original transfer block");
   std::vector<Block> blocks;
-  for (const auto &layout : layouts) {
+  for (const auto &layout : plans) {
     Block block;
     block.expected.reserve(layout.stored);
     block.packets.reserve(layout.packets + 1);

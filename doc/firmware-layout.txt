@@ -14,6 +14,14 @@ overwrite earlier addresses; record order is significant. These objects do not
 establish that all persistent NAND, ROM, wavetable, sample or device-identity
 contents required by the original hardware are available.
 
+The separate Keyboard Controller 1.4 archive is not a main 1.25 image. Its four
+transfer bodies, additional short messages and two HC12 helper objects are
+identity-pinned in keyboard-update-reference.json. The original DSP decoder can
+execute the four isolated transfers (keyboard-update.txt). The external
+controller image/architecture, short-message effects, helper execution and
+keyboard scanning/update/recovery remain unqualified; no successful controller
+is substituted.
+
 Static inspection also identifies a 94-word (282-byte) DSP first stage embedded
 in the MCU image. Its transfer header specifies P:0x6a and matches the documented
 DSP56371 SHI bootstrap framing. This is separate from the 127 runtime records.

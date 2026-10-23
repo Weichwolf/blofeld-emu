@@ -1,0 +1,50 @@
+Original Keyboard Controller 1.4 update transport
+
+  cmake --build --preset strict --target blofeld-original-keyboard-transport-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_transport$' --output-on-failure
+
+The optional gate requires the local official 1.25 and BlofeldKBC14 archives and
+the independent offline DSP assembler. Missing references explicitly skip 77;
+changed identities or unqualified execution fail. downloads.json pins the two
+archives. keyboard-update-reference.json pins the keyboard MIDI member, event
+counts, four declared/stored block identities, padding and two checked HC12
+objects. No manufacturer program bytes, images or disassembly are tracked.
+
+The 8670-byte Keyboard MIDI is separate from the main 1.25 update. It contains
+four transfer blocks, two additional short SysEx messages and one note-on/off
+pair. The short messages retain their exact positions and hash in the reference
+and receipt. Their effects and channel-event execution are unqualified; they are
+not treated as reset, successful completion or harmless messages to ignore in
+normal operation. The main Firmware loader remains strict and does not accept
+this package as a complete main MCU/DSP firmware image.
+
+The four packet-body transfers execute the original 1.25 DSP command handler
+under an explicit native caller, independently of unknown outer dispatch/wire
+behavior. They store 42 Y words, 63 P words, 1542 Y words and 58 P words. The final
+program block declares 57 words; its packet actually stores one complete extra
+padding word. All 1705 stores, 245 checksum prefetches, 249 calls, modulo 128
+sequence wrap, live native store/return instruction patches, destination guards
+and two actual JMP launch frames are checked. Each transfer's final-packet
+prefix is checked before launch; this is not every power-loss/flash phase.
+
+The independent Python packet oracle compares all actual words with complete
+byte assembly and pinned hashes, then validates every native trace row, return,
+sequence, cursor and declared launch state. Six fixed trace corruptions must
+reject. Three fixed message-envelope corruptions test changed identity, position
+and missing final message. These directed controls are not fuzzing. The shared
+main-update fixture retains its original six-block default and unchanged output
+contract; its separate regression checks the extraction/generalization.
+
+The Y payloads contain two checksummed HC12 helper objects of 119 and 1018 bytes.
+The latter is followed by 3603 opaque bytes whose identity is pinned. A valid
+transport/object checksum does not establish that these bytes are a complete
+controller image, its instruction set, address map, boot ROM or preserved data.
+The package README distinguishes keybed revisions and explicitly provides no
+host-queryable installation-success indication (function-acceptance.txt).
+
+Helper bodies, the external controller, actual scanner/main interaction, sample
+or main-NVM writes, every programming interruption/recovery phase, calibrated
+timing and normal Keyboard startup/MIDI/audio remain unqualified. Desktop use
+of this controller update is not supported. No host controller/scanner substitute,
+fake completion or physical traffic is supplied. Full requirements and both
+profile comparisons remain in objective.txt/coverage.txt.
