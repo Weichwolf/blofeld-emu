@@ -31,9 +31,15 @@ active MCU owner. A failed peer operation preserves its actual completed prefix
 and quarantines joint scheduling. An unknown final RESET sample advances neither
 owner for that unqualified edge.
 
-Completed joint-reset checkpoints replay in the new MCU epoch. External callbacks
-remain outside snapshots. Joint mid-reset board snapshots still reject; the
-separate owned MCU pulse checkpoints do not establish a whole-board snapshot.
+Joint reset checkpoints retain the actual source/phase/synchronization/edge
+state, OSC rate and next-edge fraction instead of inventing an executable MCU
+state while reset holds. Both native owners must be restored before the schedule;
+different MCU reset metadata/phase or DSP progress reject before schedule commit.
+Drive, settling, external-hold and completed boundaries replay in the new MCU
+epoch. An active edge/vector callback or poisoned owner cannot be captured.
+External callbacks, pad routes and event cursors remain caller-owned and must be
+restored/reconnected. These are trusted in-process checkpoints, not persistent
+whole-board snapshots or a hardware recovery procedure.
 
 Two documented electrical/reset facts remove false prerequisites:
 - The fixed normal-single-chip MEBI profile resets PEAR.NECLK to1 (PEAR10),
@@ -52,9 +58,15 @@ OSC phases; literal lifetime/partial-cycle/DSP ledgers and subsequent native COP
 reset are checked. A separate STAA PwO case proves a timeout inside w leaves
 SRAM unchanged. Pure offers cover all five phase residues and COPWAI write-once
 setup without consuming time or counter state.
+Twenty drive/settle/hold cuts replay twice with literal clock/vector/DSP costs;
+unknown final pad sampling recovers only from a coordinated pre-error snapshot.
+Wrong reset cause, initial OSC fraction and unrestored DSP progress reject.
 original_update_coupled additionally executes four unchanged download/helper
 paths through real COP request,195 reset edges and native vector fetch. The same
 DSP executes737/738 original BRCLR instructions across the reset, not a host pause.
+Each case saves after131 actual reset edges and repeats the remaining64 plus
+native vector fetch. Full remaining native/pad traces and both CPU/clock states
+must match; IRQ-reader state is explicitly restored with the external link.
 Fresh GPIO readers retain the documented IRQA/PortC biases and native directions.
 
 The resident loader enables PERQ pull-ups while PPSQ is still0. Its STAA EXT

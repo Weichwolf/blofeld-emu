@@ -38,6 +38,9 @@ private:
   DspScheduleCheckpoint dsp_;
   McuDspScheduleInputs inputs_;
   CpuState mcu_;
+  std::optional<McuResetState> reset_;
+  std::uint64_t reset_edge_ticks_ = 0;
+  std::uint32_t reset_oscillator_hz_ = 0;
   std::uint64_t timebase_hz_ = 0;
   std::uint64_t end_ticks_ = 0;
   std::uint64_t mcu_cycles_ = 0;
