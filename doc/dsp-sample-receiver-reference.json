@@ -1,0 +1,48 @@
+{
+  "records": [
+    {
+      "record": 39,
+      "space": 1,
+      "address": 56982,
+      "words": 1032,
+      "sha256": "0e0e7b4b7b261286403fc7892e71c29b65b05afeadb4da65a6b88da256be7479"
+    },
+    {
+      "record": 40,
+      "space": 1,
+      "address": 59830,
+      "words": 996,
+      "sha256": "7cc7649579baf592c05405686c616ecea179162722acff0b659235a4a9b045d9"
+    },
+    {
+      "record": 41,
+      "space": 2,
+      "address": 2333,
+      "words": 603,
+      "sha256": "f60780abe65f094951065e245847fae8c6f485f34aa7d05308e43af2feb36d3a"
+    },
+    {
+      "record": 79,
+      "space": 1,
+      "address": 9893,
+      "words": 16,
+      "sha256": "f65c3a8129a0ecd884f81551095ee8221b65a8a420ff88005f0fd7f4bba2ae05"
+    },
+    {
+      "record": 84,
+      "space": 0,
+      "address": 6227,
+      "words": 634,
+      "sha256": "f74fd2b7a24b7aa2a2d83fd3c4563a757bcf837c71231eb3529814c5eb926ba3"
+    },
+    {
+      "record": 114,
+      "space": 0,
+      "address": 10008,
+      "words": 1086,
+      "sha256": "2faf9d21168e2566ed128f33ddffa3a0b6249bcdff644f86072746271e295fe2"
+    }
+  ],
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "qualification": "Conditional original C100 GPIO receive, sample readiness/rate/refill producer and actual callback under declared existing descriptor, slot, logical peer, timer-busy and unscaled inputs. Raw WPC pages retain relative fields. No native header-request producer, physical NAND/page conversion, transaction timing, full boot or physical playback proof."
+}

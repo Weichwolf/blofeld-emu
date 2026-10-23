@@ -112,6 +112,14 @@ windows from all136 headers (dsp-sample.txt). It consumes eight taps. Declared
 ring inputs do not establish installation, native header conversion or playback
 through the real NAND/refill path.
 
+The original C100 GPIO receiver now consumes all136 raw logical header pages,
+then calls real preparation and its selected callback (dsp-sample-receiver.txt).
+It preserves24 packed words plus228 high-aligned payload words. Raw relative
+addresses leave36 cases silent;100 produce a real deferred refill descriptor and
+independently checked sampler result. Five missing-byte cuts retain partial data
+and recover through ten trusted owner/peer snapshot replays. Declared read-mode
+inputs and a timer-busy queue do not establish request transmission or NAND data.
+
 No firmware-derived mapping from these distributions to a complete original
 NAND image has been established. Required internal wavetable/ROM data,
 device-specific contents and their actual runtime reads remain unestablished.

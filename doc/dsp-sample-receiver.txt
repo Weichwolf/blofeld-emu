@@ -1,0 +1,38 @@
+Original logical sample receive/prepare/render chain
+
+  cmake --build --preset strict --target blofeld-original-dsp-sample-receiver-test
+  ctest --test-dir build/strict -R '^original_dsp_sample_receiver$' --output-on-failure
+
+The gate pins the firmware/MID/DSP records and original WPC/Spectre assets.
+An own native caller supplies an existing C100 descriptor, slot, read-mode GPIO,
+library-ready flag and unscaled context. Its real JSR/RTI frame executes the
+original receive handler; this does not test Timer1 interrupt recognition.
+A logical peer presents each next byte only after an observed Port-C bit 8 rising
+edge. The actual whole Port-F read must consume that byte. No host writes any
+received header, payload, copied slot field or result into DSP RAM.
+
+Each of 136 raw WPC pages supplies 528 bytes: 24 packed header words and 228 signed16
+payload words, high-aligned by the original code. All 512 ring cells and six copied
+slot fields are checked independently. The existing destination+256 slot pointer
+survives. Header 13 equals the logical WPC end field for every selected sample.
+
+Original preparation accepts 100 raw relative headers and leaves 36 silent because
+their end field is below 3400(hex). Fields are not relocated or repaired. At a
+declared zero relative pitch and centered FM control, accepted cases derive the
+rate from the original curve, select the first coefficient bank and publish their
+actual first refill: 8100, unchanged first-data address, ring+252, 264 words. An own
+native timer-arm write makes the real queue's TCIE busy path defer transmission;
+no NAND completion is supplied. The callback comes from the actual original
+target cell: 100 sampler results match independent eight-tap arithmetic and 36
+original silent callbacks return zero.
+
+Missing logical bytes at 0, 1, 71, 72, 527 fail visibly. Only complete words may enter
+the ring; incomplete headers cannot publish slot fields. Implicit CPU retry fails.
+Two trusted owner/peer snapshot replays per cut supply the newly known byte and
+complete through the original RTI, preparation and callback with equal native
+states. All six original program/data records remain unchanged.
+
+These are explicit untimed read-session inputs. Header-request production,
+full transmit/read turnaround, physical NAND/header/address conversion, pin
+timing, refills delivered by NAND, full boot and physical playback remain open.
+The strict Port-F transmit-turnaround and reserved Y:002000 frontiers remain.
