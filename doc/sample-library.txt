@@ -106,6 +106,12 @@ Original WPC catalog/sample semantics, physical page/spare/ECC contents,
 bad-block handling and flash history remain unqualified. Neither the XOR codec
 nor the matching subsets identify a complete physical NAND image.
 
+The isolated original DSP sample callback now has144384 native calls checked
+against independent phase/output/access expectations, including logical PCM
+windows from all136 headers (dsp-sample.txt). It consumes eight taps. Declared
+ring inputs do not establish installation, native header conversion or playback
+through the real NAND/refill path.
+
 No firmware-derived mapping from these distributions to a complete original
 NAND image has been established. Required internal wavetable/ROM data,
 device-specific contents and their actual runtime reads remain unestablished.

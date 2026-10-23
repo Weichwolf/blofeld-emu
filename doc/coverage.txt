@@ -979,6 +979,15 @@ ROM wavetables and other assets   partial  Original basic oscillator table gener
                                           expectations (dsp-waveforms.txt). Additional
                                           wavetable/ROM/NAND dependencies, actual
                                           startup and hardware remain unresolved.
+Original sample interpolation     partial  144384 unchanged native callback calls;
+                                          all32768 fractions/four coefficient banks,
+                                          windows from136 logical official samples,
+                                          signed/FM corners and exact eight-tap
+                                          memory accesses (dsp-sample.txt).
+                                          Slot/continuation/modifier guards checked.
+                                          Native header/NAND/refill path, rate/bank
+                                          preparation, full voices/audio and board
+                                          timing remain unqualified.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Explicit nominal DSP reset epochs retain
