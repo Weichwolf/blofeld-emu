@@ -1768,6 +1768,13 @@ Keyboard candidate FLASH         partial  Native original seven-page algorithm,
                                           (hcs08-flash.txt). Strict idle FF launch
                                           still rejects. Physical chip/timing,
                                           BDC/HC12 and whole recovery remain open.
+Keyboard BDC transaction owner    partial  Actual native halt/register/GO/BGND,
+                                          privileged memory, security and partial
+                                          frames (hcs08-bdc.txt). Original RAM
+                                          programmer runs via logical BDC commands
+                                          with saved trim under explicit FLASH
+                                          hypotheses. Wire/HC12/timing/arbitration,
+                                          whole update and physical recovery open.
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

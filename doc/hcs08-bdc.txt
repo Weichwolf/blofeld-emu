@@ -1,0 +1,56 @@
+HCS08 BDC transaction and native execution ownership
+
+  cmake --build --preset strict --target blofeld-hcs08-bdc-test \
+    blofeld-original-hcs08-bdc-test
+  ctest --test-dir build/strict -j1 \
+    -R '^(hcs08_bdc|original_hcs08_bdc)$' --output-on-failure
+
+The separate candidate GT8A BDC component owns native CPU halt/resume and byte
+transaction framing. Explicit sampled reset mode establishes BDCSCR=00 or C8;
+it does not assign unknown CPU registers or emulate physical reset sequencing.
+Partial commands cannot alter target memory. A complete frame needs a separate
+service event; response reads never service or advance commands. The future
+wire/clock owner must establish bit reception, the specified command delays,
+512-cycle timeout and memory arbitration. No pin-level ACK or timing is supplied.
+
+READ/WRITE_BYTE use a separate target mapping with actual BDC privilege/security.
+READ/WRITE_A/CCR/PC/HX/SP, GO, BACKGROUND, READ_STATUS and WRITE_CONTROL are
+implemented. Active mode prevents CPU steps. GO resumes genuine native register
+state; actual BGND establishes active mode only with enabled, unsecured admission.
+Secure serial BACKGROUND cannot force active entry; sampled BKGD-low reset can.
+ENBDM writes while active are ignored. Read-only status bits cannot be written.
+Breakpoint enable, other commands and unqualified BGND admission reject visibly.
+CLKSW is retained as control state; the consuming clock model remains required.
+
+Non-intrusive memory access while running requires an explicit reference
+instruction-boundary grant; the default rejects rather than inventing bus
+arbitration. Unsupported commands, incomplete service, missing replies and
+target faults quarantine the controller. GO or a communication timeout cannot
+clear failed native execution. Opaque controller checkpoints require separate
+CPU/memory/transport restoration; a controller-only restore cannot repair a
+faulted CPU. Timeout discards pending communication without undoing committed
+target memory effects.
+
+Independent unit expectations cover reset/control modes, all supported register
+commands, endianness, fixed CCR bits, native BGND/resume, RAM-code invalidation,
+partial-frame restoration, security/protection privilege and strict failures.
+The optional original gate uploads all132 unchanged programmer bytes and the
+32-byte preceding clear through logical BDC WRITE_BYTE commands. It then loads
+all seven supplied page buffers, writes PC/SP and sends GO. Native HCS08 code
+performs seven erases and3584 byte-burst commands. The3805 BDC transactions
+include actual running/active status replies and a retained unit-trim byte read
+from the declared own preimage. Both the frame counts and complete final image
+are checked independently. Original program bytes remain local/hash-pinned.
+
+The strict original prefix and two fresh joint restorations retain the real
+unstaged FSTAT=FF failure at PC00b2/address1825 after eight instructions; neither
+GO nor controller-only restoration clears it. The seven-page continuation uses
+the explicit idle-launch/reference-event hypotheses in hcs08-flash.txt. Active
+BDC status still precedes final FLASH completion under the slow reference
+schedule. This is logical BDC/native integration with explicit reset/debug inputs,
+not execution of the original HC12 helper or its PB1/PE7 bit transport. Physical
+part, clocks, original whole-package sequencing, full boot/MIDI/audio, update
+recovery and all118 function contracts remain open in objective.txt/coverage.txt.
+
+Primary reference: MC9S08GT16A/GT8A Rev.1 chapters4/15 (hash in hcs08-reference.json).
+No physical traffic, automatic fuzzing or hardware flashing is part of these gates.

@@ -71,6 +71,13 @@ including genuine BGND before final completion and protected-page false success.
 Its strict default still rejects the original unstaged FSTAT=FF launch;
 hardware programming/timing and the BDC/HC12 path remain open (hcs08-flash.txt).
 
+The separate BDC transaction owner now loads and starts that native algorithm
+through actual logical memory/register/GO commands and observes genuine BGND.
+It preserves a trim byte read from the declared target preimage. Secure memory,
+halt/resume and incomplete/failed command ownership are checked independently.
+This does not execute the original HC12 bit transport or qualify physical reset,
+clocking or whole-package ordering (hcs08-bdc.txt).
+
 Remaining helper bodies, the external controller, actual scanner/main interaction, sample
 or main-NVM writes, every programming interruption/recovery phase, calibrated
 timing and normal Keyboard startup/MIDI/audio remain unqualified. Desktop use

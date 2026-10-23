@@ -68,6 +68,7 @@ public:
   void observe_bus_clock(std::uint32_t hz);
   void advance(Hcs08FlashMilestone milestone);
   [[nodiscard]] Hcs08FlashState state() const;
+  [[nodiscard]] bool security_engaged() const;
   [[nodiscard]] const Hcs08FlashImage &image() const;
   [[nodiscard]] Hcs08FlashImage
   power_off_image(Hcs08FlashAbort contract = Hcs08FlashAbort::unqualified_retention) const;

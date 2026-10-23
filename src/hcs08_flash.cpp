@@ -97,6 +97,10 @@ Hcs08FlashState Hcs08Flash::state() const {
   return state_;
 }
 
+bool Hcs08Flash::security_engaged() const {
+  return secure();
+}
+
 const Hcs08FlashImage &Hcs08Flash::image() const {
   return image_;
 }

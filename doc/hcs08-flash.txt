@@ -58,6 +58,8 @@ executing command; it never invents torn byte values. Unit restart checks
 reload exact knownness/history and reject unknown option/vector bytes.
 
 Reference: MC9S08GT16A.pdf chapters4/5, URL/size/hash in hcs08-reference.json.
+The separate BDC transaction/native integration is documented in hcs08-bdc.txt;
+its logical commands do not establish the original HC12 wire path or timing.
 This component leaves full BDC/HC12 transfer, chip clocks/reset/watchdog/IRQs,
 unit trim substitution, physical programming/recovery and sub-instruction
 power-loss phases unqualified. Full package ordering, normal Blofeld boot,
