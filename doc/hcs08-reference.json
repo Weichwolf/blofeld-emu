@@ -42,6 +42,6 @@
     "source": "https://www.nxp.com/docs/en/data-sheet/MC9S08GT16A.pdf",
     "bytes": 2719710,
     "sha256": "6abfb7e68c1953c50fcd4d53e2e4573647d76da2990d2e747648ee05d38b25bf",
-    "sections": "Chapter8 S08CPUV2 instructions/CCR; chapter15 background debug. Exact Keyboard part remains unverified."
+    "sections": "Chapter4 FLASH/registers/security;5.7.4 SOPT; chapter8 S08CPUV2/CCR; chapter15 BDC. Exact Keyboard part and idle-FCBEF behavior remain unverified."
   }
 }

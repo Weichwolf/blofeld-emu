@@ -1,0 +1,65 @@
+Candidate HCS08 FLASH and original Keyboard page programmer
+
+  cmake --build --preset strict --target blofeld-hcs08-flash-test \
+    blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test
+  ctest --test-dir build/strict -j1 \
+    -R '^(hcs08_flash|hcs08_flash_recovery|original_hcs08_flash)$' --output-on-failure
+
+The separate FLASH component requires an explicit candidate GT8A contract;
+the physical part remains unverified. Its8192-byte image retains byte knowledge
+and successful erase history. Unknown contents, configuration bits, clocks,
+registers and unsupported key access fail with operation/address/PC/context.
+Clock observation validates the configured150..200kHz NVM range. Command-buffer
+transfer and completion require explicit external reference events. Status reads
+never cause progress; silicon pulse/transfer latencies remain unqualified.
+
+The model implements FCDIV write-once/DIVLD, reset-latched FOPT/FPROT,
+CPU-ignored option/protection stores, BDC protection writes, W1C errors and the
+five documented commands. Only bursts expose a successor buffer. Programming
+requires known successful erase history, including when writingFF. Security
+blocks BDC data reads and restricts its commands; mass erase plus successful
+blank check supports documented temporary unlocking. Programmed NVOPT governs
+the subsequent reset. SOPT is a separate write-once configuration component;
+watchdog, STOP and BDC consumers/timing require their own owners.
+
+Strict default execution reaches an unresolved original access: FSTAT=FF at
+PC00b2 after eight native instructions. It writes FCBEF with no staged command.
+MC9S08GT16A/GT8A Rev.1 chapter4 does not independently establish that case;
+the model rejects it. The named reference_ignore_empty contract permits only
+an empty, non-executing reference buffer. It is never a default board response.
+
+The original132-byte RAM algorithm runs under that explicit hypothesis and
+instruction-boundary reference event schedules. Two declared debug-entry/RAM
+contexts each execute all seven supplied512-byte pages. Each performs seven
+page erases and3584 byte-burst commands. All8192 final bytes match independently
+overlaid official pages and an explicitly own known preimage; omitted pages
+retain that preimage. No stock contents are inferred. Algorithm bytes remain
+unchanged, and only the original five RAM state bytes may be written.
+
+The two schedules expose distinct final-command states at actual BGND. Under
+the slower schedule the last vector byte at FFFF remains pending despite the
+original72 completion marker. Losing it under the command-range hypothesis
+makes the reset-vector read fail. A separate protected-page execution reaches
+BGND/marker72 with FPVIOL and no programmed data: CPU FPROT=FF cannot unprotect
+the page. These are conditional source/model observations, not hardware results.
+
+Opaque Hcs08Checkpoint captures native registers and the BGND request. Four
+fresh joint CPU/RAM/FLASH/reference-schedule suffix replays match every trace
+byte and endpoint; failed native execution cannot retry or checkpoint. Every
+pending/active instruction boundary checks power-loss image knowledge/history.
+Standalone cases cover partial sequences, active/queued/completed commands,
+reset-latch uncertainty, secure recovery and all256 protection values against
+all16 pages. Four fixed trace-oracle corruptions reject.
+
+Physical power-loss corruption bounds are unknown. Default retention therefore
+marks the entire array unknown when a destructive command is accepted/active.
+The separate reference_command_range hypothesis bounds uncertainty to the
+executing command; it never invents torn byte values. Unit restart checks
+reload exact knownness/history and reject unknown option/vector bytes.
+
+Reference: MC9S08GT16A.pdf chapters4/5, URL/size/hash in hcs08-reference.json.
+This component leaves full BDC/HC12 transfer, chip clocks/reset/watchdog/IRQs,
+unit trim substitution, physical programming/recovery and sub-instruction
+power-loss phases unqualified. Full package ordering, normal Blofeld boot,
+MIDI/audio and all118 manual acceptance contracts remain in objective.txt and
+coverage.txt. No fuzzing, physical traffic or hardware flashing is part of these gates.

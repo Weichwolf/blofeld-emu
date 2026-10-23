@@ -7,11 +7,14 @@
 #include "globalcontext.hh"
 #include "hcs08_native.hpp"
 #include "memstate.hh"
+#include "pcoderaw.hh"
 #include "sleigh.hh"
+#include "types.h"
 #include "xml.hh"
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -45,9 +48,9 @@ public:
     executor = std::make_unique<native::InstructionExecutor>(bus, translator, memory, layout.pc);
   }
 
-  void refresh() {
+  void refresh(const bool force = false) {
     const auto revision = bus.code_revision();
-    if (decoded_revision == revision) { return; }
+    if (!force && decoded_revision == revision) { return; }
     executor->clear_translations();
     translator.reset(&image, &context);
     ghidra::DocumentStorage documents;
@@ -124,6 +127,41 @@ bool Hcs08::background_requested() const {
 
 bool Hcs08::faulted() const {
   return !impl_->healthy;
+}
+
+Hcs08Checkpoint Hcs08::checkpoint() const {
+  if (impl_->active || !impl_->healthy || !impl_->initialized) {
+    throw Fault("HCS08 checkpoint requires a healthy completed native boundary");
+  }
+  Hcs08Checkpoint result;
+  std::map<ghidra::VarnodeData, std::string> registers;
+  impl_->translator.getAllRegisters(registers);
+  const auto *space = impl_->translator.getSpaceByName("register");
+  for (const auto &[reg, name] : registers) {
+    if (reg.space == space &&
+        (reg.offset >= result.registers_.size() ||
+         static_cast<ghidra::uintb>(reg.size) > result.registers_.size() - reg.offset)) {
+      throw Fault("HCS08 checkpoint cannot represent native register " + name);
+    }
+  }
+  impl_->registers->getChunk(
+      0, static_cast<ghidra::int4>(result.registers_.size()), result.registers_.data());
+  result.pc_ = state().pc;
+  result.background_ = background_requested();
+  return result;
+}
+
+void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
+  const native::ExecutionGuard guard(impl_->active);
+  impl_->healthy = false;
+  impl_->refresh(true);
+  impl_->registers->setChunk(
+      0, static_cast<ghidra::int4>(checkpoint.registers_.size()), checkpoint.registers_.data());
+  impl_->executor->setExecuteAddress(
+      ghidra::Address(impl_->translator.getDefaultCodeSpace(), checkpoint.pc_));
+  impl_->executor->restore_background_request(checkpoint.background_);
+  impl_->initialized = true;
+  impl_->healthy = true;
 }
 
 void Hcs08::step() {

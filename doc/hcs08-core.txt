@@ -24,7 +24,10 @@ further execution pending an owning BDC decision; it does not report active BDC
 status. WAIT/STOP, unimplemented intrinsics and offered interrupts fail visibly.
 Instruction timing, physical reset, interrupt entry, complete instruction
 qualification, BDC/security privileges and target peripherals remain required.
-Debug register replacement is not a trusted joint memory/clock snapshot.
+Opaque Hcs08Checkpoint retains all native registers and the BGND request at a
+healthy completed boundary. Its owner must restore memory, peripherals, peers
+and schedule separately; failed/reentrant capture rejects. Debug register
+replacement remains separate from a coordinated checkpoint restoration.
 
 The optional original_hcs08 gate verifies the local official Controller1.4
 archive and all supplied pages plus its132-byte RAM programmer against hashes
@@ -47,3 +50,7 @@ It does not establish complete controller operation, the physical GT8A part,
 BDC wiring/clocks, scanning/SPI/ADC, programming/recovery or normal Blofeld
 boot/MIDI/audio. Those requirements remain in objective.txt/coverage.txt;
 all118 complete manual-function acceptance rows remain pending.
+
+The candidate FLASH component and full original page-algorithm gate are in
+hcs08-flash.txt. Their explicit idle-launch/event/retention hypotheses do not
+qualify actual controller timing, a physical chip or the complete update.

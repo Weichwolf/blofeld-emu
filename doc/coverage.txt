@@ -1761,6 +1761,13 @@ Keyboard HCS08 instruction core   partial  Native SLEIGH plus independent byte/w
                                           Explicit untimed RAM/debug entry; BDC,
                                           peripherals, reset/IRQ and controller
                                           programming/recovery remain pending.
+Keyboard candidate FLASH         partial  Native original seven-page algorithm,
+                                          byte-exact final images, protected BGND,
+                                          pending final vector and joint replays
+                                          under explicit reference contracts
+                                          (hcs08-flash.txt). Strict idle FF launch
+                                          still rejects. Physical chip/timing,
+                                          BDC/HC12 and whole recovery remain open.
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

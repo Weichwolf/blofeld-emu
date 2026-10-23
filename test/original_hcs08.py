@@ -14,11 +14,7 @@ from extract_runtime import hc12_object
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
-    binary, archive, specification, trace = map(Path, sys.argv[1:])
-    if not archive.is_file():
-        print('SKIP original HCS08 execution: pinned local Keyboard archive absent')
-        return 77
+def reference_inputs(archive):
     blocks, _, _ = verified_blocks(archive)
     data = decode_block(blocks[2])[1]
     helper, consumed = hc12_object(data)
@@ -34,11 +30,20 @@ def main():
         if (int.from_bytes(record[:2], 'big') != page['address'] or
                 hashlib.sha256(record[2:]).hexdigest() != page['sha256']):
             raise ValueError('Changed original HCS08 page identity')
+    return programmer, stream[:3598]
+
+
+def main():
+    binary, archive, specification, trace = map(Path, sys.argv[1:])
+    if not archive.is_file():
+        print('SKIP original HCS08 execution: pinned local Keyboard archive absent')
+        return 77
+    programmer, supplied = reference_inputs(archive)
     trace.parent.mkdir(parents=True, exist_ok=True)
     code = trace.with_suffix('.programmer.bin')
     pages = trace.with_suffix('.pages.bin')
     code.write_bytes(programmer)
-    pages.write_bytes(stream[:3598])
+    pages.write_bytes(supplied)
     frozen = {p: hashlib.sha256(p.read_bytes()).hexdigest()
               for p in (binary, archive, specification, code, pages)}
     run = subprocess.run([str(p.resolve()) for p in (binary, code, pages, trace)],

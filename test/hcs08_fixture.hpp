@@ -29,7 +29,7 @@ struct Access {
   bool operator==(const Access &) const = default;
 };
 
-class Memory final : public Bus {
+class Memory : public Bus {
 public:
   std::array<std::uint8_t, space_bytes> bytes{};
   std::bitset<space_bytes> known, writable;

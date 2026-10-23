@@ -183,6 +183,8 @@ public:
 
   void clear_background_request() { background_ = false; }
 
+  void restore_background_request(const bool value) { background_ = value; }
+
   void clear_translations() {
     if (executing_) { throw Fault("Cannot invalidate an active HCS08 translation"); }
     discard_translations();

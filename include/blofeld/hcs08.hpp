@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -17,6 +18,22 @@ struct Hcs08State {
   std::uint8_t a = 0;
   std::uint8_t ccr = fixed_ccr; // S08CPUV2: bits6/5 are permanently one.
   bool operator==(const Hcs08State &) const = default;
+};
+
+// Trusted native instruction-boundary state. Memory, clocks and external peers
+// must be restored separately by the owner before further execution.
+class Hcs08Checkpoint {
+public:
+  Hcs08Checkpoint(const Hcs08Checkpoint &) = default;
+  Hcs08Checkpoint &operator=(const Hcs08Checkpoint &) = default;
+
+private:
+  friend class Hcs08;
+  Hcs08Checkpoint() = default;
+  static constexpr unsigned register_bytes = 64;
+  std::array<std::uint8_t, register_bytes> registers_{};
+  std::uint16_t pc_ = 0;
+  bool background_ = false;
 };
 
 // Native instruction engine, separate from target memory/peripherals and BDC.
@@ -34,6 +51,8 @@ public:
   // BGND is an observed CPU request, not a fabricated active-BDC status.
   [[nodiscard]] bool background_requested() const;
   [[nodiscard]] bool faulted() const;
+  [[nodiscard]] Hcs08Checkpoint checkpoint() const;
+  void restore_checkpoint(const Hcs08Checkpoint &checkpoint);
   void step();
 
 private:

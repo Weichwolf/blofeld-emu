@@ -65,6 +65,12 @@ debug/RAM inputs. It stops at their actual unmodeled PTED/FCDIV accesses;
 no successful target or programming callback is supplied (hcs08-core.txt).
 The physical controller, BDC link and subsequent peripheral behavior remain open.
 
+The separate candidate FLASH gate runs the unchanged132-byte page algorithm
+through all seven supplied pages under explicit idle-launch/event hypotheses,
+including genuine BGND before final completion and protected-page false success.
+Its strict default still rejects the original unstaged FSTAT=FF launch;
+hardware programming/timing and the BDC/HC12 path remain open (hcs08-flash.txt).
+
 Remaining helper bodies, the external controller, actual scanner/main interaction, sample
 or main-NVM writes, every programming interruption/recovery phase, calibrated
 timing and normal Keyboard startup/MIDI/audio remain unqualified. Desktop use
