@@ -350,6 +350,9 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           same DSP through MCU epoch changes;
                                           native vector slots, replay and fault
                                           prefixes checked (mcu-reset-coupling.txt).
+                                          COP timeout preemption now caps both
+                                          owners at the actual OSC edge; failed
+                                          bus/idle slots and writes stay incomplete.
                                           Propagation/POR, STOP/BDM and physical
                                           latency remain open.
 USB device/transport              partial  PHY control and register/data-side enable.

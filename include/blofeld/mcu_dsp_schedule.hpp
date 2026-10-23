@@ -95,7 +95,7 @@ private:
   class Guard;
   void healthy() const;
   void consumed() const;
-  void offer_period();
+  void offer_period(bool waiting = false);
   void finish_boundary();
   [[nodiscard]] std::uint64_t mcu_ticks() const;
   void advance(DspScheduleBoundary boundary,
@@ -116,6 +116,7 @@ private:
   std::optional<ExecutionContext> wait_context_;
   std::optional<ExecutionContext> reset_context_;
   bool resetting_ = false;
+  bool cop_deadline_ = false;
   bool offered_ = false;
   bool shared_write_ = false;
   bool waiting_ = false;

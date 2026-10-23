@@ -17,6 +17,11 @@ struct McuRunClockInputs {
   bool operator==(const McuRunClockInputs &) const = default;
 };
 
+struct McuRunPeriod {
+  std::uint64_t duration_ticks = 0;
+  bool cop_deadline = false;
+};
+
 // Exact normal-run reference time. The oscillator rate and its initial phase
 // are explicit inputs, not a measured Blofeld board profile. PHY LOCK remains
 // independently observed. WAI honors SCI/TIM gates with continuing system clocks;
@@ -36,6 +41,8 @@ public:
   void advance_wait_cycle(McuBus &bus, ExecutionContext context);
   // Pure duration offer for a board scheduler; no clock, input or peripheral advance.
   [[nodiscard]] std::uint64_t next_cycle_ticks(const McuBus &bus) const;
+  // A COP deadline preempts the IPBus period, including a timeout at its end.
+  [[nodiscard]] McuRunPeriod next_period(const McuBus &bus, bool waiting = false) const;
   [[nodiscard]] std::uint64_t next_reset_edge_ticks() const;
 
   [[nodiscard]] std::uint64_t timebase_hz() const { return timebase_hz_; }

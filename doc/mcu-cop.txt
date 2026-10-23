@@ -31,6 +31,12 @@ and native COPfffa fetch with retained lifetime clocks and a new MCU epoch
 Whole-board retention/coupling and physical reset timing remain open; no reset
 IRQ or host-assigned restart PC is supplied.
 
+Pure next_period offers cap joint DSP time at the real timeout edge, even when
+it coincides with the full IPBus endpoint. Failed native/idle slots do not count
+as completed and preempted writes do not transfer. Explicit joint COP reset can
+continue from that exact consumed boundary without rewinding/retiming the DSP
+(mcu-reset-coupling.txt). COPWAI affects only idle offers.
+
 Tests cover literal seven-rate boundaries, all legal control values/reserved
 rejections, write-once/reset, all256 disabled service bytes,508 enabled invalid
 byte/window combinations, exact window edges, repeated/partial service, overflow

@@ -9,7 +9,16 @@ MCU epoch through the actual owned reset API; DSP state, epoch, clock fraction,
 instruction counts and pending scheduled work remain continuous. It does not
 assert a DSP reset pin or assign a new CPU PC. Unconsumed/overshot time, pending
 idle/shared-write offers and poisoned DSP state reject rather than retime/rewind.
-Joint timeout preemption and reset propagation still require board qualification.
+Reset propagation still requires board qualification.
+
+McuRunClock::next_period offers a pure COP-aware duration. A timeout shortens
+the reference period to its actual OSC edge, including an exact-end deadline;
+the failed IPBus/idle period never counts as completed. Joint DSP execution stops
+at that same boundary. A preempted shared write has no bus transfer or observation
+to complete. Only the actual owned timeout permits discarding this pending offer
+when beginning explicit reset; unrelated faults/missing time still reject.
+COPWAI gates idle offers only. Existing DSP-before-MCU reference observation order
+remains an explicit scheduling contract, not measured reset-pin timing.
 
 After reset assertion, reconnect required GPIO sources and native observers.
 McuMachine::set_reset_period_observer receives qualified McuResetPeriod inputs
@@ -38,6 +47,11 @@ Two documented electrical/reset facts remove false prerequisites:
 Independent own-program tests check all four3..6-cycle synchronization choices,
 NOP/JMP instruction costs, exact edge/vector/lifetime ledgers, completed reset
 replay, missing offers, reentrancy, unknown pad sampling and native peer faults.
+Eight natural timeout contexts combine running BRA/WAI, OSC/PHY and two initial
+OSC phases; literal lifetime/partial-cycle/DSP ledgers and subsequent native COP
+reset are checked. A separate STAA PwO case proves a timeout inside w leaves
+SRAM unchanged. Pure offers cover all five phase residues and COPWAI write-once
+setup without consuming time or counter state.
 original_update_coupled additionally executes four unchanged download/helper
 paths through real COP request,195 reset edges and native vector fetch. The same
 DSP executes737/738 original BRCLR instructions across the reset, not a host pause.

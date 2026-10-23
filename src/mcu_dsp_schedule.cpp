@@ -10,6 +10,7 @@
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_cop.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_reset.hpp"
 #include "blofeld/mcu_run_clock.hpp"
@@ -138,15 +139,16 @@ void McuDspSchedule::advance(const DspScheduleBoundary boundary,
   }
 }
 
-void McuDspSchedule::offer_period() {
+void McuDspSchedule::offer_period(const bool waiting) {
   const auto factor = timebase_hz_ / mcu_.run_clock().timebase_hz();
-  const auto period = mcu_.run_clock().next_cycle_ticks(mcu_.bus());
+  const auto period = mcu_.run_clock().next_period(mcu_.bus(), waiting);
   if (expected_mcu_cycles_ == std::numeric_limits<std::uint64_t>::max() ||
-      period > (std::numeric_limits<std::uint64_t>::max() - end_ticks_) / factor) {
+      period.duration_ticks > (std::numeric_limits<std::uint64_t>::max() - end_ticks_) / factor) {
     throw Fault("MCU/DSP next native MCU period exhausted common time");
   }
-  end_ticks_ += period * factor;
-  ++expected_mcu_cycles_;
+  end_ticks_ += period.duration_ticks * factor;
+  cop_deadline_ = period.cop_deadline;
+  if (!cop_deadline_) { ++expected_mcu_cycles_; }
 }
 
 void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
@@ -175,8 +177,8 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
   cycle_ = cycle;
   offer_period();
   offered_ = true;
-  shared_write_ = shared_write;
-  if (!shared_write) {
+  shared_write_ = shared_write && !cop_deadline_;
+  if (!shared_write_) {
     advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
     return;
   }
@@ -246,8 +248,8 @@ void McuDspSchedule::begin_wait_period(const McuWaitPeriod period,
   }
   waiting_ = true;
   wait_context_ = period.context;
-  offer_period();
-  ++expected_idle_cycles_;
+  offer_period(true);
+  if (!cop_deadline_) { ++expected_idle_cycles_; }
   advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
   wait_context_.reset();
 }
@@ -287,12 +289,18 @@ void McuDspSchedule::begin_system_reset(const McuResetSource source,
   }
   const Guard guard(*this);
   consumed();
-  if (waiting_ || shared_write_) {
+  if ((waiting_ && !cop_deadline_) || shared_write_) {
     throw Fault("MCU/DSP reset cannot discard an unconsumed idle/shared-write offer");
+  }
+  if (cop_deadline_ &&
+      (!mcu_.run_clock().faulted() || mcu_.bus().cop_state().reset != McuCopReset::timeout)) {
+    throw Fault("MCU/DSP shortened period requires the actual owned COP timeout");
   }
   mcu_.begin_system_reset(source, synchronization_cycles);
   expected_mcu_epoch_ = mcu_.run_clock().native_epoch();
   offered_ = false;
+  waiting_ = false;
+  cop_deadline_ = false;
   resetting_ = true;
 }
 
@@ -370,6 +378,7 @@ void McuDspSchedule::restore(const McuDspScheduleCheckpoint &checkpoint) {
   wait_context_.reset();
   reset_context_.reset();
   resetting_ = false;
+  cop_deadline_ = false;
   faulted_ = false;
 }
 }
