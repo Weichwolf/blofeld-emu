@@ -23,6 +23,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -165,6 +166,7 @@ struct OriginalGpioPair {
   std::ostream &trace;
   LinkState link;
   DspCompletionObserver additional_completion;
+  std::function<void(const BusEvent &)> additional_bus_write;
 
   OriginalGpioPair(const Firmware &firmware,
                    const Case scenario,
@@ -530,6 +532,7 @@ struct OriginalGpioPair {
     mcu.set_cycle_observer([this](const Hc12BusCycle cycle) { on_cycle(cycle); });
     mcu.bus().set_observer([this](const BusEvent &event) {
       if (!event.write) { return; }
+      if (additional_bus_write) { additional_bus_write(event); }
       if (event.address == hc12::ptq) { ++link.data_writes; }
       trace << "M-W " << mcu.run_clock().elapsed_ticks() << ' ' << hex(mcu.cpu().state().pc) << ' '
             << hex(event.address) << ' ' << hex(event.value) << '\n';

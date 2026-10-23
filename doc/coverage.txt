@@ -1246,16 +1246,22 @@ Original update validation        partial  Thirteen original main-updater valida
                                           quarantine. Own post-identification entry;
                                           no successful NAND setup/programming.
                                           see original-update-validation.txt.
-Original error-helper forwarding  partial  Original main bad-marker branch and DSP
-                                          sender drive native MCU XIRQ/RTI, normal
-                                          copy and RAM JSR in four nominal contexts.
-                                          All188 helper bytes,256 six-bit groups,
-                                          native source/register effects, frame and
-                                          guards checked per case. Explicit caller,
-                                          loaded data, initial Q7/PE9 outputs and
-                                          direct routes; no helper-body execution
-                                          or whole update/physical qualification
-                                          (original-update-forwarding.txt).
+Original error-helper forwarding  partial  Original main bad-marker/DSP sender,
+                                          MCU XIRQ/RTI/copy and RAM call execute in
+                                          four nominal contexts. All188 helper bytes,
+                                          256 six-bit decoder groups and frames
+                                          checked (original-update-forwarding.txt).
+                                          Coupled continuation also clears4096 cells,
+                                          executes eight original text callbacks and
+                                          produces four independent-font-exact frames:
+                                          5024 LCD writes,1856 reads. Four further
+                                          indicator toggles clock the original checksum;
+                                          missing Y:0144b9 then quarantines both CPUs.
+                                          Helper/source/NVM retained; own LCD setup,
+                                          caller/RAM/clocks and routes explicit.
+                                          No helper return, COP restart, full boot or
+                                          whole update/physical qualification
+                                          (original-update-diagnostic.txt).
 Original update and recovery      partial  Isolated original DSP command record:
                                           144 fixed cases / 1240 actual calls check
                                           live P patches, exact P/X/Y payload and

@@ -587,7 +587,16 @@ if(BUILD_TESTING)
   set_tests_properties(original_update_validation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-update-forward-test test/original_update_forward_test.cpp)
   target_link_libraries(blofeld-original-update-forward-test PRIVATE
-    blofeld_mcu_dsp blofeld_dsp_native)
+    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture)
+  add_executable(blofeld-original-update-diagnostic-test test/original_update_diagnostic_test.cpp)
+  target_link_libraries(blofeld-original-update-diagnostic-test PRIVATE
+    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
+  add_test(NAME original_update_diagnostic COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_diagnostic.py"
+    $<TARGET_FILE:blofeld-original-update-diagnostic-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-diagnostic.trace")
+  set_tests_properties(original_update_diagnostic PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_test(NAME original_update_forwarding COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_forward.py"
     $<TARGET_FILE:blofeld-original-update-forward-test>
@@ -1558,6 +1567,7 @@ add_custom_target(quality
     blofeld-original-nand-write-test
     blofeld-original-update-validation-test
     blofeld-original-update-forward-test
+    blofeld-original-update-diagnostic-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-instruction-test
