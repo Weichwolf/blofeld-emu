@@ -1268,6 +1268,15 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           guards, sequence failure/disabled/wrap,
                                           zero groups/targets and full header/MAC
                                           accumulator state (dsp-download.txt).
+                                          Six official packet-body transfers now make
+                                          33876 native stores, including five complete
+                                          padding words;4841 checksum prefetches and
+                                          original sequence wraps remain exact. Six
+                                          final-packet interruptions retain their prefix;
+                                          three real helper JMP frames stop before body
+                                          execution. Main padding establishes Y:0144b9/
+                                          0144ba, not yet coupled to the error-helper
+                                          fixture (original-update-transport.txt).
                                           Separate declared TIO0 wire path: 30 cases,
                                           1050 bytes / 9450 original IRQs/RTIs feed
                                           real SysEx collection and manufacturer

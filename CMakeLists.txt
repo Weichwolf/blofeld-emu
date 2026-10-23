@@ -1110,6 +1110,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
   set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250 RUN_SERIAL TRUE)
+  add_executable(blofeld-original-update-transport-test test/original_update_transport_test.cpp)
+  target_link_libraries(blofeld-original-update-transport-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_update_transport COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_transport.py"
+    $<TARGET_FILE:blofeld-original-update-transport-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-transport.trace")
+  set_tests_properties(original_update_transport PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-download-test test/original_dsp_download_test.cpp)
   target_link_libraries(blofeld-original-dsp-download-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
@@ -1503,6 +1512,7 @@ add_custom_target(quality
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test
     blofeld-original-dsp-download-test
+    blofeld-original-update-transport-test
     blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test

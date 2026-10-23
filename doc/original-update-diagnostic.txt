@@ -40,3 +40,8 @@ is absent: its prior contents/initialization remain unestablished here. A comple
 boot still has the separate reserved Y:002000 frontier. Real panel/wiring/timing,
 both hardware profiles, whole-board snapshots, helper return and full update/
 recovery/power-loss behavior remain open. No fuzzing or physical traffic runs.
+
+original_update_transport separately proves that the full official main download
+writes Y:0144b9/0144ba from complete transport-padding words. They are absent only
+from this declared-byte fixture. Preserve its strict fault; carry the real decoder
+writes into a future coupled continuation (original-update-transport.txt).

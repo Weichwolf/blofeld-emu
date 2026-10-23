@@ -41,3 +41,7 @@ Neither scope establishes cold boot or normal physical MIDI baud/connector
 routing. The regression writes RAM; complete physical flash update/interruption/
 recovery, boot/assets, MIDI voices/audio, pipeline timing and Desktop/Keyboard
 equivalence remain unqualified.
+
+original_update_transport also runs all six official packet-body streams through
+this original decoder:33876 native writes include five full padding words. Three
+native helper entries stop before their bodies; see original-update-transport.txt.
