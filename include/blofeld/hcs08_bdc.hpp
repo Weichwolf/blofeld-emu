@@ -74,6 +74,7 @@ public:
   [[nodiscard]] std::uint8_t status() const;
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] Hcs08BdcState state() const;
+  [[nodiscard]] Hcs08State cpu_state() const;
   [[nodiscard]] Hcs08BdcCheckpoint checkpoint() const;
   void restore_checkpoint(const Hcs08BdcCheckpoint &checkpoint);
 

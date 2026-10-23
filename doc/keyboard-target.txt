@@ -1,0 +1,54 @@
+Original Keyboard programmer upload and native target start
+
+  cmake --build --preset strict --target blofeld-original-keyboard-target-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_target$' --output-on-failure
+
+This optional ASan/UBSan gate requires the pinned local original1.25 and
+Keyboard1.4 archives plus native HC12/HCS08 SLEIGH. Absent archives skip77;
+changed references or unsupported execution fail. No manufacturer bytes are
+embedded in the implementation/tests; the wrapper extracts and hashes them
+locally. Full requirements remain objective.txt and coverage.txt.
+
+The unchanged HC12 post-display prepare block reads actual target trim and
+uploads32 zero bytes plus all132 original programmer bytes through native GPIO
+C0/E0 and the clocked BDC wire. Target RAM starts unknown with an own canary.
+The original upload loop, pointer progression, native stack frame and saved trim
+are checked. Original byte routines deliver the first supplied512-byte page to
+RAM beneath an own JSR caller. The contiguous original page-pointer/PC/SP/GO
+and start-poll prefix then executes, without direct target PC/SP/RAM replacement
+by the driver. The HCS08 runs on target periods through the explicit instruction
+retirement contract in hcs08-run-clock.txt, independently of host polls. The
+reference tie order ends a CPU period before BDC service on that same edge;
+a newly serviced GO can affect the following period only.
+
+Two unsecured half-host-cycle phases reach the actual original FSTAT=FF store
+at PC00b2/address1825: eight retired instructions,26 executing periods and no
+NVM transfer. Literal instruction-by-instruction registers, flags, costs and
+write order are checked independently. A distinct incoming H=12 survives LDX,
+so native TXS sets SP1277; this is a declared debug context, not reset provenance.
+A secured target ignores BDC RAM writes and returns zero for the trim read.
+Actual GO then fails fetching still-unknown RAM at00a0, with zero target
+instructions. Host/clock execution remains quarantined; retry cannot progress.
+Neither case supplies success, clears the strict idle-launch failure or fills
+unknown memory. Complete original helper bytes and both NVM images remain intact.
+
+The three cases service2046 commands, receive8166 bytes and transmit3 replies;
+their baseline native HC12 count is5145185, including own JSR/idle instructions.
+Six fresh joint MCU/target CPU/memory/BDC/wire/clock restores repeat every native
+suffix event, register, memory-knownness, peripheral state and failure. Raw
+waveforms and failure prefixes remain ignored local artifacts. The optional gate
+does not qualify physical safety or a complete controller update.
+
+Explicit fixture inputs remain: active BDC reset mode, post-SYNC9/12 software
+delays, eight host bus periods per BDC period, two selected phases, own target
+flash preimage and debug registers. The original reset/SYNC caller, initial DSP
+stream/complete SMF ordering, full helper/scanner, actual part/clock/wiring,
+per-cycle CPU bus arbitration and peripheral clocks are not established. Do not
+combine this ratio with the separate6MHz FLASH fixture as a stock board profile.
+Idle FSTAT semantics still require independent target evidence. Full normal
+boot/MIDI/audio, every update/power-loss/recovery phase and all118 manual
+functions on both profiles remain open. No physical traffic or fuzzing runs.
+
+Related component scopes: hcs08-bdc.txt, hcs08-bdc-wire.txt, hcs08-flash.txt.
+Reference identities: downloads.json, keyboard-update-reference.json and
+hcs08-reference.json. Detailed source analysis remains local/private issue21.

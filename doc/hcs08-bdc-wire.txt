@@ -64,3 +64,8 @@ loss phase remain required by objective.txt/coverage.txt. No physical traffic,
 automatic fuzzing, whole-suite run or hardware flashing is part of these gates.
 
 Primary reference: MC9S08GT16A/GT8A Rev.1 chapter15, hash/URL in hcs08-reference.json.
+
+A separate original upload/start regression now connects the native HC12 RAM
+upload and PC/SP/GO prefix to clocked native HCS08 execution, including strict
+FSTAT/secured-RAM failures and fresh joint restores (keyboard-target.txt). The
+byte-helper scope and physical qualifications above remain unchanged.

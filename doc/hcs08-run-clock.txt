@@ -1,0 +1,35 @@
+HCS08 native instruction-retirement reference clock
+
+  cmake --build --preset strict --target blofeld-hcs08-run-clock-test
+  ctest --test-dir build/strict -j1 -R '^hcs08_run_clock$' --output-on-failure
+
+Hcs08RunClock consumes individual target bus periods independently of host
+status reads. The caller must select reference_instruction_retirement; an
+unqualified contract rejects. Primary MC9S08GT16A/GT8A Rev.1 table8-2 supplies
+these unstretched instruction forms (opcode, bytes, bus periods):
+
+  LDX immediate AE 2 2     LDA immediate A6 2 2     STA extended C7 3 4
+  TXS           94 1 2     NOP           9D 1 1     BGND         82 1 5+
+
+BGND's indefinite held interval is separate from its five execution periods.
+All other opcode forms, unknown operands, wrapped fetches, mid-instruction
+code/register changes and unqualified BDC halt arbitration fail visibly. Native
+architectural effects commit at the end of the documented budget, including
+actual CPU stores and BGND admission through the BDC owner. Failed instructions
+retain elapsed periods without incrementing retired instructions. Held BDC time
+never fetches or executes target instructions. There is no host ready result.
+
+The independent unit checks every period of an own six-instruction program,
+literal PC/HX/SP/A/CCR/store boundaries, all256 opcode classifications, held
+intervals, native access failure/quarantine and two fresh CPU/memory/BDC/clock
+restores from a partially elapsed LDA. TXS uses the complete H:X minus one;
+LDX immediate retains H. Checkpoints do not replace separate CPU/memory/BDC
+restoration or clear failed native execution.
+
+This explicit reference contract does not model per-cycle operand/prefetch
+transactions, wait states, interrupts, oscillator/reset phases, peripheral clocks
+or concurrent BDC arbitration. Its periods are not a calibrated board frequency.
+These remain required before full normal controller execution and physical
+update/recovery equivalence. No concurrency, realtime callback, physical traffic
+or fuzzing is introduced. Primary URL/size/hash: hcs08-reference.json.
+Original HC12/target integration and exact scope: keyboard-target.txt.

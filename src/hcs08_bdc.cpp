@@ -145,6 +145,11 @@ Hcs08BdcState Hcs08Bdc::state() const {
   return state_;
 }
 
+Hcs08State Hcs08Bdc::cpu_state() const {
+  healthy();
+  return cpu_.state();
+}
+
 Hcs08BdcCheckpoint Hcs08Bdc::checkpoint() const {
   healthy();
   static_cast<void>(cpu_.checkpoint());

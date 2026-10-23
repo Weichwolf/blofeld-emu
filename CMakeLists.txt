@@ -94,6 +94,9 @@ target_link_libraries(blofeld_hcs08_bdc PUBLIC blofeld_hcs08 blofeld_hcs08_flash
 add_library(blofeld_hcs08_bdc_wire src/hcs08_bdc_wire.cpp src/hcs08_bdc_sync.cpp)
 target_include_directories(blofeld_hcs08_bdc_wire PUBLIC include)
 target_link_libraries(blofeld_hcs08_bdc_wire PUBLIC blofeld_hcs08_bdc)
+add_library(blofeld_hcs08_run_clock src/hcs08_instruction_timing.cpp src/hcs08_run_clock.cpp)
+target_include_directories(blofeld_hcs08_run_clock PUBLIC include)
+target_link_libraries(blofeld_hcs08_run_clock PUBLIC blofeld_hcs08_bdc)
 add_library(blofeld_gpio_pads src/gpio_pads.cpp)
 target_include_directories(blofeld_gpio_pads PUBLIC include)
 target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
@@ -297,6 +300,27 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-bdc-wire.trace")
   set_tests_properties(original_keyboard_bdc_wire PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 360)
+  add_executable(blofeld-hcs08-run-clock-test test/hcs08_run_clock_test.cpp
+    test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-run-clock-test PRIVATE blofeld_hcs08_run_clock)
+  target_compile_definitions(blofeld-hcs08-run-clock-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_run_clock COMMAND blofeld-hcs08-run-clock-test)
+  add_executable(blofeld-original-keyboard-target-test test/original_keyboard_target_test.cpp
+    test/keyboard_target_fixture.cpp test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-target-test PRIVATE blofeld_core
+    blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
+  target_compile_definitions(blofeld-original-keyboard-target-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_keyboard_target COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_target.py"
+    $<TARGET_FILE:blofeld-original-keyboard-target-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-target.trace")
+  set_tests_properties(original_keyboard_target PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_executable(blofeld-audio-runtime-test test/audio_runtime_test.cpp
     test/audio_runtime_failure.cpp test/audio_runtime_board.cpp test/audio_runtime_underrun.cpp)
   target_link_libraries(blofeld-audio-runtime-test PRIVATE blofeld_audio_runtime blofeld_reference_board)
@@ -1827,7 +1851,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-hcs08-run-clock-test blofeld-original-keyboard-target-test blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test

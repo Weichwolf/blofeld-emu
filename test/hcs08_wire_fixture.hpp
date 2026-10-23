@@ -20,13 +20,19 @@ constexpr auto high = Hcs08BdcDrive::high, low = Hcs08BdcDrive::low;
 constexpr unsigned algorithm = 0xa0, seed = 0x1200, stack = 0x47c;
 
 struct Target {
-  hcs08_programmer::Memory memory{Hcs08IdleLaunch::unqualified, 5};
+  hcs08_programmer::Memory memory;
   Hcs08 cpu{memory, BLOFELD_HCS08_SLA};
   hcs08_bdc::Memory mapping{memory};
 
-  Target() {
-    memory.flash.reset(); // No absolute target NVM clock is observed by this wire fixture.
+  explicit Target(const hcs08_programmer::Memory *snapshot = nullptr)
+      : memory(snapshot != nullptr ? *snapshot : initial_memory()) {
     cpu.set_state({.pc = algorithm, .hx = seed, .sp = stack});
+  }
+
+  static hcs08_programmer::Memory initial_memory() {
+    hcs08_programmer::Memory memory(Hcs08IdleLaunch::unqualified, 5);
+    memory.flash.reset(); // No absolute target NVM clock is observed by this wire fixture.
+    return memory;
   }
 };
 

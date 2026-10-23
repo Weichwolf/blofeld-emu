@@ -81,7 +81,13 @@ clocking or whole-package ordering (hcs08-bdc.txt).
 The original C0/E0 byte functions now exchange actual GPIO waveforms with the
 clocked BKGD/BDC target, including independently seeded replies. Their explicit
 post-SYNC delay/phase/ratio fixture does not execute the reset/SYNC caller,
-controller RAM upload or complete helper (hcs08-bdc-wire.txt).
+complete helper (hcs08-bdc-wire.txt).
+
+The separate native upload/start gate executes the original RAM-upload loop and
+PC/SP/GO prefix through GPIO into actual HCS08 execution. Both unsecured phases
+retain the strict FSTAT failure; a secured case retains unknown RAM and fails
+fetching it. Six fresh joint suffix restores match (keyboard-target.txt). This
+does not qualify the reset/SYNC caller, whole transport or NVM completion.
 
 Remaining helper bodies, the external controller, actual scanner/main interaction, sample
 or main-NVM writes, every programming interruption/recovery phase, calibrated

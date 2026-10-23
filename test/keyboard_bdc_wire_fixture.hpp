@@ -15,10 +15,12 @@
 #include "blofeld/mcu_machine.hpp"
 #include "blofeld/mcu_run_clock.hpp"
 #include "hcs08_fixture.hpp"
+#include "hcs08_programmer_fixture.hpp"
 #include "hcs08_wire_fixture.hpp"
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <ostream>
 #include <span>
 #include <string>
@@ -51,11 +53,13 @@ struct Fixture {
   unsigned cursor = 0;
   ExecutionContext context;
   std::ostream &trace;
+  std::function<void(std::uint64_t)> target_clock;
 
   Fixture(const Firmware &image,
           const std::vector<std::uint8_t> &code,
           const unsigned phase,
-          std::ostream &output)
+          std::ostream &output,
+          const hcs08_programmer::Memory *snapshot = nullptr)
       : firmware(image),
         helper(code),
         host(McuFlashImage::from_known(image.mcu),
@@ -63,6 +67,7 @@ struct Fixture {
              McuRunContract{.clock = {.oscillator_hz = oscillator_hz,
                                       .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
                             .memory_timing = McuRunMemory::internal_flash_reads}),
+        target(snapshot),
         wire(bdc,
              hcs08_wire::wire_contract,
              Hcs08BdcDrive::high,
@@ -87,8 +92,13 @@ struct Fixture {
     constexpr unsigned high_delay = 0x1601;
     bus.write(low_delay, 9);
     bus.write(high_delay, 12); // Explicit post-SYNC helper-caller input, not a default board value.
-    bus.attach_gpio_pad_source(McuPort::b, [this](const std::uint32_t mask) { return pads(mask); });
-    bus.set_observer([this](const BusEvent &event) { observe(event); });
+    bind();
+  }
+
+  void bind() {
+    host.bus().attach_gpio_pad_source(McuPort::b,
+                                      [this](const std::uint32_t mask) { return pads(mask); });
+    host.bus().set_observer([this](const BusEvent &event) { observe(event); });
     host.set_cycle_observer([this](const Hc12BusCycle &cycle) { advance(cycle); });
   }
 
@@ -130,6 +140,7 @@ struct Fixture {
     context = cycle.context;
     const auto boundary = (host.run_clock().bus_cycles() + 1) * 2;
     while (wire.state().next_clock_ticks <= boundary) {
+      if (target_clock) { target_clock(wire.state().next_clock_ticks); }
       wire.clock();
       if (wire.state().received_bytes == received) { continue; }
       const auto control = bdc.state();
