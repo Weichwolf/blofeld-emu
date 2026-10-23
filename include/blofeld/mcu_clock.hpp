@@ -2,6 +2,7 @@
 #pragma once
 
 #include "blofeld/bus.hpp"
+#include "blofeld/mcu_cop.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -32,7 +33,12 @@ public:
   // The bus applies an accepted command to its USB owner at the same write.
   UsbControlCommand write(ByteWrite write);
   void observe_phy(PhyClockWindow window);
-  void advance_oscillator(unsigned cycles);
+  void advance_oscillator(unsigned cycles, bool cop_running = true);
+
+  [[nodiscard]] McuCopState cop_state() const { return cop_.state(); }
+
+  [[nodiscard]] unsigned oscillator_cycles_until_cop() const { return cop_.remaining(); }
+
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   [[nodiscard]] bool phy_running() const;
   [[nodiscard]] bool pll_selected() const;
@@ -56,6 +62,7 @@ private:
   unsigned rti_phase_ = 0;
   bool cop_wait_written_ = false;
   bool lock_known_ = true;
+  McuCop cop_;
 };
 
 }

@@ -41,3 +41,8 @@ requires every board qualification to reject, despite known consumed inputs.
 Full boot, original application dispatch, secondary sender, helper execution,
 NAND programming, complete update/recovery/power-loss and hardware validation
 retain separate requirements. No fuzzing or physical-device traffic runs.
+
+original_update_diagnostic continues the transferred helper through original
+clear/text callbacks and checks an independent original-font raster. Its first
+missing post-object source word remains a strict coupled fault; see
+original-update-diagnostic.txt. The prefix-only gate above retains its exact trace.

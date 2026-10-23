@@ -49,7 +49,7 @@ void McuRunClock::advance_wait_cycle(McuBus &bus, const ExecutionContext context
 }
 
 std::uint64_t McuRunClock::next_cycle_ticks(const McuBus &bus) const {
-  if (faulted_) { throw Fault("MCU duration preview requires a healthy run clock"); }
+  if (faulted_ || resetting_) { throw Fault("MCU duration preview requires a healthy run clock"); }
   const auto route = bus.run_clock_route();
   if (route.source == McuClockSource::usb_phy && oscillator_hz_ != nominal_oscillator_hz) {
     throw Fault("Unqualified 60 MHz PHY with non-12 MHz reference oscillator: " +
@@ -71,9 +71,13 @@ void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, con
         bus_cycles_ == std::numeric_limits<std::uint64_t>::max()) {
       throw Fault("MCU run clock counter exhausted");
     }
+    const auto cop_remaining = bus.oscillator_cycles_until_cop();
+    if (gates.cop && cop_remaining != 0 && cop_remaining <= edges) {
+      advance_to_cop_deadline(bus, cop_remaining);
+    }
     if (gates.sci) { bus.advance_sci(1); }
     if (gates.timer) { bus.advance_timer(1); }
-    bus.advance_oscillator(static_cast<unsigned>(edges));
+    bus.advance_oscillator(static_cast<unsigned>(edges), gates.cop);
     elapsed_ticks_ += ticks;
     oscillator_phase_ = oscillator_total % oscillator_period_;
     oscillator_cycles_ += edges;
@@ -84,6 +88,43 @@ void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, con
                 " completed-bus-cycles=" + std::to_string(bus_cycles_) +
                 " timebase-ticks=" + std::to_string(elapsed_ticks_) + ": " + error.what());
   }
+}
+
+void McuRunClock::advance_to_cop_deadline(McuBus &bus, const unsigned edges) {
+  const auto ticks = (edges * oscillator_period_) - oscillator_phase_;
+  elapsed_ticks_ += ticks; // Bounded by the already validated current IPBus period.
+  oscillator_cycles_ += edges;
+  oscillator_phase_ = 0;
+  bus.advance_oscillator(edges); // Latches the first timeout and rejects the uncompleted period.
+  throw Fault("MCU COP deadline failed to request reset");
+}
+
+void McuRunClock::begin_reset_epoch() {
+  if (resetting_ || epoch_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("MCU reset epoch requires an inactive representable boundary");
+  }
+  ++epoch_;
+  resetting_ = true;
+  faulted_ = false;
+}
+
+void McuRunClock::advance_reset_edge() {
+  if (!resetting_ || faulted_) { throw Fault("MCU reset clock is not active"); }
+  const auto ticks = oscillator_period_ - oscillator_phase_;
+  if (ticks > std::numeric_limits<std::uint64_t>::max() - elapsed_ticks_ ||
+      reset_edges_ == std::numeric_limits<std::uint64_t>::max() ||
+      oscillator_cycles_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("MCU reset clock counter exhausted");
+  }
+  elapsed_ticks_ += ticks;
+  oscillator_phase_ = 0;
+  ++oscillator_cycles_;
+  ++reset_edges_;
+}
+
+void McuRunClock::finish_reset() {
+  if (!resetting_ || faulted_) { throw Fault("MCU reset clock is not active"); }
+  resetting_ = false;
 }
 
 }

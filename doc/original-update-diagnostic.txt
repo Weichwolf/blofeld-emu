@@ -1,0 +1,49 @@
+Original coupled error-helper display and missing-source boundary
+
+  cmake --build --preset strict --target blofeld-original-update-diagnostic-test
+  ctest --test-dir build/strict -R '^original_update_diagnostic$' --output-on-failure
+
+The original DSP bad-marker sender and MCU IRQ/copy/RAM call continue from
+original-update-forwarding.txt. The received188-byte helper calls the real resident
+clear/text routines. Four nominal order/phase contexts check1024 literal cleared
+cells, two native text callback frames and the complete visible raster per case.
+Font1 uses original columns E81C +4*c +signed(memory[EA3B+c]), with eight rows,
+x8 and y24/32; SPACE has two columns. Mode0 clears its measured background before
+XOR. This independent data/layout calculation predicts1256 writes and464 reads,
+and every native PBM byte, before comparing any emulator capture. Only reference
+hashes are tracked; strings, glyphs, screenshots and traces remain local.
+
+The helper indicator performs four more original Q7 toggles. These clock all four
+six-bit groups of the source object's checksum word, already prefetched by the
+sender. The next original read is Y:0144b9 at P:002e5e, exactly one word beyond
+the195-byte object. That mapped RAM word was never provided by this fixture.
+It remains unknown; no padding, ignored read, skipped loop or host restart allows
+execution to continue. Both clocked owners must reject further steps unchanged.
+The native committed fetch/AGU cursor is retained, not rolled back. Original
+helper/caller/program/payload, MCU NVM/knowledge/history and untouched RAM tail
+remain exact. The status prepared bit remains clear; no successful helper return,
+trailer completion, COP restart or complete recovery is claimed.
+
+Own native GPIO setup selects DDRB=F7 and a known idle display bus, then DDRE=90.
+Original configure_display_controller executes all its waits and14 commands.
+B3 is an explicit low input; initial direct-I/O RAM flags are declared. The existing
+reset ST7565S logical adapter observes real bus writes/reads through an additional
+fixture observer. Resolved Port E combines actual local LCD-clock output with the
+explicit DSP-PE9/MCU-XIRQ route. Neither a callback return nor a font pixel comes
+from the host. Shared helpers live in original_update_forward_fixture.hpp;
+the prefix gate retains its previous byte-exact trace.
+
+Four saved PBM/PNG frames and six fixed evidence corruptions supplement full pad,
+source/stream/indicator, callback, failure and storage checks. This is a conditional
+diagnostic experiment, not a full native startup or evidence that physical RAM
+is absent: its prior contents/initialization remain unestablished here. A complete
+boot still has the separate reserved Y:002000 frontier. Real panel/wiring/timing,
+both hardware profiles, whole-board snapshots, helper return and full update/
+recovery/power-loss behavior remain open. No fuzzing or physical traffic runs.
+
+original_update_transport separately proves that the full official main download
+writes Y:0144b9/0144ba from complete transport-padding words. They are absent only
+from this declared-byte fixture, whose strict fault remains. The same native DSP
+now carries those decoder writes into original_update_coupled, reaching the
+original XOR highlight/prepared flag/delay and strict COPCTL frontier. See
+original-update-transport.txt and original-update-coupled.txt.

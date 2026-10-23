@@ -5,6 +5,7 @@
 #include "blofeld/gpio_pads.hpp"
 #include "blofeld/hc12_registers.hpp"
 #include "blofeld/mcu_clock.hpp"
+#include "blofeld/mcu_cop.hpp"
 #include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_interrupts.hpp"
@@ -106,6 +107,12 @@ void route_function(std::array<PinFunction, port_count> &ports,
 McuBus::McuBus(const std::span<const std::uint8_t> flash) : memory_(flash), flash_(memory_) {}
 
 void McuBus::reset() {
+  reset_modules();
+  observe_interrupt_pads();
+}
+
+void McuBus::reset_modules() {
+  reset_asserted_ = false;
   memory_.reset();
   decoded_bytes_.reset();
   ++code_revision_;
@@ -119,7 +126,6 @@ void McuBus::reset() {
   usb_.reset();
   interrupts_.reset();
   context_ = {};
-  observe_interrupt_pads();
 }
 
 bool McuBus::reserved_register(const std::uint16_t offset) {
@@ -167,6 +173,7 @@ std::string_view McuBus::write_register(const ByteWrite write) {
   const auto clock_name = McuClock::register_name(offset);
   if (!clock_name.empty()) {
     const auto command = clock_.write(write);
+    check_cop_reset();
     usb_.set_control(
         static_cast<std::uint16_t>((static_cast<unsigned>(clock_.read(hc12::usb_control)) << 8U) |
                                    clock_.read(hc12::usb_control + 1)));
@@ -289,6 +296,8 @@ void McuBus::write_memory(const MemoryWrite access) {
 }
 
 void McuBus::check_execute(const InstructionFetch fetch) const {
+  if (reset_asserted_) { throw Fault("MCU instruction fetch during asserted system reset"); }
+  check_cop_reset();
   constexpr unsigned address_space_size = 65536;
   if (fetch.length == 0 || fetch.length > address_space_size - fetch.address) {
     throw Fault("Invalid MCU instruction fetch range at " + hex(fetch.address) +
@@ -361,7 +370,15 @@ void McuBus::observe_interrupt_pads() {
   interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
 }
 
+void McuBus::begin_reset(const ExecutionContext context) {
+  begin_instruction(context);
+}
+
 void McuBus::begin_instruction(const ExecutionContext context) {
+  if (reset_asserted_) {
+    throw Fault("MCU execution during asserted system reset pc=" + hex(context.pc) +
+                " ccr=" + hex(context.ccr, 2));
+  }
   context_ = context;
 }
 
@@ -412,6 +429,8 @@ void McuBus::observe_phy(const PhyClockWindow window) {
 }
 
 McuRunClockRoute McuBus::run_clock_route() const {
+  if (reset_asserted_) { throw Fault("MCU normal clocks during asserted system reset"); }
+  check_cop_reset();
   try {
     return clock_.run_clock_route();
   } catch (const Fault &fault) {
@@ -422,18 +441,35 @@ McuRunClockRoute McuBus::run_clock_route() const {
 }
 
 McuWaitClockGates McuBus::wait_clock_gates() const {
-  constexpr unsigned unsupported_crg_wait = 0x37;
+  constexpr unsigned unsupported_crg_wait = 0x36;
   const auto selected = clock_.read(hc12::clock_select);
   if ((selected & unsupported_crg_wait) != 0) {
     const auto base = static_cast<unsigned>(memory_.read_register(hc12::initrg)) << 8U;
     throw Fault("Unqualified MCU wait clock at " + hex(base + hc12::clock_select) + " value=" +
                 hex(selected, 2) + " pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2));
   }
-  return {.sci = sci_.runs_in_wait(), .timer = timer_.runs_in_wait()};
+  return {.sci = sci_.runs_in_wait(), .timer = timer_.runs_in_wait(), .cop = (selected & 1U) == 0};
 }
 
-void McuBus::advance_oscillator(const unsigned cycles) {
-  clock_.advance_oscillator(cycles);
+void McuBus::check_cop_reset() const {
+  const auto cause = clock_.cop_state().reset;
+  if (cause == McuCopReset::none) { return; }
+  std::string_view name;
+  switch (cause) {
+    case McuCopReset::none: break;
+    case McuCopReset::timeout: name = "timeout"; break;
+    case McuCopReset::invalid_service: name = "invalid ARMCOP service"; break;
+    case McuCopReset::early_service: name = "early window service"; break;
+    default: throw Fault("Invalid MCU COP reset cause");
+  }
+  throw Fault("Unqualified MCU COP system reset (" + std::string(name) +
+              ") pc=" + hex(context_.pc) + " ccr=" + hex(context_.ccr, 2));
+}
+
+void McuBus::advance_oscillator(const unsigned cycles, const bool cop_running) {
+  check_cop_reset();
+  clock_.advance_oscillator(cycles, cop_running);
+  check_cop_reset();
 }
 
 unsigned McuBus::oscillator_cycles_until_rti() const {

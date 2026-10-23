@@ -495,7 +495,11 @@ Hc12::Hc12(Bus &bus, const std::filesystem::path &specification) try
 
 Hc12::~Hc12() = default;
 
-void Hc12::reset() {
+void Hc12::reset(const Hc12ResetSource source) {
+  if (source != Hc12ResetSource::external && source != Hc12ResetSource::cop) {
+    throw Fault("Invalid HC12 reset source");
+  }
+  const auto vector = source == Hc12ResetSource::cop ? hc12::cop_reset_vector : hc12::reset_vector;
   const ExecutionGuard guard(impl_->active);
   impl_->checkpointable = false;
   impl_->executor->cancel_wait();
@@ -504,10 +508,10 @@ void Hc12::reset() {
   initial.sp = hc12::reset_sp;   // S12CPU15UG section 3.1.3, reset programming model.
   initial.ccr = hc12::reset_ccr; // S, X and I are set by CPU12 reset.
   impl_->bus.begin_reset({.pc = 0, .ccr = initial.ccr});
-  initial.pc = static_cast<std::uint16_t>(
-      impl_->bus.read_memory({.address = hc12::reset_vector, .size = 2}));
+  initial.pc = static_cast<std::uint16_t>(impl_->bus.read_memory({.address = vector, .size = 2}));
   impl_->apply_state(initial);
   impl_->bus.end_reset();
+  impl_->wait_clock_failed = false;
   impl_->checkpointable = true;
 }
 

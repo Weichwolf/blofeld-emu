@@ -5,6 +5,7 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_reset.hpp"
 #include "blofeld/mcu_run_clock.hpp"
 #include "blofeld/mcu_sci.hpp"
 
@@ -70,6 +71,14 @@ public:
   [[nodiscard]] bool clocked() const;
   [[nodiscard]] const McuRunClock &run_clock() const;
   [[nodiscard]] bool timing_faulted() const;
+  // Explicit board event. Replaces native objects, drops external observers,
+  // resets modules and enters a clocked CRG pulse without fetching a vector.
+  void begin_system_reset(McuResetSource source, unsigned synchronization_cycles);
+  // Caller supplies the observed RESET pad for these SYSCLK edges. Once ready,
+  // the native five-cycle CPU reset sequence fetches the selected vector.
+  unsigned advance_system_reset(unsigned maximum_sysclk_edges, McuResetPad pad);
+  [[nodiscard]] bool system_reset_active() const;
+  [[nodiscard]] std::optional<McuResetState> system_reset_state() const;
   // Validate a healthy inactive native clock boundary without copying state.
   void validate_run_boundary() const;
   // Explicit pre-cycle pad observations; external callbacks are never checkpointed.

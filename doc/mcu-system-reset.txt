@@ -1,0 +1,52 @@
+MC9S12UF32 explicit system-reset sequence
+
+  cmake --build --preset strict --target blofeld-mcu-reset-test
+  ctest --test-dir build/strict -R '^mcu_reset$' --output-on-failure
+
+McuMachine::begin_system_reset(source,synchronization_cycles) admits an inactive
+owned MCU event; COP requires an actual pending watchdog request. Synchronization
+must be explicitly3..6 SYSCLK cycles. It resets modeled modules, retains SRAM/NVM,
+replaces native objects and advances the MCU epoch. Old references/observers and
+GPIO readers must be reattached. Existing resolved-pad obligations remain strict;
+a detached input is never replaced by a guessed voltage. SCI/TIM clocking and
+native execution stay held. No implicit board reset policy is selected.
+
+advance_system_reset(maximum_sysclk_edges,pad) advances actual OSC/SYSCLK edges:
+- RESET is driven low for128+n edges, then released for64 settling edges.
+- High at the final sample selects COPfffa or externalfffe. External low overrides
+  COP, holds internal reset and selectsfffe on a later observed high edge.
+- Unknown pad observations fail before committing a source-sampling edge. The
+  owner is quarantined; trusted pre-event/mid-reset restore is required.
+- The native VfPPP CPU reset fetches the selected vector in five IPBus cycles.
+  PC is never replaced by a host-assigned restart address. Unknown vector bytes
+  fail visibly. Offers stop at the first completed reset, even with a larger bound.
+
+Reset SYSCLK edges advance lifetime ticks/OSC counts separately from completed
+native/idle IPBus periods. A COP timeout preserves time up to its actual deadline,
+including the uncompleted IPBus period; it does not first clock SCI/TIM for that
+failed period. Reset returns to OSC because PHY/module state is reset. Mid-reset
+checkpoints retain pulse phase, source, lifetime clocks and epoch; CPU reset state
+is withheld until native vector fetch. Restore keeps the existing backend/run
+contract checks. Old MCU/DSP scheduling rejects a changed MCU epoch and cannot
+advance a healthy independent DSP through a reset gap using stale wiring.
+
+Tests use literal pulse/vector/cycle expectations, all four synchronization
+lengths and both sources; source override/hold/unknown pads, native vector slots,
+checkpoint replay, repeated resets, WAI timeout time, missing vectors and invalid
+admission are checked. Program and sector erase are reset at staged/selected/
+buffered/active/completed milestones. Active damage stays unknown; completed NVM,
+known bits, erase history, protection/security and volatile reset defaults are
+checked independently. Milestones do not qualify physical flash latency.
+
+original_update_coupled executes the actual helper request, then an explicitly
+isolated MCU-only reset withn=3/high pad. It observes nativefffa fetch to the
+unchanged resident loader and retires its first instruction. The first register
+write at8002/0012 stops on the unqualified ECLK/GPIO observation of the reset
+board, before any loopback input. No GPIO check or pin state is bypassed.
+DSP state/time stay held and stale joint scheduling rejects. This is not continuous
+whole-board reset/boot. Power-on ramps, asynchronous external pulses/retriggering,
+physical pin/switch latency, measured synchronization phase, DSP/board reset
+coupling and complete update/recovery/power-loss qualification remain open.
+
+Reference: pinned S12CRGUV1/D V01.01 sections5.2/5.2.1, figure5-1, table5-2;
+9S12UF32DGV1 device vector table, doc/hardware/sources.json.

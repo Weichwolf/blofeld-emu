@@ -112,7 +112,7 @@ target_include_directories(blofeld_nand_store PUBLIC include)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_backdoor.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
-  src/mcu_clock.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
+  src/mcu_clock.cpp src/mcu_cop.cpp src/mcu_reset.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp
   src/mcu_usb_control.cpp
   src/mcu_usb_ique_control.cpp src/mcu_usb_reset.cpp src/mcu_usb_host.cpp)
@@ -651,7 +651,25 @@ if(BUILD_TESTING)
   set_tests_properties(original_update_validation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-update-forward-test test/original_update_forward_test.cpp)
   target_link_libraries(blofeld-original-update-forward-test PRIVATE
-    blofeld_mcu_dsp blofeld_dsp_native)
+    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture)
+  add_executable(blofeld-original-update-coupled-test test/original_update_coupled_test.cpp)
+  target_link_libraries(blofeld-original-update-coupled-test PRIVATE
+    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
+  add_test(NAME original_update_coupled COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_coupled.py"
+    $<TARGET_FILE:blofeld-original-update-coupled-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-coupled.trace")
+  set_tests_properties(original_update_coupled PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 540)
+  add_executable(blofeld-original-update-diagnostic-test test/original_update_diagnostic_test.cpp)
+  target_link_libraries(blofeld-original-update-diagnostic-test PRIVATE
+    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
+  add_test(NAME original_update_diagnostic COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_diagnostic.py"
+    $<TARGET_FILE:blofeld-original-update-diagnostic-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-diagnostic.trace")
+  set_tests_properties(original_update_diagnostic PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_test(NAME original_update_forwarding COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_forward.py"
     $<TARGET_FILE:blofeld-original-update-forward-test>
@@ -1207,6 +1225,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-scheduler.trace")
   set_tests_properties(original_dsp_scheduler PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 250 RUN_SERIAL TRUE)
+  add_executable(blofeld-original-update-transport-test test/original_update_transport_test.cpp)
+  target_link_libraries(blofeld-original-update-transport-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_update_transport COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_transport.py"
+    $<TARGET_FILE:blofeld-original-update-transport-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-transport.trace")
+  set_tests_properties(original_update_transport PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-download-test test/original_dsp_download_test.cpp)
   target_link_libraries(blofeld-original-dsp-download-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
@@ -1433,6 +1460,12 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-gpio-pad-checkpoint-test PRIVATE
     blofeld_core blofeld_dsp blofeld_dsp_native)
   add_test(NAME gpio_pad_checkpoints COMMAND blofeld-gpio-pad-checkpoint-test)
+  add_executable(blofeld-mcu-reset-test test/mcu_reset_test.cpp)
+  target_link_libraries(blofeld-mcu-reset-test PRIVATE blofeld_core blofeld_mcu_dsp blofeld_dsp blofeld_dsp_native)
+  add_test(NAME mcu_reset COMMAND blofeld-mcu-reset-test)
+  add_executable(blofeld-mcu-cop-test test/mcu_cop_test.cpp)
+  target_link_libraries(blofeld-mcu-cop-test PRIVATE blofeld_core)
+  add_test(NAME mcu_cop COMMAND blofeld-mcu-cop-test)
   add_executable(blofeld-clock-test test/mcu_clock_test.cpp)
   target_link_libraries(blofeld-clock-test PRIVATE blofeld_core)
   add_test(NAME mcu_clock COMMAND blofeld-clock-test
@@ -1600,6 +1633,7 @@ add_custom_target(quality
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test
     blofeld-original-dsp-download-test
+    blofeld-original-update-transport-test
     blofeld-pin-routing-test
     blofeld-sample-library-test blofeld-hc12-ccr-test blofeld-original-usb-midi-test
     blofeld-original-usb-queue-test
@@ -1669,6 +1703,8 @@ add_custom_target(quality
     blofeld-original-nand-write-test
     blofeld-original-update-validation-test
     blofeld-original-update-forward-test
+    blofeld-original-update-diagnostic-test
+    blofeld-original-update-coupled-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
     blofeld-dsp-instruction-test
@@ -1703,6 +1739,7 @@ add_custom_target(quality
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test
     blofeld-scheduled-coupling-test
+    blofeld-mcu-cop-test blofeld-mcu-reset-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
     blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test

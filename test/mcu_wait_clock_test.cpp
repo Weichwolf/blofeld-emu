@@ -455,7 +455,7 @@ void test_unknown_pads_and_clock_failures() {
 }
 
 void test_unsupported_crg_gates_and_invalid_boundaries() {
-  for (const unsigned bit : {1U, 2U, 4U, 0x10U, 0x20U}) {
+  for (const unsigned bit : {2U, 4U, 0x10U, 0x20U}) {
     Fixture fixture;
     auto &machine = fixture.machine;
     fixture.enter();

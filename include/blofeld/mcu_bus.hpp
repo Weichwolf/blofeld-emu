@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/flash_image.hpp"
 #include "blofeld/mcu_clock.hpp"
+#include "blofeld/mcu_cop.hpp"
 #include "blofeld/mcu_flash.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_interrupts.hpp"
@@ -33,6 +34,7 @@ struct BusEvent {
 struct McuWaitClockGates {
   bool sci = true;
   bool timer = true;
+  bool cop = true;
 };
 
 // Initial strict bring-up model. Unimplemented reads fail rather than returning
@@ -58,6 +60,7 @@ public:
   void check_execute(InstructionFetch fetch) const override;
   void retire_instruction() override;
   void begin_instruction(ExecutionContext context) override;
+  void begin_reset(ExecutionContext context) override;
   [[nodiscard]] std::optional<InterruptRequest> interrupt_request(std::uint8_t ccr) const override;
   void acknowledge_interrupt(std::uint16_t vector) override;
   void set_observer(std::function<void(const BusEvent &)> observer);
@@ -88,7 +91,14 @@ public:
 
   [[nodiscard]] UsbHostEvidence usb_host_evidence() const { return usb_.host_evidence(); }
 
-  void advance_oscillator(unsigned cycles);
+  void advance_oscillator(unsigned cycles, bool cop_running = true);
+
+  [[nodiscard]] McuCopState cop_state() const { return clock_.cop_state(); }
+
+  [[nodiscard]] unsigned oscillator_cycles_until_cop() const {
+    return clock_.oscillator_cycles_until_cop();
+  }
+
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   void advance_sci(unsigned bus_cycles);
   void sample_timer_inputs(std::uint8_t mask);
@@ -101,6 +111,8 @@ public:
 private:
   friend class McuMachine;
   void notify(const BusEvent &event);
+  void check_cop_reset() const;
+  void reset_modules();
 
   struct CloneState {};
 
@@ -135,6 +147,7 @@ private:
   McuUsb usb_;
   McuInterrupts interrupts_;
   ExecutionContext context_{};
+  bool reset_asserted_ = false;
   bool notifying_ = false;
   std::function<void(const BusEvent &)> observer_;
 };

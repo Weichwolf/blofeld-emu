@@ -340,8 +340,18 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           with mid-wait checkpoint replay and
                                           independent instruction/phase ledger.
                                           Calibrated whole-board clocks pending.
-                                          Analog startup, whole-board CPU/bus clocks,
-                                          COP, wait/stop and full latency pending.
+                                          Analog startup and whole-board CPU/bus
+                                          clocks remain unqualified.
+                                          COP normal registers/rates/service/window,
+                                          WAI gating, fractional OSC edges and
+                                          checkpoint state checked (mcu-cop.txt).
+                                          Timeout/invalid service latch a request;
+                                          Explicit MCU reset pulse/source arbitration,
+                                          nativefffa/fffe fetch, lifetime clocks,
+                                          checkpoints and ten flash interruption
+                                          contexts checked (mcu-system-reset.txt).
+                                          Whole-board reset, STOP/BDM and physical
+                                          latency remain open.
 USB device/transport              partial  PHY control and register/data-side enable.
                                           UEPCSELR/UUCFGR banks and ordered 16-bit
                                           staging/commit tested (mcu-usb.txt).
@@ -1326,22 +1336,53 @@ Original update validation        partial  Thirteen original main-updater valida
                                           quarantine. Own post-identification entry;
                                           no successful NAND setup/programming.
                                           see original-update-validation.txt.
-Original error-helper forwarding  partial  Original main bad-marker branch and DSP
-                                          sender drive native MCU XIRQ/RTI, normal
-                                          copy and RAM JSR in four nominal contexts.
-                                          All188 helper bytes,256 six-bit groups,
-                                          native source/register effects, frame and
-                                          guards checked per case. Explicit caller,
-                                          loaded data, initial Q7/PE9 outputs and
-                                          direct routes; no helper-body execution
-                                          or whole update/physical qualification
-                                          (original-update-forwarding.txt).
+Original error-helper forwarding  partial  Original main bad-marker/DSP sender,
+                                          MCU XIRQ/RTI/copy and RAM call execute in
+                                          four nominal contexts. All188 helper bytes,
+                                          256 six-bit decoder groups and frames
+                                          checked (original-update-forwarding.txt).
+                                          Coupled continuation also clears4096 cells,
+                                          executes eight original text callbacks and
+                                          produces four independent-font-exact frames:
+                                          5024 LCD writes,1856 reads. Four further
+                                          indicator toggles clock the original checksum;
+                                          missing Y:0144b9 then quarantines both CPUs.
+                                          Helper/source/NVM retained; own LCD setup,
+                                          caller/RAM/clocks and routes explicit.
+                                          No helper return, COP restart, full boot or
+                                          whole update/physical qualification
+                                          (original-update-diagnostic.txt).
 Original update and recovery      partial  Isolated original DSP command record:
                                           144 fixed cases / 1240 actual calls check
                                           live P patches, exact P/X/Y payload and
                                           guards, sequence failure/disabled/wrap,
                                           zero groups/targets and full header/MAC
                                           accumulator state (dsp-download.txt).
+                                          Six official packet-body transfers now make
+                                          33876 native stores, including five complete
+                                          padding words;4841 checksum prefetches and
+                                          original sequence wraps remain exact. Six
+                                          final-packet interruptions retain their prefix;
+                                          three real helper JMP frames stop before body
+                                          execution. Main padding establishes Y:0144b9/
+                                          0144ba (original-update-transport.txt).
+                                          Same clocked DSP now downloads both main
+                                          blocks and launches the coupled error helper
+                                          without reset/copy/PC repair. Four contexts
+                                          check original XOR highlight, prepared bit,
+                                          30000 delay increments, COPCTL=1 enable and
+                                          original invalid ARMCOP=0xf0 service at
+                                          MCU003f/PC129c. Exact elapsed OSC edges
+                                          match the COP phase. Joint execution
+                                          stops at the reset request; an explicit
+                                          isolated MCU pulse/nativefffa fetch then
+                                          retires the original loader first instruction;
+                                          its first register write at8002/0012 stops
+                                          at unqualified ECLK/GPIO observation0008.
+                                          DSP stays held;
+                                          stale joint epoch rejects. Whole-board
+                                          reset and helper return remain open
+                                          (original-update-coupled.txt).
                                           Separate declared TIO0 wire path: 30 cases,
                                           1050 bytes / 9450 original IRQs/RTIs feed
                                           real SysEx collection and manufacturer

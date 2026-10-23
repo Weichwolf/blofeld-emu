@@ -39,6 +39,7 @@ private:
   std::uint64_t timebase_hz_ = 0;
   std::uint64_t end_ticks_ = 0;
   std::uint64_t mcu_cycles_ = 0;
+  std::uint64_t mcu_epoch_ = 0;
   std::uint64_t mcu_idle_cycles_ = 0;
   std::uint64_t ties_ = 0;
 };
@@ -96,6 +97,7 @@ private:
   std::uint64_t timebase_hz_;
   std::uint64_t end_ticks_;
   std::uint64_t expected_mcu_cycles_;
+  std::uint64_t expected_mcu_epoch_;
   std::uint64_t expected_idle_cycles_;
   std::uint64_t ties_ = 0;
   Hc12BusCycle cycle_;

@@ -1,0 +1,45 @@
+MC9S12UF32 normal-mode COP watchdog
+
+  cmake --build --preset strict --target blofeld-mcu-cop-test
+  ctest --test-dir build/strict -R '^mcu_cop$' --output-on-failure
+
+COPCTL003c and ARMCOP003f relocate with INITRG. COPCTL resets to zero and is
+write-once in normal user mode, including an initial disabled write. Later writes
+leave it unchanged. First writes with reserved bits3..5 fail as unqualified;
+the pinned manual labels these bits reserved without qualifying write effects.
+ARMCOP always reads zero; writes while disabled have no effect.
+
+CR[2:0]=1..7 selects16384,65536,262144,1048576,4194304,8388608,16777216
+OSCCLK edges. Zero disables the counter. Enabled55 thenAA restarts the period;
+repeated55/AA is allowed, butAA without an outstanding55 does not restart it.
+Other bytes immediately latch an invalid-service reset request. WCOP permits
+55/AA only in the final25percent; an early write requests reset. The first cause
+is sticky. Advancing a large slice stops COP and RTI at the first COP deadline.
+
+McuRunClock supplies actual OSC edges independently of IPBus/PHY phase.
+CLKSEL.COPWAI freezes COP only during native WAI idle; entry/wake cycles run it.
+Copies/checkpoints preserve counter, half-service and pending cause. RSBCK is
+retained; active BDM, STOP and special-mode behavior remain unqualified.
+
+A request is not an applied system reset. McuBus reports cause, PC/CCR and, for
+service writes, operation/relocated address. Native execution and elapsed clock
+offers reject further progress. The owned MCU/joint scheduler is quarantined;
+trusted pre-event restore or explicit external reset clears the modeled state.
+An explicit qualified MCU reset path now applies CRG pulse/source arbitration
+and native COPfffa fetch with retained lifetime clocks and a new MCU epoch
+(mcu-system-reset.txt). Without this contract the request still stops execution.
+Whole-board retention/coupling and physical reset timing remain open; no reset
+IRQ or host-assigned restart PC is supplied.
+
+Tests cover literal seven-rate boundaries, all legal control values/reserved
+rejections, write-once/reset, all256 disabled service bytes,508 enabled invalid
+byte/window combinations, exact window edges, repeated/partial service, overflow
+slices, relocated register faults, fractional PHY clocks and WAI checkpoint/wake/
+timeout. Own native HC12 instructions request invalid-service reset without NVM
+changes. original_update_coupled additionally executes the unchanged downloaded
+error helper through COP enable and its deliberate invalid service, preserving
+native MCU/DSP context, rendered pixels and NVM (original-update-coupled.txt).
+No physical equivalence, complete boot/update/recovery or reset is established.
+
+Reference: S12CRGUV1/D V01.01 sections3.1.7,3.1.10,4.1,4.3,5.2 and table3-3,
+inside the official NXP9S12UF32_ZIP.zip pinned in doc/hardware/sources.json.

@@ -1,0 +1,41 @@
+Original update packet bodies and native padding stores
+
+  cmake --build --preset strict --target blofeld-original-update-transport-test
+  ctest --test-dir build/strict -R '^original_update_transport$' --output-on-failure
+
+All six official 1.25 transfer blocks independently execute the complete original
+126-word DSP command record and twelve context/template words. An own native
+linear/unscaled caller supplies each unchanged packet body in high-aligned X RAM.
+This component boundary excludes the upstream serial producer and dispatch.
+No host target write, opcode replacement or substitute helper performs decoding.
+
+Block   Bank/start   Declared words   Actually stored   Data packets
+0       Y:00ef00       256               256               37
+1       P:002e00        63                63                9
+2       Y:010000      2883              2884              412
+3       P:002e00       388               389               56
+4       Y:00d000     29881             29883             4269
+5       P:002e00       400               401               58
+
+An independent flags/byte-triple calculation predicts every actual destination
+write, including five complete transport-padding words. Native reads preserve
+all 4841 trailing checksum prefetches; sequence state wraps through original
+instructions. Six prefixes stop before the final packet with no helper launch.
+The three P transfers stop at the actual JMP to2e00, preserving the real caller
+frame and context pointer; they never execute a fake return or helper body.
+Destination words, mapped boundary guards, own caller and original code/context
+outside its two live patches remain exact. The own native OMR instruction and
+three settling NOPs establish switched P memory before boundary guards.
+Six fixed trace corruptions must reject; raw packets, words and traces stay local.
+
+The main transfer really writes two words at Y:0144b9/0144ba. Their combined
+six-byte SHA256 is0e5f2951c001499dfdf1cc3ff93d4d4cfdce99df086f280bbedf81261b695d03.
+This establishes their official transport origin without guessing RAM contents.
+The earlier error-helper diagnostic intentionally supplies only declared bytes,
+so its missing-word failure remains valid for that narrower initial state.
+original_update_coupled now carries the actual native writes and launch frame
+into the MCU/DSP error-helper path, stopping at unimplemented COPCTL (see
+original-update-coupled.txt). No full transport/boot, helper return, COP restart, flash programming,
+whole update/recovery/power-loss or hardware equivalence is established.
+Independent own opcode expectations require the offline assembler in
+dsp-download.txt. No fuzzing or physical-device traffic runs.

@@ -23,6 +23,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -165,6 +166,7 @@ struct OriginalGpioPair {
   std::ostream &trace;
   LinkState link;
   DspCompletionObserver additional_completion;
+  std::function<void(const BusEvent &)> additional_bus_write;
 
   OriginalGpioPair(const Firmware &firmware,
                    const Case scenario,
@@ -365,7 +367,7 @@ struct OriginalGpioPair {
           << " timebase=" << dsp.run_clock().timebase_hz() << '\n';
   }
 
-  void align_prefix() {
+  void align_prefix(const unsigned limit = step_limit) {
     auto &bus = mcu.bus();
     const auto original_context = mcu.cpu().state();
     bus.write(alignment_caller, branch_opcode);
@@ -375,7 +377,7 @@ struct OriginalGpioPair {
     require(common_hz % mcu.run_clock().timebase_hz() == 0, "Integral common clock conversion");
     const auto ratio = common_hz / mcu.run_clock().timebase_hz();
     while (mcu.run_clock().elapsed_ticks() * ratio < dsp.run_clock().elapsed_ticks()) {
-      require(++padding < step_limit, "explicit own prefix clock alignment");
+      require(++padding < limit, "explicit own prefix clock alignment");
       mcu.cpu().step();
     }
     mcu.cpu().set_state(original_context);
@@ -530,6 +532,7 @@ struct OriginalGpioPair {
     mcu.set_cycle_observer([this](const Hc12BusCycle cycle) { on_cycle(cycle); });
     mcu.bus().set_observer([this](const BusEvent &event) {
       if (!event.write) { return; }
+      if (additional_bus_write) { additional_bus_write(event); }
       if (event.address == hc12::ptq) { ++link.data_writes; }
       trace << "M-W " << mcu.run_clock().elapsed_ticks() << ' ' << hex(mcu.cpu().state().pc) << ' '
             << hex(event.address) << ' ' << hex(event.value) << '\n';
