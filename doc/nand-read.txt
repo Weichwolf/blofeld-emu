@@ -88,6 +88,11 @@ commands and addresses pass bounded setup/hold/pulse/cycle checks, pending-WE
 restoration matches, and busy stays asserted through eight original ready polls.
 No data read or array completion is fabricated. See nand-write-timing.txt;
 this does not qualify the full refill or its Port F turnaround.
+The joined original transition in nand-read-setup.txt supplies an explicit lab
+Ready edge and checks read admission before the first protocol byte. It still
+fails at the actual reserved Port F function write, without a CPU data sample
+or payload RAM store. Unknown NAND drive while DSP outputs remain active is
+retained; all board cases stay unqualified.
 
 The 131072-store clear is unchanged. Actual NAND/ROM/wavetable/sample mappings and
 contents, original data reads, full scheduled boot/MIDI/audio/update/recovery,

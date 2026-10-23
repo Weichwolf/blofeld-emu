@@ -104,6 +104,9 @@ target_link_libraries(blofeld_nand_read_timing PUBLIC blofeld_nand)
 add_library(blofeld_nand_write_timing src/nand_write_timing.cpp)
 target_include_directories(blofeld_nand_write_timing PUBLIC include)
 target_link_libraries(blofeld_nand_write_timing PUBLIC blofeld_nand)
+add_library(blofeld_nand_read_setup src/nand_read_setup.cpp)
+target_include_directories(blofeld_nand_read_setup PUBLIC include)
+target_link_libraries(blofeld_nand_read_setup PUBLIC blofeld_nand)
 add_library(blofeld_nand_store src/nand_file.cpp src/nand_store.cpp)
 target_include_directories(blofeld_nand_store PUBLIC include)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
@@ -591,6 +594,19 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write-timing.trace")
   set_tests_properties(original_nand_write_timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-nand-read-setup-test test/nand_read_setup_test.cpp)
+  target_link_libraries(blofeld-nand-read-setup-test PRIVATE blofeld_nand_read_setup)
+  add_test(NAME nand_read_setup COMMAND blofeld-nand-read-setup-test)
+  add_executable(blofeld-original-nand-read-setup-test test/original_nand_read_setup_test.cpp)
+  target_link_libraries(blofeld-original-nand-read-setup-test PRIVATE
+    blofeld_nand_read_setup blofeld_nand_read_timing blofeld_nand_write_timing
+    blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_read_setup COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-nand-read-setup-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-read-setup.trace")
+  set_tests_properties(original_nand_read_setup PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-nand-image-test test/nand_image_test.cpp)
   target_link_libraries(blofeld-nand-image-test PRIVATE blofeld_nand)
   add_test(NAME nand_image COMMAND blofeld-nand-image-test)
@@ -1646,6 +1662,7 @@ add_custom_target(quality
     blofeld-original-nand-pack-test
     blofeld-original-nand-records-test
     blofeld-nand-write-timing-test blofeld-original-nand-write-timing-test
+    blofeld-nand-read-setup-test blofeld-original-nand-read-setup-test
     blofeld-nand-image-test
     blofeld-nand-store-test
     blofeld-nand-gpio-write-test

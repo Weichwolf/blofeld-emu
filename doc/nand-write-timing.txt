@@ -48,6 +48,10 @@ This is a trusted in-process checkpoint, not a portable state-file qualification
 Neither gate supplies read data or qualifies read turnaround. Read-side setup
 (tAR/tCLR/tRR/tWHR), output drive, CE interception, busy scheduling, physical
 pin continuity and the transient reserved Port F function need separate evidence.
+The separate nand-read-setup.txt gate now composes input/setup/output timing and
+the actual original transition under explicit lab Ready release. It reaches the
+unchanged reserved-function failure, with one protocol byte but no CPU sample;
+uncertain data drive prevents board qualification.
 In particular, sequential row read belongs only to the P variant (page 26),
 not every part covered by the datasheet. Page-end readiness stays unknown in
 the existing protocol model; this component does not infer a variant or invent

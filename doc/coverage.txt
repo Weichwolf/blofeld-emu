@@ -814,6 +814,15 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           invented completion. Pin/BIU timing and
                                           full refill remain separate requirements
                                           (nand-write-timing.txt).
+                                          A separate read-admission guard checks
+                                          WHR/AR/CLR/RR before consumption. Four
+                                          actual original write/poll/read paths,
+                                          with explicit lab Ready release, reach
+                                          the still-fatal reserved Port F write.
+                                          No CPU data sample or payload store
+                                          occurs; uncertain drive keeps every
+                                          board case unqualified. Joint Ready-edge
+                                          replay matches (nand-read-setup.txt).
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.
