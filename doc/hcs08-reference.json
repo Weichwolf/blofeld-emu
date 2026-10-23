@@ -1,0 +1,47 @@
+{
+  "reference": "keyboard-update-reference.json",
+  "programmer_source_offset": 5446,
+  "programmer_bytes": 132,
+  "programmer_sha256": "97785678ec7aa795167d0cfbb47157f8bd645bf60dacca8a80d04b8e617b788e",
+  "pages": [
+    {
+      "address": 57344,
+      "sha256": "61dc44d00e3322de7f8f7170b7fd5d83ae7c5ffd26638d316043cf414e7947cd"
+    },
+    {
+      "address": 57856,
+      "sha256": "f034ef473e24d0ddd5c2de8ea0f7db8d293be41e2748cf57f2182a7ab3d90ad1"
+    },
+    {
+      "address": 58368,
+      "sha256": "136508047fff64caddd419d0f7dc541b4f9202e80ea5574bff2cebec76d3092f"
+    },
+    {
+      "address": 58880,
+      "sha256": "b03318b223fa6dcfd1e4542ad1af214aaeabff4a480a2e370a4db5ac8df8f4e8"
+    },
+    {
+      "address": 59392,
+      "sha256": "7b1c0366eabfb8026d215a5bc9c692d117cc3ff6b3a17e86bba963ca15d5db77"
+    },
+    {
+      "address": 59904,
+      "sha256": "5ec71e0d8162eb43da41d5407c77fb02d8338752440177932793410b8c84b256"
+    },
+    {
+      "address": 65024,
+      "sha256": "d277fe1da73a453eb2b01a18a36e27ac1b8f1f0658a41c2d281c059a05ffeaf4"
+    }
+  ],
+  "page_bytes": 512,
+  "omitted_flash": [
+    "ec00..fdff"
+  ],
+  "scope": "Pinned supplied update contents only; no unique installed-memory image or exact hardware-part claim.",
+  "primary_reference": {
+    "source": "https://www.nxp.com/docs/en/data-sheet/MC9S08GT16A.pdf",
+    "bytes": 2719710,
+    "sha256": "6abfb7e68c1953c50fcd4d53e2e4573647d76da2990d2e747648ee05d38b25bf",
+    "sections": "Chapter8 S08CPUV2 instructions/CCR; chapter15 background debug. Exact Keyboard part remains unverified."
+  }
+}

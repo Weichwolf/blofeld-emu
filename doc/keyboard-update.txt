@@ -59,6 +59,12 @@ resident trailer bytes, pad withdrawal and joint suffix restores under declared
 logical clock/pad conditions (keyboard-initial.txt). This does not connect the
 complete SMF ordering or the later controller programmer into one update.
 
+The separate native HCS08 instruction engine executes the original supplied
+application's RAM initialization and the RAM programmer's entry under declared
+debug/RAM inputs. It stops at their actual unmodeled PTED/FCDIV accesses;
+no successful target or programming callback is supplied (hcs08-core.txt).
+The physical controller, BDC link and subsequent peripheral behavior remain open.
+
 Remaining helper bodies, the external controller, actual scanner/main interaction, sample
 or main-NVM writes, every programming interruption/recovery phase, calibrated
 timing and normal Keyboard startup/MIDI/audio remain unqualified. Desktop use

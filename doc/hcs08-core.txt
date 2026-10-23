@@ -1,0 +1,49 @@
+Native HCS08 instruction execution for the Keyboard controller
+
+  cmake --build --preset strict --target blofeld-hcs08-core-test \
+    blofeld-hcs08-arithmetic-test blofeld-original-hcs08-test
+  ctest --test-dir build/strict -j1 \
+    -R '^(hcs08_core|hcs08_arithmetic|original_hcs08)$' --output-on-failure
+
+The separate Hcs08 engine executes native SLEIGH semantics against an explicit
+Bus. It does not replace key scanning or the flash algorithm with host routines.
+Ghidra12.1.2 language sources are hash-pinned and compiled locally. The local
+patch adds missing SBC zero-flag updates and removes CPHX direct's extra pointer
+dereference. The installed Ghidra and HC12 specification are unchanged.
+
+786432 independent ADD/ADC/SUB/SBC/CMP/CPX cases cover all byte operand pairs
+with both carry/stale-flag seeds. Eighty-one CPHX direct cases check signed
+overflow, borrow and exactly one big-endian operand read. Own programs check
+LDX/TXS high-byte preservation, descending JSR/RTS stacks, all256 TAP/TPA flag
+values, native BGND requests, modified RAM-code invalidation, unknown operands
+and quarantined failures. CCR bits6/5 are permanently one (S08CPUV2 chapter8).
+
+No power-on register values are invented. The engine requires explicit entry
+state before execution or inspection. BGND surfaces a CPU request and blocks
+further execution pending an owning BDC decision; it does not report active BDC
+status. WAIT/STOP, unimplemented intrinsics and offered interrupts fail visibly.
+Instruction timing, physical reset, interrupt entry, complete instruction
+qualification, BDC/security privileges and target peripherals remain required.
+Debug register replacement is not a trusted joint memory/clock snapshot.
+
+The optional original_hcs08 gate verifies the local official Controller1.4
+archive and all supplied pages plus its132-byte RAM programmer against hashes
+in hcs08-reference.json. Original bytes stay local. Each of two explicit entry
+seeds executes three programmer instructions, retaining H through LDX/TXS,
+then faults at the real FCDIV store (PC00a5/address1820).
+
+Two application cases take E000 from the supplied reset-vector value under
+declared RAM/debug-entry conditions, not a modeled hardware reset. Each runs
+6165 original instructions: all1024 clear iterations, the overlapping stack
+iterator and calibration assignments. Independent complete RAM contents and
+3084 writes/2048 native reads agree. The explicit fixture vector reads are
+excluded. Execution then faults at the actual unmodeled PTED write
+(PCe030/address0010). No GPIO write, trim, omitted flash, ready reply or flash
+completion is silently supplied. All inputs, including the runtime SLA, remain
+hash-stable through the gate.
+
+This is an untimed instruction component with source-derived entry tests.
+It does not establish complete controller operation, the physical GT8A part,
+BDC wiring/clocks, scanning/SPI/ADC, programming/recovery or normal Blofeld
+boot/MIDI/audio. Those requirements remain in objective.txt/coverage.txt;
+all118 complete manual-function acceptance rows remain pending.

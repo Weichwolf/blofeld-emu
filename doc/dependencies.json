@@ -27,8 +27,17 @@
       {
         "file": "Ghidra/Features/Decompiler/src/decompile/cpp/memstate.cc",
         "sha256": "ef68ee18511cac1bec55a602c64e43f57bc4755ca00e8204f411434d51d27f92"
+      },
+      {
+        "file": "Ghidra/Processors/HCS08/data/languages/HCS08.slaspec",
+        "sha256": "4f6baf078d8d6ca7ed38f1321c7d6394af7757d42a84b636f16b5d0b5708bb10"
+      },
+      {
+        "file": "Ghidra/Processors/HCS08/data/languages/HCS_HC.sinc",
+        "sha256": "00f64687772e608c2e74f003227aa3af6a163e3e8e8c3fe98380131f7155b477"
       }
-    ]
+    ],
+    "hcs08_patch": "patches/ghidra-hcs08-arithmetic.patch"
   },
   "dsp56300": {
     "source": "https://github.com/dsp56300/dsp56300",

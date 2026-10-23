@@ -76,9 +76,14 @@ include(cmake/PulseAudio.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 include(cmake/Hc12Spec.cmake)
+include(cmake/Hcs08Spec.cmake)
 add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
 target_include_directories(blofeld_firmware PUBLIC include)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
+add_library(blofeld_hcs08 src/hcs08.cpp)
+target_include_directories(blofeld_hcs08 PUBLIC include)
+target_link_libraries(blofeld_hcs08 PUBLIC blofeld_firmware PRIVATE blofeld_sleigh)
+add_dependencies(blofeld_hcs08 blofeld_hcs08_spec)
 add_library(blofeld_gpio_pads src/gpio_pads.cpp)
 target_include_directories(blofeld_gpio_pads PUBLIC include)
 target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
@@ -203,6 +208,28 @@ add_executable(blofeld-headless src/main.cpp src/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-hcs08-core-test test/hcs08_core_test.cpp)
+  target_link_libraries(blofeld-hcs08-core-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-core-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_core COMMAND blofeld-hcs08-core-test)
+  add_executable(blofeld-hcs08-arithmetic-test test/hcs08_arithmetic_test.cpp)
+  target_link_libraries(blofeld-hcs08-arithmetic-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-arithmetic-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_arithmetic COMMAND blofeld-hcs08-arithmetic-test)
+  set_tests_properties(hcs08_arithmetic PROPERTIES TIMEOUT 120)
+  add_executable(blofeld-original-hcs08-test test/original_hcs08_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-original-hcs08-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08 COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08.py"
+    $<TARGET_FILE:blofeld-original-hcs08-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08.trace")
+  set_tests_properties(original_hcs08 PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-audio-runtime-test test/audio_runtime_test.cpp
     test/audio_runtime_failure.cpp test/audio_runtime_board.cpp test/audio_runtime_underrun.cpp)
   target_link_libraries(blofeld-audio-runtime-test PRIVATE blofeld_audio_runtime blofeld_reference_board)
@@ -1733,7 +1760,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-original-hcs08-test blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test

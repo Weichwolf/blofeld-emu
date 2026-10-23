@@ -1753,6 +1753,14 @@ Initial Keyboard update return    partial  Original blocks0/1, sender, XIRQ/copy
                                           (keyboard-initial.txt). Explicit clocks,
                                           logical bias and reset LCD fixture;
                                           whole update/controller/board pending.
+Keyboard HCS08 instruction core   partial  Native SLEIGH plus independent byte/word
+                                          flags, stack and strict failure cases.
+                                          Original supplied application RAM clear
+                                          and programmer entries reach actual
+                                          unknown PTED/FCDIV writes (hcs08-core.txt).
+                                          Explicit untimed RAM/debug entry; BDC,
+                                          peripherals, reset/IRQ and controller
+                                          programming/recovery remain pending.
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

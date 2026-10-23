@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-3.0-only
+--- a/HCS_HC.sinc
++++ b/HCS_HC.sinc
+@@ -232,8 +232,9 @@
+ 	$(C) = $(C) || (tempResult < Ccopy);
+ 	$(V) = $(V) ^^ sborrow(tempResult, Ccopy);
+ 	result = tempResult - Ccopy;
+ 	$(N) = result s< 0;
++	$(Z) = (result == 0);
+ }
+ 
+ @elif defined(HC05)
+ macro subtractionFlags(operand1, operand2, result) {
+@@ -1008,9 +1009,9 @@
+ 
+ @if  defined(HCS08) || defined(HC08)
+ :CPHX opr8a_16       is (op=0x75); opr8a_16
+ { 
+-	op1:2 = *:2 opr8a_16;
++	op1:2 = opr8a_16;
+ 	tmp:2 = HIX - op1;
+ 	$(Z) = (tmp == 0);
+ 	$(N) = (tmp s< 0);
+ 	$(C) = (op1 > HIX);
