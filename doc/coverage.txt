@@ -1671,6 +1671,13 @@ Desktop/Keyboard differences      pending  Both requested with 1.25; Keyboard is
                                           stays unknown after release; no controller
                                           programming or normal boot is established
                                           (keyboard-receiver.txt).
+                                          Coupled stage-2 packet download, original
+                                          DSP sender, XIRQ/resident copy/JSR and
+                                          initial helper checksum-word calls pass
+                                          four declared clock/pad/caller contexts
+                                          (keyboard-handoff.txt). Outer dispatch,
+                                          controller execution and physical board
+                                          qualification remain pending.
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

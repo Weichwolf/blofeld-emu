@@ -15,8 +15,9 @@ discarded by argument reloads; the third precedes controller initialization.
 For a stream starting at block 2 byte 0, the two-byte length plus 1018 copied bytes
 end exactly on a word boundary at byte 1020. The remaining three bytes are the
 object checksum before the separate opaque trailing contents at byte 1023.
-This is a container/copy-alignment derivation, not a verified coupled DSP/MCU
-handoff. Do not start that entry fixture at the following controller-content word.
+keyboard-handoff.txt separately checks this alignment through the original
+DSP sender and resident MCU copy/JSR on one clocked pair under declared fixture
+conditions. Do not start this isolated entry fixture at the following content word.
 
 777 directed word cases cover every byte value in each of three positions, eight
 corners and the pinned authentic checksum word. Independent shifts/masks predict
@@ -47,6 +48,7 @@ is consumed and no peer acknowledgement is invented. A separate case withdraws
 the unrelated E inputs and fails earlier, before either delay nest.
 
 This qualifies a receiver/init prefix, not the full helper, external-controller
-ISA/image, programming, recovery or physical wiring. Boot, actual DSP/copy entry,
-short-message effects, all documented functions, MIDI/audio, complete update and
-every power-loss phase remain pending in objective.txt/coverage.txt.
+ISA/image, programming, recovery or physical wiring. The separate coupled prefix
+does not qualify outer dispatch. Boot, short-message effects, all documented
+functions, MIDI/audio, complete update and every power-loss phase remain pending
+in objective.txt/coverage.txt.

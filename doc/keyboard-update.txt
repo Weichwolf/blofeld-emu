@@ -45,7 +45,10 @@ host-queryable installation-success indication (function-acceptance.txt).
 The MCU programming-helper receiver/init prefix is separately checked under
 explicit caller/pin conditions (keyboard-receiver.txt). Its three initial bytes
 must be aligned with the remaining object checksum, not the following contents.
-The actual coupled handoff and remainder of the helper are still unqualified.
+The stage-2 download, original sender, native XIRQ/resident copy/JSR and initial
+helper checksum-word calls are jointly checked under declared clock/pad/caller
+conditions (keyboard-handoff.txt). Outer dispatch and the rest of the helper
+remain unqualified.
 
 Remaining helper bodies, the external controller, actual scanner/main interaction, sample
 or main-NVM writes, every programming interruption/recovery phase, calibrated

@@ -96,6 +96,6 @@
     "container_end": 1023,
     "bytes": 3,
     "sha256": "150c006b433067769f4cc50341fc606ed5a88c0a34e55caba69f9ad43e3867fb",
-    "qualification": "Length-prefixed helper alignment and native receiver prefix; complete original DSP sender/MCU copy handoff remains unqualified."
+    "qualification": "Original stage-2 DSP sender and resident MCU copy/helper-entry prefix under declared clock/pad/caller conditions; complete outer dispatch and controller update remain unqualified."
   }
 }

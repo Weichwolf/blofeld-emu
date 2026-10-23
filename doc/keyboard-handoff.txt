@@ -1,0 +1,60 @@
+Original Keyboard stage-2 DSP/MCU handoff
+
+  cmake --build --preset strict --target blofeld-original-keyboard-handoff-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_handoff$' --output-on-failure
+
+The optional gate requires the pinned local main 1.25 and Keyboard Controller
+1.4 archives and independent offline DSP assembler. Missing inputs skip 77;
+changed inputs, unknown consumed pins or execution faults fail. References and
+all program bytes remain local. keyboard-update-reference.json pins identities.
+
+On each clocked pair, the original 1.25 packet decoder downloads Keyboard blocks
+2 and 3 into the same DSP owner: 1542 Y words and 58 P words, including one whole
+padding word beyond the declared 57-word program. The real final JMP preserves
+the native caller frame and DSP epoch. Four declared scheduling contexts cover
+both shared-write tie orders and common-time offsets 0 and 18. The independent
+packet oracle checks every store, checksum prefetch, sequence, cursor and frame.
+Totals: 6400 stores, 920 checksum prefetches and 928 packet calls.
+
+The unchanged sender then raises the real request through its declared IRQ
+route. Native XIRQ vector entry and original RTI preserve the interrupted MCU
+registers. An own request loop invokes the original resident loader. It lives
+at 0x2000, outside the complete helper copy at 0x1200..0x15f9; the smaller
+main-error helper fixture's caller at 0x1400 would be overwritten here.
+
+The resident loader consumes exactly 1360 actual six-bit samples, reconstructs
+the two-byte length and copies all 1018 helper bytes. Its actual JSR supplies
+the original callback table and return frame. Every helper byte and 32 untouched
+following RAM bytes are checked at entry and again after the receiver prefix.
+The original final LEAY/TBNE count test leaves Y=0xffff, retained through the
+initial helper receiver calls; this differs from the isolated lab caller's Y=0.
+
+The helper's first three byte calls consume the remaining object checksum word
+at stream byte 1020, not the following opaque controller contents at byte 1023.
+Four more actual reads match the DSP pin outputs, including Q7 polarity. Byte,
+cache, cursor, argument reload, stack and upper-CCR expectations are independent
+of the native decoder. The first two returned bytes are discarded by the real
+argument reloads. After 95 helper instructions the prefix ends before controller
+initialization. The sender has prefetched the first following controller word
+and waits for the next request; that word is not returned to the MCU here.
+
+Across four contexts, all 5456 consumed samples, 1368 source-word reads and
+twelve initial returned bytes are checked. Four fixed corruptions of the
+Python trace oracle must reject. Complete downloaded DSP payload/program/padding,
+MCU NVM contents/knowledge/erase history and the relocated own caller stay exact.
+
+Caller contexts, IRQ/pad routing and reference clock/PLL observations are
+explicit fixtures, not stock-board defaults. Own native BRA instructions align
+the MCU setup horizon with the running DSP plus the declared phase; no clock
+counter is assigned or scheduler admission weakened. Every consumed logical
+pad observation must be known. Unresolved unconsumed voltage intervals remain
+recorded and make the separate board-qualification check reject.
+
+This closes a coupled stage-2 sender/copy/helper-receiver prefix under those
+conditions. It does not execute stage 1, short-message/channel-event dispatch,
+the full helper or external controller, nor qualify physical wiring/timing,
+programming/recovery, every power-loss phase, normal boot, MIDI/audio or any
+function-level acceptance row. keyboard-receiver.txt separately covers the
+declared-input controller-init/unknown-PE7 frontier. Full requirements remain
+in objective.txt and coverage.txt; controller reconstruction is coordinated in
+private blofeld-src issue 21.
