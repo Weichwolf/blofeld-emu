@@ -12,6 +12,8 @@
 
 namespace blofeld {
 
+enum class Hc12ResetSource : std::uint8_t { external, cop };
+
 struct CpuState {
   std::uint16_t pc = 0;
   std::uint16_t d = 0;
@@ -51,7 +53,7 @@ public:
   ~Hc12();
   Hc12(const Hc12 &) = delete;
   Hc12 &operator=(const Hc12 &) = delete;
-  void reset();
+  void reset(Hc12ResetSource source = Hc12ResetSource::external);
   // Debug register replacement cancels WAI and interrupt deferral.
   void set_state(const CpuState &state);
   [[nodiscard]] CpuState state() const;

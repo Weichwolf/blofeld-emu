@@ -37,6 +37,8 @@ public:
 
   [[nodiscard]] McuCopState cop_state() const { return cop_.state(); }
 
+  [[nodiscard]] unsigned oscillator_cycles_until_cop() const { return cop_.remaining(); }
+
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   [[nodiscard]] bool phy_running() const;
   [[nodiscard]] bool pll_selected() const;

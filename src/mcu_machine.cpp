@@ -6,7 +6,9 @@
 #include "blofeld/hc12.hpp"
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
+#include "blofeld/mcu_cop.hpp"
 #include "blofeld/mcu_memory.hpp"
+#include "blofeld/mcu_reset.hpp"
 #include "blofeld/mcu_run_clock.hpp"
 #include "blofeld/mcu_sci.hpp"
 
@@ -31,6 +33,9 @@ struct RunState {
   std::uint8_t timer_inputs = 0;
   std::uint64_t idle_cycles = 0;
   bool wait_faulted = false;
+  std::optional<McuResetSequence> reset = std::nullopt;
+  ExecutionContext reset_context{};
+  bool reset_faulted = false;
 };
 
 RunState initial_run(const std::optional<McuRunContract> contract) {
@@ -62,13 +67,13 @@ std::vector<std::uint8_t> read_specification(const std::filesystem::path &path) 
 
 struct McuCheckpoint::Storage {
   Storage(std::unique_ptr<McuBus> bus_state,
-          const Hc12Checkpoint &cpu_state,
+          const std::optional<Hc12Checkpoint> &cpu_state,
           const std::vector<std::uint8_t> &backend,
           RunState run_state)
       : bus(std::move(bus_state)), cpu(cpu_state), specification(backend), run(run_state) {}
 
   const std::unique_ptr<const McuBus> bus;
-  const Hc12Checkpoint cpu;
+  const std::optional<Hc12Checkpoint> cpu;
   const std::vector<std::uint8_t> specification;
   const RunState run;
 };
@@ -153,9 +158,9 @@ struct McuMachine::State {
 
   void check_clock_boundary() const {
     const auto &clock = run.clock;
-    if (timed &&
-        (!clock || clock->faulted() || run.wait_faulted || run.idle_cycles > clock->bus_cycles() ||
-         timed->checkpoint_cycles() != clock->bus_cycles() - run.idle_cycles)) {
+    if (timed && (!clock || clock->faulted() || run.wait_faulted || run.reset_faulted ||
+                  run.idle_cycles > clock->bus_cycles() ||
+                  timed->checkpoint_cycles() != clock->bus_cycles() - run.idle_cycles)) {
       throw Fault("MCU run checkpoint requires coordinated healthy cycle counters");
     }
   }
@@ -218,11 +223,12 @@ const McuRunClock &McuMachine::run_clock() const {
 
 bool McuMachine::timing_faulted() const {
   const auto &clock = state_->run.clock;
-  return state_->timed &&
-         (!clock || state_->timed->faulted() || clock->faulted() || state_->run.wait_faulted);
+  return state_->timed && (!clock || state_->timed->faulted() || clock->faulted() ||
+                           state_->run.wait_faulted || state_->run.reset_faulted);
 }
 
 void McuMachine::validate_run_boundary() const {
+  if (system_reset_active()) { throw Fault("MCU native boundary is held in system reset"); }
   state_->check_inactive();
   state_->check_clock_boundary();
 }
@@ -287,6 +293,7 @@ unsigned McuMachine::advance_wait(const unsigned maximum_bus_cycles) {
 }
 
 void McuMachine::set_timer_inputs(const std::uint8_t mask) {
+  if (system_reset_active()) { throw Fault("Cannot prime timer inputs during asserted MCU reset"); }
   state_->check_inactive();
   state_->bus->sample_timer_inputs(mask);
   state_->run.timer_inputs = mask;
@@ -299,7 +306,12 @@ void McuMachine::check_specification() const {
 }
 
 McuCheckpoint McuMachine::checkpoint() const {
-  const auto cpu_state = state_->cpu.checkpoint();
+  std::optional<Hc12Checkpoint> cpu_state;
+  if (system_reset_active()) {
+    if (state_->cpu.executing()) { throw Fault("Cannot capture active MCU reset execution"); }
+  } else {
+    cpu_state = state_->cpu.checkpoint();
+  }
   state_->check_clock_boundary();
   check_specification();
   return McuCheckpoint(std::make_shared<const McuCheckpoint::Storage>(
@@ -320,9 +332,92 @@ void McuMachine::restore(const McuCheckpoint &checkpoint) {
   check_specification();
   auto replacement = std::make_unique<State>(
       checkpoint.storage_->bus->clone(), specification_, checkpoint.storage_->run);
-  replacement->cpu.restore_checkpoint(checkpoint.storage_->cpu);
+  const auto &cpu = checkpoint.storage_->cpu;
+  const auto &reset = replacement->run.reset;
+  if (cpu) {
+    replacement->cpu.restore_checkpoint(*cpu);
+  } else if (!reset || !reset->active()) {
+    throw Fault("MCU checkpoint without CPU state requires an asserted reset");
+  }
   check_specification();
   state_.swap(replacement);
+}
+
+bool McuMachine::system_reset_active() const {
+  const auto &reset = state_->run.reset;
+  return reset && reset->active();
+}
+
+std::optional<McuResetState> McuMachine::system_reset_state() const {
+  const auto &reset = state_->run.reset;
+  return reset ? std::optional(reset->state()) : std::nullopt;
+}
+
+void McuMachine::begin_system_reset(const McuResetSource source,
+                                    const unsigned synchronization_cycles) {
+  state_->check_inactive();
+  if (system_reset_active()) { throw Fault("MCU system reset is already active"); }
+  const McuResetSequence sequence(source, synchronization_cycles);
+  if (source == McuResetSource::cop && state_->bus->cop_state().reset == McuCopReset::none) {
+    throw Fault("MCU COP system reset requires an actual pending watchdog request");
+  }
+  check_specification();
+  auto run = state_->run;
+  auto &clock = run.clock;
+  if (!clock) { throw Fault("MCU reset requires a reference run clock"); }
+  clock->begin_reset_epoch();
+  run.reset = sequence;
+  run.reset_context = state_->bus->context_;
+  run.wait_faulted = false;
+  run.reset_faulted = false;
+  run.timer_inputs = 0;
+  auto bus = state_->bus->clone();
+  bus->reset_modules();
+  bus->reset_asserted_ = true;
+  auto replacement = std::make_unique<State>(std::move(bus), specification_, run);
+  check_specification();
+  state_.swap(replacement);
+}
+
+unsigned McuMachine::advance_system_reset(const unsigned maximum_sysclk_edges,
+                                          const McuResetPad pad) {
+  state_->check_inactive();
+  if (!system_reset_active() || timing_faulted()) {
+    throw Fault("MCU reset advance requires a healthy asserted system reset");
+  }
+  auto &run = state_->run;
+  auto &reset = run.reset;
+  auto &clock = run.clock;
+  if (!reset || !clock) { throw Fault("MCU reset requires its sequence and reference clock"); }
+  auto &sequence = *reset;
+  auto &reset_clock = *clock;
+  unsigned completed = 0;
+  try {
+    while (completed < maximum_sysclk_edges) {
+      auto next = sequence;
+      next.edge(pad); // Qualify before committing this edge or its elapsed time.
+      reset_clock.advance_reset_edge();
+      sequence = next;
+      ++completed;
+      if (next.state().phase == McuResetPhase::ready) {
+        reset_clock.finish_reset();
+        state_->bus->reset_asserted_ = false;
+        state_->cpu.reset(next.state().selected == McuResetSource::cop ? Hc12ResetSource::cop
+                                                                       : Hc12ResetSource::external);
+        sequence.complete();
+        break;
+      }
+    }
+  } catch (const std::exception &error) {
+    run.reset_faulted = true;
+    throw Fault("MCU system reset pc=" + hex(run.reset_context.pc) +
+                " ccr=" + hex(run.reset_context.ccr, 2) + " completed-SYSCLK-edges=" +
+                std::to_string(sequence.state().edges) + ": " + error.what());
+  } catch (...) {
+    run.reset_faulted = true;
+    throw;
+  }
+  return completed;
 }
 
 }

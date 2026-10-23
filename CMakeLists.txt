@@ -103,7 +103,7 @@ target_include_directories(blofeld_nand_store PUBLIC include)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
 add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
   src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_backdoor.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
-  src/mcu_clock.cpp src/mcu_cop.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
+  src/mcu_clock.cpp src/mcu_cop.cpp src/mcu_reset.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
   src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp
   src/mcu_usb_control.cpp
   src/mcu_usb_ique_control.cpp src/mcu_usb_reset.cpp src/mcu_usb_host.cpp)
@@ -1354,6 +1354,9 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-gpio-pad-checkpoint-test PRIVATE
     blofeld_core blofeld_dsp blofeld_dsp_native)
   add_test(NAME gpio_pad_checkpoints COMMAND blofeld-gpio-pad-checkpoint-test)
+  add_executable(blofeld-mcu-reset-test test/mcu_reset_test.cpp)
+  target_link_libraries(blofeld-mcu-reset-test PRIVATE blofeld_core blofeld_mcu_dsp blofeld_dsp blofeld_dsp_native)
+  add_test(NAME mcu_reset COMMAND blofeld-mcu-reset-test)
   add_executable(blofeld-mcu-cop-test test/mcu_cop_test.cpp)
   target_link_libraries(blofeld-mcu-cop-test PRIVATE blofeld_core)
   add_test(NAME mcu_cop COMMAND blofeld-mcu-cop-test)
@@ -1625,7 +1628,7 @@ add_custom_target(quality
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test
     blofeld-scheduled-coupling-test
-    blofeld-mcu-cop-test
+    blofeld-mcu-cop-test blofeld-mcu-reset-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
     blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test

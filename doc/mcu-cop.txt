@@ -25,9 +25,11 @@ A request is not an applied system reset. McuBus reports cause, PC/CCR and, for
 service writes, operation/relocated address. Native execution and elapsed clock
 offers reject further progress. The owned MCU/joint scheduler is quarantined;
 trusted pre-event restore or explicit external reset clears the modeled state.
-The CRG reset pulse/synchronization, whole-board reset retention, COP vector
-atfffa and coordinated reset epochs still require implementation and tests.
-No fake reset vector, successful restart or reset IRQ is supplied.
+An explicit qualified MCU reset path now applies CRG pulse/source arbitration
+and native COPfffa fetch with retained lifetime clocks and a new MCU epoch
+(mcu-system-reset.txt). Without this contract the request still stops execution.
+Whole-board retention/coupling and physical reset timing remain open; no reset
+IRQ or host-assigned restart PC is supplied.
 
 Tests cover literal seven-rate boundaries, all legal control values/reserved
 rejections, write-once/reset, all256 disabled service bytes,508 enabled invalid

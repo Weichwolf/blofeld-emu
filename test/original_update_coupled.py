@@ -65,7 +65,7 @@ def inputs(firmware, destination):
 def collect(path):
     cases, current, preload = [], None, None
     tags = {'SOURCE', 'CHUNK', 'CONSUMER', 'IRQ_PAD', 'IRQ_ENTRY', 'IRQ_RETURN', 'RESULT',
-            'COP_ENABLED', 'COP_REQUEST', 'ENTRY_FLAGS', 'CLEAR', 'TEXT', 'RECTANGLE', 'PREPARED', 'FAULT_STATE', 'COUPLED_FAULT', 'QUARANTINE', 'COUPLED_RESULT'}
+            'SYSTEM_RESET', 'RESET_BOOT', 'RESET_BOOT_FAULT', 'COP_ENABLED', 'COP_REQUEST', 'ENTRY_FLAGS', 'CLEAR', 'TEXT', 'RECTANGLE', 'PREPARED', 'FAULT_STATE', 'COUPLED_FAULT', 'QUARANTINE', 'COUPLED_RESULT'}
     with path.open() as stream:
         for line in stream:
             tag = line.split(' ', 1)[0]
@@ -200,17 +200,27 @@ def validate(cases, blocks, texts, counts):
                 or result['queries'] != case['pads'] or result['irq-queries'] <= prefix['irq-queries']
                 or result['unresolved-events'] != case['nets'] or not case['nets'] or case['delay'] != 30000):
             raise ValueError('COUPLED_RESULT raster, complete delay, storage or pad audit differs')
+        if single(case, 'SYSTEM_RESET') != dict(edges=195, vector=0xfffa, target=0x8000,
+                ticks=1024, osc=205, bus=5, epoch=2, **{'dsp-held': 1, 'storage': 1, 'joint-refused': 1}):
+            raise ValueError('SYSTEM_RESET pulse, real native vector/time or epoch isolation differs')
+        if single(case, 'RESET_BOOT') != dict(start=0x8000, stop=0x8002, instructions=1,
+                                             **{'next-observation-unqualified': 1}):
+            raise ValueError('RESET_BOOT original first instruction or reset-board boundary differs')
+        faults = case['rows'].get('RESET_BOOT_FAULT', [])
+        if (len(faults) != 1 or 'MCU write at 0x0012' not in faults[0] or 'pc=0x8002 ccr=0xd0' not in faults[0]
+                or 'Unimplemented MCU ECLK output observation at 0x0008' not in faults[0]):
+            raise ValueError('RESET_BOOT_FAULT native register operation/ECLK observation differs')
     return dict(cases=4, native_download_stores=121136, checksum_prefetches=17308,
                 packet_calls=17316, native_helper_entries=4, native_error_frames=4,
                 original_text_callbacks=8, original_rectangles=4, actual_lcd_writes=counts['writes'] * 4,
                 actual_lcd_reads=counts['reads'] * 4, native_delay_iterations=120000,
-                cop_reset_requests=4, native_source_reads=264, native_output_chunks=1048, native_input_samples=1024,
+                cop_reset_requests=4, mcu_reset_pulses=4, native_cop_vector_fetches=4, resident_loader_continuations=4, native_source_reads=264, native_output_chunks=1048, native_input_samples=1024,
                 board_rejections=4)
 
 
 def controls(cases, blocks, texts, counts, frame):
     for tag, key in (('SOURCE', 'value'), ('CHUNK', 'value'), ('RECTANGLE', 'height'),
-                     ('PREPARED', 'flags'), ('COP_ENABLED', 'control'), ('COP_REQUEST', 'phase'), ('QUARANTINE', 'joint'), ('COUPLED_RESULT', 'delay')):
+                     ('PREPARED', 'flags'), ('COP_ENABLED', 'control'), ('COP_REQUEST', 'phase'), ('SYSTEM_RESET', 'vector'), ('RESET_BOOT', 'stop'), ('QUARANTINE', 'joint'), ('COUPLED_RESULT', 'delay')):
         changed = list(cases)
         changed[0] = copy.deepcopy(cases[0])
         line = changed[0]['rows'][tag][0]
@@ -241,7 +251,7 @@ def controls(cases, blocks, texts, counts, frame):
         pass
     else:
         raise ValueError('Coupled oracle accepted a flipped native raster pixel')
-    return 12
+    return 14
 
 
 def main():
@@ -264,7 +274,7 @@ def main():
                             capture_output=True, text=True, timeout=480, check=False)
     output = native.stdout + native.stderr
     trace.with_suffix('.log').write_text(output)
-    allowed = 'Four native downloads and coupled error-helper COP reset requests verified.'
+    allowed = 'Four native downloads, COP reset pulses and resident-loader continuations verified.'
     if native.returncode or any(line and line != allowed and not re.fullmatch(r'Jit@\d+: No profiler detected', line)
                                for line in output.splitlines()):
         raise ValueError('Native coupled update failed: ' + output)
@@ -281,15 +291,17 @@ def main():
     receipt.write_text(json.dumps(dict(passed=True, **totals, fixed_oracle_corruptions=corruptions,
         frame_sha256=FRAME_SHA256, independent_assembler=provenance,
         damaged_marker_words=1, input_packet_checksum_recomputed=True,
-        full_boot=False, complete_update=False, helper_returned=False, watchdog_reset_executed=False,
+        full_boot=False, complete_update=False, helper_returned=False, watchdog_reset_executed=True, whole_board_reset=False, dsp_reset_executed=False,
         fuzz_execution=False, physical_traffic=False,
         scope='Same clocked DSP executes original main download/padding and helper launch without reset, '
               'then native GPIO/XIRQ/copy/MCU error-helper rendering and30000 delay iterations. '
               'One declared marker word is corrupted in the input packet with recomputed framing checksum. '
-              'Own caller/clock/routes/LCD context; original COPCTL enable and invalid ARMCOP service request reset, '
-              'quarantining MCU/joint scheduling while independent DSP state is held. No upstream wire producer/dispatch, '
-              'watchdog reset, full boot, whole flash update/recovery/power-loss or physical qualification.'), indent=2) + '\n')
-    print('Verified4 native download/error-helper continuations and4 original COP reset requests.')
+              'Own caller/clock/routes/LCD context; original invalid ARMCOP service requests reset, '
+              'then an explicit MCU-only reset pulse and native COP vector restart the original resident loader. '
+              'DSP remains held; stale joint scheduling rejects the changed MCU epoch. Startup stops at the first '
+              'unqualified ECLK/GPIO reset-board observation; no upstream dispatch, continuous whole-board reset/boot, live MIDI/audio, '
+              'whole update/recovery/power-loss or physical qualification.'), indent=2) + '\n')
+    print('Verified4 native error-helper MCU resets and strict resident-loader input frontiers.')
     return 0
 
 

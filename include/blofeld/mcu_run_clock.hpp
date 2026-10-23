@@ -48,9 +48,18 @@ public:
 
   [[nodiscard]] std::uint64_t oscillator_cycles() const { return oscillator_cycles_; }
 
+  [[nodiscard]] std::uint64_t native_epoch() const { return epoch_; }
+
+  [[nodiscard]] std::uint64_t reset_sysclk_edges() const { return reset_edges_; }
+
   [[nodiscard]] bool faulted() const { return faulted_; }
 
 private:
+  friend class McuMachine;
+  void begin_reset_epoch();
+  void advance_reset_edge();
+  void finish_reset();
+  void advance_to_cop_deadline(McuBus &bus, unsigned edges);
   void advance_cycle(McuBus &bus, ExecutionContext context, bool waiting);
   std::uint32_t oscillator_hz_;
   std::uint64_t timebase_hz_;
@@ -59,6 +68,9 @@ private:
   std::uint64_t elapsed_ticks_ = 0;
   std::uint64_t oscillator_cycles_ = 0;
   std::uint64_t bus_cycles_ = 0;
+  std::uint64_t epoch_ = 1;
+  std::uint64_t reset_edges_ = 0;
+  bool resetting_ = false;
   bool faulted_ = false;
 };
 

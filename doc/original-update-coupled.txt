@@ -24,26 +24,34 @@ four controller pages. Original native code sets flags0xd1, then executes all
 30000 delay increments and one GPIO wait poll. COPCTL=1 at003c enables the
 normal counter; the original invalid ARMCOP=0xf0 write at003f, PC129c/CCRb8
 then requests a COP system reset. Exact OSC edges since the enable transaction
-match the counter phase. The unapplied system reset fails visibly before later
-instructions. Reset-pulse sequencing, vector fetch and helper return remain open
-(mcu-cop.txt).
+match the counter phase. The request first fails visibly before later
+instructions. An explicitly isolated MCU reset then drives128+3 SYSCLK edges,
+settles64, observes a high RESET pad and natively fetchesfffa to8000 in VfPPP.
+Lifetime time advances1024 ticks/205 OSC edges including the five CPU bus cycles.
+The unchanged resident loader retires its first instruction, then its register
+write at8002/0012 fails on the unqualified ECLK/GPIO reset-board observation
+at0008. Operation/address/PC are checked; no pin voltage or ECLK phase is guessed.
+The diagnostic LCD fixture is detached after its saved frame; DSP state/time stay
+held. The old joint scheduler rejects the new MCU epoch. This separate MCU-only
+reset scope is not continuous whole-board reset (mcu-system-reset.txt).
 
-MCU execution and joint scheduling reject further advancement without changing
-CPU/clock state. The independent DSP remains healthy but held in its native
+At the pre-reset request boundary, MCU execution and joint scheduling reject
+further advancement without changing CPU/clock state. The independent DSP remains healthy but held in its native
 chunk wait at P:2e6b, R1=144ba. This is not a claim that its standalone API faults.
 Downloaded payload/program/padding, original decoder/context outside live patches,
-own callers, MCU helper/RAM tail and all MCU NVM/knowledge/history remain exact.
+own callers, MCU helper/RAM tail and all MCU NVM/knowledge/history are checked
+before reset. MCU NVM/knowledge/history is checked again after the explicit reset.
 The native status19 write updates only the fixture's expected source metadata;
 no host register/RAM repair supplies that status. Clock alignment uses the own
 native MCU busy loop, then restores its declared initial caller context before
 live coupling. The DSP epoch is retained; this is not continuous whole-board boot.
 
-Four nominal order/phase contexts and twelve fixed oracle corruptions cover these
+Four nominal order/phase contexts and fourteen fixed oracle corruptions cover these
 conditions. Earlier declared-byte-only diagnostics keep their strict Y:0144b9
 fault and exact traces. Shared transport/display fixtures retain default behavior.
 Original assets, packet bodies, text, screenshots and traces remain local.
 Full boot, calibrated timing/wiring, Desktop/Keyboard equivalence, normal live
-MIDI/audio, COP system-reset execution and whole flash update/recovery/power-loss
+MIDI/audio, coordinated whole-board reset and whole flash update/recovery/power-loss
 remain open.
 No fuzzing or physical traffic runs. See original-update-transport.txt,
 original-update-diagnostic.txt and objective.txt for scope and remaining gates.

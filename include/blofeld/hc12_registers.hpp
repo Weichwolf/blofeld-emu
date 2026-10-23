@@ -11,6 +11,7 @@ inline constexpr std::uint8_t interrupt_mask = 0x10;
 inline constexpr std::uint8_t xirq_mask = 0x40;
 inline constexpr std::uint16_t xirq_vector = 0xfff4;
 inline constexpr std::uint16_t swi_vector = 0xfff6;
+inline constexpr std::uint16_t cop_reset_vector = 0xfffa;
 inline constexpr std::uint16_t reset_vector = 0xfffe;
 inline constexpr std::uint32_t address_mask = 0xffff;
 inline constexpr std::uint16_t porta = 0x0000;

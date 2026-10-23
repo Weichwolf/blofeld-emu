@@ -107,6 +107,12 @@ void route_function(std::array<PinFunction, port_count> &ports,
 McuBus::McuBus(const std::span<const std::uint8_t> flash) : memory_(flash), flash_(memory_) {}
 
 void McuBus::reset() {
+  reset_modules();
+  observe_interrupt_pads();
+}
+
+void McuBus::reset_modules() {
+  reset_asserted_ = false;
   memory_.reset();
   decoded_bytes_.reset();
   ++code_revision_;
@@ -120,7 +126,6 @@ void McuBus::reset() {
   usb_.reset();
   interrupts_.reset();
   context_ = {};
-  observe_interrupt_pads();
 }
 
 bool McuBus::reserved_register(const std::uint16_t offset) {
@@ -291,6 +296,7 @@ void McuBus::write_memory(const MemoryWrite access) {
 }
 
 void McuBus::check_execute(const InstructionFetch fetch) const {
+  if (reset_asserted_) { throw Fault("MCU instruction fetch during asserted system reset"); }
   check_cop_reset();
   constexpr unsigned address_space_size = 65536;
   if (fetch.length == 0 || fetch.length > address_space_size - fetch.address) {
@@ -364,7 +370,15 @@ void McuBus::observe_interrupt_pads() {
   interrupts_.observe_pins(gpio_.observe_pads(McuPort::e, 3));
 }
 
+void McuBus::begin_reset(const ExecutionContext context) {
+  begin_instruction(context);
+}
+
 void McuBus::begin_instruction(const ExecutionContext context) {
+  if (reset_asserted_) {
+    throw Fault("MCU execution during asserted system reset pc=" + hex(context.pc) +
+                " ccr=" + hex(context.ccr, 2));
+  }
   context_ = context;
 }
 
@@ -415,6 +429,7 @@ void McuBus::observe_phy(const PhyClockWindow window) {
 }
 
 McuRunClockRoute McuBus::run_clock_route() const {
+  if (reset_asserted_) { throw Fault("MCU normal clocks during asserted system reset"); }
   check_cop_reset();
   try {
     return clock_.run_clock_route();

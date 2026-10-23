@@ -342,8 +342,12 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           WAI gating, fractional OSC edges and
                                           checkpoint state checked (mcu-cop.txt).
                                           Timeout/invalid service latch a request;
-                                          system-reset execution, STOP/BDM and
-                                          full latency pending.
+                                          Explicit MCU reset pulse/source arbitration,
+                                          nativefffa/fffe fetch, lifetime clocks,
+                                          checkpoints and ten flash interruption
+                                          contexts checked (mcu-system-reset.txt).
+                                          Whole-board reset, STOP/BDM and physical
+                                          latency remain open.
 USB device/transport              partial  PHY control and register/data-side enable.
                                           UEPCSELR/UUCFGR banks and ordered 16-bit
                                           staging/commit tested (mcu-usb.txt).
@@ -1290,8 +1294,14 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           original invalid ARMCOP=0xf0 service at
                                           MCU003f/PC129c. Exact elapsed OSC edges
                                           match the COP phase. Joint execution
-                                          stops at the unapplied reset request;
-                                          system-reset execution/return remain open
+                                          stops at the reset request; an explicit
+                                          isolated MCU pulse/nativefffa fetch then
+                                          retires the original loader first instruction;
+                                          its first register write at8002/0012 stops
+                                          at unqualified ECLK/GPIO observation0008.
+                                          DSP stays held;
+                                          stale joint epoch rejects. Whole-board
+                                          reset and helper return remain open
                                           (original-update-coupled.txt).
                                           Separate declared TIO0 wire path: 30 cases,
                                           1050 bytes / 9450 original IRQs/RTIs feed

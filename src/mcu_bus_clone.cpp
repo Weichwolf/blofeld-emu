@@ -17,7 +17,8 @@ McuBus::McuBus(const McuBus &source, CloneState /*tag*/)
       timer_(source.timer_),
       usb_(source.usb_),
       interrupts_(source.interrupts_),
-      context_(source.context_) {}
+      context_(source.context_),
+      reset_asserted_(source.reset_asserted_) {}
 
 std::unique_ptr<McuBus> McuBus::clone() const {
   if (notifying_) { throw Fault("Cannot clone during an active MCU bus observation"); }

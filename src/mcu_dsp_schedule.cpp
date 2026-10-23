@@ -57,6 +57,7 @@ McuDspSchedule::McuDspSchedule(const McuDspScheduleInputs inputs, McuMachine &mc
       timebase_hz_(dsp.run_clock().timebase_hz()),
       end_ticks_(mcu_ticks()),
       expected_mcu_cycles_(mcu.run_clock().bus_cycles()),
+      expected_mcu_epoch_(mcu.run_clock().native_epoch()),
       expected_idle_cycles_(mcu.idle_bus_cycles()) {
   mcu_.validate_run_boundary();
   if (inputs.maximum_dsp_steps_per_cycle == 0 ||
@@ -73,7 +74,8 @@ McuDspSchedule::McuDspSchedule(const McuDspScheduleInputs inputs, McuMachine &mc
 }
 
 bool McuDspSchedule::faulted() const {
-  return faulted_ || mcu_.timing_faulted() || dsp_.timing_faulted();
+  return faulted_ || mcu_.timing_faulted() || dsp_.timing_faulted() ||
+         mcu_.run_clock().native_epoch() != expected_mcu_epoch_;
 }
 
 void McuDspSchedule::healthy() const {
@@ -267,6 +269,7 @@ McuDspScheduleCheckpoint McuDspSchedule::checkpoint() const {
   result.timebase_hz_ = timebase_hz_;
   result.end_ticks_ = end_ticks_;
   result.mcu_cycles_ = expected_mcu_cycles_;
+  result.mcu_epoch_ = expected_mcu_epoch_;
   result.mcu_idle_cycles_ = expected_idle_cycles_;
   result.ties_ = ties_;
   return result;
@@ -278,6 +281,7 @@ void McuDspSchedule::restore(const McuDspScheduleCheckpoint &checkpoint) {
   if (checkpoint.inputs_ != inputs_ || checkpoint.timebase_hz_ != timebase_hz_ ||
       mcu_ticks() != checkpoint.end_ticks_ ||
       mcu_.run_clock().bus_cycles() != checkpoint.mcu_cycles_ ||
+      mcu_.run_clock().native_epoch() != checkpoint.mcu_epoch_ ||
       mcu_.idle_bus_cycles() != checkpoint.mcu_idle_cycles_ ||
       !same_cpu(mcu_.cpu().state(), checkpoint.mcu_)) {
     throw Fault("MCU/DSP schedule restore requires compatible inputs and coordinated native MCU");
@@ -285,6 +289,7 @@ void McuDspSchedule::restore(const McuDspScheduleCheckpoint &checkpoint) {
   dsp_schedule_.restore(checkpoint.dsp_, dsp_);
   end_ticks_ = checkpoint.end_ticks_;
   expected_mcu_cycles_ = checkpoint.mcu_cycles_;
+  expected_mcu_epoch_ = checkpoint.mcu_epoch_;
   expected_idle_cycles_ = checkpoint.mcu_idle_cycles_;
   ties_ = checkpoint.ties_;
   offered_ = false;

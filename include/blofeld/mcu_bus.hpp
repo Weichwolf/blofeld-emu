@@ -60,6 +60,7 @@ public:
   void check_execute(InstructionFetch fetch) const override;
   void retire_instruction() override;
   void begin_instruction(ExecutionContext context) override;
+  void begin_reset(ExecutionContext context) override;
   [[nodiscard]] std::optional<InterruptRequest> interrupt_request(std::uint8_t ccr) const override;
   void acknowledge_interrupt(std::uint16_t vector) override;
   void set_observer(std::function<void(const BusEvent &)> observer);
@@ -94,6 +95,10 @@ public:
 
   [[nodiscard]] McuCopState cop_state() const { return clock_.cop_state(); }
 
+  [[nodiscard]] unsigned oscillator_cycles_until_cop() const {
+    return clock_.oscillator_cycles_until_cop();
+  }
+
   [[nodiscard]] unsigned oscillator_cycles_until_rti() const;
   void advance_sci(unsigned bus_cycles);
   void sample_timer_inputs(std::uint8_t mask);
@@ -107,6 +112,7 @@ private:
   friend class McuMachine;
   void notify(const BusEvent &event);
   void check_cop_reset() const;
+  void reset_modules();
 
   struct CloneState {};
 
@@ -141,6 +147,7 @@ private:
   McuUsb usb_;
   McuInterrupts interrupts_;
   ExecutionContext context_{};
+  bool reset_asserted_ = false;
   bool notifying_ = false;
   std::function<void(const BusEvent &)> observer_;
 };
