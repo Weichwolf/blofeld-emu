@@ -1,0 +1,16 @@
+{
+  "qualification": "Original updater runtime page source, not a verified physical NAND image or completed boot.",
+  "update_block": 4,
+  "runtime_byte_offset": 33411,
+  "page_bytes": 528,
+  "page_sha256": "58c5d8583dafb358e27f35e963a1960d74b64ce5c3447de5aa36a85d2d5fc855",
+  "complete_records": 14,
+  "started_records": 15,
+  "stores_by_space": {
+    "0": 29,
+    "1": 98,
+    "2": 4
+  },
+  "record_loop": 126,
+  "post_first_word": 127
+}

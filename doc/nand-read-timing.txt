@@ -1,0 +1,70 @@
+Candidate NAND array-read output timing
+
+  cmake --build --preset strict --target blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
+  ctest --test-dir build/strict -j1 -R '^(nand_read_timing|original_nand_read_timing)$' --output-on-failure
+
+NandReadTiming is separate from the array/protocol, board wiring and CPU clock.
+It implements the pinned K9F1208U0C Rev1.1 3.3V array-read output bounds from
+the AC-characteristics table (nand-read.txt, hardware/sources.json):
+
+  Bound                         Nanoseconds
+  RE/CE access maximum           30 / 35
+  Output hold minimum            15
+  RE/CE-to-Hi-Z maximum          30 / 20
+  RE low/high pulse minimum      21 / 15
+  RE-to-RE cycle minimum         42
+
+The owner supplies a nonzero reference frequency and monotonic tick observations.
+Deadlines round up to whole ticks with checked overflow. Initial CE/RE levels
+are unknown; even the first idle-high observation requires the CE release bound
+before Hi-Z is established. Before both access maxima, drive/data remain unknown.
+After release, a valid byte remains driven throughout the guaranteed hold window;
+the subsequent interval is unknown until the applicable Hi-Z maximum. A legal
+short pulse that never established valid data cannot invent a held byte/driver.
+Two release edges can shorten release without extending the earlier hold.
+
+Each admitted selected falling RE invokes its caller-supplied protocol source
+once; repeated levels and output samples consume no bytes. No callback is retained.
+Timing rejection precedes the source call. Copies retain value state; the owner
+must coordinate them with protocol and CPU snapshots. Unknown pins, short pulses,
+short cycles, backward/overflowing time and missing/noncanonical source knowledge
+fail explicitly. CE assertion while RE is low and reselection during unresolved
+release remain unsupported. This component does not implement dynamic status,
+write-side setup/hold, ready/CLE/ALE-to-read setup or analog pad behavior.
+
+The own deterministic regression independently checks exact and rounded bounds
+at 1GHz, 1.08GHz and 216MHz, active/released copies, initial uncertainty, partial
+byte knowledge and directed failures. No randomized/fuzz traffic is involved.
+
+Original byte-helper regression
+The optional firmware test checks the official 1.25 ZIP identity, loads the
+unchanged embedded first stage and calls its original byte reader through native
+JSR/RTS. The own caller supplies linear modifiers, released F0..7 inputs and
+known separate F8/F9 levels. The candidate NAND has one explicitly prepared ready
+page with 512 main plus 16 spare own bytes; its preceding command/address/completion
+is a declared fixture input, not an executed original setup path. CE is a separate
+laboratory observation; no F10 chip-select route is inferred.
+
+The nominal 12MHz EXTAL reference owner advances a 1.08GHz timebase from native
+instruction estimates. Pin changes occur at declared instruction completions;
+input sampling occurs at the following instruction boundary. All 528 original
+calls return with real stack frames, and native caller stores match every byte.
+Removing column 37 permits exactly 37 complete calls, then the real next RE edge
+fails with port/PC/OMR/page/column context and no column advance. A separate own
+premature native sampler consumes one NAND byte but fails its GPIO read before
+data validity; it is not a failure claim about the original reader's timing.
+The private Testing/original-nand-read-timing.trace retains these three cases.
+
+The separate original_nand_pack regression extends this entry contract through
+the original 176-word packing loop and all buffered-only getter calls, including
+their parallel prefetches, shared-tail stores and joint mid-read restoration.
+See nand-pack.txt for exact scope and the independently retained BIU frontier.
+The prepared-page pin fixture explicitly rejects asserted write-enable; it does
+not silently accept unsupported NAND command cycles. The separate original
+first-page record experiment reaches that boundary (nand-first-records.txt).
+
+This does not change the older untimed NandLink fixture or qualify physical chip
+identity, timing, CE routing, actual contents, original refill turnaround/reserved
+Port F modes or the preceding reserved-Y clear. Full scheduled boot, actual
+library installation, audio, update/recovery and real-device equivalence remain
+open in coverage.txt. No manufacturer bytes or traces are distributed.

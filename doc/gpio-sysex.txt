@@ -1,0 +1,52 @@
+Original SysEx notification and unmapped-policy suppression
+
+  cmake --build --preset strict --target blofeld-original-gpio-sysex-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_sysex$'
+
+Ten declared contexts execute one original Sound write/read each, with both
+order/phase pairs and Device IDs17/42. Policy0 and CC-only policy1 must suppress
+notification for unmapped field70 while the original DSP still stores value7.
+Policy2 sends SysEx for mapped field69 and unmapped field70; policy3 falls back
+to SysEx for field70. Mapped policy1/3 CC cases remain in gpio-notification.txt.
+These are selected parameter/policy paths, not the whole sound-editor function.
+
+The same native MCU/DSP owners execute the original GPIO producer, ring/parser,
+normalizer/store, policy getter/cache, mapper where applicable, SNDP encoder,
+chunk router, UART queue, USB event producer and SCI/USB handlers. Every SysEx
+encoder must perform a genuine additional DSP request for the current Device ID.
+Independent source-load and wire-byte expectations distinguish policy, Device ID
+and actual Sound readback; no host reply, function return, IRQ or CPU repair is
+supplied. The full final original P image and MCU flash state remain unchanged.
+
+SNDP defines ten protocol bytes ending at F7. The original router submits three-
+byte chunks before checking for F7. Consequently its last UART/USB chunk includes
+two untouched caller-stack bytes. The gate observes these slots before entering
+the encoder and independently derives their expected contents from earlier getter
+state and the local original controller run table. It verifies the packet, actual
+SCI data writes, all decoded serial bytes and USB CIN4/4/4/5 payloads against those
+expectations. It does not replace spare bytes with zero or drop raw UART bytes.
+A fixed control consistently edits spare/packet/USB/UART evidence and must still
+fail the independent oracle. Detailed stack analysis and source data stay local.
+
+Six notifications produce60 logical SysEx bytes,72 raw SCI bytes and24 USB events
+(96 endpoint payload bytes). The two extra raw UART bytes per notification are
+observed for these declared caller contexts, not qualified MIDI message data or
+a stock-hardware defect. USB CIN5 assigns only F7 to the final message; its two
+unused payload bytes remain observable. Four suppressed cases produce no UART
+queue call, USB event or transmit interrupt. All ten original stores/readbacks
+must succeed independently of whether a notification is sent.
+
+Each active USB case yields4-byte DATA0 then12-byte DATA1 packets, actual host
+ACKs execute the original MIDI-IN ISR/flush/RTI and the emptied endpoint NAKs.
+Both transmit rings wrap; untouched cells, real policy cache insertion, caller
+code, USB identity/configuration and full final SCI stop/TC remain checked.
+The gate covers78 SCI and12 USB interrupts,2502 known shared-data-pad samples,
+zero unknown samples and104 unresolved intermediate net states. All ten board
+qualifications must still reject. Eight fixed evidence corruptions reject.
+
+All127 original records, RAM/caller state, empty active list, nominal clocks,
+SCI setup and existing own64-byte endpoint/decoder fixture are explicit inputs.
+They do not establish original enumeration, normal main-loop cadence, full boot,
+host-visible MIDI, voice/audio, both profiles, physical timing or update/recovery
+safety. Original assets and detailed traces remain local. No fuzzing, physical
+traffic or concurrent implementation changes are involved.

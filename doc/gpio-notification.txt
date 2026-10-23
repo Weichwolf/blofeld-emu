@@ -1,0 +1,54 @@
+Original parameter notification through SCI output
+
+  cmake --build --preset strict --target blofeld-original-gpio-notification-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_notification$'
+
+Eight continuous streams cover Ctrl Send policies 1 and 3, accepted Noise Color
+writes and rejected off-grid Oscillator 1 Octave writes, with two declared
+scheduler order/phase contexts. An own native caller performs three original
+writes and reads per stream. The GPIO IRQ/ring, secondary consumer, sound parser,
+normalizer, store, policy getter/cache, controller mapper, routing, UART queue and
+SCI IRQ/RTI all execute their unchanged original instructions. All127 runtime
+records and the declared RAM/pin/clock/SCI state are fixture preparation, not
+successful full initialization. The active-entry list is explicitly empty;
+voice allocation, callbacks with active voices and rendering are separate.
+
+The official manual's controller table independently identifies Noise Colour as
+CC62 and Oscillator 1 Octave as CC27. Noise values0,127,42 are stored; requested
+Octave values17,65,127 are rejected and read back as the initial64. The MCU still
+notifies all three incoming Octave values. Notification is an outgoing request
+value, not proof that the DSP accepted it. For these mapped fields both policies
+use the original ordinary selector3 UART branch. The real code returns after CC;
+the test rejects an additional direct USB queue call. The original main-loop
+mirror service, actual endpoint packets and lost-ACK retries have a separate gate
+in gpio-usb-notification.txt. Selected SysEx/unmapped-field and disabled-policy
+paths have a separate component gate in gpio-sysex.txt.
+
+One genuine DSP policy read per stream inserts the original MCU cache entry;
+later writes use actual cache hits. The UART ring starts at61 so nine bytes cross
+its64-slot boundary. The original SCI ISR consumes every byte, retains neighboring
+ring cells and disables its transmit interrupt after emptying the queue.
+
+An independent read-only sink observes the actual modeled PR3 pad every native
+MCU cycle. It checks known/conflict-free levels, falling start edges, eight LSB-
+first data bits and high stop bits at nominal31250 baud (960 declared30MHz bus
+cycles per bit). The Python oracle independently reconstructs complete bit-cell
+levels/widths from the transition ledger and compares decoded bytes with actual
+original SCI data writes. Native execution continues through the complete last
+stop bit and genuine transmission-complete/empty-ring state; no host byte source,
+register reply, IRQ injection, drain shortcut or CPU/argument repair supplies
+output. Seven fixed evidence corruptions must fail the oracle.
+
+The gate covers24 writes/reads,12 accepted stores,12 rejections,24 notifications,
+72 serial bytes,80 native SCI interrupts and120 consumed GPIO ring bytes. The
+original P image, MCU flash bytes/knowledge/freshness, own caller and policy cache
+remain checked. All3134 GPIO data samples are known, but118 intermediate shared
+net states remain unresolved and all eight board qualifications must reject.
+See gpio-pair.txt for nominal scheduling/direct-link assumptions and gpio-sound.txt
+for the separately qualified active-entry callback case with disabled policy.
+
+This is offline modeled UART output. It does not establish physical DIN wiring,
+USB mirroring/enumeration, host-visible MIDI, a complete instrument function,
+both device profiles, audio, reset-to-runtime boot, real-time performance or
+update/recovery safety. Manufacturer assets, detailed analysis and traces remain
+local. No fuzzing, physical-device traffic or concurrent implementation changes.

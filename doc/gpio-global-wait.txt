@@ -1,0 +1,54 @@
+Original global write, clocked settle and page refresh
+
+  cmake --build --preset strict --target blofeld-original-gpio-global-wait-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_global_wait$'
+
+Six declared contexts exercise the original inclusive upper boundary of the
+global settle interval: field34, documented reserved in the manufacturer map.
+This qualifies the reached firmware branch, not a documented user parameter or
+all global writes. Single-mode DSP flags, initial value42, incoming7, page0 and
+the two page-field values3/4 are explicit RAM inputs. All127 runtime records are
+loaded in order; this remains fixture preparation, not reset-to-runtime boot.
+
+The own native MCU caller invokes the original write and read routines. Original
+GPIO capture, secondary-ring parsing and DSP store execute; independent R1/B1/
+memory observations check the actual store. The original changed-value path sets
+its update flag and recomputes tuning from the retained centered settings. The
+MCU then calls its real eight-tick wait and, only after it returns, its original
+two page-state requests. Actual DSP loads supply both replies and final readback;
+no host tick, return value, source repair or interrupt injection is supplied.
+
+CRG RTICTL=40 selects the original8192-oscillator-edge period. The owned MCU run
+clock advances OSCCLK from real native bus cycles while the coupled DSP continues.
+Every cycle checks the independent oscillator-edge division and RTI remainder;
+RTIF rises must match exact period multiples. The original timer vector, tick
+increment, CRG W1C and RTI execute. Each nine-byte frame is checked against NXP
+layout and every foreground register must return unchanged. Scan inhibition is
+an explicit initial firmware flag; these contexts do not qualify the panel scan.
+
+Four active cases cover starting ticks0/254 and both declared order/phase pairs.
+Exactly eight original IRQs permit each wait to return, including254->6 wrap.
+Two negative cases disable interrupt delivery before execution while retaining
+the running counter. After nine full periods both processors still advance, RTIF
+is pending and the original wait remains unfinished: no page query, readback or
+invented successful completion is allowed. The global DSP store has occurred.
+
+All six qualification attempts must reject for their observed reason. Active
+cases retain unresolved GPIO turnaround intervals; held cases never reach that
+turnaround and reject because the original call is incomplete. Zero recorded net
+intervals in an unfinished call cannot establish board qualification. The oracle
+checks separate net/incomplete rejection counts, actual wire bytes, source loads,
+tick/IRQ/return order, original W1C writes and elapsed clock bounds. Nine fixed
+evidence corruptions must reject. Original program words, all MCU NVM bytes/
+knowledge/freshness and the own caller remain unchanged.
+
+The gate checks32 complete IRQ frames/returns,8 page reads,4 final readbacks,
+1027934 native cycle observations and170262 actual wait polls. All1158 sampled
+data-pad reads are known.48 unresolved intervals cause four net rejections;
+the two held calls have no turnaround interval and reject as incomplete.
+
+This is a nominal clock/instruction-boundary experiment. It does not establish
+physical timing, normal input scanning, all global-field effects, Multi bank/
+program loading, complete initialization, original host MIDI/audio, both device
+profiles or update/recovery safety. Detailed source analysis, reference assets
+and traces stay local. No fuzzing, physical traffic or concurrency changes.

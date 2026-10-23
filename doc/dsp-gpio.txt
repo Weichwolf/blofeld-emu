@@ -81,6 +81,12 @@ configurations, BIU arbitration and wait-state timing are unsupported.
 Core BCR state is restored on external reset; peripheral RESET clears GPIO modes.
 This gate qualifies the documented logical setup, not measured BIU cycle timing.
 
+The original_dsp_boot regression checks that the executed published SPI prefix
+and reached original stage retain the modeled BCR reset value. A separate original
+refill-entry experiment without laboratory BCR initialization rejects its first
+Port F access. This identifies an unresolved entry prerequisite, not a measured
+stock-device fault or permission to weaken the gate (nand-pack.txt).
+
 Checks
   ctest --test-dir build/strict -R '^(dsp_gpio|dsp_dax|native_dsp|original_dsp_boot)$' --output-on-failure
 Tests exercise every implemented pin as input/output, reset/disconnected data,

@@ -33,8 +33,11 @@ qualifications must still reject the recorded unresolved intermediate voltages.
 Nominal completion/clock and direct GPIO/IRQA assumptions remain in gpio-pair.txt.
 There is no inferred voltage winner, host acknowledgement or substituted parser.
 
-Only the selected raw Multi-global field is qualified here. Sound/global writes,
-normalization, callbacks, settle waits, voice/audio effects, complete initialization,
+Only the selected raw Multi-global field is qualified here. Selected sound writes,
+normalization and callbacks have a separate component gate in gpio-sound.txt.
+Selected global settling, original timer interrupts and page refresh have a
+separate gate in gpio-global-wait.txt. Other global writes, Multi program-loading
+waits, voice/audio effects, complete initialization,
 NAND/reset-to-runtime loading, normal host MIDI/USB, both hardware profiles and
 physical timing/update/recovery safety retain separate acceptance requirements.
 The full record load is declared fixture preparation, not successful native boot.

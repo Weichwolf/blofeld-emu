@@ -6,6 +6,7 @@
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_dsp_schedule.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "gpio_parameter_caller.hpp"
 #include "original_gpio_pair_fixture.hpp"
 
 #include <array>
@@ -50,52 +51,7 @@ std::vector<unsigned> messages() {
 }
 
 std::vector<std::uint8_t> caller_program() {
-  std::vector<std::uint8_t> code;
-  code.reserve((values.size() * caller_bytes) + 2);
-  for (unsigned n = 0; n < values.size(); ++n) {
-    const auto result = result_base + n;
-    // Own caller: parameter word, location, kind, then original write(B=value).
-    // The second frame calls the original read and stores its actual B result.
-    const std::array<std::uint8_t, caller_bytes> entry{0xcc,
-                                                       0,
-                                                       parameter,
-                                                       0x6c,
-                                                       0x80,
-                                                       0xc6,
-                                                       location,
-                                                       0x6b,
-                                                       0x82,
-                                                       0xc6,
-                                                       kind,
-                                                       0x6b,
-                                                       0x83,
-                                                       0xc6,
-                                                       static_cast<std::uint8_t>(values[n]),
-                                                       0x16,
-                                                       0xb7,
-                                                       0xa2,
-                                                       0xc6,
-                                                       location,
-                                                       0x6b,
-                                                       0x80,
-                                                       0x86,
-                                                       kind,
-                                                       0x6a,
-                                                       0x81,
-                                                       0xcc,
-                                                       0,
-                                                       parameter,
-                                                       0x16,
-                                                       0xb6,
-                                                       0xdc,
-                                                       0x7b,
-                                                       static_cast<std::uint8_t>(result >> 8U),
-                                                       static_cast<std::uint8_t>(result & mask)};
-    code.insert(code.end(), entry.begin(), entry.end());
-  }
-  code.push_back(branch_opcode);
-  code.push_back(branch_self);
-  return code;
+  return blofeld::test::gpio_parameter::caller_program(scenario, values, result_base);
 }
 
 struct Run {

@@ -98,6 +98,15 @@ add_library(blofeld_nand src/nand.cpp src/nand_write.cpp src/nand_array.cpp src/
   src/nand_image.cpp src/nand_image_codec.cpp)
 target_include_directories(blofeld_nand PUBLIC include)
 target_link_libraries(blofeld_nand PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
+add_library(blofeld_nand_read_timing src/nand_read_timing.cpp)
+target_include_directories(blofeld_nand_read_timing PUBLIC include)
+target_link_libraries(blofeld_nand_read_timing PUBLIC blofeld_nand)
+add_library(blofeld_nand_write_timing src/nand_write_timing.cpp)
+target_include_directories(blofeld_nand_write_timing PUBLIC include)
+target_link_libraries(blofeld_nand_write_timing PUBLIC blofeld_nand)
+add_library(blofeld_nand_read_setup src/nand_read_setup.cpp)
+target_include_directories(blofeld_nand_read_setup PUBLIC include)
+target_link_libraries(blofeld_nand_read_setup PUBLIC blofeld_nand)
 add_library(blofeld_nand_store src/nand_file.cpp src/nand_store.cpp)
 target_include_directories(blofeld_nand_store PUBLIC include)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
@@ -543,6 +552,61 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-read-test test/nand_read_test.cpp)
   target_link_libraries(blofeld-nand-read-test PRIVATE blofeld_nand)
   add_test(NAME nand_read COMMAND blofeld-nand-read-test)
+  add_executable(blofeld-nand-read-timing-test test/nand_read_timing_test.cpp)
+  target_link_libraries(blofeld-nand-read-timing-test PRIVATE blofeld_nand_read_timing)
+  add_test(NAME nand_read_timing COMMAND blofeld-nand-read-timing-test)
+  add_executable(blofeld-original-nand-read-timing-test test/original_nand_read_timing_test.cpp)
+  target_link_libraries(blofeld-original-nand-read-timing-test PRIVATE
+    blofeld_nand_read_timing blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_read_timing COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-nand-read-timing-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-read-timing.trace")
+  set_tests_properties(original_nand_read_timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-nand-pack-test test/original_nand_pack_test.cpp)
+  target_link_libraries(blofeld-original-nand-pack-test PRIVATE
+    blofeld_nand_read_timing blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_pack COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-nand-pack-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-pack.trace")
+  set_tests_properties(original_nand_pack PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-nand-records-test test/original_nand_records_test.cpp)
+  target_link_libraries(blofeld-original-nand-records-test PRIVATE
+    blofeld_nand_read_timing blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_records COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_nand_records.py"
+    $<TARGET_FILE:blofeld-original-nand-records-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-records.trace")
+  set_tests_properties(original_nand_records PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-nand-write-timing-test test/nand_write_timing_test.cpp)
+  target_link_libraries(blofeld-nand-write-timing-test PRIVATE blofeld_nand_write_timing)
+  add_test(NAME nand_write_timing COMMAND blofeld-nand-write-timing-test)
+  add_executable(blofeld-original-nand-write-timing-test test/original_nand_write_timing_test.cpp)
+  target_link_libraries(blofeld-original-nand-write-timing-test PRIVATE
+    blofeld_nand_write_timing blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_write_timing COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-nand-write-timing-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write-timing.trace")
+  set_tests_properties(original_nand_write_timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-nand-read-setup-test test/nand_read_setup_test.cpp)
+  target_link_libraries(blofeld-nand-read-setup-test PRIVATE blofeld_nand_read_setup)
+  add_test(NAME nand_read_setup COMMAND blofeld-nand-read-setup-test)
+  add_executable(blofeld-original-nand-read-setup-test test/original_nand_read_setup_test.cpp)
+  target_link_libraries(blofeld-original-nand-read-setup-test PRIVATE
+    blofeld_nand_read_setup blofeld_nand_read_timing blofeld_nand_write_timing
+    blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_nand_read_setup COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-nand-read-setup-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-read-setup.trace")
+  set_tests_properties(original_nand_read_setup PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-nand-image-test test/nand_image_test.cpp)
   target_link_libraries(blofeld-nand-image-test PRIVATE blofeld_nand)
   add_test(NAME nand_image COMMAND blofeld-nand-image-test)
@@ -873,6 +937,48 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-parameter.report")
   set_tests_properties(original_gpio_parameters PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  add_executable(blofeld-original-gpio-sound-test test/original_gpio_sound_test.cpp)
+  target_link_libraries(blofeld-original-gpio-sound-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_gpio_sound COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_sound.py"
+    $<TARGET_FILE:blofeld-original-gpio-sound-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-sound.report")
+  set_tests_properties(original_gpio_sound PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-original-gpio-notification-test test/original_gpio_notification_test.cpp)
+  target_link_libraries(blofeld-original-gpio-notification-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_gpio_notification COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_notification.py"
+    $<TARGET_FILE:blofeld-original-gpio-notification-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-notification.report")
+  set_tests_properties(original_gpio_notification PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+  add_executable(blofeld-original-gpio-usb-notification-test test/original_gpio_usb_notification_test.cpp
+    test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-gpio-usb-notification-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_gpio_usb_notification COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_usb_notification.py"
+    $<TARGET_FILE:blofeld-original-gpio-usb-notification-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-usb-notification.report")
+  set_tests_properties(original_gpio_usb_notification PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+  add_executable(blofeld-original-gpio-sysex-test test/original_gpio_sysex_test.cpp
+    test/usb_endpoint_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-gpio-sysex-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_gpio_sysex COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_sysex.py"
+    $<TARGET_FILE:blofeld-original-gpio-sysex-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-sysex.report")
+  set_tests_properties(original_gpio_sysex PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+  add_executable(blofeld-original-gpio-global-wait-test test/original_gpio_global_wait_test.cpp)
+  target_link_libraries(blofeld-original-gpio-global-wait-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME original_gpio_global_wait COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_global_wait.py"
+    $<TARGET_FILE:blofeld-original-gpio-global-wait-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-global-wait.report")
+  set_tests_properties(original_gpio_global_wait PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_executable(blofeld-dsp-dispatch-cache-test test/dsp_dispatch_cache_test.cpp)
   target_link_libraries(blofeld-dsp-dispatch-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dispatch_cache COMMAND blofeld-dsp-dispatch-cache-test)
@@ -1524,7 +1630,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
@@ -1589,6 +1695,11 @@ add_custom_target(quality
     blofeld-original-owned-clock-test
     blofeld-midi-serial-test blofeld-mcu-midi-test blofeld-clocked-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
+    blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
+    blofeld-original-nand-pack-test
+    blofeld-original-nand-records-test
+    blofeld-nand-write-timing-test blofeld-original-nand-write-timing-test
+    blofeld-nand-read-setup-test blofeld-original-nand-read-setup-test
     blofeld-nand-image-test
     blofeld-nand-store-test
     blofeld-nand-gpio-write-test

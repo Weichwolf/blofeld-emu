@@ -1,0 +1,51 @@
+Original parameter notifications mirrored to USB-MIDI
+
+  cmake --build --preset strict --target blofeld-original-gpio-usb-notification-test
+  ctest --test-dir build/strict --output-on-failure -j1 -R '^original_gpio_usb_notification$'
+
+Four continuous contexts extend gpio-notification.txt: Ctrl Send policy3, accepted
+Noise Color and rejected Octave writes, with both declared order/phase contexts.
+The same native MCU/DSP instances execute original sound writes, validation and
+readback, genuine policy lookup/cache, controller mapping and UART notification.
+The own native caller then invokes the original main-loop forwarding service
+three times. It never supplies preconstructed input bytes to either MIDI ring.
+
+The original service uses an independent UART mirror cursor and calls the real
+USB event producer. The UART ring starts at61 and the USB ring at124; both must
+wrap while preserving untouched cells. All three channel messages must become
+CC USB events with CIN11. The native SCI transmitter continues to serialize the
+same nine bytes. Notification of rejected Octave values remains distinct from
+the unchanged original sound readback.
+
+The first original USB event produces a four-byte endpoint packet; later events
+wait in the original ring while that packet remains unacknowledged. A modeled
+host IN token reads that actual packet. A missing ACK must retain its contents,
+DATA0 PID, ring cursors, endpoint status, CPU registers and time without a USB
+completion interrupt. Retrying IN must return the identical packet and PID.
+Actual host ACK then raises the original MIDI-IN vector. Its native ISR/RTI and
+real chunk sender produce the remaining eight-byte DATA1 packet. A second ACK
+must execute the ISR again and leave a real empty-endpoint NAK. The original
+mirror/USB/UART code, ring/cursor state and whole last SCI stop bit are checked.
+
+The oracle compares every original USB packet/retry byte with independent MIDI
+events, source-load/readback results, original SCI writes and decoded serial
+bytes. Fixed corruptions of retry PID/content, ACK, NAK, readback and preservation
+evidence must reject. Original P words, all MCU flash bytes/knowledge/freshness,
+own caller and the fixture's USB identity/configuration remain unchanged.
+
+The gate checks12 original writes/readbacks and12 USB events (48 distinct payload
+bytes), eight acknowledged packets plus four unchanged retries, eight native USB
+interrupts and40 SCI interrupts.36 serial bytes complete. All1567 shared-data-pad
+samples are known, but60 intermediate GPIO states still force four mandatory
+board rejections. Eight fixed oracle corruptions reject.
+
+Endpoint preparation uses the existing own USB register/decoder fixture with a
+64-byte bulk endpoint. This declares post-decoder state and endpoint inputs;
+it does not execute or qualify original enumeration, descriptor handling or a
+host-visible USB device. The full original DSP records, initial RAM, empty active
+list, pins, clocks and SCI configuration are likewise explicit caller inputs.
+There is no native reset-to-runtime boot, original main-loop cadence, physical
+USB/DIN timing, genuine voice allocation/audio, both-profile or recovery proof.
+Unresolved shared GPIO intervals still force board-qualification rejection.
+Detailed manufacturer analysis, assets and traces remain local. No fuzzing,
+physical-device traffic or concurrent implementation changes are involved.

@@ -149,6 +149,19 @@ rollback now uses fixed raw state instead of full native cache copies; actual
 bus effects, loaded REP and strict failures retain their existing contracts
 (dsp-reference-execution.txt).
 
+The same regression checks independent register expectations at reset, stage
+entry, clear entry and the strict frontier. All eight modifiers remain linear;
+the prefix preserves reset arithmetic/scaling modes and clears CCR before entry.
+The original stage defines its own accumulator, cursor, OMR and fractional count.
+Thirty fixed oracle corruptions per execution profile reject changed M4, modes,
+cursor, count, source and memory mode. Separate checkpoint branches supply zero,
+two and three reference switch cycles: the affected X-to-P mapping really changes,
+but the original Y:002000 write still fails with its PC/OMR context. Additional
+private .boot-context.trace sidecars retain the register observations; undefined
+reset fields are not treated as specified zeros. Existing full traces stay
+unchanged. These constraints apply to the published prefix, not an unidentified
+stock mask-ROM variant; reserved-write semantics remain unresolved.
+
 The host supplies pin events with explicit instruction interleaving. The original
 MCU is not the sender in this fixture, no elapsed DSP/MCU clock ratio is
 inferred, and no physical Blofeld has validated the route/timing. Native caches

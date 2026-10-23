@@ -68,6 +68,12 @@ asserts RE while data outputs are still enabled; accepting that transition would
 require measured pad timing/drive behavior. Its later Port F mode transition
 also requires qualification. Neither failure is ignored or patched around.
 
+A separate original_nand_read_timing regression calls the original byte helper
+from explicitly released data-pin/ready-page conditions. It reads all 528 bytes
+through the candidate output timing model and native JSR/RTS; missing contents
+and an own premature sampler fail. This does not execute the earlier refill
+turnaround. See nand-read-timing.txt for reference timing contracts and limits.
+
 Candidate test-only routing: C8 RE, C9 WE, C10 CLE, C11 ALE, F0..7 data and
 TIO1 ready. Chip-select is an explicit held-active laboratory observation, not an
 inferred GPIO route. In particular, F10 is not assumed to be CE; its role remains
@@ -77,6 +83,17 @@ not a measured NAND delay or DSP clock ratio. The tests do not establish board
 wiring, polarity, CE timing, setup/hold or real-device equivalence.
 
 Full original boot still stops on reserved Y:002000 before reaching NAND GPIO.
+Input-side timing now has a separate component/reference gate: actual original
+commands and addresses pass bounded setup/hold/pulse/cycle checks, pending-WE
+restoration matches, and busy stays asserted through eight original ready polls.
+No data read or array completion is fabricated. See nand-write-timing.txt;
+this does not qualify the full refill or its Port F turnaround.
+The joined original transition in nand-read-setup.txt supplies an explicit lab
+Ready edge and checks read admission before the first protocol byte. It still
+fails at the actual reserved Port F function write, without a CPU data sample
+or payload RAM store. Unknown NAND drive while DSP outputs remain active is
+retained; all board cases stay unqualified.
+
 The 131072-store clear is unchanged. Actual NAND/ROM/wavetable/sample mappings and
 contents, original data reads, full scheduled boot/MIDI/audio/update/recovery,
 full original NAND updates and stock Desktop/Keyboard comparisons remain pending.

@@ -1,0 +1,46 @@
+Original runtime records from the prepared first NAND page
+
+  cmake --build --preset strict --target blofeld-original-nand-records-test
+  ctest --test-dir build/strict -j1 -R '^original_nand_records$' --output-on-failure
+
+The optional wrapper verifies the official 1.25 ZIP, independently decodes its
+main transfer and checks the first runtime page against the size/hash/source
+offset in nand-first-records-reference.json. Original bytes stay in ignored
+Testing/original-nand-records.trace.page.bin; they are not build/source assets.
+This is an updater-source reference, not a verified physical NAND image.
+
+An own native caller supplies the supported BIU/GPIO/clock conditions and one
+explicitly ready candidate page. The unchanged original packing loop reads all
+528 bytes through the timed NAND input. An own native jump joins its returned
+first word to the original post-read continuation. A separate FM13-37 short-BSR
+encoding check establishes that continuation. No host PC/frame/register edits,
+replacement callees or host operand-RAM payload writes supply the path. Original
+reset/clear/initial refill setup remains outside this fixture.
+
+The actual page contains 14 complete records and four of eight payload words in
+the fifteenth. An independent raw-word oracle checks all 131 executed stores:
+29 P words, 98 X words and four Y words. Fifteen actual original MOVEM writes
+patch the next store from the selected original template. The subsequent stores
+must use the independent expected bank/address/value, including the transition
+from a previously cached X-store instruction to Y. X/Y and tail guards retain
+their supplied values; untouched adjacent P RAM remains explicitly unknown.
+
+A joint checkpoint immediately after the first Y-template patch retains native
+machine/clock, modified code, NAND state, output timing and verification cursors.
+A fresh identically contracted owner and fresh source callbacks reproduce every
+recorded store/template/state/time row, the final memory and the complete debug
+state. These are trusted in-process snapshots, not a portable board-state format.
+
+After consuming the supplied page, the original loader begins its next refill.
+The prepared-page fixture rejects the first asserted write-enable with bus
+address/PC/OMR/page/column context. It does not silently ignore a command, provide
+a second page or fabricate completion. At that boundary the final record still
+has four words left, its real loop/call frames remain live, and post-page NAND
+readiness is unknown. The two older complete read/packing traces stay unchanged.
+
+The nominal timing contract and limits are in nand-read-timing.txt. Actual BIU
+latency, default/reset behavior, transient Port F modes, reserved writes, stock
+mask ROM and remaining contents require separate evidence. Full original refill,
+scheduled Desktop/Keyboard boot, normal MIDI/audio, updates/recovery and physical
+comparison remain open in coverage.txt. Detailed original data and traces remain
+local; only source locations, sizes, hashes and test expectations are published.

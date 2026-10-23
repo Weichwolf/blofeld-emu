@@ -210,6 +210,10 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           (dsp-core.txt).
                                           Original DSP RAM clear reaches reserved
                                           Y:002000; write/alias behavior unverified.
+                                          Documented-prefix entry registers and
+                                          native failure before/after X-to-P switch
+                                          checked; no hidden modulo/scaling state
+                                          supplied (dsp-core.txt).
                                           Other DSP layouts and full timing pending.
 Digital GPIO coupling            partial  Local driver intent is separate from pad
                                           voltage and weak pulls. Explicit unknown
@@ -722,8 +726,52 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           32 stores/reads,160 bytes consumed and
                                           288 data writes (gpio-parameters.txt).
                                           Final original P-record overlays are
-                                          verified before/after. Other write
-                                          classes, real boot/initialization,
+                                          verified before/after. Selected Sound
+                                          writes add64 original normalizations,
+                                          32 stores/Noise Color callbacks and32
+                                          rejected off-grid Octave writes,64
+                                          native sound readbacks and8 genuine
+                                          notification-policy reads/cache
+                                          insertions (gpio-sound.txt). One own
+                                          active-list entry is declared, not
+                                          actual voice allocation/rendering.
+                                          Enabled policies1/3 add24 original
+                                          mapped CC notifications,72 SCI pin
+                                          bytes and80 real SCI interrupts with
+                                          wrapped ring/cache/last-stop checks
+                                          (gpio-notification.txt). Rejected
+                                          writes still notify incoming values;
+                                          notification is not DSP acceptance.
+                                          Original mirror/USB event/endpoint
+                                          execution adds12 events,8 ACKed packets
+                                          and4 unchanged lost-ACK retries while
+                                          the same SCI stream drains.8 original
+                                          USB interrupts, ring wrap/guards and
+                                          final NAK checked under own declared
+                                          endpoint/decoder setup
+                                          (gpio-usb-notification.txt). This is
+                                          not original enumeration. Selected
+                                          SysEx paths add6 actual DeviceID
+                                          requests/notifications,24 USB events,
+                                          72 raw serial bytes and4 suppressed
+                                          off/unmapped-CC cases (gpio-sysex.txt).
+                                          Caller spare bytes are independently
+                                          derived and preserved; raw bytes after
+                                          F7 are not qualified message data.
+                                          Host-visible output and complete
+                                          instrument functions remain open.
+                                          One reserved global boundary write
+                                          adds4 complete original8-tick waits,
+                                          32 native timer IRQ/frame/RTI returns,
+                                          8 original page-state reads and4
+                                          final readbacks.2 disabled-delivery
+                                          cases remain genuinely unfinished
+                                          beyond9 clocked periods, with no
+                                          host tick updates (gpio-global-wait.txt).
+                                          Scan inhibition and page data are
+                                          declared inputs, not normal panel/boot
+                                          evidence. Other writes/Multi waits,
+                                          real boot/initialization,
                                           host MIDI/audio and physical safety
                                           remain unqualified.
                                           Declared external pad sources separate
@@ -758,8 +806,40 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           Isolated original command/address/poll
                                           execution exposes unqualified data
                                           turnaround and upper Port F writes
-                                          (nand-read.txt). No original NAND data
-                                          transfer or default board route proven.
+                                          (nand-read.txt). Separately prepared
+                                          original byte-helper calls read all 528
+                                          bytes with bounded output timing; missing
+                                          contents and early native sampling reject
+                                          (nand-read-timing.txt). Full original
+                                          refill/default board route unproven.
+                                          Original 176-word packing and 175
+                                          buffered getter calls retain actual
+                                          prefetches, cursor stores and loop state;
+                                          joint mid-read replay matches exactly.
+                                          Missing BIU setup still rejects the first
+                                          original refill F access (nand-pack.txt).
+                                          Actual first runtime page supplies 14
+                                          complete records and one partial record:
+                                          131 native stores across P/X/Y, 15 actual
+                                          store-template patches and exact restored
+                                          live-code continuation. Next write strobe
+                                          still rejects (nand-first-records.txt).
+                                          Independent input-timing bounds qualify
+                                          four original command/address sequences
+                                          and pending-WE joint restorations; eight
+                                          real polls each retain busy without an
+                                          invented completion. Pin/BIU timing and
+                                          full refill remain separate requirements
+                                          (nand-write-timing.txt).
+                                          A separate read-admission guard checks
+                                          WHR/AR/CLR/RR before consumption. Four
+                                          actual original write/poll/read paths,
+                                          with explicit lab Ready release, reach
+                                          the still-fatal reserved Port F write.
+                                          No CPU data sample or payload store
+                                          occurs; uncertain drive keeps every
+                                          board case unqualified. Joint Ready-edge
+                                          replay matches (nand-read-setup.txt).
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.
