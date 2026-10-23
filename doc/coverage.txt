@@ -1000,6 +1000,37 @@ Original sample interpolation     partial  144384 unchanged native callback call
                                           Native header/NAND/refill path, rate/bank
                                           preparation, full voices/audio and board
                                           timing remain unqualified.
+Original sample receive chain     partial  Native C100 Port-F reads for136 raw WPC
+                                          pages,24 header/228 payload words each;
+                                          six real slot-field copies,100 active
+                                          prepare/refill/sample paths and36 actual
+                                          silent callbacks (dsp-sample-receiver.txt).
+                                          Five byte cuts check complete-word/field
+                                          publication and ten trusted replays.
+                                          Own JSR/RTI caller, read-mode peer and
+                                          timer-busy queue are explicit; original
+                                          request/turnaround/NAND/refill delivery,
+                                          physical timing and full boot remain open.
+Declared sample-MIDI pages        partial  47616 explicit target pages, bounded
+                                          sparse reads and strict missing rows;
+                                          fixed41-program view references142
+                                          headers and retains265 unresolved keys.
+                                          Native/client end fields remain distinct
+                                          in76 cases (sample-midi-pages.txt).
+                                          All142 native receive/prepare/refill/sample
+                                          paths, five byte cuts and ten replays
+                                          checked. No physical NAND/address/ECC,
+                                          programming or full-playback proof.
+Original sample Timer1 entry      partial  All142 declared MIDI headers enter the
+                                          unchanged vector through actual Timer1
+                                          capture/priority/native CPU selection;
+                                          original handler RTI restores foreground.
+                                          Five byte cuts and ten trusted replays
+                                          retain capture/vector history. Explicit
+                                          CLK/2/TIO events in an untimed owner;
+                                          physical latency, automatic scheduling,
+                                          full request/NAND turnaround and boot
+                                          remain open (dsp-sample-timer.txt).
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Explicit nominal DSP reset epochs retain

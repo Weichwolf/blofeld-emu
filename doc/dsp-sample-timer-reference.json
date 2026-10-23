@@ -1,0 +1,14 @@
+{
+  "vector_record": {
+    "record": 83,
+    "space": 0,
+    "address": 88,
+    "words": 2,
+    "sha256": "0a9fca8673f67ceed96aae565ad461123864934e7bc8c9b35ffe0e766afa2372"
+  },
+  "capture_edges": 18,
+  "capture_count": 17,
+  "timer_priority": 256,
+  "vector": 88,
+  "qualification": "Unchanged Timer1 vector and receiver under explicitly supplied synchronized TIO and CLK/2 events in an untimed native owner. No physical interrupt latency, automatic clock scheduling, NAND turnaround or full boot/playback proof."
+}

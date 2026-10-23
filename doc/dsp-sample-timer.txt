@@ -1,0 +1,29 @@
+Original Timer1 sample receive interrupt
+
+  cmake --build --preset strict --target blofeld-original-dsp-sample-receiver-test
+  ctest --test-dir build/strict -R '^original_dsp_sample_timer$' --output-on-failure
+
+The declared-MIDI page profile replaces the receiver fixture's own JSR with real
+Timer1 capture and native interrupt selection. The unchanged two-word P:0058
+vector enters the original C100 handler; its RTI returns to the own foreground
+and restores the saved context. All seven loaded original records stay intact.
+
+Explicit native setup selects IPRP=0100 (timer IPL0), SR=c00000, TLR1=0 and
+TCSR1=300065 (rising-edge capture with TCIE). Eighteen supplied CLK/2 edges give
+one load and seventeen increments. No request exists before the supplied
+synchronized rising TIO1 edge; afterwards capture=17, TCF is set, mask0 admits
+P:0058 and mask1 rejects it. The native CPU fetches both original vector words;
+the original handler clears/stops the timer and returns without a pending IRQ.
+
+All142 declared sample pages then pass the existing528-byte strobe/read, copied
+header, preparation, first-refill and independent output checks. Missing bytes
+at0,1,71,72,527 fault visibly. Ten trusted suffix replays restore both owner and
+logical peer, retain the capture/vector history and do not reissue the interrupt.
+The separate WPC and MIDI JSR profiles remain available.
+
+This is an untimed owner with declared read-mode peer/descriptor/slot and supplied
+CLK/2/TIO events. It establishes neither physical interrupt latency nor automatic
+clock scheduling, request production, NAND turnaround/refill delivery, full boot,
+live MIDI/audio or hardware equivalence. Reserved Port-F and Y:002000 accesses
+remain strict. References: DSP56371UM timer capture and interrupt-priority fields;
+firmware/vector identities: dsp-sample-timer-reference.json and dsp-voice-reference.json.

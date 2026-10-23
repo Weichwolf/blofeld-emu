@@ -1051,6 +1051,33 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample.trace")
   set_tests_properties(original_dsp_sample PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  add_executable(blofeld-original-dsp-sample-receiver-test test/original_dsp_sample_receiver_test.cpp)
+  target_link_libraries(blofeld-original-dsp-sample-receiver-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_sample_receiver COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_receiver.py"
+    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-receiver.trace")
+  set_tests_properties(original_dsp_sample_receiver PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  add_test(NAME sample_midi_pages COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/sample_midi_pages_test.py")
+  add_test(NAME sample_midi_reference COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/sample_midi_pages_test.py" --reference
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/sample-midi-reference.json")
+  set_tests_properties(sample_midi_reference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_test(NAME original_dsp_sample_receiver_midi COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_receiver_midi.py"
+    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-receiver-midi.trace")
+  set_tests_properties(original_dsp_sample_receiver_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  add_test(NAME original_dsp_sample_timer COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_timer.py"
+    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-timer.trace")
+  set_tests_properties(original_dsp_sample_timer PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_executable(blofeld-original-dsp-filters-test test/original_dsp_filters_test.cpp
     test/dsp_filter_model.cpp test/dsp_filter_fixture.cpp)
   target_link_libraries(blofeld-original-dsp-filters-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1782,6 +1809,7 @@ add_custom_target(quality
     blofeld-original-dsp-filters-test
     blofeld-original-dsp-master-output-test
     blofeld-original-dsp-sample-test
+    blofeld-original-dsp-sample-receiver-test
     blofeld-original-dsp-waveforms-test
     blofeld-original-dsp-envelopes-test
     blofeld-original-dsp-voice-test
