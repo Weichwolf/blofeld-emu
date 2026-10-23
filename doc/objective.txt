@@ -80,7 +80,8 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
 
 Functional acceptance includes every documented Blofeld function on both
 profiles, exercised through unmodified firmware with observable MIDI, audio,
-display and persistent-state results. Track feature coverage against the manual;
+display and persistent-state results. Track feature coverage against the manual
+in function-acceptance.tsv under the evidence rules in function-acceptance.txt;
 isolated helper execution does not establish a complete instrument function.
 
 Completion requires evidence for the whole emulator and both profiles, original

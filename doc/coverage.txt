@@ -20,6 +20,11 @@ Documented instrument functions  pending  Every documented function must execute
                                           through the original firmware on both
                                           profiles. Component tests below do not
                                           establish whole-function acceptance.
+                                          function-acceptance.tsv indexes manual,
+                                          controller, FAQ and Spectre/device
+                                          contracts with separate pending emulator
+                                          and hardware statuses. Expansion and
+                                          evidence rules: function-acceptance.txt.
 Original request direction       partial  Eight native MCU request prefixes cover
                                           all immediate routes and startup0x4c;
                                           an independent34-cycle driven interval

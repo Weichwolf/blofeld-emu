@@ -1,0 +1,19 @@
+{
+  "checked_on": "2026-10-23",
+  "files": [
+    {
+      "id": "desktop-faq",
+      "local_path": "doc/local/manual-acceptance/desktop-faq.html",
+      "source": "https://waldorfmusic.com/faq-blofeld/",
+      "bytes": 661720,
+      "sha256": "97810508d6319bb806642b2fb5dda7998fabc825fcd05f9705b7eee071c70552"
+    },
+    {
+      "id": "keyboard-faq",
+      "local_path": "doc/local/manual-acceptance/keyboard-faq.html",
+      "source": "https://waldorfmusic.com/faq-blofeld-keyboard/",
+      "bytes": 677040,
+      "sha256": "e841eec8bdcfb24265d7cf7c033355b3f48c603d46cf7e146bbe44e891783e9f"
+    }
+  ]
+}

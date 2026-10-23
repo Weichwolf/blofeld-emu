@@ -1,0 +1,112 @@
+Documented instrument function acceptance
+
+function-acceptance.tsv is the function-level coverage inventory. Each row is
+an acceptance contract, not a passing test or an implemented feature. Its two
+status columns refer separately to normal emulator operation and stock hardware
+comparison. All currently remain pending. coverage.txt retains the wider boot,
+ISA, peripheral, update/recovery, performance and failure-test requirements.
+
+Sources
+M means the German Blofeld_Handbuch.pdf, version 1.1, January 2009. Use actual
+printed/PDF page numbers; some contents-page numbers differ from the body.
+S means the German section of Spectre_Manual.pdf; U means the one-page
+Wie_aktualisiere_ich_die_Blofeld_Firmware.pdf. downloads.json pins all three
+official downloads by URL, size and SHA-256. Manufacturer assets stay local.
+F-D and F-K mean the Desktop and Keyboard FAQ snapshots whose URLs, sizes,
+hashes and ignored local paths are in function-references.json. Changing online
+FAQs cannot silently replace the reference used for a comparison.
+KBC means README.txt in the pinned BlofeldKBC14.zip from downloads.json. Its
+1181 bytes have SHA-256
+f86f70f9522c0f443ffbebbde00708d5fd4f3d9a1594c8fd3cfe4e65ae085773.
+It distinguishes pre-2015 keybed-controller updates from newer keyboards and
+does not offer a host-queryable success indication. The separate controller's
+image/completeness, native execution and recovery remain unqualified.
+
+The inventory covers the manual's operation, menu, synthesis, global, utility,
+update and controller sections, plus the documented Spectre/device workflow.
+Safety, shipping, acoustic examples and glossary explanations do not introduce
+separate software features. Electrical output behavior still needs board and
+hardware evidence. The old manual is not an exhaustive specification of 1.25;
+new firmware/FAQ functions extend this inventory rather than redefine success.
+
+Execution and expansion
+Run each D,K row separately on Desktop and Keyboard. K-only rows require the
+actual keyboard scanner/controller and controls; an external note source does
+not prove their operation. Desktop sample cases require an established licensed
+profile and authentic reference contents. Missing licenses/data stay explicit.
+Do not synthesize authorization or claim physical hardware variants identified.
+
+Expand named instances: every oscillator, filter, envelope, LFO, matrix slot,
+modifier, part, bank, program, pattern and step in that row's scope. Enumerate
+every discrete documented mode/source/destination/curve and each actual 1.25
+choice, retaining its identity. Exercise numeric endpoints, adjacent values,
+signed/zero transitions and interior values. Controller-table cases additionally
+cover every seven-bit input value for each documented CC, including unused CCs.
+Use directed interaction cases for mono/legato/sustain, unison/voice pressure,
+filter routing/balance/pan, envelope modes, global/part overrides, clock changes
+and overlapping arpeggiator notes. A grouped row passes only when its expanded
+cases pass; one representative sound cannot qualify the entire group.
+
+Start through the original cold-boot path with unchanged 1.25 firmware and the
+selected profile. Feed user actions through modeled panel/keyboard inputs and
+MIDI through qualified DIN/USB paths. Exercise both transports where applicable,
+all channel selections and relevant local-input differences. Original firmware
+must own parameter changes, replies, synthesis and nonvolatile writes. Isolated
+native callers, prepared RAM, injected endpoints or direct guest-state writes
+may supply component evidence, never a function-level acceptance pass.
+
+Record inputs and observed outputs on common emulated time. Check original LCD
+frames, outgoing MIDI, original DSP PCM, persistence and faults as applicable.
+Predictions come from documented boundaries, independent fixed-point/ISA
+models and qualified stock observations. Specify numerical/temporal tolerances
+before comparing audio. Pitch, level, envelopes, spectrum, stereo and effect
+tails need separate checks; an FFT match alone cannot establish note ordering,
+phase, latency, MIDI replies or storage. Deterministic replay supplements these
+independent comparisons. Missing output/unknown data is a failure or an open
+case, never silence, a fabricated ACK or an automatic success.
+
+Evidence required before changing a row's status
+- Expanded case ID, contract revision, profile/variant and exact emulator commit.
+- Firmware/reference hashes, initial persistent-state identity and clock contract.
+- Reproducible input bytes/actions and timed capture commands; exact test name.
+- Expected result and independent provenance, actual result, explicit tolerance,
+  retained trace/PCM/LCD/MIDI/NVM artifact identities and failure context.
+- For hardware comparison: device identity, stock firmware, wiring/capture method
+  and measured uncertainty. Do not infer equivalence from USB detection.
+- Separate outcomes for complete function execution and stock comparison;
+  missing references, skips, caller-qualified checks and untested instances
+  retain pending status. Never promote a row from a generated baseline alone.
+
+Persistence cases include ordinary save/reload/restart and untouched-neighbor
+checks. objective.txt requirement 4 separately requires every erase/program
+power-loss phase, damaged/interrupted updates and recovery/protection/security.
+Spectre cases use the original application under Wine and ordinary host MIDI;
+the optional samples inspection command cannot substitute for interoperability.
+Physical programming requires the separately established recovery procedure.
+All damaged/interrupted experiments here remain offline until that is met.
+Fuzzing remains explicit-request-only; this inventory starts no tests or traffic.
+
+Reference ambiguities to resolve through original execution and stock evidence
+- M37 names Alt1/Alt2 but does not explain them; M38 promises a wavetable list
+  that is absent from its appendix. Enumerate authentic choices and dependencies;
+  do not infer that all tables are internal ROM or invent unavailable contents.
+- M62/63 and the CC appendix M121 describe different LFO speed ranges. M51/52
+  include Bypass plus eleven filter types, while M123 gives a smaller CC range.
+  Record actual CC-to-parameter mappings without patching original firmware.
+- M58/59/60/61 contain inconsistent Attack Level/Sustain2 descriptions. Verify
+  actual envelope transitions; do not replace them with a host ADSR.
+- M84 limits accent velocity to 127; M85's example reaches 128. Check saturation
+  and actual event behavior rather than adopting the inconsistent example.
+- M91 describes momentary Free-button mute. The Keyboard FAQ describes a
+  recoverable latched mute condition. Keep both reference claims distinguishable.
+- The Desktop FAQ mentions channel 10 crashes, while the Keyboard FAQ explicitly
+  identifies part 10. Test part and channel independently; do not disable either
+  in the emulator or treat a firmware failure as missing input.
+- Current FAQ settings include global Local Control and Prg Send, absent from
+  the manual menu overview. They have separate pending acceptance rows.
+
+Partial evidence navigation
+The last TSV column points to existing bounded evidence, where applicable.
+Those documents state their exact fixtures and limits; the column is not a
+result, a new test run or permission to reuse an unrelated green check.
+Normal boot and original host USB enumeration/audio remain prerequisites.
