@@ -8,6 +8,7 @@
 #include "blofeld/hc12_cycles.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_machine.hpp"
+#include "blofeld/mcu_reset.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -15,6 +16,7 @@
 
 namespace blofeld {
 enum class McuDspTieOrder : std::uint8_t { unqualified, dsp_before_mcu, mcu_before_dsp };
+enum class McuDspResetOrder : std::uint8_t { unqualified, dsp_before_mcu };
 enum class McuDspWaitOrder : std::uint8_t { unqualified, dsp_before_mcu };
 
 struct McuDspScheduleInputs {
@@ -69,6 +71,16 @@ public:
                          const DspCompletionObserver &after_dsp = {},
                          const DspExternalEvents &external = {});
   void end_wait();
+  // Explicit board reset event; reconnect wiring/observers before clocking.
+  // Rejects unconsumed/overshot native offers instead of rewinding the DSP.
+  void begin_system_reset(McuResetSource source,
+                          unsigned synchronization_cycles,
+                          McuDspResetOrder order);
+  void begin_reset_period(McuResetPeriod period,
+                          const DspObserver &before_dsp = {},
+                          const DspCompletionObserver &after_dsp = {},
+                          const DspExternalEvents &external = {});
+  void end_system_reset();
   [[nodiscard]] McuDspScheduleCheckpoint checkpoint() const;
   void restore(const McuDspScheduleCheckpoint &checkpoint);
   [[nodiscard]] bool faulted() const;
@@ -102,6 +114,8 @@ private:
   std::uint64_t ties_ = 0;
   Hc12BusCycle cycle_;
   std::optional<ExecutionContext> wait_context_;
+  std::optional<ExecutionContext> reset_context_;
+  bool resetting_ = false;
   bool offered_ = false;
   bool shared_write_ = false;
   bool waiting_ = false;

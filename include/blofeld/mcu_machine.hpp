@@ -37,6 +37,13 @@ struct McuWaitPeriod {
   ExecutionContext context;
 };
 
+// Qualified SYSCLK edge during asserted reset; not a native CPU bus slot.
+struct McuResetPeriod {
+  ExecutionContext context;
+  std::uint64_t duration_ticks = 0;
+  std::uint64_t native_epoch = 0;
+};
+
 // Immutable trusted in-process state. Not a file format or a whole-board snapshot.
 class McuCheckpoint {
 public:
@@ -85,6 +92,7 @@ public:
   void set_cycle_observer(std::function<void(Hc12BusCycle)> observer);
   void set_wait_observer(std::function<void(McuWaitCycle)> observer);
   void set_wait_period_observer(std::function<void(McuWaitPeriod)> observer);
+  void set_reset_period_observer(std::function<void(McuResetPeriod)> observer);
   // Explicit test-scenario hypothesis; never selected by native registers.
   void set_sci_receive_reference(std::optional<SciReceiveReference> reference);
   [[nodiscard]] std::optional<SciReceiveReference> sci_receive_reference() const;

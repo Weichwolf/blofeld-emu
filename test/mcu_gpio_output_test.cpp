@@ -102,6 +102,9 @@ void unknown_and_peripheral_drivers() {
   gpio.reset();
   require(gpio.read(reg::rdrq) == 0 && gpio.outputs(McuPort::q) == blofeld::PinOutputs{},
           "Reset restores full-drive selection and releases the GPIO outputs");
+  require(gpio.read(reg::pear) == 0x10 && gpio.outputs(McuPort::e) == blofeld::PinOutputs{},
+          "Normal single-chip reset selects PE4 GPIO and releases all Port E drivers");
+  gpio.write({.address = reg::pear, .value = 0});
   rejects([&] { static_cast<void>(gpio.outputs(McuPort::e)); }, "ECLK");
   gpio.write({.address = reg::modrr, .value = 3});
   rejects([&] { static_cast<void>(gpio.outputs(McuPort::q)); }, "package");
@@ -110,6 +113,9 @@ void unknown_and_peripheral_drivers() {
 void board_observation() {
   blofeld::McuBus bus(flash);
   bus.begin_instruction({.pc = context_pc, .ccr = context_ccr});
+  require(bus.read(reg::pear) == 0x10 && bus.gpio_outputs(McuPort::e) == blofeld::PinOutputs{},
+          "Normal single-chip bus reset exposes GPIO without inventing a known input level");
+  bus.write(reg::pear, 0);
   rejects([&] { static_cast<void>(bus.gpio_outputs(McuPort::e)); },
           "output observation at 0x0008",
           "pc=0x8123 ccr=0x90");

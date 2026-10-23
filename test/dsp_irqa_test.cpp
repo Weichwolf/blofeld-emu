@@ -45,6 +45,25 @@ void check_priorities(const DspInterrupts &controller,
           "NXP tables2-3/2-4/2-6: greatest eligible IPL, then IRQA before SHI before TIM");
 }
 
+void test_driver_resolution() {
+  DspBus bus;
+  bus.write({.space = DspSpace::x, .address = iprc, .value = 1});
+  bus.observe_irqa_driver({});
+  require(!bus.interrupt_request(0), "Table2-6 internal pull-up deasserts a released IRQA pad");
+  bus.observe_irqa_driver({.active = 1, .known = 1});
+  require(bus.interrupt_request(0) == DspInterruptRequest{.vector = irqa_vector, .level = 0},
+          "A known strong low dominates the internal pull-up");
+  bus.observe_irqa_driver({.active = 1, .known = 1, .levels = 1, .reduced = 1});
+  require(!bus.interrupt_request(0),
+          "A known reduced-drive high still resolves against passive bias");
+  bus.observe_irqa_driver({.active = 1});
+  static_cast<void>(rejects([&] { static_cast<void>(bus.interrupt_request(0)); },
+                            "Unknown active drive must not become the pull-up voltage"));
+  bus.observe_irqa_driver({.pull_down = 1});
+  static_cast<void>(rejects([&] { static_cast<void>(bus.interrupt_request(0)); },
+                            "Opposed passive pulls have no invented voltage winner"));
+}
+
 void test_priority_matrix() {
   DspInterrupts controller;
   for (unsigned external = 0; external < 4; ++external) {
@@ -298,6 +317,7 @@ void test_native_level_and_missing_vector() {
 
 int main() {
   try {
+    test_driver_resolution();
     test_priority_matrix();
     test_level_and_disabled_detection();
     test_edge_retention_unknown_history_and_reset();

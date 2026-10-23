@@ -38,15 +38,14 @@ buffered/active/completed milestones. Active damage stays unknown; completed NVM
 known bits, erase history, protection/security and volatile reset defaults are
 checked independently. Milestones do not qualify physical flash latency.
 
-original_update_coupled executes the actual helper request, then an explicitly
-isolated MCU-only reset withn=3/high pad. It observes nativefffa fetch to the
-unchanged resident loader and retires its first instruction. The first register
-write at8002/0012 stops on the unqualified ECLK/GPIO observation of the reset
-board, before any loopback input. No GPIO check or pin state is bypassed.
-DSP state/time stay held and stale joint scheduling rejects. This is not continuous
-whole-board reset/boot. Power-on ramps, asynchronous external pulses/retriggering,
-physical pin/switch latency, measured synchronization phase, DSP/board reset
-coupling and complete update/recovery/power-loss qualification remain open.
+original_update_coupled now uses the explicit joint reset path described in
+mcu-reset-coupling.txt. Nativefffa fetch still selects the unchanged resident
+loader; the same DSP continues across SYSCLK/native-vector boundaries. The fixed
+normal-single-chip PEAR reset is10, so PE4 starts as GPIO. Startup then fails on
+an actually consumed opposed-pull Q7 net, not a fabricated ECLK requirement.
+This is not complete whole-board reset/boot. Power-on ramps, asynchronous external
+retriggering, physical pin/switch latency, measured synchronization phase and
+DSP/board reset propagation remain unqualified.
 
 Reference: pinned S12CRGUV1/D V01.01 sections5.2/5.2.1, figure5-1, table5-2;
 9S12UF32DGV1 device vector table, doc/hardware/sources.json.

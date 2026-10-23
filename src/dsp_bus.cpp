@@ -5,6 +5,7 @@
 #include "blofeld/dsp_gpio.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_timers.hpp"
+#include "blofeld/gpio_pads.hpp"
 
 #include <algorithm>
 #include <array>
@@ -414,6 +415,11 @@ std::optional<DspInterruptRequest> DspBus::interrupt_request(const unsigned mask
 
 void DspBus::observe_irqa(const std::optional<bool> level) {
   interrupts_.observe_irqa(level);
+}
+
+void DspBus::observe_irqa_driver(const GpioNetDriver driver) {
+  const auto pad = resolve_gpio_net(1, driver, {.pull_up = 1});
+  observe_irqa((pad.known & 1U) != 0 ? std::optional((pad.levels & 1U) != 0) : std::nullopt);
 }
 
 bool DspBus::interrupt_source_pending(const DspInterruptRequest request) const {

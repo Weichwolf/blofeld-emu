@@ -1354,6 +1354,9 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-gpio-pad-checkpoint-test PRIVATE
     blofeld_core blofeld_dsp blofeld_dsp_native)
   add_test(NAME gpio_pad_checkpoints COMMAND blofeld-gpio-pad-checkpoint-test)
+  add_executable(blofeld-mcu-dsp-reset-test test/mcu_dsp_reset_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-reset-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME mcu_dsp_reset COMMAND blofeld-mcu-dsp-reset-test)
   add_executable(blofeld-mcu-reset-test test/mcu_reset_test.cpp)
   target_link_libraries(blofeld-mcu-reset-test PRIVATE blofeld_core blofeld_mcu_dsp blofeld_dsp blofeld_dsp_native)
   add_test(NAME mcu_reset COMMAND blofeld-mcu-reset-test)
@@ -1628,7 +1631,7 @@ add_custom_target(quality
     blofeld-dsp-corpus-test blofeld-coupled-boot-test blofeld-dsp-zero-loop-test
     blofeld-original-sample-preparation-test
     blofeld-scheduled-coupling-test
-    blofeld-mcu-cop-test blofeld-mcu-reset-test
+    blofeld-mcu-cop-test blofeld-mcu-reset-test blofeld-mcu-dsp-reset-test
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
     blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test

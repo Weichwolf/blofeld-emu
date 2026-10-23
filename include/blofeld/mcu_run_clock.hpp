@@ -36,6 +36,7 @@ public:
   void advance_wait_cycle(McuBus &bus, ExecutionContext context);
   // Pure duration offer for a board scheduler; no clock, input or peripheral advance.
   [[nodiscard]] std::uint64_t next_cycle_ticks(const McuBus &bus) const;
+  [[nodiscard]] std::uint64_t next_reset_edge_ticks() const;
 
   [[nodiscard]] std::uint64_t timebase_hz() const { return timebase_hz_; }
 

@@ -108,9 +108,13 @@ void McuRunClock::begin_reset_epoch() {
   faulted_ = false;
 }
 
-void McuRunClock::advance_reset_edge() {
+std::uint64_t McuRunClock::next_reset_edge_ticks() const {
   if (!resetting_ || faulted_) { throw Fault("MCU reset clock is not active"); }
-  const auto ticks = oscillator_period_ - oscillator_phase_;
+  return oscillator_period_ - oscillator_phase_;
+}
+
+void McuRunClock::advance_reset_edge() {
+  const auto ticks = next_reset_edge_ticks();
   if (ticks > std::numeric_limits<std::uint64_t>::max() - elapsed_ticks_ ||
       reset_edges_ == std::numeric_limits<std::uint64_t>::max() ||
       oscillator_cycles_ == std::numeric_limits<std::uint64_t>::max()) {
