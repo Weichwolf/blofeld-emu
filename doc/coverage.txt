@@ -1742,6 +1742,17 @@ Desktop/Keyboard differences      pending  Both requested with 1.25; Keyboard is
                                           (keyboard-handoff.txt). Outer dispatch,
                                           controller execution and physical board
                                           qualification remain pending.
+Initial Keyboard update return    partial  Original blocks0/1, sender, XIRQ/copy,
+                                          native119-byte display helper and RTS in
+                                          four order/phase cases. Original font
+                                          raster and1559 writes/1070 reads each;
+                                          one real final ACK, nine resident trailer
+                                          bytes and native bus release/CLI/RTS.
+                                          Four post-cache pin failures and eight
+                                          identical joint suffix restores checked
+                                          (keyboard-initial.txt). Explicit clocks,
+                                          logical bias and reset LCD fixture;
+                                          whole update/controller/board pending.
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

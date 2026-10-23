@@ -1,0 +1,50 @@
+Original initial Keyboard sender, display helper and resident return
+
+  cmake --build --preset strict --target blofeld-original-keyboard-initial-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_initial$' --output-on-failure
+
+Pinned local main1.25 and Keyboard Controller1.4 archives are required. Their
+identities, full original records and packet words are checked before execution.
+The original DSP packet decoder downloads Keyboard blocks0/1 into one owner,
+then its final JMP enters the unchanged initial sender. Own linear/unscaled
+packet callers, reference clocks and IRQ/pad routing are explicit preconditions.
+No raw MIDI/USB reception or original outer dispatcher is supplied here.
+
+The sender patches the original main-loop word at P:019a with a branch back two
+words, independently assembled from own source. All other words of that complete
+original record stay exact. Native REP clears64 scratch words. Forty-one actual
+Y reads supply164 six-bit writes: length119, the complete MCU helper and two
+alignment bytes. The following object-checksum word is not sent. Native XIRQ/RTI,
+resident receive/copy and JSR supply119 exact bytes and the real service table.
+
+Five actual helper indicator calls toggle Q7. The first releases the sender's
+final acknowledgement wait; original pin cleanup and RTS return to an explicitly
+declared own idle caller. No additional packet is supplied by that caller.
+The helper calls actual resident clear/text/bitmap functions and returns. A
+separate original-font column/rectangle calculation predicts every visible PBM
+pixel and1559 writes/1070 reads per case. Four PBM/PNG captures remain local.
+
+The resident loader then drains nine decoded bytes. Two are cached alignment
+bytes; seven more require twelve physical sample instructions after the sender
+has released its data drivers. Under the existing explicit logical Port-C
+pull-down model those samples are zero. Source-word count remains41. Native bus
+release, CLI and RTS complete with statusc0 and the original caller stack.
+These bytes do not establish a checksum or programming-success indication.
+
+Four order/phase contexts each checkpoint after actual helper RTS. Withdrawing
+the fixture's pad observation fails the first real sample after two cached bytes
+at MCU PCbad3/address0260. DDRQ=80 leaves seven inputs: unused Q6 must remain known
+for that read too. Native retry/capture reject without state/time changes.
+Two trusted joint restorations per context rebind both CPUs, schedule, GPIO/IRQ
+readers and LCD state. Complete suffix traces, CPU states, clocks and counts are
+identical; original trailer reads and returns execute again. Eight fixed trace
+corruptions reject. MCU NVM/knowledge/erase history, helper/tail, source/program,
+download context and own callers remain exact outside native firmware patches.
+
+Consumed logical pads are known in the successful paths. Unresolved unconsumed
+voltage intervals still make the separate board-qualification check reject.
+This is conditional first-stage execution, not physical wiring/clock validation,
+complete SMF interleaving, the later external-controller programmer/recovery,
+normal boot/MIDI/audio or any completed whole-instrument acceptance row.
+All requirements remain in objective.txt/coverage.txt. No fuzzing or physical
+traffic runs; manufacturer assets and detailed analysis stay local.
