@@ -1,0 +1,50 @@
+Original NAND word packing and buffered reads
+
+  cmake --build --preset strict --target blofeld-original-nand-pack-test
+  ctest --test-dir build/strict -j1 -R '^original_nand_pack$' --output-on-failure
+
+The optional test checks the official 1.25 ZIP identity and executes the original
+first-stage packing loop plus its buffered getter. The own native caller supplies
+the documented BCR setup, released data inputs, linear addressing, explicit RAM
+guards and a prepared ready NAND page. Original reset/clear/refill setup is not
+executed by this experiment. The clock/pad contract is the same explicit nominal
+12MHz/1.08GHz reference used in nand-read-timing.txt; BIU waits and physical bus
+sampling are not calibrated.
+
+Two complete 528-byte own patterns and two differing initial buffer words check
+all 176 big-endian packed words and returned words. Actual native access observers
+check every parallel prefetch: the first reads the declared old RAM word; the
+remaining packing iterations read the first already-written packed word. Full
+accumulator values, the independent remaining loop count and one cursor update
+are checked at each shared arithmetic/read instruction.
+
+The 175 buffered-only calls consume no further NAND bytes. They retain the
+original shared-tail store of the OLD read cursor beyond the filled buffer.
+All those writes, their exact endpoint and an independent Y-space guard are
+checked. Real nested call/loop frames retire, and the caller's nonzero old loop
+address/count are restored. No host operand-RAM writes or replacement returns
+provide the results.
+
+Each case captures the native machine/clock, NAND protocol/storage and pin-output
+timing after byte 264 is latched but before the CPU can sample it. The output
+window is still unknown. A fresh owner with the identical run contract and fresh
+source callbacks restores all three components. Every subsequent recorded native
+state/time/pin row, all memory checks and the complete final debug state match.
+These are trusted in-process snapshots, not portable whole-board state files.
+
+BIU entry dependency
+The separate original_dsp_boot gate verifies that the executed published SPI
+prefix and stage prefix retain the modeled BCR reset value through the reserved-Y
+frontier. An isolated original refill call without the own BCR setup then fails
+at its first Port F control write, with address/PC/OMR context and no NAND read.
+This is the current strict-model boundary, not a physical-chip fault claim.
+
+DSP56371UM 6.2.4 requires BCR=01ffff; Table 6-1 and Figure C-29 reserve simultaneous
+Port F control/direction selection. Those references do not resolve the original
+transient pin mode or prove an alternate stock-ROM setup. Neither a write mask,
+assumed pin level nor extra timing delay is supplied. Actual mask ROM, full
+initialization/refill, reserved writes, assets, boot/MIDI/audio/update/recovery
+and Desktop/Keyboard hardware comparison remain open in coverage.txt.
+
+Private traces are Testing/original-nand-pack.trace. The older complete byte-read
+and bootstrap traces stay unchanged after their shared fixture extraction.

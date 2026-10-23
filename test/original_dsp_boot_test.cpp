@@ -31,6 +31,8 @@ constexpr unsigned pll_pc = 0x6f;
 constexpr unsigned clear_pc = 0x72;
 constexpr unsigned known_long_ram_end = 0x2000;
 constexpr unsigned clear_count = 0x20000;
+constexpr unsigned bcr = 0xfffffb;
+constexpr unsigned bcr_reset = 0x1fffff;
 constexpr unsigned word_bits = 24;
 enum class Execution : std::uint8_t { instruction, access };
 
@@ -128,6 +130,8 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
         blofeld::test::dsp_boot_word(std::span<const std::uint8_t, 3>(frame.subspan(offset, 3))));
   }
   while (cpu.state().pc != stage_base) { runner.step(); }
+  require(bus.read({.space = blofeld::DspSpace::x, .address = bcr}) == bcr_reset,
+          "The executed published SPI prefix supplies no Port F BIU setup");
   blofeld::test::boot_context::record(
       blofeld::test::boot_context::Phase::loaded, cpu.debug_state(), context);
   require(cpu.state().sp == 0 && cpu.state().r[0] == stage_base + stage_words &&
@@ -157,6 +161,8 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
   runner.step();
   require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count - known_long_ram_end,
           "Bounded native REP yields at the first reserved Y address without skipping iterations");
+  require(bus.read({.space = blofeld::DspSpace::x, .address = bcr}) == bcr_reset,
+          "The unchanged original stage still retains the unqualified reset BIU control");
   blofeld::test::boot_context::record(
       blofeld::test::boot_context::Phase::frontier, cpu.debug_state(), context);
   for (const auto space : {blofeld::DspSpace::x, blofeld::DspSpace::y}) {

@@ -795,6 +795,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           contents and early native sampling reject
                                           (nand-read-timing.txt). Full original
                                           refill/default board route unproven.
+                                          Original 176-word packing and 175
+                                          buffered getter calls retain actual
+                                          prefetches, cursor stores and loop state;
+                                          joint mid-read replay matches exactly.
+                                          Missing BIU setup still rejects the first
+                                          original refill F access (nand-pack.txt).
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.

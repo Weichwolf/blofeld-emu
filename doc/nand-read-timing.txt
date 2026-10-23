@@ -55,6 +55,11 @@ premature native sampler consumes one NAND byte but fails its GPIO read before
 data validity; it is not a failure claim about the original reader's timing.
 The private Testing/original-nand-read-timing.trace retains these three cases.
 
+The separate original_nand_pack regression extends this entry contract through
+the original 176-word packing loop and all buffered-only getter calls, including
+their parallel prefetches, shared-tail stores and joint mid-read restoration.
+See nand-pack.txt for exact scope and the independently retained BIU frontier.
+
 This does not change the older untimed NandLink fixture or qualify physical chip
 identity, timing, CE routing, actual contents, original refill turnaround/reserved
 Port F modes or the preceding reserved-Y clear. Full scheduled boot, actual
