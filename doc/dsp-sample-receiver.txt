@@ -7,6 +7,7 @@ The gate pins the firmware/MID/DSP records and original WPC/Spectre assets.
 An own native caller supplies an existing C100 descriptor, slot, read-mode GPIO,
 library-ready flag and unscaled context. Its real JSR/RTI frame executes the
 original receive handler; this does not test Timer1 interrupt recognition.
+A separate profile exercises actual capture/vector/RTI (dsp-sample-timer.txt).
 A logical peer presents each next byte only after an observed Port-C bit 8 rising
 edge. The actual whole Port-F read must consume that byte. No host writes any
 received header, payload, copied slot field or result into DSP RAM.

@@ -3,6 +3,7 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_gpio.hpp"
+#include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/dsp_native_access.hpp"
 #include "blofeld/dsp_timers.hpp"
@@ -17,6 +18,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -34,6 +36,9 @@ constexpr unsigned port_f_data = 0xfffff5, strobe = 0x100;
 constexpr unsigned phase = 0x0c0000, marker = 0x7e0000, next_marker = 0x020000;
 constexpr unsigned guard = 0x13579b, status = 0xc00300, refill_count = 264;
 constexpr unsigned timer_arm = 0x300065;
+constexpr unsigned timer_vector = 0x58, timer_record = 83, capture_count = 17, capture_edges = 18;
+constexpr unsigned timer_counter = 0xffff88, timer_status = 0xffff8b, capture_flag = 0x200000;
+constexpr unsigned unmasked_status = 0xc00000;
 constexpr unsigned header_words = 24, header_bytes = 72, seed_field = 22;
 constexpr unsigned word_bits = 24, accumulator_bits = 48, a0_seed = 0x2468ac;
 constexpr unsigned x1_seed = 0x123456, b1_seed = 0x765432, a2_seed = 0x12;
@@ -70,10 +75,10 @@ unsigned get(DspBus &bus, const DspSpace space, const unsigned address) {
   return bus.read({.space = space, .address = address});
 }
 
-std::array<unsigned, 3> caller(DspBus &bus) {
+std::array<unsigned, 3> caller(DspBus &bus, const bool native_timer) {
   DspProgram p;
   p.immediate("omr", mode);
-  p.immediate("sr", status);
+  p.immediate("sr", native_timer ? unmasked_status : status);
   for (unsigned i = 0; i < 8; ++i) { p.immediate("m" + std::to_string(i), mask); }
   p.emit("movep #>$01ffff,x:<<$fffffb");
   p.emit("movep #>$f00,x:<<$ffffbe");
@@ -83,6 +88,12 @@ std::array<unsigned, 3> caller(DspBus &bus) {
   p.emit("movep #>$400,y:<<$fffff6");
   p.emit("movep #>$400,y:<<$fffff5");
   p.emit("movep #>$3ff,y:<<$fffff7");
+  if (native_timer) {
+    p.emit("movep #>$300000,x:<<$ffff8b");
+    p.emit("movep #>$0,x:<<$ffff8a");
+    p.emit("movep #>$100,x:<<$fffffe");
+    p.emit("movep #>" + blofeld::test::number(timer_arm) + ",x:<<$ffff8b");
+  }
   p.immediate("r1", r1_seed);
   p.immediate("r2", r2_seed);
   p.immediate("m1", 3);
@@ -93,7 +104,7 @@ std::array<unsigned, 3> caller(DspBus &bus) {
   p.immediate("b1", b1_seed);
   p.immediate("x1", x1_seed);
   p.immediate("r6", receiver);
-  p.emit("jsr (r6)");
+  if (!native_timer) { p.emit("jsr (r6)"); }
   const auto header_stop = p.pc();
   p.emit("nop");
   p.emit("movep #>" + blofeld::test::number(timer_arm) + ",x:<<$ffff8b");
@@ -130,6 +141,8 @@ std::array<unsigned, 3> caller(DspBus &bus) {
 
 struct Peer {
   unsigned clocked = 0, reads = 0, steps = 0;
+  unsigned timer_edges = 0, captured = 0, vector_reads = 0;
+  bool irq_issued = false;
   std::optional<bool> previous;
   bool operator==(const Peer &) const = default;
 };
@@ -141,7 +154,8 @@ struct Saved {
 
 class Fixture {
 public:
-  explicit Fixture(const Firmware &firmware) : original_(firmware) {
+  explicit Fixture(const Firmware &firmware, const bool native_timer)
+      : original_(firmware), native_timer_(native_timer) {
     auto &bus = machine_.bus();
     bus.observe_omr(mode);
     bus.advance_instruction_cycles(3);
@@ -152,7 +166,15 @@ public:
         put(bus, space, record.address + offset, record.words.at(offset));
       }
     }
-    stops_ = caller(bus);
+    if (native_timer_) {
+      const auto &vector = original_.dsp.at(timer_record);
+      require(vector.space == 0 && vector.address == timer_vector && vector.words.size() == 2,
+              "The complete original Timer1 vector must retain its pinned two-word extent");
+      for (unsigned i = 0; i < 2; ++i) {
+        put(bus, DspSpace::p, timer_vector + i, vector.words.at(i));
+      }
+    }
+    stops_ = caller(bus, native_timer_);
     machine_.cpu().reset_spi_boot();
   }
 
@@ -192,6 +214,7 @@ public:
     put(bus, DspSpace::x, fm, 0);
     put(bus, DspSpace::y, scratch, guard);
     for (unsigned i = 0; i < 3; ++i) { put(bus, DspSpace::x, output + i, guard); }
+    if (native_timer_) { bus.timers().set_tio_drive(1, false); }
     bus.timers().observe_synchronized_tio(1, false);
     drive();
   }
@@ -255,6 +278,13 @@ public:
     }
   }
 
+  void report_timer(std::ostream &trace, const char *kind, const unsigned id) const {
+    if (native_timer_) {
+      trace << kind << ' ' << id << ' ' << peer_.timer_edges << ' ' << peer_.captured << ' '
+            << peer_.vector_reads << '\n';
+    }
+  }
+
   void intact() {
     for (const auto index : records) {
       const auto &record = original_.dsp.at(index);
@@ -262,6 +292,13 @@ public:
         require(get(machine_.bus(), static_cast<DspSpace>(record.space), record.address + i) ==
                     record.words.at(i),
                 "All complete original receiver/sampler/curve/coefficient records remain intact");
+      }
+    }
+    if (native_timer_) {
+      const auto &vector = original_.dsp.at(timer_record);
+      for (unsigned i = 0; i < vector.words.size(); ++i) {
+        require(get(machine_.bus(), DspSpace::p, timer_vector + i) == vector.words.at(i),
+                "Both original Timer1 vector words remain intact after all captures and replays");
       }
     }
   }
@@ -276,9 +313,40 @@ private:
                     .levels = upper_inputs | (missing ? 0U : byte)});
   }
 
+  void observe_capture() {
+    if (!native_timer_ || peer_.irq_issued || machine_.cpu().state().pc != stops_[0]) { return; }
+    auto &bus = machine_.bus();
+    require(peer_.clocked == 0 && peer_.reads == 0 && !bus.interrupt_request(0),
+            "The own setup boundary precedes both the actual capture and all response bytes");
+    bus.timers().advance_clk2(capture_edges);
+    require(!bus.interrupt_request(0),
+            "Clocking without a synchronized edge cannot create capture");
+    bus.timers().set_tio_drive(1, true);
+    bus.timers().observe_synchronized_tio(1, true);
+    const auto request = bus.interrupt_request(0);
+    require(request && request->vector == timer_vector && request->level == 0 &&
+                !bus.interrupt_request(1) && bus.timers().read(timer_counter) == capture_count &&
+                (bus.timers().read(timer_status) & capture_flag) != 0,
+            "One initial load plus17 increments and the real TIO edge must request Timer1 IPL0");
+    peer_.timer_edges = capture_edges;
+    peer_.captured = bus.timers().read(timer_counter);
+    peer_.irq_issued = true;
+  }
+
   void step() {
+    observe_capture();
     require(++peer_.steps <= step_limit, "Original sample receive/prepare/render exceeded bound");
     machine_.cpu().step({.observe = [this](const DspNativeAccess &access) {
+      if (access.kind == DspNativeAccessKind::vector &&
+          access.stage == DspNativeAccessStage::after) {
+        require(native_timer_ && peer_.irq_issued && peer_.vector_reads < 2 &&
+                    access.target.space == DspSpace::p &&
+                    access.target.address == timer_vector + peer_.vector_reads &&
+                    access.value == original_.dsp.at(timer_record).words.at(peer_.vector_reads),
+                "Native IRQ entry must fetch both unchanged original Timer1 vector words");
+        ++peer_.vector_reads;
+        return;
+      }
       if (access.kind != DspNativeAccessKind::read || access.stage != DspNativeAccessStage::after ||
           (access.target.space != DspSpace::y || access.target.address != port_f_data)) {
         return;
@@ -304,7 +372,10 @@ private:
   }
 
   void advance(const unsigned stop) {
-    do { step(); } while (machine_.cpu().state().pc != stop);
+    do {
+      step();
+    } while (machine_.cpu().state().pc != stop ||
+             (native_timer_ && stop == stops_[0] && !peer_.irq_issued));
   }
 
   void check_ring(const unsigned bytes) {
@@ -335,12 +406,20 @@ private:
   void check_header() {
     check_fields(true);
     const auto state = machine_.cpu().state();
-    require(state.sp == 0 && state.sr == status && state.r[1] == r1_seed && state.r[2] == r2_seed &&
-                state.m[1] == 3 && state.m[2] == 7 && (state.x >> word_bits) == x1_seed &&
-                ((state.a >> word_bits) & mask) == guard &&
-                (state.a >> accumulator_bits) == a2_seed &&
-                ((state.b >> word_bits) & mask) == b1_seed,
-            "The genuine JSR/RTI frame restores exactly the original ISR saved context");
+    require(
+        state.sp == 0 && state.sr == (native_timer_ ? unmasked_status : status) &&
+            state.r[1] == r1_seed && state.r[2] == r2_seed && state.m[1] == 3 && state.m[2] == 7 &&
+            (state.x >> word_bits) == x1_seed && ((state.a >> word_bits) & mask) == guard &&
+            (state.a >> accumulator_bits) == a2_seed && ((state.b >> word_bits) & mask) == b1_seed,
+        "The genuine native return frame restores exactly the original ISR saved context");
+    if (native_timer_) {
+      require(peer_.irq_issued && peer_.timer_edges == capture_edges &&
+                  peer_.captured == capture_count && peer_.vector_reads == 2 &&
+                  machine_.bus().timers().read(timer_counter) == capture_count &&
+                  !machine_.bus().interrupt_request(0),
+              "Original Timer1 service must retire its real IRQ, retain capture and restore "
+              "foreground");
+    }
   }
 
   void check_preparation() {
@@ -370,6 +449,7 @@ private:
   }
 
   const Firmware &original_;
+  bool native_timer_;
   DspMachine machine_;
   std::array<unsigned, 3> stops_{};
   const Page *page_ = nullptr;
@@ -388,11 +468,17 @@ unsigned read_number(std::istream &stream) {
   return result;
 }
 
-std::vector<Page> load_pages(const std::string &path) {
+struct Batch {
+  std::vector<Page> pages;
+  bool native_timer = false;
+};
+
+Batch load_pages(const std::string &path) {
   std::ifstream stream(path, std::ios::binary);
   std::array<char, 8> magic{};
   stream.read(magic.data(), static_cast<std::streamsize>(magic.size()));
-  require(std::string(magic.data(), magic.size()) == "BSRX0001", "Invalid sample page signature");
+  const std::string signature(magic.data(), magic.size());
+  require(signature == "BSRX0001" || signature == "BSRX0002", "Invalid sample page signature");
   const auto count = read_number(stream);
   require(count > 0 && count <= maximum_pages,
           "Sample receiver input count is outside its bounded scope");
@@ -410,7 +496,7 @@ std::vector<Page> load_pages(const std::string &path) {
     }
   }
   require(stream.get() == std::char_traits<char>::eof(), "Extra private sample input bytes");
-  return pages;
+  return {.pages = std::move(pages), .native_timer = signature == "BSRX0002"};
 }
 }
 
@@ -418,8 +504,9 @@ int main(const int count, char **arguments) {
   try {
     require(count == 4, "Usage: original-sample-receiver firmware.zip private.pages private.trace");
     const auto firmware = Firmware::load(arguments[1]);
-    const auto pages = load_pages(arguments[2]);
-    Fixture fixture(firmware);
+    const auto batch = load_pages(arguments[2]);
+    const auto &pages = batch.pages;
+    Fixture fixture(firmware, batch.native_timer);
     std::ofstream trace(arguments[3]);
     trace.exceptions(std::ios::failbit | std::ios::badbit);
     unsigned active = 0;
@@ -429,10 +516,12 @@ int main(const int count, char **arguments) {
       active += page.ready;
       trace << "PAGE " << page.id << ' ' << page.ready << ' ' << page.next_phase << ' '
             << page.result << '\n';
+      fixture.report_timer(trace, "TIMER", page.id);
     }
     for (const auto cutoff : {0U, 1U, 71U, 72U, 527U}) {
       fixture.failure(pages.front(), cutoff);
       trace << "CUT " << cutoff << " replays=2\n";
+      fixture.report_timer(trace, "TIMER_CUT", cutoff);
     }
     fixture.intact();
     trace << "RESULT " << pages.size() << ' ' << active << " 5 10\n";

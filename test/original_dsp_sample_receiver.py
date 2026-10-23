@@ -51,11 +51,17 @@ def prepare(firmware, destination, limit=None):
     return reference, cases
 
 
-def validate(trace, cases):
+def validate(trace, cases, timer=None):
     lines = trace.read_text().splitlines()
-    expected = [f'PAGE {page} {ready} {phase} {result}'
-                for page, ready, _, phase, result in cases]
-    expected += [f'CUT {cut} replays=2' for cut in (0, 1, 71, 72, 527)]
+    expected = []
+    for page, ready, _, phase, result in cases:
+        expected.append(f'PAGE {page} {ready} {phase} {result}')
+        if timer is not None:
+            expected.append(f"TIMER {page} {timer['capture_edges']} {timer['capture_count']} 2")
+    for cut in (0, 1, 71, 72, 527):
+        expected.append(f'CUT {cut} replays=2')
+        if timer is not None:
+            expected.append(f"TIMER_CUT {cut} {timer['capture_edges']} {timer['capture_count']} 2")
     active = sum(row[1] for row in cases)
     expected += [f'RESULT {len(cases)} {active} 5 10']
     if lines != expected:

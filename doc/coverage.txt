@@ -1009,6 +1009,16 @@ Declared sample-MIDI pages        partial  47616 explicit target pages, bounded
                                           paths, five byte cuts and ten replays
                                           checked. No physical NAND/address/ECC,
                                           programming or full-playback proof.
+Original sample Timer1 entry      partial  All142 declared MIDI headers enter the
+                                          unchanged vector through actual Timer1
+                                          capture/priority/native CPU selection;
+                                          original handler RTI restores foreground.
+                                          Five byte cuts and ten trusted replays
+                                          retain capture/vector history. Explicit
+                                          CLK/2/TIO events in an untimed owner;
+                                          physical latency, automatic scheduling,
+                                          full request/NAND turnaround and boot
+                                          remain open (dsp-sample-timer.txt).
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Explicit nominal DSP reset epochs retain

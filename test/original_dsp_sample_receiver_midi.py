@@ -16,22 +16,16 @@ from sample_midi_pages_test import reference_inputs
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
-    binary, firmware, trace = map(Path, sys.argv[1:])
-    trace.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        reference, pages, (_, samples, unresolved) = reference_inputs()
-        shared = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
-        xdata, ydata = original_records(firmware, shared)
-    except FileNotFoundError:
-        print('SKIP original sample MIDI receive: pinned private firmware/library absent')
-        return 77
+def prepare_inputs(firmware, inputs, native_timer=False):
+    reference, pages, (_, samples, unresolved) = reference_inputs()
+    shared = json.loads((ROOT / 'doc/dsp-voice-reference.json').read_text())
+    xdata, ydata = original_records(firmware, shared)
     controls()
     assert len(samples) == 142 and sum(x.high-x.low+1 for x in unresolved) == 265
     cases = []
-    inputs = trace.with_suffix('.pages')
     with inputs.open('wb') as output:
-        output.write(b'BSRX0001' + struct.pack('>I', len(samples)))
+        output.write((b'BSRX0002' if native_timer else b'BSRX0001') +
+                     struct.pack('>I', len(samples)))
         for sample in samples:
             page = pages.page(sample.header_page)
             end = int.from_bytes(page[39:42], 'big')
@@ -44,6 +38,18 @@ def main():
             row = (sample.header_page, 1, ydata[0xb1f], phase, result)
             output.write(struct.pack('>5I', *row) + page)
             cases.append(row)
+    return reference, cases
+
+
+def main():
+    binary, firmware, trace = map(Path, sys.argv[1:])
+    trace.parent.mkdir(parents=True, exist_ok=True)
+    inputs = trace.with_suffix('.pages')
+    try:
+        reference, cases = prepare_inputs(firmware, inputs)
+    except FileNotFoundError:
+        print('SKIP original sample MIDI receive: pinned private firmware/library absent')
+        return 77
     run = subprocess.run([str(binary.resolve()), str(firmware.resolve()),
                           str(inputs.resolve()), str(trace.resolve())],
                          capture_output=True, text=True, timeout=220, check=False)
