@@ -83,6 +83,12 @@ not a measured NAND delay or DSP clock ratio. The tests do not establish board
 wiring, polarity, CE timing, setup/hold or real-device equivalence.
 
 Full original boot still stops on reserved Y:002000 before reaching NAND GPIO.
+Input-side timing now has a separate component/reference gate: actual original
+commands and addresses pass bounded setup/hold/pulse/cycle checks, pending-WE
+restoration matches, and busy stays asserted through eight original ready polls.
+No data read or array completion is fabricated. See nand-write-timing.txt;
+this does not qualify the full refill or its Port F turnaround.
+
 The 131072-store clear is unchanged. Actual NAND/ROM/wavetable/sample mappings and
 contents, original data reads, full scheduled boot/MIDI/audio/update/recovery,
 full original NAND updates and stock Desktop/Keyboard comparisons remain pending.

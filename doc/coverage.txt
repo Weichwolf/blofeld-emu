@@ -807,6 +807,13 @@ DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled priv
                                           store-template patches and exact restored
                                           live-code continuation. Next write strobe
                                           still rejects (nand-first-records.txt).
+                                          Independent input-timing bounds qualify
+                                          four original command/address sequences
+                                          and pending-WE joint restorations; eight
+                                          real polls each retain busy without an
+                                          invented completion. Pin/BIU timing and
+                                          full refill remain separate requirements
+                                          (nand-write-timing.txt).
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.

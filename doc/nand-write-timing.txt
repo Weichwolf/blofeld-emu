@@ -1,0 +1,55 @@
+NAND command/address/data input timing reference
+
+  cmake --build --preset strict --target blofeld-nand-write-timing-test blofeld-original-nand-write-timing-test
+  ctest --test-dir build/strict -j1 -R '^(nand_write_timing|original_nand_write_timing)$' --output-on-failure
+
+NandWriteTiming is a separate value-state component for the explicitly selected
+K9F1208U0C Rev.1.1 3.3V candidate. The primary input table on printed page 12 and
+latch diagrams on pages 19/20 establish these minimum times, in nanoseconds:
+
+  CE setup 31; CLE/ALE setup 21; data setup 20; WE low pulse 21;
+  CE/CLE/ALE/data hold 5; WE high 15; falling-WE to falling-WE cycle 42.
+
+Setup ends at rising WE, including CLE/ALE: it does not end at falling WE.
+The source PDF URL, size and SHA-256 are pinned in hardware/sources.json.
+The component converts minima upwards to whole reference ticks. Callers must
+supply monotonic, ordered, known control observations and every intervening
+data/control transition. Data may be unknown outside its required window.
+Rising WE returns one typed command/address/data latch with eight known bits.
+No callback or protocol completion is generated. Unknown/noncanonical inputs,
+invalid setup/hold/pulse/cycle timing, simultaneous RE/WE edges, active RE during
+a write pulse, repeated control toggles within a low pulse and overflow fail.
+Rejected observations retain the previous timing state. A later hold violation
+cannot undo a physical latch already reported; the caller must stop qualification.
+Deselected writes and simultaneous CLE/ALE remain explicitly unsupported.
+
+The own deterministic gate uses independent fixed tick vectors at 1 GHz,
+1.08 GHz and 216 MHz, checking one tick before and exactly at setup, hold,
+pulse, high and cycle boundaries. It covers all three latch types, every unknown
+control, partial data knowledge, pending-pulse copies and strict failure paths.
+
+The optional original-firmware gate verifies the official 1.25 ZIP and installs
+the unchanged 94-word stage. An own native caller supplies BCR=01ffff, GPIO,
+OMR=600389, linear reset modifiers and the refill cursor/register preconditions;
+it calls original P:9c. Four independent row vectors (0, ff, 100 and 7ff) require
+exactly the read command and four address latches. CE is an explicit held-active
+laboratory condition; F10 is not inferred to be CE. Non-NAND F8/F9 have separate
+controlled low inputs. The 1.08 GHz reference clock uses declared 12 MHz EXTAL
+and native instruction-completion edge observations; BIU pad latency is uncalibrated.
+
+The NAND supplies an observed initial ready state, then remains pending/busy.
+All eight real P:bb polls per case remain in the original loop, with the real
+call frame and incremented row cursor. No completion-after-poll-count rule is
+used. A joint checkpoint after the actual falling command WE retains the native
+machine/clock, NAND and unlatched timing state. Fresh owners reproduce all five
+latches and the complete 2066-byte remaining state/time suffix in each case.
+This is a trusted in-process checkpoint, not a portable state-file qualification.
+
+Neither gate supplies read data or qualifies read turnaround. Read-side setup
+(tAR/tCLR/tRR/tWHR), output drive, CE interception, busy scheduling, physical
+pin continuity and the transient reserved Port F function need separate evidence.
+In particular, sequential row read belongs only to the P variant (page 26),
+not every part covered by the datasheet. Page-end readiness stays unknown in
+the existing protocol model; this component does not infer a variant or invent
+a next page. Reset/clear entry, complete native refill and both-profile boot,
+normal MIDI/audio, updates/recovery and hardware comparison remain open.
