@@ -1716,10 +1716,18 @@ Desktop/Keyboard differences      pending  Both requested with 1.25; Keyboard is
                                           Separate Controller1.4 transport has
                                           four native original packet-body paths:
                                           1705 exact stores, including one complete
-                                          padding word. Short-message effects,
+                                          padding word. Complete message interleaving,
                                           controller image/ISA/completeness,
                                           programming/recovery and scanner/main
                                           behavior remain open (keyboard-update.txt).
+                                          Isolated short-message raw-parser gate:
+                                          144 native rejections with independent
+                                          stale-word arithmetic, both rings, bulk
+                                          F7 deferral and trusted continuation;
+                                          six unknown stale-read faults and twelve
+                                          recovered suffixes. This does not execute
+                                          the complete update stream or controller
+                                          (keyboard-short-messages.txt).
                                           Native MCU programming-helper receiver:
                                           777 independent directed words, missing
                                           chunks, mid-word replay and original

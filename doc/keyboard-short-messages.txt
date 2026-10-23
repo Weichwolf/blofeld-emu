@@ -1,0 +1,46 @@
+Original Keyboard short-message parser behavior
+
+  cmake --build --preset strict --target blofeld-original-keyboard-short-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_short$' --output-on-failure
+
+Both short messages identified in keyboard-update-reference.json have the same
+70 F7 payload. The gate verifies their archive/member identities and supplies
+the actual F0-prefixed bytes to each original raw input ring. Two complete
+original parser program records stay unchanged; initial data come from the
+original records, with the explicit caller RAM conditions listed below.
+Own native callers declare linear modifiers, unscaled arithmetic, masked IRQs,
+known ring cells and stale buffer contents. Cursors initially force ring wrap.
+
+F0 selects the extended parser and clears its count; 70 publishes one buffer
+word. Accepted F7 finishes the message. Manufacturer recognition rejects70,
+then the universal-identity path reads three old words beyond the received
+payload. With u/v the second/third stale words, actual B1 equals
+700000 + (u >> 8) + (v >> 16), hexadecimal. This lies in700000..7100fe and
+cannot equal7e0601. This independent expectation follows DSP56300FM Rev.5,
+section3.2.1 and LSR13-95/96: LSR changes only accumulator bits47..24.
+hardware/sources.json pins the primary manual; no firmware program bytes are
+embedded in the test.
+
+The matrix checks144 native messages across both rings, two identical copies
+and six-by-six stale-word boundary values. Actual ordered stale reads, native
+register/return state, parser contexts, count/kind, buffer tails and report
+guards are checked. Every guest write is constrained to the parser/ring state;
+no reply pulse, manufacturer download or program store occurs in this scope.
+
+With declared bulk output active, the primary ring still accepts F7. Secondary
+service returns before advancing its F7 cursor and retains bit4 and the active
+swapped context. Three successive polls per copy preserve this state. Explicit
+caller release clears only bulk bit12; entry through the ordinary primary
+service then follows the retained secondary selection without a second swap.
+Two trusted suffix replays per copy consume F7 and restore the saved context.
+
+Six additional cases omit each stale word on each route. Actual reads fail
+with address/PC/OMR, completed prefixes survive, and retry/capture reject without
+native state change. Two trusted suffix replays per cut supply the newly known
+word and finish the original return. Six fixed collector corruptions reject.
+
+These are isolated raw-parser callers. Original wire timing, interleaving with
+the four update blocks, sender/helper return, SMF channel events, controller
+programming/recovery and ordinary boot/MIDI/audio remain unqualified. Existing
+transfer receipts retain their narrower scope; this gate does not turn a short
+message into a fabricated reset, acknowledgement or complete-update result.

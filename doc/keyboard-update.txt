@@ -13,9 +13,11 @@ objects. No manufacturer program bytes, images or disassembly are tracked.
 The 8670-byte Keyboard MIDI is separate from the main 1.25 update. It contains
 four transfer blocks, two additional short SysEx messages and one note-on/off
 pair. The short messages retain their exact positions and hash in the reference
-and receipt. Their effects and channel-event execution are unqualified; they are
-not treated as reset, successful completion or harmless messages to ignore in
-normal operation. The main Firmware loader remains strict and does not accept
+and receipt. A separate raw-parser gate qualifies their conditional rejection,
+stale overreads and secondary F7 deferral (keyboard-short-messages.txt). Their
+complete interleaved-update effects and channel-event execution remain open;
+they are not treated as reset or successful completion in normal operation.
+The main Firmware loader remains strict and does not accept
 this package as a complete main MCU/DSP firmware image.
 
 The four packet-body transfers execute the original 1.25 DSP command handler

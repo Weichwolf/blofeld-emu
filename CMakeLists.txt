@@ -1295,6 +1295,17 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-transport.trace")
   set_tests_properties(original_keyboard_transport PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-keyboard-short-test
+    test/original_keyboard_short_test.cpp test/keyboard_short_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-short-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_keyboard_short COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_short.py"
+    $<TARGET_FILE:blofeld-original-keyboard-short-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-short.trace")
+  set_tests_properties(original_keyboard_short PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-keyboard-receiver-test test/original_keyboard_receiver_test.cpp)
   target_link_libraries(blofeld-original-keyboard-receiver-test PRIVATE blofeld_core)
   add_test(NAME original_keyboard_receiver COMMAND ${Python3_EXECUTABLE}
@@ -1718,6 +1729,7 @@ add_custom_target(quality
     blofeld-original-dsp-download-test
     blofeld-original-update-transport-test
     blofeld-original-keyboard-transport-test
+    blofeld-original-keyboard-short-test
     blofeld-original-keyboard-receiver-test
     blofeld-original-keyboard-handoff-test
     blofeld-esai-interrupt-test
