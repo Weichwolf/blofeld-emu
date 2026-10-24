@@ -221,7 +221,7 @@ void Fixture::observe(const BusEvent &event) {
   const auto ticks = host.run_clock().elapsed_ticks();
   if (reset_drive() == Hcs08ResetDrive::low && !reset) {
     reset.emplace(Hcs08ResetContract::reference_bus_edges);
-    target.memory.flash.reset();
+    target.memory.reset_peripherals();
     trace << "ASSERT ticks=" << ticks << " pc=" << context.pc << '\n';
   }
   if (wire && (event.address == hc12::portb || event.address == hc12::ddrb)) {

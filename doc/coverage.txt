@@ -1864,3 +1864,16 @@ Eleven original-divider rates and unknown/reset/checkpoint controls do not
 select a physical rate. Candidate reset/FLASH intervals overlap4.65..5.25MHz;
 nominal4MHz fails, while6MHz is outside the candidate reset range. Actual ICG,
 clock/reset/SYNC timing, original FSTAT and complete update/recovery remain open.
+
+Candidate HCS08 ICG register/reset owner (hcs08-icg.txt): warm unknown/known
+trim retention differs from power-on80; both restore control/filter/write-once
+state.256 trim/control cases include64 ambiguous REFS readbacks; an own native
+six-instruction setup plus four fresh joint continuations check real stores and strict live-status failure.
+No physical rate/LOCK/DCOS, filter latch, changed-mode synchronization or
+physical board qualification or original application/update/boot proof is supplied.
+The original helper reference target now routes CPU ICG and resets FLASH/SOPT/ICG
+together, canceling pending NVM reference events. Three command phases/two
+retention contracts and12 fresh continuations check exact state/knownness and
+prevent post-reset phantom completions; CPU vector-read brackets stay separate.
+An explicit no-clock-event reference contract and event quarantine prevent old
+software requests from becoming live values after unknown automatic changes.

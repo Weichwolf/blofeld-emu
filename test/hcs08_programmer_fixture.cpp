@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/hcs08.hpp"
 #include "blofeld/hcs08_flash.hpp"
+#include "blofeld/hcs08_icg.hpp"
 #include "blofeld/hcs08_system_options.hpp"
 #include "hcs08_fixture.hpp"
 #include "hcs08_flash_fixture.hpp"
@@ -23,6 +24,10 @@ constexpr unsigned option_mask = 0x80;
 
 bool flash_register(const unsigned address) {
   return address >= hf::divider && address <= hf::command;
+}
+
+bool icg_register(const unsigned address) {
+  return address >= hcs08_icg::control1 && address <= hcs08_icg::trim;
 }
 } // namespace
 
@@ -44,11 +49,14 @@ std::uint8_t Memory::read(const std::uint16_t address) {
     accesses.push_back({.address = address, .value = value, .write = false});
     return value;
   }
-  if (!flash_register(address) && address < hf::first && address != Hcs08SystemOptions::address) {
+  if (!flash_register(address) && !icg_register(address) && address < hf::first &&
+      address != Hcs08SystemOptions::address) {
     return hcs08::Memory::read(address);
   }
   std::uint8_t result = 0;
-  if (address == Hcs08SystemOptions::address) {
+  if (icg_register(address)) {
+    result = icg.read(address);
+  } else if (address == Hcs08SystemOptions::address) {
     result = options.read();
   } else if (address >= hf::first) {
     result = flash.read_array(address);
@@ -63,7 +71,9 @@ void Memory::write(const std::uint16_t address, const std::uint8_t value) {
   if (resetting) {
     throw Fault("HCS08 write during reset address=" + hex(address) + " pc=" + hex(context.pc));
   }
-  if (address >= hf::first) {
+  if (icg_register(address)) {
+    icg.write({.address = address, .value = value});
+  } else if (address >= hf::first) {
     flash.stage({.address = address, .value = value});
     ++array_writes;
   } else if (flash_register(address)) {
@@ -87,6 +97,20 @@ void Memory::begin_instruction(const ExecutionContext value) {
   if (resetting) { throw Fault("HCS08 instruction during incomplete reset pc=" + hex(value.pc)); }
   hcs08::Memory::begin_instruction(value);
   flash.context(value);
+  icg.context(value);
+}
+
+void Memory::reset_peripherals(const Hcs08FlashAbort retention) {
+  if (resetting) {
+    throw Fault("HCS08 peripheral reset address=" + hex(Hcs08SystemOptions::address) +
+                " pc=" + hex(context.pc) + " ccr=" + hex(context.ccr) +
+                " agent=CPU: during CPU vector transaction");
+  }
+  flash.reset(retention);
+  options.reset();
+  icg.reset(Hcs08IcgReset::warm);
+  transfer_due.reset();
+  complete_due.reset();
 }
 
 void Memory::begin_reset(const ExecutionContext value) {

@@ -4,6 +4,7 @@
 #include "blofeld/bus.hpp"
 #include "blofeld/hcs08.hpp"
 #include "blofeld/hcs08_flash.hpp"
+#include "blofeld/hcs08_icg.hpp"
 #include "blofeld/hcs08_system_options.hpp"
 #include "hcs08_fixture.hpp"
 
@@ -27,6 +28,7 @@ public:
   explicit Memory(Hcs08IdleLaunch idle, unsigned delay);
   Hcs08Flash flash;
   Hcs08SystemOptions options;
+  Hcs08Icg icg{Hcs08IcgContract::candidate_gt8a_no_clock_events, Hcs08IcgReset::warm};
   const unsigned completion_delay;
   std::optional<unsigned> transfer_due, complete_due;
   bool resetting = false;
@@ -40,6 +42,7 @@ public:
   void end_reset() override;
   void check_execute(InstructionFetch fetch) const override;
   void retire_instruction() override;
+  void reset_peripherals(Hcs08FlashAbort retention = Hcs08FlashAbort::unqualified_retention);
   [[nodiscard]] bool cuts_after_retirement() const;
 };
 

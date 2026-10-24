@@ -84,6 +84,9 @@ add_library(blofeld_hcs08 src/hcs08.cpp src/hcs08_ccr.cpp)
 target_include_directories(blofeld_hcs08 PUBLIC include)
 target_link_libraries(blofeld_hcs08 PUBLIC blofeld_firmware PRIVATE blofeld_sleigh)
 add_dependencies(blofeld_hcs08 blofeld_hcs08_spec)
+add_library(blofeld_hcs08_icg src/hcs08_icg.cpp)
+target_include_directories(blofeld_hcs08_icg PUBLIC include)
+target_link_libraries(blofeld_hcs08_icg PUBLIC blofeld_firmware)
 add_library(blofeld_hcs08_flash src/hcs08_flash.cpp src/hcs08_flash_registers.cpp
   src/hcs08_flash_array.cpp src/hcs08_flash_reset.cpp)
 target_include_directories(blofeld_hcs08_flash PUBLIC include)
@@ -255,8 +258,23 @@ if(BUILD_TESTING)
   add_executable(blofeld-hcs08-flash-clock-test test/hcs08_flash_clock_test.cpp)
   target_link_libraries(blofeld-hcs08-flash-clock-test PRIVATE blofeld_hcs08_flash)
   add_test(NAME hcs08_flash_clock COMMAND blofeld-hcs08-flash-clock-test)
+  add_executable(blofeld-hcs08-icg-test test/hcs08_icg_test.cpp)
+  target_link_libraries(blofeld-hcs08-icg-test PRIVATE blofeld_hcs08_icg)
+  add_test(NAME hcs08_icg COMMAND blofeld-hcs08-icg-test)
+  add_executable(blofeld-hcs08-icg-native-test test/hcs08_icg_native_test.cpp)
+  target_link_libraries(blofeld-hcs08-icg-native-test PRIVATE blofeld_hcs08_icg blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-icg-native-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_icg_native COMMAND blofeld-hcs08-icg-native-test)
+  add_executable(blofeld-hcs08-peripheral-reset-test test/hcs08_peripheral_reset_test.cpp
+    test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-peripheral-reset-test PRIVATE blofeld_hcs08_icg)
+  target_link_libraries(blofeld-hcs08-peripheral-reset-test PRIVATE blofeld_hcs08
+    blofeld_hcs08_flash)
+  add_test(NAME hcs08_peripheral_reset COMMAND blofeld-hcs08-peripheral-reset-test)
   add_executable(blofeld-original-hcs08-flash-test test/original_hcs08_flash_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-flash-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-original-hcs08-flash-test PRIVATE blofeld_hcs08
     blofeld_hcs08_flash blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-flash-test PRIVATE
@@ -270,12 +288,14 @@ if(BUILD_TESTING)
   set_tests_properties(original_hcs08_flash PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 270)
   add_executable(blofeld-hcs08-bdc-test test/hcs08_bdc_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-bdc-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-hcs08-bdc-test PRIVATE blofeld_hcs08_bdc)
   target_compile_definitions(blofeld-hcs08-bdc-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_bdc COMMAND blofeld-hcs08-bdc-test)
   add_executable(blofeld-original-hcs08-bdc-test test/original_hcs08_bdc_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-bdc-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-original-hcs08-bdc-test PRIVATE blofeld_hcs08_bdc
     blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-bdc-test PRIVATE
@@ -289,6 +309,7 @@ if(BUILD_TESTING)
   set_tests_properties(original_hcs08_bdc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 270)
   add_executable(blofeld-original-hcs08-reset-entry-test test/original_hcs08_reset_entry_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-reset-entry-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-original-hcs08-reset-entry-test PRIVATE blofeld_hcs08_run_clock
     blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-reset-entry-test PRIVATE
@@ -302,12 +323,14 @@ if(BUILD_TESTING)
   set_tests_properties(original_hcs08_reset_entry PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-hcs08-bdc-wire-test test/hcs08_bdc_wire_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-bdc-wire-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-hcs08-bdc-wire-test PRIVATE blofeld_hcs08_bdc_wire)
   target_compile_definitions(blofeld-hcs08-bdc-wire-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_bdc_wire COMMAND blofeld-hcs08-bdc-wire-test)
   add_executable(blofeld-original-keyboard-bdc-wire-test test/original_keyboard_bdc_wire_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-bdc-wire-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-original-keyboard-bdc-wire-test PRIVATE blofeld_core
     blofeld_hcs08_bdc_wire)
   target_compile_definitions(blofeld-original-keyboard-bdc-wire-test PRIVATE
@@ -321,12 +344,14 @@ if(BUILD_TESTING)
   set_tests_properties(original_keyboard_bdc_wire PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 360)
   add_executable(blofeld-hcs08-run-clock-test test/hcs08_run_clock_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-run-clock-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-hcs08-run-clock-test PRIVATE blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-hcs08-run-clock-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_run_clock COMMAND blofeld-hcs08-run-clock-test)
   add_executable(blofeld-original-keyboard-target-test test/original_keyboard_target_test.cpp
     test/keyboard_target_fixture.cpp test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-target-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-original-keyboard-target-test PRIVATE blofeld_core
     blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-original-keyboard-target-test PRIVATE
@@ -341,24 +366,28 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-target.trace")
   set_tests_properties(original_keyboard_target PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_executable(blofeld-hcs08-reset-test test/hcs08_reset_test.cpp test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-reset-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-hcs08-reset-test PRIVATE blofeld_hcs08_reset)
   target_compile_definitions(blofeld-hcs08-reset-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_reset COMMAND blofeld-hcs08-reset-test)
   add_executable(blofeld-hcs08-reset-security-test test/hcs08_reset_security_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-reset-security-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-hcs08-reset-security-test PRIVATE blofeld_hcs08_bdc)
   target_compile_definitions(blofeld-hcs08-reset-security-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_reset_security COMMAND blofeld-hcs08-reset-security-test)
   add_executable(blofeld-hcs08-background-reset-test test/hcs08_background_reset_test.cpp
     test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-hcs08-background-reset-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-hcs08-background-reset-test PRIVATE blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-hcs08-background-reset-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_background_reset COMMAND blofeld-hcs08-background-reset-test)
   add_executable(blofeld-original-keyboard-reset-test test/original_keyboard_reset_test.cpp
     test/keyboard_reset_fixture.cpp test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-reset-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-original-keyboard-reset-test PRIVATE blofeld_core
     blofeld_hcs08_reset blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-original-keyboard-reset-test PRIVATE
@@ -376,6 +405,7 @@ if(BUILD_TESTING)
     test/keyboard_chain_fixture.cpp test/keyboard_chain_execution.cpp test/keyboard_chain_trace.cpp
     test/keyboard_chain_checkpoint.cpp test/keyboard_chain_overlap.cpp
     test/keyboard_reset_fixture.cpp test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_hcs08_icg)
   target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_core blofeld_mcu_dsp
     blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export
     blofeld_hcs08_reset blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
@@ -1920,7 +1950,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS format-check blofeld-hcs08-flash-clock-test blofeld-original-hcs08-reset-entry-test blofeld-hcs08-reset-security-test blofeld-hcs08-background-reset-test blofeld-original-keyboard-chain-test blofeld-original-keyboard-reset-test blofeld-hcs08-reset-test blofeld-hcs08-run-clock-test blofeld-original-keyboard-target-test blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+  DEPENDS format-check blofeld-hcs08-peripheral-reset-test blofeld-hcs08-icg-test blofeld-hcs08-icg-native-test blofeld-hcs08-flash-clock-test blofeld-original-hcs08-reset-entry-test blofeld-hcs08-reset-security-test blofeld-hcs08-background-reset-test blofeld-original-keyboard-chain-test blofeld-original-keyboard-reset-test blofeld-hcs08-reset-test blofeld-hcs08-run-clock-test blofeld-original-keyboard-target-test blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test

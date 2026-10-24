@@ -1,0 +1,90 @@
+Candidate HCS08 ICG register and reset owner
+
+  cmake --build --preset strict --target blofeld-hcs08-icg-test \
+    blofeld-hcs08-icg-native-test blofeld-hcs08-peripheral-reset-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_icg(_native)?|hcs08_peripheral_reset)$' --output-on-failure
+
+Hcs08Icg requires the explicit candidate_gt8a_no_clock_events reference
+contract and a power-on or warm reset cause. It owns software control requests, first-write fields and live
+trim knowledge. It does not select or manufacture an oscillator frequency,
+FLL lock, DCOS, BDC clock or NVM clock. The physical target remains unverified.
+Primary: MC9S08GT16A/GT8A Rev.1, register map and9.3/9.4.10; exact URL/size/hash
+in hcs08-reference.json. Frequency constraints are in hcs08-clock-constraints.txt.
+
+GT9.4.9 permits automatic CLKS/CLKST changes on clock loss. The reference
+contract excludes autonomous clock-loss/lock/stop evolution. A notified
+unqualified_clock_event invalidates control/filter knowledge and faults visibly;
+all later register transactions refuse until an explicit reset. Historic
+software requests are retained only as a ledger, not returned as live state.
+No lock/IRQ/reset response is manufactured. This event admission boundary must
+be connected to the future clock owner; it is not a clock-loss implementation.
+
+Reset and register boundary
+
+Both reset causes restore ICGC1=44, ICGC2=00, filter0C0 and first-write
+admission. Warm reset preserves known or unknown live ICGTRM. Power-on alone
+sets trim80; factory FFBE is not read or copied. A new warm-entry instance
+therefore has unknown trim until an actual register write establishes it.
+
+GT9.4.10 says first CLKS=0X locks REFS=0, while9.3.1 describes the first
+REFS request as writable. For first CLKS=0X/REFS=1, the owner preserves the
+requested value and marks REFS readback unknown (known maskDF). Whole ICGC1
+reads then fail; neither1 nor0 is invented. This does not claim a measured
+silicon response. Warm reset restores known44; independent review is in #21.
+
+First control stores record request bits; ICGC1 bit0 is known zero. HGO/RANGE/REFS
+retain the first write until reset. Repeated identical CLKS permits independent
+OSCSTEN/LOCD writes, and repeated identical MFD/RFD permits LOLRE/LOCRE writes.
+Changed CLKS or MFD/RFD refuses before mutation because cross-domain completion
+and external-pin ownership have no connected model. This is an unsupported
+transaction, not a claim that hardware always refuses those writes. A non-SCM
+request discards filter knowledge; it does not claim actual CLKST has changed.
+
+Live ICGS1/2 reads always fail visibly until clock/status evolution is modeled.
+Reset-zero flags cannot be returned indefinitely or used as ready responses.
+Filter reads/writes likewise refuse until their latch/synchronization owner
+exists. ICGIF-clear writes require actual read/event history and refuse.
+ICGIF=0 and read-only ICGS2 writes retain their documented no-effect behavior;
+neither establishes stable clocks. Reserved addresses fail. Diagnostics include
+operation, address, PC, CCR and CPU role. BDC privilege/routing is not added here.
+
+The state snapshot contains request registers, control-bit knowledge and
+optional trim/filter knowledge, not a restorable physical clock. Copies have no callbacks or peers. Restore CPU,
+memory and this owner together; a reset does not mean restoring a checkpoint.
+
+Validation and remaining integration
+
+hcs08_icg independently checks all256 trim values across warm and power-on
+resets, unknown trim retention,256 first control stores, first-write frozen
+fields,64 ambiguous REFS cases, independent control-bit changes and every
+changed MFD/RFD bit. Invalid reset/device contracts and unsupported accesses must retain the complete state.
+
+hcs08_icg_native executes an own six-instruction setup through real SLEIGH
+loads/stores into this component. Complete PC/HX/SP/A/CCR expectations follow
+each retirement; an independent bus oracle checks all three writes. Two cuts
+produce four fresh joint CPU/memory/ICG continuations. All five paths stop at
+the actual unsupported ICGS1 load without retiring it or returning invented
+status. Warm reset retains the actual CPU-written trim and restores controls.
+Entry registers/CCR are explicit own inputs; no CPU-reset or timing proof follows.
+This own ISA probe embeds no manufacturer program or reference assets.
+
+The original helper's candidate target Memory now routes CPU ICG registers.
+Its board reset calls reset_peripherals: FLASH, SOPT and ICG reset together,
+and pending reference transfer/completion events are canceled. This replaces
+the earlier FLASH-only reset. CPU vector-read brackets remain separate and
+cannot reset peripherals a second time. RAM and lifetime diagnostic counters
+are retained by this warm reference fixture; no new physical retention claim
+is made. Live trim starts unknown. The separate6MHz FLASH fixture input is
+not an ICG output. No ICG rate is connected automatically to BDC or FLASH.
+
+hcs08_peripheral_reset checks staged, launched and executing commands under
+both conservative and command-range retention:12 fresh memory continuations,
+exact NVM knownness/history, SOPT first-store reopening and unchanged RAM.
+Further32 reference retirement notifications cannot execute canceled jobs. Invalid retention and
+CPU vector-phase misuse refuse before any peripheral/event mutation.
+An unmodeled ICG event separately invalidates knowledge and quarantines access.
+
+Normal Keyboard boot, original GPIO/scanner/SPI/ADC/COP and actual clock-domain
+connections remain incomplete. There is no new original-application, full update/recovery, boot/MIDI/audio,118-function or
+physical-device qualification. Original FSTAT and LCD/BKGD frontiers remain.
+No fuzzing, concurrency, realtime callback or physical traffic is introduced.
