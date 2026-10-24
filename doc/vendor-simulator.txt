@@ -56,10 +56,10 @@ The explicit -fastmode option produces identical native instruction/register
 observations in that fresh counterexample and does not resolve the disagreement.
 
 Initial-map instruction timing is now checked separately. Thirty-eight quiet
-producer/consumer windows run1047 own instructions with verified code readback,
+producer/consumer windows run 1047 own instructions with verified code readback,
 PC transitions and expected register/SR values. Selected AGU/accumulator/status-
 MOVE delays match primary expectations; five status-bit windows remain open.
-A paired31-case run has identical PC/register results in both modes but776 versus
+A paired 31-case run has identical PC/register results in both modes but 776 versus
 562 reported clocks. Fast mode is not a timing oracle. Retirement deltas also
 cannot identify memory-access stages; see dsp-pipeline-timing.txt. These bounded
 timing observations do not repair the switched-memory or silicon-qualification gaps.

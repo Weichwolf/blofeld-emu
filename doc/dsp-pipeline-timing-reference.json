@@ -9,7 +9,7 @@
     "instructions": 1047,
     "assembler": "NXP asm56300 6.3.28"
   },
-  "transport_controls": "Every loaded program word read back before and after execution; all1047 expected PC transitions,38 independently expected data/SR results and nonzero X/Y RAM canaries checked. No memory-switch mode enabled.",
+  "transport_controls": "Every loaded program word read back before and after execution; all 1047 expected PC transitions,38 independently expected data/SR results and nonzero X/Y RAM canaries checked. No memory-switch mode enabled.",
   "measurement": "Elapsed cycle count between quiet NOP anchors bracketing producer/consumer; single-retirement delta is not an instruction cost or bus-phase timestamp.",
   "total_model_cycles": 1352,
   "paired_fastmode_control": {

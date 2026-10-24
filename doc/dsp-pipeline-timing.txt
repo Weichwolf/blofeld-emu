@@ -24,10 +24,10 @@ dedicated Wine prefix and installed backend DLL working directory are required.
 Raw listings, program bytes, transport driver, packets and console logs stay in
 doc/local/dsp-pipeline-reference/. No automatic CTest or fuzz target is added.
 
-The checked program has1315 words/1047 instructions and38 cases. It stays in the
+The checked program has 1315 words/1047 instructions and 38 cases. It stays in the
 initial map, performs no memory-switch request, and supplies nonzero X/Y canaries.
 Every program word is read back before/after execution. Every expected PC
-transition and38 independently expected register/SR results must agree.
+transition and 38 independently expected register/SR results must agree.
 dsp-pipeline-timing-reference.json pins the own word-stream hash and records the
 measured windows. It contains no manufacturer program bytes or raw vendor output.
 
@@ -46,16 +46,16 @@ Additional clocks measured in the normal model:
   move to A1; move A1                          0/1/2/8             1/0/0/0
   MPY; move SR                                0/1/2/8             2/1/0/0
 
-These33 windows agree with the selected primary expectations, including the
+These 33 windows agree with the selected primary expectations, including the
 status-MOVE distinction in APR20. They qualify fixed model observations, not
 silicon or a complete dynamic timing engine. Five BTST-SR windows remain
 unqualified: the isolated model baseline is two clocks and the additional
 MPY-related delays need reconciliation with FM A-1/A.2.3. No correction to our
 emulator is justified by those unexplained numbers alone.
 
-A separate paired31-case experiment executes553 instructions in both server
-modes. PC/register observations are identical, but normal mode reports776 clocks
-and -fastmode reports562. Fast mode omits the tested AGU hazards and changes
+A separate paired 31-case experiment executes 553 instructions in both server
+modes. PC/register observations are identical, but normal mode reports 776 clocks
+and -fastmode reports 562. Fast mode omits the tested AGU hazards and changes
 other nominal costs; it is not a timing oracle. Its previously observed memory
 switch contradiction is also unchanged. No physical pipeline phase, PLL/board
 timing, automatic active DMA, complete firmware boot or normal host audio is
