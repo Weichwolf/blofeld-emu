@@ -47,18 +47,18 @@ class ResetTrace:
             raise ValueError('Reset phase without a native assertion')
         index = len(self.reset_rows)
         if index >= 4 or row['phase'] != index + 1 or row['mode'] != (2 if index < 2 else 1):
-            raise ValueError('Missing, duplicate or reordered reset drive/sample/hold/vector phase')
+            raise ValueError('Missing, duplicate or reordered reset drive/sample/hold/entry phase')
         first = self.first_after(self.assertion)
         if index < 2:
             edge = (34, 72)[index]
             expected_tick = first + (edge - 1) * 15
         else:
             if self.release is None:
-                raise ValueError('No actual external RESET release before mode/vector entry')
+                raise ValueError('No actual external RESET release before mode/architectural entry')
             expected_tick = self.first_after(self.release) + (6 * 15 if index == 3 else 0)
             edge = (expected_tick - first) // 15 + 1
         if row != dict(ticks=expected_tick, edges=edge, phase=index + 1, mode=2 if index < 2 else 1):
-            raise ValueError('Reference reset drive/sample/vector edges changed')
+            raise ValueError('Reference reset drive/sample/entry edges changed')
         self.reset_rows.append(row)
 
     def signal_event(self, tag, row):
@@ -72,8 +72,8 @@ class ResetTrace:
             self.reset_driver = row['reset']
             return
         if tag == 'TARGET':
-            if self.stage != 'prefix' or len(self.reset_rows) != 4 or row != dict(pc=0xa5a5, hx=0x22, sp=255, a=0xa5, ccr=0x68, known=0x68, status=0xc8):
-                raise ValueError('Missing reset phases or changed native vector/register/CCR knowledge')
+            if self.stage != 'prefix' or len(self.reset_rows) != 4 or row != dict(pc=0, **{'pc-known': 0}, hx=0x22, sp=255, a=0xa5, ccr=0x68, known=0x68, status=0xc8):
+                raise ValueError('Missing reset phases or changed native pre-vector PC/register/CCR knowledge')
             self.stage = 'running'
             return
         if self.stage != 'running':

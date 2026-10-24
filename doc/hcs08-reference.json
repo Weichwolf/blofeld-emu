@@ -52,6 +52,6 @@
     "official_unavailable": "https://www.nxp.com/docs/en/reference-manual/HCS08RMV1.pdf",
     "bytes": 3594996,
     "sha256": "8d6ffc53c13c118b81ce3f5447ca432059fcdd2a5668d9c26a064769917ea509",
-    "sections": "6.2.5:only I initialized at reset; V/H/N/Z/C unknown. Publisher PDF obtained from a mirror; exact bytes/hash retained locally."
+    "sections": "6.2.5: only I initialized at reset; V/H/N/Z/C unknown. 6.4.1: normal vector/queue reset. 6.4.5 (printed96): active-background reset precedes user-vector fetch; numerical PC not established here. 7.3.4.14/.19/.26: GO/READ_PC/WRITE_PC. Publisher PDF obtained from a mirror; exact bytes/hash retained locally."
   }
 }

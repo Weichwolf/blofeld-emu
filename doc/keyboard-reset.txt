@@ -10,8 +10,9 @@ manufacturer program bytes or disassembly are embedded in tests or published.
 
 Actual PE7 latch/direction writes assert and release the candidate reset peer.
 Native PB1 drives BKGD/MS, selecting active mode at the modeled reset rise.
-The target completes separate drive/sample/hold/vector phases, reads its actual
-own-preimage reset vector and applies native warm reset effects. H becomes0;
+The target completes separate drive/sample/hold/entry phases and applies native warm reset effects before any
+user-vector fetch. Both candidate vector bytes are unknown, and the numerical
+PC remains explicitly unknown until WRITE_PC. H becomes0;
 SP becomes00FF; retained A/X and unknown CCR bits are checked. Actual BDC state
 is C8. Target instructions remain held throughout. No callback supplies a canned ready result, decoded command, TCNT value or
 native CPU continuation. GPIO reads resolve the actual modeled drivers and
@@ -38,7 +39,7 @@ erase history remain unchanged; no target command or NVM completion is invented.
 Explicit inputs: qualified reference clock switching, locked PHY/30MHz route,
 TIM /4 versus /64, target4MHz cadence/two phases, ideal PE7/PB1 wiring/pulls,
 independent other PE inputs03/PB inputs00 for native read-modify-write, an own
-flash preimage/reset vector and healthy warm A/X. An initial failure on unknown
+flash preimage with unknown vector bytes and healthy warm A/X. An initial failure on unknown
 PE0..6 is preserved locally; missing observations still fail. The new gate does
 not establish physical net continuity, target part/mask, analog/setup/hold timing,
 reset-duration units, ICG/COP/SRS or other peripheral behavior. See hcs08-reset.txt.

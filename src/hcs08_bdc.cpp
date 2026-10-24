@@ -37,9 +37,9 @@ void Hcs08Bdc::healthy() const {
 
 [[noreturn]] void Hcs08Bdc::fail(const std::string &operation, const std::string &reason) const {
   const auto cpu = cpu_.state();
-  throw Fault("HCS08 BDC " + operation + " command=" + hex(state_.frame[0]) + " pc=" + hex(cpu.pc) +
-              " ccr=" + hex(cpu.ccr) + " received=" + std::to_string(state_.received) + ": " +
-              reason);
+  throw Fault("HCS08 BDC " + operation + " command=" + hex(state_.frame[0]) + " pc=" +
+              (cpu.pc_known ? hex(cpu.pc) : "unknown pc-known=0") + " ccr=" + hex(cpu.ccr) +
+              " received=" + std::to_string(state_.received) + ": " + reason);
 }
 
 unsigned Hcs08Bdc::frame_size(const std::uint8_t command) const {

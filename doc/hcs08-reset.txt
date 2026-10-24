@@ -1,11 +1,12 @@
-HCS08 warm reset, pin sequencing and CCR knowledge
+HCS08 warm reset, pin sequencing and register knowledge
 
-  cmake --build --preset strict --target blofeld-hcs08-reset-test
-  ctest --test-dir build/strict -j1 -R '^hcs08_reset$' --output-on-failure
+  cmake --build --preset strict --target blofeld-hcs08-reset-test \
+    blofeld-hcs08-background-reset-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_reset|hcs08_background_reset)$' --output-on-failure
 
 Hcs08ResetSequence requires reference_bus_edges explicitly. It separates34
 nominal reset-drive periods,38 further periods before sampling the external
-RESET level, any continuing external hold and six vector/queue periods. It
+RESET level, any continuing external hold and six reference entry periods. It
 samples BKGD/MS at the reference resolved RESET rising boundary. Unknown drives
 or mode inputs, a new assertion after rising and extra completed-reset edges
 fail visibly. Copying the trusted owner preserves a partial reset phase.
@@ -17,10 +18,22 @@ qualification, approximate durations, input recognition and25ns MS setup/hold
 remain distinct from the explicit nominal model. The caller owns actual clocks,
 pad resolution, CPU admission, peripherals and BDC reset; no SRS flags are guessed.
 
-After that sequence the separate native Hcs08::reset boundary reads the actual
-FFFE/FFFF vector, clears H, sets SP00FF and I, and retains the supplied healthy
-warm pre-reset A/X. It preserves no invented power-on A/X values; cold unknown
-register initialization remains required. Vector/queue microcycles and prefetch
+After that sequence the separate native Hcs08::reset boundary clears H, sets
+SP00FF and I, and retains the supplied healthy warm pre-reset A/X. Normal entry
+reads the actual FFFE/FFFF vector. Explicit active_background entry precedes
+any user-vector fetch (Family RM Rev.2 section6.4.5, printed96), including with
+unknown vector bytes. The numerical active-reset PC is not established by the
+pinned paragraphs: Hcs08State.pc_known is false, with canonical representative0.
+Native fetch, disassembly, running-clock admission, READ_PC and GO refuse that
+unknown PC visibly. Held BDC memory and non-PC register commands remain usable;
+WRITE_PC establishes the actual known entry without defining unknown CCR bits.
+The same six reference entry periods are retained; active-entry latency and
+GO queue-refill microcycles are not independently qualified physical timing.
+Opaque CPU checkpoints preserve PC knowledge. A supplied known PC0000 remains
+a real executable address, distinct from the unknown representative. These
+refusals report an emulator qualification gap, not a silicon-defined READ_PC or
+GO error. Warm reset invents no power-on A/X values; cold register knowledge
+remains required. Vector/queue microcycles and prefetch
 are not individually modeled. Failed native execution needs coordinated recovery.
 
 Hcs08State.ccr_known records actual defined status bits. Reset establishes68
@@ -41,3 +54,15 @@ partial-flag effects and BDC unknown/write/read behavior. Existing arithmetic,
 original application/programmer, FLASH, BDC, wire and retirement-clock gates
 remain separate regressions. Reference URLs/byte sizes/hashes: hcs08-reference.json.
 Original HC12 pin/TIM integration and remaining limits: keyboard-reset.txt.
+
+The hcs08_background_reset unit independently tests all four vector-knownness
+combinations without any active-reset bus/decoder/timing access, missing first
+and second normal-vector bytes, native execution from a known zero vector,
+invalid entry mode, partial register inspection/writes, unknown-PC refusals and
+an actual BDC RAM upload/WRITE_PC/READ_PC/GO/LDA/BGND sequence. Two fresh joint
+CPU/memory/BDC/clock restorations retain unknown PC and reproduce the sequence;
+literal instruction/state expectations check A42, PC00a2/00a3, retained X22,
+SP00ff, partial CCR and seven unstretched execution periods. Both target vector
+bytes remain unknown and all NVM bytes/knowledge/history remain unchanged.
+This is an unsecured candidate warm-reset component, not full blank/secured-chip
+recovery, a complete installed image, original page programming or hardware proof.

@@ -11,6 +11,7 @@
 #include "blofeld/hcs08.hpp"
 #include "blofeld/hcs08_bdc.hpp"
 #include "blofeld/hcs08_bdc_wire.hpp"
+#include "blofeld/hcs08_flash.hpp"
 #include "blofeld/hcs08_reset.hpp"
 #include "blofeld/hcs08_run_clock.hpp"
 #include "blofeld/mcu_bus.hpp"
@@ -37,8 +38,7 @@ constexpr unsigned lower_canary = 0xa5, upper_canary = 0x5a, low_delay = 0x1600,
                    high_delay = 0x1601;
 constexpr unsigned memory_mapping = 0x21, phy_enable = 0x40, pll_select = 0x80,
                    previous_pc = 0x1234;
-constexpr unsigned own_reset_vector = 0xa5a5, reset_x = 0x22, reset_ccr_known = 0x68,
-                   active_status = 0xc8;
+constexpr unsigned reset_x = 0x22, reset_ccr_known = 0x68, active_status = 0xc8;
 constexpr unsigned sample_low = 0x13f1, sample_high = 0x13f9, sample_difference = 0x13fb;
 constexpr unsigned host_flags = 0xd0;
 constexpr auto released = Hcs08BdcDrive::released;
@@ -84,8 +84,7 @@ Fixture::Fixture(const Firmware &image,
   bus.write(tscr2, static_cast<std::uint8_t>(timer_prescale));
   bus.write(hc12::tscr1, timer_enable);
   host.cpu().set_state({.pc = caller, .sp = stack, .ccr = host_flags});
-  target.cpu.set_state(
-      {.pc = previous_pc, .hx = initial_hx, .sp = initial_sp, .a = initial_a, .ccr = byte_mask});
+  prepare_target(memory == nullptr);
   bind();
 }
 
@@ -105,6 +104,17 @@ Fixture::Fixture(McuMachine &machine,
           "Declared borrowed controller clock/phase/reference extent");
   const auto now = host.run_clock().elapsed_ticks();
   if (now >= next_edge) { next_edge += ((now - next_edge) / target_period + 1) * target_period; }
+  prepare_target(memory == nullptr);
+}
+
+void Fixture::prepare_target(const bool unknown_vector) {
+  if (unknown_vector) {
+    auto image = target.memory.flash.image();
+    constexpr unsigned vector = 0xfffe;
+    image.known.reset(vector - hcs08_flash::first);
+    image.known.reset(vector + 1 - hcs08_flash::first);
+    target.memory.flash = Hcs08Flash(image, hcs08_wire::chip, Hcs08IdleLaunch::unqualified);
+  }
   target.cpu.set_state(
       {.pc = previous_pc, .hx = initial_hx, .sp = initial_sp, .a = initial_a, .ccr = byte_mask});
 }
@@ -247,14 +257,14 @@ void Fixture::edge(const std::uint64_t ticks) {
             << " mode=" << (after.mode ? static_cast<unsigned>(after.mode.value()) : 2U) << '\n';
     }
     if (after.phase == Hcs08ResetPhase::ready) {
-      target.cpu.reset();
       require(after.mode && after.mode.value() == Hcs08BdcReset::bkgd_held_low,
               "Actual resolved BKGD-low reset selects active BDC");
+      target.cpu.reset(Hcs08ResetEntry::active_background);
       const auto cpu = target.cpu.state();
-      require(cpu.pc == own_reset_vector && cpu.hx == reset_x && cpu.sp == byte_mask &&
-                  cpu.a == initial_a && cpu.ccr_known == reset_ccr_known &&
-                  cpu.ccr == reset_ccr_known,
-              "Actual vector/reset effects preserve only documented knowledge");
+      require(
+          !cpu.pc_known && cpu.pc == 0 && cpu.hx == reset_x && cpu.sp == byte_mask &&
+              cpu.a == initial_a && cpu.ccr_known == reset_ccr_known && cpu.ccr == reset_ccr_known,
+          "Active reset precedes vector fetch and preserves only documented register knowledge");
       bdc.emplace(target.cpu, target.mapping, hcs08_wire::chip, after.mode.value());
       wire.emplace(
           *bdc,
@@ -264,8 +274,9 @@ void Fixture::edge(const std::uint64_t ticks) {
       clock.emplace(
           target.memory, controller(), Hcs08RunContract::reference_instruction_retirement);
       origin = ticks;
-      trace << "TARGET pc=" << cpu.pc << " hx=" << cpu.hx << " sp=" << cpu.sp
-            << " a=" << static_cast<unsigned>(cpu.a) << " ccr=" << static_cast<unsigned>(cpu.ccr)
+      trace << "TARGET pc=" << cpu.pc << " pc-known=" << cpu.pc_known << " hx=" << cpu.hx
+            << " sp=" << cpu.sp << " a=" << static_cast<unsigned>(cpu.a)
+            << " ccr=" << static_cast<unsigned>(cpu.ccr)
             << " known=" << static_cast<unsigned>(cpu.ccr_known)
             << " status=" << static_cast<unsigned>(controller().status()) << '\n';
     }
@@ -355,6 +366,11 @@ void Fixture::finish(const unsigned timer_prescale) {
     require(host.bus().peek(static_cast<std::uint16_t>(helper_base + n)) == helper[n],
             "Complete original helper remains byte-identical");
   }
+  constexpr unsigned vector = 0xfffe;
+  const auto target_image = target.memory.flash.image();
+  require(!target.cpu.state().pc_known && !target_image.known[vector - hcs08_flash::first] &&
+              !target_image.known[vector + 1 - hcs08_flash::first],
+          "Held original reset/SYNC preserves unknown target PC and both unread vector bytes");
   require(!target.memory.flash.state().divider_loaded && !target.memory.flash.state().active &&
               target.memory.transfers == 0,
           "Reset/SYNC cannot invent an NVM clock, command or completion");
@@ -407,8 +423,8 @@ std::string Fixture::endpoint() const {
   std::ostringstream out;
   out << h.pc << ' ' << h.d << ' ' << h.x << ' ' << h.y << ' ' << h.sp << ' '
       << static_cast<unsigned>(h.ccr) << ' ' << host.run_clock().elapsed_ticks() << ' '
-      << host.run_clock().bus_cycles() << ' ' << t.pc << ' ' << t.hx << ' ' << t.sp << ' '
-      << static_cast<unsigned>(t.a) << ' ' << static_cast<unsigned>(t.ccr) << ' '
+      << host.run_clock().bus_cycles() << ' ' << t.pc << ' ' << t.pc_known << ' ' << t.hx << ' '
+      << t.sp << ' ' << static_cast<unsigned>(t.a) << ' ' << static_cast<unsigned>(t.ccr) << ' '
       << static_cast<unsigned>(t.ccr_known) << ' ' << next_edge << ' ' << origin << ' ' << steps
       << ' ' << received;
   return out.str();

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "blofeld/dsp_bus.hpp"
+#include "blofeld/hcs08.hpp"
+#include "blofeld/hcs08_flash.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "hcs08_fixture.hpp"
@@ -116,6 +118,11 @@ void Chain::guards() {
     require(pair.mcu.bus().peek(static_cast<std::uint16_t>(kr::helper_base + n)) == helper[n],
             "Entire actually copied helper remains unchanged");
   }
+  constexpr unsigned vector = 0xfffe;
+  const auto target_image = peer->target.memory.flash.image();
+  require(!peer->target.cpu.state().pc_known && !target_image.known[vector - hcs08_flash::first] &&
+              !target_image.known[vector + 1 - hcs08_flash::first],
+          "Continuous original chain preserves pre-vector target PC and NVM unknownness");
   require(pair.link.unresolved_queries == 0 && sender.irq_unknown == 0 &&
               peer->target.memory.transfers == 0 && !peer->target.memory.flash.state().active,
           "No unknown consumed pad, successful target NVM transfer or completion is supplied");

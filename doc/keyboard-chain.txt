@@ -66,3 +66,11 @@ boot/USB-MIDI/Spectre/original audio/persistence, all118 manual functions and
 stock-device equivalence remain required by objective.txt/coverage.txt.
 No fuzzing, physical traffic, new concurrency/TSan claim or full-suite run is
 part of this regression.
+
+Active-background target reset now precedes user-vector fetch. The candidate
+preimage leaves FFFE/FFFF unknown; TARGET records pc-known=0 with canonical pc0.
+Joint native snapshots retain that knowledge. Held reset/SYNC/LCD tests do not
+claim a numerical reset PC or target execution; actual WRITE_PC is required
+before GO. See hcs08-reset.txt for the independent native upload/GO regression.
+The existing six reference entry periods remain an unqualified active-entry
+latency assumption; no physical timing is inferred from the absence of a fetch.

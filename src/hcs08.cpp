@@ -74,6 +74,7 @@ public:
   std::unique_ptr<native::InstructionExecutor> executor;
   std::uint64_t decoded_revision = 0;
   std::uint8_t ccr_known = Hcs08State::all_ccr;
+  bool pc_known = true;
   bool active = false;
   bool healthy = false;
   bool initialized = false;
@@ -96,9 +97,10 @@ void Hcs08::set_state(const Hcs08State &state) {
   impl_->memory.setValue(&impl_->layout.sp, state.sp);
   impl_->ccr_known = static_cast<std::uint8_t>(state.ccr_known | fixed_ccr);
   impl_->memory.setValue(&impl_->layout.ccr, (state.ccr | fixed_ccr) & impl_->ccr_known);
-  impl_->memory.setValue(&impl_->layout.pc, state.pc);
-  impl_->executor->setExecuteAddress(
-      ghidra::Address(impl_->translator.getDefaultCodeSpace(), state.pc));
+  impl_->pc_known = state.pc_known;
+  const auto pc = state.pc_known ? state.pc : std::uint16_t{0};
+  impl_->memory.setValue(&impl_->layout.pc, pc);
+  impl_->executor->setExecuteAddress(ghidra::Address(impl_->translator.getDefaultCodeSpace(), pc));
   impl_->executor->clear_background_request();
   impl_->initialized = true;
   impl_->healthy = true;
@@ -112,11 +114,14 @@ Hcs08State Hcs08::state() const {
           .a = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.a)),
           .ccr_known = impl_->ccr_known,
           .ccr = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.ccr) &
-                                           impl_->ccr_known)};
+                                           impl_->ccr_known),
+          .pc_known = impl_->pc_known};
 }
 
 std::string Hcs08::disassemble() const try {
-  static_cast<void>(state());
+  if (!state().pc_known) {
+    throw Fault("HCS08 disassemble address=unknown pc=unknown pc-known=0: unknown CPU PC");
+  }
   impl_->refresh();
   native::Assembly assembly;
   impl_->translator.printAssembly(assembly, impl_->executor->getExecuteAddress());
@@ -154,6 +159,7 @@ Hcs08Checkpoint Hcs08::checkpoint() const {
   result.pc_ = state().pc;
   result.background_ = background_requested();
   result.ccr_known_ = impl_->ccr_known;
+  result.pc_known_ = impl_->pc_known;
   return result;
 }
 
@@ -167,21 +173,37 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
       ghidra::Address(impl_->translator.getDefaultCodeSpace(), checkpoint.pc_));
   impl_->executor->restore_background_request(checkpoint.background_);
   impl_->ccr_known = checkpoint.ccr_known_;
+  impl_->pc_known = checkpoint.pc_known_;
   impl_->initialized = true;
   impl_->healthy = true;
 }
 
-void Hcs08::reset() {
+void Hcs08::reset(const Hcs08ResetEntry mode) {
+  if (mode != Hcs08ResetEntry::normal && mode != Hcs08ResetEntry::active_background) {
+    throw Fault("HCS08 reset requires a qualified architectural entry mode");
+  }
   if (impl_->active || !impl_->healthy || !impl_->initialized) {
     throw Fault("HCS08 reset requires healthy supplied pre-reset A/X and coordinated board state");
   }
-  auto entry = state();
+  const auto before = state();
+  auto entry = before;
   {
     const native::ExecutionGuard guard(impl_->active);
     impl_->healthy = false;
-    impl_->bus.begin_instruction({.pc = entry.pc, .ccr = entry.ccr});
-    constexpr unsigned vector = 0xfffe;
-    entry.pc = static_cast<std::uint16_t>(impl_->bus.read_memory({.address = vector, .size = 2}));
+    entry.pc_known = mode == Hcs08ResetEntry::normal;
+    entry.pc = 0; // Canonical representation of an unknown PC, never a fetch address.
+    if (entry.pc_known) {
+      impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
+      constexpr unsigned vector = 0xfffe;
+      try {
+        entry.pc =
+            static_cast<std::uint16_t>(impl_->bus.read_memory({.address = vector, .size = 2}));
+      } catch (const Fault &error) {
+        throw Fault("HCS08 reset vector read address=" + hex(vector) +
+                    " pc=" + (before.pc_known ? hex(before.pc) : "unknown pc-known=0") + ": " +
+                    error.what());
+      }
+    }
   }
   constexpr unsigned low_mask = 0xff;
   constexpr unsigned reset_known = 0x68;
@@ -198,6 +220,10 @@ void Hcs08::step() {
   if (background_requested()) { throw Fault("HCS08 BGND request requires an owning BDC decision"); }
   impl_->healthy = false;
   const auto before = state();
+  if (!before.pc_known) {
+    throw Fault("HCS08 execute address=unknown pc=unknown pc-known=0 ccr=" + hex(before.ccr) +
+                ": unknown CPU PC");
+  }
   try {
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
     if (impl_->bus.interrupt_request(before.ccr)) {

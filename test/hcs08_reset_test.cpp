@@ -55,7 +55,7 @@ void expect_edge(const Hcs08ResetSequence &sequence,
             "Actual external level at classification edge");
   }
   require((s.phase == Hcs08ResetPhase::ready) == (expected.edge == expected.finish),
-          "Exactly six vector periods follow released/classified reset");
+          "Exactly six reference entry periods follow released/classified reset");
 }
 
 void reset_edges() {
@@ -93,7 +93,7 @@ void reset_replay_and_failures() {
     const auto completed = restored.state();
     require(completed.edges == replay_finish && completed.phase == Hcs08ResetPhase::ready &&
                 completed.external_at_sample && *completed.external_at_sample,
-            "Fresh copied reset owner preserves drive/sample/hold/vector progression");
+            "Fresh copied reset owner preserves drive/sample/hold/entry progression");
   }
   require(rejected([] {
             const Hcs08ResetSequence invalid(Hcs08ResetContract::unqualified);

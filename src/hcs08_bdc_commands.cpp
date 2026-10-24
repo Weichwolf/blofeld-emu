@@ -47,7 +47,10 @@ void Hcs08Bdc::register_access() {
       cpu.ccr = state_.frame[1];
       cpu.ccr_known = Hcs08State::all_ccr;
       break;
-    case hcs08_bdc::write_pc: cpu.pc = argument(); break;
+    case hcs08_bdc::write_pc:
+      cpu.pc = argument();
+      cpu.pc_known = true;
+      break;
     case hcs08_bdc::write_hx: cpu.hx = argument(); break;
     case hcs08_bdc::write_sp: cpu.sp = argument(); break;
     case hcs08_bdc::read_a: reply_byte(cpu.a); return;
@@ -57,7 +60,10 @@ void Hcs08Bdc::register_access() {
       }
       reply_byte(cpu.ccr);
       return;
-    case hcs08_bdc::read_pc: reply_word(cpu.pc); return;
+    case hcs08_bdc::read_pc:
+      if (!cpu.pc_known) { fail("READ_PC", "unknown CPU PC"); }
+      reply_word(cpu.pc);
+      return;
     case hcs08_bdc::read_hx: reply_word(cpu.hx); return;
     case hcs08_bdc::read_sp: reply_word(cpu.sp); return;
     default: fail("register access", "unsupported register command");
@@ -79,6 +85,7 @@ void Hcs08Bdc::execute(const Hcs08BdcGrant grant) {
       return;
     case hcs08_bdc::go:
       if (!state_.active) { fail("GO", "command requires active background mode"); }
+      if (!cpu_.state().pc_known) { fail("GO", "unknown CPU PC; WRITE_PC is required"); }
       cpu_.set_state(cpu_.state()); // Resume genuine registers and clear the consumed BGND request.
       state_.active = false;
       return;
@@ -90,10 +97,15 @@ void Hcs08Bdc::execute(const Hcs08BdcGrant grant) {
       }
       const auto cpu = cpu_.state();
       const ExecutionContext context{.pc = cpu.pc, .ccr = cpu.ccr};
-      if (state_.frame[0] == hcs08_bdc::write_byte) {
-        memory_.write({.address = argument(), .value = state_.frame[3]}, context);
-      } else {
-        reply_byte(memory_.read(argument(), context));
+      try {
+        if (state_.frame[0] == hcs08_bdc::write_byte) {
+          memory_.write({.address = argument(), .value = state_.frame[3]}, context);
+        } else {
+          reply_byte(memory_.read(argument(), context));
+        }
+      } catch (const Fault &error) {
+        if (!cpu.pc_known) { fail("memory access", error.what()); }
+        throw;
       }
       return;
     }

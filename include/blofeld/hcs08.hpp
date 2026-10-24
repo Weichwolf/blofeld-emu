@@ -19,6 +19,7 @@ struct Hcs08State {
   std::uint8_t a = 0;
   std::uint8_t ccr_known = all_ccr;
   std::uint8_t ccr = fixed_ccr; // S08CPUV2: bits6/5 are permanently one.
+  bool pc_known = true;         // False after active-background reset until a qualified PC write.
   bool operator==(const Hcs08State &) const = default;
 };
 
@@ -36,8 +37,11 @@ private:
   std::array<std::uint8_t, register_bytes> registers_{};
   std::uint16_t pc_ = 0;
   bool background_ = false;
+  bool pc_known_ = true;
   std::uint8_t ccr_known_ = Hcs08State::all_ccr;
 };
+
+enum class Hcs08ResetEntry : std::uint8_t { unqualified, normal, active_background };
 
 // Native instruction engine, separate from target memory/peripherals and BDC.
 // Entry registers are explicit debug inputs, not invented power-on values.
@@ -50,9 +54,11 @@ public:
   Hcs08 &operator=(const Hcs08 &) = delete;
   void set_state(const Hcs08State &state);
   // Warm architectural reset after the board has completed its six reset periods.
-  // A/X retain supplied pre-reset state; H/SP/I/vector reset, other CCR bits unknown.
+  // A/X retain supplied pre-reset state; H/SP/I reset, other CCR bits unknown.
+  // Normal entry fetches the vector. Active background entry precedes that fetch;
+  // its numerical PC is unqualified and remains explicitly unknown.
   // Peripheral reset and pin/clock sequencing belong to the board owner.
-  void reset();
+  void reset(Hcs08ResetEntry mode = Hcs08ResetEntry::normal);
   [[nodiscard]] Hcs08State state() const;
   [[nodiscard]] std::string disassemble() const;
   // BGND is an observed CPU request, not a fabricated active-BDC status.

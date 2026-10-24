@@ -11,18 +11,19 @@ namespace blofeld {
 enum class Hcs08ResetContract : std::uint8_t { unqualified, reference_bus_edges };
 enum class Hcs08ResetDrive : std::uint8_t { unknown, low, released };
 enum class Hcs08ModePad : std::uint8_t { unknown, low, high };
-enum class Hcs08ResetPhase : std::uint8_t { driving, settling, external_hold, vector, ready };
+enum class Hcs08ResetPhase : std::uint8_t { driving, settling, external_hold, entry, ready };
 
 struct Hcs08ResetState {
   std::uint64_t edges = 0;
-  unsigned vector_periods = 0;
+  unsigned entry_periods = 0;
   Hcs08ResetPhase phase = Hcs08ResetPhase::driving;
   std::optional<bool> external_at_sample;
   std::optional<Hcs08BdcReset> mode;
   bool operator==(const Hcs08ResetState &) const = default;
 };
 
-// Explicit nominal 34-drive/38-settle/six-vector reference edge contract.
+// Explicit nominal 34-drive/38-settle/six-entry reference edge contract.
+// Active-background entry latency remains a reference assumption, not vector reads.
 // Inputs describe an external low/released RESET driver and sampled BKGD/MS.
 // Actual reset recognition, analog/setup/hold and target clock require the board.
 // CPU, NVM/peripherals and BDC mode must be reset by their separate owner.

@@ -22,7 +22,8 @@ void Hcs08RunClock::healthy() const {
 }
 
 [[noreturn]] void Hcs08RunClock::fail(const std::string &reason) const {
-  throw Fault("HCS08 run clock operation pc=" + hex(state_.pending.pc) +
+  throw Fault("HCS08 run clock operation pc=" +
+              (state_.pending.pc_known ? hex(state_.pending.pc) : "unknown pc-known=0") +
               " ccr=" + hex(state_.pending.ccr) +
               " offered-periods=" + std::to_string(state_.offered_periods) +
               " executing-periods=" + std::to_string(state_.executing_periods) + ": " + reason);
@@ -44,6 +45,7 @@ void Hcs08RunClock::advance() {
   }
   if (state_.remaining_periods == 0) {
     state_.pending = bdc_.cpu_state();
+    if (!state_.pending.pc_known) { fail("unknown CPU PC before instruction timing/fetch"); }
     const auto timing =
         hcs08_instruction_timing(bus_, {.pc = state_.pending.pc, .ccr = state_.pending.ccr});
     state_.remaining_periods = timing.periods;

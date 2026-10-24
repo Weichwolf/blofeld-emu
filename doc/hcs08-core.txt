@@ -56,8 +56,9 @@ hcs08-flash.txt. Their explicit idle-launch/event/retention hypotheses do not
 qualify actual controller timing, a physical chip or the complete update.
 
 Separate warm architectural reset now preserves A/X, clears H, sets SP/I and
-reads the real vector while retaining unknown status flags. Hcs08State and opaque
-checkpoints carry CCR knownness; unsupported partial-CCR semantics and BDC CCR
+reads the real vector only for normal entry. Active-background reset precedes
+that fetch and retains an explicitly unknown numerical PC. Hcs08State and opaque
+checkpoints carry PC/CCR knownness; unsupported partial-CCR semantics and BDC CCR
 reads fail visibly. Pin/clock/caller scope and remaining cold-register/ISA limits:
 hcs08-reset.txt and keyboard-reset.txt. Existing explicit debug entries retain
 fully known flags; they are not retroactively reset-proven native startup.

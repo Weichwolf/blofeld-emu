@@ -173,7 +173,7 @@ def reset(case):
         expected.append(dict(ticks=tick, edges=(tick-first)//15+1, phase=index+1,
                              mode=2 if index < 2 else 1))
     equal(case, 'RESET', expected)
-    equal(case, 'TARGET', [dict(pc=0xa5a5, hx=0x22, sp=255, a=0xa5,
+    equal(case, 'TARGET', [dict(pc=0, **{'pc-known': 0}, hx=0x22, sp=255, a=0xa5,
                                ccr=0x68, known=0x68, status=0xc8)])
     equal(case, 'SAVING_BOUNDARY', [dict(pc=0xa6ee, sp=0x21e0, rx=1, commands=0)])
     serial = rows.get('SYNC', [])
@@ -240,9 +240,9 @@ def validate(text, expected):
 def controls(text, expected):
     changes = []
     for tag, key in (('SOURCE', 'value'), ('CHUNK', 'value'), ('COPY_BOUNDARY', 'ccr'),
-                     ('TARGET', 'known'), ('TEXT', 'x'), ('TEXT', 'mode'),
+                     ('TARGET', 'known'), ('TARGET', 'pc-known'), ('TEXT', 'x'), ('TEXT', 'mode'),
                      ('WIRE_FRONTIER', 'uploaded'), ('REPLAY', 'identical')):
-        changes.append(re.sub(r'(^'+tag+r' [^\n]*\b'+key+r'=)(\d+)',
+        changes.append(re.sub(r'(^'+tag+r' (?:[^\n]* )?'+re.escape(key)+r'=)(\d+)',
                               lambda match:match[1]+str(int(match[2])+1), text, count=1, flags=re.M))
     for tag in ('PREFIX', 'ASSERT', 'RESET', 'SAVING_BOUNDARY', 'TEXT_RETURN',
                 'DIAGNOSTIC', 'CASE_END', 'END'):

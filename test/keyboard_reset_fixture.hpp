@@ -66,6 +66,7 @@ struct Fixture {
           unsigned first_edge,
           std::ostream &output,
           const hcs08_programmer::Memory *memory = nullptr);
+  void prepare_target(bool unknown_vector);
   void bind();
   [[nodiscard]] Hcs08RunClock &run_clock();
   [[nodiscard]] const Hcs08RunClock &run_clock() const;

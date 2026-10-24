@@ -44,7 +44,7 @@ void Hcs08ResetSequence::edge(const Hcs08ResetDrive reset,
   }
   constexpr unsigned drive_periods = 34;
   constexpr unsigned sample_period = 72;
-  constexpr unsigned vector_periods = 6;
+  constexpr unsigned entry_periods = 6;
   if (state_.edges == std::numeric_limits<std::uint64_t>::max()) {
     fail("reset clock horizon exhausted");
   }
@@ -58,12 +58,12 @@ void Hcs08ResetSequence::edge(const Hcs08ResetDrive reset,
   }
   if (state_.edges == sample_period) {
     state_.external_at_sample = !level(reset);
-    state_.phase = level(reset) ? Hcs08ResetPhase::vector : Hcs08ResetPhase::external_hold;
+    state_.phase = level(reset) ? Hcs08ResetPhase::entry : Hcs08ResetPhase::external_hold;
   } else if (state_.phase == Hcs08ResetPhase::external_hold && level(reset)) {
-    state_.phase = Hcs08ResetPhase::vector;
-  } else if (state_.phase == Hcs08ResetPhase::vector) {
-    ++state_.vector_periods;
-    if (state_.vector_periods == vector_periods) { state_.phase = Hcs08ResetPhase::ready; }
+    state_.phase = Hcs08ResetPhase::entry;
+  } else if (state_.phase == Hcs08ResetPhase::entry) {
+    ++state_.entry_periods;
+    if (state_.entry_periods == entry_periods) { state_.phase = Hcs08ResetPhase::ready; }
   }
   healthy_ = true;
 }
