@@ -40,6 +40,46 @@
       "license": "No redistribution grant established; local reference only.",
       "bytes": 1689028,
       "sha256": "1d243ed098ec02d6cf8611b799b2b9bb3c22fb9d6d4af2c229a54a019f691f25"
+    },
+    {
+      "file": "captainbob-rev202-1.jpg",
+      "source": "https://www.captainbob.de/publicuse/waldorf_blofeld_rev202_1.jpg",
+      "source_page": "https://www.musiker-board.de/threads/synthesizer-guts-fotos-der-innereien.474866/",
+      "author": "Klartext / captainbob.de",
+      "license": "No redistribution grant established; local reference only.",
+      "bytes": 128540,
+      "sha256": "98a836132cc5776c9562ba854aefa727e93217f8df0b3df1447e5dcf151af8bf",
+      "observation": "Author identifies Desktop PCB revision 2.02; these views show the underside and do not expose readable DSP markings."
+    },
+    {
+      "file": "captainbob-rev202-2.jpg",
+      "source": "https://www.captainbob.de/publicuse/waldorf_blofeld_rev202_2.jpg",
+      "source_page": "https://www.musiker-board.de/threads/synthesizer-guts-fotos-der-innereien.474866/",
+      "author": "Klartext / captainbob.de",
+      "license": "No redistribution grant established; local reference only.",
+      "bytes": 120669,
+      "sha256": "efe1ec875c455dfc5ee251a73e1f7f97bf9e5bd4a479eb9684c96aa2ea1e4511",
+      "observation": "Author identifies Desktop PCB revision 2.02; these views show the underside and do not expose readable DSP markings."
+    },
+    {
+      "file": "captainbob-rev202-3.jpg",
+      "source": "https://www.captainbob.de/publicuse/waldorf_blofeld_rev202_3.jpg",
+      "source_page": "https://www.musiker-board.de/threads/synthesizer-guts-fotos-der-innereien.474866/",
+      "author": "Klartext / captainbob.de",
+      "license": "No redistribution grant established; local reference only.",
+      "bytes": 133052,
+      "sha256": "480732ad1e8b500f5f326c8694cdc0a88fbb15905d96d281764d0c9fec30c6a1",
+      "observation": "Author identifies Desktop PCB revision 2.02; these views show the underside and do not expose readable DSP markings."
+    },
+    {
+      "file": "captainbob-rev202-4.jpg",
+      "source": "https://www.captainbob.de/publicuse/waldorf_blofeld_rev202_4.jpg",
+      "source_page": "https://www.musiker-board.de/threads/synthesizer-guts-fotos-der-innereien.474866/",
+      "author": "Klartext / captainbob.de",
+      "license": "No redistribution grant established; local reference only.",
+      "bytes": 151601,
+      "sha256": "dd69a18749f8eddfe4ada4f0e3b1ae058cc800b84b7800629eb56abfc2bbdc23",
+      "observation": "Author identifies Desktop PCB revision 2.02; these views show the underside and do not expose readable DSP markings."
     }
   ]
 }

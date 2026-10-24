@@ -1,10 +1,20 @@
 Complete acceptance objective
 
-Build a headless standalone Blofeld Desktop and Keyboard emulator that executes
-the unmodified original 1.25 firmware, including its MCU bootloader, DSP loading
-sequence and required peripherals, processes MIDI and produces original audio.
-This is a firmware-development test target; neither a host synthesizer nor
-silently successful peripheral stubs satisfy this objective.
+Build a complete Blofeld Desktop and Keyboard hardware emulator, initially
+headless and standalone. Unmodified original 1.25 firmware is the known-working
+compatibility reference: tests verify and correct our emulator, not the
+manufacturer's firmware. Emulate the MCU, DSP, Keyboard controller, ROM/RAM/
+flash/NAND, clocks, interrupts, buses and required peripherals so that actual
+reset, loading and initialization lead to normal instrument operation with
+original DSP audio, bidirectional MIDI and complete persistent device state.
+No firmware patches, skipped routines, fabricated success responses, host
+synthesizer or silently successful peripheral stubs satisfy this objective.
+Reconstruct missing hardware properties from primary documentation, actual
+firmware accesses, PCB photographs and available hardware observations; retain
+explicit hypotheses and visible failures where behavior remains unresolved.
+Alternative-firmware development is a secondary future use, not the primary
+deliverable. Component fixtures support full-device acceptance and cannot replace
+it.
 
 Acceptance requirements (current evidence and gaps: coverage.txt):
 

@@ -1,8 +1,9 @@
 # Project context
 
 - Speak German with the user. Code, comments, documentation and commit messages are English.
-- The active objective is a headless emulator executing unmodified Blofeld 1.25 firmware on Desktop and Keyboard profiles, with MIDI/audio and extensive boot, persistence, update, recovery and failure tests.
-- This is a firmware development test target. Do not replace original MCU or DSP behavior with a host synthesizer or silently successful peripheral stubs.
+- The primary objective is a complete Blofeld Desktop and Keyboard hardware emulator, initially headless and standalone. Unmodified original 1.25 firmware is the known-working compatibility reference; tests verify our emulator, not the manufacturer's firmware.
+- Implement the connected device from actual reset through normal instrument operation with original DSP audio, MIDI and persistent storage. Isolated routine fixtures are supporting evidence, never a substitute for that runtime. Alternative-firmware development is a secondary future use.
+- Do not replace original MCU or DSP behavior with a host synthesizer, firmware patches, skipped routines, fabricated success responses or silently successful peripheral stubs.
 - Unknown or unsupported hardware accesses must fail visibly with address, operation, PC and execution context. Keep observed behavior, hypotheses and hardware-verified facts distinct.
 - Device detection is not hardware validation. Hardware update/programming tests require a separately established recovery procedure; never flash experimental firmware as a routine test.
 - Keep the emulator, board model, transport and time-critical audio processing separate. Run as a regular user.
