@@ -1,0 +1,55 @@
+Normal HCS08 reset fetch and independent security recovery
+
+  cmake --build --preset strict --target blofeld-hcs08-reset-security-test
+  ctest --test-dir build/strict -j1 -R '^hcs08_reset_security$' --output-on-failure
+
+The normal CPU reset-vector fetch is a separate logical bus phase. Hcs08 uses
+begin_reset/end_reset around actual ordered FFFE/FFFF reads and closes that
+phase even when either byte fails. Prior PC remains the diagnostic context;
+it is not replaced to manufacture a secure instruction origin. The candidate
+memory adapter maps only this phase to Hcs08Flash::read_reset_vector_byte.
+That operation permits CPU FFFE/FFFF bytes only, preserves unknown contents
+and pending/executing NVM refusals, and cannot provide BDC or general array
+access. Active-background entry performs none of these reads/notifications.
+
+This contract follows normal reset at the fixed vector (GT Rev.1 section3.2,
+Family Rev.2 section6.4.1) and the separate instruction/debug security rules
+(GT section4.5). The SEC access rule for a pre-reset instruction must not turn
+a normal reset vector into blocked-read zeros or require known option bits.
+The target part, physical reset recognition and bus-cycle timing remain
+unqualified; these are architectural reads, not a new clock or prefetch model.
+
+The directed native regression covers all four SEC encodings, known/unknown
+NVOPT and NVPROT, and three supplied old-PC origins (48 cases). Every valid
+normal reset reads both actual vector bytes, executes an own native immediate
+LDA at that entry and checks complete PC/A/HX/SP/CCR knowledge. Missing first
+or second vector bytes fail even for secured/unknown options, with no retirement
+or leaked reset phase. Ordinary unsecured-origin CPU reads remain SEC-gated.
+An additional normal reset starts from unknown PC with FNORED0 and a protected
+vector page: the fixed vector still supplies the actual native entry.
+
+Separate active-entry cases retain unknown vectors/PC while reading actual
+BDC status and warm registers. Unknown permission-dependent RAM/FLASH/FOPT/
+FPROT reads and RAM uploads fail visibly. All four known SEC encodings check
+real BDC RAM/FLASH read blocking, ignored secured RAM writes and ignored FOPT
+writes. Direct capability controls reject BDC and non-vector reset accesses;
+pending and executing NVM commands stay unchanged on reset-read refusal.
+
+Four reference recovery cases start with actual option-page erase interruption,
+using conservative or explicit command-range retention. They send real BDC
+FPROT/FCDIV/address/data/FCMD/FSTAT frames for mass erase and full blank check,
+then upload RAM only after actual SEC knowledge permits it. Full blank check
+does not invent other unknown FOPT bits. Optional actual NVOPT programming
+makes SEC10 persist; blank-only recovery resecures on the next warm reset.
+All8192 recovered bytes and erase-history bits are checked against independent
+literal expectations, including the sole optional programmed NVOPT byte.
+Every case preserves unknown PC and retires no target instructions during this
+own recovery recipe. The valid6MHz/divisor30 NVM clock and explicit transfer/
+completion milestones are declared reference inputs, not original-loader timing.
+
+The original helper does not execute this unlock recipe. Its LCD/BKGD refusal,
+4MHz/FCDIV1E question, full page/update/recovery timeline, cold register/RAM
+knowledge, secured-chip hardware behavior and every physical interruption phase
+remain required. This regression does not prove original-update recovery,
+normal boot, stock-device equivalence or flash safety. Full objective coverage
+remains in objective.txt/coverage.txt; references are pinned in hcs08-reference.json.

@@ -25,6 +25,21 @@ namespace native = detail::hcs08;
 
 namespace {
 constexpr unsigned fixed_ccr = 0x60;
+
+std::uint16_t read_reset_vector(Bus &bus, const ExecutionContext context) {
+  bus.begin_instruction(context);
+  bus.begin_reset(context);
+  constexpr unsigned vector = 0xfffe;
+  std::uint16_t value = 0;
+  try {
+    value = static_cast<std::uint16_t>(bus.read_memory({.address = vector, .size = 2}));
+  } catch (...) {
+    bus.end_reset();
+    throw;
+  }
+  bus.end_reset();
+  return value;
+}
 }
 
 class Hcs08::Impl {
@@ -193,11 +208,9 @@ void Hcs08::reset(const Hcs08ResetEntry mode) {
     entry.pc_known = mode == Hcs08ResetEntry::normal;
     entry.pc = 0; // Canonical representation of an unknown PC, never a fetch address.
     if (entry.pc_known) {
-      impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
       constexpr unsigned vector = 0xfffe;
       try {
-        entry.pc =
-            static_cast<std::uint16_t>(impl_->bus.read_memory({.address = vector, .size = 2}));
+        entry.pc = read_reset_vector(impl_->bus, {.pc = before.pc, .ccr = before.ccr});
       } catch (const Fault &error) {
         throw Fault("HCS08 reset vector read address=" + hex(vector) +
                     " pc=" + (before.pc_known ? hex(before.pc) : "unknown pc-known=0") + ": " +

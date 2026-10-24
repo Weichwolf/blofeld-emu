@@ -29,12 +29,15 @@ public:
   Hcs08SystemOptions options;
   const unsigned completion_delay;
   std::optional<unsigned> transfer_due, complete_due;
+  bool resetting = false;
   unsigned transfers = 0, completions = 0, cuts = 0;
   unsigned array_writes = 0, command_writes = 0, status_writes = 0, sopt_writes = 0;
 
   std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
   void begin_instruction(ExecutionContext value) override;
+  void begin_reset(ExecutionContext value) override;
+  void end_reset() override;
   void check_execute(InstructionFetch fetch) const override;
   void retire_instruction() override;
   [[nodiscard]] bool cuts_after_retirement() const;

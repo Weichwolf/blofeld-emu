@@ -39,6 +39,11 @@ Memory::Memory(const Hcs08IdleLaunch idle, const unsigned delay)
 }
 
 std::uint8_t Memory::read(const std::uint16_t address) {
+  if (resetting) {
+    const auto value = flash.read_reset_vector_byte(address);
+    accesses.push_back({.address = address, .value = value, .write = false});
+    return value;
+  }
   if (!flash_register(address) && address < hf::first && address != Hcs08SystemOptions::address) {
     return hcs08::Memory::read(address);
   }
@@ -55,6 +60,9 @@ std::uint8_t Memory::read(const std::uint16_t address) {
 }
 
 void Memory::write(const std::uint16_t address, const std::uint8_t value) {
+  if (resetting) {
+    throw Fault("HCS08 write during reset address=" + hex(address) + " pc=" + hex(context.pc));
+  }
   if (address >= hf::first) {
     flash.stage({.address = address, .value = value});
     ++array_writes;
@@ -76,11 +84,26 @@ void Memory::write(const std::uint16_t address, const std::uint8_t value) {
 }
 
 void Memory::begin_instruction(const ExecutionContext value) {
+  if (resetting) { throw Fault("HCS08 instruction during incomplete reset pc=" + hex(value.pc)); }
   hcs08::Memory::begin_instruction(value);
   flash.context(value);
 }
 
+void Memory::begin_reset(const ExecutionContext value) {
+  begin_instruction(value);
+  resetting = true;
+}
+
+void Memory::end_reset() {
+  hcs08::require(resetting, "HCS08 reset completion without a matching reset boundary");
+  resetting = false;
+}
+
 void Memory::check_execute(const InstructionFetch fetch) const {
+  if (resetting) {
+    throw Fault("HCS08 fetch during reset address=" + hex(fetch.address) +
+                " pc=" + hex(context.pc));
+  }
   hcs08::require(fetch.address >= algorithm && fetch.address < algorithm + algorithm_bytes &&
                      fetch.length <= algorithm + algorithm_bytes - fetch.address,
                  "Original page programmer executes only its pinned132-byte body");
@@ -88,6 +111,7 @@ void Memory::check_execute(const InstructionFetch fetch) const {
 }
 
 void Memory::retire_instruction() {
+  if (resetting) { throw Fault("HCS08 instruction retirement during reset pc=" + hex(context.pc)); }
   hcs08::Memory::retire_instruction();
   if (complete_due && retired >= *complete_due) {
     flash.advance(Hcs08FlashMilestone::complete_command);

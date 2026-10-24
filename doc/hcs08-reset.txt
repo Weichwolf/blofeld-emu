@@ -66,3 +66,8 @@ SP00ff, partial CCR and seven unstretched execution periods. Both target vector
 bytes remain unknown and all NVM bytes/knowledge/history remain unchanged.
 This is an unsecured candidate warm-reset component, not full blank/secured-chip
 recovery, a complete installed image, original page programming or hardware proof.
+
+Normal reset now brackets vector reads with explicit bus reset boundaries;
+Hcs08Flash exposes only the CPU reset-vector bytes independently of the prior
+instruction's SEC origin. Unknown vectors and active NVM still fail. Native
+security/reset tests and remaining recovery limits: hcs08-reset-security.txt.

@@ -1843,3 +1843,10 @@ vectors. original_keyboard_reset and original_keyboard_chain use this boundary.
 This does not establish cold A/X, active-entry silicon latency, secured/blank-chip
 recovery, complete original page programming or any physical hardware profile.
 All complete objective and manual-function requirements remain in force.
+
+Normal HCS08 reset/security: explicit CPU vector reads no longer inherit the
+previous instruction's SEC access origin. hcs08_reset_security covers48 native
+SEC/options/protection/origin cases, missing vector failures, unknown permission
+refusals, known secured BDC resources and four own reference recovery recipes
+from interrupted option-page images. Original update/recovery, cold registers,
+actual NVM/board timing, physical mask and stock-device equivalence remain open.

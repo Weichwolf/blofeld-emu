@@ -64,6 +64,9 @@ public:
   [[nodiscard]] std::uint8_t read(std::uint16_t address);
   void write(ByteWrite access);
   [[nodiscard]] std::uint8_t read_array(std::uint16_t address) const;
+  // CPU reset fetch only: FFFE/FFFF are independent of pre-reset instruction SEC
+  // privilege. This does not grant BDC access, supply unknown data or complete NVM.
+  [[nodiscard]] std::uint8_t read_reset_vector_byte(std::uint16_t address) const;
   void stage(ByteWrite access);
   void observe_bus_clock(std::uint32_t hz);
   void advance(Hcs08FlashMilestone milestone);

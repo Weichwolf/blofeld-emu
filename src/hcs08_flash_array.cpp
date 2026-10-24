@@ -9,7 +9,22 @@ namespace hf = hcs08_flash;
 
 namespace {
 constexpr unsigned minimum_fclk = 150000, maximum_fclk = 200000;
+constexpr unsigned reset_vector = 0xfffe;
 constexpr unsigned prescaler = 0x40, divisor_mask = 0x3f, security_mask = 3;
+}
+
+std::uint8_t Hcs08Flash::read_reset_vector_byte(const std::uint16_t address) const {
+  if (agent_ != Hcs08FlashAgent::cpu || (address != reset_vector && address != reset_vector + 1)) {
+    fail("reset vector read", address, "requires CPU reset fetch at FFFE/FFFF");
+  }
+  if (state_.active || state_.buffer == Hcs08FlashBuffer::launched) {
+    fail("reset vector read",
+         address,
+         "array read during an executing/pending command is unqualified");
+  }
+  const auto offset = index(address);
+  if (!image_.known[offset]) { fail("reset vector read", address, "unknown nonvolatile contents"); }
+  return image_.data[offset];
 }
 
 std::uint8_t Hcs08Flash::read_array(const std::uint16_t address) const {

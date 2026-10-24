@@ -65,3 +65,8 @@ unit trim substitution, physical programming/recovery and sub-instruction
 power-loss phases unqualified. Full package ordering, normal Blofeld boot,
 MIDI/audio and all118 manual acceptance contracts remain in objective.txt and
 coverage.txt. No fuzzing, physical traffic or hardware flashing is part of these gates.
+
+Normal CPU reset-vector reads have a separate FFFE/FFFF-only capability. They
+retain unknown-data and active-NVM failures without inheriting the previous
+instruction's security origin. Ordinary CPU/BDC permissions remain separate.
+Integrated SEC/reset/unknown-option recovery: hcs08-reset-security.txt.
