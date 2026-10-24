@@ -122,6 +122,14 @@ Original MCU bootloader           partial  All 512 bytes found in 32 KiB image;
                                           untimed fixture; RAM clear and original
                                           checksum verified (mcu-boot.txt).
                                           Unknown pins still stop the default run.
+Virtual unit identity            partial  Separate persisted factory MCU serial,
+                                          exact cold restore and writer ownership;
+                                          unchanged original boot checksum and
+                                          native serial-warning ABI decisions
+                                          (device-identity.txt). Development
+                                          process integration only; complete
+                                          startup/USB and hardware qualification
+                                          remain open. No DSP status is injected.
 Original MCU scan helpers         partial  8364 original delay/scan calls cover
                                           every byte input and all CCR values
                                           at seven boundaries, zero-count wrap,

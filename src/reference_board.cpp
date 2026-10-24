@@ -241,6 +241,10 @@ void Board::report(std::ostream &stream) const {
 }
 
 void Board::persist() const {
+  if (execution_.nvm_output) {
+    execution_.nvm_output(native_->mcu.bus().power_off_flash_image());
+    return;
+  }
   if (execution_.flash_out.empty()) { return; }
   save_flash_image(execution_.flash_out, native_->mcu.bus().power_off_flash_image());
   std::cout << "Saved private MCU NVM image: " << execution_.flash_out << '\n';

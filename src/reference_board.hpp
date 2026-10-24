@@ -164,6 +164,8 @@ struct Execution {
   std::ostream *trace = nullptr;
   std::uint64_t instructions = 0;
   std::optional<AudioOutput> audio = std::nullopt;
+  // External persistent unit owner; never rewound with modeled checkpoints.
+  std::function<void(const McuFlashImage &)> nvm_output = nullptr;
 };
 
 class Board;

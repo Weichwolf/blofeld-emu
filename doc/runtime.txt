@@ -27,6 +27,11 @@ are optional development tools. They are not the normal-operation interface and
 do not establish complete boot, device enumeration or live audio. Source and
 reference artifacts remain separate; manufacturer firmware/assets stay local.
 
+Development processes can select a persistent virtual MCU unit with
+--device-state /private/existing-dir/unit.bfnvm (device-identity.txt). This is
+separate factory/NVM ownership, not a working normal device profile. The first
+creation allocates its own serial; later starts use the complete saved state.
+
 Display snapshots and live GUI access use packed 1-bit PBM/text files below
 $XDG_RUNTIME_DIR/blofeld-emu/. Atomic replacement and directory change events
 permit live GUI refresh at complete-frame publication boundaries, analogous to

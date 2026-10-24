@@ -9,6 +9,7 @@
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/pcm_recording.hpp"
 #include "blofeld/usbip_runtime.hpp"
+#include "blofeld/virtual_device_state.hpp"
 #include "host_midi_runner.hpp"
 #include "reference_board.hpp"
 #include "sample_client.hpp"
@@ -37,6 +38,7 @@ struct Options {
   std::filesystem::path trace;
   std::filesystem::path flash_in;
   std::filesystem::path flash_out;
+  std::filesystem::path device_state;
   std::filesystem::path reference_board;
   std::filesystem::path dsp_rom;
   std::filesystem::path audio_out;
@@ -97,6 +99,7 @@ void validate_options(const Options &config) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
                          "[--instructions N] [--trace file] [--port-e-input MASK:LEVELS] "
                          "[--flash-in state.bfnvm] [--flash-out state.bfnvm] "
+                         "[--device-state unit.bfnvm] "
                          "[--reference-board scenario.bfboard --dsp-rom packed24.bin] "
                          "[--midi-file bytes.bin | --midi-device /dev/snd/midiCxDy] "
                          "[--usbip-port PORT --usbip-after TICKS --usbip-period TICKS "
@@ -105,6 +108,10 @@ void validate_options(const Options &config) {
   }
   if (config.inspect && (!config.flash_in.empty() || !config.flash_out.empty())) {
     throw blofeld::Fault("--inspect cannot be combined with MCU NVM execution inputs/outputs");
+  }
+  if (!config.device_state.empty() &&
+      (config.inspect || !config.flash_in.empty() || !config.flash_out.empty())) {
+    throw blofeld::Fault("--device-state conflicts with --inspect, --flash-in or --flash-out");
   }
   if (config.reference_board.empty() != config.dsp_rom.empty()) {
     throw blofeld::Fault("--reference-board and --dsp-rom must be supplied together");
@@ -161,6 +168,35 @@ bool numeric_option(Options &result, const OptionValue &input) {
   return true;
 }
 
+bool path_option(Options &result, const OptionValue &input) {
+  if (input.name == "--firmware") {
+    result.firmware = input.value;
+  } else if (input.name == "--sla") {
+    result.specification = input.value;
+  } else if (input.name == "--trace") {
+    result.trace = input.value;
+  } else if (input.name == "--flash-in") {
+    result.flash_in = input.value;
+  } else if (input.name == "--flash-out") {
+    result.flash_out = input.value;
+  } else if (input.name == "--device-state") {
+    result.device_state = input.value;
+  } else if (input.name == "--reference-board") {
+    result.reference_board = input.value;
+  } else if (input.name == "--dsp-rom") {
+    result.dsp_rom = input.value;
+  } else if (input.name == "--audio-out") {
+    result.audio_out = input.value;
+  } else if (input.name == "--midi-file") {
+    result.midi_file = input.value;
+  } else if (input.name == "--midi-device") {
+    result.midi_device = input.value;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 Options options(const int count, char **values) {
   Options result;
   for (int index = 1; index < count; ++index) {
@@ -171,28 +207,9 @@ Options options(const int count, char **values) {
     }
     if (index + 1 >= count) { throw blofeld::Fault("Missing value for " + std::string(argument)); }
     const std::string_view value(values[++index]);
-    if (numeric_option(result, {.name = argument, .value = value})) { continue; }
-    if (argument == "--firmware") {
-      result.firmware = value;
-    } else if (argument == "--sla") {
-      result.specification = value;
-    } else if (argument == "--trace") {
-      result.trace = value;
-    } else if (argument == "--flash-in") {
-      result.flash_in = value;
-    } else if (argument == "--flash-out") {
-      result.flash_out = value;
-    } else if (argument == "--reference-board") {
-      result.reference_board = value;
-    } else if (argument == "--dsp-rom") {
-      result.dsp_rom = value;
-    } else if (argument == "--audio-out") {
-      result.audio_out = value;
-    } else if (argument == "--midi-file") {
-      result.midi_file = value;
-    } else if (argument == "--midi-device") {
-      result.midi_device = value;
-    } else if (argument == "--port-e-input") {
+    const OptionValue input{.name = argument, .value = value};
+    if (numeric_option(result, input) || path_option(result, input)) { continue; }
+    if (argument == "--port-e-input") {
       result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
       const auto conversion =
@@ -228,7 +245,7 @@ void validate_files(const Options &config, const std::filesystem::path &specific
   if (!config.audio_out.empty() && config.audio_out.extension() != ".wav") {
     throw blofeld::Fault("Audio output requires the .wav extension");
   }
-  for (const auto &path : {config.flash_in, config.flash_out}) {
+  for (const auto &path : {config.flash_in, config.flash_out, config.device_state}) {
     if (!path.empty() && path.extension() != ".bfnvm") {
       throw blofeld::Fault("MCU NVM files require the private .bfnvm extension");
     }
@@ -237,6 +254,7 @@ void validate_files(const Options &config, const std::filesystem::path &specific
                             specification,
                             config.flash_in,
                             config.flash_out,
+                            config.device_state,
                             config.reference_board,
                             config.dsp_rom,
                             config.midi_file,
@@ -252,10 +270,17 @@ void validate_files(const Options &config, const std::filesystem::path &specific
                             config.midi_file,
                             config.midi_device}) {
     distinct_files({.first = config.flash_out, .second = input});
+    distinct_files({.first = config.device_state, .second = input});
   }
 }
 
-void persist_flash(const Options &config, const blofeld::McuBus &bus) {
+void persist_flash(const Options &config,
+                   const blofeld::McuBus &bus,
+                   blofeld::VirtualDeviceState *device) {
+  if (device != nullptr) {
+    device->save(bus.power_off_flash_image());
+    return;
+  }
   if (config.flash_out.empty()) { return; }
   blofeld::save_flash_image(config.flash_out, bus.power_off_flash_image());
   std::cout << "Saved private MCU NVM image: " << config.flash_out << '\n';
@@ -299,7 +324,8 @@ void trace_interrupt(std::ofstream &trace, const blofeld::CpuStep result) {
 int run_mcu(const Options &config,
             const blofeld::McuFlashImage &image,
             const std::filesystem::path &specification,
-            std::ofstream &trace) {
+            std::ofstream &trace,
+            blofeld::VirtualDeviceState *device) {
   blofeld::McuBus bus(image);
   if (config.port_e_input) {
     bus.set_pin_drive(blofeld::McuPort::e, *config.port_e_input);
@@ -343,7 +369,7 @@ int run_mcu(const Options &config,
     } else {
       std::cerr << "MCU reset did not complete; CPU state unavailable.\n";
     }
-    persist_flash(config, bus);
+    persist_flash(config, bus, device);
     return 2;
   }
   if (trace.is_open()) { trace.flush(); }
@@ -353,7 +379,7 @@ int run_mcu(const Options &config,
   std::cout << "Delivered interrupt entries: " << interrupts << '\n';
   print_state(std::cout, cpu.state());
   std::cout << '\n';
-  persist_flash(config, bus);
+  persist_flash(config, bus, device);
   return 0;
 }
 
@@ -422,6 +448,14 @@ int run_reference(const Options &config,
   return result;
 }
 
+blofeld::McuFlashImage execution_image(const Options &config,
+                                       const blofeld::Firmware &firmware,
+                                       const blofeld::VirtualDeviceState *device) {
+  if (device != nullptr) { return device->image(); }
+  if (!config.flash_in.empty()) { return blofeld::load_flash_image(config.flash_in); }
+  return blofeld::McuFlashImage::from_known(firmware.mcu);
+}
+
 int run(const Options &config) {
   const auto specification =
       config.specification.empty() ? default_specification() : config.specification;
@@ -436,25 +470,32 @@ int run(const Options &config) {
   std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
             << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
   if (config.inspect) { return 0; }
+  std::unique_ptr<blofeld::VirtualDeviceState> device;
+  if (!config.device_state.empty()) {
+    device = std::make_unique<blofeld::VirtualDeviceState>(
+        config.device_state, blofeld::McuFlashImage::from_known(firmware.mcu));
+  }
   std::ofstream trace;
   if (!config.trace.empty()) {
     trace.open(config.trace);
     if (!trace) { throw blofeld::Fault("Cannot create trace file"); }
     trace.exceptions(std::ios::failbit | std::ios::badbit);
   }
-  const auto image = config.flash_in.empty() ? blofeld::McuFlashImage::from_known(firmware.mcu)
-                                             : blofeld::load_flash_image(config.flash_in);
+  const auto image = execution_image(config, firmware, device.get());
   if (board) {
-    const blofeld::reference::Execution execution{.image = image,
-                                                  .rom = rom,
-                                                  .specification = specification,
-                                                  .flash_out = config.flash_out,
-                                                  .trace = trace.is_open() ? &trace : nullptr,
-                                                  .instructions = config.instructions,
-                                                  .audio = audio_output(config)};
+    blofeld::reference::Execution execution{.image = image,
+                                            .rom = rom,
+                                            .specification = specification,
+                                            .flash_out = config.flash_out,
+                                            .trace = trace.is_open() ? &trace : nullptr,
+                                            .instructions = config.instructions,
+                                            .audio = audio_output(config)};
+    if (device) {
+      execution.nvm_output = [&device](const auto &state) { device->save(state); };
+    }
     return run_reference(config, *board, execution);
   }
-  return run_mcu(config, image, specification, trace);
+  return run_mcu(config, image, specification, trace, device.get());
 }
 
 } // namespace

@@ -1,0 +1,50 @@
+Persistent virtual unit identity
+
+The official1.25 update contains erased bytes in the32-byte resident MCU serial
+field. A new virtual unit needs separate factory data. This is an emulator-owned
+identity, not a manufacturer-issued physical serial or an SL authorization.
+No DSP status, response, firmware branch or license decision is supplied by it.
+
+The development runner accepts --device-state /private/existing-dir/unit.bfnvm.
+The parent directory must already exist. On first use, kernel entropy creates
+EMU followed by nine Crockford base32 characters; the ASCII serial and terminator
+are stored in that private MCU image before any CPU execution. The source update
+stays immutable. Only known, erased serial storage can be provisioned; existing
+unit data cannot be replaced through the factory API. There is no default state
+location or normal Keyboard/Desktop runtime integration yet (runtime.txt).
+
+Subsequent processes restore the complete persisted bytes, knowledge and erase
+history. Existing corrupted files fail visibly. Damaged or unknown identity
+cells are retained, including across reset/recovery experiments; there is no
+automatic repair or merge from the update. --flash-in/--flash-out remain explicit
+diagnostic import/export and cannot be combined with --device-state in the same
+process. Legacy import/export does not participate in the unit's advisory writer
+lease; external file writers must be kept separate. --inspect does not allocate
+a unit.
+
+The state owner holds a separate .lock sidecar lease for its lifetime. File
+replacement uses the existing private0600, temporary-file/fsync/rename/directory-
+fsync path. A failed publication quarantines that in-memory owner until reopen.
+The MCU-only and coupled reference runners save NVM on their normal exit and
+reported native failure paths. A killed host process is not a simulated device
+power-loss event: uncommitted runtime changes are not automatically persisted.
+NAND, DSP ROM and running-board checkpoints remain separate resources.
+
+Scoped checks
+  ctest --test-dir build/strict -j1 -R '^(device_identity|virtual_device_state|original_device_identity|device_state_cli)$' --output-on-failure
+
+Own vectors cover bounded ASCII, exact out-of-field retention, unknown/existing
+factory refusal, cold state retention, writer exclusion and corrupt-file refusal.
+The hash-pinned original native check executes the unchanged reset bootloader
+with the explicit untimed PE/PHY fixture (mcu-boot.txt): both images reach the
+application entry after90314 instructions with the original checksum accepted.
+It then executes three unchanged original serial-check instructions from a
+declared diagnostic ABI, verifying its own invalid/available flag decisions and
+all untouched stack slots, including a DSP-status canary. This is not a complete
+startup or USB-descriptor/cold-boot qualification. The process check covers
+identity reuse and existing NVM retention on both MCU and coupled-board paths.
+
+The MCU/LCD preview has no executing DSP; bad DSP response remains an actual
+firmware diagnostic until genuine coupled boot is implemented and qualified.
+This factory data component does not establish hardware equivalence, all update
+or recovery phases, host MIDI/audio or any documented instrument function.
