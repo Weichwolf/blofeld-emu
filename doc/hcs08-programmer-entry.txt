@@ -1,0 +1,51 @@
+Original HCS08 programmer entry from partial architectural reset state
+
+  cmake --build --preset strict --target blofeld-original-hcs08-reset-entry-test
+  ctest --test-dir build/strict -j1 -R '^original_hcs08_reset_entry$' --output-on-failure
+
+The optional gate verifies the local original Keyboard1.4 archive, all supplied
+pages and the complete132-byte RAM programmer through hcs08-reference.json.
+Absent input skips77; changed input fails. Manufacturer bytes remain local.
+The source contains own fixtures and scalar instruction/state expectations.
+
+Two supplied warm register/preimage contexts enter actual Hcs08 active reset.
+H becomes0, X/A retain their explicit inputs, SP becomes00ff, numerical PC is
+unknown and CCR knowledge is68. Both vector bytes and every RAM byte start
+unknown. BDC BACKGROUND/status and trim reads precede32 actual zero uploads
+and132 actual original program uploads. Only BDC WRITE_PC/WRITE_SP/GO establishes
+the original entry and stack. No WRITE_CCR, post-reset debug register replacement,
+host RAM code copy or fabricated ready response supplies the continuation.
+
+Each of the eight original instructions has independent complete PC/A/HX/SP/
+CCR-knownness and unstretched-period expectations. The prefix ends at00b2
+with HX0078, SP0077, A ff and CCR6c/known ee. The unknown half-carry/carry bits
+remain unknown. FCDIV loads1e; the original CPU FOPT02/FPROTff attempts remain
+ignored, including a declared protected-vector preimage. SOPT has not yet been
+written. The default idle FSTAT store then fails visibly at1825/PC00b2.
+No erase/program command or NVM transfer begins, and all132 program bytes,
+RAM knowledge and NVM data/knowledge/history remain intact.
+
+Two cuts per context retain the complete native CPU/memory/BDC/clock graph:
+after eight retirements and halfway through the following store's reference
+budget. Eight fresh continuations reproduce the actual complete fault suffix
+and endpoint, including quarantine. Failure occurs at executing period26 with
+eight retirements; one earlier offered period was genuinely held by BDC.
+These budgets exclude serial pin clocks and the unqualified GO queue-refill
+sequence; they are not physical transaction/latency measurements.
+
+The strict collector checks every reset/upload/start/instruction/register/write/
+pending/failure/replay/completion row. Fixed corruptions of its own trace reject
+changed knowledge, H/SP, time, accesses and outcomes, missing stages and extra
+or truncated data. These directed controls are not fuzzing.
+
+This joins architectural reset with the logical target upload/entry component.
+It does not execute the original HC12 caller, GPIO SYNC or the complete MIDI/DSP
+stream. Their existing LCD/BKGD refusal remains independent and unchanged.
+The declared unsecured pre-update options, trim and protection are explicit
+fixtures, not recovered hardware observations or a complete installed image.
+No NVM operating frequency is supplied here. The original4MHz/FCDIV1e question,
+idle-FCBEF silicon behavior, later partial-CCR ISA/peripherals, page operations,
+full reset/persistence/update/recovery, cold registers/RAM, actual part/net/clock,
+normal boot/USB-MIDI/audio and stock-device comparisons remain required.
+See objective.txt, coverage.txt and the separate original component scopes in
+hcs08-reset.txt, hcs08-bdc.txt, hcs08-reset-security.txt and keyboard-chain.txt.

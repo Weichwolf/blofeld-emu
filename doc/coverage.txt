@@ -1850,3 +1850,9 @@ SEC/options/protection/origin cases, missing vector failures, unknown permission
 refusals, known secured BDC resources and four own reference recovery recipes
 from interrupted option-page images. Original update/recovery, cold registers,
 actual NVM/board timing, physical mask and stock-device equivalence remain open.
+
+Original HCS08 reset entry: original_hcs08_reset_entry joins actual pre-vector
+warm reset, BDC trim/RAM upload/WRITE_PC/WRITE_SP/GO and eight unchanged original
+programmer instructions with partial CCR. Boundary/mid-budget joint snapshots
+repeat the default FSTAT refusal; no original caller/wire/stream, NVM operating
+rate, erase/program or full recovery is inferred. See hcs08-programmer-entry.txt.
