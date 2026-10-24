@@ -14,21 +14,37 @@ def registers(pc, accumulator, flags, stack=0x475, hx=0x12c, known=0xef):
     return dict(pc=pc, hx=hx, sp=stack, a=accumulator, ccr=flags, known=known)
 
 
-def expected_rows():
+def expected_rows(cold=False):
     result = []
     unknown = ('UNKNOWN HCS08 execution pc=0xe04e: HCS08 GPIO read address=0x0010 '
                'pc=0xe04e ccr=0x006c: Detached resolved GPIO pad source mask=0x00003c')
     status = ('STATUS HCS08 execution pc=0xe1b0: HCS08 ICG read address=0x004a '
               'pc=0xe1b0 ccr=0x0069 agent=CPU: live clock/status evolution is '
               'unqualified; reset flags are not ready')
-    for seed in range(2):
+    for seed in range(1 if cold else 2):
         for trim in (0x80, 0, 0x5a, 0xff):
             for observation in [-1] + [n << 2 for n in range(16)]:
                 result.append(('CASE', dict(seed=seed, trim=trim, observation=observation)))
                 warm = registers(0xe000, (0xa5, 0x5a)[seed], 0x68, stack=0xff,
                                  hx=(0x22, 0xbb)[seed], known=0x68)
+                if cold:
+                    warm = registers(0xe000, 0, 0x68, stack=0xff, hx=0, known=0x68)
+                    warm.update({'a-known': 0, 'hx-known': 0xff00})
                 result.append(('RESET', dict(reads=2, **{'ram-known': 0, 'flash-known': 3584,
-                    'live-known': seed, 'live': 0 if seed == 0 else 0xa7}, **warm)))
+                    'live-known': 1 if cold else seed,
+                    'live': 0x80 if cold else (0 if seed == 0 else 0xa7)}, **warm)))
+                if cold:
+                    for at, pc, hx, sp, flags in ((1, 0xe003, 0x47e, 0xff, 0x68),
+                            (2, 0xe004, 0x47e, 0x47d, 0x68),
+                            (3, 0xe006, 0x480, 0x47d, 0x6c),
+                            (4, 0xe007, 0x80, 0x47d, 0x6a),
+                            (6164, 0xe02e, 0x12c, 0x47d, 0x68)):
+                        values = registers(pc, 0, flags, stack=sp, hx=hx,
+                                           known=0xee if at <= 4 else 0xef)
+                        values.update({'a-known': 0, 'hx-known': 0xffff})
+                        result.append(('COLD', dict(retired=at, **values)))
+                    result.append(('COLD', dict(retired=6165,
+                        **registers(0xe030, 3, 0x68, stack=0x47d))))
                 result.append(('GPIO', dict(retired=6176, writes=11,
                     **registers(0xe04e, 3, 0x6c, stack=0x47d))))
                 if observation < 0:
@@ -48,6 +64,8 @@ def expected_rows():
                     result.append(status)
                 if seed == 0 and trim == 0x80 and observation in (-1, 0, 8):
                     cuts = [6176, 6186, 6188] if observation == 8 else [6176]
+                    if cold:
+                        cuts = [0, 6164] + cuts
                     for cut in cuts:
                         for index in range(2):
                             result.append(('REPLAY', dict(cut=cut, index=index, identical=1)))
@@ -67,18 +85,19 @@ def row(line):
     return tag, fields
 
 
-def validate(lines):
-    if [row(line) for line in lines] != expected_rows():
+def validate(lines, cold=False):
+    if [row(line) for line in lines] != expected_rows(cold):
         raise ValueError('Changed original startup state, chronology or strict failure')
 
 
-def controls(lines):
+def controls(lines, cold=False):
     locate = lambda prefix: next(i for i, line in enumerate(lines) if line.startswith(prefix))
     examples = [lines[:-1], lines + ['EXTRA value=1'], lines[1:],
                 lines[:2] + [lines[2]] + lines[2:]]
     changes = [('CASE ', 'seed=0', 'seed=1'), ('RESET ', 'reads=2', 'reads=0'),
                ('RESET ', 'ram-known=0', 'ram-known=1'),
-               ('RESET ', 'live-known=0', 'live-known=1'),
+               ('RESET ', 'live-known=1' if cold else 'live-known=0',
+                'live-known=0' if cold else 'live-known=1'),
                ('LOAD ', 'retired=6185', 'retired=6184'),
                ('STORE retired=6186 ', 'ccr=109', 'ccr=105'),
                ('STORE retired=6187 ', 'control1=40', 'control1=8'),
@@ -87,6 +106,11 @@ def controls(lines):
                ('STATUS ', 'pc=0xe1b0', 'pc=0xe1b2'),
                ('REPLAY ', 'identical=1', 'identical=0'),
                ('BACKGROUND ', 'retired=6181', 'retired=6182')]
+    if cold:
+        changes.extend([('RESET ', 'a-known=0', 'a-known=255'),
+                        ('RESET ', 'hx-known=65280', 'hx-known=65535'),
+                        ('COLD retired=6164 ', 'a-known=0', 'a-known=255'),
+                        ('COLD retired=6165 ', 'a=3', 'a=0')])
     for prefix, before, after in changes:
         changed = list(lines)
         index = locate(prefix)
@@ -96,7 +120,7 @@ def controls(lines):
         examples.append(changed)
     for changed in examples:
         try:
-            validate(changed)
+            validate(changed, cold)
         except (ValueError, IndexError):
             continue
         raise ValueError('Collector accepted a fixed wrong-state control')
@@ -104,7 +128,10 @@ def controls(lines):
 
 
 def main():
-    binary, archive, specification, trace = map(Path, sys.argv[1:])
+    if len(sys.argv) not in (5, 6) or (len(sys.argv) == 6 and sys.argv[5] != 'power-on'):
+        raise ValueError('Expected binary, archive, specification, trace and optional power-on')
+    cold = len(sys.argv) == 6
+    binary, archive, specification, trace = map(Path, sys.argv[1:5])
     if not archive.is_file():
         print('SKIP original HCS08 clock startup: local Keyboard archive absent')
         return 77
@@ -114,22 +141,24 @@ def main():
     pages.write_bytes(supplied)
     frozen = {p: hashlib.sha256(p.read_bytes()).hexdigest()
               for p in (binary, archive, specification, pages)}
-    result = subprocess.run([str(p.resolve()) for p in (binary, pages, trace)],
+    result = subprocess.run([str(p.resolve()) for p in (binary, pages, trace)] +
+                            (['power-on'] if cold else []),
                             capture_output=True, text=True, timeout=90, check=False)
     trace.with_suffix('.log').write_text(result.stdout + result.stderr)
     allowed = 'Original HCS08 GPIO/FLASH/ICG startup reaches strict clock status with unknown rates.'
     if result.returncode or result.stderr or result.stdout.strip() != allowed:
         raise ValueError('Original clock startup failed: '+result.stdout+result.stderr)
     lines = trace.read_text().splitlines()
-    validate(lines)
-    rejected_controls = controls(lines)
+    validate(lines, cold)
+    rejected_controls = controls(lines, cold)
     if any(hashlib.sha256(p.read_bytes()).hexdigest() != digest for p, digest in frozen.items()):
         raise ValueError('Original clock startup input changed during execution')
-    report = dict(passed=True, cases=136, unknown_pad_cases=8, actual_BGND_cases=16,
-        actual_clock_status_failures=112, fresh_joint_replays=10, collector_controls=rejected_controls,
-        declared_NVM_trim_profiles=4, warm_register_histories=2, physical_straps_inferred=False,
+    report = dict(passed=True, cases=68 if cold else 136, unknown_pad_cases=4 if cold else 8,
+        actual_BGND_cases=8 if cold else 16,
+        actual_clock_status_failures=56 if cold else 112, fresh_joint_replays=22 if cold else 10, collector_controls=rejected_controls,
+        declared_NVM_trim_profiles=4, warm_register_histories=0 if cold else 2, physical_straps_inferred=False,
         original_code_modified=False, full_boot=False, complete_update=False,
-        physical_timing_qualified=False, hardware_equivalence=False, cold_reset=False,
+        physical_timing_qualified=False, hardware_equivalence=False, cold_reset=cold,
         fuzz_execution=False, physical_traffic=False, input_sha256={str(p): h for p,h in frozen.items()},
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest())
     trace.with_suffix('.json').write_text(json.dumps(report, indent=2)+'\n')

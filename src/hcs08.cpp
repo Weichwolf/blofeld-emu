@@ -7,6 +7,7 @@
 #include "globalcontext.hh"
 #include "hcs08_ccr.hpp"
 #include "hcs08_native.hpp"
+#include "hcs08_registers.hpp"
 #include "memstate.hh"
 #include "pcoderaw.hh"
 #include "sleigh.hh"
@@ -89,6 +90,8 @@ public:
   std::unique_ptr<native::InstructionExecutor> executor;
   std::uint64_t decoded_revision = 0;
   std::uint8_t ccr_known = Hcs08State::all_ccr;
+  std::uint8_t a_known = Hcs08State::all_a;
+  std::uint16_t hx_known = Hcs08State::all_hx;
   bool pc_known = true;
   bool active = false;
   bool healthy = false;
@@ -107,8 +110,10 @@ Hcs08::~Hcs08() = default;
 void Hcs08::set_state(const Hcs08State &state) {
   const native::ExecutionGuard guard(impl_->active);
   impl_->healthy = false;
-  impl_->memory.setValue(&impl_->layout.a, state.a);
-  impl_->memory.setValue(&impl_->layout.hx, state.hx);
+  impl_->a_known = state.a_known;
+  impl_->hx_known = state.hx_known;
+  impl_->memory.setValue(&impl_->layout.a, state.a & state.a_known);
+  impl_->memory.setValue(&impl_->layout.hx, state.hx & state.hx_known);
   impl_->memory.setValue(&impl_->layout.sp, state.sp);
   impl_->ccr_known = static_cast<std::uint8_t>(state.ccr_known | fixed_ccr);
   impl_->memory.setValue(&impl_->layout.ccr, (state.ccr | fixed_ccr) & impl_->ccr_known);
@@ -123,14 +128,17 @@ void Hcs08::set_state(const Hcs08State &state) {
 
 Hcs08State Hcs08::state() const {
   if (!impl_->initialized) { throw Fault("HCS08 entry registers have not been supplied"); }
-  return {.pc = static_cast<std::uint16_t>(impl_->executor->getExecuteAddress().getOffset()),
-          .hx = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.hx)),
-          .sp = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.sp)),
-          .a = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.a)),
-          .ccr_known = impl_->ccr_known,
-          .ccr = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.ccr) &
-                                           impl_->ccr_known),
-          .pc_known = impl_->pc_known};
+  return {
+      .pc = static_cast<std::uint16_t>(impl_->executor->getExecuteAddress().getOffset()),
+      .hx = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.hx) & impl_->hx_known),
+      .sp = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.sp)),
+      .a = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.a) & impl_->a_known),
+      .ccr_known = impl_->ccr_known,
+      .ccr =
+          static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.ccr) & impl_->ccr_known),
+      .pc_known = impl_->pc_known,
+      .a_known = impl_->a_known,
+      .hx_known = impl_->hx_known};
 }
 
 std::string Hcs08::disassemble() const try {
@@ -175,6 +183,8 @@ Hcs08Checkpoint Hcs08::checkpoint() const {
   result.background_ = background_requested();
   result.ccr_known_ = impl_->ccr_known;
   result.pc_known_ = impl_->pc_known;
+  result.a_known_ = impl_->a_known;
+  result.hx_known_ = impl_->hx_known;
   return result;
 }
 
@@ -189,19 +199,31 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
   impl_->executor->restore_background_request(checkpoint.background_);
   impl_->ccr_known = checkpoint.ccr_known_;
   impl_->pc_known = checkpoint.pc_known_;
+  impl_->a_known = checkpoint.a_known_;
+  impl_->hx_known = checkpoint.hx_known_;
   impl_->initialized = true;
   impl_->healthy = true;
 }
 
-void Hcs08::reset(const Hcs08ResetEntry mode) {
+void Hcs08::reset(const Hcs08ResetEntry mode, const Hcs08ResetCause cause) {
   if (mode != Hcs08ResetEntry::normal && mode != Hcs08ResetEntry::active_background) {
     throw Fault("HCS08 reset requires a qualified architectural entry mode");
   }
-  if (impl_->active || !impl_->healthy || !impl_->initialized) {
+  if (cause != Hcs08ResetCause::warm && cause != Hcs08ResetCause::power_on) {
+    throw Fault("HCS08 reset requires a qualified architectural reset cause");
+  }
+  if (impl_->active || (impl_->initialized && !impl_->healthy) ||
+      (!impl_->initialized && cause != Hcs08ResetCause::power_on)) {
     throw Fault("HCS08 reset requires healthy supplied pre-reset A/X and coordinated board state");
   }
-  const auto before = state();
+  const auto before = impl_->initialized ? state() : Hcs08State{.pc_known = false};
   auto entry = before;
+  if (cause == Hcs08ResetCause::power_on) {
+    entry.a = 0;
+    entry.a_known = 0;
+    entry.hx = 0;
+    entry.hx_known = 0;
+  }
   {
     const native::ExecutionGuard guard(impl_->active);
     impl_->healthy = false;
@@ -219,8 +241,10 @@ void Hcs08::reset(const Hcs08ResetEntry mode) {
     }
   }
   constexpr unsigned low_mask = 0xff;
+  constexpr unsigned high_mask = 0xff00;
   constexpr unsigned reset_known = 0x68;
   entry.hx &= low_mask;
+  entry.hx_known = static_cast<std::uint16_t>((entry.hx_known & low_mask) | high_mask);
   entry.sp = low_mask;
   entry.ccr = reset_known;
   entry.ccr_known = reset_known;
@@ -242,12 +266,15 @@ void Hcs08::step() {
     if (impl_->bus.interrupt_request(before.ccr)) {
       throw Fault("HCS08 interrupt entry is not qualified");
     }
+    const auto registers = detail::hcs08::registers_after(impl_->bus, before);
     const auto known = detail::hcs08::ccr_after(impl_->bus, before);
     impl_->refresh();
     impl_->executor->execute();
     impl_->ccr_known = known;
     impl_->normalize_ccr();
     impl_->bus.retire_instruction();
+    impl_->a_known = registers.a;
+    impl_->hx_known = registers.hx;
     impl_->healthy = true;
   } catch (const ghidra::LowlevelError &error) {
     throw Fault("HCS08 execution pc=" + hex(before.pc) + ": " + error.explain);

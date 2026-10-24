@@ -171,8 +171,9 @@ void partial_flags() {
   constexpr unsigned carry_known = 0x69;
   constexpr unsigned tap_flags = 0x75;
   constexpr unsigned interrupt_cleared = 0x60;
-  constexpr std::array<Expected, 28> effects{
-      {{.opcode = 0xae, .known = loaded_status_known, .value = reset_status_known},
+  constexpr std::array<Expected, 29> effects{
+      {{.opcode = 0x4f, .known = loaded_status_known, .value = 0x6a},
+       {.opcode = 0xae, .known = loaded_status_known, .value = reset_status_known},
        {.opcode = 0xa6, .known = loaded_status_known, .value = reset_status_known},
        {.opcode = 0xc7, .known = loaded_status_known, .value = reset_status_known},
        {.opcode = 0x94, .known = reset_status_known, .value = reset_status_known},

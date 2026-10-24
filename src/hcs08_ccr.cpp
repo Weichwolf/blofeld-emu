@@ -11,7 +11,7 @@ namespace {
 constexpr unsigned ldx_immediate = 0xae, lda_immediate = 0xa6, sta_extended = 0xc7;
 constexpr unsigned txs = 0x94, nop = 0x9d, bgnd = 0x82, tap = 0x84;
 constexpr unsigned cli = 0x9a, sei = 0x9b, clc = 0x98, sec = 0x99;
-constexpr unsigned ldhx_immediate = 0x45, clrh = 0x8c, clrx = 0x5f, clr_indexed = 0x7f;
+constexpr unsigned ldhx_immediate = 0x45, clrh = 0x8c, clrx = 0x5f, clra = 0x4f, clr_indexed = 0x7f;
 constexpr unsigned bra = 0x20, bcs = 0x25, aix = 0xaf, cphx_immediate = 0x65;
 constexpr unsigned sthx_direct = 0x35, sta_direct = 0xb7, stack_prefix = 0x9e;
 constexpr unsigned ldhx_stack = 0xfe, sthx_stack = 0xff;
@@ -58,6 +58,7 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     case sthx_direct:
     case clrh:
     case clrx:
+    case clra:
     case clr_indexed: defined = vnz; break; // CLR preserves C, including unknown C.
     case cphx_immediate:
     case cmp_immediate: defined = vnz | carry; break;

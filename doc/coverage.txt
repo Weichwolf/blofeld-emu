@@ -1895,3 +1895,10 @@ The first ICGS1 load remains a strict clock-evolution refusal; no stored request
 REFS bit, lock flag or physical frequency is invented. All prior strict gates
 remain separate; cold state, timing, scanning, full update/boot and118 functions
 remain incomplete.
+
+HCS08 cold-register knowledge: explicit fresh power_on reset, unknown A/X masks,
+native dependency admission, BDC reads/writes and joint checkpoints are covered
+by hcs08_register_knowledge and original_hcs08_cold_startup. The latter executes
+68 original startup cases with no supplied pre-reset registers and22 fresh
+replays; GPIO/clock status, omitted FLASH, complete update/recovery and physical
+reset timing remain explicitly incomplete. See hcs08-reset.txt.

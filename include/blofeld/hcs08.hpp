@@ -13,6 +13,8 @@ namespace blofeld {
 struct Hcs08State {
   static constexpr unsigned fixed_ccr = 0x60;
   static constexpr std::uint8_t all_ccr = 0xff;
+  static constexpr std::uint8_t all_a = 0xff;
+  static constexpr std::uint16_t all_hx = 0xffff;
   std::uint16_t pc = 0;
   std::uint16_t hx = 0;
   std::uint16_t sp = 0;
@@ -20,6 +22,8 @@ struct Hcs08State {
   std::uint8_t ccr_known = all_ccr;
   std::uint8_t ccr = fixed_ccr; // S08CPUV2: bits6/5 are permanently one.
   bool pc_known = true;         // False after active-background reset until a qualified PC write.
+  std::uint8_t a_known = all_a;
+  std::uint16_t hx_known = all_hx;
   bool operator==(const Hcs08State &) const = default;
 };
 
@@ -39,9 +43,12 @@ private:
   bool background_ = false;
   bool pc_known_ = true;
   std::uint8_t ccr_known_ = Hcs08State::all_ccr;
+  std::uint8_t a_known_ = Hcs08State::all_a;
+  std::uint16_t hx_known_ = Hcs08State::all_hx;
 };
 
 enum class Hcs08ResetEntry : std::uint8_t { unqualified, normal, active_background };
+enum class Hcs08ResetCause : std::uint8_t { unqualified, warm, power_on };
 
 // Native instruction engine, separate from target memory/peripherals and BDC.
 // Entry registers are explicit debug inputs, not invented power-on values.
@@ -53,12 +60,14 @@ public:
   Hcs08(const Hcs08 &) = delete;
   Hcs08 &operator=(const Hcs08 &) = delete;
   void set_state(const Hcs08State &state);
-  // Warm architectural reset after the board has completed its six reset periods.
-  // A/X retain supplied pre-reset state; H/SP/I reset, other CCR bits unknown.
+  // Architectural reset after the board has completed its reset sequence.
+  // Warm retains healthy A/X knowledge; power_on starts with unknown A/X.
+  // H/SP/I reset, other CCR bits unknown. A fresh CPU permits only power_on.
   // Normal entry fetches the vector. Active background entry precedes that fetch;
   // its numerical PC is unqualified and remains explicitly unknown.
   // Peripheral reset and pin/clock sequencing belong to the board owner.
-  void reset(Hcs08ResetEntry mode = Hcs08ResetEntry::normal);
+  void reset(Hcs08ResetEntry mode = Hcs08ResetEntry::normal,
+             Hcs08ResetCause cause = Hcs08ResetCause::warm);
   [[nodiscard]] Hcs08State state() const;
   [[nodiscard]] std::string disassemble() const;
   // BGND is an observed CPU request, not a fabricated active-BDC status.

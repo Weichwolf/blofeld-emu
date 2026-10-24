@@ -8,7 +8,7 @@
 namespace blofeld {
 namespace {
 constexpr unsigned enable_mask = 0x80, breakpoint_mask = 0x20, writable_mask = 0x98;
-constexpr unsigned byte_mask = 255, high_shift = 8;
+constexpr unsigned byte_mask = 255, high_shift = 8, word_mask = 65535;
 }
 
 std::uint16_t Hcs08Bdc::argument() const {
@@ -42,7 +42,10 @@ void Hcs08Bdc::register_access() {
   if (!state_.active) { fail("register access", "command requires active background mode"); }
   auto cpu = cpu_.state();
   switch (state_.frame[0]) {
-    case hcs08_bdc::write_a: cpu.a = state_.frame[1]; break;
+    case hcs08_bdc::write_a:
+      cpu.a = state_.frame[1];
+      cpu.a_known = byte_mask;
+      break;
     case hcs08_bdc::write_ccr:
       cpu.ccr = state_.frame[1];
       cpu.ccr_known = Hcs08State::all_ccr;
@@ -51,9 +54,17 @@ void Hcs08Bdc::register_access() {
       cpu.pc = argument();
       cpu.pc_known = true;
       break;
-    case hcs08_bdc::write_hx: cpu.hx = argument(); break;
+    case hcs08_bdc::write_hx:
+      cpu.hx = argument();
+      cpu.hx_known = word_mask;
+      break;
     case hcs08_bdc::write_sp: cpu.sp = argument(); break;
-    case hcs08_bdc::read_a: reply_byte(cpu.a); return;
+    case hcs08_bdc::read_a:
+      if (cpu.a_known != byte_mask) {
+        fail("READ_A", "unknown CPU A bits mask=" + hex(byte_mask ^ cpu.a_known));
+      }
+      reply_byte(cpu.a);
+      return;
     case hcs08_bdc::read_ccr:
       if (cpu.ccr_known != Hcs08State::all_ccr) {
         const auto unknown = static_cast<unsigned>(Hcs08State::all_ccr ^ cpu.ccr_known);
@@ -66,7 +77,12 @@ void Hcs08Bdc::register_access() {
       if (!cpu.pc_known) { fail("READ_PC", "unknown CPU PC"); }
       reply_word(cpu.pc);
       return;
-    case hcs08_bdc::read_hx: reply_word(cpu.hx); return;
+    case hcs08_bdc::read_hx:
+      if (cpu.hx_known != word_mask) {
+        fail("READ_HX", "unknown CPU H:X bits mask=" + hex(word_mask ^ cpu.hx_known));
+      }
+      reply_word(cpu.hx);
+      return;
     case hcs08_bdc::read_sp: reply_word(cpu.sp); return;
     default: fail("register access", "unsupported register command");
   }

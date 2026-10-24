@@ -27,7 +27,9 @@ constexpr unsigned first_control = 0x28, second_control = 0x30, ref_known = 0xdf
 constexpr unsigned loaded_ccr = 0x69, loaded_zero_ccr = 0x6b, loaded_negative_ccr = 0x6d;
 constexpr unsigned configured_flash_bytes = 3584, packaged_trim = 0x80, strap_mask = 0x38;
 constexpr unsigned background_pc = 0xe060, zero_ccr = 0x6a;
-constexpr unsigned reset_control = 0x44;
+constexpr unsigned reset_control = 0x44, reset_hx_known = 0xff00;
+constexpr unsigned before_a_pc = 0xe02e, defined_a_pc = 0xe030, reset_flags = 0x68,
+                   load_known = 0xee;
 
 struct Saved {
   app::ApplicationMemory memory;
@@ -40,6 +42,9 @@ void registers(std::ostream &trace, const Hcs08State cpu) {
   trace << " pc=" << cpu.pc << " hx=" << cpu.hx << " sp=" << cpu.sp
         << " a=" << static_cast<unsigned>(cpu.a) << " ccr=" << static_cast<unsigned>(cpu.ccr)
         << " known=" << static_cast<unsigned>(cpu.ccr_known);
+  if (cpu.a_known != byte_mask || cpu.hx_known != word_mask) {
+    trace << " a-known=" << static_cast<unsigned>(cpu.a_known) << " hx-known=" << cpu.hx_known;
+  }
 }
 
 void unchanged_nvm(const app::ApplicationMemory &memory, const Hcs08FlashImage &initial) {
@@ -195,6 +200,61 @@ void flash_reads(const app::ApplicationMemory &memory, const bool main, const ap
   }
 }
 
+constexpr unsigned before_a = 6164, defined_a = 6165;
+
+bool cold_boundary(const unsigned at, const Hcs08State state) {
+  constexpr std::array<unsigned, 4> pcs{0xe003, 0xe004, 0xe006, 0xe007};
+  constexpr std::array<unsigned, 4> hxs{0x47e, 0x47e, 0x480, 0x80};
+  constexpr std::array<unsigned, 4> flags{0x68, 0x68, 0x6c, 0x6a};
+  require(state.hx_known == word_mask && state.a_known == (at < defined_a ? 0 : byte_mask),
+          "Only actual first LDHX and later LDA establish cold register knowledge");
+  if (at <= pcs.size()) {
+    const auto index = at - 1;
+    require(state ==
+                Hcs08State{.pc = static_cast<std::uint16_t>(pcs[index]),
+                           .hx = static_cast<std::uint16_t>(hxs[index]),
+                           .sp = static_cast<std::uint16_t>(index == 0 ? byte_mask : app::stack),
+                           .ccr_known = load_known,
+                           .ccr = static_cast<std::uint8_t>(flags[index]),
+                           .a_known = 0},
+            "Independent first four cold instructions define H/X, stack and flags");
+    return true;
+  }
+  if (at != before_a && at != defined_a) { return false; }
+  require(state == Hcs08State{.pc = static_cast<std::uint16_t>(at == before_a ? before_a_pc
+                                                                              : defined_a_pc),
+                              .hx = app::expected_hx,
+                              .sp = app::stack,
+                              .a = static_cast<std::uint8_t>(at == before_a ? 0 : 3),
+                              .ccr_known = app::ccr_known,
+                              .ccr = reset_flags,
+                              .a_known = static_cast<std::uint8_t>(at == before_a ? 0 : byte_mask)},
+          "RAM clearing/calibration preserve unknown A until the original LDA immediate");
+  return true;
+}
+
+void startup(app::ApplicationMemory &memory,
+             Hcs08 &cpu,
+             const bool cold,
+             std::ostringstream &trace,
+             std::vector<Saved> *const cuts) {
+  if (memory.retired >= app::input_retired) { return; }
+  while (memory.retired < app::input_retired) {
+    cpu.step();
+    if (!cold) { continue; }
+    if (cold_boundary(memory.retired, cpu.state())) {
+      trace << "COLD retired=" << memory.retired;
+      registers(trace, cpu.state());
+      trace << '\n';
+    }
+    if (memory.retired == before_a) { capture(memory, cpu, trace, cuts); }
+  }
+  app::configured(memory, cpu);
+  trace << "GPIO retired=" << memory.retired << " writes=" << memory.peripheral_accesses.size();
+  registers(trace, cpu.state());
+  trace << '\n';
+}
+
 void replays(const app::ApplicationMemory &memory,
              const Hcs08 &cpu,
              const app::Input input,
@@ -208,6 +268,7 @@ void replays(const app::ApplicationMemory &memory,
       Hcs08 other(restored, BLOFELD_HCS08_SLA);
       other.restore_checkpoint(saved.cpu);
       std::ostringstream actual;
+      startup(restored, other, true, actual, nullptr);
       finish(restored, other, input, actual, nullptr);
       require(actual.str() == baseline.substr(saved.offset) && other.state() == cpu.state() &&
                   other.faulted() == cpu.faulted() &&
@@ -219,32 +280,47 @@ void replays(const app::ApplicationMemory &memory,
   }
 }
 
-void run(const std::span<const std::uint8_t> records, const app::Input input, std::ostream &trace) {
+void run(const std::span<const std::uint8_t> records,
+         const app::Input input,
+         std::ostream &trace,
+         const bool cold) {
   app::ApplicationMemory memory(records, input);
   memory.warm_reset();
+  if (cold) { memory.icg.reset(Hcs08IcgReset::power_on); }
   const auto initial = memory.flash.image();
   const auto warm = app::warm_state(input.seed);
   Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
-  cpu.set_state(warm);
-  cpu.reset();
-  require(cpu.state() == Hcs08State{.pc = app::entry,
-                                    .hx = static_cast<std::uint16_t>(warm.hx & byte_mask),
-                                    .sp = byte_mask,
-                                    .a = warm.a,
-                                    .ccr_known = flags_fixed + flag_i,
-                                    .ccr = flags_fixed + flag_i} &&
+  if (!cold) { cpu.set_state(warm); }
+  cpu.reset(Hcs08ResetEntry::normal, cold ? Hcs08ResetCause::power_on : Hcs08ResetCause::warm);
+  require(cpu.state() ==
+                  Hcs08State{.pc = app::entry,
+                             .hx = static_cast<std::uint16_t>(cold ? 0 : warm.hx & byte_mask),
+                             .sp = byte_mask,
+                             .a = static_cast<std::uint8_t>(cold ? 0 : warm.a),
+                             .ccr_known = flags_fixed + flag_i,
+                             .ccr = flags_fixed + flag_i,
+                             .a_known = static_cast<std::uint8_t>(cold ? 0 : byte_mask),
+                             .hx_known =
+                                 static_cast<std::uint16_t>(cold ? reset_hx_known : word_mask)} &&
               memory.known.none() && !memory.resetting &&
               memory.icg.state().control1_request == reset_control &&
               memory.icg.state().control2_request == 0,
           "Real normal warm reset establishes vector/registers but no RAM/clock/trim history");
-  if (input.seed == 0) {
+  if (cold) {
+    require(memory.icg.state().trim == packaged_trim,
+            "Power-on live trim resets to80 independently of the declared factory NVM data");
+  } else if (input.seed == 0) {
     require(!memory.icg.state().trim, "Unknown live trim remains unknown after warm reset");
   } else {
     require(memory.icg.state().trim == app::prior_live_trim,
             "Known prior live trim survives warm reset without being mistaken for NVICGTRM");
   }
-  const auto retained =
-      input.seed == 0 ? std::nullopt : std::optional<std::uint8_t>(app::prior_live_trim);
+  std::optional<std::uint8_t> retained;
+  if (cold) {
+    retained = packaged_trim;
+  } else if (input.seed != 0) {
+    retained = app::prior_live_trim;
+  }
   require(memory.icg.state() == Hcs08IcgState{.trim = retained},
           "Warm reset restores every ICG request/knowledge/first-write field independently of NVM");
   std::ostringstream baseline;
@@ -256,17 +332,14 @@ void run(const std::span<const std::uint8_t> records, const app::Input input, st
            << " live=" << static_cast<unsigned>(memory.icg.state().trim.value_or(0));
   registers(baseline, cpu.state());
   baseline << '\n';
-  for (unsigned n = 0; n < app::input_retired; ++n) { cpu.step(); }
-  app::configured(memory, cpu);
-  baseline << "GPIO retired=" << memory.retired << " writes=" << memory.peripheral_accesses.size();
-  registers(baseline, cpu.state());
-  baseline << '\n';
   std::vector<Saved> cuts;
-  cuts.reserve(3);
+  cuts.reserve(5);
   const bool selected =
       input.seed == 0 && input.trim == packaged_trim &&
       (input.observation == -1 || input.observation == 0 || input.observation == 8);
   auto *const selected_cuts = selected ? &cuts : nullptr;
+  if (cold) { capture(memory, cpu, baseline, selected_cuts); }
+  startup(memory, cpu, cold, baseline, selected_cuts);
   capture(memory, cpu, baseline, selected_cuts);
   finish(memory, cpu, input, baseline, selected_cuts);
   const bool main =
@@ -280,7 +353,9 @@ void run(const std::span<const std::uint8_t> records, const app::Input input, st
 
 int main(const int count, char **arguments) {
   try {
-    require(count == 3, "Expected pinned original pages and private trace");
+    require(count == 3 || (count == 4 && std::string(arguments[3]) == "power-on"),
+            "Expected pinned original pages, private trace and optional explicit power-on");
+    const bool cold = count == 4;
     std::vector<std::uint8_t> records(app::records_bytes);
     std::ifstream input(arguments[1], std::ios::binary);
     input.read(reinterpret_cast<char *>(records.data()),
@@ -291,13 +366,14 @@ int main(const int count, char **arguments) {
     std::ofstream trace(arguments[2]);
     trace.exceptions(std::ios::badbit | std::ios::failbit);
     constexpr std::array<std::uint8_t, 4> trims{packaged_trim, 0, 0x5a, byte_mask};
-    for (unsigned seed = 0; seed < 2; ++seed) {
+    for (unsigned seed = 0; seed < (cold ? 1U : 2U); ++seed) {
       for (const auto trim : trims) {
-        run(records, {.seed = seed, .trim = trim, .observation = -1}, trace);
+        run(records, {.seed = seed, .trim = trim, .observation = -1}, trace, cold);
         for (unsigned bits = 0; bits < 16; ++bits) {
           run(records,
               {.seed = seed, .trim = trim, .observation = static_cast<int>(bits << 2U)},
-              trace);
+              trace,
+              cold);
         }
       }
     }
