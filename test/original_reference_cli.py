@@ -97,8 +97,8 @@ def main():
     manifest = json.loads((ROOT / "doc/downloads.json").read_text())
     expected = next(row["sha256"] for row in manifest["files"] if row["file"] == firmware.name)
     assert identity(firmware) == {"bytes": 102986, "sha256": expected}
-    assert identity(rom) == {"bytes": 174,
-                           "sha256": "8d5193c52b22cfdd633bcdd2acf8651a498e361ff06e4716454fddf92be11901"}
+    assert identity(rom) == {"bytes": 165,
+                           "sha256": "26531751e85d9d796795e443869330c84689b6bdb1eccbafc2cbd1554e377f16"}
     trace.parent.mkdir(parents=True, exist_ok=True)
     config = trace.with_suffix(".bfboard")
     config.write_text(CONFIG)

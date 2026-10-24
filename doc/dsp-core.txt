@@ -111,19 +111,27 @@ an invalid bit-24 encoding. Unknown selected bits and whole PDR reads still fail
 Document-derived SPI bootstrap reference
 DSP56371UM Appendix A publishes the SPI path, but references a separate EEPROM
 file and other ROM content is not supplied here. The optional fixture assembles
-only the 58-word prefix at P:ff0000..ff0039. Page headers are removed and equivalent
+only the 55-word prefix at P:ff0000..ff0036. Page headers are removed and equivalent
 label-colon syntax is used; instruction text is retained. The omitted EEPROM entry
 uses the separately published address, and the following burn-in entry retains
 its source position. Their bodies, main program ROM and X/Y ROM are unknown.
 This prefix is not a stock hardware ROM dump or complete mask-ROM image.
 
-After downloading verified references, supply dsp56300-asm 1.0.0 from
-https://github.com/xemu-project/dsp56300/releases/tag/v1.0.0 and pdftotext:
-  python3 tools/extract_nxp_spi_bootstrap.py --assembler /path/to/dsp56300-asm
+After downloading verified references, supply the pinned optional NXP assembler
+from Symphony Studio (reference-tools.json), Wine and pdftotext:
+  WINEPREFIX="$HOME/.local/share/wineprefixes/blofeld-emu" WINEDEBUG=-all \
+    python3 tools/extract_nxp_spi_bootstrap.py --nxp-assembler \
+    "$HOME/.local/share/wineprefixes/blofeld-emu/drive_c/SymphonyStudio/dsp56720-devtools/dist/gcc/bin/asm56300.exe"
   ctest --test-dir build/strict -R original_dsp_boot --output-on-failure
 
+The published source explicitly requests three short BRA encodings. NXP 6.3.28
+retains those forms and produces 55 words; xemu dsp56300-asm 1.0.0 expands them
+into long forms and its previous 58-word reference is rejected. This corrects
+reference generation, not the stock Blofeld firmware. No instruction text is
+rewritten or binary postprocessing used. A complete stock ROM remains absent.
+
 The tool records identities and creates only ignored doc/local/ outputs. The
-assembly tool release identity is in doc/dependencies.json. Test assets are
+assembler executable and archive identities are in reference-tools.json. Test assets are
 SHA-256 checked before execution; absent private inputs explicitly skip the test.
 
 The fixture starts native mode-five execution at ff0000, then a host pin fixture
@@ -148,7 +156,7 @@ prefix and rejects further execution/capture until trusted restore. This qualifi
 the implemented strict-map failure, not the chip's reserved-write behavior; future
 hardware evidence may change that map contract. The private sidecar is
 Testing/original-dsp-boot.trace.reference-access.trace; the original main trace
-is unchanged. GPIO/NAND startup has not yet been reached natively.
+must match between execution profiles. GPIO/NAND startup has not yet been reached natively.
 
 The same fixture also executes all 13,015 currently reached ROM/stage instructions
 through the explicit access-continuation profile. Its separate
@@ -169,9 +177,9 @@ cursor, count, source and memory mode. Separate checkpoint branches supply zero,
 two and three reference switch cycles: the affected X-to-P mapping really changes,
 but the original Y:002000 write still fails with its PC/OMR context. Additional
 private .boot-context.trace sidecars retain the register observations; undefined
-reset fields are not treated as specified zeros. Existing full traces stay
-unchanged. These constraints apply to the published prefix, not an unidentified
-stock mask-ROM variant; reserved-write semantics remain unresolved.
+reset fields are not treated as specified zeros. These constraints apply to the
+published prefix, not an unidentified stock mask-ROM variant; reserved-write
+semantics remain unresolved.
 
 The host supplies pin events with explicit instruction interleaving. The original
 MCU is not the sender in this fixture, no elapsed DSP/MCU clock ratio is

@@ -20,7 +20,7 @@ inline std::uint32_t dsp_boot_word(const std::span<const std::uint8_t, 3> bytes)
 
 // Trusted private reference; the Python runner checks the pinned identity first.
 inline std::vector<std::uint32_t> read_spi_boot_prefix(const std::filesystem::path &path) {
-  constexpr std::size_t prefix_words = 58;
+  constexpr std::size_t prefix_words = 55;
   std::ifstream file(path, std::ios::binary);
   std::array<char, prefix_words * 3> bytes{};
   file.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));

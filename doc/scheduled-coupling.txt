@@ -40,7 +40,7 @@ callbacks belong outside any future real-time audio callback.
 
 Original firmware experiment
 The optional original_scheduled_coupling regression pins the original 1.25 ZIP
-and the privately assembled 58-word NXP SPI prefix (dsp-core.txt). The original
+and the privately assembled 55-word NXP SPI prefix (dsp-core.txt). The original
 MCU executes from reset with owned CPU/SCI/TIM/OSC time and explicit laboratory
 inputs. At its first PU0-ready poll, actual native serial pads supply the DSP
 baseline. The DSP then starts its own mode-five ROM without an untimed pre-run.

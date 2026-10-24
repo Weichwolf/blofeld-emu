@@ -664,7 +664,7 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           coupling now checked under controlled
                                           pad order (coupled-boot.txt); full DSP
                                           application/board execution pending.
-DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled privately;
+DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled privately;
                                           no complete/hardware-dumped ROM supplied.
                                           Hardware SPI reset now supplies the
                                           documented OMR CDP=11 plus mode5;

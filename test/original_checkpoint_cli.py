@@ -19,8 +19,8 @@ def main():
     manifest = json.loads((ROOT / "doc/downloads.json").read_text())
     expected = next(row["sha256"] for row in manifest["files"] if row["file"] == firmware.name)
     assert identity(firmware) == {"bytes": 102986, "sha256": expected}
-    assert identity(rom) == {"bytes": 174,
-                           "sha256": "8d5193c52b22cfdd633bcdd2acf8651a498e361ff06e4716454fddf92be11901"}
+    assert identity(rom) == {"bytes": 165,
+                           "sha256": "26531751e85d9d796795e443869330c84689b6bdb1eccbafc2cbd1554e377f16"}
     trace.parent.mkdir(parents=True, exist_ok=True)
     config = trace.with_suffix(".bfboard")
     # A completed native MCU operation inside a selected, partly clocked word.
@@ -47,9 +47,10 @@ def main():
     assert prefix.splitlines()[-1].startswith("MCU end=91435878 pc=0xb9c5 instructions=1750000")
     baseline = trace.with_suffix(".baseline.trace")
     baseline.write_text(prefix + branches[0])
+    # Every previous baseline row agrees after the documented short-BRA ROM PC relocation.
     assert identity(baseline) == {
         "bytes": 139392017,
-        "sha256": "009500d2d38c1bb5d85e87d33e8d4100d1f970e91ffa3a276f30b1ec3625d53c"}
+        "sha256": "e1c8e454cfb2bfc9744b3cb90ce3e82225044291233e5581e692060f9597084d"}
     report = {"binary": identity(binary), "firmware": identity(firmware), "rom": identity(rom),
               "config": identity(config), "trace": identity(trace), "baseline": audit(baseline, firmware),
               "checkpoint_operation": 1750000, "checkpoint_common_ticks": 91435878,

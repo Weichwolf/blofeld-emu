@@ -4,7 +4,7 @@ Original MCU-to-DSP bootstrap coupling experiment
   ctest --test-dir build/strict -R '^original_coupled_boot$' --output-on-failure
 
 The optional test requires the private original 1.25 ZIP and the document-derived
-58-word SPI ROM prefix described in dsp-core.txt. The existing Python runner
+55-word SPI ROM prefix described in dsp-core.txt. The existing Python runner
 checks both pinned identities before execution; missing private inputs skip.
 No manufacturer program, ROM prefix or generated trace is distributed here.
 

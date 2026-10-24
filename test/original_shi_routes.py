@@ -32,7 +32,7 @@ def run_case(binary, firmware, rom, directory, name, release, polarity, instruct
     assert any(line.startswith(f"DSP-RELEASE requested={release}") for line in returns)
     if name == "early-inverted":
         assert result.returncode == 2, log
-        assert "SHI hreq return pad observation mcu-pc=0xb9c2 dsp-pc=0xff001b" in log
+        assert "SHI hreq return pad observation mcu-pc=0xb9c2 dsp-pc=0xff001a" in log
         assert "MCU GPIO output contention at 0x0278" in log
         assert "instructions=1672362 operations=1672362" in log
     elif name == "late-inverted":
@@ -61,8 +61,8 @@ def main():
     manifest = json.loads((ROOT / "doc/downloads.json").read_text())
     expected = next(row["sha256"] for row in manifest["files"] if row["file"] == firmware.name)
     assert identity(firmware) == {"bytes": 102986, "sha256": expected}
-    assert identity(rom) == {"bytes": 174,
-                           "sha256": "8d5193c52b22cfdd633bcdd2acf8651a498e361ff06e4716454fddf92be11901"}
+    assert identity(rom) == {"bytes": 165,
+                           "sha256": "26531751e85d9d796795e443869330c84689b6bdb1eccbafc2cbd1554e377f16"}
     directory.mkdir(parents=True, exist_ok=True)
     cases = [("early-inverted", 87310000, "inverted", 2000000),
              ("late-inverted", 87317172, "inverted", 2000000),

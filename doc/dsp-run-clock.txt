@@ -58,7 +58,7 @@ unknown input/timer failures, recovery, and visible IRQ/compatibility rejection.
 
 Original firmware experiment
 The optional original_dsp_clock test pins the original 1.25 ZIP and privately
-assembled 58-word NXP ROM prefix before execution (dsp-core.txt). The native ROM
+assembled 55-word NXP ROM prefix before execution (dsp-core.txt). The native ROM
 loads all 94 original MCU-embedded stage words through SHI and jumps to them.
 An explicit host wire fixture supplies edges at instruction boundaries; the
 executing MCU is not this test's sender and no physical SPI rate is inferred.

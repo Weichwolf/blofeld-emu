@@ -9,7 +9,16 @@
       "sha256": "3e258f696e822fad2794feeb734969011435ac70991dae0fd135034e14df4366",
       "acquisition": "User-provided local archive from the account-required vendor download; no direct download URL was supplied.",
       "license": "Vendor package containing separately licensed components; keep the archive, extracted binaries and notices local.",
-      "usage": "Optional Wine reference simulator/debugger. Installation and console startup do not validate its DSP56371 memory/peripheral model. See vendor-simulator.txt."
+      "usage": "Optional Wine reference simulator/debugger. Installation and console startup do not validate its DSP56371 memory/peripheral model. See vendor-simulator.txt.",
+      "tools": [
+        {
+          "file": "dsp56720-devtools/dist/gcc/bin/asm56300.exe",
+          "version": "6.3.28",
+          "bytes": 479232,
+          "sha256": "8e60b2e0d7c9f8251c01335543bcec966884670e2f37d4a63afe6d1169425abd",
+          "usage": "Independent encoding of the published forced-short-branch SPI prefix; no qualification of the optional processor simulator follows."
+        }
+      ]
     }
   ]
 }

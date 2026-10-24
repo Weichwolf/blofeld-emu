@@ -49,7 +49,7 @@
   "dsp56300_assembly_tool": {
     "source": "https://github.com/xemu-project/dsp56300",
     "version": "1.0.0",
-    "usage": "Optional offline assembler for the documented partial NXP SPI ROM and own instruction expectations in original_dsp_download; not an emulator runtime dependency.",
+    "usage": "Optional offline assembler for own instruction expectations in original_dsp_download; not an emulator runtime dependency. Version1.0.0 expands forced-short BRA instructions and is not qualified for the documented SPI ROM prefix; use the separate pinned NXP reference tool.",
     "artifact": "https://github.com/xemu-project/dsp56300/releases/download/v1.0.0/dsp56300-1.0.0-x86_64-unknown-linux-gnu.tar.gz",
     "sha256": "e16ef45da9572815d43ab89d030029b898e71226a265468a22591e0171df4b60",
     "license": "MIT"

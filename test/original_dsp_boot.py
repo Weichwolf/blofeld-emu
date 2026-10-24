@@ -18,7 +18,7 @@ def main(extra=()) -> int:
                     if row["file"] == "Blofeld_Firmware_V1.25.zip")
     if hashlib.sha256(firmware.read_bytes()).hexdigest() != expected:
         raise ValueError("The original 1.25 firmware identity does not match")
-    prefix_sha256 = "8d5193c52b22cfdd633bcdd2acf8651a498e361ff06e4716454fddf92be11901"
+    prefix_sha256 = "26531751e85d9d796795e443869330c84689b6bdb1eccbafc2cbd1554e377f16"
     if hashlib.sha256(rom.read_bytes()).hexdigest() != prefix_sha256:
         raise ValueError("Document-derived SPI bootstrap prefix identity does not match")
     trace.parent.mkdir(parents=True, exist_ok=True)
