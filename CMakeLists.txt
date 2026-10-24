@@ -1176,6 +1176,22 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-application.trace")
   set_tests_properties(original_application PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-identity-main-test test/original_identity_main_test.cpp)
+  target_link_libraries(blofeld-original-identity-main-test PRIVATE blofeld_application_fixture
+    blofeld_device_identity blofeld_lcd_export)
+  target_compile_definitions(blofeld-original-identity-main-test PRIVATE
+    BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
+  foreach(identity_mode baseline factory)
+    add_test(NAME original_identity_main_${identity_mode} COMMAND ${Python3_EXECUTABLE}
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/original_identity_main.py"
+      $<TARGET_FILE:blofeld-original-identity-main-test>
+      "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+      "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"
+      "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-identity-main-${identity_mode}.trace"
+      "${identity_mode}")
+    set_tests_properties(original_identity_main_${identity_mode} PROPERTIES
+      SKIP_RETURN_CODE 77 TIMEOUT 240)
+  endforeach()
   add_executable(blofeld-flash-config-test test/mcu_flash_config_test.cpp)
   target_link_libraries(blofeld-flash-config-test PRIVATE blofeld_mcu)
   add_test(NAME flash_config COMMAND blofeld-flash-config-test)
@@ -2092,7 +2108,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-original-startup-identity-test
+  DEPENDS blofeld-original-startup-identity-test blofeld-original-identity-main-test
   DEPENDS blofeld-original-device-identity-test blofeld-virtual-device-state-test blofeld-device-identity-test blofeld-hcs08-instruction-reservation-test blofeld-hcs08-irq-bus-test blofeld-hcs08-irq-test blofeld-original-hcs08-spi-irq-test blofeld-hcs08-spi-test blofeld-original-hcs08-spi-test blofeld-hcs08-register-knowledge-test blofeld-original-hcs08-clock-startup-test blofeld-hcs08-gpio-test blofeld-original-hcs08-gpio-test format-check blofeld-hcs08-peripheral-reset-test blofeld-hcs08-icg-test blofeld-hcs08-icg-native-test blofeld-hcs08-flash-clock-test blofeld-original-hcs08-reset-entry-test blofeld-hcs08-reset-security-test blofeld-hcs08-background-reset-test blofeld-original-keyboard-chain-test blofeld-original-keyboard-reset-test blofeld-hcs08-reset-test blofeld-hcs08-run-clock-test blofeld-original-keyboard-target-test blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test

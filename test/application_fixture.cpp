@@ -70,11 +70,8 @@ void observe_startup(McuBus &bus, const unsigned pc) {
 
 void qualify_pm3(McuMachine &machine,
                  std::unique_ptr<LcdFixture> &display,
-                 const ApplicationRun &run,
                  const bool high,
                  std::ostream &trace) {
-  require(run.instructions == fault_instructions && run.interrupts == periods_to_wait,
-          "Original countdown finishes before the first PM3 input observation");
   const auto checkpoint = machine.checkpoint();
   const LcdFixture saved_display(machine.bus(), *display);
   auto &bus = machine.bus();
@@ -138,12 +135,20 @@ void check_wait(McuBus &bus, const Hc12 &cpu, const CpuState &before) {
             "Original main's saved WAI frame matches the independent NXP byte layout");
   }
 }
+
+void observe_boundary(const ApplicationBoundary &observer,
+                      const McuMachine &machine,
+                      const LcdFixture &display) {
+  if (observer) { observer(machine, display); }
+}
 }
 
-ApplicationRun start_application(McuMachine &machine,
-                                 std::unique_ptr<LcdFixture> &display,
-                                 std::ostream &trace,
-                                 const bool pm3_high) {
+ApplicationRun start_application_reference(McuMachine &machine,
+                                           std::unique_ptr<LcdFixture> &display,
+                                           std::ostream &trace,
+                                           const bool pm3_high,
+                                           const unsigned maximum_steps,
+                                           const ApplicationBoundary &observer) {
   const auto initial = machine.bus().power_off_flash_image();
   boot(machine.bus(), machine.cpu(), trace);
   machine.bus().set_pin_drive(McuPort::q, {.floating = byte_mask});
@@ -157,12 +162,15 @@ ApplicationRun start_application(McuMachine &machine,
   bool observed_pm3 = false;
   CpuState before_wait;
   for (unsigned steps = 0; !machine.cpu().waiting() || machine.cpu().pending_interrupt(); ++steps) {
-    require(steps < step_limit, "Original application must reach a bounded wait or visible fault");
+    require(steps < maximum_steps,
+            "Original application must reach a bounded wait or visible fault");
     const auto before = machine.cpu().state();
     observe_startup(machine.bus(), before.pc);
     if (before.pc == pm3_read) {
       require(!observed_pm3, "Native startup observes PM3 once without host redirects");
-      qualify_pm3(machine, display, run, pm3_high, trace);
+      run.before_input_instructions = run.instructions;
+      run.before_input_interrupts = run.interrupts;
+      qualify_pm3(machine, display, pm3_high, trace);
       observed_pm3 = true;
     }
     auto &bus = machine.bus();
@@ -176,6 +184,7 @@ ApplicationRun start_application(McuMachine &machine,
       deliver_rti = false;
     }
     if (before.pc == application_wait) { before_wait = before; }
+    observe_boundary(observer, machine, *display);
     const auto result = cpu.step();
     if (result.instruction_executed) {
       ++run.instructions;
@@ -197,18 +206,30 @@ ApplicationRun start_application(McuMachine &machine,
   const auto &cpu = machine.cpu();
   check_wait(bus, cpu, before_wait);
   const auto counts = display->counts();
-  constexpr unsigned commands = 344;
-  constexpr unsigned writes = 4194;
-  constexpr unsigned reads = 2244;
-  require(observed_pm3 && run.instructions == application_instructions &&
-              run.interrupts == periods_to_wait && run.oscillator_periods == periods_to_wait &&
-              bus.read(saved_pm3) == (pm3_high ? pm3_mask : 0) && counts.commands == commands &&
-              counts.writes == writes && counts.reads == reads,
-          "Original application initializes its own PM3 state and display before main WAI");
+  require(observed_pm3 && bus.read(saved_pm3) == (pm3_high ? pm3_mask : 0),
+          "Original application initializes its own PM3 state before main WAI");
   check_nvm(bus, initial);
   trace << "native-main-wai pm3=" << (pm3_high ? 1 : 0) << " instructions=" << run.instructions
         << " interrupts=" << run.interrupts << " sp=" << hex(cpu.state().sp)
         << " ccr=" << hex(cpu.state().ccr, 2) << " reads=" << counts.reads << '\n';
+  return run;
+}
+
+ApplicationRun start_application(McuMachine &machine,
+                                 std::unique_ptr<LcdFixture> &display,
+                                 std::ostream &trace,
+                                 const bool pm3_high) {
+  const auto run = start_application_reference(machine, display, trace, pm3_high, step_limit);
+  const auto counts = display->counts();
+  constexpr unsigned commands = 344;
+  constexpr unsigned writes = 4194;
+  constexpr unsigned reads = 2244;
+  require(run.before_input_instructions == fault_instructions &&
+              run.before_input_interrupts == periods_to_wait &&
+              run.instructions == application_instructions && run.interrupts == periods_to_wait &&
+              run.oscillator_periods == periods_to_wait && counts.commands == commands &&
+              counts.writes == writes && counts.reads == reads,
+          "Original erased-unit countdown, instruction and LCD comparison contract is unchanged");
   return run;
 }
 }

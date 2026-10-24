@@ -127,7 +127,8 @@ Virtual unit identity            partial  Separate persisted factory MCU serial,
                                           unchanged original boot checksum and
                                           native serial-warning ABI decisions
                                           and actual cold reset-to-diagnostic
-                                          rendering (device-identity.txt). Development
+                                          rendering plus reference main WAI/SCI
+                                          (device-identity.txt). Development
                                           process integration only; complete
                                           startup/USB and hardware qualification
                                           remain open. No DSP status is injected.

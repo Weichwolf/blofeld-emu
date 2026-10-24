@@ -64,3 +64,25 @@ Captured original LCD pixels match across the healthy restart and differ for
 the damaged unit. Private bitmaps remain ignored; no reference pixels are embedded
 in public tests. This reaches the original diagnostic return, not full main WAI,
 genuine DSP initialization, normal display publication or hardware equivalence.
+
+Reference main-loop consumer
+  ctest --test-dir build/strict -j1 -R '^original_identity_main_(baseline|factory)$' --output-on-failure
+
+The application test fixture now separates caller-bounded startup from the
+existing erased-unit instruction/LCD comparison. The legacy entry point retains
+all exact counts. The reference entry point can consume a supplied unit image
+and offers a const MCU/LCD boundary observer for host presentation; observers are
+external to MCU checkpoints. Both paths retain native reset, the explicit GPIO/
+PHY/LCD/RTI fixture, strict unknown-PM3 failure and coordinated recovery, actual
+WAI/frame/interrupt checks and unchanged NVM. A fixture budget is not a physical
+clock or a normal device profile.
+
+One gate rechecks the legacy erased-unit contract. The other starts the actual
+persistent factory unit through first main WAI, checks its native diagnostic
+markers/text calls, and publishes its actual complete LCD frame through the host
+publisher in a private directory without MCU/bus changes. It then delivers the
+existing264 fixed SCI-waveform bytes through genuine WAI/ISR/foreground paths
+under the declared30MHz serial-input fixture. This does not establish normal
+host MIDI, DSP voices/audio or physical serial/board timing. The live canonical
+preview must separately use the new persistent state and reference entry point;
+that existing process is not replaced or certified by these gates.
