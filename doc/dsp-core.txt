@@ -49,9 +49,14 @@ DSP56371 memory and peripheral scope
   byte identities remain unverified; missing contents still fail explicitly.
 - MS=1, MSW1=MSW0=1 switches the upper 8K X RAM to P, preserving physical contents.
   The three instruction-cycle delay is explicit. Affected accesses before supplied
-  switch time fail. Other switched layouts remain unsupported.
+  switch time fail.
   The linear X:10000..11fff to P:1000..2fff word correspondence is inferred from
   the window sizes; its physical word order still needs hardware calibration.
+  All five documented window layouts are now decoded, including MSW changes
+  while MS stays set. Additional Y-to-P physical correspondence is unresolved:
+  P:3000 up to each expanded window's end fails explicitly without allocating
+  guessed RAM. Retained data windows and transition deadlines are modeled;
+  see dsp-memory-map.txt for the exact partial support and independent checks.
 - SHI uses the separately tested model in dsp-shi.txt. SHI/TIM and both ESAI
   transmit priority fields arbitrate native interrupt entry; see dsp-interrupts.txt
   and esai-interrupts.txt. Other

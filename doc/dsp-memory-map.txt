@@ -1,0 +1,52 @@
+DSP56371 memory windows and unresolved physical relocation
+
+DSP56371UM Rev. 2.1 tables 3-1..3-6 and section 3.1.3 define these exclusive
+RAM endpoints. The unchanged data windows start at X/Y:000000 and 00c000;
+their low endpoints remain X:003000 and Y:002000 in every configuration.
+P starts at 000000. ROM windows do not move. Source identity: hardware/sources.json.
+
+  MS  MSW    P end    upper X end    upper Y end
+   0   xx   001000       012000         016000
+   1   11   003000       010000         016000
+   1   10   005000       010000         014000
+   1   01   009000       010000         010000
+   1   00   00b000       010000         00e000
+
+The model now decodes all five window configurations. Changing MSW while MS
+remains set requests a new layout. MSW changes with MS clear do not move RAM.
+Switches retain physical data words, including hidden Y blocks. Hardware reset
+restores the default map while retaining the modeled RAM knowledge/contents.
+
+The existing explicit three-subsequent-unit reference delay also applies to
+transitions between switched layouts. Changing data-window intervals reject
+while the switch is pending; unaffected direct X/Y windows and the common
+X-to-P block remain available. Only a committed effective layout change
+invalidates all native P dispatch entries. Overlapping distinct requests remain
+unqualified and reject. This preserves the existing nominal timing contract;
+it does not establish physical pipeline/bus timing.
+
+Physical correspondence must not be inferred from window capacities alone.
+The previous X:010000..011fff to P:001000..002fff linear mapping remains an
+explicit hypothesis, still requiring hardware calibration. The additional
+Y-to-P word order is not established by the reviewed tables. Core reads,
+writes, instruction fetches and physical-resource queries in that part of
+the expanded P window therefore fail with 'Y-to-P physical relocation',
+rather than using guessed aliases, independent RAM or zero-filled contents.
+This is partial support for the extra layouts, not complete memory emulation.
+Reserved and protected-ROM accesses retain their strict failure contracts.
+
+  cmake --build --preset strict --target blofeld-dsp-memory-map-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_memory_map$'
+
+Independent literal tests cover every window endpoint, 25 layout transitions,
+retained/unknown RAM, ROM protection, pending switches, code invalidation and
+ignored/overlapping requests. Actual native MOVEC instructions and subsequent
+NOPs exercise the four switched modes, trusted mid-delay CPU/board snapshots
+and contextual fail-stop on a real next program fetch. These tests verify the
+emulator model against the tabulated requirements; no manufacturer code bytes
+are embedded and no physical-device equivalence is claimed.
+
+Original 1.25 requests MS/MSW=111. Its reserved Y:002000 clear remains unresolved
+and unchanged, as do matching stock ROM, later Port-F setup, NAND, full boot,
+host MIDI/audio and Desktop/Keyboard hardware comparisons. See dsp-core.txt
+and startup-dsp.txt. No write-discard policy, firmware patch or loop skip is added.

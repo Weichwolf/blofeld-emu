@@ -666,6 +666,12 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           application/board execution pending.
 DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled privately;
                                           no complete/hardware-dumped ROM supplied.
+                                          All five documented RAM window layouts
+                                          decoded, with retained direct X/Y data
+                                          and three subsequent switch units.
+                                          Extra Y-to-P word order remains unknown
+                                          and fails explicitly; no guessed alias
+                                          or new backing RAM (dsp-memory-map.txt).
                                           Original MCU-embedded 94-word DSP stage
                                           programs PCTL and clears 8192 mapped
                                           X/Y word pairs, then needs reserved-write

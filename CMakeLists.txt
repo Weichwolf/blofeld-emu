@@ -1265,6 +1265,10 @@ if(BUILD_TESTING)
   add_test(NAME dsp_pll COMMAND blofeld-dsp-pll-test)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_executable(blofeld-dsp-memory-map-test test/dsp_memory_map_test.cpp)
+  target_link_libraries(blofeld-dsp-memory-map-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_memory_map COMMAND blofeld-dsp-memory-map-test)
+  set_tests_properties(dsp_memory_map PROPERTIES TIMEOUT 60)
   add_executable(blofeld-dsp-instruction-test test/dsp_instruction_test.cpp
     test/dsp_logical_boundaries.cpp test/dsp_bitfield_boundaries.cpp test/dsp_operand_rejection.cpp)
   target_link_libraries(blofeld-dsp-instruction-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
@@ -2195,7 +2199,7 @@ add_custom_target(quality
     blofeld-original-update-coupled-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
-    blofeld-dsp-instruction-test
+    blofeld-dsp-instruction-test blofeld-dsp-memory-map-test
     blofeld-dsp-checkpoint-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test

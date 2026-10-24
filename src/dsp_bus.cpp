@@ -25,13 +25,12 @@ constexpr unsigned data_rom_end = 0xc000;
 constexpr unsigned program_ram_end = 0x1000;
 constexpr unsigned x_low_end = 0x3000;
 constexpr unsigned y_low_end = 0x2000;
-constexpr unsigned x_high_end = 0x12000;
-constexpr unsigned y_high_end = 0x16000;
 constexpr unsigned x_switched_end = 0x10000;
 constexpr unsigned io_base = 0xffff80;
 constexpr unsigned esai_offset_mask = 0x1f;
 constexpr unsigned ms = 0x80;
-constexpr unsigned msw = 0x600000;
+constexpr unsigned msw_shift = 21;
+constexpr unsigned msw_mask = 3;
 constexpr unsigned switch_cycles = 3;
 constexpr unsigned bcr_reset = 0x1fffff;
 constexpr unsigned port_f_bus_control = 0x01ffff;
@@ -118,8 +117,8 @@ DspBus::DspBus() {
 }
 
 void DspBus::reset() {
-  switched_ = false;
-  requested_switch_ = false;
+  memory_mode_ = 0;
+  requested_memory_mode_ = 0;
   switch_delay_ = 0;
   changes_ = {.all = true, .addresses = {}};
   reset_peripherals();
@@ -204,13 +203,36 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   return old;
 }
 
+DspBus::MemoryLayout DspBus::memory_layout(const unsigned mode) {
+  // DSP56371UM Rev. 2.1 tables 3-1..3-6: default, then MS=1/MSW=00,01,10,11.
+  constexpr std::array<MemoryLayout, 5> layouts{{
+      {.program_end = 0x1000, .x_end = 0x12000, .y_end = 0x16000},
+      {.program_end = 0xb000, .x_end = 0x10000, .y_end = 0xe000},
+      {.program_end = 0x9000, .x_end = 0x10000, .y_end = 0x10000},
+      {.program_end = 0x5000, .x_end = 0x10000, .y_end = 0x14000},
+      {.program_end = 0x3000, .x_end = 0x10000, .y_end = 0x16000},
+  }};
+  return layouts.at(mode);
+}
+
+bool DspBus::switching_address(const DspAddress access) const {
+  const auto before = memory_layout(memory_mode_);
+  const auto after = memory_layout(requested_memory_mode_);
+  const auto between = [address = access.address](const unsigned a, const unsigned b) {
+    return address >= std::min(a, b) && address < std::max(a, b);
+  };
+  if (access.space == DspSpace::x) { return between(before.x_end, after.x_end); }
+  if (access.space == DspSpace::y) { return between(before.y_end, after.y_end); }
+  // All switched layouts share the previously modeled X-to-P block. Extra
+  // Y-to-P word order is unqualified even where both layouts have a P window.
+  return between(before.program_end, after.program_end);
+}
+
 DspBus::Location DspBus::locate(const DspAddress access, const Operation operation) const {
   static_cast<void>(bank(access.space));
   const auto address = access.address;
   if (address > word_mask) { throw Fault("DSP address exceeds 24 bits: " + address_text(access)); }
-  if (switch_delay_ != 0 &&
-      ((access.space == DspSpace::p && address >= program_ram_end && address < x_low_end) ||
-       (access.space == DspSpace::x && address >= x_switched_end && address < x_high_end))) {
+  if (switch_delay_ != 0 && switching_address(access)) {
     throw Fault("DSP memory access requires elapsed switch cycles: " + address_text(access));
   }
   return access.space == DspSpace::p ? locate_program(address, operation)
@@ -271,9 +293,14 @@ DspMemoryConflict DspBus::memory_conflict(const DspMemoryPair pair) const {
 DspBus::Location DspBus::locate_program(const std::uint32_t address,
                                         const Operation operation) const {
   if (address < program_ram_end) { return {.offset = address}; }
-  if (switched_ && address < x_low_end) {
+  if (memory_mode_ != 0 && address < x_low_end) {
     return {.bank = 1,
             .offset = x_low_end + x_switched_end - data_rom_end + address - program_ram_end};
+  }
+  if (address < memory_layout(memory_mode_).program_end) {
+    throw Fault(std::string("Unqualified DSP56371 Y-to-P physical relocation ") +
+                (operation == Operation::read ? "read at " : "write at ") +
+                address_text({.address = address}));
   }
   if (address >= program_rom_base) { return {.offset = address - program_rom_base, .rom = true}; }
   throw Fault(std::string("Unmapped DSP memory ") +
@@ -285,8 +312,8 @@ DspBus::Location DspBus::locate_data(const DspAddress access, const Operation op
   const auto address = access.address;
   const auto index = bank(access.space);
   const auto low_end = access.space == DspSpace::x ? x_low_end : y_low_end;
-  const auto x_end = switched_ ? x_switched_end : x_high_end;
-  const auto high_end = access.space == DspSpace::x ? x_end : y_high_end;
+  const auto layout = memory_layout(memory_mode_);
+  const auto high_end = access.space == DspSpace::x ? layout.x_end : layout.y_end;
   if (address < low_end) { return {.bank = index, .offset = address}; }
   if (address >= data_rom_base && address < data_rom_end) {
     return {.bank = index, .offset = address - data_rom_base, .rom = true};
@@ -368,13 +395,10 @@ void DspBus::install_rom(const DspRom image) {
 
 void DspBus::observe_omr(const std::uint32_t value) {
   if (value > word_mask) { throw Fault("DSP OMR exceeds 24 bits"); }
-  const bool requested = (value & ms) != 0;
-  if (requested && (value & msw) != msw) {
-    throw Fault("Unimplemented DSP56371 memory-switch configuration OMR=" + hex(value, 6));
-  }
-  if (requested == requested_switch_) { return; }
+  const unsigned requested = (value & ms) == 0 ? 0 : 1 + ((value >> msw_shift) & msw_mask);
+  if (requested == requested_memory_mode_) { return; }
   if (switch_delay_ != 0) { throw Fault("Unverified overlapping DSP memory-switch requests"); }
-  requested_switch_ = requested;
+  requested_memory_mode_ = requested;
   switch_delay_ = switch_cycles;
 }
 
@@ -389,7 +413,7 @@ void DspBus::advance_instruction_cycles(const unsigned cycles) {
     switch_delay_ -= cycles;
   } else {
     switch_delay_ = 0;
-    switched_ = requested_switch_;
+    memory_mode_ = requested_memory_mode_;
     changes_.all = true;
   }
 }

@@ -155,6 +155,14 @@ private:
     bool rom = false;
   };
 
+  struct MemoryLayout {
+    std::uint32_t program_end = 0;
+    std::uint32_t x_end = 0;
+    std::uint32_t y_end = 0;
+  };
+
+  [[nodiscard]] static MemoryLayout memory_layout(unsigned mode);
+  [[nodiscard]] bool switching_address(DspAddress access) const;
   [[nodiscard]] Location locate(DspAddress access, Operation operation = Operation::read) const;
   [[nodiscard]] Location locate_program(std::uint32_t address, Operation operation) const;
   [[nodiscard]] Location locate_data(DspAddress access, Operation operation) const;
@@ -180,8 +188,8 @@ private:
       DspGpio(DspPort::c), DspGpio(DspPort::e), DspGpio(DspPort::f), DspGpio(DspPort::d)};
   std::uint32_t bus_control_ = 0;
   DspCodeChanges changes_;
-  bool switched_ = false;
-  bool requested_switch_ = false;
+  unsigned memory_mode_ = 0;
+  unsigned requested_memory_mode_ = 0;
   unsigned switch_delay_ = 0;
   std::optional<std::uint32_t> once_latch_;
 };
