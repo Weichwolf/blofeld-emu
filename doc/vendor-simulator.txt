@@ -1,0 +1,48 @@
+Optional local Symphony Studio reference
+
+The user-provided Symphony Studio 1.1.0 archive is pinned in reference-tools.json.
+It is a local reference, not a production dependency. No installer, vendor code,
+DLL, extracted assets or manufacturer program words belong in this repository.
+
+The dedicated 32-bit Wine prefix is:
+  $HOME/.local/share/wineprefixes/blofeld-emu
+
+The application is installed at C:\SymphonyStudio. Reproducible installer options
+are /mode silent /prefix C:\SymphonyStudio. Run Wine as the ordinary user with
+WINEDEBUG=-all and WINEDLLOVERRIDES='mscoree,mshtml=;winemenubuilder.exe=d'.
+Do not reuse the separate CodeWarrior or Spectre prefixes. No physical debugger,
+OpenOCD connection, hardware programming or extra system installation is needed
+for the local simulator experiments.
+
+  WINEPREFIX="$HOME/.local/share/wineprefixes/blofeld-emu" WINEDEBUG=-all \
+    wine 'C:\SymphonyStudio\dsp56720-devtools\dist\gdb\gdb56300.exe' --version
+
+The installed console debugger reports GNU GDB 6.4ps001, target dsp56720.
+The simulator server can load the DSP56300 library and explicitly reports
+'Created 56371 device'. Use its containing directory as the working directory:
+
+  WINEPREFIX="$HOME/.local/share/wineprefixes/blofeld-emu" WINEDEBUG=-all \
+    wine 'C:\SymphonyStudio\dsp56720-devtools\dist\dsp56720\gdbsimapiserver.exe' \
+    -dll libdsp56300simapi -port <unused-port> -loud
+
+The -dll argument takes a library basename, without '.dll'. -h prints usage;
+omitting the required port also prints usage and returns failure. Disconnecting
+the debugger terminates this reference simulator. Use one simulator owner at a
+time under the shared native-process budget. The Eclipse GUI is not qualified.
+
+Current evidence is limited to successful local installation, debugger startup,
+explicit 56371-model creation, register queries and one stepped NOP. The initial
+model PC is C00000; this is not a qualified hardware mode-five reset sequence.
+The release note primarily describes the DSP56720 platform configuration.
+
+The first custom GDB m/M memory probe is NOT a usable memory oracle: the RSP
+server returns E00 to reads and echoes write packets, while the custom frontend
+still displays zeros and returns process success. The intended test program did
+not read back or execute. Treat those responses as failed transactions, never
+as RAM, reserved-read, ROM, BCR or physical-device observations. Resolve the
+server/library memory-access interface before comparing semantics or changing
+the emulator's strict memory policy. No vendor-model result currently settles
+the original reserved Y:002000 clear or missing stock ROM contents.
+
+Archive/payload inventories, installed-tool hashes, registry backup and exact
+session logs remain under ignored doc/local/dsp-vendor-simulator/.

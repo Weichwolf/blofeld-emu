@@ -1,0 +1,15 @@
+{
+  "qualification": "Optional local reference tools; not emulator runtime dependencies or redistributed assets.",
+  "files": [
+    {
+      "file": "SYMPHONY_STUDIO_IDE.zip",
+      "source_page": "https://www.nxp.com/products/processors-and-microcontrollers/additional-mpu-mcus-architectures/digital-signal-processors/symphony-studio-development-tools:SYMPH_STUDIO",
+      "version": "1.1.0",
+      "bytes": 56985984,
+      "sha256": "3e258f696e822fad2794feeb734969011435ac70991dae0fd135034e14df4366",
+      "acquisition": "User-provided local archive from the account-required vendor download; no direct download URL was supplied.",
+      "license": "Vendor package containing separately licensed components; keep the archive, extracted binaries and notices local.",
+      "usage": "Optional Wine reference simulator/debugger. Installation and console startup do not validate its DSP56371 memory/peripheral model. See vendor-simulator.txt."
+    }
+  ]
+}
