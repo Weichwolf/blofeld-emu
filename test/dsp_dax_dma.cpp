@@ -69,10 +69,16 @@ struct Stream {
       require(pin.driven, "Native Port D mux connects the real DAX output");
       wire.push_back(pin.level ? '1' : '0');
     }
-    const auto word = machine.advance_dma({.cycle = edge,
-                                           .timing = DspDmaTiming::reference_sampled_cycles,
-                                           .grant = DspDmaGrant::available});
-    if (word) { writes.push_back(*word); }
+    const std::array declared_fetch{
+        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}}};
+    const auto progress = machine.advance_dma(
+        {.cycle = edge,
+         .timing = DspDmaTiming::reference_sampled_cycles,
+         .grant = DspDmaGrant::available},
+        {.accesses = declared_fetch, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    require(!progress.core_stall,
+            "Declared P-ROM occupancy cannot block an independent DAX data-register write");
+    if (progress.word) { writes.push_back(*progress.word); }
     ++edge;
   }
 };

@@ -18,8 +18,25 @@ contention only in the same1K subsection. Different subsections of the same8K
 block return unqualified, and admission fails visibly instead of inventing a
 safe wait or losing a DMA word. Distinct physical blocks/stores are independent.
 ROM same-bank partition geometry remains unqualified(block_words=0).
-Peripheral bus sharing is also unqualified; resource queries reject it without
+Core peripheral occupancy remains unqualified; resource queries reject it without
 performing I/O. An explicitly empty known core footprint needs no sharing query.
+
+For a core footprint containing only qualified RAM/ROM resources, the selected
+DMA destination can now be an implemented ESAI/ESAI_1 TX register or one of the
+three DAX data addresses. The derived admission rule uses FM10.2's separate
+core/DMA buses and APR23 sections5.1/5.2's distinction between memory modules
+and peripheral data registers. The peripheral destination does not share the
+declared core memory resource. Its actual existing write handler still executes;
+buffer, format and unsupported-access errors remain real failures. Endpoint
+permission is checked during phase admission, even under global wait. A wait
+preserves the captured word and prevents I/O; independent memory core use is
+not stalled. No peripheral read, control/status DMA or arbitrary I/O is admitted.
+
+APR23 section5.2 separately warns that simultaneous writes by core and DMA to
+one peripheral data register lose the DMA data. Such core-peripheral footprints
+still reject before sampling; this interface supplies no actual core write or
+qualified shared-peripheral phase. It does not invent a delay, priority winner
+or successful discarded transfer for that unsupported case.
 
 DspDmaIo optionally supplies admit(DspDmaPhase). Requests are sampled once before
 channel selection. The callback sees the actual selected source-read phase with
@@ -56,6 +73,18 @@ capture, hold a pending destination load and replay a mid-transfer checkpoint.
 Exact values, source/destination, native instruction counts and real load results
 are checked. These native instructions execute untimed; their supplied DMA/core
 occupancy timeline is a declared reference experiment, not silicon phase evidence.
+
+Fifteen data-register destinations check independent P/X/Y memory occupancy,
+same-peripheral core refusal, global wait, held-source mutation and ordinary
+DMA completion accounting.
+Seven forbidden endpoint cases retain failures under both wait/available grants:
+control/status registers, a mirrored bank, an unsupported FIFO source and a
+P-ROM address. Retries preserve the controller cycle, held word and endpoints.
+Existing native-configured ESAI and DAX streams now
+also declare pending-PC P-ROM occupancy on each sampled phase. Opposite-edge
+and biphase receivers still check their complete data/metadata streams and
+mid-transfer replay. This is explicit reference occupancy, not a native fetch
+timestamp, pipeline/bus-phase reconstruction or automatic clock integration.
 
 DspDmaIo has an extra callback member. Adopting C++ consumers must rebuild with
 matching project headers/libraries; frozen bundles remain frozen until deliberate

@@ -12,6 +12,8 @@
 
 namespace blofeld {
 namespace {
+constexpr unsigned io_base = 0xffff80;
+
 DspSpace space(const DspDmaSpace value) {
   switch (value) {
     case DspDmaSpace::x: return DspSpace::x;
@@ -27,7 +29,6 @@ std::string describe(const DspAddress address) {
 }
 
 void check_access(const DspDmaAddress address, const bool write) {
-  constexpr unsigned io_base = 0xffff80;
   if (address.space == DspDmaSpace::p || address.address < io_base) { return; }
   constexpr unsigned primary_tx = 0xffffa0;
   constexpr unsigned secondary_tx = 0xffff80;
@@ -105,6 +106,12 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
     const DspMemoryAccess target{
         .target = {.space = space(selected.space), .address = selected.address},
         .operation = write ? DspMemoryOperation::write : DspMemoryOperation::read};
+    if (selected.space != DspDmaSpace::p && selected.address >= io_base) {
+      // Core footprints above contain only qualified physical memory, not I/O.
+      // FM10.2/APR23 section5: these resources do not contend with a data register.
+      check_access(selected, write);
+      return DspDmaGrant::available;
+    }
     bool conflict = false;
     for (const auto access : core.accesses) {
       const auto relation = memory_conflict({.core = access, .dma = target});

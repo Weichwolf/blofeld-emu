@@ -12,6 +12,7 @@
 #include "esai_clock_fixture.hpp"
 #include "esai_fixture.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -158,8 +159,14 @@ struct Stream {
       const auto data = machine.bus().esai_transmit_outputs(instance);
       if (data.driven != 0) { bits.push_back(esai::sample(data, 0)); }
     }
-    const auto word = machine.advance_dma({.cycle = edge, .timing = timing, .grant = grant});
-    if (word) { transfers.push_back(*word); }
+    const std::array declared_fetch{
+        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}}};
+    const auto progress = machine.advance_dma(
+        {.cycle = edge, .timing = timing, .grant = grant},
+        {.accesses = declared_fetch, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    require(!progress.core_stall,
+            "Declared P-ROM occupancy is independent of the actual ESAI/DAX destination");
+    if (progress.word) { transfers.push_back(*progress.word); }
     ++edge;
   }
 };

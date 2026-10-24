@@ -56,6 +56,9 @@ Unknown/protected/unmapped memory is
 never supplied as zero or silently discarded. DspMachine adds current native
 PC/OMR to phase errors; trusted owner checkpoints include all DMA state and the
 held source value. Source cursor/receiver state remains caller-owned.
+The memory-footprint arbiter now also admits these actual peripheral writes
+against qualified core RAM/ROM use (dsp-bank-arbitration.txt). Core peripheral
+occupancy, unsupported I/O and automatic native timing remain separate refusals.
 
 This is a standalone instruction/peripheral reference experiment. Automatic
 clocked native execution rejects an active DMA channel: core/DMA bank contention,

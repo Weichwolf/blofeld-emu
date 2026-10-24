@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "bank_fixture.hpp"
+#include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_dma.hpp"
+#include "dma_fixture.hpp"
 #include "esai_fixture.hpp"
 
 #include <array>
@@ -12,6 +14,113 @@ namespace blofeld::test::banks {
 namespace {
 using esai::rejects;
 using esai::require;
+
+void memory_and_peripheral_phase(const DspAddress destination) {
+  // FM10.2/APR23 section5: independent memory modules and peripheral data registers.
+  constexpr unsigned value = 0x400;     // Also a valid XNADR payload.
+  constexpr unsigned x_copy = 0x9802d0; // Software block, X->X, one linear word.
+  constexpr unsigned y_copy = 0x9802d4; // Software block, X->Y, one linear word.
+  const unsigned control = destination.space == DspSpace::x ? x_copy : y_copy;
+  const std::array core{DspMemoryAccess{.target = {.address = p_rom_begin}},
+                        DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0x10}},
+                        DspMemoryAccess{.target = {.space = DspSpace::y, .address = 0x20},
+                                        .operation = DspMemoryOperation::write}};
+  DspBus bus;
+  static_cast<void>(bus.advance_dma(inputs({.index = 0}), use(core)));
+  bus.write({.space = DspSpace::x, .address = transfer::ring_start, .value = value});
+  configure(bus, {.destination = destination.address, .control = control});
+  const auto read = bus.advance_dma(inputs({.index = 1}), use(core));
+  require(read.phase && read.phase->kind == read_phase && !read.word && !read.core_stall,
+          "Independent P/X/Y occupancy permits the actual source read");
+  bus.write({.space = DspSpace::x, .address = transfer::ring_start, .value = first});
+  const std::array collision{
+      DspMemoryAccess{.target = destination, .operation = DspMemoryOperation::write}};
+  require(rejects([&] {
+            static_cast<void>(bus.advance_dma(inputs({.index = 2}), use(collision)));
+          }).contains("Unqualified DSP peripheral memory resource write"),
+          "A simultaneous core peripheral write still needs its own qualified collision model");
+  const auto wait = bus.advance_dma(inputs({.index = 2, .grant = DspDmaGrant::wait}), use(core));
+  require(wait.phase && wait.phase->kind == write_phase && wait.phase->value == value &&
+              !wait.word && !wait.core_stall &&
+              bus.read({.space = DspSpace::x, .address = transfer::source0}) ==
+                  transfer::ring_start,
+          "A waited peripheral phase retains its captured value without blocking memory core use");
+  const auto completed = bus.advance_dma(inputs({.index = 3}), use(core));
+  const auto target_space = destination.space == DspSpace::x ? DspDmaSpace::x : DspDmaSpace::y;
+  require(completed.word && !completed.core_stall && completed.word->value == value &&
+              completed.word->destination ==
+                  DspDmaAddress{.space = target_space, .address = destination.address} &&
+              bus.read({.space = DspSpace::x, .address = transfer::control0}) ==
+                  (control & ~transfer::enable) &&
+              bus.read({.space = DspSpace::x, .address = transfer::source0}) ==
+                  transfer::ring_start + 1,
+          "The real peripheral write completes once and retains ordinary DMA accounting");
+  require(rejects([&] { static_cast<void>(bus.read(core.back().target)); }).contains("Unknown"),
+          "Declaring memory occupancy does not execute or initialize a core operand");
+}
+
+void peripheral_destinations() {
+  constexpr unsigned primary = 0xffffa0;
+  constexpr unsigned secondary = 0xffff80;
+  for (unsigned reg = 0; reg < 6; ++reg) {
+    memory_and_peripheral_phase({.space = DspSpace::x, .address = primary + reg});
+    memory_and_peripheral_phase({.space = DspSpace::y, .address = secondary + reg});
+  }
+  constexpr std::array dax_destinations{0xffffd1U, 0xffffd2U, 0xffffd3U};
+  for (const auto reg : dax_destinations) {
+    memory_and_peripheral_phase({.space = DspSpace::x, .address = reg});
+  }
+}
+
+void forbidden_peripheral_phases() {
+  struct Case {
+    DspAddress target;
+    unsigned control;
+    bool source = false;
+  };
+
+  constexpr unsigned x_copy = 0x9802d0;
+  constexpr unsigned y_copy = 0x9802d4;
+  constexpr unsigned p_copy = 0x9802d8;
+  constexpr std::array cases{
+      Case{.target = {.space = DspSpace::x, .address = 0xffffa6}, .control = x_copy},
+      Case{.target = {.space = DspSpace::y, .address = 0xffff86}, .control = y_copy},
+      Case{.target = {.space = DspSpace::x, .address = 0xffffd0}, .control = x_copy},
+      Case{.target = {.space = DspSpace::x, .address = 0xffffd4}, .control = x_copy},
+      Case{.target = {.space = DspSpace::y, .address = 0xffffd2}, .control = y_copy},
+      Case{
+          .target = {.space = DspSpace::x, .address = 0xffff94}, .control = x_copy, .source = true},
+      Case{.target = {.address = 0xffffa0}, .control = p_copy}};
+  const std::array core{DspMemoryAccess{.target = {.address = p_rom_begin}}};
+  for (const auto &item : cases) {
+    DspBus bus;
+    static_cast<void>(bus.advance_dma(inputs({.index = 0}), use(core)));
+    bus.write({.space = DspSpace::x, .address = transfer::ring_start, .value = first});
+    const Transfer setup{.source = item.source ? item.target.address : transfer::ring_start,
+                         .destination = item.source ? transfer::destination : item.target.address,
+                         .control = item.control};
+    configure(bus, setup);
+    if (!item.source) { static_cast<void>(bus.advance_dma(inputs({.index = 1}), use(core))); }
+    const auto before_status = bus.read({.space = DspSpace::x, .address = transfer::status});
+    for (const auto grant : {DspDmaGrant::wait, DspDmaGrant::available}) {
+      const auto error = rejects([&] {
+        static_cast<void>(
+            bus.advance_dma(inputs({.index = item.source ? 1U : 2U, .grant = grant}), use(core)));
+      });
+      require(error.contains(item.target.space == DspSpace::p ? "Protected DSP ROM write"
+                                                              : "Unsupported DSP DMA peripheral") &&
+                  error.contains("channel=0") && error.contains(hex(item.target.address, 6)),
+              "Neither a wait nor memory-only core occupancy qualifies forbidden DMA I/O");
+      require(bus.read({.space = DspSpace::x, .address = transfer::source0}) == setup.source &&
+                  bus.read({.space = DspSpace::x, .address = transfer::destination0}) ==
+                      setup.destination &&
+                  bus.read({.space = DspSpace::x, .address = transfer::control0}) ==
+                      setup.control &&
+                  bus.read({.space = DspSpace::x, .address = transfer::status}) == before_status,
+              "Rejected phase admission retains the controller cycle, held word and endpoints");
+    }
+  }
+}
 
 void literal_resources() {
   struct Case {
@@ -210,6 +319,8 @@ int main() {
     partitions();
     program_partitions();
     switched_alias();
+    peripheral_destinations();
+    forbidden_peripheral_phases();
     phase_checks();
     native_checks();
     std::cout

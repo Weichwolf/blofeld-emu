@@ -925,6 +925,10 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           occupancy, held-word stalls and
                                           unsafe upper-block conflicts
                                           (dsp-bank-arbitration.txt).
+                                          ESAI/DAX data writes now admit
+                                          qualified memory-only core occupancy;
+                                          shared core/peripheral accesses still
+                                          reject without fabricated effects.
                                           Automatic native DMA bus timing,
                                           physical DAX clock/routing,
                                           RX, FOSC clocks, audio IRQ and
