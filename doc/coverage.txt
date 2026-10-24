@@ -1923,6 +1923,6 @@ HCS08 architectural IRQ: actual eligible source/frame/vector entry preserves
 unknown CCR/A/X bits in memory-owned masked RAM. Native RTI restores masks;
 ordinary reads/fetches remain strict. Directed vector/wrap/failure/BDC controls
 and original SPI IRQ execution cover two untimed schedules, including the real
-unread final RX byte after original masking. See hcs08-irq.txt. Nine-cycle IRQ,
+unread final RX byte after original masking. See hcs08-irq.txt. Eleven-cycle IRQ,
 prefetch/bus ordering, derivative priority and boot-origin timing remain open;
 this does not qualify timed run-clock admission or whole device behavior.

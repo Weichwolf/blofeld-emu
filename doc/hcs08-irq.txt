@@ -27,8 +27,17 @@ service_interrupt is architectural, explicitly untimed. pending_interrupt is
 side-effect-free and does not claim a source. The BDC wrapper holds admission
 while active. Instruction step and the current run-clock do not silently enter
 an IRQ under the next opcode's budget: an eligible unserviced IRQ still fails.
-A separate clock owner must qualify the nine-cycle sequence, bus/prefetch
-ordering and source priority/latching before timed runtime integration.
+Family6.4.2 states that IRQ follows the SWI cycle sequence. Table6-10 (printed116)
+and the SWI detail (printed285) specify11 cycles: five stack writes, two vector
+reads, one free cycle and three consecutive program fetches (sssssvvfppp).
+Nine cycles describe RTI (uuuuufppp), not IRQ entry. The instruction-table legend and AppendixA define
+these access symbols; the free cycle requires no CPU system-bus use. Section6.4.1
+explains the vector-read propagation delay before the three program fetches.
+The earlier nine-cycle IRQ description was incorrect; no implemented cycle
+budget depended on it. A separate clock owner must qualify this11-cycle sequence,
+queue consumption/invalidation and source priority/latching before timed runtime
+integration. Counting11 periods while applying all effects at the end would not
+establish the documented bus sequence.
 
 hcs08_irq independently checks30 slots/eight wrapping stack positions,27
 A/X/CCR mask combinations with54 fresh joint restores, all nine injected

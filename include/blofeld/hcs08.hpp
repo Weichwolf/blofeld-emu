@@ -76,7 +76,7 @@ public:
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] Hcs08Checkpoint checkpoint() const;
   void restore_checkpoint(const Hcs08Checkpoint &checkpoint);
-  // Normal-running architectural boundary, separate from its nine-cycle/queue
+  // Normal-running architectural boundary, separate from its eleven-cycle/queue
   // timing owner. Only a real eligible bus request can create a stack frame.
   // Entry does not retire an instruction or clear peripheral source flags.
   [[nodiscard]] std::optional<std::uint16_t> pending_interrupt() const;

@@ -61,8 +61,10 @@
       "GT 5.4.1, Figure 5-1",
       "GT 5.4.3",
       "GT Table 5-1",
-      "HCS08RMV1 6.4.2 and RTI"
+      "HCS08RMV1 6.4.2 and RTI",
+      "HCS08RMV1 Table6-10 (printed116), SWI detail (printed285):11 cycles sssssvvfppp",
+      "HCS08RMV1 RTI detail:9 cycles uuuuufppp; AppendixA.2 cycle-code legend"
     ],
-    "scope": "Architectural eligible maskable source, hardware stack order, I mask, vector fetch and native RTI. Unknown saved CCR/A/X bits remain memory-owned knowledge. Nine-cycle entry, bus/prefetch phases, late priority, physical source mapping and boot provenance remain unqualified."
+    "scope": "Architectural eligible maskable source, hardware stack order, I mask, vector fetch and native RTI. Unknown saved CCR/A/X bits remain memory-owned knowledge. Eleven-cycle entry, bus/prefetch phases, late priority, physical source mapping and boot provenance remain unqualified."
   }
 }
