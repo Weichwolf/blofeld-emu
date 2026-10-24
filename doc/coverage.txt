@@ -1856,3 +1856,11 @@ warm reset, BDC trim/RAM upload/WRITE_PC/WRITE_SP/GO and eight unchanged origina
 programmer instructions with partial CCR. Boundary/mid-budget joint snapshots
 repeat the default FSTAT refusal; no original caller/wire/stream, NVM operating
 rate, erase/program or full recovery is inferred. See hcs08-programmer-entry.txt.
+
+HCS08 clock constraints (hcs08-clock-constraints.txt): all128 FCDIV codes,
+both DIVLD write values and1536 fixed boundary cases exercise exact NVM-rate
+admission, failure atomicity, write-once state and candidate bus limits.
+Eleven original-divider rates and unknown/reset/checkpoint controls do not
+select a physical rate. Candidate reset/FLASH intervals overlap4.65..5.25MHz;
+nominal4MHz fails, while6MHz is outside the candidate reset range. Actual ICG,
+clock/reset/SYNC timing, original FSTAT and complete update/recovery remain open.
