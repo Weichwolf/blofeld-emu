@@ -152,6 +152,12 @@ DspInterlockInstruction decode_interlock_instruction(const std::uint32_t opcode,
       first == dsp56k::Invalid) {
     throw Fault("Undefined DSP interlock opcode=" + hex(opcode, 6));
   }
+  if (first == dsp56k::Btst_D && second == dsp56k::Invalid) {
+    if (operand(first, dsp56k::Field_DDDDDD, opcode) != Mask::SR || native_units != 2) {
+      throw Fault("Unqualified DSP interlock register bit-test timing");
+    }
+    return {.opcode = opcode, .native_units = native_units, .status_read = true};
+  }
   unsigned arithmetic = 0;
   Instruction move_type = first;
   if (first == dsp56k::Mpy_S1S2D || first == dsp56k::Clr) {
@@ -169,6 +175,7 @@ DspInterlockInstruction decode_interlock_instruction(const std::uint32_t opcode,
   if (move.units != native_units) {
     throw Fault("DSP interlock nominal cost differs from its independent instruction form");
   }
+  const bool whole = move.read == Mask::A || move.read == Mask::B;
   return {.opcode = opcode,
           .native_units = native_units,
           .agu_reads = move.agu,
@@ -179,6 +186,8 @@ DspInterlockInstruction decode_interlock_instruction(const std::uint32_t opcode,
           .agu_write_delay = move.immediate ? 4 - native_units : 3,
           .transfer_write_delay = move.immediate ? 2 - native_units : 1,
           .move_read_advance = move.read_advance,
+          .status_write = arithmetic != 0 || whole,
+          .partial_status_source = accumulators(move.read) != 0 && !whole,
           .status_read = dsp56k::any(move.read, Mask::SR)};
 }
 }

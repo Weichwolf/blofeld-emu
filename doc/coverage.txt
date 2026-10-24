@@ -306,9 +306,9 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           Physical pipeline/PLL/board timing open.
                                           Separate NXP initial-map reference:
                                           38 own timing windows/1047 instructions;
-                                          33 windows match primary AGU/ALU/SR-
-                                          MOVE expectations, five status-bit
-                                          windows remain unqualified. Fast-mode
+                                          38 windows match primary AGU/ALU/SR
+                                          expectations, including BTST after
+                                          FM3.5.2 reconciliation. Fast-mode
                                           counts differ despite equal registers;
                                           no automatic DMA or pipeline-phase
                                           claim (dsp-pipeline-timing.txt).
@@ -319,6 +319,10 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           scheduled completions. Other instruction
                                           forms and physical bus phases still
                                           reject (dsp-interlock-clock.txt).
+                                          SR BTST and full-accumulator S/L
+                                          readiness now use FM3.5.2; partial-read
+                                          timing remains explicitly uncertain
+                                          (dsp-status-pipeline.txt).
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
                                           source IRQs tested (dsp-timers.txt).

@@ -215,7 +215,7 @@ void visible_failure_and_restore() {
   seed(code);
   code.emit("move x0,r0");
   const auto unsupported = code.pc();
-  code.emit("btst #2,sr");
+  code.emit("rep #2");
   code.emit("move x:(r0),y0");
   initialize(machine, code);
   machine.bus().write({.space = DspSpace::x, .address = address, .value = value});
@@ -223,11 +223,12 @@ void visible_failure_and_restore() {
   const auto saved = machine.checkpoint();
   const auto before = machine.cpu().debug_state();
   const auto preview = checkpoint::rejects([&] { static_cast<void>(machine.plan_step()); },
-                                           "Unqualified status bit timing unexpectedly previewed");
+                                           "Unqualified repeat timing unexpectedly previewed");
   require(!machine.timing_faulted() && machine.cpu().debug_state() == before &&
               preview.contains("opcode read P:" + hex(unsupported, 6)),
-          "Unqualified status-bit preview is pure and contextual");
-  const auto error = checkpoint::rejects([&] { machine.cpu().step(); }, "Unqualified bit executed");
+          "Unqualified repeat preview is pure and contextual");
+  const auto error =
+      checkpoint::rejects([&] { machine.cpu().step(); }, "Unqualified repeat executed");
   require(machine.timing_faulted() && machine.cpu().debug_state() == before &&
               error.contains("omr=0x000305") && error.contains("pc=" + hex(unsupported, 6)),
           "Unsupported attempted execution quarantines without retiring the instruction");
@@ -239,6 +240,79 @@ void visible_failure_and_restore() {
   machine.cpu().step();
   require((machine.cpu().state().y & word_mask) == value,
           "Trusted restore recovers pre-fault dependency history before the real load");
+}
+
+void status_checkpoint() {
+  constexpr unsigned initial_status = 0xc00300;
+  constexpr unsigned scaled_status = 0xc00380;
+  constexpr unsigned scaled_value = 0x400000;
+  constexpr unsigned setup_steps = 15;
+  for (const bool preceding_partial : {false, true}) {
+    DspMachine machine(contract());
+    DspProgram code;
+    code.immediate("a0", 0);
+    code.immediate("a1", scaled_value);
+    code.immediate("a2", 0);
+    code.immediate("b0", 0);
+    code.immediate("b1", 0);
+    code.immediate("b2", 0);
+    code.immediate("sr", initial_status);
+    quiet(code);
+    if (preceding_partial) { code.emit("move a1,x0"); }
+    code.emit("move a,x0");
+    code.emit("move sr,x1");
+    code.emit("btst #7,sr");
+    initialize(machine, code);
+    steps(machine, setup_steps + (preceding_partial ? 2U : 1U));
+    require(machine.cpu().state().sr == scaled_status,
+            "A full accumulator bus read sets sticky S from the independent A46 XOR A45 rule");
+    expected_stalls(machine, 2);
+    const auto saved = machine.checkpoint();
+    const auto start = machine.run_clock().elapsed_ticks();
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      machine.restore(saved);
+      DspScheduledRun schedule({.observation = DspStepObservation::reference_completion_boundary},
+                               machine);
+      constexpr unsigned maximum_steps = 1;
+      require(schedule.next_completion_ticks(machine) == start + 3 &&
+                  schedule.advance_to(
+                      machine, start + 2, DspScheduleBoundary::through, maximum_steps) == 0 &&
+                  schedule.advance_to(
+                      machine, start + 3, DspScheduleBoundary::through, maximum_steps) == 1,
+              "Restored SR dependency completes at the actual three-clock MOVE deadline");
+      require((machine.cpu().state().x >> word_bits) == scaled_status &&
+                  machine.run_clock().interlock_cycle_units() == 2,
+              "A later known status writer dominates the older bounded partial-read uncertainty");
+      machine.cpu().step();
+      require(machine.cpu().state().sr == (scaled_status | 1U) &&
+                  machine.run_clock().elapsed_ticks() == start + 5,
+              "The actual two-clock BTST reads sticky S into C without clearing S");
+    }
+  }
+}
+
+void status_agu_dominance() {
+  constexpr unsigned status = 0xc00300;
+  constexpr unsigned target = 0x100;
+  constexpr unsigned setup_steps = 12;
+  DspMachine machine(contract());
+  DspProgram code;
+  code.immediate("a0", 0);
+  code.immediate("a1", target);
+  code.immediate("a2", 0);
+  code.immediate("sr", status);
+  quiet(code);
+  code.emit("move a1,r0");
+  code.emit("move sr,x:(r0)");
+  initialize(machine, code);
+  steps(machine, setup_steps + 1);
+  expected_stalls(machine, 3);
+  const auto before = machine.run_clock().elapsed_ticks();
+  machine.cpu().step();
+  require(machine.bus().read({.space = DspSpace::x, .address = target}) == status &&
+              machine.run_clock().interlock_cycle_units() == 3 &&
+              machine.run_clock().elapsed_ticks() == before + 4,
+          "The known three-clock AGU wait dominates older bounded SR timing uncertainty");
 }
 
 void fetched_identity() {
@@ -320,6 +394,8 @@ void state_checks() {
   elapsed_and_postupdate();
   checkpoint_schedule_and_reset();
   visible_failure_and_restore();
+  status_checkpoint();
+  status_agu_dominance();
   fetched_identity();
   history_reset_and_unknown_modes();
   data_bus_scope();

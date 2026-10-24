@@ -27,8 +27,8 @@ unsigned DspInterlocks::delay(const DspInterlockInstruction &instruction) const 
     }
   }
   if (instruction.status_read) {
-    if (unknown_status_ != 0) {
-      throw Fault("Unqualified DSP interlock timing for status read after accumulator transfer");
+    if (uncertain_status_ > std::max(result, status_)) {
+      throw Fault("Unqualified DSP interlock status timing after partial accumulator read");
     }
     result = std::max(result, status_);
   }
@@ -62,7 +62,7 @@ void DspInterlocks::commit(const DspInterlockInstruction &instruction, const uns
   for (auto &remaining : arithmetic_) { age(remaining, elapsed); }
   for (auto &remaining : transfer_) { age(remaining, elapsed); }
   age(status_, elapsed);
-  age(unknown_status_, elapsed);
+  age(uncertain_status_, elapsed);
   for (std::size_t index = 0; index < agu_.size(); ++index) {
     if ((instruction.agu_writes & (1U << index)) != 0) {
       agu_.at(index) = instruction.agu_write_delay;
@@ -74,8 +74,8 @@ void DspInterlocks::commit(const DspInterlockInstruction &instruction, const uns
     }
     if ((instruction.arithmetic_writes & (1U << index)) != 0) { arithmetic_.at(index) = 1; }
   }
-  if (instruction.arithmetic_writes != 0) { status_ = 2; }
-  if (instruction.move_reads != 0) { unknown_status_ = 2; }
+  if (instruction.status_write) { status_ = 2; }
+  if (instruction.partial_status_source) { uncertain_status_ = 2; }
 }
 
 unsigned DspInterlocks::complete(const unsigned native_units) {

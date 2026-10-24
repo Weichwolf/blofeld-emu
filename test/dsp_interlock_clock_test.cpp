@@ -113,7 +113,7 @@ int run(const Program &program, const bool dependencies, const unsigned low, con
             << " stalls=" << machine.run_clock().interlock_cycle_units()
             << " instructions=" << machine.cpu().debug_state().native_instructions
             << " pc=" << state.pc << " sr=" << state.sr << " x1=" << (state.x >> word_bits)
-            << " y1=" << (state.y >> word_bits) << '\n';
+            << " y1=" << (state.y >> word_bits) << " x0=" << (state.x & word_mask) << '\n';
   return 0;
 }
 }

@@ -46,12 +46,14 @@ Additional clocks measured in the normal model:
   move to A1; move A1                          0/1/2/8             1/0/0/0
   MPY; move SR                                0/1/2/8             2/1/0/0
 
-These 33 windows agree with the selected primary expectations, including the
+These 38 windows agree with the selected primary expectations, including the
 status-MOVE distinction in APR20. They qualify fixed model observations, not
-silicon or a complete dynamic timing engine. Five BTST-SR windows remain
-unqualified: the isolated model baseline is two clocks and the additional
-MPY-related delays need reconciliation with FM A-1/A.2.3. No correction to our
-emulator is justified by those unexplained numbers alone.
+silicon or a complete dynamic timing engine. FM3.5.2 resolves the five BTST-SR
+windows: A-1 gives a two-clock baseline, with two/one remaining status clocks
+after the preceding/second-preceding producer. Observed windows and word-stream
+hashes are unchanged. The more detailed primary rule explains the abbreviated
+A.2.3 wording. Separate full/partial accumulator status cases and remaining
+uncertainty are described in dsp-status-pipeline.txt.
 
 A separate paired 31-case experiment executes 553 instructions in both server
 modes. PC/register observations are identical, but normal mode reports 776 clocks

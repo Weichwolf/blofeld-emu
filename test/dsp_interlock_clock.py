@@ -115,12 +115,14 @@ def main():
                 assert nominal["stalls"] == 0 and actual["window"] - nominal["window"] == 3
         observed_cases.append(dict(case_index=index, kind=case["kind"], gap=case["gap"], **actual))
         start = end
-    report = dict(passed=True, matched_windows=33, unqualified_rejections=5,
+    qualified = sum(case["independent_expected_stall_cycles"] is not None
+                    for case in reference["cases"])
+    report = dict(passed=True, matched_windows=qualified, unqualified_rejections=len(cases)-qualified,
                   word_stream_matches_independent_NXP_assembly=True, cases=observed_cases,
                   scope="Selected dependency completion accounting, not physical bus-stage timing, automatic DMA or full boot")
     report["accumulator_forms"] = accumulator_forms(binary, directory)
     (directory / "result.json").write_text(json.dumps(report, indent=2) + "\n")
-    print("Native dependency clocks match33 independent windows; five unqualified status-bit cases reject.")
+    print(f"Native dependency clocks match {qualified} primary windows and14 accumulator-form windows.")
 
 
 if __name__ == "__main__":

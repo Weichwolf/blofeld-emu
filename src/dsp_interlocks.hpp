@@ -19,6 +19,8 @@ struct DspInterlockInstruction {
   unsigned agu_write_delay = 0;
   unsigned transfer_write_delay = 0;
   unsigned move_read_advance = 0;
+  bool status_write = false;
+  bool partial_status_source = false;
   bool status_read = false;
 };
 
@@ -40,7 +42,7 @@ private:
   std::array<unsigned, 2> arithmetic_{};
   std::array<unsigned, 2> transfer_{};
   unsigned status_ = 0;
-  unsigned unknown_status_ = 0;
+  unsigned uncertain_status_ = 0;
   std::optional<DspInterlockInstruction> prepared_;
   unsigned prepared_stalls_ = 0;
   bool fetched_ = false;

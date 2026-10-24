@@ -1,0 +1,51 @@
+DSP status dependency timing
+
+The selected native_interlock_estimates contract now includes register BTST
+of SR. DSP56300FM A-1 specifies its two-clock nominal cost. FM3.5.2 describes
+two/one remaining clocks after the preceding/second-preceding status producer.
+That detailed rule, plus the nominal cost, explains all five previously
+unqualified BTST-SR windows in dsp-pipeline-timing-reference.json. Observed
+counts and the complete independently assembled word hash remain unchanged.
+The shorter wording in A.2.3 alone does not describe this distinction clearly.
+
+A full A/B bus read runs the shifter/limiter and can update sticky S/L. It arms
+the same selected two-clock SR readiness as arithmetic. Explicit reads of
+A0/A1/A2/B1 retain separate uncertainty: their tested data and flags agree with
+the primary definitions, but the normal vendor model inserts a status delay
+even though S/L remain unchanged. Neither a zero delay nor the model delay is
+claimed as physical hardware behavior. SR reads reject while this uncertainty
+can change the selected completion time. It expires after two intervening
+clocks; a later known two-clock status producer or an already required longer
+AGU wait also dominates an older bounded uncertainty. The executed instructions
+and flags are never patched.
+
+DSP56300FM5.4.1.2 (status-bit definitions) specifies sticky S and L. Tests set
+S using a full accumulator value with bit46 different from bit45, and L using
+a positive accumulator extension that requires actual saturation. Partial
+reads return their actual bus word without setting these flags. MOVE samples
+SR and BTST samples S/L into C; literal expectations include the resulting
+flags and bus values. Existing owner/scheduler checkpoints retain both known
+readiness and unresolved history, with no physical phase timing inferred.
+
+The fixed own generator prepares 64 cases /1705 native instructions /2154 words:
+
+  python3 tools/prepare_dsp_status_reference.py doc/local/dsp-status-pipeline
+  cmake --build --preset strict --target blofeld-dsp-interlock-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_status_pipeline$'
+
+The native gate first compares the whole own word stream to the independent
+NXP assembler hash in dsp-status-timing-reference.json. It checks 48 matching
+windows and16 deliberate partial-read timing refusals. The vendor reference
+also checked every PC, all64 status/bus-value pairs, full code readback before
+and after execution, and nonzero X/Y canaries. Listings, binaries and logs stay
+local. The generator performs no assembly, execution, downloading or fuzzing.
+
+The short-absolute-store discrepancy remains separate: the A-1 table's store
+row gives two clocks, agreeing with the SDK nominal cost, while the measured
+normal vendor windows suggest one. This does not establish an SDK defect.
+The selected interlock profile still rejects the form pending clarification.
+
+These are selected instruction-completion clocks. Seven-stage fetch/AG/execute
+placement, core/DMA bus arbitration, branches/loops/IRQs, authentic full ROM,
+the original reserved Y:002000 frontier and complete instrument operation remain
+open. No physical-device or real-time qualification follows from these gates.

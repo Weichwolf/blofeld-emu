@@ -58,7 +58,10 @@ observations in that fresh counterexample and does not resolve the disagreement.
 Initial-map instruction timing is now checked separately. Thirty-eight quiet
 producer/consumer windows run 1047 own instructions with verified code readback,
 PC transitions and expected register/SR values. Selected AGU/accumulator/status-
-MOVE delays match primary expectations; five status-bit windows remain open.
+MOVE delays match primary expectations. FM3.5.2 resolves the five status-bit
+windows without changing observed counts or the sealed own program hash.
+Separate whole/partial accumulator cases check flags, bus words and status
+timing;16 partial-read windows remain unqualified (dsp-status-pipeline.txt).
 A paired 31-case run has identical PC/register results in both modes but 776 versus
 562 reported clocks. Fast mode is not a timing oracle. Retirement deltas also
 cannot identify memory-access stages; see dsp-pipeline-timing.txt. These bounded

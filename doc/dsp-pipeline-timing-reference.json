@@ -207,8 +207,8 @@
       "instructions_in_window": 12,
       "observed_clock_cycles": 15,
       "excess_over_one_cycle_per_instruction": 3,
-      "independent_expected_stall_cycles": null,
-      "qualification": "status-bit baseline and extra cycles unresolved"
+      "independent_expected_stall_cycles": 2,
+      "qualification": "FM3.5.2 resolves two/one remaining status clocks; A-1 gives the two-clock BTST base"
     },
     {
       "kind": "arithmetic",
@@ -252,8 +252,8 @@
       "instructions_in_window": 13,
       "observed_clock_cycles": 15,
       "excess_over_one_cycle_per_instruction": 2,
-      "independent_expected_stall_cycles": null,
-      "qualification": "status-bit baseline and extra cycles unresolved"
+      "independent_expected_stall_cycles": 1,
+      "qualification": "FM3.5.2 resolves two/one remaining status clocks; A-1 gives the two-clock BTST base"
     },
     {
       "kind": "arithmetic",
@@ -297,8 +297,8 @@
       "instructions_in_window": 14,
       "observed_clock_cycles": 15,
       "excess_over_one_cycle_per_instruction": 1,
-      "independent_expected_stall_cycles": null,
-      "qualification": "status-bit baseline and extra cycles unresolved"
+      "independent_expected_stall_cycles": 0,
+      "qualification": "FM3.5.2 resolves two/one remaining status clocks; A-1 gives the two-clock BTST base"
     },
     {
       "kind": "arithmetic",
@@ -342,8 +342,8 @@
       "instructions_in_window": 20,
       "observed_clock_cycles": 21,
       "excess_over_one_cycle_per_instruction": 1,
-      "independent_expected_stall_cycles": null,
-      "qualification": "status-bit baseline and extra cycles unresolved"
+      "independent_expected_stall_cycles": 0,
+      "qualification": "FM3.5.2 resolves two/one remaining status clocks; A-1 gives the two-clock BTST base"
     },
     {
       "kind": "status_move_control",
@@ -360,8 +360,8 @@
       "instructions_in_window": 12,
       "observed_clock_cycles": 13,
       "excess_over_one_cycle_per_instruction": 1,
-      "independent_expected_stall_cycles": null,
-      "qualification": "status-bit baseline and extra cycles unresolved"
+      "independent_expected_stall_cycles": 0,
+      "qualification": "FM3.5.2 resolves two/one remaining status clocks; A-1 gives the two-clock BTST base"
     }
   ],
   "status_bit_cases_unqualified": 5,

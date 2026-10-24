@@ -10,7 +10,7 @@ enable automatic active DMA or establish physical board scheduling.
 The decoder accepts NOP, selected register/immediate/single X/Y data moves,
 control moves to/from M/SR/OMR, and standalone register MPY/CLR. Other arithmetic,
 parallel arithmetic/data moves, pre-update/offset forms, branches, REP/DO,
-status-bit timing, short absolute X/Y stores, interrupts and SA/SC/loop modes
+other status-bit operations, short absolute X/Y stores, interrupts and SA/SC/loop modes
 reject. Actual data addresses
 must resolve to the strict internal-memory resource model before operand I/O;
 this contract supplies no peripheral bus timing. Firmware and missing/unsupported
@@ -25,14 +25,17 @@ windows distinguish that data-address penalty from an immediate extension fetch.
 Only explicit destination fields arm hazards: ordinary R post-updates do not.
 All elapsed nominal and inserted clocks age every group, rather than counting
 intervening instructions. Accumulator move/arithmetic and status-MOVE dependencies
-retain their separately selected readiness. A recent accumulator transfer before
-a status read remains unqualified and fails rather than inventing a delay.
+retain their separately selected readiness. Full A/B bus reads arm status
+readiness. Recent partial-accumulator reads remain uncertain before SR access;
+their distinction and the newly supported SR BTST are in dsp-status-pipeline.txt.
 Long accumulator immediates leave no transfer-read delay; long absolute loads
 leave one. A long store's address extension absorbs the selected one-clock
 accumulator dependency. The additional independent reference in
 dsp-interlock-form-reference.json records these windows and actual stored-data
 readbacks. Its short-store counterexamples expose an SDK nominal-cost mismatch;
 that form remains explicitly unsupported by the selected timing contract.
+The primary A-1 store row agrees with the SDK's two-clock base; the normal
+vendor model's one-clock observation does not prove an SDK error.
 
 SDK diagnostic cycle counters stay nominal. DspRunClock separately exposes
 interlock_cycle_units; elapsed ticks, CLK2 edges, timers, SHI and switch delays
@@ -59,7 +62,8 @@ post-updates, exact timer compare/CLK2 behavior, pending schedule deadlines,
 joint restores, reset epochs, contextual refusals and deliberately corrupted
 fetch identity. The reference gate assembles the public own program independently,
 checks its complete word-stream hash against NXP output, then executes all 33
-qualified windows and checks five deliberate status-bit refusals. Fourteen more
+qualified windows. FM3.5.2 now explains the five former status-bit refusals,
+which execute as additional matching windows. Fourteen more
 accumulator-form windows and two short-store refusals bind a second complete
 NXP word-stream hash. The own fixture uses canonical y0,x0 operand order for the
 commutative signed MPY; the SDK otherwise selects a different MPYsu encoding for

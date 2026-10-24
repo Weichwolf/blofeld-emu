@@ -1974,6 +1974,10 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_interlock_clock.py"
     $<TARGET_FILE:blofeld-dsp-interlock-test>
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-interlock-reference")
+  add_test(NAME dsp_status_pipeline COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_status_pipeline.py"
+    $<TARGET_FILE:blofeld-dsp-interlock-test>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-status-pipeline")
   add_executable(blofeld-dsp-reset-epoch-test test/dsp_reset_epoch_test.cpp)
   target_link_libraries(blofeld-dsp-reset-epoch-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_reset_epoch COMMAND blofeld-dsp-reset-epoch-test)

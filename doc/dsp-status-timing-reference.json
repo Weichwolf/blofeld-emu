@@ -1,0 +1,591 @@
+{
+  "scope": "Fixed own whole/partial accumulator status-pipeline windows. Simulator evidence is independently checked against primary timing and flag expectations;16 partial-read windows remain unqualified. Not physical bus phases, complete DSP56371 mapping, boot or silicon equivalence.",
+  "source_license": "GPL-3.0-only",
+  "reference_tools_manifest": "reference-tools.json",
+  "primary_sources": "DSP56300FM3.5.2/5.4.1.2 table5-1/A-1/A.2.3; primary download identities are in hardware/sources.json.",
+  "own_program": {
+    "sha256_24_bit_words": "8dbff1ac38b6f923f937667c8d1d8d5b3917116277d432844ee034e2da36ce13",
+    "words": 2154,
+    "instructions": 1705,
+    "assembler": "NXP asm56300 6.3.28"
+  },
+  "transport_controls": "Full program readback before/after;1705 native PC transitions;64 SR/bus-value pairs; nonzero independent X/Y memory canaries.",
+  "cases": [
+    {
+      "kind": "a0",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 12,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a0",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a0",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a0",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a0",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a0",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 14,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a0",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a0",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a1",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 12,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a1",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a1",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a1",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a1",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a1",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 14,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a1",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a1",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a2",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 12,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a2",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a2",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a2",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a2",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a2",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 14,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "a2",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a2",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b1",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 12,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "b1",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "b1",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b1",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b1",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 13,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "b1",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 14,
+      "qualified": false,
+      "qualification": "partial read leaves flags unchanged but model inserts a status delay; hardware timing remains unresolved"
+    },
+    {
+      "kind": "b1",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b1",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "a_limit",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "move",
+      "gap": 0,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "move",
+      "gap": 1,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "move",
+      "gap": 2,
+      "observed_window": 14,
+      "primary_expected_window": 14,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "move",
+      "gap": 3,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "bit",
+      "gap": 0,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "bit",
+      "gap": 1,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "bit",
+      "gap": 2,
+      "observed_window": 15,
+      "primary_expected_window": 15,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    },
+    {
+      "kind": "b_limit",
+      "consumer": "bit",
+      "gap": 3,
+      "observed_window": 16,
+      "primary_expected_window": 16,
+      "qualified": true,
+      "qualification": "initial-map reference agrees with FM3.5.2 and selected instruction costs"
+    }
+  ]
+}
