@@ -27,7 +27,7 @@ constexpr unsigned entry_flags = 0x69, saved_flags = 0x61, reset_known = 0x68;
 constexpr unsigned high_mask = 0xff00, isr_high = 0x1200, partial_ccr = 0xef;
 constexpr unsigned vector_stack_cases = 240;
 
-class IrqMemory final : public Memory {
+class IrqMemory final : public MaskedMemory {
 public:
   unsigned entries = 0, acknowledgements = 0, operation = 0;
   std::optional<unsigned> stop, return_stop;
@@ -473,6 +473,44 @@ public:
   }
 };
 
+class PolicyMemory final : public Memory {
+public:
+  unsigned entries = 0;
+
+  void begin_interrupt(const InterruptRequest request, const bool reuse) override {
+    require(request.vector == vector && request.kind == InterruptKind::maskable && !reuse,
+            "Own restricted RAM test receives the actual architectural IRQ entry");
+    ++entries;
+  }
+
+  void write(const std::uint16_t address, const std::uint8_t value) override {
+    constexpr unsigned last_programmer_write = 0x84;
+    if (address > last_programmer_write) { throw Fault("Own restricted RAM write denied"); }
+    Memory::write(address, value);
+  }
+};
+
+void policy_capability() {
+  for (const auto mask : {partial_ccr, byte_mask}) {
+    PolicyMemory memory;
+    memory.writable.set();
+    memory.interrupt = InterruptRequest{.vector = vector};
+    const Bus &board = memory;
+    require(dynamic_cast<const Hcs08KnownMemory *>(&board) == nullptr,
+            "An ordinary RAM helper cannot implicitly grant bypasses of a derived write policy");
+    Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+    auto before = foreground;
+    before.ccr_known = static_cast<std::uint8_t>(mask);
+    cpu.set_state(before);
+    const auto error = rejected([&] { (void)cpu.service_interrupt(); });
+    require(error.contains(mask == partial_ccr ? "masked RAM storage" : "restricted RAM write") &&
+                cpu.faulted() && cpu.state() == before && memory.accesses.empty() &&
+                memory.known.none() && memory.entries == (mask == partial_ccr ? 0U : 1U),
+            "Partial IRQ refuses missing capability before writes; fully known IRQ uses actual "
+            "ordinary policy, with no accepted stack byte or fabricated known bits");
+  }
+}
+
 void bdc_ownership() {
   IrqMemory memory;
   NoBdcMemory target;
@@ -499,6 +537,7 @@ int main() {
     return_failures();
     partial_read_refusal();
     required_capability();
+    policy_capability();
     bdc_ownership();
     std::cout << "HCS08 hardware IRQ frames, native masked RTI and strict ownership pass.\n";
     return 0;

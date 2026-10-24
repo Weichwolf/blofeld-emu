@@ -45,6 +45,30 @@ struct Hcs08IrqBusState {
   bool operator==(const Hcs08IrqBusState &) const = default;
 };
 
+enum class Hcs08InstructionContract : std::uint8_t {
+  unqualified,
+  reference_instruction_retirement
+};
+
+// Opaque in-process admission proof. The immutable lifetime tag is not a CPU or
+// peripheral reference. Trusted joint restores can resume a captured claim;
+// subsequent admissions use the receiving CPU's own monotonic identity space.
+class Hcs08InstructionReservation {
+public:
+  Hcs08InstructionReservation(const Hcs08InstructionReservation &) = default;
+  Hcs08InstructionReservation &operator=(const Hcs08InstructionReservation &) = default;
+  bool operator==(const Hcs08InstructionReservation &) const = default;
+  // Captured metadata only; live ownership must still be checked by the CPU.
+  [[nodiscard]] bool matches_context(const Hcs08State &before, std::uint64_t code_revision) const;
+
+private:
+  friend class Hcs08;
+  Hcs08InstructionReservation() = default;
+  std::shared_ptr<const void> identity_;
+  std::uint64_t epoch_ = 0, code_revision_ = 0;
+  Hcs08State before_;
+};
+
 // Trusted native instruction/IRQ-bus boundary state. Memory, clocks and external peers
 // must be restored separately by the owner before further execution.
 class Hcs08Checkpoint {
@@ -64,6 +88,7 @@ private:
   std::uint8_t a_known_ = Hcs08State::all_a;
   std::uint16_t hx_known_ = Hcs08State::all_hx;
   std::optional<Hcs08IrqBusState> irq_bus_;
+  std::optional<Hcs08InstructionReservation> instruction_;
 };
 
 enum class Hcs08ResetEntry : std::uint8_t { unqualified, normal, active_background };
@@ -105,10 +130,20 @@ public:
   [[nodiscard]] bool start_irq_bus(Hcs08IrqBusContract contract);
   void advance_irq_bus();
   [[nodiscard]] std::optional<Hcs08IrqBusState> irq_bus_state() const;
+  // Sample IRQ before a reference budget is accepted. Empty means no admission
+  // (IRQ, BGND or another owner); no opcode is fetched or effect executed here.
+  [[nodiscard]] std::optional<Hcs08InstructionReservation>
+  reserve_instruction(Hcs08InstructionContract contract);
+  [[nodiscard]] bool instruction_reserved() const;
+  [[nodiscard]] bool reservation_matches(const Hcs08InstructionReservation &reservation) const;
+  // Complete only this accepted instruction. A later IRQ does not interrupt it.
+  void retire_reserved_instruction(const Hcs08InstructionReservation &reservation);
   // Executes one instruction; an eligible unserviced IRQ refuses before fetch.
   void step();
 
 private:
+  [[nodiscard]] bool matches_reservation(const Hcs08InstructionReservation &reservation) const;
+  void execute_instruction(const Hcs08InstructionReservation *reservation);
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

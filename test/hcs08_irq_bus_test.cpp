@@ -38,7 +38,7 @@ struct Record {
   bool operator==(const Record &) const = default;
 };
 
-class SequenceMemory final : public Memory {
+class SequenceMemory final : public MaskedMemory {
 public:
   unsigned period = 0, entries = 0, acknowledgements = 0;
   unsigned entry_period = 0, ack_period = 0;

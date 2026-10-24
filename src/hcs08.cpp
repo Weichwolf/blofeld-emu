@@ -19,6 +19,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -30,6 +31,8 @@ namespace native = detail::hcs08;
 
 namespace {
 constexpr unsigned fixed_ccr = 0x60, address_space = 65536;
+
+struct InstructionIdentity {};
 
 std::uint16_t read_reset_vector(Bus &bus, const ExecutionContext context) {
   bus.begin_instruction(context);
@@ -226,6 +229,11 @@ public:
   bool healthy = false;
   bool initialized = false;
   std::optional<Hcs08IrqBusState> irq_bus;
+  std::optional<Hcs08InstructionReservation> instruction;
+  const std::shared_ptr<const void> instruction_identity =
+      std::make_shared<const InstructionIdentity>();
+  // Ownership metadata is not emulated state: never rewind future admissions.
+  std::uint64_t instruction_epoch = 0;
 };
 
 Hcs08::Hcs08(Bus &bus, const std::filesystem::path &specification) try
@@ -241,6 +249,7 @@ void Hcs08::set_state(const Hcs08State &state) {
   const native::ExecutionGuard guard(impl_->active);
   impl_->healthy = false;
   impl_->irq_bus.reset();
+  impl_->instruction.reset();
   impl_->a_known = state.a_known;
   impl_->hx_known = state.hx_known;
   impl_->memory.setValue(&impl_->layout.a, state.a & state.a_known);
@@ -317,6 +326,7 @@ Hcs08Checkpoint Hcs08::checkpoint() const {
   result.a_known_ = impl_->a_known;
   result.hx_known_ = impl_->hx_known;
   result.irq_bus_ = impl_->irq_bus;
+  result.instruction_ = impl_->instruction;
   return result;
 }
 
@@ -334,6 +344,7 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
   impl_->a_known = checkpoint.a_known_;
   impl_->hx_known = checkpoint.hx_known_;
   impl_->irq_bus = checkpoint.irq_bus_;
+  impl_->instruction = checkpoint.instruction_;
   impl_->initialized = true;
   impl_->healthy = true;
 }
@@ -388,6 +399,7 @@ std::optional<std::uint16_t> Hcs08::pending_interrupt() const {
   if (impl_->active || !impl_->healthy || !impl_->initialized || impl_->irq_bus) {
     throw Fault("HCS08 IRQ query requires a healthy completed native boundary");
   }
+  if (impl_->instruction) { return {}; } // Finish the accepted instruction before IRQ admission.
   return native::pending_interrupt(impl_->bus, state());
 }
 
@@ -395,6 +407,7 @@ bool Hcs08::service_interrupt() {
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
   if (background_requested()) { throw Fault("HCS08 BGND request requires an owning BDC decision"); }
+  if (impl_->instruction) { return false; }
   impl_->healthy = false;
   const auto before = state();
   try {
@@ -423,6 +436,7 @@ bool Hcs08::start_irq_bus(const Hcs08IrqBusContract contract) {
   }
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  if (impl_->instruction) { return false; }
   impl_->healthy = false;
   const auto before = state();
   if (background_requested() || impl_->irq_bus) {
@@ -481,7 +495,68 @@ void Hcs08::advance_irq_bus() {
   }
 }
 
+bool Hcs08::instruction_reserved() const {
+  return impl_->instruction.has_value();
+}
+
+bool Hcs08InstructionReservation::matches_context(const Hcs08State &before,
+                                                  const std::uint64_t code_revision) const {
+  return before_ == before && code_revision_ == code_revision;
+}
+
+bool Hcs08::matches_reservation(const Hcs08InstructionReservation &reservation) const {
+  const auto &owned = impl_->instruction;
+  if (!owned) { return false; }
+  return *owned == reservation && state() == reservation.before_ &&
+         impl_->bus.code_revision() == reservation.code_revision_;
+}
+
+bool Hcs08::reservation_matches(const Hcs08InstructionReservation &reservation) const {
+  return !impl_->active && impl_->healthy && impl_->initialized && matches_reservation(reservation);
+}
+
+std::optional<Hcs08InstructionReservation>
+Hcs08::reserve_instruction(const Hcs08InstructionContract contract) {
+  if (contract != Hcs08InstructionContract::reference_instruction_retirement) {
+    throw Fault("HCS08 instruction admission requires the explicit retirement reference contract");
+  }
+  const native::ExecutionGuard guard(impl_->active);
+  if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  if (impl_->instruction || impl_->irq_bus || background_requested()) { return {}; }
+  impl_->healthy = false;
+  const auto before = state();
+  if (!before.pc_known) {
+    throw Fault(
+        "HCS08 instruction admission address=unknown pc=unknown pc-known=0: unknown CPU PC");
+  }
+  impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
+  if (native::pending_interrupt(impl_->bus, before)) {
+    impl_->healthy = true;
+    return {};
+  }
+  if (impl_->instruction_epoch == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("HCS08 instruction admission address=" + hex(before.pc) + " pc=" + hex(before.pc) +
+                ": reservation identity counter exhausted");
+  }
+  Hcs08InstructionReservation reservation;
+  reservation.identity_ = impl_->instruction_identity;
+  reservation.epoch_ = ++impl_->instruction_epoch;
+  reservation.code_revision_ = impl_->bus.code_revision();
+  reservation.before_ = before;
+  impl_->instruction = reservation;
+  impl_->healthy = true;
+  return reservation;
+}
+
+void Hcs08::retire_reserved_instruction(const Hcs08InstructionReservation &reservation) {
+  execute_instruction(&reservation);
+}
+
 void Hcs08::step() {
+  execute_instruction(nullptr);
+}
+
+void Hcs08::execute_instruction(const Hcs08InstructionReservation *reservation) {
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
   if (background_requested()) { throw Fault("HCS08 BGND request requires an owning BDC decision"); }
@@ -496,8 +571,17 @@ void Hcs08::step() {
       throw Fault("HCS08 IRQ bus sequence/prefetch still has an owner; queue consumption is "
                   "unqualified");
     }
+    if (reservation != nullptr) {
+      if (!matches_reservation(*reservation)) {
+        throw Fault("HCS08 reserved instruction owner/state/code changed address=" +
+                    hex(before.pc));
+      }
+    } else if (impl_->instruction) {
+      throw Fault("HCS08 accepted instruction reservation still has an owner address=" +
+                  hex(before.pc));
+    }
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
-    if (native::pending_interrupt(impl_->bus, before)) {
+    if (reservation == nullptr && native::pending_interrupt(impl_->bus, before)) {
       throw Fault(
           "HCS08 interrupt entry is not qualified by instruction stepping; service required");
     }
@@ -522,6 +606,8 @@ void Hcs08::step() {
     impl_->a_known = registers.a;
     impl_->hx_known = registers.hx;
     impl_->normalize_ccr();
+    // Native effects are complete even if the subsequent observer refuses retirement.
+    if (reservation != nullptr) { impl_->instruction.reset(); }
     impl_->bus.retire_instruction();
     impl_->healthy = true;
   } catch (const ghidra::LowlevelError &error) {

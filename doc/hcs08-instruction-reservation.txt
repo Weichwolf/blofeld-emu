@@ -1,0 +1,52 @@
+HCS08 accepted-instruction ownership
+
+  cmake --build --preset strict --target blofeld-hcs08-instruction-reservation-test
+  ctest --test-dir build/strict -j1 -R '^hcs08_instruction_reservation$' --output-on-failure
+
+The instruction-retirement reference clock admits an instruction before spending
+its first period. HCS08 Family6.4.2 and GT16A/GT8A5.4 require the current
+instruction to complete before interrupt entry. Primary identities are pinned
+in hcs08-reference.json. A newly eligible source during an accepted LDA/STA/NOP
+budget must not replace that instruction at its final native step. An already
+eligible source refuses admission before opcode fetch or period accounting.
+The source itself remains owned by its peripheral; no remembered IRQ, flag clear
+or physical source-latching behavior is supplied here.
+
+reserve_instruction requires reference_instruction_retirement and returns an
+opaque in-process ticket containing an immutable lifetime tag, a monotonic
+admission epoch, canonical registers/masks and code revision. No opcode or data
+effect executes at admission. Only the matching live CPU claim can retire. Native
+stepping, another clock, untimed IRQ and explicit IRQ-bus entry cannot steal it.
+Code mutation or debugger register replacement invalidates the claim. Final
+native execution retains ordinary decoding, access policies, knowledge masks,
+BDC BGND decisions and faults; it does not re-query a later IRQ. Ownership is
+consumed after complete native effects and before the retirement observer.
+Observer failure preserves the native results and quarantines execution.
+
+The tag owns no CPU/peripheral peer. It is allocated once when creating the CPU;
+admission copies it without allocating. Tags and future epoch counters are host
+ownership metadata and never rewind with emulated state. A trusted snapshot can
+resume its captured active claim on the same or a fresh CPU, even after the
+original CPU has been destroyed. Subsequent admissions use the receiving CPU's
+own lifetime/monotonic epoch, so stale future tickets cannot revive after rewind.
+CPU, RAM/peripherals, BDC and clock snapshots must be restored jointly. The clock
+checks its captured ticket/context against actual CPU ownership on restore and
+each advance; unrelated snapshots fail before native effects.
+
+Tests check independent PC/A/HX/SP/CCR/store boundaries, each mid-STA arrival
+position, an IRQ arriving after one-period NOP admission, initially pending and
+masked sources, withdrawal, partial register knowledge, direct-step/BDC/clock
+ownership, cross-CPU/stale tickets, rewind/fork future identities, fresh graph
+restores after owner destruction, mismatched snapshots, changed code/registers,
+actual data faults and successful/refusing retirement observers. The late-LDA
+case then enters the real eleven-period IRQ sequence and checks its genuine
+completed-instruction frame. Masked storage requires explicit MaskedMemory
+opt-in; restricted ordinary owners retain their actual write policies and the
+application fixture blocks reset-time masked accesses.
+
+This is instruction-retirement reference admission, not the physical instruction
+bus pipeline. The retained IRQ/reset prefetch queue still has no qualified
+consumer; its bytes cannot be dropped to use this clock. Per-cycle operand
+access, source sampling/latching, ICG/physical rate, board event ties, full normal
+Keyboard execution, complete update/recovery and hardware equivalence remain
+unqualified. No fuzzing, physical device traffic or realtime callback is added.

@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace blofeld::test::hcs08_clock_startup {
@@ -36,7 +37,7 @@ struct Input {
 
 // Untimed, immutable-FLASH startup fixture. No oscillator/NVM clock or command
 // completion is supplied; original execution must stop at unqualified ICGS1.
-class ApplicationMemory final : public hcs08::Memory {
+class ApplicationMemory final : public hcs08::MaskedMemory {
 public:
   ApplicationMemory(std::span<const std::uint8_t> records, Input input);
   Hcs08Flash flash;
@@ -54,12 +55,17 @@ public:
   void begin_interrupt(InterruptRequest request, bool reuse_stack) override;
   void acknowledge_interrupt(std::uint16_t vector) override;
   [[nodiscard]] std::optional<InterruptRequest> interrupt_request(std::uint8_t ccr) const override;
+  Hcs08KnownByte read_known_byte(std::uint16_t address) override;
+  void write_known_byte(ByteWrite access, std::uint8_t mask) override;
   void begin_reset(ExecutionContext value) override;
   void end_reset() override;
   std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;
   void check_execute(InstructionFetch fetch) const override;
+
+private:
+  void check_reset_access(std::uint16_t address, const std::string &operation) const;
 };
 
 [[nodiscard]] Hcs08State warm_state(unsigned seed);

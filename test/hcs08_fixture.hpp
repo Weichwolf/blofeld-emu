@@ -31,7 +31,7 @@ struct Access {
   bool operator==(const Access &) const = default;
 };
 
-class Memory : public Bus, public Hcs08KnownMemory {
+class Memory : public Bus {
 public:
   std::array<std::uint8_t, space_bytes> bytes{};
   std::bitset<space_bytes> known, writable;
@@ -59,7 +59,8 @@ public:
     accesses.push_back({.address = address, .value = value, .write = true});
   }
 
-  Hcs08KnownByte read_known_byte(const std::uint16_t address) override {
+protected:
+  Hcs08KnownByte read_known_byte(const std::uint16_t address) {
     if (known[address] || !writable[address]) {
       return {.value = static_cast<std::uint8_t>(read_memory({.address = address}))};
     }
@@ -69,7 +70,7 @@ public:
     return {.value = value, .known = mask};
   }
 
-  void write_known_byte(const ByteWrite access, const std::uint8_t mask) override {
+  void write_known_byte(const ByteWrite access, const std::uint8_t mask) {
     if (mask == byte_mask) {
       write(access.address, access.value);
       return;
@@ -84,6 +85,7 @@ public:
     accesses.push_back({.address = access.address, .value = value, .write = true, .known = mask});
   }
 
+public:
   [[nodiscard]] std::uint8_t peek(const std::uint16_t address) const override {
     return known[address] ? bytes[address] : 0;
   }
@@ -124,6 +126,19 @@ public:
   [[noreturn]] void fail(const unsigned address, const std::string &operation) const {
     throw Fault("Unknown HCS08 fixture " + operation + " address=" + hex(address) +
                 " pc=" + hex(context.pc) + " ccr=" + hex(context.ccr));
+  }
+};
+
+// Only a board whose partial accesses have been qualified opts into masked RAM.
+// Inheriting ordinary RAM helpers must not bypass a derived owner's policies.
+class MaskedMemory : public Memory, public Hcs08KnownMemory {
+public:
+  Hcs08KnownByte read_known_byte(const std::uint16_t address) override {
+    return Memory::read_known_byte(address);
+  }
+
+  void write_known_byte(const ByteWrite access, const std::uint8_t mask) override {
+    Memory::write_known_byte(access, mask);
   }
 };
 

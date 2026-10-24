@@ -1933,3 +1933,14 @@ in trusted joint checkpoints. The free cycle supplies no invented memory read.
 Untimed stepping/retirement clocks refuse the owned sequence/queue. Instruction
 queue consumption/invalidation, physical source/clock/latching, normal controller
 boot and all full update/recovery/device acceptance requirements remain open.
+
+HCS08 instruction admission (hcs08-instruction-reservation.txt): the explicit
+retirement-reference clock reserves each accepted instruction before its budget.
+Late IRQs cannot replace its native completion; initially eligible sources
+refuse before opcode fetch or elapsed period. Independent instruction/store/frame
+expectations, partial knowledge, stale/cross-CPU owners, rewind/fork identities,
+destroyed-owner fresh graph restores, snapshot mismatches and failure observers
+are covered. Masked RAM is an explicit board capability; inherited ordinary RAM
+helpers cannot bypass restricted write policies or application reset ownership.
+This does not qualify instruction-bus queue consumption, physical interrupt
+sampling, common-clock controller execution or complete update/recovery.

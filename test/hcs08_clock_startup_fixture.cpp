@@ -7,6 +7,7 @@
 #include "blofeld/hcs08_flash.hpp"
 #include "blofeld/hcs08_gpio.hpp"
 #include "blofeld/hcs08_icg.hpp"
+#include "blofeld/hcs08_known_memory.hpp"
 #include "blofeld/hcs08_spi.hpp"
 #include "blofeld/hcs08_system_options.hpp"
 #include "hcs08_fixture.hpp"
@@ -111,6 +112,25 @@ void ApplicationMemory::acknowledge_interrupt(const std::uint16_t vector) {
   ++interrupt_acknowledgements; // CPU acceptance does not clear SPRF/SPTEF.
 }
 
+void ApplicationMemory::check_reset_access(const std::uint16_t address,
+                                           const std::string &operation) const {
+  if (resetting) {
+    throw Fault("HCS08 application " + operation + " address=" + hex(address) +
+                " pc=" + hex(context.pc) + " ccr=" + hex(context.ccr) +
+                ": reset transaction permits only actual FLASH vector reads");
+  }
+}
+
+Hcs08KnownByte ApplicationMemory::read_known_byte(const std::uint16_t address) {
+  check_reset_access(address, "masked read");
+  return hcs08::MaskedMemory::read_known_byte(address);
+}
+
+void ApplicationMemory::write_known_byte(const ByteWrite access, const std::uint8_t mask) {
+  check_reset_access(access.address, "masked write");
+  hcs08::MaskedMemory::write_known_byte(access, mask);
+}
+
 void ApplicationMemory::begin_reset(const ExecutionContext value) {
   begin_instruction(value);
   resetting = true;
@@ -150,6 +170,7 @@ std::uint8_t ApplicationMemory::read(const std::uint16_t address) {
 }
 
 void ApplicationMemory::write(const std::uint16_t address, const std::uint8_t value) {
+  check_reset_access(address, "write");
   require(!resetting, "An instruction cannot store during a CPU vector transaction");
   if (address >= hf::first) {
     throw Fault("Unqualified startup FLASH write address=" + hex(address) +

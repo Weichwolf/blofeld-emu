@@ -3,6 +3,7 @@
 #include "blofeld/dsp_shi.hpp"
 #include "blofeld/hcs08.hpp"
 #include "blofeld/hcs08_flash.hpp"
+#include "blofeld/hcs08_known_memory.hpp"
 #include "blofeld/hcs08_spi.hpp"
 #include "blofeld/private_file.hpp"
 #include "hcs08_clock_startup_fixture.hpp"
@@ -140,6 +141,37 @@ void unchanged_supplied_pages(const app::ApplicationMemory &memory,
               "Every supplied original instruction/data/calibration byte remains unchanged");
     }
   }
+}
+
+void reset_storage_policy(const std::span<const std::uint8_t> records) {
+  app::ApplicationMemory memory(records, {.seed = 0, .trim = packaged_trim, .observation = -1});
+  memory.warm_reset();
+  const std::array<std::uint8_t, 1> own_byte{flags};
+  memory.install(saved_ccr, own_byte);
+  memory.begin_reset({.pc = return_pc, .ccr = flags});
+  for (unsigned operation = 0; operation < 3; ++operation) {
+    const auto error = rejected([&] {
+      if (operation == 0) {
+        static_cast<void>(memory.read_known_byte(saved_ccr));
+      } else if (operation == 1) {
+        memory.write_known_byte({.address = saved_ccr, .value = flags}, ccr_mask);
+      } else {
+        memory.write(saved_ccr, flags);
+      }
+    });
+    require(error.contains("address=0x047b pc=0xe000 ccr=0x0061") &&
+                error.contains("reset transaction") && memory.accesses.empty() &&
+                memory.known[saved_ccr] && memory.bytes[saved_ccr] == flags,
+            "Qualified application masked reads/writes and ordinary writes cannot bypass reset "
+            "transaction ownership or commit a RAM prefix");
+  }
+  memory.end_reset();
+  require(memory.read_known_byte(saved_ccr).known == byte_mask,
+          "The real owner resumes fully known RAM reads after reset completes");
+  memory.write_known_byte({.address = saved_ccr, .value = flags}, ccr_mask);
+  require(!memory.known[saved_ccr] && memory.partial_known[saved_ccr] == ccr_mask &&
+              rejected([&] { (void)memory.read(saved_ccr); }).contains("address=0x047b"),
+          "Explicit masked storage remains available outside reset without ordinary zero fill");
 }
 
 Hcs08State bus_foreground(const unsigned seed) {
@@ -326,6 +358,7 @@ int main(const int count, char **arguments) {
     require(count == 3 || bus_mode,
             "Expected pinned supplied pages, private trace and optional IRQ-bus mode");
     const auto records = hp::read_input(arguments[1], app::records_bytes);
+    reset_storage_policy(records);
     std::ostringstream trace;
     if (bus_mode) {
       run_bus(records, trace);

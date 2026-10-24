@@ -26,8 +26,13 @@ restores from a partially elapsed LDA. TXS uses the complete H:X minus one;
 LDX immediate retains H. Checkpoints do not replace separate CPU/memory/BDC
 restoration or clear failed native execution.
 
+Instruction admission and late IRQ ownership are qualified separately in
+hcs08-instruction-reservation.txt. The clock samples eligible IRQs before an
+instruction budget and finishes an accepted instruction before another source
+can enter. CPU/BDC/clock snapshots retain the same opaque active claim.
+
 This explicit reference contract does not model per-cycle operand/prefetch
-transactions, wait states, interrupts, oscillator/reset phases, peripheral clocks
+transactions, wait states, IRQ entry timing, oscillator/reset phases, peripheral clocks
 or concurrent BDC arbitration. Its periods are not a calibrated board frequency.
 These remain required before full normal controller execution and physical
 update/recovery equivalence. No concurrency, realtime callback, physical traffic

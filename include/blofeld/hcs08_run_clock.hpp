@@ -6,6 +6,7 @@
 #include "blofeld/hcs08_bdc.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -38,6 +39,7 @@ private:
   friend class Hcs08RunClock;
   Hcs08RunCheckpoint() = default;
   Hcs08RunState state_;
+  std::optional<Hcs08InstructionReservation> reservation_;
 };
 
 // Native architectural effects commit at the end of the documented instruction
@@ -57,10 +59,12 @@ public:
 
 private:
   void healthy() const;
+  void check_reservation() const;
   [[noreturn]] void fail(const std::string &reason) const;
   Bus &bus_;
   Hcs08Bdc &bdc_;
   Hcs08RunState state_;
+  std::optional<Hcs08InstructionReservation> reservation_;
   bool healthy_ = true;
 };
 } // namespace blofeld

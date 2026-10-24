@@ -76,6 +76,11 @@ public:
   [[nodiscard]] bool start_irq_bus(Hcs08IrqBusContract contract);
   void advance_irq_bus();
   [[nodiscard]] std::optional<Hcs08IrqBusState> irq_bus_state() const;
+  [[nodiscard]] std::optional<Hcs08InstructionReservation>
+  reserve_instruction(Hcs08InstructionContract contract);
+  [[nodiscard]] bool instruction_reserved() const;
+  [[nodiscard]] bool reservation_matches(const Hcs08InstructionReservation &reservation) const;
+  void retire_reserved_instruction(const Hcs08InstructionReservation &reservation);
   [[nodiscard]] std::uint8_t status() const;
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] Hcs08BdcState state() const;
@@ -85,6 +90,7 @@ public:
 
 private:
   void healthy() const;
+  void complete_cpu_step();
   [[noreturn]] void fail(const std::string &operation, const std::string &reason) const;
   [[nodiscard]] unsigned frame_size(std::uint8_t command) const;
   [[nodiscard]] std::uint16_t argument() const;

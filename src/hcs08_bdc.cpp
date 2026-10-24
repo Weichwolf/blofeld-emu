@@ -154,6 +154,43 @@ void Hcs08Bdc::step_cpu() {
   if (state_.active) { fail("CPU step", "active background mode owns the halted CPU"); }
   healthy_ = false;
   cpu_.step();
+  complete_cpu_step();
+}
+
+std::optional<Hcs08InstructionReservation>
+Hcs08Bdc::reserve_instruction(const Hcs08InstructionContract contract) {
+  healthy();
+  if (contract != Hcs08InstructionContract::reference_instruction_retirement) {
+    fail("instruction admission", "requires the explicit retirement reference contract");
+  }
+  if (state_.active) { return {}; }
+  healthy_ = false;
+  const auto reservation = cpu_.reserve_instruction(contract);
+  healthy_ = true;
+  return reservation;
+}
+
+bool Hcs08Bdc::instruction_reserved() const {
+  healthy();
+  return cpu_.instruction_reserved();
+}
+
+bool Hcs08Bdc::reservation_matches(const Hcs08InstructionReservation &reservation) const {
+  healthy();
+  return cpu_.reservation_matches(reservation);
+}
+
+void Hcs08Bdc::retire_reserved_instruction(const Hcs08InstructionReservation &reservation) {
+  healthy();
+  if (state_.active) {
+    fail("instruction retirement", "active background mode owns the halted CPU");
+  }
+  healthy_ = false;
+  cpu_.retire_reserved_instruction(reservation);
+  complete_cpu_step();
+}
+
+void Hcs08Bdc::complete_cpu_step() {
   if (cpu_.background_requested()) {
     if ((state_.control & enable_mask) == 0 ||
         memory_.secured({.pc = cpu_.state().pc, .ccr = cpu_.state().ccr})) {
