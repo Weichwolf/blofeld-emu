@@ -1914,6 +1914,15 @@ See hcs08-programmer-entry.txt. Warm entry remains an independent regression.
 Candidate S08SPIV3 SPI: explicit untimed master-edge owner supports real bit
 shifting, register/ack semantics, buffers/overrun/IRQ requests and trusted copies.
 Original direct SPI ISR gate checks own foreground frames/rings and native RTI
-against actual HCS08-to-DSP-SHI pin transfers (hcs08-spi.txt). CPU IRQ admission,
-physical timing/nets and full boot/controller/DSP event provenance remain open.
+against actual HCS08-to-DSP-SHI pin transfers (hcs08-spi.txt). Scheduled IRQ
+admission/timing, physical nets and full boot/controller/DSP event provenance
+remain open. Architectural untimed admission is covered below.
 No original FSTAT policy or firmware byte changes are implied.
+
+HCS08 architectural IRQ: actual eligible source/frame/vector entry preserves
+unknown CCR/A/X bits in memory-owned masked RAM. Native RTI restores masks;
+ordinary reads/fetches remain strict. Directed vector/wrap/failure/BDC controls
+and original SPI IRQ execution cover two untimed schedules, including the real
+unread final RX byte after original masking. See hcs08-irq.txt. Nine-cycle IRQ,
+prefetch/bus ordering, derivative priority and boot-origin timing remain open;
+this does not qualify timed run-clock admission or whole device behavior.

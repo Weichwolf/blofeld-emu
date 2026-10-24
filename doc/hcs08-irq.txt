@@ -1,0 +1,57 @@
+HCS08 architectural IRQ and native masked RTI
+
+  cmake --build --preset strict --target blofeld-hcs08-irq-test \
+    blofeld-original-hcs08-spi-irq-test format-check
+  ctest --test-dir build/strict -j1 \
+    -R '^(hcs08_irq|original_hcs08_spi_irq)$' --output-on-failure
+
+Primary references are GT5.4.1/5.4.3, figure5-1 and Family6.4.2/RTI;
+identities and URLs remain in hcs08-reference.json. The architecture boundary
+services an actual eligible maskable Bus request: PCL/PCH/X/A/CCR descending
+writes, I set, actual even vector read and explicit acknowledgement. H is not
+automatically saved. Acknowledgement does not clear a peripheral source flag.
+No instruction retires and no cycle count, prefetch or bus phase is supplied.
+All even architecture vector slots FFC0..FFFA are accepted; actual derivative
+source/reserved-slot priority remains the board owner's responsibility. Reset,
+SWI, odd/out-of-range vectors, foreign IRQ kinds and unknown I/stacked PC fail.
+
+Hcs08KnownMemory is an optional board capability, independent of generic Bus.
+It must retain actual RAM bit masks with ordinary access/effect checks. IRQ
+frames preserve unknown CCR/A/X bits. Ordinary data reads/fetches still reject
+partial bytes. Only qualified native RTI raw copies recover actual frame masks;
+PC reads remain fully known. RTI leaves H at its actual ISR value/knownness.
+Missing masked-storage capability refuses a partial frame before any write.
+Memory masks are part of board state and must accompany CPU checkpoints.
+
+service_interrupt is architectural, explicitly untimed. pending_interrupt is
+side-effect-free and does not claim a source. The BDC wrapper holds admission
+while active. Instruction step and the current run-clock do not silently enter
+an IRQ under the next opcode's budget: an eligible unserviced IRQ still fails.
+A separate clock owner must qualify the nine-cycle sequence, bus/prefetch
+ordering and source priority/latching before timed runtime integration.
+
+hcs08_irq independently checks30 slots/eight wrapping stack positions,27
+A/X/CCR mask combinations with54 fresh joint restores, all nine injected
+entry/write/vector/ACK failure cuts, CPU masking, unknown mask and invalid
+source refusals, reentrancy, real BDC GO/hold and ordinary partial-data refusal.
+A failure retains the committed stack/SP/vector prefix and quarantines the CPU.
+Five native RTI read cuts additionally retain each actually restored register
+and its mask immediately, even when a later frame read fails. Retirement hooks
+see coherent values/masks; a refusing hook retains native effects and quarantines.
+These are finite directed cases, not fuzz execution.
+
+original_hcs08_spi_irq uses actual original FFE0->EA29 vector reads and native
+PSHH/PULH/RTI from an own foreground declared once. Eight register contexts and
+two explicit untimed schedules execute64 original handlers/1240 instructions,
+320 real frame writes and768 actual master transitions. Unknown CCR H remains
+unknown across every entry/return. Actual DSP SHI MISO/MOSI produces16 own words.
+The prefetch schedule leaves its genuine final RX byte unread after original
+TX IRQ masking; the completed-byte schedule stores all three received bytes.
+No host IRQ frame, handler PC, RX byte or successful transaction is injected.
+The existing direct-frame original_hcs08_spi gate remains independent.
+
+Foreground/RAM, digital scheduling and SHI peer setup are declared fixtures.
+These gates do not establish boot-origin provenance, physical IRQ/clock/SPI
+latency, PCB wiring, native DSP event handling, normal Keyboard boot/scanning,
+main1.25 MIDI/audio/persistence, original whole update/recovery or real-device
+flash safety. Strict ICG/FSTAT and missing ROM/NAND data remain unresolved.

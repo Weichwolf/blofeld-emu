@@ -12,6 +12,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -45,10 +46,14 @@ public:
   Hcs08SystemOptions options{Hcs08FlashContract::candidate_gt8a};
   std::vector<Access> peripheral_accesses, flash_reads;
   bool resetting = false;
+  unsigned interrupt_entries = 0, interrupt_acknowledgements = 0;
 
   void bind(int observation);
   void warm_reset();
   void begin_instruction(ExecutionContext value) override;
+  void begin_interrupt(InterruptRequest request, bool reuse_stack) override;
+  void acknowledge_interrupt(std::uint16_t vector) override;
+  [[nodiscard]] std::optional<InterruptRequest> interrupt_request(std::uint8_t ccr) const override;
   void begin_reset(ExecutionContext value) override;
   void end_reset() override;
   std::uint8_t read(std::uint16_t address) override;

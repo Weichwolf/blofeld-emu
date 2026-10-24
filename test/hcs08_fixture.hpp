@@ -3,6 +3,7 @@
 
 #include "blofeld/bus.hpp"
 #include "blofeld/hcs08.hpp"
+#include "blofeld/hcs08_known_memory.hpp"
 
 #include <array>
 #include <bitset>
@@ -26,13 +27,15 @@ struct Access {
   unsigned address;
   unsigned value;
   bool write;
+  std::uint8_t known = byte_mask;
   bool operator==(const Access &) const = default;
 };
 
-class Memory : public Bus {
+class Memory : public Bus, public Hcs08KnownMemory {
 public:
   std::array<std::uint8_t, space_bytes> bytes{};
   std::bitset<space_bytes> known, writable;
+  std::array<std::uint8_t, space_bytes> partial_known{};
   mutable std::bitset<space_bytes> decoded;
   std::vector<Access> accesses;
   std::optional<InterruptRequest> interrupt;
@@ -50,9 +53,35 @@ public:
     if (!writable[address]) { fail(address, "write"); }
     bytes[address] = value;
     known.set(address);
+    partial_known[address] = 0;
     ++generation;
     if (decoded[address]) { ++code_generation; }
     accesses.push_back({.address = address, .value = value, .write = true});
+  }
+
+  Hcs08KnownByte read_known_byte(const std::uint16_t address) override {
+    if (known[address] || !writable[address]) {
+      return {.value = static_cast<std::uint8_t>(read_memory({.address = address}))};
+    }
+    const auto mask = partial_known[address];
+    const auto value = static_cast<std::uint8_t>(bytes[address] & mask);
+    accesses.push_back({.address = address, .value = value, .write = false, .known = mask});
+    return {.value = value, .known = mask};
+  }
+
+  void write_known_byte(const ByteWrite access, const std::uint8_t mask) override {
+    if (mask == byte_mask) {
+      write(access.address, access.value);
+      return;
+    }
+    if (!writable[access.address]) { fail(access.address, "masked RAM write"); }
+    const auto value = static_cast<std::uint8_t>(access.value & mask);
+    bytes[access.address] = value;
+    known.reset(access.address);
+    partial_known[access.address] = mask;
+    ++generation;
+    if (decoded[access.address]) { ++code_generation; }
+    accesses.push_back({.address = access.address, .value = value, .write = true, .known = mask});
   }
 
   [[nodiscard]] std::uint8_t peek(const std::uint16_t address) const override {
@@ -86,6 +115,7 @@ public:
     for (unsigned n = 0; n < data.size(); ++n) {
       bytes.at(address + n) = data[n];
       known.set(address + n);
+      partial_known[address + n] = 0;
     }
     ++generation;
     ++code_generation;

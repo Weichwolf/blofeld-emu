@@ -71,6 +71,7 @@ public:
   // The clock owner, not a status read, establishes the documented timeout.
   void communication_timeout();
   void step_cpu();
+  [[nodiscard]] bool service_interrupt();
   [[nodiscard]] std::uint8_t status() const;
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] Hcs08BdcState state() const;

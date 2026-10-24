@@ -18,6 +18,10 @@ constexpr unsigned ldhx_stack = 0xfe, sthx_stack = 0xff;
 constexpr unsigned lda_direct = 0xb6, lda_extended = 0xc6, clr_direct = 0x3f;
 constexpr unsigned mov_immediate_direct = 0x6e, bit_immediate = 0xa5, beq = 0x27;
 constexpr unsigned cmp_immediate = 0xa1, jsr_extended = 0xcd, ais = 0xa7;
+constexpr unsigned ldx_direct = 0xbe, and_immediate = 0xa4, inc_a = 0x4c, inc_x = 0x5c;
+constexpr unsigned mov_direct = 0x4e, sta_indexed16 = 0xd7, cmp_direct = 0xb1;
+constexpr unsigned lda_indexed16 = 0xd6, cmp_extended = 0xc1;
+constexpr unsigned push_h = 0x8b, pull_h = 0x8a, tax = 0x97, txa = 0x9f, brclr7 = 0x0f;
 
 [[noreturn]] void unqualified(const Hcs08State &before, const unsigned opcode) {
   throw Fault("HCS08 partial-CCR instruction operation address=" + hex(before.pc) + " pc=" +
@@ -54,6 +58,13 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     case clr_direct:
     case mov_immediate_direct:
     case bit_immediate:
+    case ldx_direct:
+    case and_immediate:
+    case inc_a:
+    case inc_x:
+    case mov_direct:
+    case lda_indexed16:
+    case sta_indexed16:
     case sta_direct:
     case sthx_direct:
     case clrh:
@@ -61,7 +72,10 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     case clra:
     case clr_indexed: defined = vnz; break; // CLR preserves C, including unknown C.
     case cphx_immediate:
+    case cmp_extended:
+    case cmp_direct:
     case cmp_immediate: defined = vnz | carry; break;
+    case brclr7: defined = carry; break; // C copies the tested memory bit, not an incoming flag.
     case stack_prefix:
       qualify_stack(bus, before);
       defined = vnz;
@@ -73,6 +87,10 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
       if ((before.ccr_known & zero) == 0) { unqualified(before, opcode); }
       break;
     case jsr_extended:
+    case push_h:
+    case pull_h:
+    case tax:
+    case txa:
     case ais:
     case bra:
     case aix:

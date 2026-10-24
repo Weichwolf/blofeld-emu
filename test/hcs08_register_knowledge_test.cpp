@@ -53,6 +53,10 @@ constexpr unsigned cli = 0x9a;
 constexpr unsigned sei = 0x9b;
 constexpr unsigned clc = 0x98;
 constexpr unsigned sec = 0x99;
+constexpr unsigned ldx_direct = 0xbe, and_immediate = 0xa4, inc_a = 0x4c, inc_x = 0x5c;
+constexpr unsigned mov_direct = 0x4e, cmp_direct = 0xb1;
+constexpr unsigned lda_indexed16 = 0xd6, cmp_extended = 0xc1;
+constexpr unsigned push_h = 0x8b, pull_h = 0x8a, tax = 0x97, txa = 0x9f, brclr7 = 0x0f, rti = 0x80;
 constexpr unsigned vector_high = 0xfffe;
 constexpr unsigned vector_low = 0xffff;
 constexpr unsigned sign_bit = 0x80;
@@ -183,10 +187,15 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case clra:
     case tpa:
     case ldx_immediate:
+    case ldx_direct:
     case clrx:
     case ldhx_immediate:
     case clrh:
     case mov_immediate_direct:
+    case mov_direct:
+    case pull_h:
+    case brclr7:
+    case rti:
     case clr_direct:
     case bra:
     case bcs:
@@ -199,11 +208,20 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case sei:
     case clc:
     case sec: return true;
+    case lda_indexed16:
     case txs:
     case aix:
     case cphx_immediate:
     case sthx_direct:
     case clr_indexed: return s.hx_known == word_mask;
+    case push_h: return (s.hx_known & reset_hx_known) == reset_hx_known;
+    case txa:
+    case inc_x: return (s.hx_known & byte_mask) == byte_mask;
+    case tax:
+    case inc_a:
+    case and_immediate:
+    case cmp_direct:
+    case cmp_extended:
     case sta_direct:
     case sta_extended:
     case bit_immediate:
@@ -213,7 +231,92 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
   }
 }
 
+Hcs08State irq_body_effect(const unsigned opcode, Hcs08State s) {
+  switch (opcode) {
+    case ldx_direct:
+      s.hx = static_cast<std::uint16_t>((s.hx & reset_hx_known) | data_byte);
+      s.hx_known |= byte_mask;
+      s.ccr = initial_ccr;
+      break;
+    case pull_h:
+      s.hx =
+          static_cast<std::uint16_t>((s.hx & byte_mask) | static_cast<unsigned>(data_byte << 8U));
+      s.hx_known |= reset_hx_known;
+      ++s.sp;
+      break;
+    case push_h: --s.sp; break;
+    case inc_x:
+      ++s.hx;
+      s.ccr = initial_ccr;
+      break;
+    case inc_a:
+      ++s.a;
+      s.ccr = initial_ccr;
+      break;
+    case tax:
+      s.hx = static_cast<std::uint16_t>((s.hx & reset_hx_known) | data_byte);
+      s.hx_known |= byte_mask;
+      break;
+    case txa:
+      s.a = index_low;
+      s.a_known = byte_mask;
+      break;
+    case and_immediate:
+      s.a = operand;
+      s.ccr = initial_ccr;
+      break;
+    case cmp_extended:
+    case cmp_direct: s.ccr = tap_ccr; break;
+    case mov_direct: s.ccr = initial_ccr; break;
+    case brclr7: s.ccr = carry_clear_ccr; break;
+    case rti:
+      s.a = data_byte;
+      s.a_known = byte_mask;
+      s.hx = static_cast<std::uint16_t>((s.hx & reset_hx_known) | index_low);
+      s.hx_known |= byte_mask;
+      s.sp += 5;
+      s.ccr = initial_ccr;
+      break;
+    default: break;
+  }
+  return s;
+}
+
+unsigned instruction_length(const unsigned opcode) {
+  switch (opcode) {
+    case ldhx_immediate:
+    case lda_extended:
+    case lda_indexed16:
+    case cmp_extended:
+    case sta_extended:
+    case cphx_immediate:
+    case jsr_extended:
+    case mov_immediate_direct:
+    case mov_direct:
+    case brclr7:
+    case rti: return 3; // Own RTI frame returns to8003.
+    case lda_immediate:
+    case lda_direct:
+    case ldx_immediate:
+    case ldx_direct:
+    case and_immediate:
+    case cmp_direct:
+    case aix:
+    case sthx_direct:
+    case sta_direct:
+    case bit_immediate:
+    case cmp_immediate:
+    case clr_direct:
+    case bra:
+    case bcs:
+    case beq:
+    case ais: return 2;
+    default: return 1;
+  }
+}
+
 Hcs08State effect(const unsigned opcode, Hcs08State s) {
+  s = irq_body_effect(opcode, s);
   switch (opcode) {
     case lda_immediate:
       s.a = operand;
@@ -222,6 +325,7 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
       break;
     case lda_direct:
     case lda_extended:
+    case lda_indexed16:
       s.a = data_byte;
       s.a_known = byte_mask;
       s.ccr = initial_ccr;
@@ -273,31 +377,8 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
     case clc: s.ccr = carry_clear_ccr; break;
     default: break;
   }
-  unsigned length = 1;
-  switch (opcode) {
-    case ldhx_immediate:
-    case lda_extended:
-    case sta_extended:
-    case cphx_immediate:
-    case jsr_extended:
-    case mov_immediate_direct: length = 3; break;
-    case lda_immediate:
-    case lda_direct:
-    case ldx_immediate:
-    case aix:
-    case sthx_direct:
-    case sta_direct:
-    case bit_immediate:
-    case cmp_immediate:
-    case clr_direct:
-    case bra:
-    case bcs:
-    case beq:
-    case ais: length = 2; break;
-    default: break;
-  }
-  s.pc = static_cast<std::uint16_t>(entry + length);
-  if (opcode == bra || opcode == bcs) { s.pc += operand; }
+  s.pc = static_cast<std::uint16_t>(entry + instruction_length(opcode));
+  if (opcode == bra || opcode == bcs || opcode == brclr7) { s.pc += operand; }
   if (opcode == jsr_extended) { s.pc = extended_address; }
   return s;
 }
@@ -306,6 +387,10 @@ void opcode_case(Memory &memory, Hcs08 &cpu, const unsigned opcode, const Hcs08S
   memory.bytes.fill(data_byte);
   const std::array<std::uint8_t, 3> code{static_cast<std::uint8_t>(opcode), operand, operand};
   memory.install(entry, code);
+  if (opcode == rti) {
+    constexpr std::array<std::uint8_t, 5> frame{0x79, 0x5a, 0x34, 0x80, 3};
+    memory.install(initial_sp + 1, frame);
+  }
   memory.accesses.clear();
   cpu.set_state(initial);
   const auto before = cpu.state();
@@ -327,6 +412,13 @@ void opcode_case(Memory &memory, Hcs08 &cpu, const unsigned opcode, const Hcs08S
     if (opcode == jsr_extended) {
       require(memory.bytes[initial_sp] == 3 && memory.bytes[initial_sp - 1] == sign_bit,
               "Native JSR pushes the genuine return address while A remains unknown");
+    }
+    if (opcode == push_h) {
+      require(memory.bytes[initial_sp] == index_high, "PSHH pushes actual independently known H");
+    }
+    if (opcode == mov_direct) {
+      require(memory.bytes[operand] == data_byte,
+              "MOV direct copies the actual independent source byte");
     }
     if (opcode == mov_immediate_direct) {
       require(memory.bytes[operand] == operand && cpu.state().a_known == before.a_known,

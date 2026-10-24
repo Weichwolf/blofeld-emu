@@ -43,6 +43,10 @@ constexpr unsigned clc = 0x98;
 constexpr unsigned sec = 0x99;
 constexpr unsigned ldhx_stack = 0xfe;
 constexpr unsigned sthx_stack = 0xff;
+constexpr unsigned ldx_direct = 0xbe, and_immediate = 0xa4, inc_a = 0x4c, inc_x = 0x5c;
+constexpr unsigned mov_direct = 0x4e, cmp_direct = 0xb1;
+constexpr unsigned lda_indexed16 = 0xd6, cmp_extended = 0xc1;
+constexpr unsigned push_h = 0x8b, pull_h = 0x8a, tax = 0x97, txa = 0x9f, brclr7 = 0x0f;
 constexpr unsigned byte_mask = 0xff, high_mask = 0xff00, word_mask = 0xffff;
 
 [[noreturn]] void unqualified(const Hcs08State &s, const unsigned opcode) {
@@ -74,42 +78,66 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case lda_direct:                        // LDA direct
     case lda_extended:                      // LDA extended
     case clra: result.a = byte_mask; break; // CLRA
-    case tpa:                               // TPA; partial CCR cannot be converted into known A.
+    case lda_indexed16:
+      if (s.hx_known != word_mask) { unqualified(s, opcode); }
+      result.a = byte_mask;
+      break;
+    case tpa: // TPA; partial CCR cannot be converted into known A.
       if (s.ccr_known != Hcs08State::all_ccr) { unqualified(s, opcode); }
       result.a = byte_mask;
       break;
-    case ldx_immediate:                                // LDX immediate
+    case ldx_immediate: // LDX immediate
+    case ldx_direct:
     case clrx: result.hx |= byte_mask; break;          // CLRX
     case ldhx_immediate: result.hx = word_mask; break; // LDHX immediate
-    case clrh: result.hx |= high_mask; break;          // CLRH
-    case txs:                                          // TXS
-    case aix:                                          // AIX
-    case cphx_immediate:                               // CPHX immediate
-    case sthx_direct:                                  // STHX direct
-    case clr_indexed:                                  // CLR indexed
+    case clrh: // CLRH and PULH define H without consuming its prior value.
+    case pull_h: result.hx |= high_mask; break;
+    case push_h:
+      if ((s.hx_known & high_mask) != high_mask) { unqualified(s, opcode); }
+      break;
+    case inc_x:
+    case txa:
+      if ((s.hx_known & byte_mask) != byte_mask) { unqualified(s, opcode); }
+      if (opcode == txa) { result.a = byte_mask; }
+      break;
+    case tax:
+      if (s.a_known != byte_mask) { unqualified(s, opcode); }
+      result.hx |= byte_mask;
+      break;
+    case txs:            // TXS
+    case aix:            // AIX
+    case cphx_immediate: // CPHX immediate
+    case sthx_direct:    // STHX direct
+    case clr_indexed:    // CLR indexed
       if (s.hx_known != word_mask) { unqualified(s, opcode); }
       break;
     case sta_direct:    // STA direct
     case sta_extended:  // STA extended
     case bit_immediate: // BIT immediate
     case cmp_immediate: // CMP immediate
-    case tap:           // TAP
+    case cmp_extended:
+    case cmp_direct:
+    case and_immediate:
+    case inc_a:
+    case tap: // TAP
       if (s.a_known != byte_mask) { unqualified(s, opcode); }
       break;
     case stack_prefix: return stack(bus, s);
     case mov_immediate_direct: // MOV immediate,direct
-    case clr_direct:           // CLR direct
-    case bra:                  // BRA
-    case bcs:                  // BCS
-    case beq:                  // BEQ
-    case jsr_extended:         // JSR extended
-    case ais:                  // AIS
-    case nop:                  // NOP
-    case bgnd:                 // BGND
-    case cli:                  // CLI
-    case sei:                  // SEI
-    case clc:                  // CLC
-    case sec: break;           // SEC
+    case mov_direct:
+    case brclr7:
+    case clr_direct:   // CLR direct
+    case bra:          // BRA
+    case bcs:          // BCS
+    case beq:          // BEQ
+    case jsr_extended: // JSR extended
+    case ais:          // AIS
+    case nop:          // NOP
+    case bgnd:         // BGND
+    case cli:          // CLI
+    case sei:          // SEI
+    case clc:          // CLC
+    case sec: break;   // SEC
     default: unqualified(s, opcode);
   }
   return result;

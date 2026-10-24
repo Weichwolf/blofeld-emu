@@ -3,9 +3,11 @@
 
 #include "address.hh"
 #include "blofeld/bus.hpp"
+#include "blofeld/hcs08_known_memory.hpp"
 #include "error.hh"
 #include "globalcontext.hh"
 #include "hcs08_ccr.hpp"
+#include "hcs08_interrupts.hpp"
 #include "hcs08_native.hpp"
 #include "hcs08_registers.hpp"
 #include "memstate.hh"
@@ -18,6 +20,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -25,7 +28,7 @@ namespace blofeld {
 namespace native = detail::hcs08;
 
 namespace {
-constexpr unsigned fixed_ccr = 0x60;
+constexpr unsigned fixed_ccr = 0x60, address_space = 65536;
 
 std::uint16_t read_reset_vector(Bus &bus, const ExecutionContext context) {
   bus.begin_instruction(context);
@@ -62,7 +65,12 @@ public:
     memory.setMemoryBank(ram.get());
     memory.setMemoryBank(registers.get());
     memory.setMemoryBank(temporaries.get());
-    executor = std::make_unique<native::InstructionExecutor>(bus, translator, memory, layout.pc);
+    executor = std::make_unique<native::InstructionExecutor>(
+        bus,
+        translator,
+        memory,
+        layout,
+        native::ReturnKnowledge{.ccr = ccr_known, .a = a_known, .hx = hx_known});
   }
 
   void refresh(const bool force = false) {
@@ -77,6 +85,45 @@ public:
   }
 
   void normalize_ccr() { memory.setValue(&layout.ccr, memory.getValue(&layout.ccr) | fixed_ccr); }
+
+  void push_irq_byte(const Hcs08KnownByte byte) {
+    const auto sp = static_cast<std::uint16_t>(memory.getValue(&layout.sp));
+    if (byte.known == Hcs08KnownByte::all) {
+      bus.write(sp, byte.value);
+    } else {
+      auto *known = dynamic_cast<Hcs08KnownMemory *>(&bus);
+      if (known == nullptr) { throw Fault("HCS08 IRQ frame requires masked RAM storage"); }
+      known->write_known_byte({.address = sp, .value = byte.value}, byte.known);
+    }
+    memory.setValue(&layout.sp, static_cast<std::uint16_t>(sp + address_space - 1U));
+  }
+
+  void enter_interrupt(const Hcs08State &before, const std::uint16_t vector) {
+    constexpr unsigned byte_mask = 0xff;
+    constexpr unsigned shift = 8;
+    constexpr unsigned interrupt = 8;
+    if ((before.ccr_known != Hcs08State::all_ccr || before.a_known != Hcs08State::all_a ||
+         (before.hx_known & byte_mask) != byte_mask) &&
+        dynamic_cast<Hcs08KnownMemory *>(&bus) == nullptr) {
+      throw Fault("HCS08 IRQ frame write address=" +
+                  hex(static_cast<std::uint16_t>(before.sp + address_space - 4U)) +
+                  " pc=" + hex(before.pc) + " ccr=" + hex(before.ccr) +
+                  ": unknown register bits require explicit masked RAM storage");
+    }
+    bus.begin_interrupt({.vector = vector, .kind = InterruptKind::maskable}, false);
+    push_irq_byte({.value = static_cast<std::uint8_t>(before.pc & byte_mask)});
+    push_irq_byte({.value = static_cast<std::uint8_t>(before.pc >> shift)});
+    push_irq_byte({.value = static_cast<std::uint8_t>(before.hx & byte_mask),
+                   .known = static_cast<std::uint8_t>(before.hx_known & byte_mask)});
+    push_irq_byte({.value = before.a, .known = before.a_known});
+    push_irq_byte({.value = before.ccr, .known = before.ccr_known});
+    ccr_known = static_cast<std::uint8_t>(before.ccr_known | interrupt);
+    memory.setValue(&layout.ccr, before.ccr | interrupt);
+    const auto target = static_cast<std::uint16_t>(bus.read_memory({.address = vector, .size = 2}));
+    memory.setValue(&layout.pc, target);
+    executor->setExecuteAddress(ghidra::Address(translator.getDefaultCodeSpace(), target));
+    bus.acknowledge_interrupt(vector);
+  }
 
   Bus &bus;
   native::CodeImage image;
@@ -251,6 +298,34 @@ void Hcs08::reset(const Hcs08ResetEntry mode, const Hcs08ResetCause cause) {
   set_state(entry);
 }
 
+std::optional<std::uint16_t> Hcs08::pending_interrupt() const {
+  if (impl_->active || !impl_->healthy || !impl_->initialized) {
+    throw Fault("HCS08 IRQ query requires a healthy completed native boundary");
+  }
+  return native::pending_interrupt(impl_->bus, state());
+}
+
+bool Hcs08::service_interrupt() {
+  const native::ExecutionGuard guard(impl_->active);
+  if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  if (background_requested()) { throw Fault("HCS08 BGND request requires an owning BDC decision"); }
+  impl_->healthy = false;
+  const auto before = state();
+  try {
+    const auto vector = native::pending_interrupt(impl_->bus, before);
+    if (!vector) {
+      impl_->healthy = true;
+      return false;
+    }
+    impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
+    impl_->enter_interrupt(before, *vector);
+    impl_->healthy = true;
+    return true;
+  } catch (const Fault &error) {
+    throw Fault("HCS08 interrupt entry pc=" + hex(before.pc) + ": " + error.what());
+  }
+}
+
 void Hcs08::step() {
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
@@ -263,18 +338,32 @@ void Hcs08::step() {
   }
   try {
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
-    if (impl_->bus.interrupt_request(before.ccr)) {
-      throw Fault("HCS08 interrupt entry is not qualified");
+    if (native::pending_interrupt(impl_->bus, before)) {
+      throw Fault(
+          "HCS08 interrupt entry is not qualified by instruction stepping; service required");
     }
-    const auto registers = detail::hcs08::registers_after(impl_->bus, before);
-    const auto known = detail::hcs08::ccr_after(impl_->bus, before);
+    impl_->bus.check_execute({.address = before.pc, .length = 1});
+    constexpr unsigned rti = 0x80;
+    const bool returning = impl_->bus.peek(before.pc) == rti;
+    auto registers = returning
+                         ? native::RegisterKnowledge{.a = before.a_known, .hx = before.hx_known}
+                         : native::registers_after(impl_->bus, before);
+    auto known = returning ? before.ccr_known : native::ccr_after(impl_->bus, before);
+    impl_->executor->prepare_return_frame(returning ? std::optional(before.sp) : std::nullopt);
     impl_->refresh();
     impl_->executor->execute();
+    if (returning) {
+      const auto masks = impl_->executor->return_masks();
+      known = static_cast<std::uint8_t>(masks[0] | fixed_ccr);
+      registers.a = masks[1];
+      constexpr unsigned high_mask = 0xff00;
+      registers.hx = static_cast<std::uint16_t>((before.hx_known & high_mask) | masks[2]);
+    }
     impl_->ccr_known = known;
-    impl_->normalize_ccr();
-    impl_->bus.retire_instruction();
     impl_->a_known = registers.a;
     impl_->hx_known = registers.hx;
+    impl_->normalize_ccr();
+    impl_->bus.retire_instruction();
     impl_->healthy = true;
   } catch (const ghidra::LowlevelError &error) {
     throw Fault("HCS08 execution pc=" + hex(before.pc) + ": " + error.explain);

@@ -13,6 +13,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -88,6 +89,26 @@ void ApplicationMemory::begin_instruction(const ExecutionContext value) {
   flash.context(value);
   icg.context(value);
   spi.context(value);
+}
+
+std::optional<InterruptRequest> ApplicationMemory::interrupt_request(const std::uint8_t ccr) const {
+  constexpr unsigned interrupt_mask = 8;
+  constexpr unsigned spi_vector = 0xffe0;
+  if ((ccr & interrupt_mask) != 0 || !spi.interrupt_requested()) { return {}; }
+  return InterruptRequest{.vector = spi_vector, .kind = InterruptKind::maskable};
+}
+
+void ApplicationMemory::begin_interrupt(const InterruptRequest request, const bool reuse_stack) {
+  constexpr unsigned spi_vector = 0xffe0;
+  require(request.kind == InterruptKind::maskable && request.vector == spi_vector && !reuse_stack,
+          "Only the actual SPI source can begin this candidate running CPU IRQ frame");
+  ++interrupt_entries;
+}
+
+void ApplicationMemory::acknowledge_interrupt(const std::uint16_t vector) {
+  constexpr unsigned spi_vector = 0xffe0;
+  require(vector == spi_vector, "Only the entered real SPI vector may be acknowledged");
+  ++interrupt_acknowledgements; // CPU acceptance does not clear SPRF/SPTEF.
 }
 
 void ApplicationMemory::begin_reset(const ExecutionContext value) {
@@ -236,6 +257,9 @@ void configured(const ApplicationMemory &memory, const Hcs08 &cpu) {
 
 void same_endpoint(const ApplicationMemory &actual, const ApplicationMemory &expected) {
   require(actual.bytes == expected.bytes && actual.known == expected.known &&
+              actual.partial_known == expected.partial_known &&
+              actual.interrupt_entries == expected.interrupt_entries &&
+              actual.interrupt_acknowledgements == expected.interrupt_acknowledgements &&
               actual.retired == expected.retired && actual.accesses == expected.accesses &&
               actual.flash.image() == expected.flash.image() &&
               actual.flash.state() == expected.flash.state() &&

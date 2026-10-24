@@ -3,6 +3,7 @@
 #include "address.hh"
 #include "blofeld/bus.hpp"
 #include "blofeld/hcs08.hpp"
+#include "blofeld/hcs08_known_memory.hpp"
 #include "emulate.hh"
 #include "error.hh"
 #include "globalcontext.hh"
@@ -16,6 +17,7 @@
 #include "types.h"
 #include "xml.hh"
 
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -134,6 +136,7 @@ private:
 struct RegisterLayout {
   ghidra::VarnodeData a;
   ghidra::VarnodeData hx;
+  ghidra::VarnodeData x;
   ghidra::VarnodeData sp;
   ghidra::VarnodeData ccr;
   ghidra::VarnodeData pc;
@@ -142,10 +145,17 @@ struct RegisterLayout {
 inline RegisterLayout register_layout(const ghidra::Translate &translator) {
   return {.a = translator.getRegister("A"),
           .hx = translator.getRegister("HIX"),
+          .x = translator.getRegister("X"),
           .sp = translator.getRegister("SP"),
           .ccr = translator.getRegister("CCR"),
           .pc = translator.getRegister("PC")};
 }
+
+struct ReturnKnowledge {
+  std::uint8_t &ccr;
+  std::uint8_t &a;
+  std::uint16_t &hx;
+};
 
 // Execute exactly one cached translation. Ghidra's EmulatePcodeCache eagerly decodes
 // the following instruction, which can report a fault after the current one has
@@ -155,11 +165,15 @@ public:
   InstructionExecutor(Bus &bus,
                       ghidra::Sleigh &translator,
                       ghidra::MemoryState &memory,
-                      const ghidra::VarnodeData &program_counter)
+                      const RegisterLayout &layout,
+                      const ReturnKnowledge knowledge)
       : EmulateMemory(&memory),
         bus_(bus),
         translator_(translator),
-        program_counter_(program_counter) {
+        program_counter_(layout.pc),
+        layout_(layout),
+        knowledge_(knowledge),
+        known_memory_(dynamic_cast<Hcs08KnownMemory *>(&bus)) {
     ghidra::OpBehavior::registerInstructions(behaviors_, &translator_);
     translator_.getUserOpNames(user_operations_);
   }
@@ -188,6 +202,19 @@ public:
   void clear_translations() {
     if (executing_) { throw Fault("Cannot invalidate an active HCS08 translation"); }
     discard_translations();
+  }
+
+  void prepare_return_frame(const std::optional<std::uint16_t> stack) {
+    return_frame_.reset();
+    if (stack) { return_frame_ = ReturnFrame{.stack = *stack, .pending = std::nullopt}; }
+  }
+
+  [[nodiscard]] std::array<std::uint8_t, 3> return_masks() const {
+    constexpr unsigned all_reads = 7;
+    if (!return_frame_ || return_frame_->seen != all_reads || return_frame_->pending) {
+      throw Fault("HCS08 RTI did not read its actual CCR/A/X frame fields");
+    }
+    return return_frame_->masks;
   }
 
   void execute() {
@@ -240,7 +267,7 @@ protected:
 
   void executeLoad() override {
     const auto access = memory_access(false);
-    write_value(currentOp->getOutput(), bus_.read_memory(access));
+    write_value(currentOp->getOutput(), read_operand(access));
   }
 
   void executeStore() override {
@@ -291,13 +318,68 @@ private:
   [[nodiscard]] ghidra::uintb read_value(const ghidra::VarnodeData *node) const {
     if (node->space != translator_.getDefaultCodeSpace()) { return memstate->getValue(node); }
     if (node->offset > address_mask) { throw Fault("HCS08 constant operand exceeds 16 bits"); }
-    return bus_.read_memory({.address = static_cast<std::uint16_t>(node->offset),
-                             .size = static_cast<unsigned>(node->size)});
+    return read_operand({.address = static_cast<std::uint16_t>(node->offset),
+                         .size = static_cast<unsigned>(node->size)});
+  }
+
+  [[nodiscard]] ghidra::uintb read_operand(const MemoryRead access) const {
+    if (return_frame_ && access.size == 1) {
+      for (unsigned index = 0; index < return_frame_->masks.size(); ++index) {
+        const auto address = static_cast<std::uint16_t>(return_frame_->stack + 1U + index);
+        if (access.address != address) { continue; }
+        if ((return_frame_->seen & (1U << index)) != 0) {
+          throw Fault("HCS08 RTI repeats a qualified raw frame-byte read");
+        }
+        const auto value =
+            known_memory_ != nullptr
+                ? known_memory_->read_known_byte(address)
+                : Hcs08KnownByte{.value = static_cast<std::uint8_t>(bus_.read_memory(access))};
+        if (return_frame_->pending) {
+          throw Fault("HCS08 RTI read precedes completion of its previous raw register copy");
+        }
+        return_frame_->masks[index] = value.known;
+        return_frame_->pending = index;
+        return static_cast<ghidra::uintb>(value.value & value.known);
+      }
+    }
+    if (return_frame_ && access.size == 2 && access.address == address_mask &&
+        static_cast<std::uint16_t>(return_frame_->stack + 4U) == access.address) {
+      const auto high = bus_.read_memory({.address = access.address});
+      return (high << 8U) | bus_.read_memory({.address = 0});
+    }
+    return bus_.read_memory(access);
+  }
+
+  void write_register(const ghidra::VarnodeData *node, ghidra::uintb value) {
+    constexpr unsigned fixed = 0x60;
+    constexpr unsigned high = 0xff00;
+    const auto index = return_frame_ ? return_frame_->pending : std::nullopt;
+    if (index) {
+      const std::array<const ghidra::VarnodeData *, 3> fields{&layout_.ccr, &layout_.a, &layout_.x};
+      const auto *expected = fields.at(*index);
+      if (node->space != expected->space || node->offset != expected->offset ||
+          node->size != expected->size) {
+        throw Fault("HCS08 RTI raw frame copy has an unqualified register destination");
+      }
+      if (*index == 0) { value |= fixed; }
+    }
+    memstate->setValue(node, value);
+    if (!index) { return; }
+    if (!return_frame_) { throw Fault("HCS08 RTI frame lost during its raw register copy"); }
+    const auto mask = return_frame_->masks.at(*index);
+    switch (*index) {
+      case 0: knowledge_.ccr = static_cast<std::uint8_t>(mask | fixed); break;
+      case 1: knowledge_.a = mask; break;
+      case 2: knowledge_.hx = static_cast<std::uint16_t>((knowledge_.hx & high) | mask); break;
+      default: throw Fault("HCS08 RTI raw frame field exceeds CCR/A/X");
+    }
+    return_frame_->seen |= 1U << *index;
+    return_frame_->pending.reset();
   }
 
   void write_value(const ghidra::VarnodeData *node, const ghidra::uintb value) {
     if (node->space != translator_.getDefaultCodeSpace()) {
-      memstate->setValue(node, value);
+      write_register(node, value);
       return;
     }
     if (node->offset > address_mask) { throw Fault("HCS08 constant operand exceeds 16 bits"); }
@@ -341,6 +423,18 @@ private:
   Bus &bus_;
   ghidra::Sleigh &translator_;
   const ghidra::VarnodeData &program_counter_;
+  const RegisterLayout &layout_;
+  ReturnKnowledge knowledge_;
+  Hcs08KnownMemory *known_memory_;
+
+  struct ReturnFrame {
+    std::uint16_t stack;
+    std::array<std::uint8_t, 3> masks{};
+    unsigned seen = 0;
+    std::optional<unsigned> pending;
+  };
+
+  mutable std::optional<ReturnFrame> return_frame_;
   ghidra::Address address_;
   ghidra::Address next_;
   std::span<ghidra::PcodeOpRaw *const> operations_;

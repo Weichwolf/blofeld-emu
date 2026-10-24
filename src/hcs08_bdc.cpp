@@ -117,6 +117,15 @@ void Hcs08Bdc::communication_timeout() {
   state_.reply_cursor = 0;
 }
 
+bool Hcs08Bdc::service_interrupt() {
+  healthy();
+  if (state_.active) { return false; }
+  healthy_ = false;
+  const bool entered = cpu_.service_interrupt();
+  healthy_ = true;
+  return entered;
+}
+
 void Hcs08Bdc::step_cpu() {
   healthy();
   if (state_.active) { fail("CPU step", "active background mode owns the halted CPU"); }

@@ -53,5 +53,16 @@
     "bytes": 3594996,
     "sha256": "8d6ffc53c13c118b81ce3f5447ca432059fcdd2a5668d9c26a064769917ea509",
     "sections": "6.2.5: only I initialized at reset; V/H/N/Z/C unknown. 6.4.1: normal vector/queue reset. 6.4.5 (printed96): active-background reset precedes user-vector fetch; numerical PC not established here. 7.3.4.14/.19/.26: GO/READ_PC/WRITE_PC. Publisher PDF obtained from a mirror; exact bytes/hash retained locally. Instruction details: MOV/BIT define V/N/Z; JSR/AIS preserve CCR; BEQ consumes Z. Instruction Set Details: CLR (printed241, including CLRH) and MOV (printed260) define V/N/Z and preserve C/H; AIS preserves all condition codes."
+  },
+  "architectural_irq_reference": {
+    "primary": "primary_reference",
+    "family": "family_reset_reference",
+    "sections": [
+      "GT 5.4.1, Figure 5-1",
+      "GT 5.4.3",
+      "GT Table 5-1",
+      "HCS08RMV1 6.4.2 and RTI"
+    ],
+    "scope": "Architectural eligible maskable source, hardware stack order, I mask, vector fetch and native RTI. Unknown saved CCR/A/X bits remain memory-owned knowledge. Nine-cycle entry, bus/prefetch phases, late priority, physical source mapping and boot provenance remain unqualified."
   }
 }

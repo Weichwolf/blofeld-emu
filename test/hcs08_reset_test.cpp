@@ -163,44 +163,60 @@ void native_reset() {
           "TPA cannot expose fabricated reset flags");
 }
 
-void partial_flags() {
-  struct Expected {
-    unsigned opcode, known, value;
-  };
+struct PartialExpected {
+  unsigned opcode, known, value;
+};
 
-  constexpr unsigned carry_known = 0x69;
-  constexpr unsigned tap_flags = 0x75;
-  constexpr unsigned interrupt_cleared = 0x60;
-  constexpr std::array<Expected, 29> effects{
-      {{.opcode = 0x4f, .known = loaded_status_known, .value = 0x6a},
-       {.opcode = 0xae, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0xa6, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0xc7, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0x94, .known = reset_status_known, .value = reset_status_known},
-       {.opcode = 0x9d, .known = reset_status_known, .value = reset_status_known},
-       {.opcode = 0x82, .known = reset_status_known, .value = reset_status_known},
-       {.opcode = 0x84, .known = byte_mask, .value = tap_flags},
-       {.opcode = 0x9a, .known = reset_status_known, .value = interrupt_cleared},
-       {.opcode = 0x9b, .known = reset_status_known, .value = reset_status_known},
-       {.opcode = 0x98, .known = carry_known, .value = reset_status_known},
-       {.opcode = 0x99, .known = carry_known, .value = carry_known},
-       {.opcode = 0x45, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0x8c, .known = loaded_status_known, .value = 0x6a},
-       {.opcode = 0x5f, .known = loaded_status_known, .value = 0x6a},
-       {.opcode = 0x7f, .known = loaded_status_known, .value = 0x6a},
-       {.opcode = 0x20, .known = reset_status_known, .value = reset_status_known},
-       {.opcode = 0xaf, .known = reset_status_known, .value = reset_status_known},
-       {.opcode = 0x35, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0xb7, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0x65, .known = 0xef, .value = 0x6d},
-       {.opcode = 0x3f, .known = loaded_status_known, .value = 0x6a},
-       {.opcode = 0x6e, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0xb6, .known = loaded_status_known, .value = 0x6c},
-       {.opcode = 0xc6, .known = loaded_status_known, .value = 0x6c},
-       {.opcode = 0xa5, .known = loaded_status_known, .value = reset_status_known},
-       {.opcode = 0xa1, .known = 0xef, .value = 0x6d},
-       {.opcode = 0xcd, .known = reset_status_known, .value = reset_status_known},
-       {.opcode = 0xa7, .known = reset_status_known, .value = reset_status_known}}};
+constexpr unsigned carry_known = 0x69;
+constexpr unsigned tap_flags = 0x75;
+constexpr unsigned interrupt_cleared = 0x60;
+constexpr std::array<PartialExpected, 44> effects{
+    {{.opcode = 0xc1, .known = 0xef, .value = 0xed},
+     {.opcode = 0xd6, .known = 0xee, .value = 0x6c},
+     {.opcode = 0x0f, .known = 0x69, .value = 0x69},
+     {.opcode = 0x4e, .known = 0xee, .value = 0x6c},
+     {.opcode = 0xbe, .known = 0xee, .value = 0x6c},
+     {.opcode = 0xb1, .known = 0xef, .value = 0xed},
+     {.opcode = 0xa4, .known = 0xee, .value = 0x68},
+     {.opcode = 0x4c, .known = 0xee, .value = 0x68},
+     {.opcode = 0x5c, .known = 0xee, .value = 0x68},
+     {.opcode = 0x8b, .known = 0x68, .value = 0x68},
+     {.opcode = 0x8a, .known = 0x68, .value = 0x68},
+     {.opcode = 0x97, .known = 0x68, .value = 0x68},
+     {.opcode = 0x9f, .known = 0x68, .value = 0x68},
+     {.opcode = 0xd7, .known = 0xee, .value = 0x68},
+     {.opcode = 0x80, .known = 0xff, .value = 0x6b},
+     {.opcode = 0x4f, .known = loaded_status_known, .value = 0x6a},
+     {.opcode = 0xae, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0xa6, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0xc7, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0x94, .known = reset_status_known, .value = reset_status_known},
+     {.opcode = 0x9d, .known = reset_status_known, .value = reset_status_known},
+     {.opcode = 0x82, .known = reset_status_known, .value = reset_status_known},
+     {.opcode = 0x84, .known = byte_mask, .value = tap_flags},
+     {.opcode = 0x9a, .known = reset_status_known, .value = interrupt_cleared},
+     {.opcode = 0x9b, .known = reset_status_known, .value = reset_status_known},
+     {.opcode = 0x98, .known = carry_known, .value = reset_status_known},
+     {.opcode = 0x99, .known = carry_known, .value = carry_known},
+     {.opcode = 0x45, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0x8c, .known = loaded_status_known, .value = 0x6a},
+     {.opcode = 0x5f, .known = loaded_status_known, .value = 0x6a},
+     {.opcode = 0x7f, .known = loaded_status_known, .value = 0x6a},
+     {.opcode = 0x20, .known = reset_status_known, .value = reset_status_known},
+     {.opcode = 0xaf, .known = reset_status_known, .value = reset_status_known},
+     {.opcode = 0x35, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0xb7, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0x65, .known = 0xef, .value = 0x6d},
+     {.opcode = 0x3f, .known = loaded_status_known, .value = 0x6a},
+     {.opcode = 0x6e, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0xb6, .known = loaded_status_known, .value = 0x6c},
+     {.opcode = 0xc6, .known = loaded_status_known, .value = 0x6c},
+     {.opcode = 0xa5, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0xa1, .known = 0xef, .value = 0x6d},
+     {.opcode = 0xcd, .known = reset_status_known, .value = reset_status_known},
+     {.opcode = 0xa7, .known = reset_status_known, .value = reset_status_known}}};
+
+void partial_flags() {
   Memory memory;
   memory.writable.set();
   Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
@@ -212,13 +228,20 @@ void partial_flags() {
     constexpr unsigned extended_operand = 0x7800;
     memory.install(loaded_x, negative);
     memory.install(extended_operand, negative);
+    constexpr unsigned indexed_operand = 0x7878;
+    memory.install(indexed_operand, negative);
+    constexpr unsigned rti = 0x80;
+    if (opcode == rti) {
+      constexpr std::array<std::uint8_t, 5> frame{0x6b, 0x5a, 0x34, 0x80, 3};
+      memory.install(loaded_sp + 1, frame);
+    }
     cpu.set_state({.pc = entry,
                    .hx = loaded_x,
                    .sp = loaded_sp,
                    .a = loaded_a,
                    .ccr_known = reset_status_known,
                    .ccr = reset_status_known});
-    const Expected *effect = nullptr;
+    const PartialExpected *effect = nullptr;
     for (const auto &candidate : effects) {
       if (candidate.opcode == opcode) {
         effect = &candidate;

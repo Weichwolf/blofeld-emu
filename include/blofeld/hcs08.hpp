@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -75,6 +76,12 @@ public:
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] Hcs08Checkpoint checkpoint() const;
   void restore_checkpoint(const Hcs08Checkpoint &checkpoint);
+  // Normal-running architectural boundary, separate from its nine-cycle/queue
+  // timing owner. Only a real eligible bus request can create a stack frame.
+  // Entry does not retire an instruction or clear peripheral source flags.
+  [[nodiscard]] std::optional<std::uint16_t> pending_interrupt() const;
+  [[nodiscard]] bool service_interrupt();
+  // Executes one instruction; an eligible unserviced IRQ refuses before fetch.
   void step();
 
 private:
