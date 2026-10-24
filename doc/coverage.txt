@@ -1758,9 +1758,19 @@ Keyboard HCS08 instruction core   partial  Native SLEIGH plus independent byte/w
                                           Original supplied application RAM clear
                                           and programmer entries reach actual
                                           unknown PTED/FCDIV writes (hcs08-core.txt).
-                                          Explicit untimed RAM/debug entry; BDC,
-                                          peripherals, reset/IRQ and controller
-                                          programming/recovery remain pending.
+                                          Untimed debug and actual warm-reset
+                                          entries; partial CCR and unknown initial
+                                          RAM retained. Board reset/IRQ, target
+                                          peripherals and full recovery pending.
+Keyboard candidate GPIO          partial  GT A..E latches/DD/pulls/slew, explicit
+                                          GPIO-owned drivers and resolved inputs.
+                                          Original11 writes; unknown PTE read at
+                                          E04E,16 declared input patterns reach
+                                          BGND or unmodeled trim store E1A8; six
+                                          fresh CPU/RAM/GPIO suffix replays.
+                                          Part/package/nets, G/BDC, peripheral
+                                          mux and physical timing remain pending
+                                          (hcs08-gpio.txt).
 Keyboard candidate FLASH         partial  Native original seven-page algorithm,
                                           byte-exact final images, protected BGND,
                                           pending final vector and joint replays
@@ -1877,3 +1887,11 @@ retention contracts and12 fresh continuations check exact state/knownness and
 prevent post-reset phantom completions; CPU vector-read brackets stay separate.
 An explicit no-clock-event reference contract and event quarantine prevent old
 software requests from becoming live values after unknown automatic changes.
+
+Original HCS08 GPIO/FLASH/ICG startup (hcs08-clock-startup.txt): actual normal
+warm reset/vector reads, unknown initial RAM and declared strap/calibration
+histories join original GPIO setup to original live trim/control stores.
+The first ICGS1 load remains a strict clock-evolution refusal; no stored request,
+REFS bit, lock flag or physical frequency is invented. All prior strict gates
+remain separate; cold state, timing, scanning, full update/boot and118 functions
+remain incomplete.

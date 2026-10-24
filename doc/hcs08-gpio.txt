@@ -1,0 +1,52 @@
+Candidate HCS08 GPIO and original application startup
+
+  cmake --build --preset strict --target blofeld-hcs08-gpio-test \
+    blofeld-original-hcs08-gpio-test blofeld-hcs08-reset-test
+  ctest --test-dir build/strict -j1 \
+    -R '^(hcs08_gpio|original_hcs08_gpio|hcs08_reset)$' --output-on-failure
+
+Hcs08Gpio requires candidate_gt8a explicitly. GT Rev.1 chapter6 defines A/B/C
+as8-bit, D as5-bit and E as6-bit ports, each with data/pull/slew/direction at
+four-byte strides0000..0013. Reset clears all four register fields. Non-pin
+positions shown read-only0 in the port figures have no modeled storage; this
+candidate interpretation does not extend to other reserved registers.
+
+Writes latch data even for inputs or pins owned by another peripheral. DDR1
+reads the stored latch; DDR0 requires an actual resolved pad observation.
+Missing/detached/unknown/conflicting observations fail with address/op/PC/CCR,
+including when pulls are enabled: unspecified connectivity is not floating.
+Driver descriptions expose only explicitly GPIO-owned pins, with input pulls
+and intended steady-state output levels. Slew control has stored readback;
+transition/settling/synchronizer timing is unqualified. The board owns net
+resolution and alternate-function/pull-down policy. G/BDC/oscillator and other
+registers refuse; enabling ADC/KBI/SCI/SPI/timers requires their own models.
+Chip copies/moves preserve registers and detach pad callbacks; fresh board
+owners reconnect them. Reset retains the existing physical pad binding.
+
+The independent unit checks all20 register addresses with all256 byte writes,
+reset states/non-pin fields, latch/input distinction, GPIO ownership, pull
+resolution against known/unknown drivers, conflicts, detached copies and resets.
+Partial CCR admission adds the original MOV immediate/direct, CLR direct,
+LDA direct/extended, BIT/CMP immediate, BEQ, JSR extended and AIS forms. MOV
+defines V/N/Z; JSR/AIS preserve flags. BEQ requires known Z. Independent native
+classification and taken/not-taken/unknown-Z/descending-return-stack checks
+retain unknown H/C rather than supplying fully known reset flags.
+
+The optional original gate pins all seven Controller1.4 pages through the local
+archive/reference hashes. Real normal warm reset retains supplied A/X; all1024
+RAM bytes start unknown. Each case executes6176 instructions and11 independently
+specified GPIO writes before the first PTED read atE04E. Entire RAM contents,
+calibration/iterator and every GPIO register agree. Missing pad inputs fail there.
+All16 declared E[5:2] patterns exercise the actual BIT38/BEQ branch:0/4 reach
+the overlapping native BGND in6181 instructions;14 nonzero-mask cases execute
+native JSR/AIS and packaged-trim LDA, then fail at clock-trim store004E/PCe1a8
+after6185 retirements. Every RAM/return-stack byte and the full native endpoint
+state agree. Two fresh continuations at each unknown/BGND/trim boundary reproduce
+the complete suffix using reconnected CPU/RAM/GPIO owners: six joint replays.
+
+These are untimed conditional GPIO components, not inferred physical strap/net
+levels, a reset/FLASH-security integration, unique factory trim, key scanning,
+clock calibration, complete boot/MIDI/audio/update or hardware equivalence.
+The previous strict PTED boundary remains in original_hcs08; this separate gate
+does not weaken it. Manufacturer bytes/maps/listings stay local. Primary URLs,
+sizes/hashes: hcs08-reference.json; full remaining scope: objective.txt/coverage.txt.

@@ -56,7 +56,9 @@ void Hcs08Bdc::register_access() {
     case hcs08_bdc::read_a: reply_byte(cpu.a); return;
     case hcs08_bdc::read_ccr:
       if (cpu.ccr_known != Hcs08State::all_ccr) {
-        fail("READ_CCR", "unknown CPU CCR bits mask=" + hex(cpu.ccr_known));
+        const auto unknown = static_cast<unsigned>(Hcs08State::all_ccr ^ cpu.ccr_known);
+        fail("READ_CCR",
+             "unknown CPU CCR bits mask=" + hex(unknown) + " ccr-known=" + hex(cpu.ccr_known));
       }
       reply_byte(cpu.ccr);
       return;

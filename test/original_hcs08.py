@@ -63,14 +63,19 @@ def main():
                                hx=seed | 0x78, a=30, address=0x1820, fault=1)),
             ('STARTUP', dict(seed=seed, retired=6165, pc=0xe030, sp=0x47d, hx=300,
                             a=3, writes=3084, reads=2048, address=0x10, fault=1))])
+    for seed in (0, 0x1200):
+        expected.append(('WARM_STARTUP', dict(seed=seed, retired=6165, pc=0xe030,
+            sp=0x47d, hx=300, a=3, writes=3084, reads=2050, address=0x10, fault=1,
+            **{'ccr-known': 0xef, 'ccr': 0x68})))
     if rows != expected:
         raise ValueError('Original HCS08 native prefix state/counts differ')
     if any(hashlib.sha256(p.read_bytes()).hexdigest() != digest for p, digest in frozen.items()):
         raise ValueError('Original HCS08 inputs changed during execution')
-    trace.with_suffix('.json').write_text(json.dumps(dict(passed=True, cases=4,
-        original_startup_instructions=12330, original_programmer_instructions=6,
-        checked_ram_bytes=2048, writes=6168, reads=4096,
-        strict_peripheral_failures=4, full_boot=False, controller_link=False,
+    trace.with_suffix('.json').write_text(json.dumps(dict(passed=True, cases=6,
+        original_startup_instructions=24660, original_programmer_instructions=6,
+        normal_warm_reset_cases=2, warm_initial_ram_unknown=True, cold_reset=False,
+        checked_ram_bytes=4096, writes=12336, reads=8196,
+        strict_peripheral_failures=6, full_boot=False, controller_link=False,
         flash_programming=False, physical_traffic=False, fuzz_execution=False,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         specification_sha256=frozen[specification]), indent=2) + '\n')

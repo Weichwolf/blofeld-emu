@@ -42,7 +42,7 @@
     "source": "https://www.nxp.com/docs/en/data-sheet/MC9S08GT16A.pdf",
     "bytes": 2719710,
     "sha256": "6abfb7e68c1953c50fcd4d53e2e4573647d76da2990d2e747648ee05d38b25bf",
-    "sections": "Chapter4 FLASH/registers/security;5.7.4 SOPT; chapter8 S08CPUV2/CCR;9.3.1..9.3.6 ICG reset/trim,9.4.1.3/9.4.2 reset versus frequency-retaining SCM;9.4.8/9.4.9 loss-of-lock/clock and automatic CLKS changes;9.4.10 requested/actual mode and synchronization; tableA-11 reset frequency limits; chapter15 BDC. Exact Keyboard part and idle-FCBEF behavior remain unverified."
+    "sections": "Chapter4 FLASH/registers/security;5.7.4 SOPT; chapter8 S08CPUV2/CCR;9.3.1..9.3.6 ICG reset/trim,9.4.1.3/9.4.2 reset versus frequency-retaining SCM;9.4.8/9.4.9 loss-of-lock/clock and automatic CLKS changes;9.4.10 requested/actual mode and synchronization; tableA-11 reset frequency limits; chapter15 BDC. Exact Keyboard part and idle-FCBEF behavior remain unverified. Chapter6 candidate A..E GPIO fields/reset/readback; peripheral ownership and actual package/nets remain separate."
   },
   "family_reset_reference": {
     "publisher": "Freescale Semiconductor",
@@ -52,6 +52,6 @@
     "official_unavailable": "https://www.nxp.com/docs/en/reference-manual/HCS08RMV1.pdf",
     "bytes": 3594996,
     "sha256": "8d6ffc53c13c118b81ce3f5447ca432059fcdd2a5668d9c26a064769917ea509",
-    "sections": "6.2.5: only I initialized at reset; V/H/N/Z/C unknown. 6.4.1: normal vector/queue reset. 6.4.5 (printed96): active-background reset precedes user-vector fetch; numerical PC not established here. 7.3.4.14/.19/.26: GO/READ_PC/WRITE_PC. Publisher PDF obtained from a mirror; exact bytes/hash retained locally."
+    "sections": "6.2.5: only I initialized at reset; V/H/N/Z/C unknown. 6.4.1: normal vector/queue reset. 6.4.5 (printed96): active-background reset precedes user-vector fetch; numerical PC not established here. 7.3.4.14/.19/.26: GO/READ_PC/WRITE_PC. Publisher PDF obtained from a mirror; exact bytes/hash retained locally. Instruction details: MOV/BIT define V/N/Z; JSR/AIS preserve CCR; BEQ consumes Z. Instruction Set Details: CLR (printed241, including CLRH) and MOV (printed260) define V/N/Z and preserve C/H; AIS preserves all condition codes."
   }
 }

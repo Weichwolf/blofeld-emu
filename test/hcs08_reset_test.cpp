@@ -171,7 +171,7 @@ void partial_flags() {
   constexpr unsigned carry_known = 0x69;
   constexpr unsigned tap_flags = 0x75;
   constexpr unsigned interrupt_cleared = 0x60;
-  constexpr std::array<Expected, 11> effects{
+  constexpr std::array<Expected, 28> effects{
       {{.opcode = 0xae, .known = loaded_status_known, .value = reset_status_known},
        {.opcode = 0xa6, .known = loaded_status_known, .value = reset_status_known},
        {.opcode = 0xc7, .known = loaded_status_known, .value = reset_status_known},
@@ -182,7 +182,24 @@ void partial_flags() {
        {.opcode = 0x9a, .known = reset_status_known, .value = interrupt_cleared},
        {.opcode = 0x9b, .known = reset_status_known, .value = reset_status_known},
        {.opcode = 0x98, .known = carry_known, .value = reset_status_known},
-       {.opcode = 0x99, .known = carry_known, .value = carry_known}}};
+       {.opcode = 0x99, .known = carry_known, .value = carry_known},
+       {.opcode = 0x45, .known = loaded_status_known, .value = reset_status_known},
+       {.opcode = 0x8c, .known = loaded_status_known, .value = 0x6a},
+       {.opcode = 0x5f, .known = loaded_status_known, .value = 0x6a},
+       {.opcode = 0x7f, .known = loaded_status_known, .value = 0x6a},
+       {.opcode = 0x20, .known = reset_status_known, .value = reset_status_known},
+       {.opcode = 0xaf, .known = reset_status_known, .value = reset_status_known},
+       {.opcode = 0x35, .known = loaded_status_known, .value = reset_status_known},
+       {.opcode = 0xb7, .known = loaded_status_known, .value = reset_status_known},
+       {.opcode = 0x65, .known = 0xef, .value = 0x6d},
+       {.opcode = 0x3f, .known = loaded_status_known, .value = 0x6a},
+       {.opcode = 0x6e, .known = loaded_status_known, .value = reset_status_known},
+       {.opcode = 0xb6, .known = loaded_status_known, .value = 0x6c},
+       {.opcode = 0xc6, .known = loaded_status_known, .value = 0x6c},
+       {.opcode = 0xa5, .known = loaded_status_known, .value = reset_status_known},
+       {.opcode = 0xa1, .known = 0xef, .value = 0x6d},
+       {.opcode = 0xcd, .known = reset_status_known, .value = reset_status_known},
+       {.opcode = 0xa7, .known = reset_status_known, .value = reset_status_known}}};
   Memory memory;
   memory.writable.set();
   Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
@@ -190,6 +207,10 @@ void partial_flags() {
   for (unsigned opcode = 0; opcode < byte_values; ++opcode) {
     const std::array<std::uint8_t, 3> code{static_cast<std::uint8_t>(opcode), loaded_x, 0};
     memory.install(entry, code);
+    constexpr std::array<std::uint8_t, 1> negative{0x80};
+    constexpr unsigned extended_operand = 0x7800;
+    memory.install(loaded_x, negative);
+    memory.install(extended_operand, negative);
     cpu.set_state({.pc = entry,
                    .hx = loaded_x,
                    .sp = loaded_sp,
@@ -212,6 +233,12 @@ void partial_flags() {
                   memory.retired == retired + 1,
               "Primary instruction effects establish only defined CCR bits and preserve unknown "
               "status");
+      constexpr unsigned jsr = 0xcd;
+      if (opcode == jsr) {
+        require(cpu.state().pc == extended_operand && cpu.state().sp == loaded_sp - 2 &&
+                    memory.bytes[loaded_sp] == 3 && memory.bytes[loaded_sp - 1] == (entry >> 8U),
+                "Partial-CCR JSR preserves flags and pushes the independent return PC descending");
+      }
     } else {
       require(rejected([&] { cpu.step(); }).contains("partial-CCR") && cpu.faulted() &&
                   cpu.state() == before && memory.retired == retired,
@@ -221,6 +248,136 @@ void partial_flags() {
   }
   require(accepted == effects.size(),
           "All256 opcode classifications retain an independent explicit result");
+}
+
+void partial_zero() {
+  Memory memory;
+  constexpr std::array<std::uint8_t, 2> branch{0x27, 3};
+  constexpr std::array<unsigned, 4> masks{0x68, 0x6a, 0x78, 0x7a};
+  constexpr std::array<unsigned, 2> seeds{0x68, 0x7b};
+  memory.install(entry, branch);
+  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+  for (const auto mask : masks) {
+    for (const auto flags : seeds) {
+      cpu.set_state({.pc = entry,
+                     .ccr_known = static_cast<std::uint8_t>(mask),
+                     .ccr = static_cast<std::uint8_t>(flags)});
+      const auto before = cpu.state();
+      const auto retired = memory.retired;
+      if ((mask & flag_z) == 0) {
+        require(rejected([&] { cpu.step(); }).contains("partial-CCR") && cpu.state() == before &&
+                    memory.retired == retired,
+                "BEQ cannot consume an unknown Z representative");
+      } else {
+        cpu.step();
+        auto expected = before;
+        expected.pc = static_cast<std::uint16_t>(entry + ((flags & flag_z) != 0 ? 5 : 2));
+        require(cpu.state() == expected && memory.retired == retired + 1,
+                "Independent taken/not-taken BEQ preserves partial CCR and unrelated registers");
+      }
+    }
+  }
+}
+
+void partial_prefixes() {
+  constexpr unsigned stack = 0x200;
+  constexpr unsigned high = stack + 1;
+  constexpr unsigned low_byte = stack + 2;
+  constexpr unsigned prefix = 0x9e;
+  constexpr unsigned load_opcode = 0xfe;
+  constexpr unsigned store_opcode = 0xff;
+  constexpr unsigned loaded_ccr = 0x6c;
+  constexpr std::array<std::uint8_t, 2> data{0x80, 0};
+  Memory memory;
+  memory.writable.set();
+  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+  for (unsigned second = 0; second < byte_values; ++second) {
+    const std::array<std::uint8_t, 3> code{prefix, static_cast<std::uint8_t>(second), 1};
+    memory.install(entry, code);
+    memory.install(high, data);
+    cpu.set_state({.pc = entry,
+                   .hx = loaded_x,
+                   .sp = stack,
+                   .ccr_known = reset_status_known,
+                   .ccr = reset_status_known});
+    const auto before = cpu.state();
+    const auto retired = memory.retired;
+    const auto events = memory.accesses;
+    if (second == load_opcode || second == store_opcode) {
+      cpu.step();
+      const bool load = second == load_opcode;
+      const auto s = cpu.state();
+      require(s.pc == entry + 3 && s.hx == (load ? 0x8000 : loaded_x) && s.sp == stack &&
+                  s.ccr_known == loaded_status_known &&
+                  s.ccr == (load ? loaded_ccr : reset_status_known) &&
+                  memory.bytes[high] == (load ? 0x80 : 0) &&
+                  memory.bytes[low_byte] == (load ? 0 : loaded_x) && memory.retired == retired + 1,
+              "Only actual LDHX/STHX SP1 forms define VNZ and preserve unknown H/C");
+    } else {
+      require(rejected([&] { cpu.step(); }).contains("partial-CCR") && cpu.faulted() &&
+                  cpu.state() == before && memory.retired == retired && memory.accesses == events,
+              "Every other prefixed form refuses before register, RAM or retirement effects");
+    }
+  }
+  constexpr std::array<std::uint8_t, 1> truncated{prefix};
+  for (const unsigned pc : {entry, word_mask}) {
+    memory.known.reset();
+    memory.install(pc, truncated);
+    cpu.set_state({.pc = static_cast<std::uint16_t>(pc),
+                   .ccr_known = reset_status_known,
+                   .ccr = reset_status_known});
+    const auto before = cpu.state();
+    const auto retired = memory.retired;
+    require(rejected([&] { cpu.step(); }).contains(pc == entry ? "fetch" : "wraps") &&
+                cpu.state() == before && memory.retired == retired,
+            "Unknown or wrapped second opcode cannot qualify a prefixed instruction");
+  }
+}
+
+void partial_carry() {
+  Memory memory;
+  memory.writable.set(operand);
+  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+  constexpr std::array<unsigned, 4> masks{0x68, 0x69, 0x78, 0x79};
+  constexpr std::array<unsigned, 2> seeds{0x68, 0x79};
+  constexpr std::array<std::uint8_t, 3> clear_opcodes{0x8c, 0x5f, 0x7f};
+  constexpr unsigned defined_vnz = 0x86;
+  for (const auto mask : masks) {
+    for (const unsigned flags : seeds) {
+      for (const auto opcode : clear_opcodes) {
+        const std::array code{opcode};
+        memory.install(entry, code);
+        cpu.set_state({.pc = entry,
+                       .hx = operand,
+                       .ccr_known = static_cast<std::uint8_t>(mask),
+                       .ccr = static_cast<std::uint8_t>(flags)});
+        cpu.step();
+        require(cpu.state().ccr_known == (mask | defined_vnz) &&
+                    cpu.state().ccr == ((flags & mask) | flag_z),
+                "CLRH/CLRX/CLR indexed preserve both values and unknownness of H/C");
+      }
+      constexpr std::array<std::uint8_t, 2> branch{0x25, 3};
+      memory.install(entry, branch);
+      cpu.set_state({.pc = entry,
+                     .ccr_known = static_cast<std::uint8_t>(mask),
+                     .ccr = static_cast<std::uint8_t>(flags)});
+      const auto before = cpu.state();
+      const auto retired = memory.retired;
+      const auto events = memory.accesses;
+      if ((mask & flag_c) != 0) {
+        cpu.step();
+        auto expected = before;
+        expected.pc = static_cast<std::uint16_t>(entry + ((flags & flag_c) != 0 ? 5 : 2));
+        require(cpu.state() == expected && memory.retired == retired + 1 &&
+                    memory.accesses == events,
+                "BCS consumes only known C; literal taken/not-taken PCs preserve all flags");
+      } else {
+        require(rejected([&] { cpu.step(); }).contains("partial-CCR") && cpu.state() == before &&
+                    memory.retired == retired && memory.accesses == events,
+                "BCS cannot consume an unknown carry, even if its representative is zero");
+      }
+    }
+  }
 }
 
 void bdc_ccr() {
@@ -245,10 +402,9 @@ void bdc_ccr() {
               "Actual WRITE_CCR establishes bits before native READ_CCR reply");
     } else {
       constexpr std::array<std::uint8_t, 1> read{0x69};
-      require(rejected([&] {
-                blofeld::test::hcs08_bdc::command(bdc, read);
-              }).contains("unknown CPU CCR") &&
-                  bdc.faulted(),
+      const auto error = rejected([&] { blofeld::test::hcs08_bdc::command(bdc, read); });
+      require(error.contains("unknown CPU CCR bits mask=0x0097") &&
+                  error.contains("ccr-known=0x0068") && bdc.faulted(),
               "BDC cannot serialize unknown reset flags as a successful byte");
     }
   }
@@ -262,6 +418,9 @@ int main() {
     native_reset();
     bdc_ccr();
     partial_flags();
+    partial_prefixes();
+    partial_carry();
+    partial_zero();
     std::cout << "HCS08 reset edges, native register/CCR effects and BDC unknownness verified.\n";
     return 0;
   } catch (const std::exception &e) {

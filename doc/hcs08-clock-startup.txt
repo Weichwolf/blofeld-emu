@@ -1,0 +1,57 @@
+Original HCS08 normal-reset/GPIO/FLASH/ICG startup
+
+  cmake --build --preset strict --target blofeld-original-hcs08-clock-startup-test
+  ctest --test-dir build/strict -j1 -R '^original_hcs08_clock_startup$' --output-on-failure
+
+This optional local-reference gate joins the unmodified Controller1.4 startup
+to the candidate GPIO and ICG register owners. Source identities are pinned by
+hcs08-reference.json and the existing Keyboard archive manifest. Manufacturer
+pages, extracted inputs and traces remain local. It does not execute the main
+1.25 DSP/MCU boot or replace the earlier strict original_hcs08/GPIO gates.
+
+Two explicit warm A/X/register histories start with all1024 RAM bytes unknown.
+Actual normal CPU reset reads FFFE/FFFF through the FLASH reset-vector role;
+ordinary instruction/data accesses retain actual FLASH privilege and knowledge.
+Only the seven supplied pages are known; EC00..FDFF remains unknown, with no
+invented erased data/history. No NVM clock, command transfer or completion is
+supplied. The fixture deliberately refuses FLASH writes beyond its startup scope.
+
+The packaged FFBE calibration80 plus declared per-unit data0/5A/FF exercise
+the updater's independently established trim-preservation contract. Only that
+data byte differs from pinned supplied pages; executable bytes are unchanged.
+One warm history has unknown live ICGTRM; the other retains a declared priorA7.
+Warm reset restores ICG control/filter/first-write state without copying FFBE.
+Only the original actual LDA/STA copies per-unit FLASH calibration into ICGTRM.
+Neither a calibration value nor the stored requests supplies an oscillator rate.
+
+For every history/calibration, absent PortE pads remain an actual GPIO failure.
+All16 explicitly declared E[5:2] patterns exercise real BIT38/BEQ decisions:
+0/4 reach native overlapping BGND; the other14 reach the original clock prefix.
+No physical strap, net connectivity or board revision is inferred. BGND
+reports the native CPU request; no BDC-active state or halt timing follows.
+
+Independent full PC/HX/SP/A/CCR/knownness expectations cover GPIO initialization,
+all1024 RAM bytes, calibration/iterator and the JSR return stack. Original CMP
+carry survives the calibration load: trim80/FF yields6D, zero6B, positive5A69.
+Actual STA to ICGTRM and MOV28/30 to ICGC1/2 retire at6186/6187/6188; MOV leaves
+CCR69 with H still unknown (maskEF). The first real ICGS1 read atE1B0/004A
+refuses without retiring or fabricating clock flags. Unknown REFS readback stays
+separate from the stored28 request; live status/filter/evolution remain unqualified.
+
+The gate checks136 cases:8 missing-pad failures,16 actual BGND branches and
+112 actual ICGS1 failures. Three selected histories have ten fresh joint
+CPU/RAM/FLASH/GPIO/ICG continuations, reconnecting GPIO pads after each copy.
+Cuts include the GPIO-read boundary, actual trim store and completed control
+requests. Complete suffixes, architectural endpoints, FLASH image/knowledge,
+registers and actual access histories must match; decoder-cache identity is
+not an architectural requirement. These are untimed retirement boundaries.
+
+The Python collector checks every ordered row against independent expected
+states and fixed negative controls. Missing references skip77; altered references
+fail before native execution. This is directed regression, with no fuzz campaign.
+
+This is a warm conditional startup prefix. Cold A/X knowledge, physical pin/
+reset margins, IRQ/COP/timer/SPI/ADC, live ICG transitions/rates, original FSTAT,
+the LCD/BKGD update frontier, complete update/recovery/every interruption phase,
+normal boot/MIDI/audio/persistence,118 manual functions and stock-device
+comparison remain required. No physical traffic or programming is performed.

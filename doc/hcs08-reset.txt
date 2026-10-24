@@ -39,18 +39,23 @@ are not individually modeled. Failed native execution needs coordinated recovery
 Hcs08State.ccr_known records actual defined status bits. Reset establishes68
 (fixed bits plus I); V/H/N/Z/C remain unknown. Unknown bits have a canonical zero
 representative, never a known flag value. Native checkpoints retain this mask.
-For partial CCR, immediate LDX/LDA and extended STA define V/N/Z; TXS/NOP/BGND
-preserve knowledge, TAP defines all bits, CLI/SEI define I and CLC/SEC define C.
-All other partial-CCR forms reject before architectural execution. This limited
-qualification must be extended for normal controller startup, branches and other
-instructions; fully known debug states retain the complete existing native ISA.
+For partial CCR, immediate LDX/LDA/LDHX, direct/extended LDA/STA, direct STHX,
+LDHX/STHX SP1, immediate MOV/BIT and CLRH/CLRX/CLR direct/indexed define V/N/Z. CLR preserves C, including
+unknown C (Family RM Rev.2 CLR, printed241). Immediate CPHX/CMP define V/N/Z/C.
+BCS requires known C; BEQ requires known Z. Both preserve knowledge.
+BRA/AIX/AIS/JSR extended/TXS/NOP/BGND preserve it.
+TAP defines all bits, CLI/SEI define I and CLC/SEC define C. Other forms reject
+before architectural execution; prefix9E admits only FE/FF. Fully known debug
+states retain the complete existing native ISA. This qualifies the original
+application RAM-clear prefix after warm reset, not the remaining controller ISA.
 BDC PC/register changes preserve the mask. WRITE_CCR establishes all bits;
 READ_CCR cannot serialize unknown flags into a fabricated successful reply.
 
 Independent units check16 reset release/mode cases at every edge, two partial
 reset restores, unknown inputs/completion faults, actual vector/register effects,
-partial native checkpoint recovery, all256 opcode classifications,11 literal
-partial-flag effects and BDC unknown/write/read behavior. Existing arithmetic,
+partial native checkpoint recovery, all256 first/second-opcode classifications,
+28 literal partial-flag effects, missing/wrapped prefixes, C/H preservation and
+BCS/BEQ taken/not-taken/unknown-input cases plus BDC unknown/write/read behavior. Existing arithmetic,
 original application/programmer, FLASH, BDC, wire and retirement-clock gates
 remain separate regressions. Reference URLs/byte sizes/hashes: hcs08-reference.json.
 Original HC12 pin/TIM integration and remaining limits: keyboard-reset.txt.

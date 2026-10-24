@@ -45,6 +45,16 @@ excluded. Execution then faults at the actual unmodeled PTED write
 completion is silently supplied. All inputs, including the runtime SLA, remain
 hash-stable through the gate.
 
+Two additional application cases call actual normal warm CPU reset from known
+pre-reset A/X, with all1024 initial RAM bytes unknown. Both actual vector reads
+select E000 and reset establishes only CCR mask68. The same6165 instructions
+define every RAM byte,3084 writes and2050 reads including both vector bytes,
+then fail at PTED. CPHX establishes C; CLR preserves it. Final CCR68/maskEF
+leaves H unknown. No initial RAM contents or fully known flags are supplied.
+This generic Bus gate does not qualify FLASH security, reset pins/clocks, cold
+A/X, dummy bus accesses or the board boot sequence. Existing debug trace rows
+remain byte-identical; two WARM_STARTUP rows are appended.
+
 This is an untimed instruction component with source-derived entry tests.
 It does not establish complete controller operation, the physical GT8A part,
 BDC wiring/clocks, scanning/SPI/ADC, programming/recovery or normal Blofeld

@@ -24,6 +24,8 @@ constexpr unsigned startup_retired = 6165, expected_writes = 3084, expected_read
 constexpr unsigned calibration_batches = 300, calibration_low = 44;
 constexpr unsigned page_size = 512, record_size = page_size + 2;
 constexpr std::array pages{0xe000U, 0xe200U, 0xe400U, 0xe600U, 0xe800U, 0xea00U, 0xfe00U};
+constexpr unsigned reset_ccr = 0x68, initialized_ccr_known = 0xef;
+enum class StartupEntry : std::uint8_t { debug, normal_reset };
 
 std::vector<std::uint8_t> input(const char *path, const unsigned size) {
   std::ifstream stream(path, std::ios::binary);
@@ -78,7 +80,48 @@ void programmer(const std::vector<std::uint8_t> &program,
         << " address=" << flash_divider << " fault=1\n";
 }
 
-void startup(const std::vector<std::uint8_t> &records, std::ostream &trace, const unsigned seed) {
+void enter_application(Hcs08 &cpu, Memory &bus, const unsigned seed, const StartupEntry mode) {
+  if (mode == StartupEntry::normal_reset) {
+    constexpr unsigned retained_x = 0x22;
+    constexpr unsigned previous_pc = 0x1234;
+    constexpr unsigned previous_sp = 0x4567;
+    for (unsigned n = ram_first; n < ram_end; ++n) { bus.known.reset(n); }
+    cpu.set_state({.pc = previous_pc,
+                   .hx = static_cast<std::uint16_t>(seed | retained_x),
+                   .sp = previous_sp,
+                   .a = canary,
+                   .ccr = byte_mask});
+    cpu.reset();
+    require(
+        cpu.state() == Hcs08State{.pc = application_entry,
+                                  .hx = retained_x,
+                                  .sp = byte_mask,
+                                  .a = canary,
+                                  .ccr_known = reset_ccr,
+                                  .ccr = reset_ccr} &&
+            bus.accesses ==
+                std::vector<Access>{
+                    {.address = reset_vector, .value = application_entry >> 8U, .write = false},
+                    {.address = reset_vector + 1, .value = 0, .write = false}} &&
+            bus.retired == 0,
+        "Native normal warm reset reads both original vector bytes without defining CCR or RAM");
+    return;
+  }
+  const auto initial_pc =
+      static_cast<std::uint16_t>(bus.read_memory({.address = reset_vector, .size = 2}));
+  require(initial_pc == application_entry, "Original supplied reset vector selects E000");
+  bus.accesses.clear(); // Explicit debug fixture reads are not native CPU transactions.
+  cpu.set_state({.pc = initial_pc,
+                 .hx = static_cast<std::uint16_t>(seed),
+                 .sp = 0,
+                 .a = canary,
+                 .ccr = static_cast<std::uint8_t>(seed == 0 ? flags_fixed : byte_mask)});
+}
+
+void startup(const std::vector<std::uint8_t> &records,
+             std::ostream &trace,
+             const unsigned seed,
+             const StartupEntry mode) {
   Memory bus;
   ram(bus);
   for (unsigned n = 0; n < pages.size(); ++n) {
@@ -87,21 +130,17 @@ void startup(const std::vector<std::uint8_t> &records, std::ostream &trace, cons
             "Original supplied page addresses remain exact; omitted memory is not filled");
     bus.install(pages[n], std::span(records).subspan(offset + 2, page_size));
   }
-  const auto initial_pc =
-      static_cast<std::uint16_t>(bus.read_memory({.address = reset_vector, .size = 2}));
-  require(initial_pc == application_entry, "Original supplied reset vector selects E000");
-  bus.accesses.clear(); // The two explicit fixture vector reads are not native CPU transactions.
   Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
-  cpu.set_state({.pc = initial_pc,
-                 .hx = static_cast<std::uint16_t>(seed),
-                 .sp = 0,
-                 .a = canary,
-                 .ccr = static_cast<std::uint8_t>(seed == 0 ? flags_fixed : byte_mask)});
+  enter_application(cpu, bus, seed, mode);
   for (unsigned n = 0; n < startup_retired; ++n) { cpu.step(); }
   const auto before = cpu.state();
   require(before.pc == gpio_write_pc && before.sp == ram_end - 3 &&
               before.hx == calibration_batches && before.a == 3,
           "Original HCS08 startup completes its real RAM loop and calibration assignments");
+  if (mode == StartupEntry::normal_reset) {
+    require(before.ccr_known == initialized_ccr_known && before.ccr == reset_ccr,
+            "Original CPHX establishes C, later CLR preserves it and H remains unknown");
+  }
   const auto error = rejected([&] { cpu.step(); });
   require(error.contains("write address=" + hex(port_e)) &&
               error.contains("pc=" + hex(gpio_write_pc)) && bus.retired == startup_retired,
@@ -120,12 +159,19 @@ void startup(const std::vector<std::uint8_t> &records, std::ostream &trace, cons
   unsigned writes = 0;
   unsigned reads = 0;
   for (const auto &event : bus.accesses) { event.write ? ++writes : ++reads; }
-  require(writes == expected_writes && reads == expected_reads,
+  const unsigned reset_reads = mode == StartupEntry::normal_reset ? 2 : 0;
+  require(writes == expected_writes && reads == expected_reads + reset_reads,
           "Independent loop and word-access counts match every native RAM transaction");
   quarantine(cpu, bus);
-  trace << "STARTUP seed=" << seed << " retired=" << bus.retired << " pc=" << before.pc
-        << " sp=" << before.sp << " hx=" << before.hx << " a=" << static_cast<unsigned>(before.a)
-        << " writes=" << writes << " reads=" << reads << " address=" << port_e << " fault=1\n";
+  trace << (mode == StartupEntry::normal_reset ? "WARM_STARTUP" : "STARTUP") << " seed=" << seed
+        << " retired=" << bus.retired << " pc=" << before.pc << " sp=" << before.sp
+        << " hx=" << before.hx << " a=" << static_cast<unsigned>(before.a) << " writes=" << writes
+        << " reads=" << reads << " address=" << port_e << " fault=1";
+  if (mode == StartupEntry::normal_reset) {
+    trace << " ccr-known=" << static_cast<unsigned>(before.ccr_known)
+          << " ccr=" << static_cast<unsigned>(before.ccr);
+  }
+  trace << '\n';
 }
 } // namespace
 
@@ -138,7 +184,10 @@ int main(const int count, char **arguments) {
     trace.exceptions(std::ios::badbit | std::ios::failbit);
     for (const unsigned seed : {0U, 0x1200U}) {
       programmer(program, trace, seed);
-      startup(records, trace, seed);
+      startup(records, trace, seed, StartupEntry::debug);
+    }
+    for (const unsigned seed : {0U, 0x1200U}) {
+      startup(records, trace, seed, StartupEntry::normal_reset);
     }
     std::cout << "Original HCS08 programmer and startup execute to strict peripheral boundaries.\n";
     return 0;
