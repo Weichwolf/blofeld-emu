@@ -7,6 +7,7 @@
 #include "blofeld/hcs08_flash.hpp"
 #include "blofeld/hcs08_gpio.hpp"
 #include "blofeld/hcs08_icg.hpp"
+#include "blofeld/hcs08_spi.hpp"
 #include "blofeld/hcs08_system_options.hpp"
 #include "hcs08_fixture.hpp"
 
@@ -78,6 +79,7 @@ void ApplicationMemory::warm_reset() {
   gpio.reset();
   icg.reset(Hcs08IcgReset::warm);
   options.reset();
+  spi.reset();
 }
 
 void ApplicationMemory::begin_instruction(const ExecutionContext value) {
@@ -85,6 +87,7 @@ void ApplicationMemory::begin_instruction(const ExecutionContext value) {
   hcs08::Memory::begin_instruction(value);
   flash.context(value);
   icg.context(value);
+  spi.context(value);
 }
 
 void ApplicationMemory::begin_reset(const ExecutionContext value) {
@@ -105,12 +108,14 @@ std::uint8_t ApplicationMemory::read(const std::uint16_t address) {
     return value;
   }
   require(!resetting, "Only actual FLASH vector reads belong to the reset transaction");
-  if (!Hcs08Gpio::contains(address) && !icg_register(address) && !flash_register(address) &&
-      address != Hcs08SystemOptions::address) {
+  if (!Hcs08Gpio::contains(address) && !Hcs08Spi::contains(address) && !icg_register(address) &&
+      !flash_register(address) && address != Hcs08SystemOptions::address) {
     return hcs08::Memory::read(address);
   }
   std::uint8_t value = 0;
-  if (Hcs08Gpio::contains(address)) {
+  if (Hcs08Spi::contains(address)) {
+    value = spi.read(address);
+  } else if (Hcs08Gpio::contains(address)) {
     value = gpio.read(address, context);
   } else if (icg_register(address)) {
     value = icg.read(address);
@@ -129,12 +134,14 @@ void ApplicationMemory::write(const std::uint16_t address, const std::uint8_t va
     throw Fault("Unqualified startup FLASH write address=" + hex(address) +
                 " pc=" + hex(context.pc) + " ccr=" + hex(context.ccr));
   }
-  if (!Hcs08Gpio::contains(address) && !icg_register(address) && !flash_register(address) &&
-      address != Hcs08SystemOptions::address) {
+  if (!Hcs08Gpio::contains(address) && !Hcs08Spi::contains(address) && !icg_register(address) &&
+      !flash_register(address) && address != Hcs08SystemOptions::address) {
     hcs08::Memory::write(address, value);
     return;
   }
-  if (Hcs08Gpio::contains(address)) {
+  if (Hcs08Spi::contains(address)) {
+    spi.write({.address = address, .value = value});
+  } else if (Hcs08Gpio::contains(address)) {
     gpio.write({.address = address, .value = value}, context);
   } else if (icg_register(address)) {
     icg.write({.address = address, .value = value});
@@ -234,6 +241,8 @@ void same_endpoint(const ApplicationMemory &actual, const ApplicationMemory &exp
               actual.flash.state() == expected.flash.state() &&
               actual.flash_reads == expected.flash_reads &&
               actual.icg.state() == expected.icg.state() &&
+              actual.spi.state() == expected.spi.state() &&
+              actual.spi.faulted() == expected.spi.faulted() &&
               actual.options.read() == expected.options.read() &&
               actual.options.written() == expected.options.written() &&
               actual.peripheral_accesses == expected.peripheral_accesses &&

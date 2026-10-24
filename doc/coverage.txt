@@ -1910,3 +1910,10 @@ CPU/peripheral state to actual logical BDC RAM upload/PC/SP/GO and the original
 A/X until original LDX/LDA retire. Strict idle-FSTAT refusal remains before NVM
 launch; this is not a complete update, physical cold start or recovery proof.
 See hcs08-programmer-entry.txt. Warm entry remains an independent regression.
+
+Candidate S08SPIV3 SPI: explicit untimed master-edge owner supports real bit
+shifting, register/ack semantics, buffers/overrun/IRQ requests and trusted copies.
+Original direct SPI ISR gate checks own foreground frames/rings and native RTI
+against actual HCS08-to-DSP-SHI pin transfers (hcs08-spi.txt). CPU IRQ admission,
+physical timing/nets and full boot/controller/DSP event provenance remain open.
+No original FSTAT policy or firmware byte changes are implied.

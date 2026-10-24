@@ -6,6 +6,7 @@
 #include "blofeld/hcs08_flash.hpp"
 #include "blofeld/hcs08_gpio.hpp"
 #include "blofeld/hcs08_icg.hpp"
+#include "blofeld/hcs08_spi.hpp"
 #include "blofeld/hcs08_system_options.hpp"
 #include "hcs08_fixture.hpp"
 
@@ -40,6 +41,7 @@ public:
   Hcs08Flash flash;
   Hcs08Gpio gpio{Hcs08GpioContract::candidate_gt8a};
   Hcs08Icg icg{Hcs08IcgContract::candidate_gt8a_no_clock_events, Hcs08IcgReset::warm};
+  Hcs08Spi spi{Hcs08SpiContract::candidate_gt8a_reference_master_edges};
   Hcs08SystemOptions options{Hcs08FlashContract::candidate_gt8a};
   std::vector<Access> peripheral_accesses, flash_reads;
   bool resetting = false;

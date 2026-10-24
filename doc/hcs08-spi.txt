@@ -1,0 +1,56 @@
+Candidate S08SPIV3 master SPI and original Keyboard ISR
+
+  cmake --build --preset strict --target blofeld-hcs08-spi-test \
+    blofeld-original-hcs08-spi-test blofeld-original-hcs08-clock-startup-test format-check
+  ctest --test-dir build/strict -j1 \
+    -R '^(hcs08_spi|original_hcs08_spi|original_hcs08_clock_startup|original_hcs08_cold_startup)$' \
+    --output-on-failure
+
+Hcs08Spi requires candidate_gt8a_reference_master_edges explicitly. It owns
+0028/29/2A/2B/2D registers, double buffering, CPOL/CPHA/MSB/LSB shifting and
+SPRF/SPTEF IRQ requests.002C is reserved and fails. Reset control1=04,
+control2/baud/data=0 and SPIS=20 follow GT chapter12. SPIS writes are ignored;
+SPIS-with-SPTEF then SPID write is required to queue data. Reads do not advance
+transfers. SPIS-with-SPRF then SPID read acknowledges RX; unarmed reads do not.
+Receive overrun discards the new byte without a fabricated error bit. SPE clear
+aborts the paths, clears SPRF and sets SPTEF. Full reset also clears register data.
+
+The owner must supply a real queued-buffer transfer,16 actual SPSCK transitions
+with eight known MISO sample inputs, then a completion boundary. No host byte
+injection or poll creates RX data. Unknown inputs, impossible events, enabled
+slave mode, unsupported mode-fault/bidirectional/wait-clock controls and active
+format changes fail with address/operation/PC/CCR/edge context and quarantine.
+Trusted copies preserve pending bits, flag-ack history and buffers without peers
+or callbacks. MOSI is explicitly unknown in unqualified idle data intervals.
+
+These are untimed digital events. The idle transmit buffer moves to the shifter
+within two BUSCLK cycles according to12.4.4; the text does not select our exact
+write-to-transfer/first-edge or final-sample-to-SPRF phase. No fixed latency or
+physical SCK rate is invented. SPIBR12 derives divisor16, not a calibrated rate
+or active-divider transition phase. Original MODFEN0 leaves SS with the GPIO
+owner. Electrical pad resolution, alternate ownership and actual board wiring
+remain separate; no default selected slave or incoming zero is supplied.
+
+Units independently check all256 baud values, control2 unsupported bits,
+2048 full byte/format combinations, every partial-edge copy position and12 fresh
+paired master/DSP-SHI continuations. All MOSI/MISO bits cross real pin events;
+three8-bit transfers form one24-bit DSP receive word with known peer reply.
+Unknown MISO, early completion, reset/disable, queueing, RX overrun and actual
+flag acknowledgements are checked without fuzzing.
+
+original_hcs08_spi loads only pinned local official pages and directly enters
+the original EA29 ISR with eight own declared foreground/stack/RAM contexts.
+32 original ISR calls execute664 native instructions. Actual SPIS reads arm
+SPID writes; three16-edge transfers per context send own903C64 to DspShi and
+return its own123456 through the original RX ring. The empty-TX branch writes
+54 to disable transmit IRQ. Native PSHH/PULH/RTI must restore the complete own
+foreground frame.16 fixed collector corruptions reject changed bits/cursors/
+retirements/return state. Manufacturer program bytes remain local.
+
+This is bounded direct ISR execution, not actual CPU interrupt admission or a
+boot-origin frame. No native DSP firmware consumer is executed by this gate.
+Full controller boot, ICG/FLL/status, timer/ADC, interrupt timing, master latency,
+physical nets, complete MIDI/audio/update/recovery and hardware equivalence
+remain open. Existing warm/cold startup retains its strict ICGS1/unknown-pad
+frontiers. The independent idle-FSTAT store remains unresolved; no broad
+protocol rule, other derivative or absence of errata supplies an exact result.
