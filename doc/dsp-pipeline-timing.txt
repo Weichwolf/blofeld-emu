@@ -1,0 +1,63 @@
+DSP pipeline timing reference
+
+The current native_internal_estimates clock excludes pipeline interlocks and
+memory bus phases. FM Rev5 tables2-1/5-1 describe overlapped F1/F2/decode/AG1/AG2/
+E1/E2 stages. Semantic access order and a total instruction cost do not establish
+simultaneous core/DMA occupancy. The original foreground polls DSR0; a WAIT-only
+clock path would not cover that loop.
+
+Primary references: DSP56300FM A.2, APR20 section6 and DSPSTUDIOUG section2.3.
+PDF download URLs, sizes and hashes are in hardware/sources.json. The PDFs and
+vendor binaries remain local. APR30's description of the legacy simulator is
+not proof that every installed derivative model is correct. The independently
+observed switched-memory disagreement remains open (vendor-simulator.txt).
+
+Own fixed initial-map reference
+
+  python3 tools/prepare_dsp_pipeline_reference.py doc/local/dsp-pipeline-reference
+
+This command only generates own assembly and case metadata. It assembles,
+executes and downloads nothing. Assemble interlocks.asm using the pinned NXP
+6.3.28 assembler with -a -binterlocks.coff -linterlocks.lst. Execute using the
+separately qualified local RSP transport and normal server -showpc mode. The
+dedicated Wine prefix and installed backend DLL working directory are required.
+Raw listings, program bytes, transport driver, packets and console logs stay in
+doc/local/dsp-pipeline-reference/. No automatic CTest or fuzz target is added.
+
+The checked program has1315 words/1047 instructions and38 cases. It stays in the
+initial map, performs no memory-switch request, and supplies nonzero X/Y canaries.
+Every program word is read back before/after execution. Every expected PC
+transition and38 independently expected register/SR results must agree.
+dsp-pipeline-timing-reference.json pins the own word-stream hash and records the
+measured windows. It contains no manufacturer program bytes or raw vendor output.
+
+Each producer/consumer pair has eight quiet NOPs before and after. Cycle counts
+are subtracted at quiet NOP anchors around the pair. A counter delta printed for
+one retired instruction can charge a bubble to its producer or a preceding NOP;
+it cannot be treated as that instruction's cost or its memory-access timestamp.
+
+Additional clocks measured in the normal model:
+
+  producer / consumer                    intervening NOPs    additional clocks
+  write R0/N0/M0; load through R0              0/1/2/3             3/2/1/0
+  write R1; load through R0                    0/1/2/3             0/0/0/0
+  MPY to A; move A1                            0/1/2/8             1/0/0/0
+  MPY to A; move B1                            0/1/2/8             0/0/0/0
+  move to A1; move A1                          0/1/2/8             1/0/0/0
+  MPY; move SR                                0/1/2/8             2/1/0/0
+
+These33 windows agree with the selected primary expectations, including the
+status-MOVE distinction in APR20. They qualify fixed model observations, not
+silicon or a complete dynamic timing engine. Five BTST-SR windows remain
+unqualified: the isolated model baseline is two clocks and the additional
+MPY-related delays need reconciliation with FM A-1/A.2.3. No correction to our
+emulator is justified by those unexplained numbers alone.
+
+A separate paired31-case experiment executes553 instructions in both server
+modes. PC/register observations are identical, but normal mode reports776 clocks
+and -fastmode reports562. Fast mode omits the tested AGU hazards and changes
+other nominal costs; it is not a timing oracle. Its previously observed memory
+switch contradiction is also unchanged. No physical pipeline phase, PLL/board
+timing, automatic active DMA, complete firmware boot or normal host audio is
+established. Dynamic timing must retain instruction history and elapsed stall
+clocks; bus phases and branch/interlock interaction still need reconstruction.

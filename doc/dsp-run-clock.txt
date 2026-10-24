@@ -48,6 +48,10 @@ charged post-update by N, and assigned P-space MOVEP two. Own assembled and
 independently encoded cases check the actual encoded instruction form and literal table-derived costs,
 including immediate/absolute, post/pre-update, peripheral/register and P: forms.
 These corrections qualify these nominal entries, not every SDK instruction cost.
+Separate initial-map NXP reference windows now measure selected AGU, accumulator
+and SR interlocks (dsp-pipeline-timing.txt). The existing nominal contract is not
+silently promoted to a pipeline clock. Fast-mode reference counts are unsuitable;
+five status-bit timing windows and actual memory phases remain unqualified.
 
   cmake --build --preset strict --target blofeld-dsp-run-clock-test blofeld-original-dsp-clock-test
   ctest --test-dir build/strict -R '^(dsp_run_clock|original_dsp_clock)$' --output-on-failure

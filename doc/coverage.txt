@@ -304,6 +304,14 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           (dsp-clocked-wire.txt). Physical IRQ
                                           latency and serial baud remain open.
                                           Physical pipeline/PLL/board timing open.
+                                          Separate NXP initial-map reference:
+                                          38 own timing windows/1047 instructions;
+                                          33 windows match primary AGU/ALU/SR-
+                                          MOVE expectations, five status-bit
+                                          windows remain unqualified. Fast-mode
+                                          counts differ despite equal registers;
+                                          no automatic DMA or pipeline-phase
+                                          claim (dsp-pipeline-timing.txt).
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
                                           source IRQs tested (dsp-timers.txt).

@@ -1,0 +1,370 @@
+{
+  "scope": "Fixed own initial-map NXP reference instruction timing windows; not complete DSP56371 silicon, memory-switch, automatic DMA, full firmware boot or host audio qualification. All program bytes, vendor logs/binaries and detailed analysis remain local.",
+  "source_license": "GPL-3.0-only",
+  "reference_tools_manifest": "reference-tools.json",
+  "prefix": "dedicated local blofeld-emu Wine prefix",
+  "own_program": {
+    "sha256_24_bit_words": "a7838b1337d9a6b89f4c1bd29aadd0fcdceb636fe359439f502ae0340431eaef",
+    "words": 1315,
+    "instructions": 1047,
+    "assembler": "NXP asm56300 6.3.28"
+  },
+  "transport_controls": "Every loaded program word read back before and after execution; all1047 expected PC transitions,38 independently expected data/SR results and nonzero X/Y RAM canaries checked. No memory-switch mode enabled.",
+  "measurement": "Elapsed cycle count between quiet NOP anchors bracketing producer/consumer; single-retirement delta is not an instruction cost or bus-phase timestamp.",
+  "total_model_cycles": 1352,
+  "paired_fastmode_control": {
+    "instructions": 553,
+    "cases": 31,
+    "register_and_PC_results_identical": true,
+    "default_cycles": 776,
+    "fastmode_cycles": 562,
+    "fastmode_timing_qualified": false
+  },
+  "cases": [
+    {
+      "kind": "agu_r0",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 3,
+      "independent_expected_stall_cycles": 3,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_r0",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 2,
+      "independent_expected_stall_cycles": 2,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_r0",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": 1,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_r0",
+      "nop_gap": 3,
+      "instructions_in_window": 15,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_n0",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 3,
+      "independent_expected_stall_cycles": 3,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_n0",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 2,
+      "independent_expected_stall_cycles": 2,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_n0",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": 1,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_n0",
+      "nop_gap": 3,
+      "instructions_in_window": 15,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_m0",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 3,
+      "independent_expected_stall_cycles": 3,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_m0",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 2,
+      "independent_expected_stall_cycles": 2,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_m0",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": 1,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_m0",
+      "nop_gap": 3,
+      "instructions_in_window": 15,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_r1",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 12,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_r1",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 13,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_r1",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 14,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "agu_r1",
+      "nop_gap": 3,
+      "instructions_in_window": 15,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "arithmetic",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 13,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": 1,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "arithmetic_other",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 12,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "transfer",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 13,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": 1,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_move",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 14,
+      "excess_over_one_cycle_per_instruction": 2,
+      "independent_expected_stall_cycles": 2,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_bit",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 3,
+      "independent_expected_stall_cycles": null,
+      "qualification": "status-bit baseline and extra cycles unresolved"
+    },
+    {
+      "kind": "arithmetic",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 13,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "arithmetic_other",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 13,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "transfer",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 13,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_move",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 14,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": 1,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_bit",
+      "nop_gap": 1,
+      "instructions_in_window": 13,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 2,
+      "independent_expected_stall_cycles": null,
+      "qualification": "status-bit baseline and extra cycles unresolved"
+    },
+    {
+      "kind": "arithmetic",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 14,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "arithmetic_other",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 14,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "transfer",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 14,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_move",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 14,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_bit",
+      "nop_gap": 2,
+      "instructions_in_window": 14,
+      "observed_clock_cycles": 15,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": null,
+      "qualification": "status-bit baseline and extra cycles unresolved"
+    },
+    {
+      "kind": "arithmetic",
+      "nop_gap": 8,
+      "instructions_in_window": 20,
+      "observed_clock_cycles": 20,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "arithmetic_other",
+      "nop_gap": 8,
+      "instructions_in_window": 20,
+      "observed_clock_cycles": 20,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "transfer",
+      "nop_gap": 8,
+      "instructions_in_window": 20,
+      "observed_clock_cycles": 20,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_move",
+      "nop_gap": 8,
+      "instructions_in_window": 20,
+      "observed_clock_cycles": 20,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_bit",
+      "nop_gap": 8,
+      "instructions_in_window": 20,
+      "observed_clock_cycles": 21,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": null,
+      "qualification": "status-bit baseline and extra cycles unresolved"
+    },
+    {
+      "kind": "status_move_control",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 12,
+      "excess_over_one_cycle_per_instruction": 0,
+      "independent_expected_stall_cycles": 0,
+      "qualification": "initial-map model window matches primary expectation"
+    },
+    {
+      "kind": "status_bit_control",
+      "nop_gap": 0,
+      "instructions_in_window": 12,
+      "observed_clock_cycles": 13,
+      "excess_over_one_cycle_per_instruction": 1,
+      "independent_expected_stall_cycles": null,
+      "qualification": "status-bit baseline and extra cycles unresolved"
+    }
+  ],
+  "status_bit_cases_unqualified": 5,
+  "silicon_validated": false,
+  "automatic_DMA_qualified": false
+}

@@ -148,5 +148,17 @@
     "source": "https://www.nxp.com/docs/en/product-numbering-scheme/DSPDECODERMSC.pdf",
     "bytes": 30209,
     "sha256": "1e76ef1209604f1202777a9ac2aa121115d00503bc8fcd49c3b5fb0ca1001d26"
+  },
+  {
+    "file": "APR30.pdf",
+    "source": "https://www.nxp.com/docs/en/application-note/APR30.pdf",
+    "bytes": 642801,
+    "sha256": "a1d22006d5083ea4c0a822a99f7100f08a81ade04027cfb43a081db39e6c1f1d"
+  },
+  {
+    "file": "DSPSTUDIOUG.pdf",
+    "source": "https://www.nxp.com/docs/en/user-guide/DSPSTUDIOUG.pdf",
+    "bytes": 5444616,
+    "sha256": "45c1dba6205862ac2944f92104f0bf8bec348f58f4cf33c2cb311ac0d5915efe"
   }
 ]

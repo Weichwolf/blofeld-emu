@@ -26,8 +26,9 @@ The simulator server can load the DSP56300 library and explicitly reports
     -dll libdsp56300simapi -port <unused-port> -loud
 
 The -dll argument takes a library basename, without '.dll'. -h prints usage;
-omitting the required port also prints usage and returns failure. Disconnecting
-the debugger terminates this reference simulator. Use one simulator owner at a
+omitting the required port also prints usage and returns failure. After disconnect,
+verify that the specific local server process has exited; terminate only that
+process if needed, keeping the shared Wine server alive. Use one simulator owner at a
 time under the shared native-process budget. The Eclipse GUI is not qualified.
 
 The installed server has a memory-transport incompatibility: the 56300 callback
@@ -53,6 +54,15 @@ previously written Y:000000, contrary to table 3-2. The cause/configuration
 remains unresolved; these observations do not override the chip manual.
 The explicit -fastmode option produces identical native instruction/register
 observations in that fresh counterexample and does not resolve the disagreement.
+
+Initial-map instruction timing is now checked separately. Thirty-eight quiet
+producer/consumer windows run1047 own instructions with verified code readback,
+PC transitions and expected register/SR values. Selected AGU/accumulator/status-
+MOVE delays match primary expectations; five status-bit windows remain open.
+A paired31-case run has identical PC/register results in both modes but776 versus
+562 reported clocks. Fast mode is not a timing oracle. Retirement deltas also
+cannot identify memory-access stages; see dsp-pipeline-timing.txt. These bounded
+timing observations do not repair the switched-memory or silicon-qualification gaps.
 
 Initial model OMR=000300 independently agrees with the documented CDP reset
 bits. Initial PC=C00000 and BCR=0 do not qualify a hardware SPI-reset sequence
