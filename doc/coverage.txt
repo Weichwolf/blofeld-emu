@@ -911,6 +911,10 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           Explicit DMA register/counter/request
                                           phases now feed native-configured ESAI
                                           with literal ring/serial expectations;
+                                          cold masked DSTR reads retain
+                                          independent reset DTD/reserved bits
+                                          without qualifying another channel's
+                                          unknown time/activity (dsp-dma.txt);
                                           DAX now has buffered digital output,
                                           Port D, explicit input dividers, VUC/
                                           parity/block checks and actual DMA

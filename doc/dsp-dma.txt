@@ -23,6 +23,11 @@ inputs fail visibly. Reset DSTR is00003f; DE's DTD clear has the documented thre
 additional reference-cycle delay. Repeating-mode DTD lifetime after a block is
 unqualified: reads selecting that bit reject until explicit disable completes.
 Qualified masked status-bit reads still work without inventing the unknown bit.
+Before the first reference-cycle sample, each never-enabled channel's reset DTD
+and all reserved-zero fields remain independently readable. A cold enabled
+channel still rejects reads selecting its DTD or the shared DACT/DCH fields;
+a whole DSTR read therefore still fails. A status mask cannot manufacture elapsed
+cycles, a request, a grant or a transfer for another channel.
 
 DspDma::advance requires reference_sampled_cycles, consecutive caller-owned cycle
 indices, explicitly known request levels and an available/wait bus grant. External
@@ -72,7 +77,15 @@ triple layouts on both endpoints, dual/linear modes and24-bit wrap. Sixty-five
 real source reads check the64-word ring, reload and first reused word. Separate
 tests cover all six equal priorities, higher-priority arrival between phases,
 held-data replay, denied grants, DE clear before/after source read, faults and
-strict input/configuration rejection. Own unclocked native MOVEP programs configure
+strict input/configuration rejection.
+
+Every combination of enabled channels and nonempty DTD masks is also checked in
+both request-driven word and software block modes (8064 fixed mask cases).
+After those queries, exactly three explicit waited cycles clear only the enabled
+DTD bits without any I/O. A further 144 own native MOVEP/BTST programs cover every
+status bit with each channel enabled: known fields change only Carry/PC;
+unknown fields retain contextual failure and do not retire the instruction.
+Own unclocked native MOVEP programs configure
 both ESAI maps and DMA registers. Explicit HCKT observations and DMA grants feed
 an opposite-edge receiver;66 complete serial words and every actual RAM/TX transfer
 match independent expectations, including ring wrap. A checkpoint between the

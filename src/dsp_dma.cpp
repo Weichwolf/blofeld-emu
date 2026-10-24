@@ -29,17 +29,21 @@ bool DspDma::busy(const unsigned channel) const {
 }
 
 unsigned DspDma::read_status(const unsigned mask) const {
+  constexpr unsigned activity_fields = 0xf00;
   unsigned result = 0;
   for (unsigned index = 0; index < channels_.size(); ++index) {
     const auto &channel = channels_.at(index);
-    if (busy(index) && !cycle_) {
-      throw Fault("Unqualified DSP DMA cycle timing" + location(dma::status));
+    const auto timed_fields = (1U << index) | activity_fields;
+    if (busy(index) && !cycle_ && (mask & timed_fields) != 0) {
+      throw Fault("Unqualified DSP DMA cycle timing" + location(dma::status) +
+                  " mask=" + hex(mask, 6) + " channel=" + std::to_string(index));
     }
     if (!channel.done_known && (mask & (1U << index)) != 0) {
       throw Fault("Unqualified DSP DMA repeating DTD lifetime" + location(dma::status));
     }
     if (channel.done) { result |= 1U << index; }
   }
+  if ((mask & activity_fields) == 0) { return result & mask; }
   const auto selected = active_ ? std::optional{active_->channel} : select();
   constexpr unsigned active_flag = 0x100;
   constexpr unsigned channel_shift = 9;

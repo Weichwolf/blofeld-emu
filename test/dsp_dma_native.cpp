@@ -30,6 +30,67 @@ constexpr unsigned total_words = 66;
 constexpr unsigned port_control = 31;
 constexpr unsigned port_direction = 30;
 
+struct StatusBitCase {
+  unsigned channel;
+  unsigned bit;
+};
+
+void native_masked_status_case(const StatusBitCase input) {
+  constexpr unsigned channels = 6;
+  const auto [channel, bit] = input;
+  const auto register_offset = channel * 4;
+  DspMachine machine;
+  DspProgram code;
+  for (const auto [address, value] : {std::pair{source0, ring_start},
+                                      std::pair{destination0, destination},
+                                      std::pair{counter0, 0U},
+                                      std::pair{control0, word_copy}}) {
+    code.emit("movep #>" + number(value) + ",x:<<" + number(address - register_offset));
+  }
+  code.emit(bit < channels ? "andi #$fe,ccr" : "ori #1,ccr");
+  code.emit("btst #" + std::to_string(bit) + ",x:<<" + number(status));
+  code.install(machine.bus());
+  machine.cpu().reset_spi_boot();
+  for (unsigned step = 0; step < 5; ++step) { machine.cpu().step(); }
+  const auto before = machine.cpu().debug_state();
+  const bool unknown = bit == channel || (bit >= 8 && bit <= 11);
+  if (unknown) {
+    const auto error = rejects([&] { machine.cpu().step(); });
+    require(error.contains("cycle timing") && error.contains("pc=" + hex(before.cpu.pc, 6)) &&
+                error.contains("omr=" + hex(before.cpu.omr, 6)) &&
+                error.contains("mask=" + hex(1U << bit, 6)) &&
+                machine.cpu().state().sr == before.cpu.sr &&
+                machine.cpu().debug_state().native_instructions == before.native_instructions,
+            "Native selected unknown DMA fields fail with exact CPU/register/mask context");
+    const auto stopped = machine.cpu().debug_state();
+    require(rejects([&] { machine.cpu().step(); }).contains("requires reset") &&
+                machine.cpu().debug_state() == stopped,
+            "Rejected unknown status cannot resume or change native state without recovery");
+  } else {
+    machine.cpu().step();
+    auto expected = before.cpu;
+    ++expected.pc;
+    expected.sr = (expected.sr & ~1U) | (bit < channels ? 1U : 0U);
+    require(machine.cpu().state() == expected &&
+                machine.cpu().debug_state().native_instructions == before.native_instructions + 1,
+            "FM BTST changes only Carry and PC for an independent known DTD or reserved bit");
+  }
+  require(machine.bus().read({.space = DspSpace::x, .address = control0 - register_offset}) ==
+                  word_copy &&
+              machine.bus().read({.space = DspSpace::x, .address = counter0 - register_offset}) ==
+                  0,
+          "Status bit access never alters the real enabled channel or counter");
+}
+
+void native_masked_status_without_time() {
+  constexpr unsigned bits = 24;
+  for (unsigned channel = 0; channel < 6; ++channel) {
+    for (unsigned bit = 0; bit < bits; ++bit) {
+      native_masked_status_case({.channel = channel, .bit = bit});
+    }
+  }
+}
+
 unsigned program(DspProgram &code, const bool second, const bool with_dax) {
   unsigned count = 0;
   const auto put = [&](const DspSpace space, const unsigned address, const unsigned value) {
@@ -320,6 +381,7 @@ void dax_data_map() {
 }
 
 void native_checks() {
+  native_masked_status_without_time();
   serial_refill(false);
   serial_refill(true);
   dax_fifo_failure();

@@ -6,6 +6,60 @@
 
 namespace blofeld::test::dma_test {
 namespace {
+struct StatusMaskCase {
+  unsigned control;
+  unsigned enabled;
+};
+
+void masked_status_case(const StatusMaskCase input) {
+  // FM figure10-6/table10-10: DTD is per-channel; DACT/DCH describe global activity.
+  constexpr unsigned activity = 0xf00;
+  constexpr unsigned reserved = 0xfff0c0;
+  constexpr unsigned full_status = 0xffffff;
+  const auto [control, enabled] = input;
+  Harness test;
+  for (unsigned channel = 0; channel < 6; ++channel) {
+    if ((enabled & (1U << channel)) != 0) { configure(test.dma, control, 0, channel); }
+  }
+  for (unsigned selected = 1; selected <= all_done; ++selected) {
+    if ((selected & enabled) == 0) {
+      require(test.dma.read(status, selected | reserved) == selected,
+              "Untimed channels do not obscure independent reset DTD or reserved-zero bits");
+    } else {
+      require(rejects([&] {
+                static_cast<void>(test.dma.read(status, selected));
+              }).contains("cycle timing"),
+              "Selecting an enabled channel still requires actual elapsed reference cycles");
+    }
+  }
+  require(test.dma.read(status, reserved) == 0 && test.dma.read(status, 0) == 0,
+          "Unrequested and reserved fields cannot require an unrelated DMA clock sample");
+  for (const auto mask : {activity, 0x100U, 0x200U, 0x400U, 0x800U, full_status}) {
+    if (enabled == 0) {
+      require(test.dma.read(status, mask) == (all_done & mask),
+              "Disabled DMA has known reset status fields");
+    } else {
+      require(
+          rejects([&] { static_cast<void>(test.dma.read(status, mask)); }).contains("cycle timing"),
+          "Any unobserved enabled channel prevents fabricating global activity fields");
+    }
+  }
+  for (unsigned cycle = 0; cycle < 3; ++cycle) {
+    require(!test.tick(0, true) && test.reads.empty() && test.writes.empty(),
+            "Status reads consume no DMA time, request or external bus access");
+    require(test.dma.read(status, all_done) == (cycle == 2 ? all_done & ~enabled : all_done),
+            "Only three explicit reference cycles clear exactly the enabled DTD bits");
+  }
+}
+
+void masked_status_without_time() {
+  for (const auto control : {word_copy, software_copy}) {
+    for (unsigned enabled = 0; enabled <= all_done; ++enabled) {
+      masked_status_case({.control = control, .enabled = enabled});
+    }
+  }
+}
+
 void priorities() {
   Harness equal;
   static_cast<void>(equal.tick());
@@ -137,6 +191,7 @@ void late_peripheral() {
 }
 
 void state_checks() {
+  masked_status_without_time();
   priorities();
   captured_disable_and_recovery();
   strict_inputs_and_configuration();

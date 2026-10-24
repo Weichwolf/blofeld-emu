@@ -61,6 +61,9 @@ the DSP56720 platform configuration. The observed reserved-write/ROM results
 cannot establish silicon behavior from this inconsistent model. Our emulator
 therefore retains its reserved Y:002000 and missing-ROM failures; no write-
 discard policy or guessed memory alias follows from these experiments.
+The server log explicitly reports internal-reserved-memory access for Y:002000
+while the debugger still receives a stepped-stop response. Neither that response
+nor a later zero value establishes successful access or harmless silicon writes.
 
 The separately pinned NXP assembler 6.3.28 qualifies the document-derived SPI
 prefix encoding independently of the simulator. It preserves the manual's three
