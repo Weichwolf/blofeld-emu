@@ -45,7 +45,37 @@ The declared unsecured pre-update options, trim and protection are explicit
 fixtures, not recovered hardware observations or a complete installed image.
 No NVM operating frequency is supplied here. The original4MHz/FCDIV1e question,
 idle-FCBEF silicon behavior, later partial-CCR ISA/peripherals, page operations,
-full reset/persistence/update/recovery, cold registers/RAM, actual part/net/clock,
+full reset/persistence/update/recovery, physical cold-state retention, actual part/net/clock,
 normal boot/USB-MIDI/audio and stock-device comparisons remain required.
 See objective.txt, coverage.txt and the separate original component scopes in
 hcs08-reset.txt, hcs08-bdc.txt, hcs08-reset-security.txt and keyboard-chain.txt.
+
+Architectural power-on upload and register-definition continuations
+
+  ctest --test-dir build/strict -j1 \
+    -R '^(original_hcs08_reset_entry|original_hcs08_cold_programmer)$' --output-on-failure
+
+The separate cold gate uses the same132-byte original program with two declared
+unsecured NVM/protection/trim fixtures. A fresh native CPU receives power_on
+active-background reset, no set_state inputs and no WRITE_A/HX/CCR. Both vectors
+and all RAM start unknown. Peripheral reset establishes live ICGTRM80 separately
+from the explicit factory NVM trim. Actual BDC commands establish every uploaded
+RAM byte and only PC/SP/GO. Original LDX defines X at reference period2; A stays
+unknown until original LDA retires at6. No register definition commits during
+an unfinished instruction budget. CCR remains partial throughout the prefix.
+
+Eight trusted joint graph cuts per fixture cover reset, completed upload before
+PC/SP/GO, midway LDX, before/midway/after first LDA, completed prefix and pending
+FSTAT.32 fresh continuations execute real remaining commands/instructions, check
+literal PC/register/knowledge/time/access expectations, and reproduce the full
+trace suffix and CPU/BDC/clock/RAM/NVM/peripheral endpoint. Runtime counter deltas
+account for180 actual retirements,1042 BDC commands and984 RAM writes including
+replays. All34 attempted idle-FSTAT stores still fail with no NVM launch/transfer.
+The75-row collector rejects33 fixed chronology/state/counter corruptions; these
+are directed tests, not fuzzing. Existing warm trace remains separate and exact.
+
+This qualifies the logical cold upload/programmer entry and trusted timed graph
+restoration only. It supplies no NVM operating frequency, physical reset or BDC
+pin/GO-queue timing, original HC12 caller, complete installed image, page update,
+power-loss corruption bounds, safe hardware recovery or hardware equivalence.
+The full objective and independent LCD/BKGD/ICG/ROM/USB/audio frontiers remain.

@@ -358,6 +358,13 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-reset-entry.trace")
   set_tests_properties(original_hcs08_reset_entry PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_cold_programmer COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_cold_programmer.py"
+    $<TARGET_FILE:blofeld-original-hcs08-reset-entry-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-cold-programmer.trace")
+  set_tests_properties(original_hcs08_cold_programmer PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-hcs08-bdc-wire-test test/hcs08_bdc_wire_test.cpp
     test/hcs08_programmer_fixture.cpp)
   target_link_libraries(blofeld-hcs08-bdc-wire-test PRIVATE blofeld_hcs08_icg)

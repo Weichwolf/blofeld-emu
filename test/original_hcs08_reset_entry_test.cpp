@@ -3,6 +3,7 @@
 #include "blofeld/hcs08.hpp"
 #include "blofeld/hcs08_bdc.hpp"
 #include "blofeld/hcs08_flash.hpp"
+#include "blofeld/hcs08_icg.hpp"
 #include "blofeld/hcs08_run_clock.hpp"
 #include "blofeld/hcs08_system_options.hpp"
 #include "blofeld/private_file.hpp"
@@ -12,6 +13,7 @@
 #include "hcs08_programmer_fixture.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -38,7 +40,8 @@ constexpr unsigned loaded_hx = 0x78, loaded_sp = 0x77, written_divider = 0x1e;
 constexpr unsigned reset_status = 0xc0, options = 0xc2, final_ccr = 0x6c;
 constexpr unsigned warm_pc = 0x1234, warm_hx = 0x3322, warm_sp = 0x4567, warm_a = 0xa5;
 constexpr unsigned second_pc = 0x5678, second_hx = 0x44bb, second_sp = 0x2456, second_a = 0x5a;
-constexpr unsigned protected_vectors = 0xfc, stack = 0x47c;
+constexpr unsigned protected_vectors = 0xfc, stack = 0x47c, reset_hx_known = 0xff00,
+                   power_on_trim = 0x80;
 
 struct Seed {
   Hcs08State warm;
@@ -70,7 +73,8 @@ struct Target {
   Hcs08 cpu{memory, BLOFELD_HCS08_SLA};
   cmds::Memory mapping{memory};
 
-  explicit Target(const Seed seed) : memory(Hcs08IdleLaunch::unqualified, 5) {
+  explicit Target(const Seed seed, const bool cold = false)
+      : memory(Hcs08IdleLaunch::unqualified, 5) {
     auto image = nvm::initial();
     image.data[hf::nv_protection - hf::first] = seed.protection;
     image.data[trim_address - hf::first] = seed.trim;
@@ -79,8 +83,14 @@ struct Target {
     memory.flash = Hcs08Flash(image, chip); // No observed NVM operating frequency.
     memory.bytes.fill(hp::data_canary);
     memory.known.reset(); // Actual BDC writes must establish every uploaded RAM byte.
-    cpu.set_state(seed.warm);
-    cpu.reset(Hcs08ResetEntry::active_background);
+    if (cold) {
+      memory.reset_peripherals();
+      memory.icg.reset(Hcs08IcgReset::power_on);
+    } else {
+      cpu.set_state(seed.warm);
+    }
+    cpu.reset(Hcs08ResetEntry::active_background,
+              cold ? Hcs08ResetCause::power_on : Hcs08ResetCause::warm);
   }
 
   explicit Target(const Saved &saved) : memory(saved.memory) { cpu.restore_checkpoint(saved.cpu); }
@@ -91,7 +101,7 @@ struct Machine {
   Hcs08Bdc bdc{target.cpu, target.mapping, chip, Hcs08BdcReset::bkgd_held_low};
   Hcs08RunClock clock{target.memory, bdc, run_contract};
 
-  explicit Machine(const Seed seed) : target(seed) {}
+  explicit Machine(const Seed seed, const bool cold = false) : target(seed, cold) {}
 
   explicit Machine(const Saved &saved) : target(saved) {
     bdc.restore_checkpoint(saved.bdc);
@@ -106,11 +116,37 @@ struct Machine {
   }
 };
 
+enum class Stage : std::uint8_t { prepare, start, prefix, pending, fault };
+
+struct Cut {
+  Saved saved;
+  Stage stage;
+  std::size_t offset;
+  std::uint64_t periods;
+  unsigned retired, remaining;
+};
+
+void capture(const Machine &machine,
+             const Stage stage,
+             const std::ostringstream &trace,
+             std::vector<Cut> *const cuts) {
+  if (cuts == nullptr) { return; }
+  cuts->push_back({.saved = machine.checkpoint(),
+                   .stage = stage,
+                   .offset = trace.str().size(),
+                   .periods = machine.clock.state().executing_periods,
+                   .retired = machine.target.memory.retired,
+                   .remaining = machine.clock.state().remaining_periods});
+}
+
 void registers(std::ostream &trace, const Hcs08State state) {
   trace << " pc=" << state.pc << " pc-known=" << state.pc_known << " hx=" << state.hx
         << " sp=" << state.sp << " a=" << static_cast<unsigned>(state.a)
         << " ccr=" << static_cast<unsigned>(state.ccr)
         << " known=" << static_cast<unsigned>(state.ccr_known);
+  if (state.a_known != Hcs08State::all_a || state.hx_known != Hcs08State::all_hx) {
+    trace << " a-known=" << static_cast<unsigned>(state.a_known) << " hx-known=" << state.hx_known;
+  }
 }
 
 void ram(const hp::Memory &memory, const std::span<const std::uint8_t> program) {
@@ -130,23 +166,56 @@ std::uint8_t status(Hcs08Bdc &bdc) {
   return bdc.read_reply();
 }
 
+void start(Machine &machine, std::ostringstream &trace) {
+  auto &cpu = machine.target.cpu;
+  auto &memory = machine.target.memory;
+  auto expected = cpu.state();
+  expected.pc = hp::algorithm;
+  expected.pc_known = true;
+  expected.sp = stack;
+  constexpr std::array<std::uint8_t, 3> pc{0x4b, 0, hp::algorithm};
+  constexpr std::array<std::uint8_t, 3> sp{0x4f, 4, 0x7c};
+  constexpr std::array<std::uint8_t, 1> go{0x08};
+  cmds::command(machine.bdc, pc);
+  cmds::command(machine.bdc, sp);
+  cmds::command(machine.bdc, go);
+  require(
+      status(machine.bdc) == running_status && cpu.state() == expected &&
+          machine.bdc.state().serviced == command_count,
+      "Actual WRITE_PC/WRITE_SP/GO starts original RAM code without WRITE_CCR or guessed flags");
+  trace << "START";
+  registers(trace, cpu.state());
+  trace << " commands=" << machine.bdc.state().serviced << " status=" << running_status << '\n';
+  memory.accesses.clear();
+}
+
 void prepare(Machine &machine,
              const Seed seed,
              const std::span<const std::uint8_t> program,
-             std::ostream &trace) {
+             std::ostringstream &trace,
+             const bool cold = false,
+             std::vector<Cut> *const cuts = nullptr) {
   auto &cpu = machine.target.cpu;
   auto &memory = machine.target.memory;
   const auto after_reset = cpu.state();
   require(
-      after_reset == Hcs08State{.pc = 0,
-                                .hx = static_cast<std::uint16_t>(seed.warm.hx & byte_mask),
-                                .sp = byte_mask,
-                                .a = seed.warm.a,
-                                .ccr_known = reset_known,
-                                .ccr = reset_known,
-                                .pc_known = false} &&
+      after_reset ==
+              Hcs08State{.pc = 0,
+                         .hx = static_cast<std::uint16_t>(cold ? 0 : seed.warm.hx & byte_mask),
+                         .sp = byte_mask,
+                         .a = static_cast<std::uint8_t>(cold ? 0 : seed.warm.a),
+                         .ccr_known = reset_known,
+                         .ccr = reset_known,
+                         .pc_known = false,
+                         .a_known = static_cast<std::uint8_t>(cold ? 0 : Hcs08State::all_a),
+                         .hx_known = static_cast<std::uint16_t>(cold ? reset_hx_known
+                                                                     : Hcs08State::all_hx)} &&
           memory.known.none() && memory.accesses.empty() && !memory.resetting,
       "Actual active reset precedes vector/RAM access and retains only documented warm knowledge");
+  if (cold) {
+    require(memory.icg.state().trim == power_on_trim && !memory.options.written(),
+            "Actual power-on peripherals retain reset trim, separate from factory NVM data");
+  }
   trace << "RESET";
   registers(trace, after_reset);
   trace << " status=" << static_cast<unsigned>(machine.bdc.status())
@@ -174,42 +243,54 @@ void prepare(Machine &machine,
   trace << "UPLOAD bytes=" << upload_bytes << " known=" << memory.known.count()
         << " commands=" << machine.bdc.state().serviced << " pc-known=" << cpu.state().pc_known
         << '\n';
-  constexpr std::array<std::uint8_t, 3> pc{0x4b, 0, hp::algorithm};
-  constexpr std::array<std::uint8_t, 3> sp{0x4f, 4, 0x7c};
-  constexpr std::array<std::uint8_t, 1> go{0x08};
-  cmds::command(machine.bdc, pc);
-  cmds::command(machine.bdc, sp);
-  cmds::command(machine.bdc, go);
-  require(
-      status(machine.bdc) == running_status && cpu.state().pc_known &&
-          cpu.state().ccr_known == reset_known && cpu.state().sp == stack &&
-          machine.bdc.state().serviced == command_count,
-      "Actual WRITE_PC/WRITE_SP/GO starts original RAM code without WRITE_CCR or guessed flags");
-  trace << "START";
-  registers(trace, cpu.state());
-  trace << " commands=" << machine.bdc.state().serviced << " status=" << running_status << '\n';
-  memory.accesses.clear();
+  capture(machine, Stage::start, trace, cuts);
+  start(machine, trace);
 }
 
-void prefix(Machine &machine, const Seed seed, std::ostream &trace) {
+void pending_registers(Machine &machine,
+                       const unsigned instruction,
+                       const bool cold,
+                       const std::ostringstream &trace,
+                       std::vector<Cut> *const cuts) {
+  if (!cold || machine.clock.state().remaining_periods != 1 ||
+      (instruction != 0 && instruction != 2)) {
+    return;
+  }
+  const auto pending = machine.clock.state().pending;
+  require(pending == machine.target.cpu.state() && pending.a_known == 0 &&
+              pending.hx_known == (instruction == 0 ? reset_hx_known : Hcs08State::all_hx) &&
+              machine.target.memory.retired == instruction,
+          "Pending original LDX/LDA budgets retain unknown incoming register knowledge");
+  capture(machine, Stage::prefix, trace, cuts);
+}
+
+void prefix(Machine &machine,
+            const Seed seed,
+            std::ostringstream &trace,
+            const bool cold = false,
+            std::vector<Cut> *const cuts = nullptr) {
   constexpr std::array<unsigned, 8> pcs{0xa2, 0xa3, 0xa5, 0xa8, 0xaa, 0xad, 0xaf, strict_pc};
   constexpr std::array<unsigned, 8> periods{2, 4, 6, 10, 12, 16, 18, prefix_periods};
   constexpr std::array<unsigned, 6> loaded{
       written_divider, written_divider, 2, 2, byte_mask, byte_mask};
   auto &memory = machine.target.memory;
-  for (unsigned n = 0; n < pcs.size(); ++n) {
+  for (unsigned n = memory.retired; n < pcs.size(); ++n) {
     while (memory.retired == n) {
       require(machine.clock.state().executing_periods < periods[n],
               "Independent native prefix timing bound");
       machine.clock.advance();
+      pending_registers(machine, n, cold, trace, cuts);
     }
-    const auto expected_a = n < 2 ? seed.warm.a : loaded[n - 2];
+    const auto prior_a = cold ? 0U : static_cast<unsigned>(seed.warm.a);
+    const auto expected_a = n < 2 ? prior_a : loaded[n - 2];
     const Hcs08State expected{.pc = static_cast<std::uint16_t>(pcs[n]),
                               .hx = loaded_hx,
                               .sp = static_cast<std::uint16_t>(n == 0 ? stack : loaded_sp),
                               .a = static_cast<std::uint8_t>(expected_a),
                               .ccr_known = load_known,
-                              .ccr = static_cast<std::uint8_t>(n < 6 ? reset_known : final_ccr)};
+                              .ccr = static_cast<std::uint8_t>(n < 6 ? reset_known : final_ccr),
+                              .a_known =
+                                  static_cast<std::uint8_t>(cold && n < 2 ? 0 : Hcs08State::all_a)};
     require(machine.target.cpu.state() == expected && memory.retired == n + 1 &&
                 machine.clock.state().retired_instructions == n + 1 &&
                 machine.clock.state().executing_periods == periods[n],
@@ -217,6 +298,7 @@ void prefix(Machine &machine, const Seed seed, std::ostream &trace) {
     trace << "STEP n=" << memory.retired << " periods=" << machine.clock.state().executing_periods;
     registers(trace, machine.target.cpu.state());
     trace << '\n';
+    if (cold && (n == 1 || n == 2)) { capture(machine, Stage::prefix, trace, cuts); }
   }
   using blofeld::test::hcs08::Access;
   require(
@@ -288,7 +370,7 @@ fault(Machine &machine, const Hcs08FlashImage &image, const std::span<const std:
 void run(const unsigned index,
          const Seed seed,
          const std::span<const std::uint8_t> program,
-         std::ostream &trace) {
+         std::ostringstream &trace) {
   Machine machine(seed);
   const auto image = machine.target.memory.flash.image();
   trace << "CASE index=" << index << " a=" << static_cast<unsigned>(seed.warm.a)
@@ -329,17 +411,161 @@ void run(const unsigned index,
   trace << "CASE_END index=" << index << " retired=" << machine.target.memory.retired
         << " commands=" << machine.bdc.state().serviced << '\n';
 }
+
+void cold_pending(Machine &machine,
+                  const Hcs08FlashImage &image,
+                  std::ostringstream &trace,
+                  std::vector<Cut> *const cuts = nullptr) {
+  while (machine.clock.state().executing_periods < middle_period) { machine.clock.advance(); }
+  require(machine.clock.state().executing_periods == middle_period &&
+              machine.clock.state().remaining_periods == 2 && machine.target.memory.retired == 8 &&
+              machine.target.memory.flash.image() == image,
+          "Actual pending FSTAT budget has no premature peripheral or register effects");
+  trace << "PENDING periods=" << machine.clock.state().executing_periods
+        << " remaining=" << machine.clock.state().remaining_periods
+        << " retired=" << machine.target.memory.retired << '\n';
+  capture(machine, Stage::fault, trace, cuts);
+}
+
+void same_cold_endpoint(const Machine &actual, const Machine &expected) {
+  const auto &a = actual.target.memory;
+  const auto &b = expected.target.memory;
+  require(actual.target.cpu.state() == expected.target.cpu.state() &&
+              actual.target.cpu.faulted() == expected.target.cpu.faulted() &&
+              actual.target.cpu.background_requested() ==
+                  expected.target.cpu.background_requested() &&
+              actual.bdc.state() == expected.bdc.state() &&
+              actual.bdc.faulted() == expected.bdc.faulted() &&
+              actual.clock.state() == expected.clock.state() &&
+              actual.clock.faulted() == expected.clock.faulted(),
+          "Restored CPU/BDC/clock reproduce all register masks, pending budgets and quarantine");
+  require(a.bytes == b.bytes && a.known == b.known && a.writable == b.writable &&
+              a.accesses == b.accesses && a.retired == b.retired && a.resetting == b.resetting &&
+              a.context.pc == b.context.pc && a.context.ccr == b.context.ccr &&
+              a.flash.image() == b.flash.image() && a.flash.state() == b.flash.state() &&
+              a.icg.state() == b.icg.state() && a.options.written() == b.options.written() &&
+              a.options.read() == b.options.read() && a.transfer_due == b.transfer_due &&
+              a.complete_due == b.complete_due && a.transfers == b.transfers &&
+              a.completions == b.completions && a.array_writes == b.array_writes &&
+              a.command_writes == b.command_writes && a.status_writes == b.status_writes &&
+              a.sopt_writes == b.sopt_writes && a.icg.state().trim == power_on_trim,
+          "Restored target retains actual RAM/access/NVM/peripheral state and power-on live trim");
+}
+
+void cold_suffix(Machine &machine,
+                 const Stage stage,
+                 const Seed seed,
+                 const Hcs08FlashImage &image,
+                 const std::span<const std::uint8_t> program,
+                 std::ostringstream &trace) {
+  if (stage == Stage::prepare) { prepare(machine, seed, program, trace, true); }
+  if (stage == Stage::start) { start(machine, trace); }
+  if (stage <= Stage::prefix) { prefix(machine, seed, trace, true); }
+  if (stage <= Stage::pending) { cold_pending(machine, image, trace); }
+  trace << "ATTEMPT index=0\n" << fault(machine, image, program);
+}
+
+struct ColdTotals {
+  std::uint64_t instructions = 0, commands = 0, ram_writes = 0;
+};
+
+void cold_replays(const Machine &machine,
+                  const Seed seed,
+                  const Hcs08FlashImage &image,
+                  const std::span<const std::uint8_t> program,
+                  const std::string &baseline,
+                  const std::vector<Cut> &cuts,
+                  std::ostringstream &trace,
+                  ColdTotals &totals) {
+  constexpr std::array<unsigned, 8> periods{0, 0, 1, 4, 5, 6, 22, 24};
+  constexpr std::array<unsigned, 8> retired{0, 0, 0, 2, 2, 3, 8, 8};
+  constexpr std::array<unsigned, 8> remaining{0, 0, 1, 0, 1, 0, 0, 2};
+  constexpr std::array<Stage, 8> stages{Stage::prepare,
+                                        Stage::start,
+                                        Stage::prefix,
+                                        Stage::prefix,
+                                        Stage::prefix,
+                                        Stage::prefix,
+                                        Stage::pending,
+                                        Stage::fault};
+  require(cuts.size() == periods.size(),
+          "All eight independent cold continuation boundaries exist");
+  for (unsigned cut = 0; cut < cuts.size(); ++cut) {
+    const auto &saved = cuts[cut];
+    require(saved.periods == periods[cut] && saved.retired == retired[cut] &&
+                saved.remaining == remaining[cut] && saved.stage == stages[cut],
+            "Independent cold reset/upload/register-definition/store-budget cut positions");
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      Machine restored(saved.saved);
+      const auto prior_commands = restored.bdc.state().serviced;
+      std::ostringstream observed;
+      cold_suffix(restored, saved.stage, seed, image, program, observed);
+      require(observed.str() == baseline.substr(saved.offset),
+              "Actual restored commands/instructions reproduce the full original cold suffix");
+      same_cold_endpoint(restored, machine);
+      totals.instructions += restored.target.memory.retired - saved.retired;
+      totals.commands += restored.bdc.state().serviced - prior_commands;
+      totals.ram_writes += restored.target.memory.generation - saved.saved.memory.generation;
+      trace << "COLD_REPLAY cut=" << cut << " index=" << replay
+            << " stage=" << static_cast<unsigned>(saved.stage) << " periods=" << saved.periods
+            << " retired=" << saved.retired << " remaining=" << saved.remaining << " identical=1\n";
+    }
+  }
+}
+
+void run_cold(const unsigned index,
+              const Seed seed,
+              const std::span<const std::uint8_t> program,
+              std::ostringstream &trace,
+              ColdTotals &totals) {
+  Machine machine(seed, true);
+  const auto prior_generation = machine.target.memory.generation;
+  const auto image = machine.target.memory.flash.image();
+  std::vector<Cut> cuts;
+  cuts.reserve(8);
+  std::ostringstream baseline;
+  baseline << "CASE index=" << index
+           << " power-on=1 protection=" << static_cast<unsigned>(seed.protection)
+           << " trim=" << static_cast<unsigned>(seed.trim) << '\n';
+  capture(machine, Stage::prepare, baseline, &cuts);
+  prepare(machine, seed, program, baseline, true, &cuts);
+  prefix(machine, seed, baseline, true, &cuts);
+  capture(machine, Stage::pending, baseline, &cuts);
+  cold_pending(machine, image, baseline, &cuts);
+  baseline << "ATTEMPT index=0\n" << fault(machine, image, program);
+  trace << baseline.str();
+  totals.instructions += machine.target.memory.retired;
+  totals.commands += machine.bdc.state().serviced;
+  totals.ram_writes += machine.target.memory.generation - prior_generation;
+  cold_replays(machine, seed, image, program, baseline.str(), cuts, trace, totals);
+  trace << "CASE_END index=" << index << " retired=" << machine.target.memory.retired
+        << " commands=" << machine.bdc.state().serviced << '\n';
+}
+
 } // namespace
 
 int main(const int count, char **arguments) {
   try {
-    require(count == 3, "Expected pinned original programmer and private trace path");
+    require(count == 3 || (count == 4 && std::string(arguments[3]) == "power-on"),
+            "Expected pinned original programmer, private trace path and optional power-on");
+    const bool cold = count == 4;
     const auto program = hp::read_input(arguments[1], hp::algorithm_bytes);
     std::ostringstream trace;
+    ColdTotals totals;
     for (unsigned index = 0; index < seeds.size(); ++index) {
-      run(index, seeds[index], program, trace);
+      if (cold) {
+        run_cold(index, seeds[index], program, trace, totals);
+      } else {
+        run(index, seeds[index], program, trace);
+      }
     }
-    trace << "END cases=2 instructions=16 faults=10 replays=8\n";
+    if (cold) {
+      trace << "END cases=2 instructions=" << totals.instructions
+            << " faults=34 replays=32 commands=" << totals.commands
+            << " ram-writes=" << totals.ram_writes << '\n';
+    } else {
+      trace << "END cases=2 instructions=16 faults=10 replays=8\n";
+    }
     const auto text = trace.str();
     write_private_file(arguments[2],
                        {reinterpret_cast<const std::uint8_t *>(text.data()), text.size()});

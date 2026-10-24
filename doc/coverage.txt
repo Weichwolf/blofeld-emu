@@ -1902,3 +1902,11 @@ by hcs08_register_knowledge and original_hcs08_cold_startup. The latter executes
 68 original startup cases with no supplied pre-reset registers and22 fresh
 replays; GPIO/clock status, omitted FLASH, complete update/recovery and physical
 reset timing remain explicitly incomplete. See hcs08-reset.txt.
+
+Original cold programmer: original_hcs08_cold_programmer joins fresh power_on
+CPU/peripheral state to actual logical BDC RAM upload/PC/SP/GO and the original
+132-byte programmer prefix. Eight joint graph cuts/two declared NVM fixtures,
+32 fresh continuations and literal register/period/access oracles retain unknown
+A/X until original LDX/LDA retire. Strict idle-FSTAT refusal remains before NVM
+launch; this is not a complete update, physical cold start or recovery proof.
+See hcs08-programmer-entry.txt. Warm entry remains an independent regression.
