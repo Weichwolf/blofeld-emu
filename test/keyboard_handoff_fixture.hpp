@@ -49,9 +49,12 @@ constexpr std::array layouts{
         .mode = 3, .address = source, .declared = 1542, .stored = 1542, .packets = 221},
     transport::Layout{.mode = 0, .address = 0x2e00, .declared = 57, .stored = 58, .packets = 9}};
 
+enum class EntryCcr : std::uint8_t { setup = 0x90, cleared_lcd = 0xb0 };
+
 struct Fixture {
   gp::OriginalGpioPair pair;
   const std::vector<transport::Block> &blocks;
+  const EntryCcr required_ccr;
   std::optional<CpuState> interrupted;
   unsigned loaded = 0, sent = 0, received = 0, initial_reads = 0, returned = 0;
   unsigned irq_entries = 0, irq_returns = 0, irq_queries = 0, irq_unknown = 0;
@@ -60,8 +63,9 @@ struct Fixture {
           const std::vector<transport::Block> &input,
           const transport::Templates &templates,
           std::ostream &trace,
-          const unsigned phase)
-      : pair(firmware, gp::cases.back(), trace), blocks(input) {
+          const unsigned phase,
+          const EntryCcr expected_upper_ccr = EntryCcr::setup)
+      : pair(firmware, gp::cases.back(), trace), blocks(input), required_ccr(expected_upper_ccr) {
     const auto epoch = pair.dsp.run_clock().native_epoch();
     const auto before = pair.dsp.cpu().debug_state().native_instructions;
     trace << "PRELOAD block=2\n";
@@ -227,15 +231,16 @@ struct Fixture {
     const auto state = pair.mcu.cpu().state();
     const auto expected =
         (blocks.at(2).expected.at(checksum_word) >> (16U - 8U * returned)) & byte_mask;
-    require(
-        (state.d & byte_mask) == expected && state.y == terminal_counter &&
-            state.sp == entry_sp - (returned < 2 ? 15U : 13U) &&
-            state.x == cache + (returned == 2 ? 1U : 0U) && (state.ccr & upper_ccr) == entry_ccr &&
-            pair.mcu.bus().read(cache + 2) == returned &&
-            pair.mcu.bus().read(cache) ==
-                ((blocks.at(2).expected.at(checksum_word) >> 8U) & byte_mask) &&
-            pair.mcu.bus().read(cache + 1) == (blocks.at(2).expected.at(checksum_word) & byte_mask),
-        "Original checksum byte, cache cursor, stack and upper CCR differ");
+    require((state.d & byte_mask) == expected && state.y == terminal_counter &&
+                state.sp == entry_sp - (returned < 2 ? 15U : 13U) &&
+                state.x == cache + (returned == 2 ? 1U : 0U) &&
+                (state.ccr & upper_ccr) == static_cast<unsigned>(required_ccr) &&
+                pair.mcu.bus().read(cache + 2) == returned &&
+                pair.mcu.bus().read(cache) ==
+                    ((blocks.at(2).expected.at(checksum_word) >> 8U) & byte_mask) &&
+                pair.mcu.bus().read(cache + 1) ==
+                    (blocks.at(2).expected.at(checksum_word) & byte_mask),
+            "Original checksum byte, cache cursor, stack and upper CCR differ");
     pair.trace << "BYTE index=" << returned << " value=" << expected << " sp=" << state.sp
                << " x=" << state.x << '\n';
     ++returned;
@@ -244,7 +249,8 @@ struct Fixture {
   void entry() {
     const auto state = pair.mcu.cpu().state();
     require(state.pc == fw::target && state.d == fw::service_table && state.sp == entry_sp &&
-                state.y == terminal_counter && (state.ccr & upper_ccr) == entry_ccr &&
+                state.y == terminal_counter &&
+                (state.ccr & upper_ccr) == static_cast<unsigned>(required_ccr) &&
                 irq_entries == 1 && irq_returns == 1 && sent == resident_samples &&
                 received == resident_samples && loaded == checksum_word + 1 &&
                 pair.mcu.bus().read_memory({.address = entry_sp, .size = 2}) == fw::helper_return,

@@ -12,6 +12,7 @@
 #include "blofeld/hcs08_bdc.hpp"
 #include "blofeld/hcs08_bdc_wire.hpp"
 #include "blofeld/hcs08_reset.hpp"
+#include "blofeld/hcs08_run_clock.hpp"
 #include "blofeld/mcu_bus.hpp"
 #include "blofeld/mcu_gpio.hpp"
 #include "blofeld/mcu_machine.hpp"
@@ -23,6 +24,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -49,11 +51,13 @@ Fixture::Fixture(const Firmware &image,
                  const hcs08_programmer::Memory *memory)
     : firmware(image),
       helper(code),
-      host(McuFlashImage::from_known(image.mcu),
-           BLOFELD_DEFAULT_SLA,
-           McuRunContract{.clock = {.oscillator_hz = oscillator_hz,
-                                    .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
-                          .memory_timing = McuRunMemory::internal_flash_reads}),
+      owned_host(std::make_unique<McuMachine>(
+          McuFlashImage::from_known(image.mcu),
+          BLOFELD_DEFAULT_SLA,
+          McuRunContract{.clock = {.oscillator_hz = oscillator_hz,
+                                   .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
+                         .memory_timing = McuRunMemory::internal_flash_reads})),
+      host(*owned_host),
       target(memory),
       next_edge(first_edge),
       trace(output) {
@@ -83,6 +87,36 @@ Fixture::Fixture(const Firmware &image,
   target.cpu.set_state(
       {.pc = previous_pc, .hx = initial_hx, .sp = initial_sp, .a = initial_a, .ccr = byte_mask});
   bind();
+}
+
+Fixture::Fixture(McuMachine &machine,
+                 const Firmware &image,
+                 const std::vector<std::uint8_t> &code,
+                 const unsigned first_edge,
+                 std::ostream &output,
+                 const hcs08_programmer::Memory *memory)
+    : firmware(image),
+      helper(code),
+      host(machine),
+      target(memory),
+      next_edge(first_edge),
+      trace(output) {
+  require(first_edge > 0 && first_edge <= target_period && code.size() == helper_bytes,
+          "Declared borrowed controller clock/phase/reference extent");
+  const auto now = host.run_clock().elapsed_ticks();
+  if (now >= next_edge) { next_edge += ((now - next_edge) / target_period + 1) * target_period; }
+  target.cpu.set_state(
+      {.pc = previous_pc, .hx = initial_hx, .sp = initial_sp, .a = initial_a, .ccr = byte_mask});
+}
+
+Hcs08RunClock &Fixture::run_clock() {
+  if (!clock) { throw Fault("Missing qualified HCS08 instruction clock"); }
+  return *clock;
+}
+
+const Hcs08RunClock &Fixture::run_clock() const {
+  if (!clock) { throw Fault("Missing qualified HCS08 instruction clock"); }
+  return *clock;
 }
 
 Hcs08Bdc &Fixture::controller() {
@@ -147,7 +181,7 @@ GpioPadSample Fixture::pads(const McuPort port, const std::uint32_t mask) const 
   // Independent fixture stimuli for other PE/PB inputs read by native RMW.
   // These are not a measured board profile or RESET acknowledgements.
   constexpr unsigned other_e_levels = 3;
-  peer.active = mask & ~pin;
+  peer.active = mask & ~pin & ~static_cast<std::uint32_t>(host_pins.mask);
   peer.known = peer.active;
   peer.levels = port == McuPort::e ? other_e_levels & peer.active : 0;
   auto drive = released;
@@ -227,6 +261,8 @@ void Fixture::edge(const std::uint64_t ticks) {
           hcs08_wire::wire_contract,
           bkgd_drive(),
           Hcs08BdcWireClock{.period_ticks = target_period, .first_edge_ticks = target_period});
+      clock.emplace(
+          target.memory, controller(), Hcs08RunContract::reference_instruction_retirement);
       origin = ticks;
       trace << "TARGET pc=" << cpu.pc << " hx=" << cpu.hx << " sp=" << cpu.sp
             << " a=" << static_cast<unsigned>(cpu.a) << " ccr=" << static_cast<unsigned>(cpu.ccr)
@@ -236,6 +272,16 @@ void Fixture::edge(const std::uint64_t ticks) {
     return;
   }
   if (!wire) { return; }
+  const auto retired = run_clock().state().retired_instructions;
+  run_clock().advance();
+  if (run_clock().state().retired_instructions != retired) {
+    const auto cpu = target.cpu.state();
+    trace << "CPU n=" << run_clock().state().retired_instructions
+          << " periods=" << run_clock().state().executing_periods << " pc=" << cpu.pc
+          << " hx=" << cpu.hx << " sp=" << cpu.sp << " a=" << static_cast<unsigned>(cpu.a)
+          << " ccr=" << static_cast<unsigned>(cpu.ccr)
+          << " known=" << static_cast<unsigned>(cpu.ccr_known) << '\n';
+  }
   const auto before = transport().state();
   transport().clock();
   const auto after = transport().state();
@@ -244,12 +290,18 @@ void Fixture::edge(const std::uint64_t ticks) {
           << " phase=" << static_cast<unsigned>(after.sync) << " count=" << after.syncs << '\n';
   }
   if (after.received_bytes != received) {
-    require(after.received_bytes == received + 1 &&
-                controller().state().frame[0] == blofeld::hcs08_bdc::background,
-            "Actual original BACKGROUND is the only decoded command");
+    const auto control = controller().state();
+    require(after.received_bytes == received + 1 && control.received > 0,
+            "Every actual BKGD byte retains its serial frame position");
+    const auto byte = control.frame.at(control.received - 1);
+    if (received_byte) {
+      received_byte(byte);
+    } else {
+      require(byte == blofeld::hcs08_bdc::background,
+              "Actual original BACKGROUND is the only decoded command");
+    }
     received = after.received_bytes;
-    trace << "RX value=" << static_cast<unsigned>(controller().state().frame[0])
-          << " ticks=" << ticks << '\n';
+    trace << "RX value=" << static_cast<unsigned>(byte) << " ticks=" << ticks << '\n';
   }
 }
 
@@ -320,6 +372,7 @@ Saved Fixture::checkpoint() const {
           .reset = reset_sequence(),
           .bdc = controller().checkpoint(),
           .wire = transport().checkpoint(),
+          .clock = run_clock().checkpoint(),
           .next_edge = next_edge,
           .origin = origin,
           .steps = steps,
@@ -338,6 +391,8 @@ void Fixture::restore(const Saved &saved) {
                released,
                Hcs08BdcWireClock{.period_ticks = target_period, .first_edge_ticks = target_period});
   transport().restore_checkpoint(saved.wire);
+  clock.emplace(target.memory, controller(), Hcs08RunContract::reference_instruction_retirement);
+  run_clock().restore_checkpoint(saved.clock);
   host.restore(saved.host);
   next_edge = saved.next_edge;
   origin = saved.origin;

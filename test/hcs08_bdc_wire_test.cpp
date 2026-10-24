@@ -87,6 +87,47 @@ void sync_and_timeout() {
           "Documented communication timeout aborts framing without resetting mode or memory");
 }
 
+void active_resynchronization() {
+  // Own host stimulus exceeds128*64 periods; this is no silicon detector threshold.
+  constexpr unsigned conservative_host_low = 16384;
+  constexpr unsigned response_end = 145;
+  Target target;
+  const auto memory = target.memory;
+  const auto cpu = target.cpu.state();
+  Hcs08Bdc bdc(target.cpu, target.mapping, chip, Hcs08BdcReset::bkgd_held_low);
+  Hcs08BdcWire wire(bdc, wire_contract, high, wire_clock);
+  for (unsigned pass = 0; pass < 2; ++pass) {
+    wire.host_drive(low, {.pc = algorithm});
+    clocks(wire, conservative_host_low);
+    require(wire.state().sync == Hcs08BdcSync::wait_release && bdc.status() == active_status,
+            "Conservatively long host SYNC remains admissible in already active background mode");
+    wire.host_drive(high, {.pc = algorithm});
+    for (unsigned age = 0; age <= response_end; ++age) {
+      wire.clock();
+      auto expected_drive = released;
+      if (age >= sync_delay && age < sync_delay + sync_low) {
+        expected_drive = low;
+      } else if (age == sync_delay + sync_low) {
+        expected_drive = high;
+      }
+      require(wire.target_drive() == expected_drive && wire.level() == (expected_drive != low),
+              "Independent16/128/one response shape survives a second active-mode SYNC");
+      if (age == 0) { wire.host_drive(released, {.pc = algorithm}); }
+    }
+    require(wire.state().syncs == pass + 1 && wire.state().sync == Hcs08BdcSync::idle,
+            "The response completes before a subsequent real command");
+    wire.host_drive(high, {.pc = algorithm});
+    send(wire, hcs08_bdc::background);
+    clocks(wire, command_delay);
+    require(bdc.state().serviced == pass + 1 && bdc.status() == active_status &&
+                target.cpu.state() == cpu && target.memory.retired == 0 &&
+                target.memory.bytes == memory.bytes && target.memory.known == memory.known &&
+                target.memory.flash.image() == memory.flash.image() &&
+                target.memory.flash.state() == memory.flash.state(),
+            "Actual BACKGROUND after either SYNC retains held native CPU and untouched NVM/RAM");
+  }
+}
+
 void strict_failures() {
   for (unsigned failure = 0; failure < 3; ++failure) {
     Target target;
@@ -236,6 +277,7 @@ int main() {
   try {
     all_bytes();
     sync_and_timeout();
+    active_resynchronization();
     strict_failures();
     reply_replay();
     asynchronous_boundary();

@@ -1,0 +1,68 @@
+Original Keyboard stage2/reset/LCD chain
+
+  cmake --build --preset strict --target blofeld-original-keyboard-chain-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_chain$' --output-on-failure
+
+Requires the two pinned local original archives and the independent DSP
+assembler, selected by BLOFELD_DSP_ASSEMBLER. Missing reference inputs skip77;
+a missing native executable or CPU language is an error. Private traces, input
+hashes, reports and actual LCD PBM/PNG files go under build/strict/Testing/.
+No manufacturer program bytes, fonts, images or disassembly are embedded here.
+
+One native DSP owner receives both original stage2 packet bodies, including
+actual decoder stores/checksum reads/padding and launch frame. Its original
+sender drives the real MCU XIRQ/resident copy/JSR, all1018 helper bytes and
+three checksum-byte/cache returns. The same MCU then executes original
+reset/SYNC with a continuously running native TIM and target reset/BDC peer.
+The actual saving callback includes recursive mode3 width measurement,
+background clearing and physical LCD glyph reads/writes. Its real entry stack
+contains pointer15d0 at+2, y16 at+4, x8 at+5, font2 at+6. Independent original
+font columns/displacements predict every final pixel and1172/296 LCD writes/
+reads. PNG chunk/CRC/decompressed-row validation is independent of the encoder.
+
+Two contexts exercise opposite MCU/DSP tie orders and declared phase pairs.
+A snapshot just before drawing retains an actually received, not-yet-serviced
+BACKGROUND command. Two fresh continuations per context restore native MCU,
+DSP and HCS08 owners, clocks/scheduler, RAM/knownness, reset, BDC/wire and LCD.
+Complete semantic suffix traces and endpoints must match. Pure instruction and
+fully-known pad rows are compressed with exact counts; unknown/conflicting pads,
+source/chunk/cache events, GPIO writes and unqualified intervals remain visible.
+The collector rejects missing/reordered stages, changed original values/frames,
+extra records, truncated completion and fixed corruptions of its own trace.
+
+Current strict boundary is a REFERENCE-MODEL REFUSAL, not a silicon trap or a
+proven original firmware defect. Under the declared ordinary GPIO/direct PB1
+BKGD route, original whole-PORTB LCD operations hold PB1 low. The named wire
+reference recognizes128 current periods as a long-low request. The first
+subsequent original trim-read command raises the line and starts another bit
+before that reference response completes; MCU143f/GPIO0001 fails visibly with
+native context. No trim reply, RAM upload, GO, target retirement or NVM action
+is supplied. The unresolved MCU/DSP pad interval still fails board qualification.
+
+GT chapter15 specifies a conservative HOST low duration of at least128 periods
+of the slowest possible BDC clock, then high/release, and a target16/128/one
+response after recognition. Those paragraphs do not specify the exact silicon
+recognition threshold/divider or response-collision recovery. Neither128 current
+periods nor a fitted longer threshold is thereby established. A separate wire
+unit checks a conservatively long second SYNC while already active and an actual
+BACKGROUND afterward, with an unchanged held CPU and NVM/RAM. No timing or gate
+is fitted to let this original sequence continue. See hcs08-bdc-wire.txt.
+
+Explicit laboratory inputs remain: own native request/GPIO caller invokes the
+real configure/clear-display routines first; nominal locked30MHz MCU, TIM /4,
+4MHz target, declared GPIO/panel routing and other input pads; warm supplied A/X,
+own target preimage/vector and chapter5.2 reference reset periods. The helper,
+MCU NVM and complete downloaded DSP source/program remain unmodified. These
+inputs are not full original startup, a cold controller image or measured wiring.
+The buffering flag is not a workaround: the original loader forces direct I/O
+while the helper occupies the same RAM as the display buffer.
+
+Stage1/full SMF interleaving and caller history, actual part/mask/net/clock,
+long-low recognition/collision behavior, complete first-page/upload/GO/FSTAT,
+continuing controller NVM time, security/protection/trim, every erase/program
+power-loss/recovery phase and physical recovery remain open. Existing isolated
+upload tests retain their separate scope (keyboard-target.txt). Full headless
+boot/USB-MIDI/Spectre/original audio/persistence, all118 manual functions and
+stock-device equivalence remain required by objective.txt/coverage.txt.
+No fuzzing, physical traffic, new concurrency/TSan claim or full-suite run is
+part of this regression.

@@ -1820,3 +1820,16 @@ under dense MIDI/polyphony/effects with host load, separately from sanitizer run
 The current machine is an i5-1135G7 (4 cores, 8 threads); its sufficiency is not
 established. Vulkan would require a separate equivalent DSP execution backend and
 synchronization model. No GPU backend is currently planned or implemented.
+
+Original Keyboard stage2/reset/LCD chain (keyboard-chain.txt): two actual native
+DSP download/sender -> MCU XIRQ/copy/helper/checksum -> reset/SYNC -> recursive
+saving-text physical LCD contexts, plus four fresh joint suffix restorations.
+Independent original bytes/frames/clock-response geometry and complete font PBM/
+PNG pixels are checked; shared warm reset/CCR/TIM and wire inputs remain explicit.
+The current direct-PB1/reference128-period model refuses the original first trim
+command after LCD long-low activity. This is not an exact silicon detector or
+collision-recovery specification, physical firmware defect, target upload/GO/
+FSTAT success, full stage1/SMF update, boot/audio or hardware qualification.
+The wire unit additionally checks two conservatively long active-mode SYNCs
+and subsequent BACKGROUND with CPU/RAM/NVM held unchanged. All complete-update,
+every-phase recovery/power-loss and118 manual acceptance obligations remain open.

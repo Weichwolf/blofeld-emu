@@ -69,3 +69,15 @@ A separate original upload/start regression now connects the native HC12 RAM
 upload and PC/SP/GO prefix to clocked native HCS08 execution, including strict
 FSTAT/secured-RAM failures and fresh joint restores (keyboard-target.txt). The
 byte-helper scope and physical qualifications above remain unchanged.
+
+SYNC qualification: the current named reference uses128 current BDC periods
+for long-low recognition. GT15.2.3's host recipe instead requires at least128
+periods of the slowest possible BDC clock; its conservative host bound does
+not establish an exact silicon detector threshold/divider or collision recovery.
+Do not infer a fitted8192-period detector or disable SYNC while active. A directed
+unit holds an own host stimulus beyond128*64 periods, checks two complete
+16/128/one responses while already active, then sends actual BACKGROUND after
+each response. CPU and all RAM/NVM remain unchanged. This qualifies reference
+active-state admission and compliant response shape, not below-bound recognition.
+The combined original reset/LCD path exposes the remaining boundary explicitly
+(keyboard-chain.txt); it must not bypass the real LCD call or supply a trim reply.

@@ -8,11 +8,14 @@
 #include "blofeld/hcs08_bdc.hpp"
 #include "blofeld/hcs08_bdc_wire.hpp"
 #include "blofeld/hcs08_reset.hpp"
+#include "blofeld/hcs08_run_clock.hpp"
 #include "blofeld/mcu_machine.hpp"
 #include "hcs08_programmer_fixture.hpp"
 #include "hcs08_wire_fixture.hpp"
 
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -31,17 +34,21 @@ struct Saved {
   Hcs08ResetSequence reset;
   Hcs08BdcCheckpoint bdc;
   Hcs08BdcWireCheckpoint wire;
+  Hcs08RunCheckpoint clock;
   std::uint64_t next_edge, origin, steps, received;
 };
 
 struct Fixture {
   const Firmware &firmware;
   const std::vector<std::uint8_t> &helper;
-  McuMachine host;
+  std::unique_ptr<McuMachine> owned_host;
+  McuMachine &host;
   hcs08_wire::Target target;
   std::optional<Hcs08ResetSequence> reset;
   std::optional<Hcs08Bdc> bdc;
   std::optional<Hcs08BdcWire> wire;
+  std::optional<Hcs08RunClock> clock;
+  std::function<void(std::uint8_t)> received_byte;
   std::uint64_t next_edge, origin = 0, steps = 0, received = 0;
   ExecutionContext context;
   std::ostream &trace;
@@ -51,7 +58,17 @@ struct Fixture {
           unsigned timer_prescale,
           std::ostream &output,
           const hcs08_programmer::Memory *memory = nullptr);
+  // Borrow the actual coupled MCU without changing its RAM, registers or clocks.
+  // The caller composes GPIO/bus/cycle observers and supplies peripheral context.
+  Fixture(McuMachine &machine,
+          const Firmware &image,
+          const std::vector<std::uint8_t> &code,
+          unsigned first_edge,
+          std::ostream &output,
+          const hcs08_programmer::Memory *memory = nullptr);
   void bind();
+  [[nodiscard]] Hcs08RunClock &run_clock();
+  [[nodiscard]] const Hcs08RunClock &run_clock() const;
   [[nodiscard]] Hcs08Bdc &controller();
   [[nodiscard]] const Hcs08Bdc &controller() const;
   [[nodiscard]] Hcs08BdcWire &transport();
