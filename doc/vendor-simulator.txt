@@ -30,19 +30,35 @@ omitting the required port also prints usage and returns failure. Disconnecting
 the debugger terminates this reference simulator. Use one simulator owner at a
 time under the shared native-process budget. The Eclipse GUI is not qualified.
 
-Current evidence is limited to successful local installation, debugger startup,
-explicit 56371-model creation, register queries and one stepped NOP. The initial
-model PC is C00000; this is not a qualified hardware mode-five reset sequence.
-The release note primarily describes the DSP56720 platform configuration.
+The installed server has a memory-transport incompatibility: the 56300 callback
+uses Boolean success, while the server's RSP handlers expect zero. Reads return
+E00 and writes echo packets although the underlying operations can succeed.
+The custom GDB frontend still displays zeros and exits successfully. Do not use
+those displayed zeros as memory observations. An unchanged-server control now
+executes an independently encoded immediate MOVE and reports its exact nonzero
+X0 and two-word PC increment, proving that the write actually occurred.
 
-The first custom GDB m/M memory probe is NOT a usable memory oracle: the RSP
-server returns E00 to reads and echoes write packets, while the custom frontend
-still displays zeros and returns process success. The intended test program did
-not read back or execute. Treat those responses as failed transactions, never
-as RAM, reserved-read, ROM, BCR or physical-device observations. Resolve the
-server/library memory-access interface before comparing semantics or changing
-the emulator's strict memory policy. No vendor-model result currently settles
-the original reserved Y:002000 clear or missing stock ROM contents.
+A local copy corrects only the two RSP memory success tests. The installed
+executable and processor DLLs are unchanged. A strict client checks checksums,
+reply sizes, actual OK responses and explicit errors; the server's trailing
+boundary NUL is recorded separately. Program readback, native instruction/PC
+expectations and independent X/Y canaries validate that reference transport.
+The transformed binary, derivation and all program/packet data remain local.
+
+The tested 56371 model is still not qualified as a memory-map oracle. Native
+MOVEC plus three subsequent NOPs and 140 fixed endpoint cases expose 20 RAM
+disagreements with DSP56371UM tables 3-1..3-6. A fresh model with the original
+first-stage OMR operand independently retains writable X:010000 and loses
+previously written Y:000000, contrary to table 3-2. The cause/configuration
+remains unresolved; these observations do not override the chip manual.
+
+Initial model OMR=000300 independently agrees with the documented CDP reset
+bits. Initial PC=C00000 and BCR=0 do not qualify a hardware SPI-reset sequence
+or complete derivative initialization. The release note primarily describes
+the DSP56720 platform configuration. The observed reserved-write/ROM results
+cannot establish silicon behavior from this inconsistent model. Our emulator
+therefore retains its reserved Y:002000 and missing-ROM failures; no write-
+discard policy or guessed memory alias follows from these experiments.
 
 Archive/payload inventories, installed-tool hashes, registry backup and exact
 session logs remain under ignored doc/local/dsp-vendor-simulator/.
