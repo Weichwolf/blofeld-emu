@@ -48,3 +48,19 @@ The MCU/LCD preview has no executing DSP; bad DSP response remains an actual
 firmware diagnostic until genuine coupled boot is implemented and qualified.
 This factory data component does not establish hardware equivalence, all update
 or recovery phases, host MIDI/audio or any documented instrument function.
+
+Cold-start diagnostic rendering
+  ctest --test-dir build/strict -j1 -R '^original_startup_identity$' --output-on-failure
+
+This separate original regression starts three fresh CPUs at the actual reset
+vector, without a synthetic caller, PC/register replacement or host RAM writes.
+The explicit untimed application GPIO/PHY/LCD and poll-triggered RTI fixture is
+retained; it is not a normal or hardware-qualified profile. The first unit and
+its cold reopen use the same factory identity. A third cold run retains an
+explicitly damaged high serial bit. Original stack markers and actual native
+text calls independently distinguish the two available cases from the bad-serial
+control. All three draw the genuine bad-DSP warning and preserve complete NVM.
+Captured original LCD pixels match across the healthy restart and differ for
+the damaged unit. Private bitmaps remain ignored; no reference pixels are embedded
+in public tests. This reaches the original diagnostic return, not full main WAI,
+genuine DSP initialization, normal display publication or hardware equivalence.
