@@ -327,7 +327,7 @@ void control_frontiers() {
   }
 }
 
-void conditional_frontier() {
+void conditional_flow() {
   for (const bool taken : {false, true}) {
     const auto branch = checkpoint::assemble(taken ? "jne $104" : "jeq $104");
     require(branch.size() == 1, "Independent Jcc short absolute instruction length");
@@ -339,22 +339,89 @@ void conditional_frontier() {
     for (unsigned index = 0; index < words.size(); ++index) { fetch_word(machine); }
     require((machine.cpu().state().sr & zero) == 0, "Literal Z=0 selects JNE and rejects JEQ");
     const auto saved = machine.checkpoint();
-    if (taken) {
-      const auto retired = machine.advance_reference_access(access::ticket(progress));
-      require(retired.retired && machine.cpu().state().pc == program + 4 &&
-                  machine.reference_fetch().used == 0 &&
-                  machine.reference_fetch().next_address == program + 4,
-              "A genuine taken conditional redirects to its independently expected address");
-    } else {
-      const auto error = fault(
-          [&] { static_cast<void>(machine.advance_reference_access(access::ticket(progress))); });
-      require(error.contains("conditional fallthrough pc=0x000100") &&
-                  error.contains("omr=0x000305"),
-              "Unqualified same-cursor conditional flow fails visibly instead of guessing");
-      static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
+    for (unsigned replay = 0; replay < 2; ++replay) {
       machine.restore(saved);
-      require(machine.reference_fetch().used == words.size() && machine.cpu().state().pc == program,
-              "Trusted restore recovers the whole pre-branch frontend after flow rejection");
+      const auto retired = machine.advance_reference_access(access::ticket(machine));
+      const auto fetch = machine.reference_fetch();
+      require(retired.retired && machine.cpu().state().pc == program + (taken ? 4U : 1U) &&
+                  fetch.used == (taken ? 0U : words.size() - 1) &&
+                  fetch.next_address == program + (taken ? 4U : words.size()),
+              "Taken conditional flow redirects; actual fallthrough retains its younger samples");
+    }
+  }
+}
+
+struct ConditionalCase {
+  bool taken;
+  bool bit_operand;
+};
+
+void conditional_dma_replay(DspMachine &machine,
+                            const ConditionalCase scenario,
+                            const Replacement replacement) {
+  const auto before = machine.cpu().debug_state();
+  overwrite(machine, replacement);
+  auto progress = machine.advance_reference_access(access::ticket(machine));
+  const auto cpu = machine.cpu().state();
+  const auto fetch = machine.reference_fetch();
+  require(progress.retired && cpu.pc == replacement.address && cpu.sr == before.cpu.sr &&
+              cpu.sp == (!scenario.bit_operand && scenario.taken ? 1U : 0U) &&
+              (scenario.bit_operand || !scenario.taken || cpu.stack_pc == replacement.address) &&
+              fetch.used == (scenario.taken ? 0U : 3U) &&
+              fetch.pending_address.has_value() != scenario.taken,
+          "Actual memory condition or conditional call preserves or redirects despite identical "
+          "next PC");
+  if (scenario.bit_operand) {
+    require(access::completed(progress).value == (scenario.taken ? 1U : 0U),
+            "The branch uses the actual independently seeded RAM operand");
+  }
+  progress = machine.begin_reference_instruction(access::boundaries);
+  if (scenario.taken) { fetch_word(machine); }
+  progress = machine.advance_reference_access(access::ticket(progress));
+  require(progress.retired &&
+              machine.cpu().state().r[0] == (scenario.taken ? new_r0 : initial_r0) &&
+              machine.reference_fetch().used == (scenario.taken ? 0U : 2U),
+          "The following ordinary opcode sees either genuine DMA refetch or its older queued NOP");
+}
+
+void conditional_dma_case(const ConditionalCase scenario) {
+  constexpr unsigned operand = 0x20;
+  const char *text = "jset #0,x:$20,$102";
+  if (!scenario.bit_operand) { text = scenario.taken ? "jsne $101" : "jseq $101"; }
+  const auto branch = checkpoint::assemble(text);
+  require(branch.size() == (scenario.bit_operand ? 2U : 1U),
+          "Independent JSET memory and short conditional JSR instruction lengths");
+  const auto replacement = checkpoint::assemble("move #<$34,r0").front();
+  const auto destination = program + static_cast<unsigned>(branch.size());
+  auto words = branch;
+  words.insert(words.end(), 3, 0);
+  DspMachine machine;
+  prepare(machine, words, {.address = destination, .value = replacement});
+  machine.bus().write(
+      {.space = DspSpace::x, .address = operand, .value = scenario.taken ? 1U : 0U});
+  auto progress = machine.begin_reference_instruction(access::boundaries);
+  static_cast<void>(machine.start_reference_fetch(access::ticket(progress)));
+  for (std::size_t index = 0; index < words.size(); ++index) { fetch_word(machine); }
+  static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
+  if (scenario.bit_operand) {
+    progress = machine.advance_reference_access(access::ticket(progress));
+    progress = machine.advance_reference_access(access::ticket(progress));
+    require(access::request(progress).kind == DspNativeAccessKind::read &&
+                access::request(progress).target.space == DspSpace::x &&
+                access::request(progress).target.address == operand,
+            "The actual RAM bit-test operand suspends the native branch decision");
+  }
+  const auto saved = machine.checkpoint();
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    machine.restore(saved);
+    conditional_dma_replay(machine, scenario, {.address = destination, .value = replacement});
+  }
+}
+
+void conditional_dma() {
+  for (const bool taken : {false, true}) {
+    for (const bool bit_operand : {false, true}) {
+      conditional_dma_case({.taken = taken, .bit_operand = bit_operand});
     }
   }
 }
@@ -429,7 +496,8 @@ int main() {
     unknown_read_and_recovery();
     program_data_is_not_prefetch();
     control_frontiers();
-    conditional_frontier();
+    conditional_flow();
+    conditional_dma();
     clocked_owner_guard();
     call_and_return();
     std::cout << "DSP queued program fetch checks passed\n";

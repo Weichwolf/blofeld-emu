@@ -56,7 +56,10 @@ writes; admission consumes it without another memory read. The pending-word
 primitive and separately enabled F1/F2 frontend are documented in
 dsp-program-fetch.txt. The frontend retains actual later words across native
 retirement, preserving P-data reads as separate accesses. It does not assign
-physical phase clocks or silently qualify interrupts and loops.
+physical phase clocks or silently qualify interrupts and loops. Native actual
+control-transfer completion distinguishes a taken same-cursor branch from false
+fallthrough, using the retained real operand reads. The derived result resets
+on every attempt and trusted restore; it is never injected through checkpoints.
 Register state and native counters remain at the instruction or entry start while paused;
 all architected updates publish together at retirement. Completed bus effects
 remain visible between admissions. Reset aborts continuation through the existing

@@ -1703,8 +1703,14 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           backpressure and joint snapshots.
                                           Eight words is a host continuation
                                           bound, not a silicon queue depth.
-                                          Physical scheduling, conditional
-                                          fallthrough, loops and IRQ timelines
+                                          Actual native PC-write results now
+                                          distinguish taken same-cursor flow
+                                          from false fallthrough. All16 Jcc
+                                          conditions/all 256 CCR values have
+                                          independent ISA expectations, plus
+                                          actual memory-bit/conditional-call
+                                          DMA and two-restore cases. Physical
+                                          scheduling, loops and IRQ timelines
                                           remain open.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
@@ -1875,7 +1881,7 @@ Keyboard reset/SYNC              partial  Original HC12 GPIO reset/SYNC with nat
                                           TIM /4 accepts239 counts; /64 rejects15.
                                           Warm native HCS08 vector/H/SP/I effects,
                                           unknown CCR masks,16 reset edge cases,
-                                          all256 partial-CCR classifications and
+                                          all 256 partial-CCR classifications and
                                           six joint SYNC replays (hcs08-reset.txt,
                                           keyboard-reset.txt). Explicit cadence,
                                           wiring/pads and caller inputs remain

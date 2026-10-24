@@ -368,22 +368,13 @@ public:
                   hex(reference.snapshot().context.pc, 6) + " omr=" + hex(omr, 6));
     }
     const auto view = fetch.view();
-    bool redirect = next != view.consume_address || omr != view.omr;
-    if (const auto opcode = reference.opcode()) {
-      const auto [instruction, flags] = fetch_instruction(*opcode);
-      const bool unconditional =
-          instruction == dsp56k::Jmp_ea || instruction == dsp56k::Jmp_xxx ||
-          instruction == dsp56k::Jsr_ea || instruction == dsp56k::Jsr_xxx ||
-          instruction == dsp56k::Rti || instruction == dsp56k::Rts ||
-          (instruction >= dsp56k::Bra_xxxx && instruction <= dsp56k::Bra_Rn) ||
-          (instruction >= dsp56k::Bsr_xxxx && instruction <= dsp56k::Bsr_Rn);
-      if ((flags & dsp56k::OpFlagBranch) != 0 && !unconditional && !redirect) {
-        throw Fault("Unqualified native program-fetch conditional fallthrough pc=" +
-                    hex(reference.snapshot().context.pc, 6) + " omr=" + hex(omr, 6));
-      }
-      redirect |= unconditional;
+    const bool redirected = cpu.referenceRedirected();
+    if (!redirected && next != view.consume_address) {
+      throw Fault("Unqualified native program-fetch PC transition pc=" +
+                  hex(reference.snapshot().context.pc, 6) + " next=" + hex(next, 6) +
+                  " expected=" + hex(view.consume_address, 6) + " omr=" + hex(omr, 6));
     }
-    if (redirect) { fetch.redirect(next, omr); }
+    if (redirected || omr != view.omr) { fetch.redirect(next, omr); }
   }
 
   void resume_reference() {

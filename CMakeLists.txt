@@ -748,6 +748,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-prefetch-queue-test test/dsp_prefetch_queue_test.cpp)
   target_link_libraries(blofeld-prefetch-queue-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_prefetch_queue COMMAND blofeld-prefetch-queue-test)
+  add_executable(blofeld-prefetch-condition-test test/dsp_prefetch_condition_test.cpp)
+  target_link_libraries(blofeld-prefetch-condition-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_prefetch_conditions COMMAND blofeld-prefetch-condition-test)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
@@ -2167,7 +2170,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

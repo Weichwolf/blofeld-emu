@@ -7,7 +7,6 @@
 #include "blofeld/dsp_reference_execution.hpp"
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <optional>
@@ -90,16 +89,6 @@ void DspReferenceTape::check_admission() const {
   if (state_.fetch.active() && state_.pending && program_read(*state_.pending)) {
     state_.fetch.check_consume(std::get<DspNativeAccess>(*state_.pending).target.address);
   }
-}
-
-std::optional<std::uint32_t> DspReferenceTape::opcode() const {
-  for (std::size_t index = 0; index < state_.used; ++index) {
-    const auto *record = std::get_if<DspReferenceRecord>(&state_.entries.at(index));
-    if (record == nullptr) { continue; }
-    const auto *access = std::get_if<DspNativeAccess>(&record->effect);
-    if (access != nullptr && access->kind == DspNativeAccessKind::opcode) { return record->value; }
-  }
-  return std::nullopt;
 }
 
 void DspReferenceTape::restore(const DspReferenceState &state) {

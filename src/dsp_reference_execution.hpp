@@ -86,7 +86,6 @@ public:
   [[nodiscard]] const DspProgramFetch &fetch() const { return state_.fetch; }
 
   void check_admission() const;
-  [[nodiscard]] std::optional<std::uint32_t> opcode() const;
 
   [[nodiscard]] const DspReferenceEffect &check_program_latch() const;
   void latch_program();

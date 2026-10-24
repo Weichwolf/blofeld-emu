@@ -70,15 +70,24 @@ unconsumed words; real RAM/code-cache invalidation cannot replace their values.
 Checkpoints retain both sampled words and the separately issued F1 address.
 Reset clears the entire frontend and invalidates old native tickets.
 
-Native flow to a different address redirects the frontend to the resulting PC.
-Unconditional JMP/JSR/BRA/BSR and returns also redirect if their destination
-happens to equal the sequential cursor: discard younger words and an outstanding
-F1 address, then read the destination afresh. Conditional flow with the same
-resulting PC cannot yet distinguish fallthrough from a taken same-address branch;
-it fails contextually rather than guessing. IRQ insertion, loops/REP, hardware
-cache, WAIT/STOP, traps/debug and software-reset pipeline behavior remain strict
-frontiers. Atomic native execution cannot bypass an enabled frontend. The
-original per-effect reference and completion-clock contracts remain separate.
+The native attempt reports whether execution actually wrote the PC through its
+control-transfer path. Sequential opcode/extension fetch increments do not set
+this result. A taken JMP/JSR/BRA/BSR, conditional transfer or return discards
+all younger samples and an issued F1 address even when its destination equals
+the sequential cursor. A false condition retains these real samples. A PC that
+differs from the consumed cursor without a native redirect rejects contextually;
+resulting-PC comparison cannot substitute for an actual branch decision.
+The adapter does not reevaluate conditions from later RAM or status values.
+
+The fixed native result is cleared before each attempt, on yield/failure,
+hardware reset and both trusted restore paths. It is derived completion output,
+not serialized architectural history. A resumed attempt recomputes it from its
+retained actual bus reads and native base. Rebuild matching SDK headers/archives;
+the SDK's full and bounded architectural checkpoint layouts remain unchanged.
+This result supplies no physical branch-stage timestamp. IRQ insertion, loops/
+REP, hardware cache, WAIT/STOP, traps/debug and software-reset pipeline behavior
+remain strict frontiers. Atomic native execution cannot bypass an enabled
+frontend. Per-effect reference and completion-clock contracts remain separate.
 
   cmake --build --preset strict --target blofeld-prefetch-queue-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_prefetch_queue$'
@@ -91,3 +100,17 @@ reads see the newer RAM value while the same address's queued opcode stays old.
 JMP redirects invalidate ready and issued words, including a fallthrough target.
 Capacity, starvation, competing APIs, reset and unknown speculative-read recovery
 remain explicit. Full seven-stage scheduling and physical bus timing are open.
+
+  cmake --build --preset strict --target blofeld-prefetch-condition-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_prefetch_conditions$'
+
+A fixed matrix executes all 16 Jcc codes with all 256 CCR values using independent
+FM tables12-17/12-18 Boolean expectations, including normalized and signed conditions.
+Every branch targets the identical sequential PC, so only the real decision
+can select retention versus fresh fetch after code overwrite. Literal native
+flags, register values, stack, PC and four retirements per case are checked.
+Separate native-configured DMA cases pause an actual memory-bit operand or
+conditional call, replay two joint snapshots and distinguish the following
+queued NOP from the DMA-written instruction. Existing distinct-target branches,
+JMP/JSR/RTS, zero/extension captures and strict failure cases remain covered.
+These finite ISA cases are deterministic instruction tests, not parser fuzzing.
