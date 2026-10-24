@@ -1711,7 +1711,14 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           actual memory-bit/conditional-call
                                           DMA and two-restore cases. Physical
                                           scheduling, loops and IRQ timelines
-                                          remain open.
+                                          remain open. Composed native/F2/DMA
+                                          admission now derives actual core
+                                          addresses/directions and enforces
+                                          stalls on the real pending effects;
+                                          no supplied footprint or program word.
+                                          Ordering/action selection remain
+                                          explicit, without physical clocks
+                                          (dsp-reference-cycle.txt).
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

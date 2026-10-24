@@ -6,6 +6,7 @@
 #include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_program_fetch.hpp"
+#include "blofeld/dsp_reference_cycle.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
@@ -87,6 +88,9 @@ public:
   [[nodiscard]] DspProgramFetchView reference_fetch() const;
   [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
+  // Derive occupancy from actual selected F2/native effects; honor DMA stalls.
+  [[nodiscard]] DspReferenceCycleResult
+  advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs);
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);
   [[nodiscard]] DspDmaBusResult advance_dma(DspDmaInputs inputs, DspCoreBusUse core);
   void observe_dax(DspDaxInputs inputs);

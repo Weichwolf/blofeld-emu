@@ -1,0 +1,57 @@
+Actual native/F2 DMA cycle admission
+
+DspMachine::advance_reference_bus_cycle selects a genuine pending native ticket
+and/or an existing frontend address/read stage. It derives the core occupancy
+from those actual effects and the issued F2 address. Callers supply neither a
+core footprint nor an instruction word. An already captured opcode/extension,
+including zero, needs no second P read. F1 only issues its sequential address.
+The returned footprint describes the selected memory effects, including stalled
+ones; it is not a hardware pipeline trace.
+
+The declared order must be dma_then_fetch_then_native. The existing DMA model
+samples its reference index/requests and arbitrates against that derived group.
+A fresh conflicting DMA source waits while native core work proceeds. A held
+DMA destination has priority: core_stall prevents both selected frontend and
+native actions, including the cycle that commits the DMA write. A later actual
+admission reads the committed value. An independent DMA source/destination and
+core action both execute. Controller reads, including an actual native DMA bit
+test, use the separate controller route; the chosen order exposes DMA's updated
+register value. This order is an explicit experiment, not silicon sampling order.
+
+Preflight checks tickets, current queue readiness, fetch stage, memory resources
+and core port sharing before DMA request sampling or real bus I/O. Two P-space
+reads or an unqualified pair sharing physical storage cannot be declared as
+independent simultaneous core accesses. General core I/O, controller writes,
+non-memory reset/acknowledge effects and unqualified sharing remain refusals.
+The established strict resource/map/ROM and actual-value handlers still apply.
+A refused preflight preserves the legitimate pending access and DMA index.
+
+After entering the DMA/fetch/native sequence, an actual failure quarantines the
+CPU with index, address/operation, PC and OMR context. Already completed DMA and
+core effects remain a prefix; no later selected action runs. Only a trusted
+coordinated checkpoint or actual reset can recover. Snapshots retain real held
+DMA data, native tickets/prefixes and ready/issued frontend state together;
+restore invalidates old tickets. A returned fetch view is the final view after
+native work, including any real branch redirect that discarded a just-read word.
+
+This composes real actions at an explicitly selected reference boundary. It
+advances no instruction clock, timers, CLK/2 or elapsed-time counters and does
+not assign AG1/AG2/E1/E2 timestamps. Callers still select actions; access ordinals
+cannot determine their physical grouping. The complete overlapped pipeline,
+automatic action scheduling, actual core/DMA time placement, loop/IRQ timelines,
+full ROM, reserved Y:002000 and full instrument startup/audio remain open.
+Existing unclocked calls and clocked completion contracts retain their behavior;
+a clocked owner refuses this semantic cycle API. Matching headers/libraries are
+required; no prepared native SDK interface changes in this increment.
+
+  cmake --build --preset strict --target blofeld-reference-cycle-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_reference_bus_cycle$'
+
+Own native MOVEP setup programs configure real X-to-Y and P-to-P DMA. Literal
+source/destination/register/PC/count expectations cover fresh-source core wins,
+held-destination native/F2 waits, actual write completion, two joint replays,
+zero-word admission, F2 plus controller-bit observation, and a younger F2 word
+invalidated by an actual same-cursor JMP. Guard cases preserve request indices,
+FIFO data and pending effects. A real unknown F2 read after an admitted DMA
+source retains that prefix, refuses checkpoints and recovers only through a
+trusted snapshot. No manufacturer bytes are embedded in these own programs.

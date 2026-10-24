@@ -132,3 +132,10 @@ not establish allocation-free execution or real-time bounds. This path does not
 belong in a real-time audio callback. IRQ-entry clocking, physical
 pipeline/grouping/interlocks, elapsed stall clocks, dynamic deadline placement,
 original full boot and audio, and real-device equivalence remain unqualified.
+
+Selected native and frontend effects can now be composed with one real DMA
+reference phase. The owner derives their addresses/directions and holds the
+actual pending accesses on a destination conflict; it never accepts a supplied
+core footprint or replacement word (dsp-reference-cycle.txt). Action selection
+and order remain explicit, with no instruction/peripheral time advancement.
+Failures preserve executed prefixes and require coordinated recovery.

@@ -205,7 +205,7 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
 add_library(blofeld_dsp src/dsp_core.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
-  src/dsp_program_fetch.cpp
+  src/dsp_program_fetch.cpp src/dsp_reference_cycle.cpp
   src/dsp_interlocks.cpp src/dsp_interlock_decode.cpp
   src/dsp_interrupt_timing.cpp
   src/dsp_machine.cpp src/dsp_scheduled_run.cpp
@@ -751,6 +751,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-prefetch-condition-test test/dsp_prefetch_condition_test.cpp)
   target_link_libraries(blofeld-prefetch-condition-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_prefetch_conditions COMMAND blofeld-prefetch-condition-test)
+  add_executable(blofeld-reference-cycle-test test/dsp_reference_cycle_test.cpp)
+  target_link_libraries(blofeld-reference-cycle-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_reference_bus_cycle COMMAND blofeld-reference-cycle-test)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
@@ -2170,7 +2173,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

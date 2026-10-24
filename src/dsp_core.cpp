@@ -652,11 +652,8 @@ DspProgramFetchView DspCore::reference_fetch() const {
 }
 
 DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage stage) {
-  if (impl_->active || impl_->faulted || impl_->run.begin) {
-    throw Fault("Program fetching requires a healthy unclocked native boundary");
-  }
+  validate_reference_fetch(stage);
   auto &fetch = impl_->native.reference().fetch();
-  fetch.check_stage(stage);
   const auto before = state();
   const auto view = fetch.view();
   const auto address = view.pending_address.value_or(view.next_address);
@@ -679,10 +676,25 @@ DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage 
   }
 }
 
-DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
+void DspCore::validate_reference_fetch(const DspProgramFetchStage stage) const {
+  if (impl_->active || impl_->faulted || impl_->run.begin) {
+    throw Fault("Program fetching requires a healthy unclocked native boundary");
+  }
+  impl_->native.reference().fetch().check_stage(stage);
+}
+
+void DspCore::validate_reference_admission(const DspReferenceTicket &ticket) const {
   validate_reference_ticket(ticket);
   impl_->native.reference().check_admission();
   impl_->check_fetch_opcode();
+}
+
+void DspCore::fail_reference_cycle() noexcept {
+  impl_->faulted = true;
+}
+
+DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
+  validate_reference_admission(ticket);
   const auto before = state();
   const ExecutionGuard guard(impl_->active);
   try {

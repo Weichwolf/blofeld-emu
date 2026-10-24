@@ -107,3 +107,9 @@ timestamp, pipeline/bus-phase reconstruction or automatic clock integration.
 DspDmaIo has an extra callback member. Adopting C++ consumers must rebuild with
 matching project headers/libraries; frozen bundles remain frozen until deliberate
 adoption. This increment does not change the prepared native SDK interface.
+
+The composed native-cycle API derives occupancy from selected actual pending
+native/F2 effects and enforces the resulting stall before their real admissions
+(dsp-reference-cycle.txt). It eliminates caller-supplied footprints for that
+path, while retaining explicit action selection/order and no physical clocks.
+The lower-level footprint API and its qualified scope remain unchanged.

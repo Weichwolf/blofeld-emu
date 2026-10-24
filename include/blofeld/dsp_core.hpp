@@ -132,6 +132,9 @@ private:
   [[nodiscard]] DspProgramFetchView advance_reference_fetch(DspProgramFetchStage stage);
   [[nodiscard]] DspProgramFetchView reference_fetch() const;
   void validate_reference_ticket(const DspReferenceTicket &ticket) const;
+  void validate_reference_admission(const DspReferenceTicket &ticket) const;
+  void validate_reference_fetch(DspProgramFetchStage stage) const;
+  void fail_reference_cycle() noexcept;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;
   [[nodiscard]] DspReferenceProgress

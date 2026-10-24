@@ -8,15 +8,19 @@
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_program_fetch.hpp"
+#include "blofeld/dsp_reference_cycle.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 #include "dsp_interlocks.hpp"
+#include "dsp_reference_cycle.hpp"
 
 #include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
+#include <string>
 #include <utility>
 
 namespace blofeld {
@@ -346,6 +350,46 @@ DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTick
 
 std::optional<DspReferencePending> DspMachine::reference_pending() const {
   return state_->cpu.reference_pending();
+}
+
+DspReferenceCycleResult
+DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
+  if (clocked() || state_->cpu.executing()) {
+    throw Fault("Composed native bus cycles require an unclocked healthy reference owner");
+  }
+  const auto pending = state_->cpu.reference_pending();
+  const auto context = state_->cpu.state();
+  DspReferenceCycleResult result;
+  try {
+    if (inputs.order != DspReferenceBusOrder::dma_then_fetch_then_native) {
+      throw Fault("Native bus cycle requires explicit DMA/fetch/native order");
+    }
+    if (inputs.access) { state_->cpu.validate_reference_admission(*inputs.access); }
+    if (inputs.fetch) { state_->cpu.validate_reference_fetch(*inputs.fetch); }
+    result = reference_cycle_footprint(state_->bus, inputs, pending, state_->cpu.reference_fetch());
+  } catch (const std::exception &error) {
+    throw Fault("DSP bus-cycle preflight pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
+                ": " + error.what());
+  }
+  try {
+    result.dma =
+        advance_dma(inputs.dma,
+                    {.accesses = std::span(result.core_accesses).first(result.core_access_count),
+                     .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    if (result.dma.core_stall) { return result; }
+    if (inputs.fetch) { result.fetch = state_->cpu.advance_reference_fetch(*inputs.fetch); }
+    if (inputs.access) { result.progress = state_->cpu.advance_reference_access(*inputs.access); }
+    if (inputs.fetch) { result.fetch = state_->cpu.reference_fetch(); }
+    return result;
+  } catch (const std::exception &error) {
+    state_->cpu.fail_reference_cycle();
+    throw Fault("DSP bus cycle=" + std::to_string(inputs.dma.cycle) + " DMA/fetch/native pc=" +
+                hex(context.pc, 6) + " omr=" + hex(context.omr, 6) + ": " + error.what());
+  } catch (...) {
+    state_->cpu.fail_reference_cycle();
+    throw Fault("Non-standard DSP bus-cycle failure pc=" + hex(context.pc, 6) +
+                " omr=" + hex(context.omr, 6));
+  }
 }
 
 DspCheckpoint DspMachine::checkpoint() const {
