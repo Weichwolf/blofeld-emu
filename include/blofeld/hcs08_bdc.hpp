@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -72,6 +73,9 @@ public:
   void communication_timeout();
   void step_cpu();
   [[nodiscard]] bool service_interrupt();
+  [[nodiscard]] bool start_irq_bus(Hcs08IrqBusContract contract);
+  void advance_irq_bus();
+  [[nodiscard]] std::optional<Hcs08IrqBusState> irq_bus_state() const;
   [[nodiscard]] std::uint8_t status() const;
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] Hcs08BdcState state() const;

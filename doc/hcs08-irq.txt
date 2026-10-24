@@ -64,3 +64,7 @@ These gates do not establish boot-origin provenance, physical IRQ/clock/SPI
 latency, PCB wiring, native DSP event handling, normal Keyboard boot/scanning,
 main1.25 MIDI/audio/persistence, original whole update/recovery or real-device
 flash safety. Strict ICG/FSTAT and missing ROM/NAND data remain unresolved.
+
+The separate explicit user-view bus owner is described in hcs08-irq-bus.txt.
+It retains real access prefixes and program bytes; queue consumption, internal
+pipeline/board timing and scheduled controller execution remain unqualified.

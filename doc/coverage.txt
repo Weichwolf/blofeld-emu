@@ -1926,3 +1926,10 @@ and original SPI IRQ execution cover two untimed schedules, including the real
 unread final RX byte after original masking. See hcs08-irq.txt. Eleven-cycle IRQ,
 prefetch/bus ordering, derivative priority and boot-origin timing remain open;
 this does not qualify timed run-clock admission or whole device behavior.
+
+HCS08 IRQ bus owner (hcs08-irq-bus.txt): eleven explicit unstretched user-view
+periods perform actual stack/vector/program accesses and retain partial queues
+in trusted joint checkpoints. The free cycle supplies no invented memory read.
+Untimed stepping/retirement clocks refuse the owned sequence/queue. Instruction
+queue consumption/invalidation, physical source/clock/latching, normal controller
+boot and all full update/recovery/device acceptance requirements remain open.

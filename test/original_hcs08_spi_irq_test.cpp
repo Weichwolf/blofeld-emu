@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "blofeld/bus.hpp"
 #include "blofeld/dsp_shi.hpp"
 #include "blofeld/hcs08.hpp"
 #include "blofeld/hcs08_flash.hpp"
@@ -14,8 +15,10 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -139,6 +142,130 @@ void unchanged_supplied_pages(const app::ApplicationMemory &memory,
   }
 }
 
+Hcs08State bus_foreground(const unsigned seed) {
+  return {.pc = return_pc,
+          .hx = static_cast<std::uint16_t>((seed << byte_shift) | (byte_mask - seed)),
+          .sp = original_sp,
+          .a = static_cast<std::uint8_t>(seed ^ byte_mask),
+          .ccr_known = ccr_mask,
+          .ccr = flags};
+}
+
+void prepare_bus(app::ApplicationMemory &memory, Hcs08 &cpu, const unsigned seed) {
+  memory.warm_reset();
+  constexpr std::array<std::uint8_t, 5> cursors{0, 3, 0, 0, 0};
+  memory.install(tx_read, cursors);
+  memory.install(tx_buffer, event_bytes);
+  cpu.set_state(bus_foreground(seed)); // Own foreground only, never an IRQ handler/frame.
+  configure(memory.spi);
+  require(cpu.start_irq_bus(Hcs08IrqBusContract::reference_unstretched_sequence),
+          "Actual original SPI source admits the explicit11-period bus sequence");
+}
+
+void bus_cycles(Hcs08 &cpu, const unsigned count, unsigned &periods) {
+  for (unsigned n = 0; n < count; ++n) {
+    cpu.advance_irq_bus();
+    ++periods;
+  }
+}
+
+void bus_endpoint(const app::ApplicationMemory &memory,
+                  const Hcs08 &cpu,
+                  const unsigned seed,
+                  std::ostream &trace) {
+  auto expected = bus_foreground(seed);
+  expected.pc = handler;
+  expected.sp = original_sp - 5;
+  expected.ccr = entered_flags;
+  const auto state = cpu.irq_bus_state();
+  if (!state) { throw Fault("Original IRQ must retain its owned program queue"); }
+  const auto &image = memory.flash.image();
+  constexpr unsigned cycles = 11;
+  require(cpu.state() == expected && state->completed_cycles == cycles &&
+              state->attempted_cycles == cycles && state->vector == vector &&
+              state->target == handler && state->ready_program_bytes == 2 &&
+              state->program_byte_in_flight && state->prefetched_bytes == 3 &&
+              state->acknowledged && memory.retired == 0 && memory.interrupt_entries == 1 &&
+              memory.interrupt_acknowledgements == 1 && memory.spi.interrupt_requested() &&
+              !memory.known[saved_ccr] && memory.partial_known[saved_ccr] == ccr_mask &&
+              !memory.options.written(),
+          "Original FLASH vector and program reads retain the genuine frame/queue without an ISR "
+          "opcode");
+  constexpr std::array<unsigned, 5> addresses{
+      vector, vector + 1, handler, handler + 1, handler + 2};
+  require(memory.flash_reads.size() == addresses.size(),
+          "Exactly five actual original FLASH reads");
+  for (unsigned n = 0; n < addresses.size(); ++n) {
+    const auto address = addresses[n];
+    require(memory.flash_reads[n] == Access{.address = address,
+                                            .value = image.data[address - app::hf::first],
+                                            .write = false},
+            "Independent vector/program address order matches the pinned original bytes");
+    if (n >= 2) {
+      require(state->prefetched[n - 2] == image.data[address - app::hf::first],
+              "Actual captured bytes retain the original immutable program image");
+    }
+  }
+  trace << "END seed=" << seed << " cycles=" << state->completed_cycles << " pc=" << cpu.state().pc
+        << " sp=" << cpu.state().sp << " ccr=" << static_cast<unsigned>(cpu.state().ccr)
+        << " known=" << static_cast<unsigned>(cpu.state().ccr_known)
+        << " ready=" << state->ready_program_bytes << " inflight=" << state->program_byte_in_flight
+        << " q0=" << static_cast<unsigned>(state->prefetched[0])
+        << " q1=" << static_cast<unsigned>(state->prefetched[1])
+        << " q2=" << static_cast<unsigned>(state->prefetched[2]) << " retired=" << memory.retired
+        << '\n';
+}
+
+void bus_replays(const std::span<const std::uint8_t> records,
+                 std::ostream &trace,
+                 unsigned &periods) {
+  constexpr unsigned seed = 7;
+  constexpr unsigned cycles = 11;
+  app::ApplicationMemory initial(records, {.seed = 0, .trim = packaged_trim, .observation = -1});
+  Hcs08 first(initial, BLOFELD_HCS08_SLA);
+  prepare_bus(initial, first, seed);
+  const auto zero = first.checkpoint();
+  std::optional<app::ApplicationMemory> endpoint;
+  for (unsigned cut = 0; cut <= cycles; ++cut) {
+    auto partial = initial;
+    Hcs08 cut_cpu(partial, BLOFELD_HCS08_SLA);
+    cut_cpu.restore_checkpoint(zero);
+    bus_cycles(cut_cpu, cut, periods);
+    const auto saved = cut_cpu.checkpoint();
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      auto restored = partial;
+      Hcs08 other(restored, BLOFELD_HCS08_SLA);
+      other.restore_checkpoint(saved);
+      require(other.state() == cut_cpu.state() && other.irq_bus_state() == cut_cpu.irq_bus_state(),
+              "Actual partial original frame/vector/program queue survives a fresh joint restore");
+      bus_cycles(other, cycles - cut, periods);
+      trace << "REPLAY cut=" << cut << " index=" << replay << '\n';
+      bus_endpoint(restored, other, seed, trace);
+      unchanged_supplied_pages(restored, records);
+      if (endpoint) {
+        app::same_endpoint(restored, *endpoint);
+      } else {
+        endpoint = restored;
+      }
+    }
+  }
+}
+
+void run_bus(const std::span<const std::uint8_t> records, std::ostream &trace) {
+  constexpr unsigned cycles = 11;
+  unsigned periods = 0;
+  for (unsigned seed = 0; seed < 8; ++seed) {
+    app::ApplicationMemory memory(records, {.seed = 0, .trim = packaged_trim, .observation = -1});
+    Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+    prepare_bus(memory, cpu, seed);
+    bus_cycles(cpu, cycles, periods);
+    bus_endpoint(memory, cpu, seed, trace);
+    unchanged_supplied_pages(memory, records);
+  }
+  bus_replays(records, trace, periods);
+  trace << "SUMMARY periods=" << periods << " baseline=8 replays=24 retired=0\n";
+}
+
 void run(const std::span<const std::uint8_t> records,
          const unsigned seed,
          const bool pipeline,
@@ -195,16 +322,28 @@ void run(const std::span<const std::uint8_t> records,
 
 int main(const int count, char **arguments) {
   try {
-    require(count == 3, "Expected pinned supplied pages and private original-SPI-IRQ trace path");
+    const bool bus_mode = count == 4 && std::string_view(arguments[3]) == "--irq-bus";
+    require(count == 3 || bus_mode,
+            "Expected pinned supplied pages, private trace and optional IRQ-bus mode");
     const auto records = hp::read_input(arguments[1], app::records_bytes);
     std::ostringstream trace;
-    for (unsigned seed = 0; seed < 8; ++seed) {
-      for (const bool pipeline : {false, true}) { run(records, seed, pipeline, trace); }
+    if (bus_mode) {
+      run_bus(records, trace);
+    } else {
+      for (unsigned seed = 0; seed < 8; ++seed) {
+        for (const bool pipeline : {false, true}) { run(records, seed, pipeline, trace); }
+      }
     }
     const auto text = trace.str();
     write_private_file(arguments[2],
                        {reinterpret_cast<const std::uint8_t *>(text.data()), text.size()});
-    std::cout << "Original HCS08 SPI interrupts preserve partial CCR through actual IRQ and RTI.\n";
+    if (bus_mode) {
+      std::cout
+          << "Original HCS08 IRQ bus sequence retains actual program bytes and joint state.\n";
+    } else {
+      std::cout
+          << "Original HCS08 SPI interrupts preserve partial CCR through actual IRQ and RTI.\n";
+    }
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

@@ -32,6 +32,10 @@ void Hcs08RunClock::healthy() const {
 void Hcs08RunClock::advance() {
   healthy();
   healthy_ = false;
+  if (bdc_.irq_bus_state()) {
+    state_.pending = bdc_.cpu_state();
+    fail("IRQ bus sequence/prefetch belongs to its separate qualified clock owner");
+  }
   if (state_.offered_periods == std::numeric_limits<std::uint64_t>::max()) {
     fail("period counter exhausted");
   }

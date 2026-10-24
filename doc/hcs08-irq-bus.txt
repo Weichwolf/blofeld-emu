@@ -1,0 +1,62 @@
+HCS08 IRQ user-view bus sequence
+
+  cmake --build --preset strict --target blofeld-hcs08-irq-bus-test format-check
+  ctest --test-dir build/strict -j1 -R '^hcs08_irq_bus$' --output-on-failure
+
+Primary Family6.4.2/Table6-10/SWI detail (printed95/116/285) establish11 cycles,
+sssssvvfppp. RTI is9 cycles. The corrected primary identities are recorded in
+hcs08-reference.json. This contract supplies unstretched user-view bus periods;
+it does not establish oscillator rate or internal clock-half-cycle timing.
+
+start_irq_bus requires reference_unstretched_sequence and a real eligible local
+source. It reserves the CPU without an early memory access. Each advance then
+performs only its actual period's access:
+
+  1..5  Write PCL/PCH/X/A/CCR at descending SP; retain genuine RAM masks.
+     5  Set I after saving the previous CCR.
+     6  Select the current local highest-priority source and read vector high.
+     7  Read that same vector's low byte; notify the board of acceptance.
+     8  Free CPU bus cycle; make the observed complete target available.
+  9..11 Read and retain three consecutive actual program bytes, wrapping16 bits.
+
+The free cycle does not invent an arbitrary-address read. The board notification
+is not a physical ACK wire or peripheral flag clear. Initial admission and final
+vector selection remain distinct. Source withdrawal before the vector read is
+explicitly unqualified and faults; no remembered successful source is supplied.
+Actual derivative priorities, electrical sampling/latching, wait/stretch behavior
+and exact board event tie order still require qualification.
+
+As in the primary reset/queue description, a program read propagates to the CPU
+one period later. At the end of period11 two captured bytes are available and
+the third is in flight. The owner records observations separately from readiness;
+it cannot advertise all three as immediately executable. A known prior arrival
+is retained even if the following period's new memory request faults.
+
+CPU, RAM masks, source/peripheral state and the sequence must be restored jointly.
+Trusted CPU checkpoints retain each completed period, vector-byte observations
+and partial program queue. Failures retain committed stack/register/read prefixes
+and quarantine; neither a retry nor a checkpoint from a failed phase is allowed.
+Explicit debugger state replacement/reset discards sequence/queue ownership.
+
+The retained three-byte program queue has no qualified instruction consumer yet.
+Ordinary native stepping and the instruction-retirement clock refuse this owned
+state before charging another instruction. They cannot reread changed memory,
+drop prefetched bytes or convert an IRQ into a next-opcode budget. Untimed
+service_interrupt remains a separate architecture-only path. No normal runtime
+or full controller-boot timing claim follows from this component.
+
+Units compare each11-period prefix against independent stack/vector/program
+address/value/mask expectations, including partial registers, stack and program
+wraps,24 fresh mid-sequence continuations, every real memory-access failure,
+notification failures, late source selection, withdrawal, BDC ownership and
+strict retained-queue refusal. No original program bytes are embedded or changed.
+No fuzzing or physical device traffic is run by this component.
+
+original_hcs08_irq_bus reads the unchanged official FFE0->EA29 vector and three
+actual FLASH program bytes in eight declared foreground contexts. Twelve cuts
+with24 fresh CPU/RAM/SPI/FLASH suffix restorations retain every phase and partial
+queue.286 actual advance calls are checked independently; no handler PC, frame,
+program byte or successful ISR result is supplied by the host. No instruction
+executes or retires while the real queue remains owned. Full normal controller
+startup, code-queue consumption/invalidation, physical timing and common-clock
+peripheral scheduling remain required. Manufacturer bytes/traces stay local.

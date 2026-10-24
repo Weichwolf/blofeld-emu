@@ -16,6 +16,7 @@
 #include "types.h"
 #include "xml.hh"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -98,10 +99,8 @@ public:
     memory.setValue(&layout.sp, static_cast<std::uint16_t>(sp + address_space - 1U));
   }
 
-  void enter_interrupt(const Hcs08State &before, const std::uint16_t vector) {
+  void require_irq_storage(const Hcs08State &before) const {
     constexpr unsigned byte_mask = 0xff;
-    constexpr unsigned shift = 8;
-    constexpr unsigned interrupt = 8;
     if ((before.ccr_known != Hcs08State::all_ccr || before.a_known != Hcs08State::all_a ||
          (before.hx_known & byte_mask) != byte_mask) &&
         dynamic_cast<Hcs08KnownMemory *>(&bus) == nullptr) {
@@ -110,6 +109,13 @@ public:
                   " pc=" + hex(before.pc) + " ccr=" + hex(before.ccr) +
                   ": unknown register bits require explicit masked RAM storage");
     }
+  }
+
+  void enter_interrupt(const Hcs08State &before, const std::uint16_t vector) {
+    constexpr unsigned byte_mask = 0xff;
+    constexpr unsigned shift = 8;
+    constexpr unsigned interrupt = 8;
+    require_irq_storage(before);
     bus.begin_interrupt({.vector = vector, .kind = InterruptKind::maskable}, false);
     push_irq_byte({.value = static_cast<std::uint8_t>(before.pc & byte_mask)});
     push_irq_byte({.value = static_cast<std::uint8_t>(before.pc >> shift)});
@@ -123,6 +129,82 @@ public:
     memory.setValue(&layout.pc, target);
     executor->setExecuteAddress(ghidra::Address(translator.getDefaultCodeSpace(), target));
     bus.acknowledge_interrupt(vector);
+  }
+
+  void irq_stack_cycle(Hcs08IrqBusState &sequence, const unsigned phase) {
+    const auto &s = sequence.entry;
+    constexpr unsigned byte_mask = 0xff;
+    constexpr unsigned shift = 8;
+    constexpr unsigned interrupt = 8;
+    const std::array<Hcs08KnownByte, 5> bytes{
+        {{.value = static_cast<std::uint8_t>(s.pc & byte_mask)},
+         {.value = static_cast<std::uint8_t>(s.pc >> shift)},
+         {.value = static_cast<std::uint8_t>(s.hx & byte_mask),
+          .known = static_cast<std::uint8_t>(s.hx_known & byte_mask)},
+         {.value = s.a, .known = s.a_known},
+         {.value = s.ccr, .known = s.ccr_known}}};
+    if (phase == 1) {
+      bus.begin_interrupt({.vector = sequence.admitted_vector, .kind = InterruptKind::maskable},
+                          false);
+    }
+    push_irq_byte(bytes.at(phase - 1U));
+    if (phase == bytes.size()) {
+      ccr_known = static_cast<std::uint8_t>(s.ccr_known | interrupt);
+      memory.setValue(&layout.ccr, s.ccr | interrupt);
+    }
+  }
+
+  void irq_vector_cycle(Hcs08IrqBusState &sequence, const unsigned phase) {
+    constexpr unsigned high_cycle = 6;
+    if (phase == high_cycle) {
+      const auto selected = native::pending_interrupt(bus, sequence.entry);
+      if (!selected) {
+        throw Fault("HCS08 IRQ vector select address=" + hex(sequence.admitted_vector) +
+                    ": source withdrawal before vector fetch is unqualified");
+      }
+      sequence.vector = *selected;
+      sequence.vector_selected = true;
+    }
+    if (!sequence.vector_selected) {
+      throw Fault("HCS08 IRQ vector read requires a selected source");
+    }
+    const auto index = phase - high_cycle;
+    const auto address = static_cast<std::uint16_t>(sequence.vector + index);
+    sequence.vector_bytes.at(index) =
+        static_cast<std::uint8_t>(bus.read_memory({.address = address}));
+    ++sequence.vector_reads;
+    if (index == 1) {
+      bus.acknowledge_interrupt(sequence.vector);
+      sequence.acknowledged = true;
+    }
+  }
+
+  void irq_free_cycle(Hcs08IrqBusState &sequence) {
+    constexpr unsigned shift = 8;
+    if (sequence.vector_reads != sequence.vector_bytes.size()) {
+      throw Fault("HCS08 IRQ free cycle requires both actual vector reads");
+    }
+    // No CPU memory access is invented for f. The vector propagation interval
+    // completes before the first consecutive program-byte request.
+    sequence.target = static_cast<std::uint16_t>(
+        (static_cast<unsigned>(sequence.vector_bytes[0]) << shift) | sequence.vector_bytes[1]);
+    sequence.target_known = true;
+    memory.setValue(&layout.pc, sequence.target);
+    executor->setExecuteAddress(ghidra::Address(translator.getDefaultCodeSpace(), sequence.target));
+  }
+
+  void irq_program_cycle(Hcs08IrqBusState &sequence, const unsigned phase) {
+    constexpr unsigned first_fetch = 9;
+    if (!sequence.target_known) {
+      throw Fault("HCS08 IRQ program fetch requires its actual target");
+    }
+    const auto index = phase - first_fetch;
+    const auto address = static_cast<std::uint16_t>(sequence.target + index);
+    bus.check_execute({.address = address, .length = 1});
+    sequence.prefetched.at(index) =
+        static_cast<std::uint8_t>(bus.read_memory({.address = address}));
+    ++sequence.prefetched_bytes;
+    sequence.program_byte_in_flight = true;
   }
 
   Bus &bus;
@@ -143,6 +225,7 @@ public:
   bool active = false;
   bool healthy = false;
   bool initialized = false;
+  std::optional<Hcs08IrqBusState> irq_bus;
 };
 
 Hcs08::Hcs08(Bus &bus, const std::filesystem::path &specification) try
@@ -157,6 +240,7 @@ Hcs08::~Hcs08() = default;
 void Hcs08::set_state(const Hcs08State &state) {
   const native::ExecutionGuard guard(impl_->active);
   impl_->healthy = false;
+  impl_->irq_bus.reset();
   impl_->a_known = state.a_known;
   impl_->hx_known = state.hx_known;
   impl_->memory.setValue(&impl_->layout.a, state.a & state.a_known);
@@ -232,6 +316,7 @@ Hcs08Checkpoint Hcs08::checkpoint() const {
   result.pc_known_ = impl_->pc_known;
   result.a_known_ = impl_->a_known;
   result.hx_known_ = impl_->hx_known;
+  result.irq_bus_ = impl_->irq_bus;
   return result;
 }
 
@@ -248,6 +333,7 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
   impl_->pc_known = checkpoint.pc_known_;
   impl_->a_known = checkpoint.a_known_;
   impl_->hx_known = checkpoint.hx_known_;
+  impl_->irq_bus = checkpoint.irq_bus_;
   impl_->initialized = true;
   impl_->healthy = true;
 }
@@ -299,7 +385,7 @@ void Hcs08::reset(const Hcs08ResetEntry mode, const Hcs08ResetCause cause) {
 }
 
 std::optional<std::uint16_t> Hcs08::pending_interrupt() const {
-  if (impl_->active || !impl_->healthy || !impl_->initialized) {
+  if (impl_->active || !impl_->healthy || !impl_->initialized || impl_->irq_bus) {
     throw Fault("HCS08 IRQ query requires a healthy completed native boundary");
   }
   return native::pending_interrupt(impl_->bus, state());
@@ -312,6 +398,7 @@ bool Hcs08::service_interrupt() {
   impl_->healthy = false;
   const auto before = state();
   try {
+    if (impl_->irq_bus) { throw Fault("HCS08 IRQ bus sequence/prefetch still has an owner"); }
     const auto vector = native::pending_interrupt(impl_->bus, before);
     if (!vector) {
       impl_->healthy = true;
@@ -326,6 +413,74 @@ bool Hcs08::service_interrupt() {
   }
 }
 
+std::optional<Hcs08IrqBusState> Hcs08::irq_bus_state() const {
+  return impl_->irq_bus;
+}
+
+bool Hcs08::start_irq_bus(const Hcs08IrqBusContract contract) {
+  if (contract != Hcs08IrqBusContract::reference_unstretched_sequence) {
+    throw Fault("HCS08 IRQ bus requires the explicit unstretched sequence contract");
+  }
+  const native::ExecutionGuard guard(impl_->active);
+  if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  impl_->healthy = false;
+  const auto before = state();
+  if (background_requested() || impl_->irq_bus) {
+    throw Fault("HCS08 IRQ bus admission requires an unowned normal-running CPU boundary");
+  }
+  const auto vector = native::pending_interrupt(impl_->bus, before);
+  if (!vector) {
+    impl_->healthy = true;
+    return false;
+  }
+  impl_->require_irq_storage(before);
+  impl_->irq_bus = Hcs08IrqBusState{.entry = before, .admitted_vector = *vector};
+  impl_->healthy = true;
+  return true;
+}
+
+void Hcs08::advance_irq_bus() {
+  const native::ExecutionGuard guard(impl_->active);
+  if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  impl_->healthy = false;
+  constexpr unsigned vector_high = 6;
+  constexpr unsigned free = 8;
+  constexpr unsigned last = 11;
+  auto &owner = impl_->irq_bus;
+  if (!owner || owner->completed_cycles >= last) {
+    throw Fault("HCS08 IRQ bus advance requires an unfinished owned sequence; prefetch consumption "
+                "remains unqualified");
+  }
+  auto &sequence = *owner;
+  const auto phase = sequence.completed_cycles + 1;
+  ++sequence.attempted_cycles;
+  // Previous program data reaches the CPU one user-view bus period later.
+  // Keep that known arrival even if this period's new access then faults.
+  sequence.ready_program_bytes = sequence.prefetched_bytes;
+  sequence.program_byte_in_flight = false;
+  const auto before = state();
+  try {
+    impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
+    if (phase < vector_high) {
+      impl_->irq_stack_cycle(sequence, phase);
+    } else if (phase < free) {
+      impl_->irq_vector_cycle(sequence, phase);
+    } else if (phase == free) {
+      impl_->irq_free_cycle(sequence);
+    } else {
+      impl_->irq_program_cycle(sequence, phase);
+    }
+    sequence.completed_cycles = phase;
+    impl_->healthy = true;
+  } catch (const ghidra::LowlevelError &error) {
+    throw Fault("HCS08 IRQ bus cycle=" + std::to_string(phase) + " pc=" + hex(before.pc) + ": " +
+                error.explain);
+  } catch (const Fault &error) {
+    throw Fault("HCS08 IRQ bus cycle=" + std::to_string(phase) + " pc=" + hex(before.pc) +
+                " ccr=" + hex(before.ccr) + ": " + error.what());
+  }
+}
+
 void Hcs08::step() {
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
@@ -337,6 +492,10 @@ void Hcs08::step() {
                 ": unknown CPU PC");
   }
   try {
+    if (impl_->irq_bus) {
+      throw Fault("HCS08 IRQ bus sequence/prefetch still has an owner; queue consumption is "
+                  "unqualified");
+    }
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
     if (native::pending_interrupt(impl_->bus, before)) {
       throw Fault(

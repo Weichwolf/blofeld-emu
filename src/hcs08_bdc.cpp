@@ -6,6 +6,7 @@
 #include "blofeld/hcs08_flash.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -124,6 +125,28 @@ bool Hcs08Bdc::service_interrupt() {
   const bool entered = cpu_.service_interrupt();
   healthy_ = true;
   return entered;
+}
+
+bool Hcs08Bdc::start_irq_bus(const Hcs08IrqBusContract contract) {
+  healthy();
+  if (state_.active) { return false; }
+  healthy_ = false;
+  const bool started = cpu_.start_irq_bus(contract);
+  healthy_ = true;
+  return started;
+}
+
+void Hcs08Bdc::advance_irq_bus() {
+  healthy();
+  if (state_.active) { fail("IRQ bus cycle", "active background mode owns the halted CPU"); }
+  healthy_ = false;
+  cpu_.advance_irq_bus();
+  healthy_ = true;
+}
+
+std::optional<Hcs08IrqBusState> Hcs08Bdc::irq_bus_state() const {
+  healthy();
+  return cpu_.irq_bus_state();
 }
 
 void Hcs08Bdc::step_cpu() {

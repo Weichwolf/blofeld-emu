@@ -28,7 +28,24 @@ struct Hcs08State {
   bool operator==(const Hcs08State &) const = default;
 };
 
-// Trusted native instruction-boundary state. Memory, clocks and external peers
+enum class Hcs08IrqBusContract : std::uint8_t { unqualified, reference_unstretched_sequence };
+
+// Completed user-view bus cycles, not internal pipeline register timing. The
+// vector bytes are observed separately before the free cycle makes the target
+// available. Prefetched bytes stay owned until a qualified queue consumer exists.
+struct Hcs08IrqBusState {
+  Hcs08State entry;
+  std::uint16_t admitted_vector = 0, vector = 0, target = 0;
+  std::array<std::uint8_t, 2> vector_bytes{};
+  std::array<std::uint8_t, 3> prefetched{};
+  unsigned completed_cycles = 0, attempted_cycles = 0, vector_reads = 0, prefetched_bytes = 0;
+  unsigned ready_program_bytes = 0;
+  bool program_byte_in_flight = false;
+  bool vector_selected = false, target_known = false, acknowledged = false;
+  bool operator==(const Hcs08IrqBusState &) const = default;
+};
+
+// Trusted native instruction/IRQ-bus boundary state. Memory, clocks and external peers
 // must be restored separately by the owner before further execution.
 class Hcs08Checkpoint {
 public:
@@ -46,6 +63,7 @@ private:
   std::uint8_t ccr_known_ = Hcs08State::all_ccr;
   std::uint8_t a_known_ = Hcs08State::all_a;
   std::uint16_t hx_known_ = Hcs08State::all_hx;
+  std::optional<Hcs08IrqBusState> irq_bus_;
 };
 
 enum class Hcs08ResetEntry : std::uint8_t { unqualified, normal, active_background };
@@ -81,6 +99,12 @@ public:
   // Entry does not retire an instruction or clear peripheral source flags.
   [[nodiscard]] std::optional<std::uint16_t> pending_interrupt() const;
   [[nodiscard]] bool service_interrupt();
+  // Real sssssvvfppp accesses, one explicitly supplied bus period per advance.
+  // No instruction retires. Ordinary stepping refuses the retained IRQ queue;
+  // consuming/invalidation of that queue is not yet qualified.
+  [[nodiscard]] bool start_irq_bus(Hcs08IrqBusContract contract);
+  void advance_irq_bus();
+  [[nodiscard]] std::optional<Hcs08IrqBusState> irq_bus_state() const;
   // Executes one instruction; an eligible unserviced IRQ refuses before fetch.
   void step();
 
