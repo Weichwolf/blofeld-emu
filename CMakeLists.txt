@@ -758,6 +758,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-fetch-run-test test/dsp_fetch_run_test.cpp test/dsp_fetch_run_guards.cpp)
   target_link_libraries(blofeld-fetch-run-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_fetch_run COMMAND blofeld-fetch-run-test)
+  add_executable(blofeld-retirement-test test/dsp_retirement_test.cpp test/dsp_retirement_fetch.cpp)
+  target_link_libraries(blofeld-retirement-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_reference_retirement COMMAND blofeld-retirement-test)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
@@ -2177,7 +2180,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

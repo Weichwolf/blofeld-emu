@@ -18,6 +18,7 @@ struct DspFetchRunInputs {
   std::uint32_t extal_hz = 0;
   std::uint64_t timebase_hz = 0;
   DspFetchTiming timing = DspFetchTiming::unqualified;
+  DspReferenceExecution execution = DspReferenceExecution::access_boundaries;
   bool operator==(const DspFetchRunInputs &) const = default;
 };
 

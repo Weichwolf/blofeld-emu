@@ -1,0 +1,60 @@
+Deferred native DSP retirement
+
+The explicit access_and_retirement_boundaries execution contract separates
+real native memory/peripheral effects from publication of their completed CPU
+result. The ordinary access_boundaries contract retains immediate completion.
+DSP56300FM Rev5 Table5-1 distinguishes address updates, load/store operands and
+ALU destination phases. A last-access callback cannot supply all those stages:
+the native interpreter previously published the whole result at that callback.
+This boundary is infrastructure for a staged backend, not a stage timestamp.
+
+After the final real access, a DspInstructionRetire ticket holds the genuine
+native completed result. Public registers, flags, stack, PC and SDK counters
+still show the instruction base. Native computation is not replaced or run
+again at retirement. Admission restores its held bounded native result once,
+observes the actual resulting OMR and applies the actual native redirect.
+The marker is not a bus access and has no memory footprint. It cannot enter
+the generic peripheral/reset handler or be replayed as another memory effect.
+
+Real stores and destructive reads admitted before retirement remain committed.
+Later RAM/program changes or an empty FIFO cannot change the captured CPU
+result. Native R/N/M, whole stack, flags, REP state and diagnostic counters are
+held together. This uses the existing bounded native attempt-state interface;
+no native SDK source changes or extra instruction estimates are introduced.
+
+Trusted joint machine checkpoints include the candidate and actual redirect
+outcome. Restore/fork refreshes ticket ownership; a reset discards both. A
+loaded zero-access REP body also yields at its explicit retirement boundary.
+Unknown accesses still quarantine execution before any successful result; only
+trusted recovery or reset permits continuation. Snapshot formats remain local
+and opaque, requiring matching rebuilt headers and archives.
+
+DspFetchRun can select the same execution contract in its inputs. Its initial
+pending instruction must match, and subsequent begin_instruction calls retain
+that choice. While a candidate is held, automatic F1/F2 and reference clocks
+can continue. Actual retirement has no extra P read; an old F2 can coexist with
+it. A DMA conflict with that selected F2 still holds both selected actions.
+Branch retirement invalidates younger fetched words even for a taken branch
+to the sequential consumption cursor; the saved native redirect flag survives
+candidate/checkpoint restoration. An OMR result starts the reference switch
+delay at publication, excluding that cycle from the three subsequent clocks.
+
+  cmake --build --preset strict --target blofeld-retirement-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_reference_retirement$'
+
+Own assembled/independently encoded tests check literal parallel arithmetic/CCR/modulo/load results,
+committed stores and destructive FIFO reads with no reaccess, fresh-machine
+snapshot forks, repeated restores, zero-access REP, unknown reads/reset/stale
+tickets, explicit untimed vector acknowledgement/reassertion, same-cursor
+branch flushing, queued zero NOPs, actual held DMA code
+replacement, delayed OMR publication and unknown-F2 quarantine/recovery. Register/PC/count expectations are
+independent of round trips. Existing immediate reference and original reached
+boot experiments remain separate regression evidence.
+
+Begin, native effect admission and retirement selection are still explicit.
+This holds one whole instruction result; it does not yet implement overlapping
+instruction candidates, per-register AG2/E1/E2 publication, automatic decode,
+all simultaneous X/Y/P groups, loop/IRQ stage timing or physical clock order.
+It is not a real-time callback implementation. Full ROM, reserved Y:002000,
+full original reset-to-instrument operation, MIDI/audio and all complete-device
+acceptance requirements remain open (objective.txt, coverage.txt).

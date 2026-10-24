@@ -41,6 +41,7 @@ struct DspReferenceState {
   DspNativeAccess context{};
   std::optional<DspReferenceInterrupt> interrupt;
   bool active = false;
+  DspReferenceExecution execution = DspReferenceExecution::unqualified;
   DspProgramFetch fetch;
 };
 
@@ -53,11 +54,15 @@ public:
   explicit DspReferenceTape(DspBus &bus) : bus_(bus) {}
 
   void begin(DspNativeAccess context,
+             DspReferenceExecution execution,
              std::optional<DspReferenceInterrupt> interrupt = std::nullopt);
   void clear();
   void finish();
   void rewind();
   void verify_complete() const;
+  void stage_retirement(DspInstructionRetire result);
+
+  [[nodiscard]] DspReferenceExecution execution() const { return state_.execution; }
 
   [[nodiscard]] bool active() const { return state_.active; }
 

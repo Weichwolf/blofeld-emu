@@ -29,11 +29,17 @@ bool same_effect(const DspReferenceEffect &a, const DspReferenceEffect &b) {
     const auto other = std::get<DspInterruptAcknowledge>(b).request;
     return ack->request.vector == other.vector && ack->request.level == other.level;
   }
+  if (const auto *retire = std::get_if<DspInstructionRetire>(&a)) {
+    return *retire == std::get<DspInstructionRetire>(b);
+  }
   const auto *access = std::get_if<DspNativeAccess>(&a);
   return access == nullptr || same_access(*access, std::get<DspNativeAccess>(b));
 }
 
 std::string effect_context(const DspReferenceEffect &effect) {
+  if (const auto *retire = std::get_if<DspInstructionRetire>(&effect)) {
+    return "instruction-retirement pc=" + hex(retire->pc, 6) + " next=" + hex(retire->next_pc, 6);
+  }
   if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&effect)) {
     return "interrupt-acknowledge vector=" + hex(ack->request.vector, 6) +
            " level=" + std::to_string(ack->request.level);
@@ -57,10 +63,12 @@ bool program_read(const DspReferenceEffect &effect) {
 }
 
 void DspReferenceTape::begin(const DspNativeAccess context,
+                             const DspReferenceExecution execution,
                              const std::optional<DspReferenceInterrupt> interrupt) {
   if (state_.active) { throw Fault("Native reference instruction is already pending"); }
   finish();
   state_.context = context;
+  state_.execution = execution;
   state_.interrupt = interrupt;
   state_.active = true;
 }
@@ -92,8 +100,13 @@ void DspReferenceTape::check_admission() const {
 }
 
 void DspReferenceTape::restore(const DspReferenceState &state) {
+  const bool retirement =
+      state.pending && std::holds_alternative<DspInstructionRetire>(*state.pending);
   if (state.used > state.entries.size() || (state.active != state.pending.has_value()) ||
-      (state.pending && state.used == state.entries.size()) ||
+      (state.pending && state.used == state.entries.size() && !retirement) ||
+      (state.active && state.execution != DspReferenceExecution::access_boundaries &&
+       state.execution != DspReferenceExecution::access_and_retirement_boundaries) ||
+      (retirement && state.execution != DspReferenceExecution::access_and_retirement_boundaries) ||
       (state.latched_program_word && (!state.pending || !program_read(*state.pending) ||
                                       *state.latched_program_word > word_mask))) {
     throw Fault("Invalid trusted native reference continuation");
@@ -136,6 +149,16 @@ void DspReferenceTape::verify_complete() const {
   if (cursor_ != state_.used || state_.pending) {
     throw Fault("Native reference execution lost an admitted effect");
   }
+}
+
+void DspReferenceTape::stage_retirement(const DspInstructionRetire result) {
+  verify_complete();
+  if (!state_.active ||
+      state_.execution != DspReferenceExecution::access_and_retirement_boundaries ||
+      mode_ != DspReferenceMode::ordinary) {
+    throw Fault("Native result requires an explicit retirement boundary");
+  }
+  state_.pending = result;
 }
 
 void DspReferenceTape::check_capacity() const {
@@ -220,6 +243,9 @@ std::uint32_t DspReferenceTape::peek_program(const std::uint32_t address) {
 }
 
 std::uint32_t DspReferenceTape::perform(const DspReferenceEffect &effect) {
+  if (std::holds_alternative<DspInstructionRetire>(effect)) {
+    throw Fault("Native retirement cannot perform a bus operation");
+  }
   if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&effect)) {
     bus_.acknowledge_latched_interrupt(ack->request);
     return 0;
@@ -251,6 +277,9 @@ DspReferenceEffect DspReferenceTape::commit() {
     throw Fault("Native reference admission requires an inactive pending access");
   }
   const auto effect = *state_.pending;
+  if (std::holds_alternative<DspInstructionRetire>(effect)) {
+    throw Fault("Native retirement requires its held CPU result, not access replay");
+  }
   check_admission();
   std::uint32_t value = 0;
   try {

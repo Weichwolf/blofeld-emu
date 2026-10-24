@@ -42,6 +42,7 @@ inline DspFetchCycleInputs input(const bool admit = false) {
 struct Setup {
   banks::Transfer transfer{.control = 0};
   bool timer = false;
+  DspReferenceExecution execution = reference::boundaries;
 };
 
 inline void
@@ -74,7 +75,7 @@ prepare(DspMachine &machine, const std::span<const std::uint32_t> words, const S
   require(
       machine.cpu().state().pc == program && machine.cpu().state().r[0] == initial_r0,
       "Real native MOVEP setup configures the pre-epoch DMA/timer state and enters own RAM code");
-  static_cast<void>(machine.begin_reference_instruction(reference::boundaries));
+  static_cast<void>(machine.begin_reference_instruction(setup.execution));
 }
 
 void guard_checks();

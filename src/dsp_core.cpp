@@ -216,15 +216,22 @@ std::uint64_t register_value(const dsp56k::DSP &cpu, const dsp56k::EReg reg) {
 }
 }
 
+struct DspRetirementResult {
+  dsp56k::DSP::ReferenceAttemptState cpu;
+  bool redirected = false;
+};
+
 struct DspCoreCheckpoint::Storage {
   Storage(dsp56k::DSP::ReferenceState state,
           const DspReferenceState &reference_state,
-          const std::uint64_t serial)
-      : cpu(std::move(state)), reference(reference_state), generation(serial) {}
+          const std::uint64_t serial,
+          const std::optional<DspRetirementResult> &result)
+      : cpu(std::move(state)), reference(reference_state), generation(serial), retirement(result) {}
 
   const dsp56k::DSP::ReferenceState cpu;
   const DspReferenceState reference;
   const std::uint64_t generation;
+  const std::optional<DspRetirementResult> retirement;
 };
 
 DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
@@ -316,6 +323,7 @@ public:
     auto next_owner = std::make_shared<const bool>(true);
     native.reference().clear();
     reference_base.reset();
+    retirement.reset();
     reference_owner = std::move(next_owner);
     generation = 0;
   }
@@ -356,7 +364,7 @@ public:
     }
   }
 
-  void finish_fetch() {
+  void finish_fetch(const bool redirected) {
     auto &reference = native.reference();
     auto &fetch = reference.fetch();
     if (!fetch.active()) { return; }
@@ -368,13 +376,35 @@ public:
                   hex(reference.snapshot().context.pc, 6) + " omr=" + hex(omr, 6));
     }
     const auto view = fetch.view();
-    const bool redirected = cpu.referenceRedirected();
     if (!redirected && next != view.consume_address) {
       throw Fault("Unqualified native program-fetch PC transition pc=" +
                   hex(reference.snapshot().context.pc, 6) + " next=" + hex(next, 6) +
                   " expected=" + hex(view.consume_address, 6) + " omr=" + hex(omr, 6));
     }
     if (redirected || omr != view.omr) { fetch.redirect(next, omr); }
+  }
+
+  void finish_reference(const bool redirected) {
+    bus.observe_omr(word(cpu.regs().omr));
+    finish_fetch(redirected);
+    native.reference().finish();
+    reference_base.reset();
+    retirement.reset();
+  }
+
+  DspReferenceEffect retire_reference() {
+    const auto &pending = native.reference().pending();
+    if (!retirement || !pending || !std::holds_alternative<DspInstructionRetire>(*pending)) {
+      throw Fault("Native retirement lost its held instruction result");
+    }
+    const auto completed = *pending;
+    const bool redirected = retirement->redirected;
+    {
+      const DspReferenceScope restoring(native.reference(), DspReferenceMode::restoring);
+      cpu.restoreReferenceAttempt(retirement->cpu);
+    }
+    finish_reference(redirected);
+    return completed;
   }
 
   void resume_reference() {
@@ -397,11 +427,20 @@ public:
       return;
     }
     // Validate native continuation constraints without publishing a partial step.
-    static_cast<void>(cpu.referenceAttemptState());
-    bus.observe_omr(word(cpu.regs().omr));
-    finish_fetch();
-    reference.finish();
-    reference_base.reset();
+    const auto result = cpu.referenceAttemptState();
+    const bool redirected = cpu.referenceRedirected();
+    if (reference.execution() == DspReferenceExecution::access_and_retirement_boundaries) {
+      const auto before = reference.snapshot().context;
+      reference.stage_retirement({.pc = before.pc,
+                                  .next_pc = word(cpu.regs().pc),
+                                  .omr = before.omr,
+                                  .next_omr = word(cpu.regs().omr),
+                                  .redirected = redirected});
+      retirement = DspRetirementResult{.cpu = result, .redirected = redirected};
+      restore_reference_base();
+    } else {
+      finish_reference(redirected);
+    }
   }
 
   DspBus &bus;
@@ -416,6 +455,7 @@ public:
   bool active = false;
   RunHooks run;
   std::optional<dsp56k::DSP::ReferenceAttemptState> reference_base;
+  std::optional<DspRetirementResult> retirement;
   std::shared_ptr<const bool> reference_owner;
   std::uint64_t generation = 0;
 };
@@ -486,8 +526,11 @@ DspCoreCheckpoint DspCore::checkpoint() const {
     throw Fault("DSP checkpoint requires a completed reference step or reset");
   }
   impl_->access.verify_interrupt_fetch();
-  return DspCoreCheckpoint(std::make_shared<const DspCoreCheckpoint::Storage>(
-      impl_->cpu.referenceState(), impl_->native.reference().snapshot(), impl_->generation));
+  return DspCoreCheckpoint(
+      std::make_shared<const DspCoreCheckpoint::Storage>(impl_->cpu.referenceState(),
+                                                         impl_->native.reference().snapshot(),
+                                                         impl_->generation,
+                                                         impl_->retirement));
 }
 
 void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
@@ -500,6 +543,7 @@ void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
     impl_->cpu.restoreReferenceState(checkpoint.storage_->cpu);
   }
   impl_->native.reference().restore(checkpoint.storage_->reference);
+  impl_->retirement = checkpoint.storage_->retirement;
   impl_->generation = checkpoint.storage_->generation;
   if (checkpoint.storage_->reference.active) {
     impl_->reference_base = impl_->cpu.referenceAttemptState();
@@ -516,7 +560,8 @@ std::optional<DspReferencePending> DspCore::reference_pending_unchecked() const 
                              .ticket = DspReferenceTicket(impl_->reference_owner,
                                                           {.generation = impl_->generation,
                                                            .record = reference.pending_index()}),
-                             .latched_program_word = reference.latched_program_word()};
+                             .latched_program_word = reference.latched_program_word(),
+                             .execution = reference.execution()};
 }
 
 std::optional<DspReferencePending> DspCore::reference_pending() const {
@@ -544,8 +589,9 @@ DspReferenceProgress DspCore::begin_reference_interrupt(const DspReferenceExecut
 DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution contract,
                                                    const bool interrupt_entry) {
   if (impl_->active || impl_->faulted || impl_->native.reference().active() ||
-      contract != DspReferenceExecution::access_boundaries || impl_->run.begin ||
-      impl_->run.complete || impl_->run.failed || impl_->run.reset) {
+      (contract != DspReferenceExecution::access_boundaries &&
+       contract != DspReferenceExecution::access_and_retirement_boundaries) ||
+      impl_->run.begin || impl_->run.complete || impl_->run.failed || impl_->run.reset) {
     throw Fault(
         "Native access suspension requires an explicit healthy unclocked instruction boundary");
   }
@@ -584,7 +630,7 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
       entry =
           DspReferenceInterrupt{.request = *interrupt, .address = before.vba + interrupt->vector};
     }
-    impl_->native.reference().begin({.pc = before.pc, .omr = before.omr}, entry);
+    impl_->native.reference().begin({.pc = before.pc, .omr = before.omr}, contract, entry);
     impl_->resume_reference();
     return reference_progress();
   } catch (const std::exception &error) {
@@ -698,6 +744,10 @@ DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket 
   const auto before = state();
   const ExecutionGuard guard(impl_->active);
   try {
+    const auto pending = impl_->native.reference().pending();
+    if (pending && std::holds_alternative<DspInstructionRetire>(*pending)) {
+      return reference_progress(impl_->retire_reference());
+    }
     auto completed = impl_->native.reference().commit();
     impl_->resume_reference();
     return reference_progress(completed);

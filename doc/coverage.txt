@@ -1727,6 +1727,14 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           admission remains explicit; complete
                                           seven-stage timing and normal boot
                                           remain open (dsp-fetch-clock.txt).
+                                          Optional deferred native retirement
+                                          holds the actual completed CPU result
+                                          separately from committed bus effects;
+                                          snapshots, actual redirect/OMR and
+                                          zero-access REP continuations retain it
+                                          (dsp-retirement.txt). Whole-result
+                                          publication is not a complete staged
+                                          overlapping backend.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

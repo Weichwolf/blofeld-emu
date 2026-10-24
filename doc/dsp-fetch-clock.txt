@@ -61,3 +61,7 @@ physical stage timestamps and default runtime integration remain open. Native
 exceptions/checkpoint allocation are not a real-time callback implementation.
 Authentic full ROM, reserved Y:002000 semantics, full original boot, normal
 MIDI/audio and complete Desktop/Keyboard hardware acceptance remain incomplete.
+
+An explicit matching access_and_retirement_boundaries execution choice can now
+hold actual completed native results separately from their last bus access.
+Candidate/redirect checkpoints and clock integration: dsp-retirement.txt.

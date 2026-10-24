@@ -38,7 +38,9 @@ void validate_inputs(const DspFetchRunInputs inputs) {
   constexpr std::uint64_t maximum_timebase = 1000000000000;
   if (inputs.timing != DspFetchTiming::reference_cycle_order || inputs.extal_hz < minimum_extal ||
       inputs.extal_hz > maximum_extal || inputs.timebase_hz < inputs.extal_hz ||
-      inputs.timebase_hz > maximum_timebase || inputs.timebase_hz % inputs.extal_hz != 0) {
+      inputs.timebase_hz > maximum_timebase || inputs.timebase_hz % inputs.extal_hz != 0 ||
+      (inputs.execution != DspReferenceExecution::access_boundaries &&
+       inputs.execution != DspReferenceExecution::access_and_retirement_boundaries)) {
     throw Fault("DSP fetch run requires an explicit integral EXTAL/reference-cycle clock contract");
   }
 }
@@ -55,6 +57,9 @@ DspFetchRun::DspFetchRun(const DspFetchRunInputs inputs, DspMachine &machine)
   if (machine.clocked()) { throw Fault("DSP fetch run cannot replace a completion-clock owner"); }
   const auto pending = machine.reference_pending();
   if (!pending) { throw Fault("DSP fetch run requires a pending opcode" + context(machine)); }
+  if (pending->execution != inputs.execution) {
+    throw Fault("DSP fetch run requires its matching native execution contract" + context(machine));
+  }
   const auto *access = std::get_if<DspNativeAccess>(&pending->effect);
   if (access == nullptr || access->kind != DspNativeAccessKind::opcode) {
     throw Fault("DSP fetch run requires a genuine pending ordinary opcode" + context(machine));
@@ -97,8 +102,7 @@ DspReferenceProgress DspFetchRun::begin_instruction(DspMachine &machine) {
   }
   const FetchGuard guard(impl_->active);
   try {
-    const auto progress =
-        machine.begin_reference_instruction(DspReferenceExecution::access_boundaries);
+    const auto progress = machine.begin_reference_instruction(impl_->state.inputs.execution);
     impl_->state.bind(machine);
     return progress;
   } catch (const std::exception &error) {
