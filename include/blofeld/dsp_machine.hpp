@@ -5,6 +5,7 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
+#include "blofeld/dsp_program_fetch.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 
@@ -80,6 +81,10 @@ public:
   [[nodiscard]] DspReferenceProgress begin_reference_interrupt(DspReferenceExecution contract);
   // Capture the pending opcode/extension now; keep native decoding suspended.
   [[nodiscard]] DspReferencePending latch_reference_program(const DspReferenceTicket &ticket);
+  // Explicit untimed F1/F2 transitions; sampled words feed real native admissions.
+  [[nodiscard]] DspProgramFetchView start_reference_fetch(const DspReferenceTicket &ticket);
+  [[nodiscard]] DspProgramFetchView advance_reference_fetch(DspProgramFetchStage stage);
+  [[nodiscard]] DspProgramFetchView reference_fetch() const;
   [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
   [[nodiscard]] std::optional<DspDmaWord> advance_dma(DspDmaInputs inputs);

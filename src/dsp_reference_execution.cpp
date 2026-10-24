@@ -7,6 +7,7 @@
 #include "blofeld/dsp_reference_execution.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <optional>
@@ -59,7 +60,7 @@ bool program_read(const DspReferenceEffect &effect) {
 void DspReferenceTape::begin(const DspNativeAccess context,
                              const std::optional<DspReferenceInterrupt> interrupt) {
   if (state_.active) { throw Fault("Native reference instruction is already pending"); }
-  clear();
+  finish();
   state_.context = context;
   state_.interrupt = interrupt;
   state_.active = true;
@@ -70,6 +71,35 @@ void DspReferenceTape::clear() {
   cursor_ = 0;
   ordinal_ = 0;
   mode_ = DspReferenceMode::ordinary;
+}
+
+void DspReferenceTape::finish() {
+  const auto fetch = state_.fetch;
+  clear();
+  state_.fetch = fetch;
+}
+
+std::optional<std::uint32_t> DspReferenceTape::latched_program_word() const {
+  if (state_.fetch.active() && state_.pending && program_read(*state_.pending)) {
+    return state_.fetch.peek(std::get<DspNativeAccess>(*state_.pending).target.address);
+  }
+  return state_.latched_program_word;
+}
+
+void DspReferenceTape::check_admission() const {
+  if (state_.fetch.active() && state_.pending && program_read(*state_.pending)) {
+    state_.fetch.check_consume(std::get<DspNativeAccess>(*state_.pending).target.address);
+  }
+}
+
+std::optional<std::uint32_t> DspReferenceTape::opcode() const {
+  for (std::size_t index = 0; index < state_.used; ++index) {
+    const auto *record = std::get_if<DspReferenceRecord>(&state_.entries.at(index));
+    if (record == nullptr) { continue; }
+    const auto *access = std::get_if<DspNativeAccess>(&record->effect);
+    if (access != nullptr && access->kind == DspNativeAccessKind::opcode) { return record->value; }
+  }
+  return std::nullopt;
 }
 
 void DspReferenceTape::restore(const DspReferenceState &state) {
@@ -89,7 +119,7 @@ const DspReferenceEffect &DspReferenceTape::check_program_latch() const {
   if (!state_.active || !state_.pending || mode_ != DspReferenceMode::ordinary) {
     throw Fault("Program latch requires a pending native program read");
   }
-  if (state_.latched_program_word || !program_read(*state_.pending)) {
+  if (state_.fetch.active() || state_.latched_program_word || !program_read(*state_.pending)) {
     throw Fault("Unavailable program latch for native " + effect_context(*state_.pending) +
                 " pc=" + hex(state_.context.pc, 6) + " omr=" + hex(state_.context.omr, 6));
   }
@@ -193,7 +223,8 @@ std::uint32_t DspReferenceTape::peek_program(const std::uint32_t address) {
     return saved->value;
   }
   check_capacity();
-  const auto value = bus_.peek_program(address);
+  const auto fetched = state_.fetch.peek(address);
+  const auto value = fetched ? *fetched : bus_.peek_program(address);
   state_.entries.at(state_.used++) = DspReferenceLookahead{.address = address, .value = value};
   ++cursor_;
   return value;
@@ -231,9 +262,14 @@ DspReferenceEffect DspReferenceTape::commit() {
     throw Fault("Native reference admission requires an inactive pending access");
   }
   const auto effect = *state_.pending;
+  check_admission();
   std::uint32_t value = 0;
   try {
-    value = state_.latched_program_word ? *state_.latched_program_word : perform(effect);
+    if (state_.fetch.active() && program_read(effect)) {
+      value = state_.fetch.consume(std::get<DspNativeAccess>(effect).target.address);
+    } else {
+      value = state_.latched_program_word ? *state_.latched_program_word : perform(effect);
+    }
   } catch (const std::exception &error) {
     throw Fault("Native reference " + effect_context(effect) + ": " + error.what());
   }

@@ -4,6 +4,7 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_native_access.hpp"
+#include "blofeld/dsp_program_fetch.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 
 #include <array>
@@ -127,6 +128,9 @@ private:
                                                           bool interrupt_entry);
   [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
   [[nodiscard]] DspReferencePending latch_reference_program(const DspReferenceTicket &ticket);
+  [[nodiscard]] DspProgramFetchView start_reference_fetch(const DspReferenceTicket &ticket);
+  [[nodiscard]] DspProgramFetchView advance_reference_fetch(DspProgramFetchStage stage);
+  [[nodiscard]] DspProgramFetchView reference_fetch() const;
   void validate_reference_ticket(const DspReferenceTicket &ticket) const;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;

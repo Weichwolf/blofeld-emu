@@ -1695,8 +1695,17 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           latch an actual bus word before
                                           native decode/retirement; snapshots
                                           retain it through real DMA code writes
-                                          (dsp-program-fetch.txt). Multiword
-                                          overlapped fetch scheduling remains open.
+                                          (dsp-program-fetch.txt). An opt-in
+                                          owner-driven F1/F2 frontend now retains
+                                          several real words across data waits
+                                          and native retirement, with separate
+                                          P-data sampling, actual JMP redirects,
+                                          backpressure and joint snapshots.
+                                          Eight words is a host continuation
+                                          bound, not a silicon queue depth.
+                                          Physical scheduling, conditional
+                                          fallthrough, loops and IRQ timelines
+                                          remain open.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

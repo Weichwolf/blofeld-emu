@@ -5,6 +5,7 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_native_access.hpp"
+#include "blofeld/dsp_program_fetch.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
@@ -29,6 +30,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace blofeld {
 namespace {
@@ -324,6 +326,66 @@ public:
     cpu.restoreReferenceAttempt(*reference_base);
   }
 
+  [[nodiscard]] std::pair<dsp56k::Instruction, std::uint32_t>
+  fetch_instruction(const std::uint32_t opcode) const {
+    auto first = dsp56k::Invalid;
+    auto second = dsp56k::Invalid;
+    if (opcodes.getInstructionTypes(opcode, first, second) == 0) {
+      throw Fault("Undefined native program-fetch opcode=" + hex(opcode, 6));
+    }
+    return {first, dsp56k::Opcodes::getFlags(first, second)};
+  }
+
+  void check_fetch_opcode() const {
+    const auto &reference = native.reference();
+    const auto pending = reference.pending();
+    if (!reference.fetch().active() || !pending) { return; }
+    const auto *request = std::get_if<DspNativeAccess>(&*pending);
+    if (request == nullptr || request->kind != DspNativeAccessKind::opcode) { return; }
+    const auto value = reference.latched_program_word();
+    if (!value) { return; }
+    const auto [instruction, flags] = fetch_instruction(*value);
+    if ((flags & (dsp56k::OpFlagLoop | dsp56k::OpFlagCacheMod)) != 0 ||
+        instruction == dsp56k::Stop || instruction == dsp56k::Wait || instruction == dsp56k::Trap ||
+        instruction == dsp56k::Trapcc || instruction == dsp56k::Debug ||
+        instruction == dsp56k::Debugcc || instruction == dsp56k::Illegal ||
+        instruction == dsp56k::Reset) {
+      throw Fault("Unqualified native program-fetch control opcode at P:" +
+                  hex(request->target.address, 6) + " pc=" + hex(request->pc, 6) +
+                  " omr=" + hex(request->omr, 6));
+    }
+  }
+
+  void finish_fetch() {
+    auto &reference = native.reference();
+    auto &fetch = reference.fetch();
+    if (!fetch.active()) { return; }
+    const auto next = word(cpu.regs().pc);
+    const auto omr = word(cpu.regs().omr);
+    constexpr unsigned loop_cache_or_compatibility = 0x1a000;
+    if ((word(cpu.regs().sr) & loop_cache_or_compatibility) != 0) {
+      throw Fault("Unqualified native program-fetch mode change pc=" +
+                  hex(reference.snapshot().context.pc, 6) + " omr=" + hex(omr, 6));
+    }
+    const auto view = fetch.view();
+    bool redirect = next != view.consume_address || omr != view.omr;
+    if (const auto opcode = reference.opcode()) {
+      const auto [instruction, flags] = fetch_instruction(*opcode);
+      const bool unconditional =
+          instruction == dsp56k::Jmp_ea || instruction == dsp56k::Jmp_xxx ||
+          instruction == dsp56k::Jsr_ea || instruction == dsp56k::Jsr_xxx ||
+          instruction == dsp56k::Rti || instruction == dsp56k::Rts ||
+          (instruction >= dsp56k::Bra_xxxx && instruction <= dsp56k::Bra_Rn) ||
+          (instruction >= dsp56k::Bsr_xxxx && instruction <= dsp56k::Bsr_Rn);
+      if ((flags & dsp56k::OpFlagBranch) != 0 && !unconditional && !redirect) {
+        throw Fault("Unqualified native program-fetch conditional fallthrough pc=" +
+                    hex(reference.snapshot().context.pc, 6) + " omr=" + hex(omr, 6));
+      }
+      redirect |= unconditional;
+    }
+    if (redirect) { fetch.redirect(next, omr); }
+  }
+
   void resume_reference() {
     restore_reference_base();
     auto &reference = native.reference();
@@ -346,7 +408,8 @@ public:
     // Validate native continuation constraints without publishing a partial step.
     static_cast<void>(cpu.referenceAttemptState());
     bus.observe_omr(word(cpu.regs().omr));
-    reference.clear();
+    finish_fetch();
+    reference.finish();
     reference_base.reset();
   }
 
@@ -496,11 +559,17 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
         "Native access suspension requires an explicit healthy unclocked instruction boundary");
   }
   const auto before = state();
+  if (impl_->native.reference().fetch().active() && interrupt_entry) {
+    throw Fault("Unqualified native program-fetch interrupt timeline pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6));
+  }
   constexpr unsigned mask_shift = 8;
   constexpr unsigned interrupt_mask = 3;
   const auto interrupt = impl_->bus.interrupt_request((before.sr >> mask_shift) & interrupt_mask);
+  const auto queued_opcode = impl_->native.reference().fetch().peek(before.pc);
   const bool accepted =
-      interrupt && impl_->cpu.referenceInterruptible(impl_->bus.peek_program(before.pc));
+      interrupt && impl_->cpu.referenceInterruptible(
+                       queued_opcode ? *queued_opcode : impl_->bus.peek_program(before.pc));
   if (interrupt_entry && !accepted) {
     throw Fault("No admissible native reference interrupt pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6));
@@ -568,8 +637,61 @@ DspReferencePending DspCore::latch_reference_program(const DspReferenceTicket &t
   }
 }
 
+DspProgramFetchView DspCore::start_reference_fetch(const DspReferenceTicket &ticket) {
+  validate_reference_ticket(ticket);
+  const auto &effect = impl_->native.reference().check_program_latch();
+  const auto &access = std::get<DspNativeAccess>(effect);
+  constexpr unsigned loop_cache_or_compatibility = 0x1a000;
+  if (access.kind != DspNativeAccessKind::opcode || impl_->native.reference().interrupt() ||
+      (state().sr & loop_cache_or_compatibility) != 0 ||
+      impl_->cpu.referenceAttemptState().repeat.remaining != 0) {
+    throw Fault("Program-fetch start requires an ordinary pending opcode P:" +
+                hex(access.target.address, 6) + " pc=" + hex(access.pc, 6) +
+                " omr=" + hex(access.omr, 6));
+  }
+  impl_->native.reference().fetch().start(access.target.address, access.omr);
+  return reference_fetch();
+}
+
+DspProgramFetchView DspCore::reference_fetch() const {
+  if (impl_->active || impl_->faulted) {
+    throw Fault("Program-fetch inspection requires a healthy native boundary");
+  }
+  return impl_->native.reference().fetch().view();
+}
+
+DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage stage) {
+  if (impl_->active || impl_->faulted || impl_->run.begin) {
+    throw Fault("Program fetching requires a healthy unclocked native boundary");
+  }
+  auto &fetch = impl_->native.reference().fetch();
+  fetch.check_stage(stage);
+  const auto before = state();
+  const auto view = fetch.view();
+  const auto address = view.pending_address.value_or(view.next_address);
+  const ExecutionGuard guard(impl_->active);
+  try {
+    if (stage == DspProgramFetchStage::address) {
+      fetch.issue();
+    } else {
+      fetch.capture(impl_->bus);
+    }
+    return fetch.view();
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault("DSP program-fetch read at P:" + hex(address, 6) + " pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6) + ": " + error.what());
+  } catch (...) {
+    impl_->faulted = true;
+    throw Fault("Non-standard DSP program-fetch failure at P:" + hex(address, 6) +
+                " pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6));
+  }
+}
+
 DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
   validate_reference_ticket(ticket);
+  impl_->native.reference().check_admission();
+  impl_->check_fetch_opcode();
   const auto before = state();
   const ExecutionGuard guard(impl_->active);
   try {
@@ -642,7 +764,7 @@ void DspCore::step_admitted(const std::optional<DspInterruptRequest> interrupt) 
 
 void DspCore::step_impl(DspNativeAccessObserver observer, const Admission *admission) {
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
-  if (impl_->native.reference().active()) {
+  if (impl_->native.reference().active() || impl_->native.reference().fetch().active()) {
     throw Fault("Cannot execute an atomic DSP step while a reference access is pending");
   }
   const ExecutionGuard guard(impl_->active);

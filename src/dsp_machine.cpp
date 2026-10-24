@@ -7,6 +7,7 @@
 #include "blofeld/dsp_dax.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_interrupts.hpp"
+#include "blofeld/dsp_program_fetch.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
 #include "dsp_interlocks.hpp"
@@ -322,6 +323,20 @@ DspReferenceProgress DspMachine::begin_reference_interrupt(const DspReferenceExe
 DspReferencePending DspMachine::latch_reference_program(const DspReferenceTicket &ticket) {
   if (clocked()) { throw Fault("Program latching requires an unclocked reference owner"); }
   return state_->cpu.latch_reference_program(ticket);
+}
+
+DspProgramFetchView DspMachine::start_reference_fetch(const DspReferenceTicket &ticket) {
+  if (clocked()) { throw Fault("Program fetching requires an unclocked reference owner"); }
+  return state_->cpu.start_reference_fetch(ticket);
+}
+
+DspProgramFetchView DspMachine::advance_reference_fetch(const DspProgramFetchStage stage) {
+  if (clocked()) { throw Fault("Program fetching requires an unclocked reference owner"); }
+  return state_->cpu.advance_reference_fetch(stage);
+}
+
+DspProgramFetchView DspMachine::reference_fetch() const {
+  return state_->cpu.reference_fetch();
 }
 
 DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTicket &ticket) {

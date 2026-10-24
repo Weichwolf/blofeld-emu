@@ -4,6 +4,7 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_native_access.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
+#include "dsp_program_fetch.hpp"
 
 #include <array>
 #include <cstddef>
@@ -40,6 +41,7 @@ struct DspReferenceState {
   DspNativeAccess context{};
   std::optional<DspReferenceInterrupt> interrupt;
   bool active = false;
+  DspProgramFetch fetch;
 };
 
 enum class DspReferenceMode : std::uint8_t { ordinary, attempt, restoring };
@@ -53,6 +55,7 @@ public:
   void begin(DspNativeAccess context,
              std::optional<DspReferenceInterrupt> interrupt = std::nullopt);
   void clear();
+  void finish();
   void rewind();
   void verify_complete() const;
 
@@ -76,9 +79,14 @@ public:
 
   [[nodiscard]] std::size_t pending_index() const { return state_.used; }
 
-  [[nodiscard]] std::optional<std::uint32_t> latched_program_word() const {
-    return state_.latched_program_word;
-  }
+  [[nodiscard]] std::optional<std::uint32_t> latched_program_word() const;
+
+  [[nodiscard]] DspProgramFetch &fetch() { return state_.fetch; }
+
+  [[nodiscard]] const DspProgramFetch &fetch() const { return state_.fetch; }
+
+  void check_admission() const;
+  [[nodiscard]] std::optional<std::uint32_t> opcode() const;
 
   [[nodiscard]] const DspReferenceEffect &check_program_latch() const;
   void latch_program();

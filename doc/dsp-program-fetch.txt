@@ -10,12 +10,11 @@ without reading P memory again. Decoder lookahead alone never creates a latch.
 Existing callers that admit reads directly retain their behavior.
 
 DSP56300FM2.3.1/table2-1 and5.3/table5-1 distinguish fetching an instruction
-from decoding and executing it. The new primitive supplies this separation
-to the existing native continuation path. It does not assign silicon clocks
-to the calls or implement the complete overlapped fetch queue. That queue,
-branch/IRQ redirects, AG/data/execute placement and automatic core/DMA
-arbitration still need integration. The clocked completion profiles cannot
-silently use this untimed API.
+from decoding and executing it. The latch supplies this separation to native
+continuations without assigning silicon clocks to calls. The separately enabled
+frontend below retains several actual reads across instruction boundaries.
+AG/data/execute placement, IRQ/loop timelines and automatic core/DMA arbitration
+still need integration. Clocked completion profiles cannot use these untimed APIs.
 
 The owner validates the same process-local capability as normal admission.
 Default, foreign, expired and reset/restore-invalidated tickets reject before
@@ -51,3 +50,44 @@ reference experiment; these tests provide no physical phase timestamps.
 No automatic DMA clock, complete ROM, reserved Y:002000 behavior, full Desktop/
 Keyboard reset-to-instrument boot, real-time callback bound or silicon
 equivalence is established. Manufacturer assets remain local.
+
+Queued frontend
+
+start_reference_fetch(ticket) enables the frontend at a genuine pending ordinary
+opcode. No caller supplies an address or replacement word. Explicit
+advance_reference_fetch(address) generates the next sequential 24-bit address;
+advance_reference_fetch(read) samples that issued address on the strict P bus.
+These are owner-selected F1/F2 transitions, not calibrated ticks. Fetches can
+continue while the current native instruction waits at a data effect. The fixed
+eight-word host bound supplies backpressure; it is not a silicon queue-depth claim.
+reference_fetch() returns a copy of this state, not a restore or injection interface.
+
+Actual opcode/extension admissions consume the queue head once. An empty queue
+refuses admission without fallback reads or native effects. Decoder lookahead
+uses a matching ready word if available but never consumes it. P-space data
+operands still perform their ordinary actual bus read. Retirement preserves
+unconsumed words; real RAM/code-cache invalidation cannot replace their values.
+Checkpoints retain both sampled words and the separately issued F1 address.
+Reset clears the entire frontend and invalidates old native tickets.
+
+Native flow to a different address redirects the frontend to the resulting PC.
+Unconditional JMP/JSR/BRA/BSR and returns also redirect if their destination
+happens to equal the sequential cursor: discard younger words and an outstanding
+F1 address, then read the destination afresh. Conditional flow with the same
+resulting PC cannot yet distinguish fallthrough from a taken same-address branch;
+it fails contextually rather than guessing. IRQ insertion, loops/REP, hardware
+cache, WAIT/STOP, traps/debug and software-reset pipeline behavior remain strict
+frontiers. Atomic native execution cannot bypass an enabled frontend. The
+original per-effect reference and completion-clock contracts remain separate.
+
+  cmake --build --preset strict --target blofeld-prefetch-queue-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_prefetch_queue$'
+
+Own native-configured DMA tests distinguish F1 from actual F2 sampling, preserve
+later opcodes/extensions and zero words through real code overwrites, and replay
+both ready and issued-address snapshots. Native literal register/PC/flag/length
+and nominal-cost expectations cover their later consumption. Separate P-data
+reads see the newer RAM value while the same address's queued opcode stays old.
+JMP redirects invalidate ready and issued words, including a fallthrough target.
+Capacity, starvation, competing APIs, reset and unknown speculative-read recovery
+remain explicit. Full seven-stage scheduling and physical bus timing are open.
