@@ -1,0 +1,43 @@
+HCS08 warm reset, pin sequencing and CCR knowledge
+
+  cmake --build --preset strict --target blofeld-hcs08-reset-test
+  ctest --test-dir build/strict -j1 -R '^hcs08_reset$' --output-on-failure
+
+Hcs08ResetSequence requires reference_bus_edges explicitly. It separates34
+nominal reset-drive periods,38 further periods before sampling the external
+RESET level, any continuing external hold and six vector/queue periods. It
+samples BKGD/MS at the reference resolved RESET rising boundary. Unknown drives
+or mode inputs, a new assertion after rising and extra completed-reset edges
+fail visibly. Copying the trusted owner preserves a partial reset phase.
+
+These are reference bus edges, not measured silicon timing. GT16A/GT8A chapter5.2
+uses internal bus cycles;2.3.3 and the appendix use fSelf_reset. The latter is
+nominal8MHz ICGOUT, whereas reset BUSCLK is nominal4MHz. This wording/rate
+qualification, approximate durations, input recognition and25ns MS setup/hold
+remain distinct from the explicit nominal model. The caller owns actual clocks,
+pad resolution, CPU admission, peripherals and BDC reset; no SRS flags are guessed.
+
+After that sequence the separate native Hcs08::reset boundary reads the actual
+FFFE/FFFF vector, clears H, sets SP00FF and I, and retains the supplied healthy
+warm pre-reset A/X. It preserves no invented power-on A/X values; cold unknown
+register initialization remains required. Vector/queue microcycles and prefetch
+are not individually modeled. Failed native execution needs coordinated recovery.
+
+Hcs08State.ccr_known records actual defined status bits. Reset establishes68
+(fixed bits plus I); V/H/N/Z/C remain unknown. Unknown bits have a canonical zero
+representative, never a known flag value. Native checkpoints retain this mask.
+For partial CCR, immediate LDX/LDA and extended STA define V/N/Z; TXS/NOP/BGND
+preserve knowledge, TAP defines all bits, CLI/SEI define I and CLC/SEC define C.
+All other partial-CCR forms reject before architectural execution. This limited
+qualification must be extended for normal controller startup, branches and other
+instructions; fully known debug states retain the complete existing native ISA.
+BDC PC/register changes preserve the mask. WRITE_CCR establishes all bits;
+READ_CCR cannot serialize unknown flags into a fabricated successful reply.
+
+Independent units check16 reset release/mode cases at every edge, two partial
+reset restores, unknown inputs/completion faults, actual vector/register effects,
+partial native checkpoint recovery, all256 opcode classifications,11 literal
+partial-flag effects and BDC unknown/write/read behavior. Existing arithmetic,
+original application/programmer, FLASH, BDC, wire and retirement-clock gates
+remain separate regressions. Reference URLs/byte sizes/hashes: hcs08-reference.json.
+Original HC12 pin/TIM integration and remaining limits: keyboard-reset.txt.

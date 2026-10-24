@@ -95,3 +95,10 @@ timing and normal Keyboard startup/MIDI/audio remain unqualified. Desktop use
 of this controller update is not supported. No host controller/scanner substitute,
 fake completion or physical traffic is supplied. Full requirements and both
 profile comparisons remain in objective.txt/coverage.txt.
+
+The separate original reset/SYNC function now runs against an explicit nominal
+reset/BKGD peer and actual native TIM. Application /4 inputs accept239 counts;
+recovery /64 rejects15 through original code. Warm target reset effects and CCR
+unknownness are modeled, with six joint SYNC restores (keyboard-reset.txt).
+This remains separate from the post-SYNC upload fixture and complete original
+startup/DSP/SMF/update sequencing; it does not qualify physical reset/recovery.

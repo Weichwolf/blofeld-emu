@@ -1795,6 +1795,18 @@ Keyboard native upload/start     partial  Original HC12 RAM upload, pointer/PC/S
                                           physical clock/wiring and whole recovery
                                           remain required; no NVM transfer occurs.
 
+Keyboard reset/SYNC              partial  Original HC12 GPIO reset/SYNC with native
+                                          TIM /4 accepts239 counts; /64 rejects15.
+                                          Warm native HCS08 vector/H/SP/I effects,
+                                          unknown CCR masks,16 reset edge cases,
+                                          all256 partial-CCR classifications and
+                                          six joint SYNC replays (hcs08-reset.txt,
+                                          keyboard-reset.txt). Explicit cadence,
+                                          wiring/pads and caller inputs remain
+                                          conditional. Full startup/caller chain,
+                                          cold unknown A/X, partial-CCR ISA coverage,
+                                          physical timing and recovery remain open.
+
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
                                           No Blofeld detected on USB; DIN wiring

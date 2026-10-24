@@ -43,12 +43,20 @@ void Hcs08Bdc::register_access() {
   auto cpu = cpu_.state();
   switch (state_.frame[0]) {
     case hcs08_bdc::write_a: cpu.a = state_.frame[1]; break;
-    case hcs08_bdc::write_ccr: cpu.ccr = state_.frame[1]; break;
+    case hcs08_bdc::write_ccr:
+      cpu.ccr = state_.frame[1];
+      cpu.ccr_known = Hcs08State::all_ccr;
+      break;
     case hcs08_bdc::write_pc: cpu.pc = argument(); break;
     case hcs08_bdc::write_hx: cpu.hx = argument(); break;
     case hcs08_bdc::write_sp: cpu.sp = argument(); break;
     case hcs08_bdc::read_a: reply_byte(cpu.a); return;
-    case hcs08_bdc::read_ccr: reply_byte(cpu.ccr); return;
+    case hcs08_bdc::read_ccr:
+      if (cpu.ccr_known != Hcs08State::all_ccr) {
+        fail("READ_CCR", "unknown CPU CCR bits mask=" + hex(cpu.ccr_known));
+      }
+      reply_byte(cpu.ccr);
+      return;
     case hcs08_bdc::read_pc: reply_word(cpu.pc); return;
     case hcs08_bdc::read_hx: reply_word(cpu.hx); return;
     case hcs08_bdc::read_sp: reply_word(cpu.sp); return;

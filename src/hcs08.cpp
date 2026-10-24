@@ -5,6 +5,7 @@
 #include "blofeld/bus.hpp"
 #include "error.hh"
 #include "globalcontext.hh"
+#include "hcs08_ccr.hpp"
 #include "hcs08_native.hpp"
 #include "memstate.hh"
 #include "pcoderaw.hh"
@@ -72,6 +73,7 @@ public:
   std::unique_ptr<ghidra::MemoryHashOverlay> temporaries;
   std::unique_ptr<native::InstructionExecutor> executor;
   std::uint64_t decoded_revision = 0;
+  std::uint8_t ccr_known = Hcs08State::all_ccr;
   bool active = false;
   bool healthy = false;
   bool initialized = false;
@@ -92,7 +94,8 @@ void Hcs08::set_state(const Hcs08State &state) {
   impl_->memory.setValue(&impl_->layout.a, state.a);
   impl_->memory.setValue(&impl_->layout.hx, state.hx);
   impl_->memory.setValue(&impl_->layout.sp, state.sp);
-  impl_->memory.setValue(&impl_->layout.ccr, state.ccr | fixed_ccr);
+  impl_->ccr_known = static_cast<std::uint8_t>(state.ccr_known | fixed_ccr);
+  impl_->memory.setValue(&impl_->layout.ccr, (state.ccr | fixed_ccr) & impl_->ccr_known);
   impl_->memory.setValue(&impl_->layout.pc, state.pc);
   impl_->executor->setExecuteAddress(
       ghidra::Address(impl_->translator.getDefaultCodeSpace(), state.pc));
@@ -107,7 +110,9 @@ Hcs08State Hcs08::state() const {
           .hx = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.hx)),
           .sp = static_cast<std::uint16_t>(impl_->memory.getValue(&impl_->layout.sp)),
           .a = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.a)),
-          .ccr = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.ccr))};
+          .ccr_known = impl_->ccr_known,
+          .ccr = static_cast<std::uint8_t>(impl_->memory.getValue(&impl_->layout.ccr) &
+                                           impl_->ccr_known)};
 }
 
 std::string Hcs08::disassemble() const try {
@@ -148,6 +153,7 @@ Hcs08Checkpoint Hcs08::checkpoint() const {
       0, static_cast<ghidra::int4>(result.registers_.size()), result.registers_.data());
   result.pc_ = state().pc;
   result.background_ = background_requested();
+  result.ccr_known_ = impl_->ccr_known;
   return result;
 }
 
@@ -160,8 +166,30 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
   impl_->executor->setExecuteAddress(
       ghidra::Address(impl_->translator.getDefaultCodeSpace(), checkpoint.pc_));
   impl_->executor->restore_background_request(checkpoint.background_);
+  impl_->ccr_known = checkpoint.ccr_known_;
   impl_->initialized = true;
   impl_->healthy = true;
+}
+
+void Hcs08::reset() {
+  if (impl_->active || !impl_->healthy || !impl_->initialized) {
+    throw Fault("HCS08 reset requires healthy supplied pre-reset A/X and coordinated board state");
+  }
+  auto entry = state();
+  {
+    const native::ExecutionGuard guard(impl_->active);
+    impl_->healthy = false;
+    impl_->bus.begin_instruction({.pc = entry.pc, .ccr = entry.ccr});
+    constexpr unsigned vector = 0xfffe;
+    entry.pc = static_cast<std::uint16_t>(impl_->bus.read_memory({.address = vector, .size = 2}));
+  }
+  constexpr unsigned low_mask = 0xff;
+  constexpr unsigned reset_known = 0x68;
+  entry.hx &= low_mask;
+  entry.sp = low_mask;
+  entry.ccr = reset_known;
+  entry.ccr_known = reset_known;
+  set_state(entry);
 }
 
 void Hcs08::step() {
@@ -175,8 +203,10 @@ void Hcs08::step() {
     if (impl_->bus.interrupt_request(before.ccr)) {
       throw Fault("HCS08 interrupt entry is not qualified");
     }
+    const auto known = detail::hcs08::ccr_after(impl_->bus, before);
     impl_->refresh();
     impl_->executor->execute();
+    impl_->ccr_known = known;
     impl_->normalize_ccr();
     impl_->bus.retire_instruction();
     impl_->healthy = true;

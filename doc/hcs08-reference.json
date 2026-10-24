@@ -43,5 +43,15 @@
     "bytes": 2719710,
     "sha256": "6abfb7e68c1953c50fcd4d53e2e4573647d76da2990d2e747648ee05d38b25bf",
     "sections": "Chapter4 FLASH/registers/security;5.7.4 SOPT; chapter8 S08CPUV2/CCR; chapter15 BDC. Exact Keyboard part and idle-FCBEF behavior remain unverified."
+  },
+  "family_reset_reference": {
+    "publisher": "Freescale Semiconductor",
+    "title": "HCS08 Family Reference Manual Volume1",
+    "revision": "Rev.2,05/2007",
+    "source": "https://raw.githubusercontent.com/meenmachine1/ghidra-processor-manuals/main/Ghidra/Processors/HCS08/data/manuals/HCS08RMV1.pdf",
+    "official_unavailable": "https://www.nxp.com/docs/en/reference-manual/HCS08RMV1.pdf",
+    "bytes": 3594996,
+    "sha256": "8d6ffc53c13c118b81ce3f5447ca432059fcdd2a5668d9c26a064769917ea509",
+    "sections": "6.2.5:only I initialized at reset; V/H/N/Z/C unknown. Publisher PDF obtained from a mirror; exact bytes/hash retained locally."
   }
 }

@@ -1,0 +1,54 @@
+Original Keyboard HC12 reset/SYNC with native TIM
+
+  cmake --build --preset strict --target blofeld-original-keyboard-reset-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_reset$' --output-on-failure
+
+The optional gate executes the unchanged complete HC12 helper's reset/SYNC
+function beneath an own native JSR caller. It requires the local pinned original
+1.25 and Keyboard1.4 archives; absent inputs skip77, changed inputs fail. No
+manufacturer program bytes or disassembly are embedded in tests or published.
+
+Actual PE7 latch/direction writes assert and release the candidate reset peer.
+Native PB1 drives BKGD/MS, selecting active mode at the modeled reset rise.
+The target completes separate drive/sample/hold/vector phases, reads its actual
+own-preimage reset vector and applies native warm reset effects. H becomes0;
+SP becomes00FF; retained A/X and unknown CCR bits are checked. Actual BDC state
+is C8. Target instructions remain held throughout. No callback supplies a canned ready result, decoded command, TCNT value or
+native CPU continuation. GPIO reads resolve the actual modeled drivers and
+declared peer inputs.
+
+Continuously clocked native TIM supplies the original polled low/high reads and
+16-bit subtraction. Under declared CPU/IP30MHz, target4MHz and /4 TIM, both
+phases measure239 counts: original code accepts, stores fixed9/12 and transmits
+BACKGROUND. With /64 TIM the same code measures15 and returns failure without
+changing the seeded delay bytes or sending that command. This distinguishes
+application versus earlier recovery timer inputs; neither original startup/caller
+history is executed or inferred from the helper PC. The initial reset-held BKGD
+release and the explicit later request each produce a genuine wire SYNC response.
+
+Three cases retire1086885 native HC12 instructions, including the own caller
+and idle tail, and zero target instructions. Six fresh MCU/target/native/reset/
+BDC/wire/TIM owner restorations reproduce complete SYNC suffixes and endpoints.
+The collector requires every reset/SYNC phase, target entry, native HOST row,
+TCNT read/subtraction, return, replay and case completion. Eight fixed own-trace
+corruptions reject missing phases/returns/instructions and changed state/counts;
+these directed controls are not fuzzing. Complete helper and MCU NVM/knownness/
+erase history remain unchanged; no target command or NVM completion is invented.
+
+Explicit inputs: qualified reference clock switching, locked PHY/30MHz route,
+TIM /4 versus /64, target4MHz cadence/two phases, ideal PE7/PB1 wiring/pulls,
+independent other PE inputs03/PB inputs00 for native read-modify-write, an own
+flash preimage/reset vector and healthy warm A/X. An initial failure on unknown
+PE0..6 is preserved locally; missing observations still fail. The new gate does
+not establish physical net continuity, target part/mask, analog/setup/hold timing,
+reset-duration units, ICG/COP/SRS or other peripheral behavior. See hcs08-reset.txt.
+The source-derived nominal reset4MHz versus original FCDIV1E consistency question
+also remains open; no6MHz FLASH hypothesis is transplanted into this fixture.
+
+The separate upload/start test still uses its declared post-SYNC/debug/ratio8
+context (keyboard-target.txt). Joining complete original caller/DSP/SMF/helper
+ordering, ongoing native target/peripheral/NVM time, both original FSTAT=FF sites,
+all interruption/recovery/power-loss phases and real stock-profile behavior remain
+required. Full boot, USB-MIDI/Spectre, original audio, persistence, performance,
+all118 manual functions and hardware comparisons remain in objective.txt/coverage.txt.
+No physical-device traffic, flashing or automatic fuzzing is part of this gate.
