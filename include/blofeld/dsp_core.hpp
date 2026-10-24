@@ -126,6 +126,8 @@ private:
   [[nodiscard]] DspReferenceProgress begin_reference_step(DspReferenceExecution contract,
                                                           bool interrupt_entry);
   [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
+  [[nodiscard]] DspReferencePending latch_reference_program(const DspReferenceTicket &ticket);
+  void validate_reference_ticket(const DspReferenceTicket &ticket) const;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;
   [[nodiscard]] DspReferenceProgress

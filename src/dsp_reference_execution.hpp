@@ -36,6 +36,7 @@ struct DspReferenceState {
   std::array<DspReferenceEntry, dsp_reference_capacity> entries{};
   std::size_t used = 0;
   std::optional<DspReferenceEffect> pending = std::nullopt;
+  std::optional<std::uint32_t> latched_program_word = std::nullopt;
   DspNativeAccess context{};
   std::optional<DspReferenceInterrupt> interrupt;
   bool active = false;
@@ -74,6 +75,13 @@ public:
   [[nodiscard]] const std::optional<DspReferenceEffect> &pending() const { return state_.pending; }
 
   [[nodiscard]] std::size_t pending_index() const { return state_.used; }
+
+  [[nodiscard]] std::optional<std::uint32_t> latched_program_word() const {
+    return state_.latched_program_word;
+  }
+
+  [[nodiscard]] const DspReferenceEffect &check_program_latch() const;
+  void latch_program();
 
   [[nodiscard]] DspReferenceEffect commit();
   [[nodiscard]] std::uint32_t read(DspAddress target, DspNativeAccessKind kind);

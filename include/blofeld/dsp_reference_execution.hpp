@@ -48,6 +48,8 @@ private:
 struct DspReferencePending {
   DspReferenceEffect effect;
   DspReferenceTicket ticket;
+  // Actual P-bus read already captured; admission must not read it again.
+  std::optional<std::uint32_t> latched_program_word = std::nullopt;
 };
 
 // Semantic access boundaries only; no clock, pipeline-stage or allocation bound.

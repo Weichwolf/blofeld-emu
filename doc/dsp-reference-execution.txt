@@ -49,6 +49,11 @@ acknowledged with it (FM2.3.2.6). A withdrawn source or changed priority rejects
 at actual acknowledgement; dynamic cancellation after acceptance is unqualified.
 Decoder lookahead retains its prior metadata
 view, but a later consumed extension reads the then-current actual bus word.
+Opcodes and consumed extensions can now be read into a fixed program latch
+before native admission, keeping even register-only instructions suspended
+after the actual read. Checkpoints retain this sampled word through DMA code
+writes; admission consumes it without another memory read. The single pending
+word and capability/type/fault rules are documented in dsp-program-fetch.txt.
 Register state and native counters remain at the instruction or entry start while paused;
 all architected updates publish together at retirement. Completed bus effects
 remain visible between admissions. Reset aborts continuation through the existing

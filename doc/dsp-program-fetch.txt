@@ -1,0 +1,53 @@
+Native program fetch latches
+
+DspMachine::latch_reference_program(ticket) performs the strict P-bus read for
+the current pending opcode or consumed extension, then keeps native decoding
+and retirement suspended. DspReferencePending::latched_program_word exposes
+the actual captured word, including zero. The effect/ticket still names the
+pending native admission; the optional word means its physical memory read
+has already happened. advance_reference_access consumes that captured word
+without reading P memory again. Decoder lookahead alone never creates a latch.
+Existing callers that admit reads directly retain their behavior.
+
+DSP56300FM2.3.1/table2-1 and5.3/table5-1 distinguish fetching an instruction
+from decoding and executing it. The new primitive supplies this separation
+to the existing native continuation path. It does not assign silicon clocks
+to the calls or implement the complete overlapped fetch queue. That queue,
+branch/IRQ redirects, AG/data/execute placement and automatic core/DMA
+arbitration still need integration. The clocked completion profiles cannot
+silently use this untimed API.
+
+The owner validates the same process-local capability as normal admission.
+Default, foreign, expired and reset/restore-invalidated tickets reject before
+accessing the bus. Duplicate captures and nonprogram effects reject before
+I/O and preserve the legitimate pending access. A real unknown P read fails
+with opcode/extension, address, PC and OMR context, quarantining the core until
+trusted coordinated restore. Program data reads and interrupt-vector reads
+remain ordinary admissions; they cannot be relabeled as opcode/extension
+captures. No caller-supplied word can replace an actual strict bus sample.
+
+The captured word is a fixed optional in the opaque continuation checkpoint.
+Coordinated restore retains it alongside CPU, bus and DMA state while replacing
+old capabilities. Hardware reset and retirement clear it. Later code writes
+still invalidate native host dispatch; they do not erase a word already fetched
+by the modeled core. No original firmware or bus memory is rewritten to make
+the native interpreter execute the captured word.
+Rebuild consumers with matching project headers/libraries for the extended
+pending view and checkpoint state. Frozen consumer bundles retain their own
+verified implementation until deliberately rebuilt.
+
+  cmake --build --preset strict --target blofeld-program-latch-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_program_latch$'
+
+Own programs configure actual P-to-P DMA through native MOVEP instructions.
+Independent literal register/PC/flag and instruction-length/cost expectations
+distinguish reads before and after DMA overwrites. Both opcode and extension
+paths replay coordinated snapshots, preserve a zero opcode, retain an already
+fetched long instruction after RAM changes to NOP, and observe new code on a
+later genuine fetch. FIFO/type/capability guards and unknown opcode/extension
+recovery retain strict failures. Supplied DMA/core occupancy remains an explicit
+reference experiment; these tests provide no physical phase timestamps.
+
+No automatic DMA clock, complete ROM, reserved Y:002000 behavior, full Desktop/
+Keyboard reset-to-instrument boot, real-time callback bound or silicon
+equivalence is established. Manufacturer assets remain local.

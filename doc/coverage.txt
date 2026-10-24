@@ -1691,6 +1691,12 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           Semantic order is not pipeline timing;
                                           IRQ clocks and real-time bounds remain
                                           open (dsp-reference-execution.txt).
+                                          Pending opcode/extension reads can
+                                          latch an actual bus word before
+                                          native decode/retirement; snapshots
+                                          retain it through real DMA code writes
+                                          (dsp-program-fetch.txt). Multiword
+                                          overlapped fetch scheduling remains open.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

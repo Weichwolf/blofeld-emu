@@ -461,7 +461,8 @@ std::optional<DspReferencePending> DspCore::reference_pending_unchecked() const 
   return DspReferencePending{.effect = *pending,
                              .ticket = DspReferenceTicket(impl_->reference_owner,
                                                           {.generation = impl_->generation,
-                                                           .record = reference.pending_index()})};
+                                                           .record = reference.pending_index()}),
+                             .latched_program_word = reference.latched_program_word()};
 }
 
 std::optional<DspReferencePending> DspCore::reference_pending() const {
@@ -537,13 +538,38 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
   }
 }
 
-DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
+void DspCore::validate_reference_ticket(const DspReferenceTicket &ticket) const {
   const auto &reference = impl_->native.reference();
   if (impl_->active || impl_->faulted || !reference.pending() ||
       ticket.owner_ != impl_->reference_owner || ticket.position_.generation != impl_->generation ||
       ticket.position_.record != reference.pending_index()) {
     throw Fault("Stale, foreign or unavailable native reference access ticket");
   }
+}
+
+DspReferencePending DspCore::latch_reference_program(const DspReferenceTicket &ticket) {
+  validate_reference_ticket(ticket);
+  static_cast<void>(impl_->native.reference().check_program_latch());
+  const auto before = state();
+  const ExecutionGuard guard(impl_->active);
+  try {
+    impl_->native.reference().latch_program();
+    const auto pending = reference_pending_unchecked();
+    if (!pending) { throw Fault("Program latch lost its native admission boundary"); }
+    return *pending;
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault("DSP program latch pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) + ": " +
+                error.what());
+  } catch (...) {
+    impl_->faulted = true;
+    throw Fault("Non-standard DSP program latch failure pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6));
+  }
+}
+
+DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
+  validate_reference_ticket(ticket);
   const auto before = state();
   const ExecutionGuard guard(impl_->active);
   try {

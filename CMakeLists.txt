@@ -741,6 +741,9 @@ if(BUILD_TESTING)
     test/dsp_reference_core.cpp test/dsp_reference_dma.cpp test/dsp_reference_interrupts.cpp)
   target_link_libraries(blofeld-reference-access-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_reference_access COMMAND blofeld-reference-access-test)
+  add_executable(blofeld-program-latch-test test/dsp_program_latch_test.cpp)
+  target_link_libraries(blofeld-program-latch-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_program_latch COMMAND blofeld-program-latch-test)
   add_executable(blofeld-dax-test test/dsp_dax_test.cpp test/dsp_dax_native.cpp test/dsp_dax_dma.cpp)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
@@ -2160,6 +2163,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
+    blofeld-program-latch-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

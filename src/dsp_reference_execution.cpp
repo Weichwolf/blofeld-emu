@@ -15,6 +15,8 @@
 
 namespace blofeld {
 namespace {
+constexpr unsigned word_mask = 0xffffff;
+
 bool same_access(const DspNativeAccess &a, const DspNativeAccess &b) {
   return a.kind == b.kind && a.stage == b.stage && a.target.space == b.target.space &&
          a.target.address == b.target.address && a.value == b.value && a.bit == b.bit &&
@@ -44,6 +46,14 @@ std::string effect_context(const DspReferenceEffect &effect) {
          spaces.at(static_cast<unsigned>(access->target.space)) + hex(access->target.address, 6) +
          " ordinal=" + std::to_string(access->ordinal);
 }
+
+bool program_read(const DspReferenceEffect &effect) {
+  const auto *access = std::get_if<DspNativeAccess>(&effect);
+  return access != nullptr && access->target.space == DspSpace::p &&
+         access->stage == DspNativeAccessStage::before &&
+         (access->kind == DspNativeAccessKind::opcode ||
+          access->kind == DspNativeAccessKind::extension);
+}
 }
 
 void DspReferenceTape::begin(const DspNativeAccess context,
@@ -64,13 +74,35 @@ void DspReferenceTape::clear() {
 
 void DspReferenceTape::restore(const DspReferenceState &state) {
   if (state.used > state.entries.size() || (state.active != state.pending.has_value()) ||
-      (state.pending && state.used == state.entries.size())) {
+      (state.pending && state.used == state.entries.size()) ||
+      (state.latched_program_word && (!state.pending || !program_read(*state.pending) ||
+                                      *state.latched_program_word > word_mask))) {
     throw Fault("Invalid trusted native reference continuation");
   }
   state_ = state;
   cursor_ = 0;
   ordinal_ = 0;
   mode_ = DspReferenceMode::ordinary;
+}
+
+const DspReferenceEffect &DspReferenceTape::check_program_latch() const {
+  if (!state_.active || !state_.pending || mode_ != DspReferenceMode::ordinary) {
+    throw Fault("Program latch requires a pending native program read");
+  }
+  if (state_.latched_program_word || !program_read(*state_.pending)) {
+    throw Fault("Unavailable program latch for native " + effect_context(*state_.pending) +
+                " pc=" + hex(state_.context.pc, 6) + " omr=" + hex(state_.context.omr, 6));
+  }
+  return *state_.pending;
+}
+
+void DspReferenceTape::latch_program() {
+  const auto effect = check_program_latch();
+  try {
+    state_.latched_program_word = perform(effect);
+  } catch (const std::exception &error) {
+    throw Fault("Native program latch " + effect_context(effect) + ": " + error.what());
+  }
 }
 
 void DspReferenceTape::rewind() {
@@ -201,12 +233,13 @@ DspReferenceEffect DspReferenceTape::commit() {
   const auto effect = *state_.pending;
   std::uint32_t value = 0;
   try {
-    value = perform(effect);
+    value = state_.latched_program_word ? *state_.latched_program_word : perform(effect);
   } catch (const std::exception &error) {
     throw Fault("Native reference " + effect_context(effect) + ": " + error.what());
   }
   state_.entries.at(state_.used++) = DspReferenceRecord{.effect = effect, .value = value};
   state_.pending.reset();
+  state_.latched_program_word.reset();
   auto completed = effect;
   if (auto *access = std::get_if<DspNativeAccess>(&completed)) {
     access->stage = DspNativeAccessStage::after;
