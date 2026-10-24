@@ -312,6 +312,13 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           counts differ despite equal registers;
                                           no automatic DMA or pipeline-phase
                                           claim (dsp-pipeline-timing.txt).
+                                          Opt-in selected native dependency
+                                          accounting now preserves R/N/M and
+                                          accumulator readiness, separate stall
+                                          units, timers, joint checkpoints and
+                                          scheduled completions. Other instruction
+                                          forms and physical bus phases still
+                                          reject (dsp-interlock-clock.txt).
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
                                           source IRQs tested (dsp-timers.txt).

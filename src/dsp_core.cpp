@@ -254,6 +254,32 @@ public:
     }
   }
 
+  void begin_run(const DspState before, const bool interrupt) const {
+    if (run.begin) {
+      const auto units = run.fetched && !interrupt ? cpu.referenceNextCycles() : 0;
+      run.begin(before, interrupt, units);
+    }
+  }
+
+  [[nodiscard]] DspNativeAccessObserver timing_observer(DspNativeAccessObserver observer) const {
+    if (!run.fetched && !run.data) { return observer; }
+    return {.observe = [this, observer = std::move(observer)](const DspNativeAccess &event) {
+      if (event.kind == DspNativeAccessKind::opcode && event.stage == DspNativeAccessStage::after &&
+          run.fetched) {
+        if (!event.value) { throw Fault("DSP interlock opcode fetch lost its value"); }
+        run.fetched(*event.value);
+      }
+      if (event.stage == DspNativeAccessStage::before && run.data &&
+          (event.kind == DspNativeAccessKind::read || event.kind == DspNativeAccessKind::write)) {
+        run.data({.target = event.target,
+                  .operation = event.kind == DspNativeAccessKind::write
+                                   ? DspMemoryOperation::write
+                                   : DspMemoryOperation::read});
+      }
+      if (observer.observe) { observer.observe(event); }
+    }};
+  }
+
   [[nodiscard]] StepEstimate interrupt_estimate(const DspState &before,
                                                 const DspInterruptRequest request) const {
     const auto address = before.vba + request.vector;
@@ -601,12 +627,13 @@ void DspCore::step_impl(DspNativeAccessObserver observer, const Admission *admis
   try {
     impl_->invalidate();
     interrupt = impl_->select_interrupt(before, admission);
-    if (impl_->run.begin) { impl_->run.begin(before, interrupt.has_value()); }
+    impl_->begin_run(before, interrupt.has_value());
     if (interrupt && impl_->run.vector_estimates) {
       estimate = impl_->interrupt_estimate(before, *interrupt);
     }
-    const DspNativeAccessScope observed(
-        impl_->native, std::move(observer), {.pc = before.pc, .omr = before.omr});
+    const DspNativeAccessScope observed(impl_->native,
+                                        impl_->timing_observer(std::move(observer)),
+                                        {.pc = before.pc, .omr = before.omr});
     if (interrupt) {
       const auto vector = before.vba + interrupt->vector;
       impl_->access.arm_interrupt(*interrupt,

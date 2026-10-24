@@ -205,6 +205,7 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
 add_library(blofeld_dsp src/dsp_core.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
+  src/dsp_interlocks.cpp src/dsp_interlock_decode.cpp
   src/dsp_interrupt_timing.cpp
   src/dsp_machine.cpp src/dsp_scheduled_run.cpp
   src/dsp_scheduled_events.cpp)
@@ -1965,6 +1966,14 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
   target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
+  add_executable(blofeld-dsp-interlock-test test/dsp_interlock_clock_test.cpp test/dsp_interlock_state.cpp)
+  target_include_directories(blofeld-dsp-interlock-test PRIVATE src)
+  target_link_libraries(blofeld-dsp-interlock-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_interlock_clock COMMAND blofeld-dsp-interlock-test)
+  add_test(NAME dsp_interlock_reference COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_interlock_clock.py"
+    $<TARGET_FILE:blofeld-dsp-interlock-test>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-interlock-reference")
   add_executable(blofeld-dsp-reset-epoch-test test/dsp_reset_epoch_test.cpp)
   target_link_libraries(blofeld-dsp-reset-epoch-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_reset_epoch COMMAND blofeld-dsp-reset-epoch-test)
@@ -2162,7 +2171,7 @@ add_custom_target(quality
     blofeld-hc12-flash-cycles-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
-    blofeld-dsp-run-clock-test blofeld-dsp-reset-epoch-test
+    blofeld-dsp-run-clock-test blofeld-dsp-reset-epoch-test blofeld-dsp-interlock-test
     blofeld-dsp-irq-clock-test
     blofeld-dsp-irq-admission-test
     blofeld-dsp-scheduled-run-test

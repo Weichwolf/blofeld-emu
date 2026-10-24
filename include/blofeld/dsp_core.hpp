@@ -93,10 +93,12 @@ private:
   friend class DspMachine;
 
   struct RunHooks {
-    std::function<void(DspState, bool)> begin;
+    std::function<void(DspState, bool, unsigned)> begin;
     std::function<void(unsigned)> complete;
     std::function<void()> failed;
     std::function<void()> reset;
+    std::function<void(std::uint32_t)> fetched;
+    std::function<void(DspMemoryAccess)> data;
     bool vector_estimates = false;
   };
 

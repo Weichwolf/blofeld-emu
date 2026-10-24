@@ -1,0 +1,143 @@
+{
+  "scope": "Own fixed initial-map accumulator timing windows. Simulator evidence, not physical DSP56371 bus phases, complete startup or silicon equivalence.",
+  "source_license": "GPL-3.0-only",
+  "reference_tools_manifest": "reference-tools.json",
+  "own_program": {
+    "sha256_24_bit_words": "36da213a60129ed180ea2f14aede7487062a264fdce8e77eb4e16f89d8068fe4",
+    "words": 462,
+    "instructions": 401,
+    "assembler": "NXP asm56300 6.3.28"
+  },
+  "transport_controls": "Complete loaded word readback before and after; 401 native PC transitions, 20 data observations including four actual store readbacks and nonzero X/Y canaries verified.",
+  "measurement": "Quiet NOP anchor totals; retirement deltas do not establish instruction-stage timestamps.",
+  "cases": [
+    {
+      "kind": "register",
+      "gap": 0,
+      "observed_window": 13,
+      "window_instructions": 12,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "register",
+      "gap": 1,
+      "observed_window": 13,
+      "window_instructions": 13,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "register",
+      "gap": 2,
+      "observed_window": 14,
+      "window_instructions": 14,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "register",
+      "gap": 3,
+      "observed_window": 15,
+      "window_instructions": 15,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_immediate",
+      "gap": 0,
+      "observed_window": 13,
+      "window_instructions": 12,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_immediate",
+      "gap": 1,
+      "observed_window": 14,
+      "window_instructions": 13,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_immediate",
+      "gap": 2,
+      "observed_window": 15,
+      "window_instructions": 14,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_immediate",
+      "gap": 3,
+      "observed_window": 16,
+      "window_instructions": 15,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_memory",
+      "gap": 0,
+      "observed_window": 14,
+      "window_instructions": 12,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_memory",
+      "gap": 1,
+      "observed_window": 14,
+      "window_instructions": 13,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_memory",
+      "gap": 2,
+      "observed_window": 15,
+      "window_instructions": 14,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_memory",
+      "gap": 3,
+      "observed_window": 16,
+      "window_instructions": 15,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "long_store",
+      "gap": 0,
+      "observed_window": 13,
+      "window_instructions": 12,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "payload",
+      "gap": 0
+    },
+    {
+      "kind": "long_store",
+      "gap": 1,
+      "observed_window": 14,
+      "window_instructions": 13,
+      "qualification": "selected initial-map reference window"
+    },
+    {
+      "kind": "payload",
+      "gap": 1
+    },
+    {
+      "kind": "short_store",
+      "gap": 0,
+      "observed_window": 13,
+      "window_instructions": 12,
+      "qualification": "rejected: SDK short-store nominal cost disagrees with this normal-mode reference"
+    },
+    {
+      "kind": "payload",
+      "gap": 0
+    },
+    {
+      "kind": "short_store",
+      "gap": 1,
+      "observed_window": 13,
+      "window_instructions": 13,
+      "qualification": "rejected: SDK short-store nominal cost disagrees with this normal-mode reference"
+    },
+    {
+      "kind": "payload",
+      "gap": 1
+    }
+  ]
+}

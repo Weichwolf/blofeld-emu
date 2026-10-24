@@ -14,7 +14,11 @@
 
 namespace blofeld {
 
-enum class DspRunTiming : std::uint8_t { unqualified, native_internal_estimates };
+enum class DspRunTiming : std::uint8_t {
+  unqualified,
+  native_internal_estimates,
+  native_interlock_estimates
+};
 enum class DspInterruptTiming : std::uint8_t { unqualified, native_vector_estimates };
 enum class DspResetTiming : std::uint8_t { unqualified, reference_instruction_boundary };
 
@@ -29,6 +33,7 @@ struct DspRunContract {
 struct DspStepPlan {
   DspDebugState before;
   unsigned native_cycle_units = 0;
+  unsigned interlock_cycle_units = 0;
   std::uint64_t start_ticks = 0;
   std::uint64_t duration_ticks = 0;
   std::optional<DspInterruptVector> interrupt;

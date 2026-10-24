@@ -1,0 +1,74 @@
+Selected native DSP instruction dependencies
+
+DspRunTiming::native_interlock_estimates adds selected normal-mode internal-
+memory dependency clocks to native execution. The original native_internal_estimates
+contract keeps its previous nominal behavior. This is still an explicit
+instruction-completion experiment: stalls are accounted at the consuming
+instruction, not assigned physical decode/AG/execute timestamps. It does not
+enable automatic active DMA or establish physical board scheduling.
+
+The decoder accepts NOP, selected register/immediate/single X/Y data moves,
+control moves to/from M/SR/OMR, and standalone register MPY/CLR. Other arithmetic,
+parallel arithmetic/data moves, pre-update/offset forms, branches, REP/DO,
+status-bit timing, short absolute X/Y stores, interrupts and SA/SC/loop modes
+reject. Actual data addresses
+must resolve to the strict internal-memory resource model before operand I/O;
+this contract supplies no peripheral bus timing. Firmware and missing/unsupported
+memory behavior are unchanged.
+
+FM A.2 and the separately measured initial-map windows in dsp-pipeline-timing.txt
+provide the selected expectations. Eight R/N/M register groups retain readiness
+across instructions. Explicit register/short-immediate destination writes leave
+three dependency clocks; a long-immediate destination leaves two. A memory-load
+destination leaves three, including a long absolute load. Fresh independent NXP
+windows distinguish that data-address penalty from an immediate extension fetch.
+Only explicit destination fields arm hazards: ordinary R post-updates do not.
+All elapsed nominal and inserted clocks age every group, rather than counting
+intervening instructions. Accumulator move/arithmetic and status-MOVE dependencies
+retain their separately selected readiness. A recent accumulator transfer before
+a status read remains unqualified and fails rather than inventing a delay.
+Long accumulator immediates leave no transfer-read delay; long absolute loads
+leave one. A long store's address extension absorbs the selected one-clock
+accumulator dependency. The additional independent reference in
+dsp-interlock-form-reference.json records these windows and actual stored-data
+readbacks. Its short-store counterexamples expose an SDK nominal-cost mismatch;
+that form remains explicitly unsupported by the selected timing contract.
+
+SDK diagnostic cycle counters stay nominal. DspRunClock separately exposes
+interlock_cycle_units; elapsed ticks, CLK2 edges, timers, SHI and switch delays
+advance by their sum. Typed DspClockUnits prevent exchanging the two quantities.
+DspStepPlan includes the added clocks and corresponding duration. Repeated pure
+previews do not age history. The executed opcode must match the prepared word;
+an altered fetch rejects before operand effects. Invalid/unknown operations keep
+their address/operation/native PC/OMR context and require coordinated recovery.
+
+Opaque owner checkpoints copy the native CPU, bus, clock and dependency state.
+Scheduler checkpoints retain the pending completion separately; restore both
+together. Nominal reset epochs retain lifetime native/stall units, clear history
+and start a fresh divider phase under the existing declared reset contract.
+These are reference reset boundaries, not electrical reset timing measurements.
+Consumers must rebuild with matching project headers and libraries for the
+extended clock/plan/hook layouts. Frozen preview bundles retain their own scope.
+
+  cmake --build --preset strict --target blofeld-dsp-interlock-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_interlock_(clock|reference)$'
+
+Own native tests cover all eight explicit R/N/M destination groups at four gaps,
+immediate/register/memory producer differences, elapsed multiword gaps, ordinary
+post-updates, exact timer compare/CLK2 behavior, pending schedule deadlines,
+joint restores, reset epochs, contextual refusals and deliberately corrupted
+fetch identity. The reference gate assembles the public own program independently,
+checks its complete word-stream hash against NXP output, then executes all 33
+qualified windows and checks five deliberate status-bit refusals. Fourteen more
+accumulator-form windows and two short-store refusals bind a second complete
+NXP word-stream hash. The own fixture uses canonical y0,x0 operand order for the
+commutative signed MPY; the SDK otherwise selects a different MPYsu encoding for
+x0,y0. No original firmware word is rewritten. An unchanged
+nominal-profile control retains its shorter count. No manufacturer program words
+or vendor binaries are required or embedded by these tests.
+
+Full dynamic instruction coverage, fetch latching and seven-stage bus placement,
+branch/loop/IRQ interaction, automatic core/DMA timing, authentic complete ROM,
+the original reserved Y:002000 store and complete Desktop/Keyboard startup remain
+open. Passing these instruction tests is supporting evidence for the hardware
+emulator, not normal instrument acceptance or silicon equivalence.

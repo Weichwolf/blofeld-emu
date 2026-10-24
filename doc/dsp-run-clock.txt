@@ -52,6 +52,10 @@ Separate initial-map NXP reference windows now measure selected AGU, accumulator
 and SR interlocks (dsp-pipeline-timing.txt). The existing nominal contract is not
 silently promoted to a pipeline clock. Fast-mode reference counts are unsuitable;
 five status-bit timing windows and actual memory phases remain unqualified.
+The opt-in native_interlock_estimates contract now accounts for selected
+dependencies separately from SDK units, including timer/CLK2 and checkpoint/
+scheduler integration. Its supported forms and remaining physical phase limits
+are explicit in dsp-interlock-clock.txt; the default nominal contract is unchanged.
 
   cmake --build --preset strict --target blofeld-dsp-run-clock-test blofeld-original-dsp-clock-test
   ctest --test-dir build/strict -R '^(dsp_run_clock|original_dsp_clock)$' --output-on-failure

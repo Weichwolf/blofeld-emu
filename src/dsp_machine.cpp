@@ -9,8 +9,11 @@
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "blofeld/dsp_run_clock.hpp"
+#include "dsp_interlocks.hpp"
 
+#include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -20,22 +23,29 @@ namespace {
 struct RunState {
   std::optional<DspRunContract> contract;
   std::optional<DspRunClock> clock;
+  std::optional<DspInterlocks> interlocks;
 };
 
 RunState initial_run(const std::optional<DspRunContract> contract) {
   if (!contract) { return {}; }
-  if (contract->timing != DspRunTiming::native_internal_estimates) {
+  const bool interlocks = contract->timing == DspRunTiming::native_interlock_estimates;
+  if (contract->timing != DspRunTiming::native_internal_estimates && !interlocks) {
     throw Fault("DSP run requires an explicit native-cycle-estimate timing contract");
   }
   if (contract->interrupts != DspInterruptTiming::unqualified &&
       contract->interrupts != DspInterruptTiming::native_vector_estimates) {
     throw Fault("Unsupported DSP interrupt timing contract");
   }
+  if (interlocks && contract->interrupts != DspInterruptTiming::unqualified) {
+    throw Fault("DSP interlock estimates do not qualify interrupt-vector timing");
+  }
   if (contract->resets != DspResetTiming::unqualified &&
       contract->resets != DspResetTiming::reference_instruction_boundary) {
     throw Fault("Unsupported DSP reset timing contract");
   }
-  return {.contract = contract, .clock = DspRunClock(contract->clock)};
+  return {.contract = contract,
+          .clock = DspRunClock(contract->clock),
+          .interlocks = interlocks ? std::optional{DspInterlocks{}} : std::nullopt};
 }
 }
 
@@ -55,22 +65,70 @@ struct DspMachine::State {
       const bool vector_estimates =
           run.contract.value().interrupts == DspInterruptTiming::native_vector_estimates;
       cpu.set_run_hooks(
-          {.begin =
-               [this, vector_estimates](const auto state, const bool interrupt) {
-                 constexpr unsigned compatibility = 0x2000;
-                 if ((interrupt && !vector_estimates) || (state.sr & compatibility) != 0) {
-                   throw Fault("Unqualified DSP interrupt or compatibility-mode timing");
-                 }
-                 if (cpu.native_cycles() != run.clock->epoch_native_cycle_units()) {
-                   throw Fault("DSP clock/native counters require coordinated recovery");
-                 }
-                 run.clock->begin_step(bus, {.pc = state.pc, .omr = state.omr});
-               },
-           .complete = [this](const auto cycles) { run.clock->finish_step(bus, cycles); },
+          {.begin = [this](const auto state,
+                           const bool interrupt,
+                           const unsigned units) { begin_step(state, interrupt, units); },
+           .complete = [this](const auto cycles) { complete_step(cycles); },
            .failed = [this] { run.clock->fail(); },
            .reset = [this] { reset_clock(); },
+           .fetched = run.interlocks ? std::function<void(std::uint32_t)>(
+                                           [this](const auto opcode) { observe_opcode(opcode); })
+                                     : std::function<void(std::uint32_t)>{},
+           .data = run.interlocks ? std::function<void(DspMemoryAccess)>([this](const auto access) {
+             static_cast<void>(bus.memory_resource(access));
+           })
+                                  : std::function<void(DspMemoryAccess)>{},
            .vector_estimates = vector_estimates});
     }
+  }
+
+  void begin_step(const DspState context, const bool interrupt, const unsigned units) {
+    if (!run.clock || !run.contract) { throw Fault("DSP run lost its clock contract"); }
+    const bool vector_estimates =
+        run.contract->interrupts == DspInterruptTiming::native_vector_estimates;
+    constexpr unsigned compatibility = 0x2000;
+    constexpr unsigned arithmetic_or_loop = 0x28000;
+    if ((interrupt && !vector_estimates) || (context.sr & compatibility) != 0) {
+      throw Fault("Unqualified DSP interrupt or compatibility-mode timing");
+    }
+    if (run.interlocks && (context.sr & arithmetic_or_loop) != 0) {
+      throw Fault("Unqualified DSP interlock arithmetic/loop-mode timing");
+    }
+    if (cpu.native_cycles() != run.clock->epoch_native_cycle_units()) {
+      throw Fault("DSP clock/native counters require coordinated recovery");
+    }
+    prepare_interlocks(context, units);
+    run.clock->begin_step(bus, {.pc = context.pc, .omr = context.omr});
+  }
+
+  [[nodiscard]] unsigned preview_stalls(const DspState context, const unsigned units) const {
+    if (!run.interlocks) { return 0; }
+    try {
+      constexpr unsigned unsupported_status = 0x2a000; // SA, LF, SC.
+      if ((context.sr & unsupported_status) != 0) {
+        throw Fault("Unqualified DSP interlock arithmetic/loop/compatibility mode");
+      }
+      return run.interlocks->preview(bus.inspect_program(context.pc), units);
+    } catch (const std::exception &error) {
+      throw Fault("DSP interlock opcode read P:" + hex(context.pc, 6) +
+                  " omr=" + hex(context.omr, 6) + ": " + error.what());
+    }
+  }
+
+  void prepare_interlocks(const DspState context, const unsigned units) {
+    static_cast<void>(preview_stalls(context, units));
+    if (run.interlocks) { run.interlocks->prepare(bus.inspect_program(context.pc), units); }
+  }
+
+  void observe_opcode(const std::uint32_t opcode) {
+    if (!run.interlocks) { throw Fault("DSP opcode timing hook lost its dependency state"); }
+    run.interlocks->observe_opcode(opcode);
+  }
+
+  void complete_step(const unsigned units) {
+    if (!run.clock) { throw Fault("DSP instruction completion lost its clock"); }
+    const auto stalls = run.interlocks ? run.interlocks->complete(units) : 0;
+    run.clock->finish_step(bus, DspClockUnits{.native = units, .interlocks = stalls});
   }
 
   void reset_clock() {
@@ -88,6 +146,7 @@ struct DspMachine::State {
                   hex(context.pc, 6) + " omr=" + hex(context.omr, 6));
     }
     clock.restart_native_epoch();
+    if (run.interlocks) { run.interlocks->reset(); }
   }
 
   void check_boundary() const {
@@ -195,10 +254,13 @@ DspStepPlan DspMachine::plan_step() const {
     const bool vector_estimates =
         run_contract->interrupts == DspInterruptTiming::native_vector_estimates;
     const auto estimate = state_->cpu.next_step_cycles(vector_estimates);
+    const auto stalls = state_->preview_stalls(before.cpu, estimate.units);
     return {.before = before,
             .native_cycle_units = estimate.units,
+            .interlock_cycle_units = stalls,
             .start_ticks = clock.elapsed_ticks(),
-            .duration_ticks = clock.next_step_ticks(state_->bus, estimate.units),
+            .duration_ticks = clock.next_step_ticks(
+                state_->bus, DspClockUnits{.native = estimate.units, .interlocks = stalls}),
             .interrupt = estimate.interrupt};
   } catch (const std::exception &error) {
     throw Fault("DSP run plan pc=" + hex(before.cpu.pc, 6) + " omr=" + hex(before.cpu.omr, 6) +
@@ -226,8 +288,12 @@ void DspMachine::verify_prepared_step(const DspStepPlan &plan) const {
     DspCore::Admission admission;
     if (plan.interrupt) { admission.interrupt = plan.interrupt->request; }
     const auto estimate = state_->cpu.next_step_cycles(true, &admission);
+    const auto stalls = state_->preview_stalls(before.cpu, estimate.units);
     if (estimate.units != plan.native_cycle_units || estimate.interrupt != plan.interrupt ||
-        clock.next_step_ticks(state_->bus, estimate.units) != plan.duration_ticks) {
+        stalls != plan.interlock_cycle_units ||
+        clock.next_step_ticks(state_->bus,
+                              DspClockUnits{.native = estimate.units, .interlocks = stalls}) !=
+            plan.duration_ticks) {
       throw Fault("DSP admitted instruction changed before its declared completion");
     }
   } catch (const std::exception &error) {
