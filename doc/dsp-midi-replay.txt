@@ -14,7 +14,7 @@ Component word-image SHA-256 identities:
   P:0967 / 1092 words
     603cd0a98101a15a7994a2d9f2d946f39890865ebf566f84161a7d9cf0a2dc5f
 
-Declared caller context: OMR=5, SR=c00300, linear M0..7, single block, omni or
+Declared caller context: OMR=000305, SR=c00300, linear M0..7, single block, omni or
 one selected MIDI channel, clock ignored by the original setting. An own native
 JSR harness calls both genuine ring consumers and the actual nested pitch-bend
 callback; no host PC/register patch or successful callback stub is supplied.

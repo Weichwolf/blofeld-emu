@@ -100,7 +100,7 @@ void test_time_memory_pll_phase_and_restore() {
     machine.cpu().reset_spi_boot();
     counts(machine, value.total - 3, 0, value.ticks - reset_prefix_ticks, value.edges - 1);
     require(machine.run_clock().native_epoch() == previous_epoch + 1 &&
-                machine.cpu().state().pc == boot && machine.cpu().state().omr == 5 &&
+                machine.cpu().state().pc == boot && machine.cpu().state().omr == reset_omr &&
                 machine.bus().pll().read() == reset_pctl &&
                 machine.bus().read({.space = blofeld::DspSpace::x, .address = fixture::data}) ==
                     fixture::cookie &&
@@ -149,7 +149,7 @@ void test_default_refusal_and_fault_recovery() {
   const auto error = fixture::rejects([&] { strict.cpu().reset_spi_boot(); },
                                       "Live reset must require an explicit timing contract");
   require(error.contains("explicit reference reset timing") && error.contains("pc=0xff0001") &&
-              error.contains("omr=0x000005") && strict.cpu().debug_state() == before &&
+              error.contains("omr=0x000305") && strict.cpu().debug_state() == before &&
               strict.run_clock().native_epoch() == epoch,
           "Default refusal retains native state, epoch and execution context");
   counts(strict, 1, 1, nop_ticks, 0);

@@ -204,7 +204,7 @@ void reject(DspMachine &machine, const Input &input) {
   require(
       error.contains("Unqualified DSP reference " + operation_name(input.arithmetic.operation)) &&
           error.contains("coefficient=" + std::to_string(input.arithmetic.power)) &&
-          error.contains("pc=" + hex(before.cpu.pc, 6)) && error.contains("omr=0x000005") &&
+          error.contains("pc=" + hex(before.cpu.pc, 6)) && error.contains("omr=0x000305") &&
           after.cpu == expected && unchanged_context(before, after) &&
           after.native_instructions == before.native_instructions,
       "Untabulated coefficient fails contextually before data, flags or retirement change");

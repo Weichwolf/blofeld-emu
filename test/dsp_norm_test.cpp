@@ -125,7 +125,7 @@ void check_result(const DspState &after, const NormInput input, const unsigned p
   require(after.pc == pc + 1 && after.sr == expected.status && actual == expected.value,
           context + " has unexpected PC/accumulator/flags: sr=" + number(after.sr) +
               " expected=" + number(expected.status));
-  require(other == other_accumulator && after.sp == 0 && after.lc == 0 && after.omr == 5,
+  require(other == other_accumulator && after.sp == 0 && after.lc == 0 && after.omr == reset_omr,
           context + " modified another accumulator or control state");
   for (unsigned reg = 0; reg < 8; ++reg) {
     require(after.r[reg] ==

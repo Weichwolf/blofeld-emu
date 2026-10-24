@@ -19,6 +19,7 @@
 
 namespace {
 constexpr unsigned boot = 0xff0000;
+constexpr unsigned reset_omr = 0x305; // FM figure 5-3/table 5-2, mode-five pins.
 constexpr unsigned word_mask = 0xffffff;
 constexpr unsigned data = 0x100;
 constexpr unsigned input = 0x123456;
@@ -161,7 +162,7 @@ void test_native_reset_fetch_fault_and_arithmetic() {
   const std::array<std::uint32_t, 1> nop{0};
   bus.install_rom({.start = boot, .words = nop});
   blofeld::DspCore cpu(bus);
-  require(cpu.state().pc == boot && cpu.state().omr == 5 && cpu.state().sp == 0,
+  require(cpu.state().pc == boot && cpu.state().omr == reset_omr && cpu.state().sp == 0,
           "SPI boot reset enters the documented P:ff0000 mode-five vector");
   cpu.step();
   require(cpu.state().pc == boot + 1, "One-word NOP does not require known lookahead data");
@@ -594,10 +595,34 @@ void test_software_reset_preserves_clock_and_memory_mode() {
           "Executed RESET clears timer count/control/flags and retains the external TIO drive");
   cpu.reset_spi_boot();
   constexpr unsigned pinit_high_control = 0x04601d;
-  require(bus.pll().read() == pinit_high_control && cpu.state().omr == 5,
+  require(bus.pll().read() == pinit_high_control && cpu.state().omr == reset_omr,
           "Hardware reset samples PINIT and restores the selected SPI boot profile");
   require(bus.read({.space = blofeld::DspSpace::x, .address = 0x10000}) == input,
           "Hardware reset restores the original map and retains the physical RAM contents");
+}
+
+void test_hardware_reset_restores_core_dma_priority() {
+  constexpr unsigned priority_shift = 8;
+  constexpr unsigned previous_mode = 0xa;
+  for (unsigned priority = 0; priority < 4; ++priority) {
+    const auto configured = (priority << priority_shift) | previous_mode;
+    blofeld::DspBus bus;
+    Program program;
+    program.emit("move #>" + address(configured) + ",omr");
+    program.emit("reset");
+    program.install(bus);
+    blofeld::DspCore cpu(bus);
+    cpu.step();
+    require(cpu.state().omr == configured,
+            "A native MOVEC can configure every documented core-DMA priority");
+    cpu.step();
+    require(cpu.state().omr == configured,
+            "The executed RESET instruction preserves CPU priority and operating-mode bits");
+    cpu.reset_spi_boot();
+    require(cpu.state().omr == reset_omr && cpu.state().pc == boot,
+            "External hardware reset restores literal CDP=11 and mode-five pins from every prior "
+            "priority");
+  }
 }
 
 void test_short_immediates_and_register_repeat_count() {
@@ -755,6 +780,7 @@ int main() {
     test_native_bit_ram_and_fifo_fallback();
     test_native_gpio_output_bits_and_external_input();
     test_software_reset_preserves_clock_and_memory_mode();
+    test_hardware_reset_restores_core_dma_priority();
     test_short_immediates_and_register_repeat_count();
     test_bounded_rep_steps();
     test_bounded_do_waits_for_real_spi_words();

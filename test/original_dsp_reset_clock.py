@@ -37,7 +37,7 @@ def verify_reset(text, rows):
         raise ValueError("Reset must retain lifetime time and restart only native counters")
     reset = data["reset"]
     if (reset["cycles"], reset["ticks"], reset["clk2"], reset["pc"], reset["omr"]) != (
-            units, ticks, units // 2, 0xff0000, 5):
+            units, ticks, units // 2, 0xff0000, 0x305):
         raise ValueError("Reset entry, mode or lifetime counters differ")
     repeated = dict(first, cycles=units * 2, ticks=ticks * 2, clk2=(units // 2) * 2)
     if data["reset_frontier"] != repeated:

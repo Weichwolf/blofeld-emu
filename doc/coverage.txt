@@ -666,6 +666,10 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           application/board execution pending.
 DSP56371 peripherals/boot ROM     partial  NXP 58-word SPI prefix assembled privately;
                                           no complete/hardware-dumped ROM supplied.
+                                          Hardware SPI reset now supplies the
+                                          documented OMR CDP=11 plus mode5;
+                                          native MOVEC/software RESET retain
+                                          their separate effects (dsp-reset.txt).
                                           All five documented RAM window layouts
                                           decoded, with retained direct X/Y data
                                           and three subsequent switch units.

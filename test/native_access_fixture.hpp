@@ -58,7 +58,7 @@ inline void pair(const std::span<const DspNativeAccess> rows, const Expected exp
     const auto &row = rows[expected.offset + index];
     require(row.kind == expected.kind && row.target.space == expected.target.space &&
                 row.target.address == expected.target.address && row.bit == expected.bit &&
-                row.ordinal == expected.ordinal && row.pc == expected.pc && row.omr == 5 &&
+                row.ordinal == expected.ordinal && row.pc == expected.pc && row.omr == reset_omr &&
                 row.stage == (index == 0 ? Stage::before : Stage::after),
             "Native address/kind/order/step context agrees with the literal expectation");
     const auto value = index != 0 || expected.kind == Kind::write

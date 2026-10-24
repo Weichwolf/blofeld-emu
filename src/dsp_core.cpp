@@ -36,6 +36,7 @@ constexpr unsigned word_mask = 0xffffff;
 constexpr unsigned address_space = 0x1000000;
 constexpr unsigned native_xy_words = 0x18000;
 constexpr unsigned spi_mode = 5;
+constexpr unsigned reset_core_dma_priority = 0x300;
 constexpr unsigned boot_entry = 0xff0000;
 constexpr std::uint64_t data_mask = 0xffffffffffff;
 constexpr std::uint64_t accumulator_mask = 0xffffffffffffff;
@@ -352,7 +353,9 @@ void DspCore::reset_spi_boot() {
   impl_->reset_reference();
   impl_->bus.reset();
   impl_->cpu.resetHW();
-  impl_->cpu.regs().omr.var = spi_mode;
+  // DSP56300FM figure 5-3/table 5-2: hardware reset sets CDP1/CDP0;
+  // mode pins select the low nibble. The generic core resets OMR to zero.
+  impl_->cpu.regs().omr.var = reset_core_dma_priority | spi_mode;
   impl_->cpu.setPC(boot_entry);
   impl_->access.reset();
   impl_->faulted = false;

@@ -23,6 +23,8 @@ inline constexpr unsigned clear_pc = 0x72;
 inline constexpr unsigned word_bits = 24;
 // FM Figure 5-4/Table 5-1 explicitly set CP1/CP0 as well as I1/I0.
 inline constexpr unsigned reset_sr = 0xc00300;
+// FM figure 5-3/table 5-2 set CDP1/CDP0; mode inputs select SPI boot.
+inline constexpr unsigned reset_omr = 0x305;
 inline constexpr unsigned clear_sr = 0xc00314;
 inline constexpr unsigned stage = 0x6a;
 inline constexpr unsigned stage_words = 94;
@@ -44,10 +46,12 @@ inline bool valid(const Phase phase, const DspDebugState &state) {
     return false;
   }
   switch (phase) {
-    case Phase::reset: return cpu.pc == bootstrap_entry && cpu.omr == 5 && cpu.sr == reset_sr;
+    case Phase::reset:
+      return cpu.pc == bootstrap_entry && cpu.omr == reset_omr && cpu.sr == reset_sr;
     case Phase::loaded:
-      return cpu.pc == stage && cpu.omr == 5 && cpu.sr == reset_sr && cpu.a == stage_words &&
-             cpu.r[0] == stage + stage_words && cpu.r[1] == stage && cpu.r[5] == 0;
+      return cpu.pc == stage && cpu.omr == reset_omr && cpu.sr == reset_sr &&
+             cpu.a == stage_words && cpu.r[0] == stage + stage_words && cpu.r[1] == stage &&
+             cpu.r[5] == 0;
     case Phase::clear:
     case Phase::frontier: {
       const auto address = phase == Phase::clear ? 0U : ram_end;
@@ -68,6 +72,14 @@ inline void negative_controls(const Phase phase, const DspDebugState &state) {
     changed = state;
     changed.cpu.sr ^= mask;
     require(!valid(phase, changed), "Arithmetic/compatibility/scaling mode changes must fail");
+  }
+  if (phase == Phase::reset || phase == Phase::loaded) {
+    constexpr std::array priority_bits{0x100U, 0x200U};
+    for (const auto mask : priority_bits) {
+      changed = state;
+      changed.cpu.omr &= ~mask;
+      require(!valid(phase, changed), "A missing hardware-reset CDP bit must fail the boot oracle");
+    }
   }
   if (phase == Phase::clear || phase == Phase::frontier) {
     changed = state;

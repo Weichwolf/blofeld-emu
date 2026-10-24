@@ -12,6 +12,7 @@
 
 namespace blofeld::test {
 inline constexpr unsigned boot = 0xff0000;
+inline constexpr unsigned reset_omr = 0x305; // FM figure 5-3/table 5-2, mode-five pins.
 inline constexpr unsigned word_mask = 0xffffff;
 inline constexpr unsigned word_bits = 24;
 inline constexpr unsigned data_bits = word_bits * 2;

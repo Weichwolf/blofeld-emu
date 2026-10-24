@@ -10,6 +10,11 @@ The session transport is separate (host-audio.txt); isolated original master
 output arithmetic and access scope are tested in dsp-master-output.txt.
 
 Native adaptation
+The SPI hardware-reset adapter selects OMR=000305: documented CDP1/CDP0=11
+plus mode-five inputs. The generic library's zero OMR is not a derivative reset
+contract. Native MOVEC and software RESET still retain their separate semantics;
+see dsp-reset.txt. This corrects reset state, not the original reserved-write gap.
+
 patches/dsp56300-reference-bus.patch adds unconditional board-owned memory hooks,
 a custom peripheral dispatcher and a bounded execReference entry. Each DO body
 instruction yields independently. Positive REP counts also yield per body
@@ -159,7 +164,7 @@ The same regression checks independent register expectations at reset, stage
 entry, clear entry and the strict frontier. All eight modifiers remain linear;
 the prefix preserves reset arithmetic/scaling modes and clears CCR before entry.
 The original stage defines its own accumulator, cursor, OMR and fractional count.
-Thirty fixed oracle corruptions per execution profile reject changed M4, modes,
+Thirty-four fixed oracle corruptions per execution profile reject changed M4, modes,
 cursor, count, source and memory mode. Separate checkpoint branches supply zero,
 two and three reference switch cycles: the affected X-to-P mapping really changes,
 but the original Y:002000 write still fails with its PC/OMR context. Additional

@@ -247,7 +247,7 @@ void test_unknown_inputs_failure_prefix_and_restore() {
   const auto initial = machine.checkpoint();
   const auto error = fixture::rejects([&] { machine.cpu().step(); }, "Unobserved PINIT must fail");
   require(machine.timing_faulted() && error.contains("pc=0xff0000") &&
-              error.contains("omr=0x000005") && error.contains("PINIT") &&
+              error.contains("omr=0x000305") && error.contains("PINIT") &&
               machine.run_clock().elapsed_ticks() == 0,
           "Unknown reset clock input is not fabricated and preserves full CPU/clock context");
   machine.restore(initial);

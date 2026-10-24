@@ -72,7 +72,7 @@ inline void expect(const DspReferenceProgress &progress,
   require(value.ordinal == expected.ordinal,
           context + ": unexpected ordinal " + std::to_string(value.ordinal));
   require(value.pc == expected.pc, context + ": unexpected instruction PC " + hex(value.pc, 6));
-  require(value.omr == 5, context + ": unexpected OMR " + hex(value.omr, 6));
+  require(value.omr == reset_omr, context + ": unexpected OMR " + hex(value.omr, 6));
 }
 
 inline void send(DspShi &shi, const unsigned value) {

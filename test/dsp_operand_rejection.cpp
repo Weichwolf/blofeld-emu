@@ -132,7 +132,7 @@ void expect_rejection(DspMachine &machine, const RejectedCase &item, const DspDe
   expected.pc += item.bitfield && item.immediate ? 2U : 1U;
   require(error.contains("Unqualified DSP reference " + item.diagnostic) &&
               error.contains(rejected_control(item)) &&
-              error.contains("pc=" + hex(before.cpu.pc, 6)) && error.contains("omr=0x000005") &&
+              error.contains("pc=" + hex(before.cpu.pc, 6)) && error.contains("omr=0x000305") &&
               after.cpu == expected && after.native_instructions == before.native_instructions &&
               after.stack_high == before.stack_high && after.stack_low == before.stack_low &&
               after.ep == before.ep && after.sz == before.sz && after.sc == before.sc,

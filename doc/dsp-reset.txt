@@ -1,5 +1,13 @@
 DSP reset with retained reference time
 
+Hardware reset supplies OMR=000305 for the SPI-boot profile: CDP1/CDP0 are
+both set, and sampled mode inputs select 5. DSP56300FM Rev. 5 figure 5-3/table 5-2
+define these priority reset bits; DSP56371UM section 4.2 retains them. The adapter now
+applies that complete word after the generic library's zero OMR initialization.
+Software MOVEC can change CDP; the executed RESET instruction preserves OMR.
+The four native previous-priority cases check that distinction against literal
+manual expectations. This correction does not establish DMA bus timing.
+
 DspRunContract::resets defaults to unqualified: a live clocked reset still
 rejects. Explicit reference_instruction_boundary permits a zero-duration native
 hardware reset at a healthy completed instruction boundary. This is a nominal

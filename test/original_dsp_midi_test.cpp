@@ -272,7 +272,7 @@ public:
     require(
         error.contains("Unknown DSP memory read at X:" + blofeld::hex(ring.base, 6)) &&
             error.contains("pc=" + blofeld::hex(missing_input_pc.at(selected), 6)) &&
-            error.contains("omr=0x000005") && read(ring.consumer) == ring.base &&
+            error.contains("omr=0x000305") && read(ring.consumer) == ring.base &&
             read(ring.producer) == ring.base && read(field_address) == field_sentinel &&
             machine_.cpu().state().sp == 1 &&
             machine_.cpu().debug_state().native_instructions == retirement_base_ + instructions_,
