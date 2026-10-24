@@ -18,11 +18,22 @@ contention only in the same1K subsection. Different subsections of the same8K
 block return unqualified, and admission fails visibly instead of inventing a
 safe wait or losing a DMA word. Distinct physical blocks/stores are independent.
 ROM same-bank partition geometry remains unqualified(block_words=0).
-Core peripheral occupancy remains unqualified; resource queries reject it without
-performing I/O. An explicitly empty known core footprint needs no sharing query.
+Core peripheral resource queries remain unqualified and reject without performing
+I/O. The arbiter separately recognizes controller reads described below. An
+explicitly empty known core footprint needs no sharing query.
 
-For a core footprint containing only qualified RAM/ROM resources, the selected
-DMA destination can now be an implemented ESAI/ESAI_1 TX register or one of the
+Core read footprints at the 29 DMA-controller addresses X:ffffd8..fffff4 are
+independent of the DMA source/destination data path (FM10.2/10.5, figure10-1).
+The arbiter validates their address/direction without reading the register or
+making its contents known. Actual reads still use the strict controller handler,
+including unknown offsets and DSTR lifetime refusals. These footprints can coexist
+with memory occupancy or an admitted ESAI/DAX destination. Controller writes,
+wrong-space aliases and adjacent addresses remain unqualified. No ordering of a
+simultaneous core register read and DMA's internal register update is inferred;
+explicitly before/after native reads observe their respective actual values.
+
+For a core footprint containing qualified RAM/ROM resources or controller reads,
+the selected DMA destination can be an implemented ESAI/ESAI_1 TX register or one of the
 three DAX data addresses. The derived admission rule uses FM10.2's separate
 core/DMA buses and APR23 sections5.1/5.2's distinction between memory modules
 and peripheral data registers. The peripheral destination does not share the
@@ -77,12 +88,19 @@ occupancy timeline is a declared reference experiment, not silicon phase evidenc
 Fifteen data-register destinations check independent P/X/Y memory occupancy,
 same-peripheral core refusal, global wait, held-source mutation and ordinary
 DMA completion accounting.
+Twenty-nine controller addresses check independent memory data phases, wait and
+completion without initializing unread controller state. Seven wrong-space,
+adjacent or write footprints fail before sampling. A native MOVEP is suspended
+at its actual DSR0 read while DMA captures and stores a held RAM word. Four joint
+checkpoint branches place that read explicitly before/after the destination
+commit; native AND/CMP then observes the old/changed bit5 half, respectively.
+No host write changes DSR0 after configuration, and DMA retires no CPU instruction.
 Seven forbidden endpoint cases retain failures under both wait/available grants:
 control/status registers, a mirrored bank, an unsupported FIFO source and a
 P-ROM address. Retries preserve the controller cycle, held word and endpoints.
-Existing native-configured ESAI and DAX streams now
-also declare pending-PC P-ROM occupancy on each sampled phase. Opposite-edge
-and biphase receivers still check their complete data/metadata streams and
+Existing native-configured ESAI and DAX streams now also declare pending-PC
+P-ROM and DSR0-read occupancy on each sampled phase. Opposite-edge and biphase
+receivers still check their complete data/metadata streams and
 mid-transfer replay. This is explicit reference occupancy, not a native fetch
 timestamp, pipeline/bus-phase reconstruction or automatic clock integration.
 

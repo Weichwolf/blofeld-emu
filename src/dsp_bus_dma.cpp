@@ -14,6 +14,11 @@ namespace blofeld {
 namespace {
 constexpr unsigned io_base = 0xffff80;
 
+bool controller_read(const DspMemoryAccess access) {
+  return access.operation == DspMemoryOperation::read && access.target.space == DspSpace::x &&
+         DspDma::handles(access.target.address);
+}
+
 DspSpace space(const DspDmaSpace value) {
   switch (value) {
     case DspDmaSpace::x: return DspSpace::x;
@@ -26,6 +31,23 @@ DspSpace space(const DspDmaSpace value) {
 std::string describe(const DspAddress address) {
   constexpr std::array names{"P:", "X:", "Y:"};
   return std::string(names.at(static_cast<unsigned>(address.space))) + hex(address.address, 6);
+}
+
+bool core_conflict(const DspBus &bus, const DspCoreBusUse core, const DspMemoryAccess target) {
+  bool conflict = false;
+  for (const auto access : core.accesses) {
+    // Controller inspection does not use the DMA source/destination data path.
+    if (controller_read(access)) { continue; }
+    const auto relation = bus.memory_conflict({.core = access, .dma = target});
+    if (relation == DspMemoryConflict::unqualified) {
+      const bool write = target.operation == DspMemoryOperation::write;
+      throw Fault("Unqualified DSP core/DMA bank contention at " +
+                  std::string(write ? "destination write " : "source read ") +
+                  describe(target.target) + " core=" + describe(access.target));
+    }
+    conflict = conflict || relation == DspMemoryConflict::protected_partition;
+  }
+  return conflict;
 }
 
 void check_access(const DspDmaAddress address, const bool write) {
@@ -97,7 +119,9 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
   if (core.knowledge != DspCoreBusKnowledge::reference_cycle_occupancy) {
     throw Fault("DSP DMA bank arbitration requires explicitly known core-cycle occupancy");
   }
-  for (const auto access : core.accesses) { static_cast<void>(memory_resource(access)); }
+  for (const auto access : core.accesses) {
+    if (!controller_read(access)) { static_cast<void>(memory_resource(access)); }
+  }
   DspDmaBusResult result;
   const DspDmaAdmission admission = [&](const DspDmaPhase &phase) {
     result.phase = phase;
@@ -107,21 +131,12 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
         .target = {.space = space(selected.space), .address = selected.address},
         .operation = write ? DspMemoryOperation::write : DspMemoryOperation::read};
     if (selected.space != DspDmaSpace::p && selected.address >= io_base) {
-      // Core footprints above contain only qualified physical memory, not I/O.
+      // Core footprints contain physical memory or DMA-controller reads, not data I/O.
       // FM10.2/APR23 section5: these resources do not contend with a data register.
       check_access(selected, write);
       return DspDmaGrant::available;
     }
-    bool conflict = false;
-    for (const auto access : core.accesses) {
-      const auto relation = memory_conflict({.core = access, .dma = target});
-      if (relation == DspMemoryConflict::unqualified) {
-        throw Fault("Unqualified DSP core/DMA bank contention at " +
-                    std::string(write ? "destination write " : "source read ") +
-                    describe(target.target) + " core=" + describe(access.target));
-      }
-      conflict = conflict || relation == DspMemoryConflict::protected_partition;
-    }
+    const bool conflict = core_conflict(*this, core, target);
     result.core_stall = write && conflict;
     return !write && conflict ? DspDmaGrant::wait : DspDmaGrant::available;
   };

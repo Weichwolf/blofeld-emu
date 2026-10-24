@@ -927,7 +927,11 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           (dsp-bank-arbitration.txt).
                                           ESAI/DAX data writes now admit
                                           qualified memory-only core occupancy;
-                                          shared core/peripheral accesses still
+                                          DMA-controller read footprints also
+                                          admit real source/destination phases,
+                                          with suspended native DSR0 sampling
+                                          before/after a real half transition.
+                                          Shared data-peripheral accesses still
                                           reject without fabricated effects.
                                           Automatic native DMA bus timing,
                                           physical DAX clock/routing,

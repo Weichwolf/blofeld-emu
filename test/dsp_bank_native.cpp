@@ -1,20 +1,107 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "bank_fixture.hpp"
+#include "blofeld/bus.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/dsp_native_access.hpp"
+#include "blofeld/dsp_reference_execution.hpp"
 #include "dma_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "esai_fixture.hpp"
 
 #include <array>
+#include <variant>
 #include <vector>
 
 namespace blofeld::test::banks {
 namespace {
 using esai::rejects;
 using esai::require;
+
+DspReferencePending pending_read(const DspMachine &machine) {
+  const auto pending = machine.reference_pending();
+  if (!pending) { throw Fault("Native controller read lost its admission ticket"); }
+  return *pending;
+}
+
+DspReferencePending source_read(DspMachine &machine) {
+  auto progress = machine.begin_reference_instruction(DspReferenceExecution::access_boundaries);
+  for (unsigned effect = 0; effect < 8 && progress.pending; ++effect) {
+    const auto *access = std::get_if<DspNativeAccess>(&progress.pending->effect);
+    require(access != nullptr, "The native source-register query has only memory effects");
+    if (access->kind == DspNativeAccessKind::read && access->target.space == DspSpace::x &&
+        access->target.address == transfer::source0) {
+      return *progress.pending;
+    }
+    progress = machine.advance_reference_access(progress.pending->ticket);
+  }
+  throw Fault("Native MOVEP did not yield its actual DMA source-register read");
+}
+
+void native_controller_query() {
+  // The original foreground compares DSR0 bit5. Qualify both explicit access
+  // orders, without choosing their simultaneous silicon sampling order.
+  constexpr unsigned last_word = 0x67f;
+  constexpr unsigned next_half = 0x680;
+  constexpr unsigned phase = 0x20;
+  DspMachine machine;
+  DspProgram code;
+  code.immediate("x0", phase);
+  code.emit("movep x:<<$ffffef,a");
+  code.emit("and #>$20,a");
+  code.emit("cmp x0,a");
+  code.install(machine.bus());
+  machine.cpu().reset_spi_boot();
+  static_cast<void>(machine.advance_dma(inputs({.index = 0}), use()));
+  machine.bus().write({.space = DspSpace::x, .address = last_word, .value = first});
+  configure(machine.bus(), {.source = last_word, .control = transfer::software_copy});
+  machine.cpu().step();
+  const auto pending = source_read(machine);
+  const std::array core{
+      DspMemoryAccess{.target = std::get<DspNativeAccess>(pending.effect).target}};
+  const auto read = machine.advance_dma(inputs({.index = 1}), use(core));
+  require(read.phase && read.phase->kind == read_phase && !read.word && !read.core_stall,
+          "An actually suspended native controller read leaves the DMA source path available");
+  machine.bus().write({.space = DspSpace::x, .address = last_word, .value = second});
+  const auto frozen = machine.checkpoint();
+  for (const bool before_write : {true, false}) {
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      machine.restore(frozen);
+      const auto before = machine.cpu().debug_state();
+      const auto restored = pending_read(machine);
+      if (before_write) {
+        require(machine.advance_reference_access(restored.ticket).retired,
+                "The before-write branch retires the real source-register MOVEP");
+      }
+      const auto completed = machine.advance_dma(inputs({.index = 2}), use(core));
+      require(completed.word && completed.word->value == first && !completed.core_stall &&
+                  machine.bus().read({.space = DspSpace::x, .address = transfer::source0}) ==
+                      next_half &&
+                  machine.bus().read({.space = DspSpace::y, .address = transfer::destination}) ==
+                      first,
+              "DMA alone publishes the next half and stores its captured, unmodified word");
+      if (!before_write) {
+        require(machine.cpu().debug_state() == before &&
+                    pending_read(machine).ticket == restored.ticket,
+                "DMA advances neither the pending instruction nor its access ticket");
+        require(machine.advance_reference_access(restored.ticket).retired,
+                "The after-write branch retires the real source-register MOVEP");
+      }
+      constexpr unsigned accumulator_shift = 24;
+      constexpr unsigned word_mask = 0xffffff;
+      const auto observed = (machine.cpu().state().a >> accumulator_shift) & word_mask;
+      require(observed == (before_write ? last_word : next_half) &&
+                  machine.cpu().debug_state().native_instructions == before.native_instructions + 1,
+              "Each native MOVEP samples its explicitly ordered actual controller value once");
+      machine.cpu().step();
+      machine.cpu().step();
+      constexpr unsigned zero = 1U << 2U;
+      require(((machine.cpu().state().sr & zero) != 0) == before_write,
+              "Native AND/CMP sees equal old phase or the DMA-generated changed half");
+    }
+  }
+}
 
 void native_held_word() {
   constexpr unsigned prefix_units = 17; // Five setup*2, store2, NOP1, immediate2, overwrite2.
@@ -158,6 +245,7 @@ void caller_qualification() {
 }
 
 void native_checks() {
+  native_controller_query();
   native_held_word();
   unqualified_conflict();
   caller_qualification();

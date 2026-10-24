@@ -160,7 +160,8 @@ struct Stream {
       if (data.driven != 0) { bits.push_back(esai::sample(data, 0)); }
     }
     const std::array declared_fetch{
-        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}}};
+        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}},
+        DspMemoryAccess{.target = {.space = DspSpace::x, .address = source0}}};
     const auto progress = machine.advance_dma(
         {.cycle = edge, .timing = timing, .grant = grant},
         {.accesses = declared_fetch, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});

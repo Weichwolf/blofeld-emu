@@ -70,7 +70,8 @@ struct Stream {
       wire.push_back(pin.level ? '1' : '0');
     }
     const std::array declared_fetch{
-        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}}};
+        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}},
+        DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::source0}}};
     const auto progress = machine.advance_dma(
         {.cycle = edge,
          .timing = DspDmaTiming::reference_sampled_cycles,

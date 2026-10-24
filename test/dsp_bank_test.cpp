@@ -15,6 +15,65 @@ namespace {
 using esai::rejects;
 using esai::require;
 
+void controller_reads() {
+  // FM10.5/figure10-1: six four-register channels, four offsets and DSTR at the top.
+  constexpr unsigned first_controller = 0xffffd8;
+  constexpr unsigned last_controller = 0xfffff4;
+  for (unsigned address = first_controller; address <= last_controller; ++address) {
+    DspBus bus;
+    const std::array core{DspMemoryAccess{.target = {.address = p_rom_begin}},
+                          DspMemoryAccess{.target = {.space = DspSpace::x, .address = address}},
+                          DspMemoryAccess{.target = {.space = DspSpace::y, .address = 0x20},
+                                          .operation = DspMemoryOperation::write}};
+    static_cast<void>(bus.advance_dma(inputs({.index = 0}), use(core)));
+    bus.write({.space = DspSpace::x, .address = transfer::ring_start, .value = first});
+    configure(bus, {.control = transfer::software_copy});
+    const auto source = bus.advance_dma(inputs({.index = 1}), use(core));
+    require(source.phase && source.phase->kind == read_phase && !source.word && !source.core_stall,
+            "A controller read does not consume the DMA RAM source data path");
+    const auto wait = bus.advance_dma(inputs({.index = 2, .grant = DspDmaGrant::wait}), use(core));
+    require(wait.phase && wait.phase->value == first && !wait.word && !wait.core_stall,
+            "Independent controller inspection cannot bypass a global destination wait");
+    const auto destination = bus.advance_dma(inputs({.index = 3}), use(core));
+    require(destination.word && destination.word->value == first && !destination.core_stall &&
+                bus.read({.space = DspSpace::y, .address = transfer::destination}) == first &&
+                bus.read({.space = DspSpace::x, .address = transfer::source0}) ==
+                    transfer::ring_start + 1 &&
+                bus.read({.space = DspSpace::x, .address = transfer::control0}) ==
+                    (transfer::software_copy & ~transfer::enable),
+            "Each declared controller read preserves actual DMA data and completion accounting");
+    require(rejects([&] {
+              static_cast<void>(bus.read({.space = DspSpace::x, .address = transfer::offset1}));
+            }).contains("Unknown DSP DMA offset"),
+            "Declaring register occupancy neither reads nor initializes unknown controller state");
+  }
+}
+
+void unsupported_controller_use() {
+  constexpr std::array cases{
+      DspMemoryAccess{.target = {.space = DspSpace::y, .address = 0xffffef}},
+      DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0xffffd7}},
+      DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0xfffff5}},
+      DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::source0},
+                      .operation = DspMemoryOperation::write},
+      DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::counter0},
+                      .operation = DspMemoryOperation::write},
+      DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::control0},
+                      .operation = DspMemoryOperation::write},
+      DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::status},
+                      .operation = DspMemoryOperation::write}};
+  for (const auto access : cases) {
+    DspBus bus;
+    const std::array core{access};
+    const auto error =
+        rejects([&] { static_cast<void>(bus.advance_dma(inputs({.index = 0}), use(core))); });
+    require(error.contains("Unqualified DSP peripheral memory resource") &&
+                error.contains(hex(access.target.address, 6)),
+            "Wrong-bank, adjacent and controller-write occupancy fail before request sampling");
+    static_cast<void>(bus.advance_dma(inputs({.index = 0}), use()));
+  }
+}
+
 void memory_and_peripheral_phase(const DspAddress destination) {
   // FM10.2/APR23 section5: independent memory modules and peripheral data registers.
   constexpr unsigned value = 0x400;     // Also a valid XNADR payload.
@@ -319,6 +378,8 @@ int main() {
     partitions();
     program_partitions();
     switched_alias();
+    controller_reads();
+    unsupported_controller_use();
     peripheral_destinations();
     forbidden_peripheral_phases();
     phase_checks();
