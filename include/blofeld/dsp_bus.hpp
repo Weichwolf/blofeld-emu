@@ -103,6 +103,9 @@ public:
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   // Strict, side-effect-free P-space observation, including map/knowledge checks.
   [[nodiscard]] std::uint32_t inspect_program(std::uint32_t address) const;
+
+  [[nodiscard]] std::optional<std::uint64_t> last_dma_cycle() const { return dma_.last_cycle(); }
+
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);
   void advance_instruction_cycles(unsigned cycles);
@@ -140,6 +143,10 @@ public:
 
 private:
   friend class DspReferenceTape;
+  friend class DspFetchRun;
+  void advance_reference_cycle_delays(std::uint64_t admitted_dma_cycle, bool switch_was_pending);
+  void advance_core_delays(unsigned cycles);
+  void advance_memory_switch(unsigned cycles);
   void acknowledge_latched_interrupt(DspInterruptRequest request);
   [[nodiscard]] bool interrupt_source_pending(DspInterruptRequest request) const;
   enum class Operation : std::uint8_t { read, write };

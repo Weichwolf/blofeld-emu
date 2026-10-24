@@ -44,6 +44,10 @@ Existing unclocked calls and clocked completion contracts retain their behavior;
 a clocked owner refuses this semantic cycle API. Matching headers/libraries are
 required; no prepared native SDK interface changes in this increment.
 
+The separate DspFetchRun owner now automates F1/F2 and reference core/peripheral
+clocks around this API (dsp-fetch-clock.txt). Backend admission remains explicit;
+this unclocked selected-action API and its completion-clock refusal are unchanged.
+
   cmake --build --preset strict --target blofeld-reference-cycle-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_reference_bus_cycle$'
 

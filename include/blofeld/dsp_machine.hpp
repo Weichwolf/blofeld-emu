@@ -100,6 +100,10 @@ public:
 
 private:
   friend class DspScheduledRun;
+  friend class DspFetchRun;
+  friend struct DspFetchState;
+  [[nodiscard]] std::shared_ptr<const bool> reference_clock_owner() const;
+  void fail_reference_clock() noexcept;
   void check_admission_contract() const;
   void verify_prepared_step(const DspStepPlan &plan) const;
   void execute_prepared_step(const DspStepPlan &plan);

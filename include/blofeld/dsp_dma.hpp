@@ -65,6 +65,9 @@ public:
   void write(unsigned address, std::uint32_t value);
   [[nodiscard]] std::uint32_t requested_sources() const;
   [[nodiscard]] bool active() const;
+
+  [[nodiscard]] std::optional<std::uint64_t> last_cycle() const { return cycle_; }
+
   // End-of-block requests latch independently of DTD's repeating-mode lifetime.
   [[nodiscard]] std::uint8_t interrupt_sources() const;
   void acknowledge_interrupt(unsigned channel);

@@ -1,0 +1,63 @@
+Automatic DSP program-fetch reference clock
+
+DspFetchRun owns one completed core reference cycle per advance_cycle call.
+Its explicit reference_cycle_order contract orders actual DMA admission, old
+F2 sampling, a selected native effect, new F1 address generation, then SHI/map
+delays and CLK/2. The caller supplies external DMA requests/grants and chooses
+native admission; it supplies no fetch action, memory footprint, program word,
+DMA index or elapsed-cycle chunk. This is not the complete seven-stage CPU.
+
+DSP56300FM Rev5 sections2.3.1/Table2-1 and5.3/Table5-1 distinguish F1 address
+generation from the following F2 memory read, with one fetched word per clock.
+The first cycle only issues F1. Subsequent cycles can sample the previous F2
+and issue the next F1. The established eight-word host continuation bound
+applies backpressure; it is not evidence for silicon queue depth. Genuine native
+JMP/JSR/RTS handling and captured opcode/extension consumption remain those of
+the underlying frontend (dsp-program-fetch.txt). No extra P read is invented
+for an already captured word, including zero.
+
+A held DMA destination stalls selected native/F2 work and new F1, including
+the cycle that commits the destination. Completed stalled or backpressure
+cycles still advance peripheral delays and CLK/2, retaining the odd residue.
+A new OMR memory-switch command does not consume its own delay: three subsequent
+completed clocks are required. End-of-cycle peripheral sampling is an explicit
+reference order, not a measured placement of every physical bus effect.
+
+Each cycle latches the current PCTL requested EXTAL ratio. Exact integral
+timebase ticks are committed only when the cycle completes. Unknown PINIT,
+nonintegral rates and counter exhaustion refuse rather than round. These
+digital command ratios do not establish analog PLL lock or Blofeld clock rates.
+The reference epoch begins at zero cycles/ticks/CLK2 phase; the starting DMA
+index follows the controller's actual last admitted index.
+
+Joint checkpoints retain native execution, real captured words, issued F1,
+DMA, timer/PLL/map state, reference time and divider phase. Only the matching
+machine and clock contract can restore them. A fresh process-local execution
+capability detects machine-only restore even when every exposed CPU field is
+identical. It is unrelated to persistent device identity. Out-of-band native,
+fetch or DMA-index changes refuse coordinated continuation.
+
+An entered-cycle failure quarantines CPU and clock, preserving already admitted
+DMA/native effects. Completed time is a prefix, not permission to retry partial
+effects. Diagnostics include completed cycles, DMA index, ticks, PC/OMR and the
+underlying failing address/operation. Trusted joint restore recovers both owners.
+The existing completion-clock contract cannot be replaced, and its active-DMA
+refusal is unchanged. Matching rebuilt headers and libraries are required.
+
+  cmake --build --preset strict --target blofeld-fetch-run-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_fetch_run$'
+
+Own assembled programs use actual native MOVEP setup before the reference epoch.
+Literal clock/register/address oracles cover F1/F2 latency and overlap, capacity
+backpressure, real DMA waits/writes, timer compare/CLK2 edges, native OMR delay,
+sampled zero preservation, partial failure and joint replay. PLL period-change
+cases alter the model command directly; they do not qualify native PCTL stage
+placement. Guard cases check unknown PINIT, invalid period/contract, foreign and
+duplicate owners, machine-only restore and unchanged nominal completion use.
+
+Backend begin/admission is still selected explicitly. Automatic decode, AG1/AG2,
+E1/E2, simultaneous X/Y/P groups, all interlocks, loop/REP and IRQ timelines,
+physical stage timestamps and default runtime integration remain open. Native
+exceptions/checkpoint allocation are not a real-time callback implementation.
+Authentic full ROM, reserved Y:002000 semantics, full original boot, normal
+MIDI/audio and complete Desktop/Keyboard hardware acceptance remain incomplete.

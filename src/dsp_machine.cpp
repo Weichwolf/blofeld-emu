@@ -165,6 +165,7 @@ struct DspMachine::State {
   DspBus bus;
   RunState run;
   DspCore cpu;
+  const std::shared_ptr<const bool> execution_owner = std::make_shared<const bool>(true);
 };
 
 DspCheckpoint::DspCheckpoint(std::shared_ptr<const Storage> storage)
@@ -397,6 +398,14 @@ DspCheckpoint DspMachine::checkpoint() const {
   state_->check_boundary();
   return DspCheckpoint(
       std::make_shared<const DspCheckpoint::Storage>(state_->bus, cpu_state, state_->run));
+}
+
+void DspMachine::fail_reference_clock() noexcept {
+  state_->cpu.fail_reference_cycle();
+}
+
+std::shared_ptr<const bool> DspMachine::reference_clock_owner() const {
+  return state_->execution_owner;
 }
 
 void DspMachine::restore(const DspCheckpoint &checkpoint) {

@@ -407,7 +407,24 @@ void DspBus::advance_instruction_cycles(const unsigned cycles) {
     throw Fault("Unqualified automatic DSP DMA bus timing at X:0xfffff4: "
                 "explicit standalone phases do not establish native bus arbitration");
   }
+  advance_core_delays(cycles);
+}
+
+void DspBus::advance_reference_cycle_delays(const std::uint64_t admitted_dma_cycle,
+                                            const bool switch_was_pending) {
+  if (dma_.last_cycle() != admitted_dma_cycle) {
+    throw Fault("DSP fetch clock lost its actually admitted DMA cycle");
+  }
+  shi_.advance_instruction_cycles(1);
+  if (switch_was_pending) { advance_memory_switch(1); }
+}
+
+void DspBus::advance_core_delays(const unsigned cycles) {
   shi_.advance_instruction_cycles(cycles);
+  advance_memory_switch(cycles);
+}
+
+void DspBus::advance_memory_switch(const unsigned cycles) {
   if (switch_delay_ == 0) { return; }
   if (cycles < switch_delay_) {
     switch_delay_ -= cycles;

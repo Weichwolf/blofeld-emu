@@ -1719,6 +1719,14 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           Ordering/action selection remain
                                           explicit, without physical clocks
                                           (dsp-reference-cycle.txt).
+                                          A separate reference-clock owner now
+                                          automates F1/F2, derives DMA indices and
+                                          advances delay/CLK2 time through actual
+                                          DMA waits, with joint replay and
+                                          machine-only restore detection. Backend
+                                          admission remains explicit; complete
+                                          seven-stage timing and normal boot
+                                          remain open (dsp-fetch-clock.txt).
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast
