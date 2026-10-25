@@ -577,10 +577,17 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
       result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);
     }
     if (inputs.access) { result.progress = state_->cpu.advance_reference_access(*inputs.access); }
+    // The older register source must be sampled before a younger AG2 R update.
+    // This is a selected reference phase order, not a silicon sampling claim.
+    const bool register_store = inputs.memory && state_->cpu.address_stage(*inputs.memory).kind ==
+                                                     DspAddressStageKind::peripheral_register;
+    if (register_store) { result.memory = state_->cpu.execute_reference_memory(*inputs.memory); }
     if (inputs.address_update) {
       result.address_update = state_->cpu.publish_reference_address(*inputs.address_update);
     }
-    if (inputs.memory) { result.memory = state_->cpu.execute_reference_memory(*inputs.memory); }
+    if (inputs.memory && !register_store) {
+      result.memory = state_->cpu.execute_reference_memory(*inputs.memory);
+    }
     if (inputs.fetch) { result.fetch = state_->cpu.reference_fetch(); }
     return result;
   } catch (const std::exception &error) {

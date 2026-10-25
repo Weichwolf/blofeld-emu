@@ -1,17 +1,21 @@
-Native immediate peripheral pipeline
+Native peripheral-store pipeline
 
-The opt-in automatic_memory profile accepts two-word immediate MOVEP stores to
-short X/Y I/O. The selected high- and low-I/O encodings use the real F2 opcode
-and extension. Nine own instruction encodings are pinned independently against
-the Freescale assembler; no manufacturer program bytes are embedded in tests.
-Register-source MOVEP and other unqualified forms still fail at Decode.
+The opt-in automatic_memory profile accepts immediate and X/Y/R/N/M register
+MOVEP stores to short X/Y I/O. The selected high- and low-I/O encodings use the
+real F2 opcode and, for immediate data only, its extension. Nine immediate and
+112 register/port own encodings are pinned independently against the Freescale
+assembler. No manufacturer program bytes are embedded in tests. Control, stack,
+accumulator sources and general port reads remain unqualified.
 
-AG1 captures the actual extension and fixed peripheral address, with no R/N/M
-input or pointer update. AG2 advances that record without inventing a register
-write. Native E1 consumes the same captured opcode/extension and dispatches one
-real write through the existing strict device handler. E2 publishes the actual
-native PC, counters and remaining result without repeating I/O. A neighboring
-AGU dependency cannot turn the immediate port into a fictitious R0 consumer.
+AG1 captures the fixed port address and actual extension where present, with no
+fictitious AGU input or pointer update. AG2 advances that record without a
+register write. Native E1 consumes the same F2 words and dispatches one actual
+write through the strict owner. A register source comes from native CPU state;
+no caller supplies its value. The selected reference order publishes the older
+E2, samples register-store E1, then publishes younger AG2. This preserves old
+R0 for a store adjacent to (R0)+ while retaining the actual increment through
+retirement. Other memory forms retain their existing phase order. E2 publishes
+the real PC/counters without repeating I/O or inventing a two-clock register stall.
 
 The complete reported core footprint retains the short-I/O write and concurrent
 P fetch. The arbiter classifies the idle-controller peripheral path separately
@@ -25,20 +29,31 @@ I/O: unknown/invalid actual writes still fail at their strict native owner.
 Joint snapshots retain extension identity, phase records, actual effects and
 peripheral state. Directed cases cover literal extrema, low X/Y registers, SHI
 transmission without a repeated HTX write, captured/future code replacement,
-trusted replay, unknown Y ownership, reserved bits, failed simultaneous F2,
+trusted replay, register producer/younger AGU overlap, captured/future opcodes,
+unknown Y ownership, reserved bits, failed simultaneous F2,
 active DMA and the separate public native-reference caller.
 
   cmake --build --preset strict --target blofeld-peripheral-pipeline-test
   ctest --test-dir build/strict -j1 --output-on-failure \
-    -R '^dsp_pipeline_(peripheral_writes|peripheral_state|bootstrap_prefix)$'
+    -R '^dsp_pipeline_(peripheral_writes|peripheral_state|register_peripheral_writes|register_peripheral_state|bootstrap_prefix)$'
 
 The optional local document-derived SPI prefix is SHA-256 pinned. With the
-selected OMR branches it retires eleven native instructions over29 reference
-clocks, then refuses register-source SHI MOVEP at P:ff0019 before the held final
-branch result retires. CLR flags and short-immediate R1 state have independent
-primary expectations. It is a partial document reconstruction, not an
+selected OMR branches it retires twelve native instructions over30 reference
+clocks, then refuses the peripheral-source JCLR at P:ff001a. The preceding SHI
+register store has only reached Decode and has not enabled SHI. CLR flags and
+short-immediate R1 state have independent primary expectations. It is a partial
+document reconstruction, not an
 authentic full mask ROM or normal instrument boot. The modeled bus order remains
 a declared reference order, not a measured silicon trace. General peripheral
 forms, active DMA timing, general branches/loops/IRQ/reset fill, authentic ROM/reserved
 Y:002000, original Desktop/Keyboard reset-to-instrument operation and the full
 MIDI/audio/storage/update/recovery/physical acceptance objective remain open.
+
+FM TableA-1 gives one clock for register-source MOVEP and two for immediate
+data. Six quiet windows agree with these primary counts in the normal vendor
+model, including old R0 sampling before a younger postincrement. Readback is
+checked after the quiet drain; immediate post-step peripheral visibility differs.
+This does not qualify silicon sampling stages or the switched memory map. See
+dsp-register-peripheral-reference.json. The generator assembles/executes nothing:
+
+  python3 tools/prepare_dsp_register_peripheral_reference.py

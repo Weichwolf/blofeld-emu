@@ -1231,7 +1231,7 @@ DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t add
   if (!opcode) { throw Fault("Native AG1 awaits actual F2 at P:" + hex(address, 6)); }
   std::optional<DspProgramWord> extension;
   const auto form = decode_memory_stage(*opcode);
-  if (form && form->peripheral) {
+  if (form && form->peripheral && !form->peripheral_register) {
     const auto next = (address + 1) & word_mask;
     const auto value = impl_->native.reference().fetch().peek(next);
     if (!value) { throw Fault("Native peripheral AG1 awaits actual F2 at P:" + hex(next, 6)); }

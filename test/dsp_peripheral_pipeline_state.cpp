@@ -25,10 +25,9 @@ namespace blofeld::test::peripheral_pipeline {
 namespace {
 using native_access::fault;
 constexpr unsigned changed_literal = 0x654321;
-constexpr unsigned register_movep = 0x08c43c;
-constexpr unsigned prefix_clocks = 29;
-constexpr unsigned prefix_native_cycles = 21;
-constexpr unsigned spi_mode_branch = 0xff0016;
+constexpr unsigned prefix_clocks = 30;
+constexpr unsigned prefix_native_cycles = 25;
+constexpr unsigned spi_store = 0xff0019;
 constexpr unsigned boot_spi_control = 0xa9;
 constexpr unsigned clear_status = 0x14;
 constexpr unsigned condition_codes = 0xff;
@@ -103,25 +102,6 @@ void rejected_write(const WriteFailure &sample) {
     require(error == first,
             "Joint replay preserves the complete native peripheral failure frontier");
   }
-}
-
-void register_source_stays_unqualified() {
-  DspMachine machine;
-  const std::array<std::string, 1> code{"movep x0,x:<<$fffffc"};
-  prepare(machine, code);
-  // Independent Freescale encoding; register-source operand timing is separate.
-  require(machine.bus().peek_program(body) == register_movep,
-          "Register MOVEP boundary uses the independent one-word encoding");
-  const auto before = machine.cpu().debug_state();
-  DspFetchRun run(contract(), machine);
-  clocks(run, machine, 2);
-  const auto error =
-      fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-  require(error.contains("automatic DSP decode") && error.contains("pc=") &&
-              error.contains("omr=") && run.faulted() && run.completed_cycles() == 2 &&
-              machine.cpu().debug_state() == before && !machine.bus().once_latch() &&
-              machine.bus().last_dma_cycle() == 2,
-          "Register-source MOVEP refuses before any architectural or peripheral effect");
 }
 
 void failed_f2_precedes_write() {
@@ -240,7 +220,6 @@ void state_checks() {
   reference_idle_write();
   reference_refusals();
   active_dma_refuses_port();
-  register_source_stays_unqualified();
   captured_literal(false);
   captured_literal(true);
   snapshots();
@@ -289,21 +268,24 @@ void bootstrap(const BootstrapFiles &files) {
   expected.cpu.sr |= clear_status;
   expected.cpu.r[1] = boot_spi_control;
   expected.cpu.r[5] = 0;
-  expected.cpu.pc = spi_mode_branch;
-  expected.native_instructions += 11;
+  expected.cpu.pc = spi_store;
+  expected.native_instructions += 12;
   expected.native_cycles += prefix_native_cycles;
-  require(machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0,
-          "Native OMR branches reach SPI selection with independently expected CLR/R state");
+  require(machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0 &&
+              (machine.bus().shi().read(control) & 1U) == 0,
+          "Native OMR branches reach the SPI store with independently expected CLR/R state");
   const auto saved = run.checkpoint(machine);
   std::string first;
   for (unsigned replay = 0; replay < 2; ++replay) {
     run.restore(saved, machine);
     const auto error =
         fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-    require(error.contains("Unqualified automatic DSP decode P:0xff0019") && run.faulted() &&
+    require(error.contains("Unqualified automatic DSP decode P:0xff001a") && run.faulted() &&
                 run.completed_cycles() == prefix_clocks &&
-                machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0,
-            "Register-source SHI MOVEP remains the explicit frontier; no boot routine is skipped");
+                machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0 &&
+                (machine.bus().shi().read(control) & 1U) == 0,
+            "SHI peripheral JCLR remains the explicit frontier before the older register store "
+            "executes");
     if (replay == 0) { first = error; }
     require(error == first, "Both reset-prefix continuations stop at the identical actual branch");
   }

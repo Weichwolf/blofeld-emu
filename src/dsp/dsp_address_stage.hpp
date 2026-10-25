@@ -30,7 +30,11 @@ struct DspAddressStageLane {
   bool pointer_update = false;
 };
 
-enum class DspAddressStageKind : std::uint8_t { register_agu, peripheral_immediate };
+enum class DspAddressStageKind : std::uint8_t {
+  register_agu,
+  peripheral_immediate,
+  peripheral_register
+};
 
 struct DspAddressStageView {
   DspProgramWord word;

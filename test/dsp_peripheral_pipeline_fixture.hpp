@@ -20,6 +20,8 @@ using memory_pipeline::stages;
 inline constexpr unsigned body = memory_pipeline::body;
 void writes();
 void state_checks();
+void register_writes();
+void register_state_checks();
 
 struct BootstrapFiles {
   std::filesystem::path rom;

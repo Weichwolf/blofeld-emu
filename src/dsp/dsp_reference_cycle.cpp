@@ -76,13 +76,14 @@ void append(DspReferenceCycleResult &result, const DspMemoryAccess access) {
 }
 
 std::optional<DspMemoryAccess> peripheral_store(const std::optional<DspAddressStageView> &memory) {
-  if (!memory || memory->kind != DspAddressStageKind::peripheral_immediate) { return std::nullopt; }
+  if (!memory || memory->kind == DspAddressStageKind::register_agu) { return std::nullopt; }
   const auto access = memory->data_accesses[0];
-  if (!memory->extension || memory->pointer_update || memory->secondary ||
+  const bool immediate = memory->kind == DspAddressStageKind::peripheral_immediate;
+  if (memory->extension.has_value() != immediate || memory->pointer_update || memory->secondary ||
       memory->data_access_count != 1 || access.target.space == DspSpace::p ||
       access.target.address < short_io_begin || access.target.address > address_mask ||
       access.operation != DspMemoryOperation::write) {
-    throw Fault("Unqualified immediate native peripheral footprint");
+    throw Fault("Unqualified native peripheral store footprint");
   }
   return access;
 }

@@ -22,6 +22,7 @@ struct DspMemoryForm {
   std::size_t lane_count = 1;
   bool long_pair = false;
   std::optional<DspAddress> peripheral = std::nullopt;
+  bool peripheral_register = false;
 };
 
 [[nodiscard]] std::optional<DspMemoryForm> decode_memory_stage(std::uint32_t opcode);

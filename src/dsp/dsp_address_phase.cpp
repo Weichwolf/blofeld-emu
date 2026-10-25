@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
@@ -34,11 +35,8 @@ std::optional<unsigned> address_register(const std::uint32_t opcode) {
   if (opcodes.getInstructionTypes(opcode, first, second) == 0) {
     throw Fault("Undefined native address-phase opcode=" + hex(opcode, 6));
   }
-  if ((first == dsp56k::Movep_ppea || first == dsp56k::Movep_Xqqea ||
-       first == dsp56k::Movep_Yqqea) &&
-      dsp56k::getFieldValue(first, dsp56k::Field_W, opcode) != 0 &&
-      dsp56k::getFieldValue(first, dsp56k::Field_MMM, opcode) == 6 &&
-      dsp56k::getFieldValue(first, dsp56k::Field_RRR, opcode) == 4) {
+  // Fixed-port stores have no AGU address update; capture still validates all R values.
+  if (const auto form = decode_memory_stage(opcode); form && form->peripheral) {
     return std::nullopt;
   }
   const auto type = effective(first) || absolute(first) ? first : second;

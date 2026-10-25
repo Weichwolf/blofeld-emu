@@ -49,6 +49,27 @@ std::optional<DspMemoryForm> peripheral_immediate(const Type type, const unsigne
                                                  dsp56k::getFieldValue(type, field, opcode)}};
 }
 
+std::optional<DspMemoryForm> peripheral_register(const Type type, const unsigned opcode) {
+  if (type != dsp56k::Movep_Spp && type != dsp56k::Movep_SXqq && type != dsp56k::Movep_SYqq) {
+    return std::nullopt;
+  }
+  const auto source = dsp56k::getRegister(type, dsp56k::Field_dddddd, opcode);
+  if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) == 0 ||
+      (!data_register(source) && !address_register(source))) {
+    return std::nullopt;
+  }
+  const bool high = type == dsp56k::Movep_Spp;
+  const bool y = type == dsp56k::Movep_SYqq ||
+                 (high && dsp56k::getFieldValue(type, dsp56k::Field_s, opcode) != 0);
+  const auto offset =
+      high ? dsp56k::getFieldValue(type, dsp56k::Field_pppppp, opcode)
+           : dsp56k::getFieldValue(type, dsp56k::Field_q, dsp56k::Field_qqqqq, opcode);
+  return DspMemoryForm{.peripheral =
+                           DspAddress{.space = y ? DspSpace::y : DspSpace::x,
+                                      .address = (high ? high_io_begin : low_io_begin) + offset},
+                       .peripheral_register = true};
+}
+
 DspMemoryOperation
 operation(const Type type, const dsp56k::Field field, const std::uint32_t opcode) {
   return dsp56k::getFieldValue(type, field, opcode) != 0 ? DspMemoryOperation::read
@@ -117,6 +138,7 @@ std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
   auto second = dsp56k::Invalid;
   if (opcodes.getInstructionTypes(opcode, first, second) == 0) { return std::nullopt; }
   if (const auto peripheral = peripheral_immediate(first, opcode)) { return peripheral; }
+  if (const auto peripheral = peripheral_register(first, opcode)) { return peripheral; }
   if (dsp56k::Opcodes::getOpcodeLength(opcode, first, second) != 1) { return std::nullopt; }
   const auto type = memory(first) ? first : second;
   if (type == dsp56k::Movex_ea || type == dsp56k::Movey_ea || type == dsp56k::Movec_ea) {

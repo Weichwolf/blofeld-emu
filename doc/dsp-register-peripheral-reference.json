@@ -1,0 +1,94 @@
+{
+  "scope": "Six fixed own initial-map register/immediate MOVEP write windows. Independent primary instruction counts and normal-mode model observations; no silicon stage, switched-map, authentic ROM or full-device acceptance claim.",
+  "primary_reference": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "section": "TableA-1: register MOVEP1clock, immediate/effective-address MOVEP2clock."
+  },
+  "toolchain": "Pinned Symphony Studio1.1.0 normal-mode56371 and Freescale assembler6.3.28; local RSP Boolean-success transport correction only. Installed processor libraries unchanged.",
+  "own_program_sha256": "ef830844f5cca6b0750e7de21aaadaaa1383552512ef2c71bdf8797b443b97bc",
+  "own_assembly_sha256": "baa943572eae5701147769df3518852c09746335de1c795737ea3db9e355ba1c",
+  "static_dynamic_own_instructions": 169,
+  "generator": "tools/prepare_dsp_register_peripheral_reference.py",
+  "own_register_encoding_count": 112,
+  "own_register_encoding_words_sha256": "08c82bb81d1da45232d0dc5d8823e60676ff5ef76cd90ff50a8cafee1e4e3acc",
+  "cases": [
+    {
+      "name": "x0_quiet",
+      "source": "x0",
+      "value": 3,
+      "alias": false,
+      "expected_hckr": 3,
+      "expected_x0": 3,
+      "expected_y1": 3,
+      "expected_anchor_clocks": 7,
+      "observed_anchor_clocks": 7
+    },
+    {
+      "name": "r1_quiet",
+      "source": "r1",
+      "value": 9,
+      "alias": false,
+      "expected_hckr": 9,
+      "expected_x0": 9,
+      "expected_y1": 9,
+      "expected_anchor_clocks": 7,
+      "observed_anchor_clocks": 7
+    },
+    {
+      "name": "r0_quiet",
+      "source": "r0",
+      "value": 11,
+      "alias": false,
+      "expected_hckr": 11,
+      "expected_x0": 11,
+      "expected_y1": 11,
+      "expected_anchor_clocks": 7,
+      "observed_anchor_clocks": 7
+    },
+    {
+      "name": "immediate_quiet",
+      "source": "immediate",
+      "value": 13,
+      "alias": false,
+      "expected_hckr": 13,
+      "expected_x0": 13,
+      "expected_y1": 13,
+      "expected_anchor_clocks": 8,
+      "observed_anchor_clocks": 8
+    },
+    {
+      "name": "r0_younger_r0_update",
+      "source": "r0",
+      "value": 17,
+      "alias": true,
+      "expected_hckr": 17,
+      "expected_x0": 2311527,
+      "expected_y1": 18,
+      "expected_anchor_clocks": 8,
+      "observed_anchor_clocks": 8
+    },
+    {
+      "name": "r1_younger_r0_update",
+      "source": "r1",
+      "value": 19,
+      "alias": true,
+      "expected_hckr": 19,
+      "expected_x0": 2311527,
+      "expected_y1": 20,
+      "expected_anchor_clocks": 8,
+      "observed_anchor_clocks": 8
+    }
+  ],
+  "anchor_rule": "Last preceding NOP after8quiet NOPs to sixth following NOP: register1/immediate2 + optional postincrement load1 + six NOPs.",
+  "peripheral_observation": "First immediate post-step reads for register writes still showed the previous HCKR value. Unchanged expected values appear after the fixed quiet drain. No hardware sampling phase inferred.",
+  "canaries": {
+    "X:000100": "13579b",
+    "Y:000100": "2468ac",
+    "X:source-value": "234567"
+  },
+  "all_windows_agree": true,
+  "physical_phase_qualified": false,
+  "switched_memory_map_qualified": false,
+  "normal_boot_qualified": false
+}

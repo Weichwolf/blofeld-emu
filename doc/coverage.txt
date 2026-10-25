@@ -1915,11 +1915,17 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           the real F2 literal through AG1/AG2,
                                           commits one strict native E1 write and
                                           retires in E2 without a fictitious R
-                                          update or repeated I/O. Three directed
+                                          update or repeated I/O. Five directed
                                           groups include a document-derived boot
                                           prefix, stopping at unsupported SHI
-                                          register MOVEP; no full ROM/boot is
-                                          implied (dsp-peripheral-pipeline.txt).
+                                          peripheral JCLR; no full ROM/boot is
+                                          implied. Register-source X/Y/R/N/M
+                                          stores use actual native E1 state,
+                                          one-clock issue and old-R/younger-AG2
+                                          preservation. 28 sources/112 encodings,
+                                          six independent quiet windows and
+                                          strict state/failure cases are scoped
+                                          in dsp-peripheral-pipeline.txt.
                                           Selected OMR JSET/JCLR now preserve
                                           older F2 words, fetch fresh targets
                                           and validate actual native E1/E2.

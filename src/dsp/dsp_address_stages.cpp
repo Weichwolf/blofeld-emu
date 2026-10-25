@@ -78,7 +78,9 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu,
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
     DspAddressStageView view;
     if (form->peripheral) {
-      if (!extension) { throw Fault("Native peripheral AG1 requires its real F2 extension"); }
+      if (extension.has_value() == form->peripheral_register) {
+        throw Fault("Native peripheral AG1 has a mismatched F2 extension form");
+      }
       const auto target = *form->peripheral;
       view = {.word = word,
               .update = {.space = target.space,
@@ -89,7 +91,8 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu,
               .data_accesses = {DspMemoryAccess{.target = target,
                                                 .operation = DspMemoryOperation::write}},
               .data_access_count = 1,
-              .kind = DspAddressStageKind::peripheral_immediate,
+              .kind = form->peripheral_register ? DspAddressStageKind::peripheral_register
+                                                : DspAddressStageKind::peripheral_immediate,
               .extension = extension};
     } else {
       if (extension) { throw Fault("Unexpected extension for native register AG1"); }

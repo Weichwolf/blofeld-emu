@@ -1088,10 +1088,13 @@ if(BUILD_TESTING)
   add_test(NAME dsp_pipeline_omr_branches COMMAND blofeld-branch-pipeline-test branches)
   add_test(NAME dsp_pipeline_branch_state COMMAND blofeld-branch-pipeline-test state)
   add_executable(blofeld-peripheral-pipeline-test test/dsp_peripheral_pipeline_test.cpp
-    test/dsp_peripheral_pipeline_writes.cpp test/dsp_peripheral_pipeline_state.cpp)
+    test/dsp_peripheral_pipeline_writes.cpp test/dsp_peripheral_pipeline_state.cpp
+    test/dsp_register_peripheral_writes.cpp test/dsp_register_peripheral_state.cpp)
   target_link_libraries(blofeld-peripheral-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_pipeline_peripheral_writes COMMAND blofeld-peripheral-pipeline-test writes)
   add_test(NAME dsp_pipeline_peripheral_state COMMAND blofeld-peripheral-pipeline-test state)
+  add_test(NAME dsp_pipeline_register_peripheral_writes COMMAND blofeld-peripheral-pipeline-test register-writes)
+  add_test(NAME dsp_pipeline_register_peripheral_state COMMAND blofeld-peripheral-pipeline-test register-state)
   add_test(NAME dsp_pipeline_bootstrap_prefix COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_bootstrap_pipeline.py"
     $<TARGET_FILE:blofeld-peripheral-pipeline-test>
