@@ -32,6 +32,7 @@
 # Publication
 
 - The public repository is Weichwolf/blofeld-emu; its original implementation uses GPL-3.0-only.
+- Keep `/home/cosmo/Git/blofeld-emu` on `main` and synchronize it after every verified publication. Continue active work in this canonical checkout; preserve open source changes and local references before removing unused worktrees.
 - Push only reviewed source commits to upstream/main. Never push local/pre-publication-* backup branches or use --all/--mirror.
 - Keep detailed manufacturer disassembly analysis under ignored doc/local/. Public tests pin reference hashes instead of embedding manufacturer program bytes.
 - All GitHub issue communication belongs in private Weichwolf/blofeld-src, including emulator interfaces, test summaries and source findings. Do not create or comment on blofeld-emu issues. Existing emulator issues are migrated with their history before the originals are removed. Raw disassembly and reference assets retain their local-only rules.

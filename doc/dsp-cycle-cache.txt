@@ -1,0 +1,30 @@
+Host DSP cycle-count cache
+
+  cmake --build --preset strict --target blofeld-dsp-cycle-cache-test
+  ctest --test-dir build/strict -R '^(dsp_cycle_cache|dsp_checkpoint|dsp_dispatch_cache|native_dsp)$' --output-on-failure
+
+The native SDK's separate per-PC cycle-count cache now uses1024-byte pages over
+the unchanged24-bit logical program space. Absent entries retain the original
+zero/not-computed sentinel. Cold reads/invalidation allocate nothing; first
+memoization allocates a page. Complete reset discards pages; a single code write
+invalidates only its prior byte. Full snapshots deep-copy resident values and
+their logical bound, preserving cached counts even if code later changes.
+Strong copy assignment prepares its replacement before publishing it.
+
+Storage tests compare every value against a dense independent expectation and
+cover low/high/page boundaries,255-cycle bytes, cold probes, stable references,
+snapshot isolation, moves, partial pages and rejected bounds. The actual SDK
+metadata test checks independent NOP=1/immediate-MOVE=2 counts, cache hits,
+invalidation and restoration of a nonzero captured count without recomputation.
+Constructor priority writes use the real board bus; unexpected peripheral/data
+execution rejects. Forced-interpreter construction, M0/SR/LA writes, code changes,
+snapshot restoration and cleanup retain null JIT entries/optional runtime and
+empty loop registries while preserving actual register values. Existing native
+instruction, loop, IRQ, access-continuation, coupling and original sample
+regressions check integration.
+
+This changes host memoization storage. It does not alter guest P/X/Y storage,
+strict bus admission, cycle equations, native counters or instruction semantics.
+First use and full snapshots still allocate and may throw; they remain outside
+any future real-time audio callback. No physical clock/cache timing, complete
+boot, live original MIDI/audio or hardware equivalence is established.

@@ -78,6 +78,70 @@ checked. No voltage winner, GPIO latch initialization or DSP reset is invented.
 Physical reset wiring, passive-bias transfer/latency and coupled power-on behavior
 remain unknown; this is not full board boot, MIDI/audio or recovery qualification.
 
+original_update_reset_inputs retains that strict baseline, then restores the
+healthy post-vector checkpoint for both declared Q7 observations, low/high, during
+opposed passive pulls only. Strong/unknown output conflicts remain strict. Each
+order/phase runs both suffixes twice, checking full raw traces, native states,
+RAM, clocks, original DSP downloads/padding and MCU NVM bytes/knowledge/history.
+The unchanged resident loader must execute90312 instructions/233742 bus cycles
+after the five vector cycles and reach8200 using native MODRR0/PR2 routing.
+Additional laboratory inputs are PE2/PE3 loopback, weak PE5/PE6 pull-downs, fresh
+PHY edges15 at8049 and idle-high PR2. PE4/PE7 use actual MCU biases. The modeled
+IRQA route is PJ0, resolved from actual MCU drivers/biases and DSP internal
+pull-up; both endpoint readers share that net. Its native high/low/high history
+must leave the original masked DSP edge pending. These observations do not
+establish physical wiring, a passive voltage winner or whole-board recovery.
+
+  ctest --test-dir build/strict -R '^original_update_reset_inputs$' --output-on-failure
+
+Supplemental local ASan/UBSan diagnostics continue the same low-Q7/order0/phase0
+owner beyond8200. Without a TIO0 observation, the native timer fails at87ea after
+28 application instructions. Observing idle-high PT0 before capture activation
+permits1582162 application instructions/9233816 MCU reference ticks, then the
+actual PU read0278 atb98d fails with unknown mask3f. These deltas match the
+independent original_cycle_application cold-start census. MCU NVM stays exact;
+the DSP remains in its original transferred helper at2e6b/R1=144ba, epoch1.
+This diagnostic is not CTest-adopted or separately TSan/hardware validated.
+Shorter bounded runs stop inside real delay counters, not a proven reply wait.
+
+PB0 alone cannot qualify as DSP RESET: display initialization leaves DDRB=f7,
+PORTB=80, hence PB0 output-low; physical LCD transfers also end at80. Direct
+active-low wiring would hold the DSP in reset; unconditional inversion conflicts
+with PB0-high serial boot. Additional gating is not evidenced.
+PU0 is a stronger source-consistent reset/readback candidate: PTU=00/DDRU=01
+holds low through all delays; DDRU=00 atb98a releases it before the bit0 poll.
+DSP RESET has an internal pull-up (DSP56371UM table2-6). Continuity is unproved;
+direct active-low HREQ has the opposite ready polarity. Unknown mask3f is the
+implemented whole-port mask, not six ready signals; unused inputs stay unknown.
+Shared scheduling admits an explicit fixed-mode EXTAL hold (dsp-reset.txt).
+begin_dsp_reset/release_dsp_reset accept a consumed MCU instruction boundary or
+the actual observe_write signal callback; unrelated active callbacks reject.
+MCU cycles, WAI/reset periods and external events continue while the DSP is held.
+No GPIO route is installed by these APIs. joint_dsp_hold uses own native
+PU latch/direction stores with three supplied release phases and both tie orders;
+the trailing O cycle advances recovery, not DSP instructions. Twelve suffix
+replays check literal time and full observed CPU/stack state. Repeated joint
+resets retain lifetime counts/RAM. Asynchronous assertion and PU0 continuity/
+readback remain unqualified; no high input is fabricated.
+Additional held-WAI and held-system-reset cases replay twice each. WAI idle
+periods17+3 and195 reset OSC edges/five native vector periods retain literal
+time with zero DSP instructions until release. A cut after131 reset edges keeps
+a partial EXTAL period; recovery then executes exactly two native NOPs.
+original_reset_start starts the DSP reference owner at the actual U0-low write
+(B944); earlier DSP power-on history remains outside this experiment. All original
+MCU startup/delay instructions execute. U0 release at B98A resolves against the
+declared DSP RESET pull-up, without a fixed ready delay or a PC-triggered reply.
+Unknown U1..5 still fault with mask3e. A separate declared weak pull-down profile
+permits native transmission of97 frames/7275 stores and all94 stage words; only
+the original trailing UI word remains in the copied FIFO. Held-reset replay
+compares full observed CPU/stack state, all5120 MCU SRAM bytes and event/census
+suffixes. Independent manual costs audit both timelines through the unchanged
+Y002000 fault. This does not qualify PU0 continuity, physical latency or full boot.
+
+  ctest --test-dir build/strict -R '^original_reset_start$' --output-on-failure
+
+Detailed observations/inputs remain under ignored doc/local/reset-application/.
+
 References: S12MEBIV3 figure3-9, 9S12UF32DGV1 section4.2.1.1, S12UF32PIMV2
 figures3-30/3-31, S12CPUV2 STAA EXT bus sequence; DSP56371UM tables2-6/2-8.
 Official bundles/hashes: doc/hardware/sources.json.

@@ -1508,3 +1508,167 @@
 +			return result;
 +		}
 +
+
+diff --git a/source/dsp56kEmu/dsp.cpp b/source/dsp56kEmu/dsp.cpp
+--- a/source/dsp56kEmu/dsp.cpp
++++ b/source/dsp56kEmu/dsp.cpp
+@@ -567 +567 @@
+-	uint32_t DSP::referenceNextCycles() const
++	TWord DSP::referenceNextOpcode() const
+@@ -578 +578,6 @@
+-		return referenceCycleCost(pc, opcode);
++		return opcode;
++	}
++
++	uint32_t DSP::referenceNextCycles() const
++	{
++		return referenceCycleCost(reg.pc.toWord(), referenceNextOpcode());
+@@ -1615 +1620 @@
+-				m_opcodeCycleCache[_addr] = 0;
++				m_opcodeCycleCache.invalidate(_addr);
+@@ -1908 +1913 @@
+-			m_opcodeCycleCache.assign(mem.sizeP(), 0);
++			m_opcodeCycleCache.reset(mem.sizeP());
+diff --git a/source/dsp56kEmu/dsp.h b/source/dsp56kEmu/dsp.h
+--- a/source/dsp56kEmu/dsp.h
++++ b/source/dsp56kEmu/dsp.h
+@@ -6,0 +7 @@
++#include "dsp/dsp_cycle_cache.hpp"
+@@ -141,2 +142,2 @@
+-		// this vector empty because they account cycles per compiled block. 0 = not yet computed.
+-		std::vector<uint8_t>			m_opcodeCycleCache;
++		// this cache empty because they account cycles per compiled block. 0 = not yet computed.
++		blofeld::DspCycleCache		m_opcodeCycleCache;
+@@ -193 +194 @@
+-			std::vector<uint8_t> opcodeCycleCache;
++			blofeld::DspCycleCache opcodeCycleCache;
+@@ -281,0 +283 @@
++		TWord referenceNextOpcode() const;
+diff --git a/source/dsp56kEmu/dsp_ops.inl b/source/dsp56kEmu/dsp_ops.inl
+--- a/source/dsp56kEmu/dsp_ops.inl
++++ b/source/dsp56kEmu/dsp_ops.inl
+@@ -528,0 +529,2 @@
++		if(m_referenceMode && isSixteenBitArithmetic())
++			throw std::runtime_error("Unqualified DSP reference NORMF sixteen-bit arithmetic");
+@@ -533,0 +536,3 @@
++		const auto count = signextend<int,24>(s);
++		if(m_referenceMode && (count < -55 || count > 56))
++			throw std::runtime_error("Unqualified DSP reference NORMF shift count=" + std::to_string(count));
+@@ -541,2 +546,8 @@
+-			// ASR
+-			alu_asr(D, D, static_cast<int>(s));
++			// FM13-147 permits NORMF +56 while ASR itself stops at55.
++			// Compose two legal right shifts; this is still one native instruction.
++			if(m_referenceMode && count == 56) {
++				alu_asr(D, D, 55);
++				alu_asr(D, D, 1);
++			} else {
++				alu_asr(D, D, static_cast<int>(s));
++			}
+diff --git a/source/dsp56kEmu/dsp_ops_alu.inl b/source/dsp56kEmu/dsp_ops_alu.inl
+--- a/source/dsp56kEmu/dsp_ops_alu.inl
++++ b/source/dsp56kEmu/dsp_ops_alu.inl
+@@ -4,0 +5,2 @@
++
++#include <bit>
+@@ -620,0 +623,2 @@
++		if(m_referenceMode && isSixteenBitArithmetic())
++			throw std::runtime_error("Unqualified DSP reference CLB sixteen-bit arithmetic");
+@@ -731,0 +736,2 @@
++		if(m_referenceMode && isSixteenBitArithmetic())
++			throw std::runtime_error("Unqualified DSP reference DIV sixteen-bit arithmetic");
+@@ -743,9 +749,10 @@
+-		d.var <<= 1;
+-		d.var |= static_cast<TInt64>(sr_test_noCache(CCR_C) ? 1 : 0) << g_aluShift;	// carry enters at the accumulator LSB
+-
+-		const auto msbNew = bitvalue<55 + g_aluShift>(d);
+-
+-		if( c )
+-			d.var = ((d.var + (signextend<TInt64,24>(s24.var) << (24 + g_aluShift)) )&static_cast<TInt64>(0x00ffffffff000000ull << g_aluShift)) | (d.var & (0xffffffll << g_aluShift));
+-		else
+-			d.var = ((d.var - (signextend<TInt64,24>(s24.var) << (24 + g_aluShift)) )&static_cast<TInt64>(0x00ffffffff000000ull << g_aluShift)) | (d.var & (0xffffffll << g_aluShift));
++		// Aligned 56-bit hardware arithmetic is modular. Signed host add/sub
++		// overflows when the preceding left shift changes the extension sign.
++		const uint64_t shifted = (static_cast<uint64_t>(d.var) << 1) |
++			(static_cast<uint64_t>(sr_test_noCache(CCR_C)) << g_aluShift);
++		const auto msbNew = bitvalue<uint64_t,55 + g_aluShift>(shifted);
++		const auto divisor = static_cast<uint64_t>(signextend<TInt64,24>(s24.var)) << (24 + g_aluShift);
++		const auto result = c ? shifted + divisor : shifted - divisor;
++		constexpr uint64_t upper = 0x00ffffffff000000ull << g_aluShift;
++		constexpr uint64_t lower = 0xffffffull << g_aluShift;
++		d.var = std::bit_cast<TInt64>((result & upper) | (shifted & lower));
+diff --git a/source/dsp56kEmu/jit.cpp b/source/dsp56kEmu/jit.cpp
+--- a/source/dsp56kEmu/jit.cpp
++++ b/source/dsp56kEmu/jit.cpp
+@@ -123,2 +123,3 @@
+-	Jit::Jit(DSP& _dsp) : m_dsp(_dsp), m_trampoline(_dsp), m_rt(new JitRuntime())
+-	{
++	Jit::Jit(DSP& _dsp) : m_dsp(_dsp), m_trampoline(_dsp), m_rt(g_useJIT ? new JitRuntime() : nullptr)
++	{
++		if constexpr(!g_useJIT) return;
+@@ -259,0 +261 @@
++		if constexpr(!g_useJIT) return;
+@@ -391,0 +394 @@
++		if constexpr(!g_useJIT) return;
+@@ -448,0 +452 @@
++		if constexpr(!g_useJIT) return;
+diff --git a/source/dsp56kEmu/jitmem.cpp b/source/dsp56kEmu/jitmem.cpp
+--- a/source/dsp56kEmu/jitmem.cpp
++++ b/source/dsp56kEmu/jitmem.cpp
+@@ -1052,0 +1053 @@
++		mem.requireArrayStorage("JIT pointer", _area, 0);
+diff --git a/source/dsp56kEmu/memory.cpp b/source/dsp56kEmu/memory.cpp
+--- a/source/dsp56kEmu/memory.cpp
++++ b/source/dsp56kEmu/memory.cpp
+@@ -5,0 +6,2 @@
++#include <stdexcept>
++#include <string>
+@@ -19,0 +22,18 @@
++	Memory::Memory(const IMemoryValidator& _memoryMap, BusOwned, TWord _memSizeP, TWord _memSizeXY)
++		: m_memoryMap(_memoryMap)
++		, m_busOwned(true)
++		, m_size({_memSizeP, _memSizeXY, _memSizeXY})
++		, m_mem({nullptr})
++		, x(nullptr), y(nullptr), p(nullptr)
++		, m_bridgedMemoryAddress(0)
++		, m_dsp(nullptr)
++	{
++	}
++
++	void Memory::requireArrayStorage(const char* _operation, EMemArea _area, TWord _offset) const
++	{
++		if(m_busOwned)
++			throw std::logic_error(std::string("Bus-owned DSP memory ") + _operation +
++				" bypass: area=" + std::to_string(_area) + " address=" + std::to_string(_offset));
++	}
++
+@@ -112,0 +133 @@
++		requireArrayStorage("write", _area, _offset);
+@@ -166,0 +188 @@
++		requireArrayStorage("extension", MemArea_P, offset);
+@@ -173,0 +196 @@
++		requireArrayStorage("read", _area, _offset);
+@@ -208,0 +232 @@
++		requireArrayStorage("opcode", MemArea_P, _offset);
+@@ -277,0 +302 @@
++		requireArrayStorage("assembly export", MemArea_P, _offset);
+@@ -390,0 +416 @@
++		requireArrayStorage("init pattern", MemArea_COUNT, 0);
+diff --git a/source/dsp56kEmu/memory.h b/source/dsp56kEmu/memory.h
+--- a/source/dsp56kEmu/memory.h
++++ b/source/dsp56kEmu/memory.h
+@@ -59,0 +60 @@
++		const bool m_busOwned = false;
+@@ -96,0 +98,3 @@
++		// The validator owns every word; no array/MMU fallback is available.
++		struct BusOwned {};
++		explicit Memory(const IMemoryValidator& _memoryMap, BusOwned, TWord _memSizeP, TWord _memSizeXY);
+@@ -127,0 +132 @@
++			requireArrayStorage("external-memory remap", MemArea_COUNT, _address);
+@@ -134,0 +140 @@
++			requireArrayStorage("direct pointer", _area, 0);
+@@ -163,0 +170,2 @@
++
++		bool hasArrayStorage() const { return x != nullptr || y != nullptr || p != nullptr; }
+@@ -192,0 +201 @@
++		void requireArrayStorage(const char* _operation, EMemArea _area, TWord _offset) const;

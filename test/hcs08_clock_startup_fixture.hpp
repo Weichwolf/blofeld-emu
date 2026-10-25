@@ -4,9 +4,11 @@
 #include "common/bus.hpp"
 #include "hcs08_fixture.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_adc.hpp"
 #include "keyboard/hcs08_flash.hpp"
 #include "keyboard/hcs08_gpio.hpp"
 #include "keyboard/hcs08_icg.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_system_options.hpp"
 
@@ -44,6 +46,7 @@ public:
   Hcs08Gpio gpio{Hcs08GpioContract::candidate_gt8a};
   Hcs08Icg icg{Hcs08IcgContract::candidate_gt8a_no_clock_events, Hcs08IcgReset::warm};
   Hcs08Spi spi{Hcs08SpiContract::candidate_gt8a_reference_master_edges};
+  Hcs08Adc adc{Hcs08AdcContract::candidate_gt8a_reference_stable_input};
   Hcs08SystemOptions options{Hcs08FlashContract::candidate_gt8a};
   std::vector<Access> peripheral_accesses, flash_reads;
   bool resetting = false;
@@ -54,9 +57,9 @@ public:
   void begin_instruction(ExecutionContext value) override;
   void begin_interrupt(InterruptRequest request, bool reuse_stack) override;
   void acknowledge_interrupt(std::uint16_t vector) override;
-  [[nodiscard]] std::optional<InterruptRequest> interrupt_request(std::uint8_t ccr) const override;
   Hcs08KnownByte read_known_byte(std::uint16_t address) override;
   void write_known_byte(ByteWrite access, std::uint8_t mask) override;
+  [[nodiscard]] std::optional<InterruptRequest> interrupt_request(std::uint8_t ccr) const override;
   void begin_reset(ExecutionContext value) override;
   void end_reset() override;
   std::uint8_t read(std::uint16_t address) override;

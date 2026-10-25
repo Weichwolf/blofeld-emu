@@ -51,7 +51,7 @@ is fitted to let this original sequence continue. See hcs08-bdc-wire.txt.
 Explicit laboratory inputs remain: own native request/GPIO caller invokes the
 real configure/clear-display routines first; nominal locked30MHz MCU, TIM /4,
 4MHz target, declared GPIO/panel routing and other input pads; warm supplied A/X,
-own target preimage/vector and chapter5.2 reference reset periods. The helper,
+own target preimage with unknown vectors and chapter5.2 reference reset periods. The helper,
 MCU NVM and complete downloaded DSP source/program remain unmodified. These
 inputs are not full original startup, a cold controller image or measured wiring.
 The buffering flag is not a workaround: the original loader forces direct I/O
@@ -64,8 +64,9 @@ power-loss/recovery phase and physical recovery remain open. Existing isolated
 upload tests retain their separate scope (keyboard-target.txt). Full headless
 boot/USB-MIDI/Spectre/original audio/persistence, all118 manual functions and
 stock-device equivalence remain required by objective.txt/coverage.txt.
-No fuzzing, physical traffic, new concurrency/TSan claim or full-suite run is
-part of this regression.
+Scoped ASan/UBSan and separate TSan runs cover this reference path; they do not
+establish concurrent board behavior. No fuzzing, physical traffic or full-suite
+run is part of this regression.
 
 Active-background target reset now precedes user-vector fetch. The candidate
 preimage leaves FFFE/FFFF unknown; TARGET records pc-known=0 with canonical pc0.

@@ -45,11 +45,12 @@ void require(const bool condition, const std::string &message) {
   if (!condition) { throw blofeld::Fault(message); }
 }
 
-blofeld::DspRunContract contract(const bool reset) {
+blofeld::DspRunContract contract(const bool reset, const bool agu = false) {
   return {.clock = {.extal_hz = extal_hz,
                     .timebase_hz = timebase_hz,
                     .switch_timing = blofeld::DspClockSwitch::reference_instruction_boundary},
-          .timing = blofeld::DspRunTiming::native_internal_estimates,
+          .timing = agu ? blofeld::DspRunTiming::native_internal_agu_interlocks
+                        : blofeld::DspRunTiming::native_internal_estimates,
           .resets = reset ? blofeld::DspResetTiming::reference_instruction_boundary
                           : blofeld::DspResetTiming::unqualified};
 }
@@ -158,6 +159,7 @@ struct Inputs {
   std::filesystem::path rom;
   std::filesystem::path trace;
   bool reset = false;
+  bool agu = false;
 };
 
 void load_stage(blofeld::DspMachine &machine,
@@ -235,7 +237,7 @@ void reboot(blofeld::DspMachine &machine,
 void run(const Inputs &inputs) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
   const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
-  blofeld::DspMachine machine(contract(inputs.reset));
+  blofeld::DspMachine machine(contract(inputs.reset, inputs.agu));
   machine.bus().install_rom({.start = bootstrap_base, .words = rom});
   // Explicit reference EXTAL/PINIT inputs, not measured Blofeld reset or clock data.
   machine.bus().pll().observe_pinit(false);
@@ -271,6 +273,10 @@ void run(const Inputs &inputs) {
               machine.run_clock().elapsed_ticks() == expected_ticks,
           "Coordinated native REP/PLL/CLK2/memory-map replay preserves state and reference time");
   record("replay", machine, trace);
+  if (inputs.agu) {
+    require(machine.run_clock().interlock_cycle_units() == 0,
+            "Reviewed original boot prefix has no remaining MOVE-to-AGU dependency delay");
+  }
   if (inputs.reset) { reboot(machine, frame, inputs.trace, trace); }
 }
 }
@@ -278,10 +284,15 @@ void run(const Inputs &inputs) {
 int main(const int count, char **arguments) {
   try {
     const bool reset = count == 5 && std::string_view(arguments[4]) == "reset";
-    if (count != 4 && !reset) {
+    const bool agu = count == 5 && std::string_view(arguments[4]) == "agu";
+    if (count != 4 && !reset && !agu) {
       throw blofeld::Fault("Usage: dsp-clock-test firmware.zip private-rom.bin private.trace");
     }
-    run({.firmware = arguments[1], .rom = arguments[2], .trace = arguments[3], .reset = reset});
+    run({.firmware = arguments[1],
+         .rom = arguments[2],
+         .trace = arguments[3],
+         .reset = reset,
+         .agu = agu});
     std::cout << "Original DSP ROM/stage, declared cycle/PLL reference and mid-REP replay passed; "
                  "reserved-write/physical timing/full board boot remain unqualified.\n";
     return 0;

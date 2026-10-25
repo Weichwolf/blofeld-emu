@@ -84,7 +84,8 @@ Further32 reference retirement notifications cannot execute canceled jobs. Inval
 CPU vector-phase misuse refuse before any peripheral/event mutation.
 An unmodeled ICG event separately invalidates knowledge and quarantines access.
 
-Normal Keyboard boot, original GPIO/scanner/SPI/ADC/COP and actual clock-domain
-connections remain incomplete. There is no new original-application, full update/recovery, boot/MIDI/audio,118-function or
+The separate original FLASH/GPIO/ICG continuation is documented in
+hcs08-icg-startup.txt. Normal Keyboard boot, scanner/SPI/ADC/COP and actual
+clock-domain connections remain incomplete. There is no new original-application, full update/recovery, boot/MIDI/audio,118-function or
 physical-device qualification. Original FSTAT and LCD/BKGD frontiers remain.
 No fuzzing, concurrency, realtime callback or physical traffic is introduced.

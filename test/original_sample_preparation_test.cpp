@@ -60,6 +60,10 @@ constexpr unsigned row_mask = 0xfffe0;
 constexpr unsigned scan_selector = 0x1c00;
 constexpr unsigned copy_selector = 0x1a00;
 constexpr unsigned step_limit = 4096;
+// Own caller17 + original prefix4 +176 native seven-instruction loop bodies
+// +original suffix5 +shared request4. Bus/cycle timing remains separate.
+constexpr unsigned copy_steps = 17 + 4 + (page_words * 7) + 5 + 4;
+static_assert(copy_steps < step_limit);
 
 unsigned read_be(std::istream &stream, const unsigned count) {
   unsigned value = 0;
@@ -152,6 +156,18 @@ std::uint64_t execute(blofeld::DspMachine &machine) {
   throw blofeld::Fault("Original preparation exceeded its independent instruction bound");
 }
 
+void execute_copy(blofeld::DspMachine &machine) {
+  const auto before = machine.cpu().debug_state().native_instructions;
+  for (unsigned count = 0; count < copy_steps; ++count) {
+    machine.cpu().step();
+    machine.bus().advance_instruction_cycles(1);
+  }
+  const auto after = machine.cpu().debug_state();
+  require(after.cpu.pc == observation_entry && after.native_instructions >= before &&
+              after.native_instructions - before == copy_steps,
+          "Original copy must reach its landing pad in the independent native instruction budget");
+}
+
 void verify_code(blofeld::DspBus &bus, const std::span<const unsigned> helper) {
   constexpr unsigned service_operand = 0x2e27;
   constexpr unsigned status_read_operand = 0x2e29;
@@ -218,7 +234,7 @@ void copy_page(blofeld::DspMachine &machine,
   for (const auto address : {output_base - 1, output_base + page_bytes}) {
     write(bus, DspSpace::x, address, guard_cookie);
   }
-  execute(machine);
+  execute_copy(machine);
   for (unsigned index = 0; index < page_words; ++index) {
     for (unsigned byte = 0; byte < 3; ++byte) {
       const auto expected = (words[index] >> ((2 - byte) * 8)) & byte_mask;

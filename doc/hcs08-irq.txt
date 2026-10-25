@@ -22,6 +22,12 @@ partial bytes. Only qualified native RTI raw copies recover actual frame masks;
 PC reads remain fully known. RTI leaves H at its actual ISR value/knownness.
 Missing masked-storage capability refuses a partial frame before any write.
 Memory masks are part of board state and must accompany CPU checkpoints.
+Test Memory is ordinary RAM; MaskedMemory explicitly opts qualified owners into
+the capability. Restricted programmer/legacy RAM policies cannot acquire an
+inherited masked-write bypass. ApplicationMemory qualifies both ordinary and
+masked access paths and refuses them during an active reset transaction.
+This application fixture routes SPI IRQ only; a pending ADC source refuses
+with its actual register/context instead of being silently omitted.
 
 service_interrupt is architectural, explicitly untimed. pending_interrupt is
 side-effect-free and does not claim a source. The BDC wrapper holds admission

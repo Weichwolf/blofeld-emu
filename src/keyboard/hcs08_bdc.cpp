@@ -149,6 +149,27 @@ std::optional<Hcs08IrqBusState> Hcs08Bdc::irq_bus_state() const {
   return cpu_.irq_bus_state();
 }
 
+void Hcs08Bdc::start_irq_program(const Hcs08PrefetchContract contract) {
+  healthy();
+  if (state_.active) { fail("program queue", "active background mode owns the halted CPU"); }
+  healthy_ = false;
+  cpu_.start_irq_program(contract);
+  healthy_ = true;
+}
+
+void Hcs08Bdc::advance_irq_program() {
+  healthy();
+  if (state_.active) { fail("program period", "active background mode owns the halted CPU"); }
+  healthy_ = false;
+  cpu_.advance_irq_program();
+  complete_cpu_step();
+}
+
+std::optional<Hcs08PrefetchState> Hcs08Bdc::prefetch_state() const {
+  healthy();
+  return cpu_.prefetch_state();
+}
+
 void Hcs08Bdc::step_cpu() {
   healthy();
   if (state_.active) { fail("CPU step", "active background mode owns the halted CPU"); }

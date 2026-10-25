@@ -47,3 +47,8 @@ unqualified.
 
   cmake --build --preset strict --target blofeld-original-dsp-scheduler-test
   ctest --test-dir build/strict -R '^original_dsp_scheduler$' --output-on-failure
+
+The optional nominal AGU history adds interlock units to planned durations while
+retaining executed SDK units separately. Fixed external timestamps and coordinated
+pending-deadline replay are covered; physical pipeline placement and automatic
+DMA remain unqualified (dsp-agu-interlocks.txt).

@@ -76,6 +76,9 @@ public:
   [[nodiscard]] bool start_irq_bus(Hcs08IrqBusContract contract);
   void advance_irq_bus();
   [[nodiscard]] std::optional<Hcs08IrqBusState> irq_bus_state() const;
+  void start_irq_program(Hcs08PrefetchContract contract);
+  void advance_irq_program();
+  [[nodiscard]] std::optional<Hcs08PrefetchState> prefetch_state() const;
   [[nodiscard]] std::optional<Hcs08InstructionReservation>
   reserve_instruction(Hcs08InstructionContract contract);
   [[nodiscard]] bool instruction_reserved() const;

@@ -97,17 +97,20 @@ private:
   friend class DspMachine;
 
   struct RunHooks {
-    std::function<void(DspState, bool, unsigned)> begin;
+    std::function<void()> ready;
+    std::function<void(DspState, bool, unsigned, std::optional<std::uint32_t>)> begin;
     std::function<void(unsigned)> complete;
     std::function<void()> failed;
     std::function<void()> reset;
     std::function<void(std::uint32_t)> fetched;
     std::function<void(DspMemoryAccess)> data;
     bool vector_estimates = false;
+    bool timing_opcode = false;
   };
 
   struct StepEstimate {
     unsigned units = 0;
+    std::optional<std::uint32_t> opcode = std::nullopt;
     std::optional<DspInterruptVector> interrupt;
   };
 
@@ -119,7 +122,8 @@ private:
   [[nodiscard]] bool faulted() const;
   [[nodiscard]] std::uint64_t native_cycles() const;
   [[nodiscard]] StepEstimate next_step_cycles(bool vector_estimates,
-                                              const Admission *admission = nullptr) const;
+                                              const Admission *admission = nullptr,
+                                              bool timing_opcode = false) const;
   void step_admitted(std::optional<DspInterruptRequest> interrupt);
   void step_impl(DspNativeAccessObserver observer, const Admission *admission);
   [[nodiscard]] DspCoreCheckpoint checkpoint() const;

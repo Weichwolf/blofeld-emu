@@ -70,6 +70,9 @@ this method executes no CPU instruction. All declared simultaneous accesses are
 checked without treating them as separate clocks. Unsafe/unqualified conflicts
 fail with addresses/operation and native PC/OMR. Trusted owner checkpoints retain
 pending requests, held values and DMA cycle state; footprints remain caller-owned.
+The separate advance_reference_dma owner API derives a footprint from the actual
+pending native word and enforces the returned stall before admitting it; see
+dsp-reference-execution.txt. Its samples remain explicit reference inputs.
 
   cmake --build --preset strict --target blofeld-bank-test
   ctest --test-dir build/strict -R '^dsp_bank_arbitration$' --output-on-failure

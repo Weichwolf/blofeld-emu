@@ -1,0 +1,33 @@
+Original foreground with both DMA-controlled audio outputs
+
+  cmake --build --preset strict --target blofeld-original-dsp-dual-output-test
+  ctest --test-dir build/strict -R '^original_dsp_dual_output$' --output-on-failure
+
+Eight held-entry contexts execute six consecutive original foreground bodies
+each. The original DMA-source comparison selects work; original voice, mix,
+master, scheduler and smoothing fill the actual opposite ring half. Independent
+integer models check all48 bodies and their retained histories, as in
+dsp-foreground-ring.txt. Effects are Off; caller/RAM/queue conditions remain
+declared inputs. All127 original records remain pinned and program words intact.
+
+Own native register preloads enter the original DMA-enable suffix. Actual two
+MOVEPs, REP/4095 NOPs, BSET and RTS execute4100 instructions per stream with real
+frames. This is a separate declared suffix entry, not an initializer continuation;
+its existing reserved-access and active-configuration faults remain unchanged.
+
+DMA0/3 retain the original controls and both consume real ESAI_1 TDE. The next
+request is held only after BOTH channels transfer32 words. Foreground instructions
+execute with peripheral clocks paused; explicit HCKT/ACI/grants then drain each
+half with known empty core occupancy. Each output consumes1536 words overall.
+Independent pin decoding checks768 PCM frames and776 DAX frames, including one
+known zero-priming frame per stream. Final ACI-only edges finish the actual held
+DAX B payload while HCKT/core/DMA remain paused. Nothing is reconstructed for output.
+
+Eight held-word restores retain both channel/pin states. Four previous and four
+new fixed oracle corruptions reject, including DAX payload/metadata/parity.
+The legacy single-output stream retains its separate regression.
+
+These are untimed reference interleaves and declared rates/phases, not measured
+board wiring or simultaneous core/DMA timing. Automatic active-DMA timing still
+rejects. Full boot, NoteOn allocation, live host output and stock comparison remain
+open; this does not establish ordinary instrument-function acceptance.

@@ -9,7 +9,10 @@ The separate Hcs08 engine executes native SLEIGH semantics against an explicit
 Bus. It does not replace key scanning or the flash algorithm with host routines.
 Ghidra12.1.2 language sources are hash-pinned and compiled locally. The local
 patch adds missing SBC zero-flag updates and removes CPHX direct's extra pointer
-dereference. The installed Ghidra and HC12 specification are unchanged.
+dereference. It also corrects BGE to N XOR V == 0 (Family Rev2 p212);
+upstream incorrectly used the BLT condition.640 independent BGE/BLT cases cover
+all64 CCR combinations and five signed offsets through ordinary native step().
+The installed Ghidra and HC12 specification are unchanged.
 
 786432 independent ADD/ADC/SUB/SBC/CMP/CPX cases cover all byte operand pairs
 with both carry/stale-flag seeds. Eighty-one CPHX direct cases check signed
@@ -18,11 +21,17 @@ LDX/TXS high-byte preservation, descending JSR/RTS stacks, all256 TAP/TPA flag
 values, native BGND requests, modified RAM-code invalidation, unknown operands
 and quarantined failures. CCR bits6/5 are permanently one (S08CPUV2 chapter8).
 
-No power-on register values are invented. The engine requires explicit entry
-state before execution or inspection. BGND surfaces a CPU request and blocks
+DIV quotient/remainder/error knowledge, native zero guard and independent
+operand/flag/clock qualification: hcs08-divide.txt.
+
+No power-on register values are invented. The engine requires explicit debug
+state or a qualified power_on reset before execution or inspection. BGND surfaces a CPU request and blocks
 further execution pending an owning BDC decision; it does not report active BDC
-status. WAIT/STOP, unimplemented intrinsics and offered interrupts fail visibly.
-Instruction timing, physical reset, interrupt entry, complete instruction
+status. WAIT/STOP, unimplemented intrinsics and unserviced eligible interrupts
+fail visibly. Architectural source/frame/vector entry and masked native RTI are
+available separately through service_interrupt (hcs08-irq.txt); stepping does
+not substitute an IRQ for the next instruction. Complete timing, physical reset,
+timed IRQ/queue integration, complete instruction
 qualification, BDC/security privileges and target peripherals remain required.
 Opaque Hcs08Checkpoint retains all native registers and the BGND request at a
 healthy completed boundary. Its owner must restore memory, peripherals, peers
@@ -65,10 +74,11 @@ The candidate FLASH component and full original page-algorithm gate are in
 hcs08-flash.txt. Their explicit idle-launch/event/retention hypotheses do not
 qualify actual controller timing, a physical chip or the complete update.
 
-Separate warm architectural reset now preserves A/X, clears H, sets SP/I and
-reads the real vector only for normal entry. Active-background reset precedes
+Architectural reset retains warm A/X knowledge; power_on leaves A/X unknown.
+Both clear H, set SP/I and read the real vector only for normal entry. Active-background reset precedes
 that fetch and retains an explicitly unknown numerical PC. Hcs08State and opaque
-checkpoints carry PC/CCR knownness; unsupported partial-CCR semantics and BDC CCR
-reads fail visibly. Pin/clock/caller scope and remaining cold-register/ISA limits:
+checkpoints carry PC/CCR/A/HX knownness; unsupported partial-register semantics
+and BDC reads of unknown bits fail visibly. Cold prefix/word-load/retirement
+qualification and remaining pin/clock/caller/ISA limits:
 hcs08-reset.txt and keyboard-reset.txt. Existing explicit debug entries retain
 fully known flags; they are not retroactively reset-proven native startup.

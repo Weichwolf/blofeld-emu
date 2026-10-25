@@ -17,6 +17,7 @@ nominal8MHz ICGOUT, whereas reset BUSCLK is nominal4MHz. This wording/rate
 qualification, approximate durations, input recognition and25ns MS setup/hold
 remain distinct from the explicit nominal model. The caller owns actual clocks,
 pad resolution, CPU admission, peripherals and BDC reset; no SRS flags are guessed.
+The electrical drive-duration row is a minimum, not an exact counter guarantee.
 
 After that sequence the separate native Hcs08::reset boundary clears H, sets
 SP00FF and I, and retains the supplied healthy warm pre-reset A/X. Normal entry
@@ -42,13 +43,14 @@ are not individually modeled. Failed native execution needs coordinated recovery
 Hcs08State.ccr_known records actual defined status bits. Reset establishes68
 (fixed bits plus I); V/H/N/Z/C remain unknown. Unknown bits have a canonical zero
 representative, never a known flag value. Native checkpoints retain this mask.
-For partial CCR, immediate LDX/LDA/LDHX, direct/extended LDA/STA, direct STHX,
-LDHX/STHX SP1, immediate MOV/BIT and CLRA/CLRH/CLRX/CLR direct/indexed define V/N/Z. CLR preserves C, including
-unknown C (Family RM Rev.2 CLR, printed241). Immediate CPHX/CMP define V/N/Z/C.
-BCS requires known C; BEQ requires known Z. Both preserve knowledge.
-BRA/AIX/AIS/JSR extended/TXS/NOP/BGND preserve it.
-TAP defines all bits, CLI/SEI define I and CLC/SEC define C. Other forms reject
-before architectural execution; prefix9E admits only FE/FF. Fully known debug
+For partial CCR, qualified loads/stores/MOV/BIT/CLR define V/N/Z; comparisons
+and ASL/ROL SP1 define V/N/Z/C; ADD SP1 also defines H. ROL requires known C.
+BRSET7/BRCLR7 copy the memory bit to C. BCS needs C; BEQ/BNE need Z. BHI/BLS
+need a resolved C|Z: both known, or one known set bit. Branches preserve flags.
+BRA/AIX/AIS/JSR/JMP extended, TXS/NOP/BGND and PSHA/PSHX/PSHH/PULA/PULH/
+TAX/TXA preserve knowledge. TAP defines all bits, CLI/SEI define I and CLC/SEC
+require no incoming flags and define C. Other forms reject before execution;
+prefix9E admits FE/FF/EE/E1/68/69/EB with the dependencies above. Fully known debug
 states retain the complete existing native ISA. This qualifies the original
 application RAM-clear prefix after warm reset, not the remaining controller ISA.
 BDC PC/register changes preserve the mask. WRITE_CCR establishes all bits;
@@ -57,8 +59,9 @@ READ_CCR cannot serialize unknown flags into a fabricated successful reply.
 Independent units check16 reset release/mode cases at every edge, two partial
 reset restores, unknown inputs/completion faults, actual vector/register effects,
 partial native checkpoint recovery, all256 first/second-opcode classifications,
-29 literal partial-flag effects, missing/wrapped prefixes, C/H preservation and
-BCS/BEQ taken/not-taken/unknown-input cases plus BDC unknown/write/read behavior. Existing arithmetic,
+52 literal first-opcode and six SP1 partial-flag effects, missing/wrapped prefixes, C/H preservation and
+BCS/BEQ taken/not-taken/unknown-input cases plus BDC unknown/write/read behavior.
+ADC-path dependency/arithmetic oracles and native unknown-H dispatch: hcs08-adc.txt. Existing arithmetic,
 original application/programmer, FLASH, BDC, wire and retirement-clock gates
 remain separate regressions. Reference URLs/byte sizes/hashes: hcs08-reference.json.
 Original HC12 pin/TIM integration and remaining limits: keyboard-reset.txt.
@@ -89,7 +92,7 @@ Cold-register dependency qualification
 
 Partial A/HX paths qualify register reads before native data effects. Immediate,
 direct and extended LDA and CLRA define A; immediate LDX/CLRX define low X;
-CLRH defines H; immediate/stack-relative LDHX defines both index bytes. TPA
+CLRH defines H; immediate/direct/stack-relative LDHX defines both index bytes. TPA
 requires fully known CCR. Stores, comparisons, BIT and TAP require their actual
 source register; indexed accesses, TXS, AIX and CPHX require full HX. Explicit
 register-independent forms preserve masks. Other partial-register forms fail
@@ -100,7 +103,8 @@ unknown bits; WRITE_A/WRITE_HX establish only their written registers. No guesse
 reply is transmitted. SP is known after reset or supplied debug state.
 
 The directed unit covers1280 input-mask combinations,2048 first-opcode cases,
-256 second-opcode forms, native dependency/state/flag effects, missing/wrapped
+256 second-opcode forms, native dependency/state/flag effects, direct-word
+ordered reads/fresh restores/missing first-or-second data bytes, missing/wrapped
 prefixes, actual cold vectors, warm unknown retention, fresh checkpoint restores
 and actual BDC frames. No random/fuzz traffic is generated. The original cold
 startup gate adds68 cases: four declared NVM trim profiles and absent/all16
@@ -112,3 +116,8 @@ per-unit FFBE; original code copies FFBE, requests ICGC1/2 and still stops at
 unqualified ICGS1 (or earlier unknown straps/BGND). Electrical reset timing,
 complete controller boot, other partial ISA forms and hardware equivalence
 remain unqualified. The existing136-case warm trace remains a separate gate.
+
+Native register values and A/HX/CCR knowledge commit together before the bus
+retirement hook. Own LDA/LDHX immediate/direct observers check six successful/
+failing-hook cases. A hook failure preserves executed facts and quarantines
+the CPU; checkpoints still require return to a healthy completed boundary.

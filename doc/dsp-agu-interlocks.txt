@@ -1,0 +1,55 @@
+Nominal DSP MOVE-to-AGU history
+
+DspRunTiming::native_internal_agu_interlocks explicitly extends the existing
+instruction-completion reference experiment. DSP56300FM Rev5 A.2.4 supplies the
+three/two/one-clock dependency rules and requires inserted clocks to count toward
+following dependencies. The pinned source is in hardware/sources.json.
+
+At the declared completion of an explicit MOVE to Ri/Ni/Mi, its register set
+requires three further nominal clocks before an address-generation MOVE. Other
+completed commands and inserted stalls reduce that remainder. An unchanged-value
+write still establishes a dependency. Address-mode pointer updates do not create
+a new explicit MOVE dependency. Simultaneous X/Y uses take the maximum wait,
+not a sum. Actual native opcode metadata supplies both endpoints; loaded REP
+uses its captured word even when backing P memory changes.
+
+native_cycle_units remains the SDK sum of nominal instruction costs.
+elapsed_cycle_units adds the separately reported
+interlock_cycle_units. SHI/map delays and CLK/2 phase use that nominal elapsed
+total at completion; PCTL retains its existing instruction-boundary rate latch.
+Scheduler plans include the extra units in their duration. Trusted owner/schedule
+snapshots retain readiness, native state, counters and pending deadlines; an
+explicit nominal reset clears readiness and the epoch phase without erasing
+lifetime time. Run-contract mismatch still rejects restoration.
+
+This is not a physical pipeline: effects still occur at declared completion, and
+there is no partial advancement of an instruction's elapsed clocks. ALU/status/
+transfer hazards, fetch stages, physical register forwarding, branch/interlock
+overlap, IRQ entry and chip-mask timing remain unqualified. Tcc, LUA/LRA, other
+non-MOVE AGU writers and dependent non-MOVE EA consumers reject in this mode.
+Automatic active-DMA timing still rejects. This path has no allocation-free or
+realtime guarantee and does not belong in an audio callback. Existing nominal
+and untimed modes keep their contracts; normal boot/MIDI/audio remains open.
+
+  cmake --build --preset strict --target blofeld-dsp-agu-interlocks-test blofeld-original-dsp-clock-test
+  ctest --test-dir build/strict -R '^(dsp_agu_interlocks|original_dsp_agu_clock)$' --output-on-failure
+
+The directed gate covers all 24 R/N/M members at four distances, multi-clock
+spacing, real data/control/program/peripheral MOVE destinations, parallel X/Y,
+offset/long-memory operands, native results, timer edges, snapshots, reset and
+loaded-REP mutation. A fixed synchronized TIO event retains its timestamp within
+a longer scheduled command and is not replayed after coordinated restore.
+Unqualified sequence/IRQ rejection precedes effects and acknowledgement.
+
+The document-derived SPI ROM and unmodified firmware stage have no surviving
+MOVE-to-AGU delay: polling, DO and MOVEP/REP separate their explicit preloads
+from consumers, while the long
+store performs an ordinary pointer update. The separate original gate requires
+zero added units and checks the complete independent nominal instruction/PLL/
+CLK2 ledger plus mid-REP replay. The reserved Y:002000 frontier stays strict.
+Neither that prefix nor these own programs establish stock-device equivalence.
+
+The prepared SDK exposes a pure next-opcode query, including its REP latch.
+Adopting consumers require matching SDK/project headers and libraries; the
+public DspStepPlan gains an interlock-unit field. Default references and frozen
+consumer bundles do not automatically adopt this mode.

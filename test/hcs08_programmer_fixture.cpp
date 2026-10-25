@@ -84,13 +84,17 @@ void Memory::write(const std::uint16_t address, const std::uint8_t value) {
     options.write({.address = address, .value = value}, context);
     ++sopt_writes;
   } else {
-    hcs08::require(address >= ram_first && address <= marker + 2,
-                   "Unexpected original HCS08 programmer RAM write at " + hex(address) +
-                       " pc=" + hex(context.pc));
+    check_ram_write(address);
     hcs08::Memory::write(address, value);
     return;
   }
   accesses.push_back({.address = address, .value = value, .write = true});
+}
+
+void Memory::check_ram_write(const std::uint16_t address) const {
+  hcs08::require(address >= ram_first && address <= marker + 2,
+                 "Unexpected original HCS08 programmer RAM write at " + hex(address) +
+                     " pc=" + hex(context.pc));
 }
 
 void Memory::begin_instruction(const ExecutionContext value) {

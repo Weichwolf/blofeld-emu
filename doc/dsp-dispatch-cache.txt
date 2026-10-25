@@ -9,7 +9,8 @@ Entry references remain stable while other pages are created.
 This is host decoder storage, independent of guest P/X/Y memory and physical
 instruction caches. Strict bus checks, missing-ROM faults, REP latching,
 instruction/cycle counters and architectural checkpoints retain their existing
-contracts. The separate native cycle-count vector is unchanged.
+contracts. Cycle-count memoization has separate copyable pages
+(dsp-cycle-cache.txt).
 
   ctest --test-dir build/strict -R '^(native_dsp|dsp_dispatch_cache|dsp_checkpoint)$' --output-on-failure
 

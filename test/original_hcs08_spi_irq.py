@@ -112,6 +112,7 @@ def main():
         DSP24_bit_words=16, collector_controls=negative, actual_CPU_IRQ_entry=True,
         injected_handler_PC_or_frame=False, unknown_CCR_H_preserved=True,
         physical_wiring_qualified=False, physical_timing_qualified=False,
+        RTI_irq_contract='reference_immediate', physical_RTI_latency_qualified=False,
         IRQ_cycle_timing_qualified=False, ICG_clock_supplied=False, full_boot=False,
         native_DSP_firmware_executed=False, firmware_modified=False, fuzz_execution=False,
         physical_traffic=False, hardware_equivalence=False,

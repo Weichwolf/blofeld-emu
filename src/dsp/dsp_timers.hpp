@@ -20,8 +20,8 @@ struct DspTimerPin {
   std::optional<bool> level;
 };
 
-// DSP56371 modes zero and capture-six (TRM=0). Clocks and synchronized input
-// samples are explicit observations; raw TIO pads do not invent capture timing.
+// DSP56371 modes zero, event-three and capture-six (TRM=0). Clocks and synchronized
+// input samples are explicit observations; raw pads do not invent timer events.
 class DspTimers {
 public:
   DspTimers();

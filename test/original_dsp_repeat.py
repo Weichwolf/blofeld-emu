@@ -123,7 +123,7 @@ class Pipeline:
         self.serial(text, check)
 
 
-def validate(text, xdata, ydata, program):
+def validate(text, xdata, ydata, program, pipeline_type=Pipeline):
     cases = re.findall(r'CASE (normal|sync) ([01]) (\d+) ([01]) ([01])\n([\s\S]*?)'
                        r'(?=CASE |Entry-streams visited PCs:)', text)
     expected = [(kind, mode, '127', str(int(kind == 'sync')), routing)
@@ -136,7 +136,7 @@ def validate(text, xdata, ydata, program):
     totals = new_totals()
     totals['nonzero_serial_words'] = 0
     for *identity, stream in cases:
-        pipeline = Pipeline(identity[3] == '1', identity[1] == '1', program)
+        pipeline = pipeline_type(identity[3] == '1', identity[1] == '1', program)
         if row('REPEAT_AUTOMATIC_REJECTED', stream) != [1]:
             raise ValueError('Automatic DMA timing guard was not retained')
         expected_bytes = [0xb0, 7, 127, 1, 0, 7, 127] if pipeline.varied else [0xb0, 7, 0]

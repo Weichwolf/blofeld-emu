@@ -33,6 +33,7 @@ public:
 
   ~Guard() {
     schedule_.active_ = false;
+    schedule_.observing_signals_ = false;
     if (std::uncaught_exceptions() > exceptions_) { schedule_.faulted_ = true; }
   }
 
@@ -48,6 +49,13 @@ namespace {
 bool same_cpu(const CpuState &first, const CpuState &second) {
   return std::tie(first.pc, first.d, first.x, first.y, first.sp, first.ccr) ==
          std::tie(second.pc, second.d, second.x, second.y, second.sp, second.ccr);
+}
+
+std::string scheduled_event_name(const DspMachine &dsp,
+                                 const DspScheduledRun &schedule,
+                                 const std::uint64_t ticks) {
+  if (dsp.hardware_reset_active()) { return "DSP reset recovery"; }
+  return schedule.next_completion_ticks(dsp) == ticks ? "DSP completion" : "external event";
 }
 }
 
@@ -191,9 +199,7 @@ void McuDspSchedule::begin_cycle(const Hc12BusCycle cycle,
     }
     ++ties_;
     if (inputs_.shared_write_order == McuDspTieOrder::unqualified) {
-      const std::string event = dsp_schedule_.next_completion_ticks(dsp_) == end_ticks_
-                                    ? "DSP completion"
-                                    : "external event";
+      const auto event = scheduled_event_name(dsp_, dsp_schedule_, end_ticks_);
       throw Fault("Unqualified simultaneous " + event + " and MCU shared write at " +
                   hex(*cycle.address) + " mcu-pc=" + hex(cycle.context.pc) +
                   " dsp-pc=" + hex(dsp_.cpu().state().pc, 6));
@@ -216,7 +222,9 @@ void McuDspSchedule::observe_write(const BusEvent &event,
       event.address != *cycle_.address || !observe_signals) {
     throw Fault("MCU/DSP shared observation must match its completed native write cycle");
   }
+  observing_signals_ = true;
   observe_signals();
+  observing_signals_ = false;
   consumed();
   advance(DspScheduleBoundary::through, before_dsp, after_dsp, external);
   shared_write_ = false;
@@ -333,6 +341,33 @@ void McuDspSchedule::end_system_reset() {
   }
   finish_boundary();
   resetting_ = false;
+}
+
+void McuDspSchedule::validate_dsp_reset_observation() const {
+  if ((active_ && !observing_signals_) || faulted()) {
+    throw Fault("DSP reset observation requires a healthy completed MCU signal boundary");
+  }
+  if (!observing_signals_) {
+    if (mcu_.system_reset_active()) {
+      mcu_.validate_reset_boundary();
+    } else {
+      mcu_.validate_run_boundary();
+    }
+  }
+  consumed();
+  if (dsp_schedule_.horizon_ticks() != end_ticks_) {
+    throw Fault("DSP reset observation cannot discard an unconsumed peer interval");
+  }
+}
+
+void McuDspSchedule::begin_dsp_reset(const DspHardwareResetInputs inputs) {
+  validate_dsp_reset_observation();
+  dsp_schedule_.begin_hardware_reset(dsp_, inputs);
+}
+
+void McuDspSchedule::release_dsp_reset() {
+  validate_dsp_reset_observation();
+  dsp_schedule_.release_hardware_reset(dsp_);
 }
 
 McuDspScheduleCheckpoint McuDspSchedule::checkpoint() const {

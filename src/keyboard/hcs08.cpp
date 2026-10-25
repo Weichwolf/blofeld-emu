@@ -9,6 +9,7 @@
 #include "keyboard/hcs08_interrupts.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
 #include "keyboard/hcs08_native.hpp"
+#include "keyboard/hcs08_prefetch.hpp"
 #include "keyboard/hcs08_registers.hpp"
 #include "memstate.hh"
 #include "pcoderaw.hh"
@@ -16,6 +17,7 @@
 #include "types.h"
 #include "xml.hh"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -23,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 
@@ -52,8 +55,17 @@ std::uint16_t read_reset_vector(Bus &bus, const ExecutionContext context) {
 
 class Hcs08::Impl {
 public:
-  Impl(Bus &input, const std::filesystem::path &specification)
-      : bus(input), image(input), translator(&image, &context), memory(&translator) {
+  Impl(Bus &input, const std::filesystem::path &specification, const Hcs08RtiIrqContract contract)
+      : bus(input),
+        image(input),
+        translator(&image, &context),
+        memory(&translator),
+        rti_contract(contract) {
+    if (contract != Hcs08RtiIrqContract::unqualified &&
+        contract != Hcs08RtiIrqContract::reference_immediate &&
+        contract != Hcs08RtiIrqContract::reference_next_instruction) {
+      throw Fault("HCS08 invalid RTI IRQ reference contract");
+    }
     std::istringstream configuration("<sleigh>" + native::xml_text(specification.string()) +
                                      "</sleigh>");
     ghidra::DocumentStorage documents;
@@ -79,13 +91,45 @@ public:
 
   void refresh(const bool force = false) {
     const auto revision = bus.code_revision();
-    if (!force && decoded_revision == revision) { return; }
+    if (!force && decoded_valid && decoded_revision == revision) { return; }
     executor->clear_translations();
     translator.reset(&image, &context);
     ghidra::DocumentStorage documents;
     translator.initialize(documents);
     layout = native::register_layout(translator);
     decoded_revision = revision;
+    decoded_valid = true;
+  }
+
+  void run_native(const Bus *program, Hcs08DataRead *operand) {
+    image.program(program);
+    executor->captured_read(operand);
+    constexpr unsigned rti = 0x80;
+    auto *returns = program != nullptr && prefetch && prefetch->instruction[0] == rti
+                        ? &prefetch->return_reads
+                        : nullptr;
+    executor->captured_return(returns);
+    try {
+      refresh(program != nullptr);
+      executor->execute(program);
+      if (operand != nullptr && !operand->consumed) {
+        throw Fault("HCS08 native instruction did not consume its actual captured data read");
+      }
+      if (returns != nullptr &&
+          !std::ranges::all_of(*returns, [](const auto &read) { return read.consumed; })) {
+        throw Fault("HCS08 native RTI did not consume all five actual captured stack reads");
+      }
+    } catch (...) {
+      executor->captured_read(nullptr);
+      executor->captured_return(nullptr);
+      image.program(nullptr);
+      if (program != nullptr) { decoded_valid = false; }
+      throw;
+    }
+    executor->captured_read(nullptr);
+    executor->captured_return(nullptr);
+    image.program(nullptr);
+    if (program != nullptr) { decoded_valid = false; }
   }
 
   void normalize_ccr() { memory.setValue(&layout.ccr, memory.getValue(&layout.ccr) | fixed_ccr); }
@@ -210,6 +254,79 @@ public:
     sequence.program_byte_in_flight = true;
   }
 
+  void begin_program_instruction(Hcs08PrefetchState &program, const Hcs08State &before) const {
+    program.before = before;
+    if (const auto vector = native::pending_interrupt(bus, before, irq_delay)) {
+      throw Fault("HCS08 prefetch IRQ vector=" + hex(*vector) +
+                  ": eligible source requires a qualified queue handoff");
+    }
+    program.native_executed = false;
+    if (!before.pc_known || before.pc != program.head || program.ready_bytes == 0) {
+      throw Fault("HCS08 prefetch admission address=" + hex(program.head) +
+                  " pc=" + hex(before.pc) + ": known matching PC and a ready opcode are required");
+    }
+    const auto shape = native::prefetch_shape(program.queued[0],
+                                              {.pc = before.pc, .ccr = before.ccr},
+                                              program.contract,
+                                              program.ready_bytes > 1 ? program.queued[1] : 0U);
+    if (shape.bytes > program.ready_bytes || shape.bytes > address_space - before.pc) {
+      throw Fault("HCS08 prefetch operands address=" + hex(before.pc) + " pc=" + hex(before.pc) +
+                  ": actual ready instruction bytes are insufficient or wrap");
+    }
+    program.operand = {};
+    program.return_reads = {};
+    program.return_discarded.reset();
+    program.jump_discarded.reset();
+    program.instruction = {};
+    std::copy_n(program.queued.begin(), shape.bytes, program.instruction.begin());
+    program.instruction_bytes = shape.bytes;
+    program.instruction_periods = shape.periods;
+    program.instruction_cycle = 0;
+    program.native_executed = false;
+    for (unsigned n = shape.bytes; n < program.queued_bytes; ++n) {
+      program.queued[n - shape.bytes] = program.queued[n];
+    }
+    program.queued_bytes -= shape.bytes;
+    program.ready_bytes -= shape.bytes;
+    for (auto n = program.queued_bytes; n < program.queued.size(); ++n) { program.queued[n] = 0; }
+    program.head = static_cast<std::uint16_t>(program.head + shape.bytes);
+  }
+
+  void program_read(Hcs08PrefetchState &program) {
+    if (program.program_byte_in_flight || program.queued_bytes >= program.queued.size()) {
+      throw Fault("HCS08 prefetch read address=" + hex(program.next_read) +
+                  " pc=" + hex(program.before.pc) + ": program queue has no qualified read slot");
+    }
+    bus.check_execute({.address = program.next_read, .length = 1});
+    const auto value = static_cast<std::uint8_t>(bus.read_memory({.address = program.next_read}));
+    program.queued[program.queued_bytes++] = value;
+    program.next_read = static_cast<std::uint16_t>(program.next_read + 1U);
+    program.program_byte_in_flight = true;
+  }
+
+  static void arrive_program_reads(Hcs08PrefetchState &program) {
+    program.operand.in_flight = false;
+    for (auto &read : program.return_reads) { read.in_flight = false; }
+    if (program.discarded) { program.discarded->in_flight = false; }
+    if (program.return_discarded) { program.return_discarded->in_flight = false; }
+    if (program.jump_discarded) { program.jump_discarded->in_flight = false; }
+    if (program.program_byte_in_flight) {
+      program.ready_bytes = program.queued_bytes;
+      program.program_byte_in_flight = false;
+    }
+  }
+
+  void require_program_handoff(const Hcs08State &before) const {
+    if (!prefetch || !before.pc_known || before.pc != prefetch->head ||
+        prefetch->instruction_bytes != 0 || prefetch->instruction_periods != 0 ||
+        prefetch->instruction_cycle != 0 || prefetch->queued_bytes != 3 ||
+        prefetch->ready_bytes != 2 || !prefetch->program_byte_in_flight ||
+        prefetch->next_read != static_cast<std::uint16_t>(prefetch->head + 3U)) {
+      throw Fault("HCS08 IRQ queue handoff pc=" + hex(before.pc) +
+                  ": completed instruction and actual matching three-byte queue are required");
+    }
+  }
+
   Bus &bus;
   native::CodeImage image;
   ghidra::ContextInternal context;
@@ -221,6 +338,7 @@ public:
   std::unique_ptr<ghidra::MemoryHashOverlay> temporaries;
   std::unique_ptr<native::InstructionExecutor> executor;
   std::uint64_t decoded_revision = 0;
+  bool decoded_valid = true;
   std::uint8_t ccr_known = Hcs08State::all_ccr;
   std::uint8_t a_known = Hcs08State::all_a;
   std::uint16_t hx_known = Hcs08State::all_hx;
@@ -230,14 +348,19 @@ public:
   bool initialized = false;
   std::optional<Hcs08IrqBusState> irq_bus;
   std::optional<Hcs08InstructionReservation> instruction;
+  std::optional<Hcs08PrefetchState> prefetch;
+  Hcs08IrqDelay irq_delay = Hcs08IrqDelay::none;
+  const Hcs08RtiIrqContract rti_contract;
   const std::shared_ptr<const void> instruction_identity =
       std::make_shared<const InstructionIdentity>();
   // Ownership metadata is not emulated state: never rewind future admissions.
   std::uint64_t instruction_epoch = 0;
 };
 
-Hcs08::Hcs08(Bus &bus, const std::filesystem::path &specification) try
-    : impl_(std::make_unique<Impl>(bus, specification)) {
+Hcs08::Hcs08(Bus &bus,
+             const std::filesystem::path &specification,
+             const Hcs08RtiIrqContract contract) try
+    : impl_(std::make_unique<Impl>(bus, specification, contract)) {
 } catch (const ghidra::LowlevelError &error) {
 
   throw Fault("Cannot initialize HCS08 semantics: " + error.explain);
@@ -250,6 +373,8 @@ void Hcs08::set_state(const Hcs08State &state) {
   impl_->healthy = false;
   impl_->irq_bus.reset();
   impl_->instruction.reset();
+  impl_->prefetch.reset();
+  impl_->irq_delay = Hcs08IrqDelay::none;
   impl_->a_known = state.a_known;
   impl_->hx_known = state.hx_known;
   impl_->memory.setValue(&impl_->layout.a, state.a & state.a_known);
@@ -327,11 +452,17 @@ Hcs08Checkpoint Hcs08::checkpoint() const {
   result.hx_known_ = impl_->hx_known;
   result.irq_bus_ = impl_->irq_bus;
   result.instruction_ = impl_->instruction;
+  result.irq_delay_ = impl_->irq_delay;
+  result.rti_contract_ = impl_->rti_contract;
+  result.prefetch_ = impl_->prefetch;
   return result;
 }
 
 void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
   const native::ExecutionGuard guard(impl_->active);
+  if (checkpoint.rti_contract_ != impl_->rti_contract) {
+    throw Fault("HCS08 checkpoint RTI IRQ reference contract mismatch");
+  }
   impl_->healthy = false;
   impl_->refresh(true);
   impl_->registers->setChunk(
@@ -345,6 +476,8 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
   impl_->hx_known = checkpoint.hx_known_;
   impl_->irq_bus = checkpoint.irq_bus_;
   impl_->instruction = checkpoint.instruction_;
+  impl_->irq_delay = checkpoint.irq_delay_;
+  impl_->prefetch = checkpoint.prefetch_;
   impl_->initialized = true;
   impl_->healthy = true;
 }
@@ -395,12 +528,30 @@ void Hcs08::reset(const Hcs08ResetEntry mode, const Hcs08ResetCause cause) {
   set_state(entry);
 }
 
+Hcs08IrqDelay Hcs08::irq_delay() const {
+  return impl_->irq_delay;
+}
+
+void Hcs08::resume_background() {
+  const native::ExecutionGuard guard(impl_->active);
+  if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  const auto before = state();
+  if (!before.pc_known || impl_->instruction || impl_->irq_bus || impl_->prefetch) {
+    throw Fault(
+        "HCS08 BDC resume operation address=" + (before.pc_known ? hex(before.pc) : "unknown") +
+        " pc=" + (before.pc_known ? hex(before.pc) : "unknown pc-known=0") + " ccr=" +
+        hex(before.ccr) + ": known PC and an unowned instruction/IRQ queue boundary are required");
+  }
+  impl_->executor->clear_background_request();
+}
+
 std::optional<std::uint16_t> Hcs08::pending_interrupt() const {
-  if (impl_->active || !impl_->healthy || !impl_->initialized || impl_->irq_bus) {
+  if (impl_->active || !impl_->healthy || !impl_->initialized || impl_->irq_bus ||
+      impl_->prefetch) {
     throw Fault("HCS08 IRQ query requires a healthy completed native boundary");
   }
   if (impl_->instruction) { return {}; } // Finish the accepted instruction before IRQ admission.
-  return native::pending_interrupt(impl_->bus, state());
+  return native::pending_interrupt(impl_->bus, state(), impl_->irq_delay);
 }
 
 bool Hcs08::service_interrupt() {
@@ -411,8 +562,10 @@ bool Hcs08::service_interrupt() {
   impl_->healthy = false;
   const auto before = state();
   try {
-    if (impl_->irq_bus) { throw Fault("HCS08 IRQ bus sequence/prefetch still has an owner"); }
-    const auto vector = native::pending_interrupt(impl_->bus, before);
+    if (impl_->irq_bus || impl_->prefetch) {
+      throw Fault("HCS08 IRQ bus sequence/prefetch still has an owner");
+    }
+    const auto vector = native::pending_interrupt(impl_->bus, before, impl_->irq_delay);
     if (!vector) {
       impl_->healthy = true;
       return false;
@@ -431,24 +584,33 @@ std::optional<Hcs08IrqBusState> Hcs08::irq_bus_state() const {
 }
 
 bool Hcs08::start_irq_bus(const Hcs08IrqBusContract contract) {
-  if (contract != Hcs08IrqBusContract::reference_unstretched_sequence) {
-    throw Fault("HCS08 IRQ bus requires the explicit unstretched sequence contract");
+  if (contract != Hcs08IrqBusContract::reference_unstretched_sequence &&
+      contract != Hcs08IrqBusContract::reference_owned_program_handoff) {
+    throw Fault("HCS08 IRQ bus requires an explicit unstretched sequence or owned-program handoff "
+                "contract");
   }
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
   if (impl_->instruction) { return false; }
+  const bool handoff = contract == Hcs08IrqBusContract::reference_owned_program_handoff;
+  const auto &queue = impl_->prefetch;
+  if (handoff && queue && queue->instruction_bytes != 0) { return false; }
   impl_->healthy = false;
   const auto before = state();
-  if (background_requested() || impl_->irq_bus) {
+  if (background_requested() || impl_->irq_bus || (!handoff && impl_->prefetch)) {
     throw Fault("HCS08 IRQ bus admission requires an unowned normal-running CPU boundary");
   }
-  const auto vector = native::pending_interrupt(impl_->bus, before);
+  if (handoff) { impl_->require_program_handoff(before); }
+  const auto vector = native::pending_interrupt(impl_->bus, before, impl_->irq_delay);
   if (!vector) {
     impl_->healthy = true;
     return false;
   }
   impl_->require_irq_storage(before);
-  impl_->irq_bus = Hcs08IrqBusState{.entry = before, .admitted_vector = *vector};
+  impl_->irq_bus = Hcs08IrqBusState{.entry = before,
+                                    .admitted_vector = *vector,
+                                    .discarded_program = handoff ? impl_->prefetch : std::nullopt};
+  if (handoff) { impl_->prefetch.reset(); }
   impl_->healthy = true;
   return true;
 }
@@ -472,6 +634,7 @@ void Hcs08::advance_irq_bus() {
   // Keep that known arrival even if this period's new access then faults.
   sequence.ready_program_bytes = sequence.prefetched_bytes;
   sequence.program_byte_in_flight = false;
+  if (sequence.discarded_program) { Impl::arrive_program_reads(*sequence.discarded_program); }
   const auto before = state();
   try {
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
@@ -492,6 +655,266 @@ void Hcs08::advance_irq_bus() {
   } catch (const Fault &error) {
     throw Fault("HCS08 IRQ bus cycle=" + std::to_string(phase) + " pc=" + hex(before.pc) +
                 " ccr=" + hex(before.ccr) + ": " + error.what());
+  }
+}
+
+std::optional<Hcs08PrefetchState> Hcs08::prefetch_state() const {
+  return impl_->prefetch;
+}
+
+void Hcs08::start_irq_program(const Hcs08PrefetchContract contract) {
+  if (contract != Hcs08PrefetchContract::reference_linear_program_cycles &&
+      contract != Hcs08PrefetchContract::reference_data_branch_cycles &&
+      contract != Hcs08PrefetchContract::reference_short_branch_refill &&
+      contract != Hcs08PrefetchContract::reference_peripheral_program_cycles &&
+      contract != Hcs08PrefetchContract::reference_jump_program_cycles &&
+      contract != Hcs08PrefetchContract::reference_scanner_byte_cycles) {
+    throw Fault("HCS08 prefetch requires an explicit supported program-cycle reference contract");
+  }
+  const native::ExecutionGuard guard(impl_->active);
+  if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  const auto &irq = impl_->irq_bus;
+  constexpr unsigned finished = 11;
+  if (!irq || irq->completed_cycles != finished || irq->prefetched_bytes != 3 ||
+      irq->ready_program_bytes != 2 || !irq->program_byte_in_flight || impl_->prefetch ||
+      impl_->instruction || background_requested()) {
+    throw Fault("HCS08 prefetch handoff requires the complete owned IRQ queue");
+  }
+  const auto before = state();
+  if (!before.pc_known || before.pc != irq->target) {
+    throw Fault("HCS08 prefetch handoff PC does not match the actual IRQ target");
+  }
+  impl_->prefetch = Hcs08PrefetchState{.contract = contract,
+                                       .head = irq->target,
+                                       .next_read = static_cast<std::uint16_t>(irq->target + 3U),
+                                       .queued = irq->prefetched,
+                                       .queued_bytes = irq->prefetched_bytes,
+                                       .ready_bytes = irq->ready_program_bytes,
+                                       .program_byte_in_flight = true,
+                                       .discarded = std::nullopt,
+                                       .return_discarded = std::nullopt,
+                                       .jump_discarded = std::nullopt,
+                                       .before = before};
+  impl_->irq_bus.reset();
+}
+
+void Hcs08::execute_program(Hcs08PrefetchState &program, Hcs08DataRead *operand) {
+  const native::PrefetchView view(impl_->bus,
+                                  program.before.pc,
+                                  std::span(program.instruction).first(program.instruction_bytes));
+  execute_native(program.before, &view, operand);
+  program.native_executed = true;
+}
+
+void Hcs08::advance_data_program(Hcs08PrefetchState &program,
+                                 const unsigned phase,
+                                 const bool branch) {
+  const bool extended = !branch && program.instruction_bytes == 3;
+  constexpr unsigned pull_h = 0x8a;
+  constexpr unsigned pull_x = 0x88;
+  constexpr unsigned lda_indexed8 = 0xe6;
+  constexpr unsigned lda_indexed16 = 0xd6;
+  const bool pull = program.instruction[0] == pull_h || program.instruction[0] == pull_x;
+  const bool indexed =
+      program.instruction[0] == lda_indexed8 || program.instruction[0] == lda_indexed16;
+  const unsigned read_phase = extended ? 2 : 1;
+  if (phase == read_phase) {
+    program.operand.address = program.instruction[1];
+    if (extended) {
+      program.operand.address = static_cast<std::uint16_t>(
+          (static_cast<unsigned>(program.instruction[1]) << 8U) | program.instruction[2]);
+    }
+    if (pull) { program.operand.address = static_cast<std::uint16_t>(program.before.sp + 1U); }
+    if (indexed) {
+      constexpr unsigned all_index_bits = 0xffff;
+      if (program.before.hx_known != all_index_bits) {
+        throw Fault("HCS08 indexed read address=unknown: incomplete native H:X knowledge");
+      }
+      program.operand.address = static_cast<std::uint16_t>(
+          static_cast<unsigned>(program.operand.address) + program.before.hx);
+    }
+    program.operand.value =
+        static_cast<std::uint8_t>(impl_->bus.read_memory({.address = program.operand.address}));
+    program.operand.in_flight = true;
+    return;
+  }
+  const auto program_address = program.next_read;
+  if (!pull || phase != read_phase + 1) { impl_->program_read(program); }
+  if (phase != read_phase + 1) { return; }
+  execute_program(program, &program.operand);
+  if (!branch) { return; }
+  // Explicit branch reference: p2 is sequential speculation; the selected
+  // native PC supplies three refill reads on p3..p5, including not-taken cases.
+  if (program.queued_bytes != 1 || program.ready_bytes != 0 || !program.program_byte_in_flight ||
+      !state().pc_known) {
+    throw Fault(
+        "HCS08 bit-branch refill requires its actual speculative program read and native PC");
+  }
+  program.discarded = Hcs08DiscardedProgramRead{
+      .address = program_address, .value = program.queued[0], .in_flight = true};
+  program.queued = {};
+  program.queued_bytes = 0;
+  program.ready_bytes = 0;
+  program.program_byte_in_flight = false;
+  program.head = state().pc;
+  program.next_read = program.head;
+}
+
+void Hcs08::advance_short_branch(Hcs08PrefetchState &program, const unsigned phase) {
+  if (phase == 1) {
+    if (program.queued_bytes != 1 || program.ready_bytes != 1 || program.program_byte_in_flight) {
+      throw Fault("HCS08 short-branch refill requires its actual ready sequential successor");
+    }
+    execute_program(program);
+    if (!state().pc_known) { throw Fault("HCS08 short-branch native PC remains unknown"); }
+    // Explicit reference: discard the already-fetched successor, then p1..p3
+    // refill from the native selected PC for both branch outcomes.
+    program.discarded = Hcs08DiscardedProgramRead{
+        .address = program.head, .value = program.queued[0], .in_flight = false};
+    program.queued = {};
+    program.queued_bytes = 0;
+    program.ready_bytes = 0;
+    program.head = state().pc;
+    program.next_read = program.head;
+  }
+  impl_->program_read(program);
+}
+
+void Hcs08::advance_jump_program(Hcs08PrefetchState &program, const unsigned phase) {
+  const unsigned execute_phase = program.instruction_bytes == 3 ? 2U : 1U;
+  if (phase == execute_phase) {
+    const unsigned successors = program.instruction_bytes == 1 ? 2U : 1U;
+    if (program.queued_bytes != successors || program.ready_bytes != successors ||
+        program.program_byte_in_flight) {
+      throw Fault("HCS08 JMP requires its actual ready sequential successor bytes");
+    }
+    execute_program(program);
+    if (!state().pc_known) { throw Fault("HCS08 JMP native target remains unknown"); }
+    // Explicit reference: three-byte forms speculate sequentially on p1;
+    // native JMP then discards the real successor(s) and refills three p reads.
+    program.discarded = Hcs08DiscardedProgramRead{
+        .address = program.head, .value = program.queued[0], .in_flight = false};
+    if (successors == 2) {
+      program.jump_discarded =
+          Hcs08DiscardedProgramRead{.address = static_cast<std::uint16_t>(program.head + 1U),
+                                    .value = program.queued[1],
+                                    .in_flight = false};
+    }
+    program.queued = {};
+    program.queued_bytes = 0;
+    program.ready_bytes = 0;
+    program.head = state().pc;
+    program.next_read = program.head;
+  }
+  impl_->program_read(program);
+}
+
+void Hcs08::advance_write_program(Hcs08PrefetchState &program, const unsigned phase) {
+  const unsigned write_phase = program.instruction_bytes == 3 ? 2 : 1;
+  if (phase == write_phase) {
+    execute_program(program);
+  } else {
+    impl_->program_read(program);
+  }
+}
+
+void Hcs08::advance_return_program(Hcs08PrefetchState &program, const unsigned phase) {
+  constexpr unsigned stack_reads = 5;
+  constexpr unsigned raw_fields = 3;
+  constexpr unsigned execute_phase = 6;
+  if (phase <= stack_reads) {
+    auto &read = program.return_reads.at(phase - 1);
+    read.address = static_cast<std::uint16_t>(program.before.sp + phase);
+    auto *known = dynamic_cast<Hcs08KnownMemory *>(&impl_->bus);
+    const auto byte = phase <= raw_fields && known != nullptr
+                          ? known->read_known_byte(read.address)
+                          : Hcs08KnownByte{.value = static_cast<std::uint8_t>(
+                                               impl_->bus.read_memory({.address = read.address}))};
+    read.value = byte.value;
+    read.known = byte.known;
+    read.in_flight = true;
+    return;
+  }
+  if (phase == execute_phase) {
+    if (program.queued_bytes != 2 || program.ready_bytes != 2 || program.program_byte_in_flight) {
+      throw Fault("HCS08 RTI requires both actual ready sequential successor bytes");
+    }
+    execute_program(program);
+    if (!state().pc_known) { throw Fault("HCS08 RTI native return PC remains unknown"); }
+    // Explicit reference: f6 restores native state; p7..p9 refill the native PC.
+    program.discarded = Hcs08DiscardedProgramRead{
+        .address = program.head, .value = program.queued[0], .in_flight = false};
+    program.return_discarded =
+        Hcs08DiscardedProgramRead{.address = static_cast<std::uint16_t>(program.head + 1U),
+                                  .value = program.queued[1],
+                                  .in_flight = false};
+    program.queued = {};
+    program.queued_bytes = 0;
+    program.ready_bytes = 0;
+    program.head = state().pc;
+    program.next_read = program.head;
+    return;
+  }
+  impl_->program_read(program);
+}
+
+void Hcs08::advance_irq_program() {
+  const native::ExecutionGuard guard(impl_->active);
+  if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
+  impl_->healthy = false;
+  auto &owner = impl_->prefetch;
+  if (!owner) { throw Fault("HCS08 prefetch advance requires its owned program queue"); }
+  auto &program = *owner;
+  constexpr auto limit = std::numeric_limits<std::uint64_t>::max();
+  if (program.attempted_periods == limit || program.completed_periods == limit ||
+      program.retired_instructions == limit) {
+    throw Fault("HCS08 prefetch period or instruction counter exhausted");
+  }
+  ++program.attempted_periods;
+  Impl::arrive_program_reads(program);
+  try {
+    if (program.instruction_bytes == 0) { impl_->begin_program_instruction(program, state()); }
+    const auto before = program.before;
+    impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
+    const auto shape =
+        native::prefetch_shape(program.instruction[0],
+                               {.pc = before.pc, .ccr = before.ccr},
+                               program.contract,
+                               program.instruction_bytes > 1 ? program.instruction[1] : 0U);
+    const auto phase = program.instruction_cycle + 1;
+    const bool final = phase == program.instruction_periods;
+    if (shape.jump) {
+      advance_jump_program(program, phase);
+    } else if (shape.returning) {
+      advance_return_program(program, phase);
+    } else if (shape.read) {
+      advance_data_program(program, phase, shape.branch);
+    } else if (shape.write) {
+      advance_write_program(program, phase);
+    } else if (shape.branch) {
+      advance_short_branch(program, phase);
+    } else {
+      if (shape.push && phase == 1) { execute_program(program); }
+      // pp/ppp immediate, sp pushes, p singles, ffffp MUL and fffffp DIV.
+      const bool program_access = final || (!shape.push && shape.bytes > 1);
+      if (program_access) { impl_->program_read(program); }
+      if (!shape.push && final) { execute_program(program); }
+    }
+    program.instruction_cycle = phase;
+    ++program.completed_periods;
+    if (final) {
+      program.instruction_bytes = 0;
+      program.instruction_periods = 0;
+      program.instruction_cycle = 0;
+      impl_->bus.retire_instruction();
+      ++program.retired_instructions;
+    }
+    impl_->healthy = true;
+  } catch (const ghidra::LowlevelError &error) {
+    throw Fault("HCS08 prefetch cycle pc=" + hex(program.before.pc) + ": " + error.explain);
+  } catch (const Fault &error) {
+    throw Fault("HCS08 prefetch cycle pc=" + hex(program.before.pc) +
+                " ccr=" + hex(program.before.ccr) + ": " + error.what());
   }
 }
 
@@ -522,7 +945,9 @@ Hcs08::reserve_instruction(const Hcs08InstructionContract contract) {
   }
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
-  if (impl_->instruction || impl_->irq_bus || background_requested()) { return {}; }
+  if (impl_->instruction || impl_->irq_bus || impl_->prefetch || background_requested()) {
+    return {};
+  }
   impl_->healthy = false;
   const auto before = state();
   if (!before.pc_known) {
@@ -530,7 +955,7 @@ Hcs08::reserve_instruction(const Hcs08InstructionContract contract) {
         "HCS08 instruction admission address=unknown pc=unknown pc-known=0: unknown CPU PC");
   }
   impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
-  if (native::pending_interrupt(impl_->bus, before)) {
+  if (native::pending_interrupt(impl_->bus, before, impl_->irq_delay)) {
     impl_->healthy = true;
     return {};
   }
@@ -556,6 +981,30 @@ void Hcs08::step() {
   execute_instruction(nullptr);
 }
 
+void Hcs08::execute_native(const Hcs08State &before, const Bus *program, Hcs08DataRead *operand) {
+  const auto &code = program != nullptr ? *program : impl_->bus;
+  constexpr unsigned rti = 0x80;
+  const auto opcode = code.peek(before.pc);
+  const bool returning = opcode == rti;
+  auto registers = returning ? native::RegisterKnowledge{.a = before.a_known, .hx = before.hx_known}
+                             : native::registers_after(code, before);
+  auto known = returning ? before.ccr_known : native::ccr_after(code, before);
+  impl_->executor->prepare_return_frame(returning ? std::optional(before.sp) : std::nullopt);
+  impl_->run_native(program, operand);
+  if (returning) {
+    const auto masks = impl_->executor->return_masks();
+    known = static_cast<std::uint8_t>(masks[0] | fixed_ccr);
+    registers.a = masks[1];
+    constexpr unsigned high_mask = 0xff00;
+    registers.hx = static_cast<std::uint16_t>((before.hx_known & high_mask) | masks[2]);
+  }
+  impl_->ccr_known = known;
+  impl_->a_known = registers.a;
+  impl_->hx_known = registers.hx;
+  impl_->normalize_ccr();
+  impl_->irq_delay = native::irq_delay_after(before, state(), opcode, impl_->rti_contract);
+}
+
 void Hcs08::execute_instruction(const Hcs08InstructionReservation *reservation) {
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
@@ -567,7 +1016,7 @@ void Hcs08::execute_instruction(const Hcs08InstructionReservation *reservation) 
                 ": unknown CPU PC");
   }
   try {
-    if (impl_->irq_bus) {
+    if (impl_->irq_bus || impl_->prefetch) {
       throw Fault("HCS08 IRQ bus sequence/prefetch still has an owner; queue consumption is "
                   "unqualified");
     }
@@ -581,31 +1030,12 @@ void Hcs08::execute_instruction(const Hcs08InstructionReservation *reservation) 
                   hex(before.pc));
     }
     impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
-    if (reservation == nullptr && native::pending_interrupt(impl_->bus, before)) {
+    if (reservation == nullptr && native::pending_interrupt(impl_->bus, before, impl_->irq_delay)) {
       throw Fault(
           "HCS08 interrupt entry is not qualified by instruction stepping; service required");
     }
     impl_->bus.check_execute({.address = before.pc, .length = 1});
-    constexpr unsigned rti = 0x80;
-    const bool returning = impl_->bus.peek(before.pc) == rti;
-    auto registers = returning
-                         ? native::RegisterKnowledge{.a = before.a_known, .hx = before.hx_known}
-                         : native::registers_after(impl_->bus, before);
-    auto known = returning ? before.ccr_known : native::ccr_after(impl_->bus, before);
-    impl_->executor->prepare_return_frame(returning ? std::optional(before.sp) : std::nullopt);
-    impl_->refresh();
-    impl_->executor->execute();
-    if (returning) {
-      const auto masks = impl_->executor->return_masks();
-      known = static_cast<std::uint8_t>(masks[0] | fixed_ccr);
-      registers.a = masks[1];
-      constexpr unsigned high_mask = 0xff00;
-      registers.hx = static_cast<std::uint16_t>((before.hx_known & high_mask) | masks[2]);
-    }
-    impl_->ccr_known = known;
-    impl_->a_known = registers.a;
-    impl_->hx_known = registers.hx;
-    impl_->normalize_ccr();
+    execute_native(before);
     // Native effects are complete even if the subsequent observer refuses retirement.
     if (reservation != nullptr) { impl_->instruction.reset(); }
     impl_->bus.retire_instruction();

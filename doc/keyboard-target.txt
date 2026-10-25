@@ -38,6 +38,9 @@ Six fresh joint MCU/target CPU/memory/BDC/wire/clock restores repeat every nativ
 suffix event, register, memory-knownness, peripheral state and failure. Raw
 waveforms and failure prefixes remain ignored local artifacts. The optional gate
 does not qualify physical safety or a complete controller update.
+Each case requires one GO observation and exactly two ordered suffix replays
+before completion. Four fixed corruptions reject, including redistributed
+replays that preserve the matrix-wide count.
 
 Explicit fixture inputs remain: active BDC reset mode, post-SYNC9/12 software
 delays, eight host bus periods per BDC period, two selected phases, own target
@@ -50,5 +53,6 @@ boot/MIDI/audio, every update/power-loss/recovery phase and all118 manual
 functions on both profiles remain open. No physical traffic or fuzzing runs.
 
 Related component scopes: hcs08-bdc.txt, hcs08-bdc-wire.txt, hcs08-flash.txt.
+Separate reset/SYNC evidence in hcs08-bdc-wire.txt is not coupled to this gate.
 Reference identities: downloads.json, keyboard-update-reference.json and
 hcs08-reference.json. Detailed source analysis remains local/private issue21.

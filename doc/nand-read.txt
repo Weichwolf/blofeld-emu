@@ -101,3 +101,39 @@ A static candidate reconstruction from the updater's source ranges also leaves
 264 trailing page bytes outside the supplied update object. It is not an
 installed NAND dump; those bytes are not assumed erased or zero. Detailed source
 analysis and candidate extracts stay private and do not initialize a board model.
+
+Clocked operation reference
+NandOperationClock owns the protocol and requires an explicit reference_maximum
+contract. Samsung p.13 supplies tR=15us maximum and tRST=5/10/500us maximum for
+read/ready, program and erase interruption. Durations round up to whole reference
+ticks. Busy recognition is explicitly zero tWB (the table permits up to 100ns);
+R/B pull-up delay, exact silicon timing and board attachment remain unqualified.
+Only the final address starts a read timer. Status polls and ignored surplus
+addresses cannot advance or restart it. advance() reports the exact event tick;
+the board must interleave peers using next_event(), processing events before
+same-tick inputs. Reset replaces the read event; power loss cancels all events.
+Unknown-power and repeated-reset timing reject. Program/erase completion still
+requires an observed outcome. No timer creates known data or successful writes.
+Failed operations poison the owner; trusted value copies restore cells, protocol,
+time and event together. Counter exhaustion fails instead of wrapping.
+
+  cmake --build --preset strict --target blofeld-nand-operation-clock-test
+  ctest --test-dir build/strict -R '^nand_operation_clock$' --output-on-failure
+Four independent timebase vectors check read and all reset deadlines, fine/coarse
+advance, polling invariance, cancellation, unknown data and complete owner copies.
+The same scoped gate passes separately under ASan/UBSan and TSan.
+original_nand_read_setup additionally couples this owner to four unchanged
+original read-address paths and a missing-byte control, with saved-busy replay
+and visible rejection of skewed clocks or further steps after a device fault.
+Its event/publication distinction and remaining board limits are in
+nand-read-setup.txt.
+
+An ignored full-first-stage experiment retains the explicit memory/PRRC/BCR
+counterfactuals from dsp-core.txt. Five original GPIO latches schedule the read;
+the 540MHz reference event occurs 8100 ticks after the final address. Instruction-
+boundary publication is 30 ticks later, explicitly separate from the event time.
+After 160 original polls, read setup admits the first RE edge. Unknown contents
+fail before consuming the byte. A separate synthetic-byte control reaches the
+unchanged reserved Port F write; no CPU payload sample occurs. Both sanitizer
+modes retain byte-identical traces. This does not qualify actual flash contents,
+physical pin timing, ROM/reserved-write behavior or the default board's boot.

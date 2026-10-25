@@ -16,7 +16,8 @@ struct Hcs08InstructionTiming {
   bool operator==(const Hcs08InstructionTiming &) const = default;
 };
 
-// Documented unstretched S08CPUV2 costs for explicitly implemented forms only.
+// Documented unstretched S08CPUV2 costs; native semantics are qualified separately.
+// Undefined forms and indefinite STOP/WAIT states refuse timing admission.
 [[nodiscard]] Hcs08InstructionTiming hcs08_instruction_timing(const Bus &bus,
                                                               ExecutionContext context);
 

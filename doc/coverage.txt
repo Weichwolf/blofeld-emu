@@ -231,6 +231,17 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           (dsp-core.txt).
                                           Original DSP RAM clear reaches reserved
                                           Y:002000; write/alias behavior unverified.
+                                          Local counterfactuals count the complete
+                                          sweep and reach strict PRRC=00ff00
+                                          reserved-bit rejection; no runtime
+                                          bypass or silicon qualification.
+                                          Further private PRRC clipping and BIU
+                                          hypotheses reach five original NAND
+                                          command/address latches and eight
+                                          healthy busy polls; no completion/data
+                                          supplied (dsp-core.txt). Physical write
+                                          effects, ROM/BIU entry and full boot
+                                          remain unqualified.
                                           Documented-prefix entry registers and
                                           native failure before/after X-to-P switch
                                           checked; no hidden modulo/scaling state
@@ -326,6 +337,9 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           DSP mode-zero counters, shared internal
                                           prescaler, TIO input/output, W1C and
                                           source IRQs tested (dsp-timers.txt).
+                                          Mode-three synchronized TIO/prescaler
+                                          counters, strict unknown inputs and
+                                          native IRQ/owner replay also checked.
                                           Ordered TE-clear/TC changes, live TCPR,
                                           retained clocked reload requests and
                                           nonboundary TRM updates checked against
@@ -564,6 +578,24 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           addresses, boundary code changes and
                                           trusted restore; guest maps unchanged
                                           (dsp-dispatch-cache.txt).
+                                          Forced interpreter skips optional JIT
+                                          runtime and mode/loop bookkeeping;
+                                          actual register writes and code-cache
+                                          invalidation tested (dsp-cycle-cache.txt).
+                                          Bus-owned SDK storage removes unused
+                                          arrays; declined hooks/direct pointers
+                                          fail, legacy array users remain tested
+                                          (dsp-core.txt). Guest maps unchanged.
+                                          Original dual-DMA enable fragment and
+                                          repeating ESAI/DAX source rings tested
+                                          under declared clocks/paused core;
+                                          full startup remains unqualified
+                                          (dsp-audio-dma.txt).
+                                          Eight six-body foreground streams also
+                                          feed both original DMA controls and
+                                          actual PCM/DAX pins; independent voice/
+                                          master equations, priming and DAX tail
+                                          checked (dsp-foreground-dual.txt).
                                           INC/DEC now honor arithmetic saturation;
                                           1080 independent full-state vectors
                                           check modes, rails and carry/borrow
@@ -654,6 +686,15 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           pin all 16 condition encodings and retained
                                           CCR/SP and selected RAM words
                                           (dsp-instructions.txt).
+                                          Normal DIV has 20736 independent cases,
+                                          literal host-overflow regression and
+                                          quotient/REP replay (dsp-divide.txt);
+                                          sixteen-bit DIV remains unqualified.
+                                          CLB/NORMF have 35424 independent cases,
+                                          native normalization/snapshot chains and
+                                          the full-width NORMF correction;
+                                          sixteen-bit mode remains unsupported
+                                          (dsp-fast-normalization.txt).
                                           Actual exception/debug/clock states remain
                                           unsupported, not silently successful.
                                           A saved own oversized-shift input pins
@@ -893,6 +934,23 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           occurs; uncertain drive keeps every
                                           board case unqualified. Joint Ready-edge
                                           replay matches (nand-read-setup.txt).
+                                          The same gate joins timed completion
+                                          for four original address rows and an
+                                          unknown-byte control. Busy snapshots
+                                          restore event/native/pin state; skewed
+                                          clocks and post-device-fault steps reject.
+                                          Event time and instruction-boundary
+                                          publication remain distinct; no physical
+                                          turnaround or full refill is qualified.
+                                          Explicit maximum-duration NAND owner
+                                          checks timed read/reset completion,
+                                          stale-event cancellation and unknown
+                                          payload rejection. A counterfactual
+                                          full-first-stage run leaves busy through
+                                          elapsed time, then fails on missing data;
+                                          a synthetic byte retains the reserved
+                                          Port F failure. Physical/default-board
+                                          timing remains unqualified (nand-read.txt).
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.
@@ -1082,18 +1140,53 @@ Original sample Timer1 entry      partial  All142 declared MIDI headers enter th
                                           physical latency, automatic scheduling,
                                           full request/NAND turnaround and boot
                                           remain open (dsp-sample-timer.txt).
+Original post-header refill       partial  All142 actual Timer1/header receives feed
+                                          568 original preparation/queue/drain
+                                          suffixes without a timer-busy override.
+                                          Unknown/low/high/release ready inputs
+                                          preserve exact partial state; actual
+                                          PCR_F=300 with PRR_F=500 fails at P:18a8.
+                                          No descriptor consumption or fabricated
+                                          refill/output (dsp-sample-refill.txt).
+                                          Full transaction/boot remain open.
 Cold boot and reset               partial  Untimed MCU reset-to-application fixture;
                                           no complete scheduled board/DSP boot yet.
                                           Explicit nominal DSP reset epochs retain
                                           lifetime time and reject stale schedules;
                                           original ROM/stage reloads twice before
                                           the same reserved write (dsp-reset.txt).
+                                          Explicit mode5/PINIT-low EXTAL reset
+                                          holds/recovery retain RAM and lifetime
+                                          time, block execution, reset peripherals
+                                          and replay owner snapshots. All256 CCR
+                                          seeds reset correctly; native SDK upper
+                                          CCR retention is corrected in the adapter.
+                                          Shared scheduling admits held/reset
+                                          recovery time and external events;
+                                          native MCU release stores,44 partial
+                                          periods, both tie orders and12 joint
+                                          suffix replays have literal oracles.
+                                          Held WAI/system-reset variants each
+                                          replay twice across native MCU idle/
+                                          reset/vector execution and DSP recovery.
+                                          Conditional original U0 assert/release
+                                          now clocks the native97-frame SPI path
+                                          without a synthetic ready input, with
+                                          unknown-unused-pin failure and held
+                                          replay; pre-assert DSP history/routing
+                                          remain outside that test's scope.
+                                          Asynchronous assertion and physical
+                                          routing remain unqualified.
                                           Additional CPU-cycle adapter runs the
                                           same original 90314-instruction MCU
                                           bootloader with SCI/TIM clocks in
                                           233749 un-stretched cycles, including
                                           reset (hc12-cycles.txt). GPIO/PHY and
                                           memory timing remain explicit contracts.
+                                          Native PE2/PE3 loopback also retains
+                                          MODRR0/PR2: 90312 instructions/233747
+                                          cycles. Missing PR2 fails visibly;
+                                          these are conditional routing contexts.
                                           Timed native application: strict unknown
                                           capture failure; conditional PT0 handover
                                           reaches unknown PU after 1672474 native
@@ -1506,6 +1599,21 @@ Original update and recovery      partial  Isolated original DSP command record:
                                           NVM checked. Physical reset propagation,
                                           whole boot and helper return remain open
                                           (original-update-coupled.txt).
+                                          Declared post-reset Q7 low/high, shared
+                                          PE2/PE3 and PJ0/IRQA nets, PHY observation
+                                          and PR2 idle exercise16 native resident
+                                          bootstrap suffixes/eight exact replays.
+                                          Full90312-instruction RAM/checksum path,
+                                          retained DSP downloads and MCU NVM checked;
+                                          laboratory inputs do not qualify wiring
+                                          or whole-board recovery
+                                          (mcu-reset-coupling.txt).
+                                          Supplemental local ASan continuation
+                                          reaches the unknown PU0 input after
+                                          1582162 application instructions with
+                                          observed idle TIO0; DSP still runs its
+                                          transferred helper. Not CTest/TSan or
+                                          physical reset/ready-route validation.
                                           Separate declared TIO0 wire path: 30 cases,
                                           1050 bytes / 9450 original IRQs/RTIs feed
                                           real SysEx collection and manufacturer
@@ -1655,6 +1763,13 @@ Parser fuzzing/regression corpus  partial  Offline ZIP/MIDI harness, initial 60 
                                           runs in 61 s without findings
                                           (nand-persistence.txt). Sustained
                                           complete-board campaigns remain pending.
+Host cycle-count storage          partial  Full24-bit cycle memoization uses sparse
+                                          pages with deep snapshot copies; cold
+                                          invalidation does not allocate. Own
+                                          storage and actual SDK metadata tests
+                                          preserve cached counts without replay.
+                                          First use/snapshots allocate; no real-time
+                                          or silicon timing proof (dsp-cycle-cache.txt).
 Long-run/realtime stress          pending  Need boot, MIDI and original audio first.
 Traces and snapshots              partial  MCU state, disassembly and register-write
                                           trace; full bootloader trace under build/.
@@ -1689,6 +1804,13 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           loads; two restores preserve the old
                                           sampled word despite source overwrite.
                                           Semantic order is not pipeline timing;
+                                          reference DMA memory admission now
+                                          derives actual pending operands and
+                                          holds native tickets on bank stalls.
+                                          Optional nominal MOVE-to-AGU history
+                                          separates SDK/elapsed units and retains
+                                          timer/scheduler replay; physical stages
+                                          remain open (dsp-agu-interlocks.txt).
                                           IRQ clocks and real-time bounds remain
                                           open (dsp-reference-execution.txt).
                                           Pending opcode/extension reads can
@@ -1941,9 +2063,20 @@ Keyboard BKGD byte transport      partial  Clocked wire/SYNC/timeout/replay and
                                           original HC12 GPIO C0/E0 routines reach
                                           actual target RAM/replies across eight
                                           declared phases (hcs08-bdc-wire.txt).
-                                          Reset/SYNC caller, complete helper,
-                                          full target programming and
-                                          physical timing/wiring remain open.
+                                          Complete helper, full target programming
+                                          and physical timing/wiring
+                                          remain open.
+Keyboard reset/SYNC caller       partial  Original138C GPIO, TCNT word reads and
+                                          acceptance execute under declared PHY/
+                                          TIM/reference circuit inputs. Six cases:
+                                          two4MHz phases pass,3/6MHz reject,
+                                          unknown PE7 fails, disconnected target
+                                          times out (hcs08-bdc-wire.txt). Native
+                                          reset epoch and independent timer/pulse
+                                          expectations checked; target executes
+                                          zero instructions. Actual target reset/
+                                          ICG, reached entry and FLASH-clock
+                                          consistency remain unqualified.
 Keyboard native upload/start     partial  Original HC12 RAM upload, pointer/PC/SP/GO
                                           through GPIO starts native HCS08 at two
                                           reference phases; secure RAM blocking,
@@ -1951,7 +2084,7 @@ Keyboard native upload/start     partial  Original HC12 RAM upload, pointer/PC/S
                                           suffix replays (keyboard-target.txt).
                                           Six primary-table instruction budgets
                                           have independent period/state tests
-                                          (hcs08-run-clock.txt). Reset/SYNC caller,
+                                          (hcs08-run-clock.txt). Coupled reset/SYNC,
                                           full stream/helper, bus microcycles,
                                           physical clock/wiring and whole recovery
                                           remain required; no NVM transfer occurs.
@@ -1965,8 +2098,10 @@ Keyboard reset/SYNC              partial  Original HC12 GPIO reset/SYNC with nat
                                           keyboard-reset.txt). Explicit cadence,
                                           wiring/pads and caller inputs remain
                                           conditional. Full startup/caller chain,
-                                          cold unknown A/X, partial-CCR ISA coverage,
+                                          remaining partial-register ISA coverage,
                                           physical timing and recovery remain open.
+                                          Cold A/X architectural knowledge is
+                                          covered below; physical cold start is not.
 
 Stock hardware validation         pending  No stock Desktop/Keyboard currently
                                           available, as reported by the user.
@@ -1987,6 +2122,9 @@ DSP download/sender -> MCU XIRQ/copy/helper/checksum -> reset/SYNC -> recursive
 saving-text physical LCD contexts, plus four fresh joint suffix restorations.
 Independent original bytes/frames/clock-response geometry and complete font PBM/
 PNG pixels are checked; shared warm reset/CCR/TIM and wire inputs remain explicit.
+Active-background entry now precedes vector fetch; target PC and both vector
+bytes remain unknown until explicit input establishes them (hcs08-reset.txt).
+This removes the valid-vector dependency without qualifying cold/secured recovery.
 The current direct-PB1/reference128-period model refuses the original first trim
 command after LCD long-low activity. This is not an exact silicon detector or
 collision-recovery specification, physical firmware defect, target upload/GO/
@@ -2009,7 +2147,7 @@ Normal HCS08 reset/security: explicit CPU vector reads no longer inherit the
 previous instruction's SEC access origin. hcs08_reset_security covers48 native
 SEC/options/protection/origin cases, missing vector failures, unknown permission
 refusals, known secured BDC resources and four own reference recovery recipes
-from interrupted option-page images. Original update/recovery, cold registers,
+from interrupted option-page images. Original update/recovery, cold secured recovery,
 actual NVM/board timing, physical mask and stock-device equivalence remain open.
 
 Original HCS08 reset entry: original_hcs08_reset_entry joins actual pre-vector
@@ -2039,13 +2177,51 @@ prevent post-reset phantom completions; CPU vector-read brackets stay separate.
 An explicit no-clock-event reference contract and event quarantine prevent old
 software requests from becoming live values after unknown automatic changes.
 
+Original Keyboard FLASH/GPIO/ICG startup: candidate FLASH holds exactly the
+seven supplied pages; omitted bytes/erase history stay unknown. Real normal
+reset and native GPIO/trim/control instructions reach ICGS1 atE1B0 after6188
+retirements under declared input levels. Three entry contexts retain unknown
+pads or unknown/known live trim. Fourteen fresh joint CPU/RAM/NVM/GPIO/ICG
+suffixes and two coordinated warm resets preserve actual trim, RAM and NVM;
+no ready status or frequency is supplied (hcs08-icg-startup.txt). Full clock
+history, CPU/peripheral timing, physical part/nets and boot/MIDI/audio remain
+pending. Shared programmer-fixture compilation retains strict flags and one
+translation unit; its default RAM/code policy remains separately exercised.
+
+Original controller instruction-period startup (hcs08-run-clock.txt): primary
+Family RM Table6-13 covers251 ordinary primary/47 page2 forms (252 first-opcode
+classifications including9E). Independent complete matrices check all missing
+bytes and wrap boundaries; undefined and STOP/WAIT forms still refuse.
+Native MUL/stack/JSR/RTS/BGND effects have independent per-period states and
+fresh mid-MUL continuations. Timing metadata does not establish all native
+semantics, held states, IRQ pin/DAA intrinsics or physical bus/prefetch timing. The real original RAM clear/GPIO/trim/control prefix consumes
+22670 reference bus periods; its first ICGS1 read faults at22673,6188 retired.
+Six fresh joint partial-instruction continuations reproduce complete state and
+access histories. No physical frequency, synchronization latency, FLL/status,
+timer/COP progress or complete boot/MIDI/audio is inferred.
+
+Candidate controller TPM/COP (hcs08-timer-cop.txt): run-mode BUSCLK up-counter,
+coherent16-bit reads, overflow history and watchdog2^13/2^18 reset requests.
+Unknown divider phase is not filled; modulo/channels/PWM/external clocks and
+CPU IRQ/reset delivery remain unsupported. Separate original E1C2 timer-loop
+execution reaches its real31250 threshold through native SRS stores under two
+declared histories, with eight fresh joint partial-budget continuations. An
+expired prehistory instead requests reset before the first service retires.
+Unchanged ICG/ADC startup is not bypassed into a normal boot: this component's
+entry is explicit. It continues through original SPI configuration and JSR to
+the flash writer: real FCDIV/ignored CPU FOPT/FPROT stores precede strict idle
+FSTATFF refusal at1825/PCea88. SPI IRQ is pending with CPU I set; there are no
+serial edges or fabricated IRQ/command completions. Full state/copy suffixes
+retain exact stack bytes, write order and original timer/service totals.
+Full board/reset integration and all complete objective requirements stay open.
+
 Original HCS08 GPIO/FLASH/ICG startup (hcs08-clock-startup.txt): actual normal
 warm reset/vector reads, unknown initial RAM and declared strap/calibration
 histories join original GPIO setup to original live trim/control stores.
 The first ICGS1 load remains a strict clock-evolution refusal; no stored request,
 REFS bit, lock flag or physical frequency is invented. All prior strict gates
-remain separate; cold state, timing, scanning, full update/boot and118 functions
-remain incomplete.
+remain separate; the cold gate below covers register knowledge. Physical
+timing, scanning, full update/boot and118 functions remain incomplete.
 
 HCS08 cold-register knowledge: explicit fresh power_on reset, unknown A/X masks,
 native dependency admission, BDC reads/writes and joint checkpoints are covered
@@ -2062,6 +2238,16 @@ A/X until original LDX/LDA retire. Strict idle-FSTAT refusal remains before NVM
 launch; this is not a complete update, physical cold start or recovery proof.
 See hcs08-programmer-entry.txt. Warm entry remains an independent regression.
 
+Cold-register/timer integration: direct LDHX defines HX without a prior HX
+value; absent first/second memory bytes keep its knowledge uncommitted. The
+original timer component now includes an unknown-HX entry and observes its
+first real coherent counter load. Earlier exact timer/service totals remain
+reference-clock results; A and prior ICG/ADC histories are not supplied by a
+complete boot. Root period/TPM/COP and original ICG/GPIO gates remain separate.
+Retirement observers see register values and knowledge together; failed hooks
+retain actual native effects and require coordinated recovery, without opening
+checkpoint admission during active execution (hcs08-reset.txt).
+
 Candidate S08SPIV3 SPI: explicit untimed master-edge owner supports real bit
 shifting, register/ack semantics, buffers/overrun/IRQ requests and trusted copies.
 Original direct SPI ISR gate checks own foreground frames/rings and native RTI
@@ -2070,13 +2256,27 @@ admission/timing, physical nets and full boot/controller/DSP event provenance
 remain open. Architectural untimed admission is covered below.
 No original FSTAT policy or firmware byte changes are implied.
 
+Candidate S08ATDV3 ADC (hcs08-adc.txt): explicit stable-input/clock/reference
+observations drive register semantics, ideal quantization, complete formats,
+documented BUS-period conversion, CCF/IRQ and abort/reset/copy behavior.
+Original bounded setup/poll/dispatch/three-accumulator paths use own caller/RAM
+contexts; incomplete conversions and unknown analog inputs cannot supply data.
+Fifteen contexts include unknown H; native polling/dispatch preserves it until
+original ADD E152 defines it. Independent ISA oracles cover actual CCR inputs,
+CPU/RAM effects and arithmetic boundaries;90 fresh partial-ADC continuations.
+No boot-origin clock/CCR, physical S/H/accuracy, full analog calibration/event
+path or complete controller/MCU/DSP execution is established by these gates.
+
 HCS08 architectural IRQ: actual eligible source/frame/vector entry preserves
 unknown CCR/A/X bits in memory-owned masked RAM. Native RTI restores masks;
 ordinary reads/fetches remain strict. Directed vector/wrap/failure/BDC controls
 and original SPI IRQ execution cover two untimed schedules, including the real
-unread final RX byte after original masking. See hcs08-irq.txt. Eleven-cycle IRQ,
-prefetch/bus ordering, derivative priority and boot-origin timing remain open;
-this does not qualify timed run-clock admission or whole device behavior.
+unread final RX byte after original masking. See hcs08-irq.txt. This architectural
+gate alone does not qualify eleven-cycle entry, prefetch ordering, derivative
+priority, boot-origin timing or whole device behavior; explicit bus coverage follows.
+Masked RAM is an explicit optional capability; restricted ordinary RAM cannot
+inherit a policy bypass. Application ordinary/masked operations retain reset
+transaction ownership, with complete knownness and effect-prefix checks.
 
 HCS08 IRQ bus owner (hcs08-irq-bus.txt): eleven explicit unstretched user-view
 periods perform actual stack/vector/program accesses and retain partial queues
@@ -2095,3 +2295,114 @@ are covered. Masked RAM is an explicit board capability; inherited ordinary RAM
 helpers cannot bypass restricted write policies or application reset ownership.
 This does not qualify instruction-bus queue consumption, physical interrupt
 sampling, common-clock controller execution or complete update/recovery.
+
+ADC common-reference-clock component (hcs08-adc.txt): documented native budgets
+and explicit ADC-before-retirement ordering cover setup, CCF visibility around
+BRSET, actual channel arithmetic and overlapping next conversions. Fresh joint
+mid-instruction/ADC continuations retain opaque admission ownership. Physical
+bus/tie timing, boot origin, full analog event production and normal runtime
+remain unqualified; no ICG/FSTAT frontier or original byte is bypassed.
+
+Calibrated pitch producer (hcs08-pitch-event.txt): original averaging/filter/map/
+change suppression/TX-ring code feeds actual original IRQ/SPI/SHI data transfers.
+Independent width/threshold/ring oracles and fresh native stack continuations
+cover declared caller/calibration states. Physical timing and boot-origin
+calibration/normal scanner/whole-device behavior remain open.
+
+Shared-clock calibrated pitch (hcs08-pitch-clock.txt): the same68 declared
+contexts execute original arithmetic/ring stores with masked IRQs. Common setup13,
+held conversion176 and next-channel start115/completion291 retain actual ADC
+work during longer native computation. Seven joint cuts include a partial MUL;
+14 fresh CPU/RAM/ADC/SPI/BDC/clock owners reproduce full endpoints/access histories.
+The separate native IRQ/serial gate remains unchanged in behavior. Full-path
+period counts are recorded; physical bus/ADC/SPI phases, normal scanner/IRQ
+scheduling and boot-origin calibration remain unqualified.
+
+HCS08 DIV (hcs08-divide.txt): native zero guard and error A/H/Z knowledge retain
+known X/C and unrelated flags.22449 independent arithmetic boundaries, partial
+CCR/missing operands/invalid consumers, guest recovery and joint six-period
+snapshot suffixes qualify the instruction. This is a calibration prerequisite;
+Boot-origin acquisition and normal boot/physical equivalence remain open.
+
+Original300-step pitch acquisition (hcs08-calibration.txt): native cold RAM and
+ADC sample history replace preseeded analog state.4817 pitch samples/14451 real
+channel windows feed302 independent batch oracles, final center/range/gains and
+actual pressure/pitch ring records. Late joint division/calibration snapshots
+qualify suffixes. Explicit ADC caller/clock handoff still excludes unresolved
+ICG reads, normal board/scanner/IRQ timing and complete boot/device equivalence.
+
+HCS08 IRQ-enable history (hcs08-irq-delay.txt): CLI/TAP1->0 protects the actual
+following instruction across holds/reservations/checkpoints. BDC GO preserves
+history and cannot drop owned work. Family RM p87/p275 contradict RTI timing:
+default unresolved pending arbitration refuses; explicit immediate/next-instruction
+reference contracts remain conditional, not physical qualification. Joint restore
+requires the same contract. Full board/queue/ADC/IRQ scheduling remains open.
+
+HCS08 SPI BUSCLK divider owner (hcs08-spi-clock.txt): explicit half-period/final-
+edge reference;2048 independent baud/format period oracles and385 cuts/770 fresh
+paired SHI continuations. Genuine pin events/acknowledgements, ownership failures
+and joint recovery retain partial phases. Automatic launch, physical phase and
+common CPU/ADC/SPI IRQ/prefetch scheduling remain open. No fuzz/physical traffic.
+
+HCS08 captured IRQ program (hcs08-prefetch.txt): explicit linear p/f/s consumer
+retains the real queue and delayed arrivals;21 opcode shapes keep independent
+native knowledge checks.41 instruction/mask oracles,235 strict classifications,
+24 fresh continuations and original native PSHH s/p execution (eight contexts,
+six fresh suffixes) preserve actual bytes and partial CCR. Original next BRCLR,
+general data/flow/IRQ scheduling and normal controller boot remain unqualified.
+
+HCS08 direct data/bit-branch reference (hcs08-prefetch.txt): native semantics
+consume one captured actual operand, preserving read-side effects and selected
+PC/C.7680 independent cases,60 fresh unit suffixes and the original PSHH/BRCLR/
+LDA/CMP path (eight contexts,32 fresh suffixes) cover actual data/program reads.
+Next BEQ stays strict. Speculative p2 and p3..p5 refill are explicit hypotheses;
+physical addresses/phases, general scheduling and full controller boot remain open.
+
+HCS08 short-branch refill reference (hcs08-prefetch.txt): sixteen native ppp
+branch forms preserve actual ready/discarded bytes and selected-PC reads.
+Native BGE build-copy correction has640 independent ordinary BGE/BLT cases.
+3520 independent cases/two wraps/32 fresh unit suffixes; original empty/send
+BEQ paths reach MOV/STA with88 fresh joint continuations. Physical fetch/register
+phases, write/return cycles, common scheduling and full boot remain unqualified.
+
+HCS08 peripheral program cycles (hcs08-prefetch.txt): native wpp/pwpp stores,
+indexed rpp/prpp reads and ufp PULH use the real bus/captured arrivals.3072 own
+byte/mask cases and54 fresh suffixes cover exact effects and failures. Original
+empty/send control/cursor/buffer/SPID writes and saved-H restoration have132
+fresh joint continuations. RTI uuuuufppp captures five real frame reads with raw
+CCR/A/X masks, consumes them through native RTI at f6 and refills the native PC.
+256 flag/data and256 raw-mask cases, six wraps,40 fresh suffixes,16 read failures
+and unknown PC refusals cover the bounded reference. Original empty/send ISR
+returns have168 fresh suffixes through real IRQ/PSHH/PULH frames. Both actual
+sequential successors remain observable. Three RTI policies check actual pending
+IRQs at new instruction boundaries, refusing unqualified queue handoff without
+extra accesses. Physical phases/IRQ-delay conflict/automatic SPI launch/common
+clocks/full boot remain unqualified.
+
+HCS08 owned queue-to-IRQ handoff (hcs08-irq-bus.txt): a completed actual queue,
+its pending arrival and all RTI/discarded observations move to the new IRQ owner.
+128 CCR/priority cases,256 raw-mask cases, two wraps,84 fresh suffixes and20
+failed access prefixes cover real stacking/selection/refill and protected admission.
+Explicit promotion of an original native queued SPI byte now raises a second
+original ISR/frame/RTI with120 fresh suffixes. No supplied handler PC/frame/SPI
+byte or serial edge. Physical promotion/invalidation/late mask timing, automatic
+SPI launch/shared clocks/full boot and hardware equivalence remain unqualified.
+
+HCS08 CPU/SPI reference owner (hcs08-spi-run-clock.txt): native IRQ/program and
+SPI periods run once in either explicit order; genuine queued bytes launch after
+one/two subsequent stages.1024 byte/reference cases and284 fresh suffixes cover
+complete serial bytes and committed failure/abort prefixes. Original firmware
+queues90/3C through two real ISR/frame/RTI paths while ADC advances each period;
+nine real edges precede strict E33D JMP-cycle refusal.32 contexts,200 cuts/400
+fresh suffixes retain all owners. Original scanner/general instruction cycles,
+physical event/promotion phases, active BDC clocks and full boot remain open.
+An explicit JMP extension now follows both original jumps back to the scanner
+and executes actual LDX before a strict ASLX-cycle boundary. Eleven serial edges
+and the genuine busy ADC remain concurrent. Five JMP addressing forms retain
+native destinations, actual discarded reads and fresh failure/restore prefixes;
+earlier program contracts retain their strict JMP boundary (hcs08-prefetch-jump.txt).
+Scanner byte cycles additionally admit native ASLX, STA/STX SP1 and PULX.
+The original gate derives RAM/main frame SP0475 from actual reset/startup before
+ICGS1, then resumes a declared component caller. Actual contact reads, frame
+stores and pulls coexist with14 serial edges; native STHX bus phases remain a
+visible boundary. This is not a completed startup (hcs08-scanner-bytes.txt).

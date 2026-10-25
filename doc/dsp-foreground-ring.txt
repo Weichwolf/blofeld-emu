@@ -1,5 +1,8 @@
 Persistent original foreground and repeating DMA ring
 
+dsp-foreground-dual.txt adds both original DMA-controlled serial outputs and the
+actual original enable/settling/return suffix under separate declared inputs.
+
 original_dsp_repeat executes six consecutive original foreground iterations in
 eight held-voice contexts: both pitch profiles, RM modes and filter routings.
 The original primary MIDI parser, voice, copy/mix/master, scheduler seed/tick

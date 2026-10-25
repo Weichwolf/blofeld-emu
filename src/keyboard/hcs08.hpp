@@ -28,11 +28,88 @@ struct Hcs08State {
   bool operator==(const Hcs08State &) const = default;
 };
 
-enum class Hcs08IrqBusContract : std::uint8_t { unqualified, reference_unstretched_sequence };
+enum class Hcs08IrqBusContract : std::uint8_t {
+  unqualified,
+  reference_unstretched_sequence,
+  reference_owned_program_handoff
+};
+
+// CLI/TAP1->0 protects the next instruction. Conflicting RTI descriptions in
+// Family RM Rev.2 require an explicit reference choice when arbitration differs.
+enum class Hcs08RtiIrqContract : std::uint8_t {
+  unqualified,
+  reference_immediate,
+  reference_next_instruction
+};
+enum class Hcs08IrqDelay : std::uint8_t {
+  none,
+  next_instruction,
+  unknown_transition,
+  unqualified_return
+};
+
+enum class Hcs08InstructionContract : std::uint8_t {
+  unqualified,
+  reference_instruction_retirement
+};
+
+enum class Hcs08PrefetchContract : std::uint8_t {
+  unqualified,
+  reference_linear_program_cycles,
+  reference_data_branch_cycles,
+  reference_short_branch_refill,
+  reference_peripheral_program_cycles,
+  reference_jump_program_cycles,
+  reference_scanner_byte_cycles
+};
+
+struct Hcs08DataRead {
+  std::uint16_t address = 0;
+  std::optional<std::uint8_t> value;
+  bool in_flight = false, consumed = false;
+  bool operator==(const Hcs08DataRead &) const = default;
+};
+
+struct Hcs08DiscardedProgramRead {
+  std::uint16_t address;
+  std::uint8_t value;
+  bool in_flight;
+  bool operator==(const Hcs08DiscardedProgramRead &) const = default;
+};
+
+// RTI raw-copy latches retain unknown CCR/A/X bits from actual stack reads.
+struct Hcs08StackRead {
+  static constexpr std::uint8_t all = 0xff;
+  std::uint16_t address = 0;
+  std::optional<std::uint8_t> value;
+  std::uint8_t known = all;
+  bool in_flight = false, consumed = false;
+  bool operator==(const Hcs08StackRead &) const = default;
+};
+
+// Explicit bounded cycle references retain actual reads and one-period arrivals.
+// The optional direct-data/bit-branch policy assumes sequential speculation and
+// selected-PC refill; physical addresses/phases and general pipelines are unqualified.
+struct Hcs08PrefetchState {
+  Hcs08PrefetchContract contract = Hcs08PrefetchContract::unqualified;
+  std::uint16_t head = 0, next_read = 0;
+  std::array<std::uint8_t, 3> queued{}, instruction{};
+  unsigned queued_bytes = 0, ready_bytes = 0;
+  unsigned instruction_bytes = 0, instruction_periods = 0, instruction_cycle = 0;
+  bool program_byte_in_flight = false, native_executed = false;
+  Hcs08DataRead operand{};
+  std::optional<Hcs08DiscardedProgramRead> discarded;
+  std::array<Hcs08StackRead, 5> return_reads{};
+  std::optional<Hcs08DiscardedProgramRead> return_discarded;
+  std::optional<Hcs08DiscardedProgramRead> jump_discarded;
+  std::uint64_t completed_periods = 0, attempted_periods = 0, retired_instructions = 0;
+  Hcs08State before;
+  bool operator==(const Hcs08PrefetchState &) const = default;
+};
 
 // Completed user-view bus cycles, not internal pipeline register timing. The
 // vector bytes are observed separately before the free cycle makes the target
-// available. Prefetched bytes stay owned until a qualified queue consumer exists.
+// available. Prefetched bytes stay owned until an explicit consumer accepts them.
 struct Hcs08IrqBusState {
   Hcs08State entry;
   std::uint16_t admitted_vector = 0, vector = 0, target = 0;
@@ -42,12 +119,8 @@ struct Hcs08IrqBusState {
   unsigned ready_program_bytes = 0;
   bool program_byte_in_flight = false;
   bool vector_selected = false, target_known = false, acknowledged = false;
+  std::optional<Hcs08PrefetchState> discarded_program;
   bool operator==(const Hcs08IrqBusState &) const = default;
-};
-
-enum class Hcs08InstructionContract : std::uint8_t {
-  unqualified,
-  reference_instruction_retirement
 };
 
 // Opaque in-process admission proof. The immutable lifetime tag is not a CPU or
@@ -89,6 +162,9 @@ private:
   std::uint16_t hx_known_ = Hcs08State::all_hx;
   std::optional<Hcs08IrqBusState> irq_bus_;
   std::optional<Hcs08InstructionReservation> instruction_;
+  Hcs08IrqDelay irq_delay_ = Hcs08IrqDelay::none;
+  Hcs08RtiIrqContract rti_contract_ = Hcs08RtiIrqContract::unqualified;
+  std::optional<Hcs08PrefetchState> prefetch_;
 };
 
 enum class Hcs08ResetEntry : std::uint8_t { unqualified, normal, active_background };
@@ -99,7 +175,9 @@ enum class Hcs08ResetCause : std::uint8_t { unqualified, warm, power_on };
 // Timing, interrupts, reset sequencing and BDC privileges require their owners.
 class Hcs08 {
 public:
-  explicit Hcs08(Bus &bus, const std::filesystem::path &specification);
+  explicit Hcs08(Bus &bus,
+                 const std::filesystem::path &specification,
+                 Hcs08RtiIrqContract rti_contract = Hcs08RtiIrqContract::unqualified);
   ~Hcs08();
   Hcs08(const Hcs08 &) = delete;
   Hcs08 &operator=(const Hcs08 &) = delete;
@@ -124,12 +202,20 @@ public:
   // Entry does not retire an instruction or clear peripheral source flags.
   [[nodiscard]] std::optional<std::uint16_t> pending_interrupt() const;
   [[nodiscard]] bool service_interrupt();
+  [[nodiscard]] Hcs08IrqDelay irq_delay() const;
   // Real sssssvvfppp accesses, one explicitly supplied bus period per advance.
+  // Owned-program handoff additionally retains the complete discarded queue;
+  // an unfinished instruction or ineligible source never transfers ownership.
   // No instruction retires. Ordinary stepping refuses the retained IRQ queue;
-  // consuming/invalidation of that queue is not yet qualified.
+  // bounded linear consumption has a separate explicit reference contract.
   [[nodiscard]] bool start_irq_bus(Hcs08IrqBusContract contract);
   void advance_irq_bus();
   [[nodiscard]] std::optional<Hcs08IrqBusState> irq_bus_state() const;
+  // Transfer the completed IRQ queue to its explicit linear-cycle consumer.
+  // Ordinary stepping, IRQ service and BDC GO cannot discard this ownership.
+  void start_irq_program(Hcs08PrefetchContract contract);
+  void advance_irq_program();
+  [[nodiscard]] std::optional<Hcs08PrefetchState> prefetch_state() const;
   // Sample IRQ before a reference budget is accepted. Empty means no admission
   // (IRQ, BGND or another owner); no opcode is fetched or effect executed here.
   [[nodiscard]] std::optional<Hcs08InstructionReservation>
@@ -142,8 +228,21 @@ public:
   void step();
 
 private:
+  friend class Hcs08Bdc;
+  // Logical BDC resume is not debugger register replacement. Keep CPU history;
+  // retained instruction/IRQ queues still require their qualified timing owner.
+  void resume_background();
   [[nodiscard]] bool matches_reservation(const Hcs08InstructionReservation &reservation) const;
   void execute_instruction(const Hcs08InstructionReservation *reservation);
+  void execute_native(const Hcs08State &before,
+                      const Bus *program = nullptr,
+                      Hcs08DataRead *operand = nullptr);
+  void execute_program(Hcs08PrefetchState &program, Hcs08DataRead *operand = nullptr);
+  void advance_data_program(Hcs08PrefetchState &program, unsigned phase, bool branch);
+  void advance_return_program(Hcs08PrefetchState &program, unsigned phase);
+  void advance_short_branch(Hcs08PrefetchState &program, unsigned phase);
+  void advance_jump_program(Hcs08PrefetchState &program, unsigned phase);
+  void advance_write_program(Hcs08PrefetchState &program, unsigned phase);
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

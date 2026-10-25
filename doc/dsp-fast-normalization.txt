@@ -1,0 +1,32 @@
+DSP normal-mode CLB and NORMF
+
+DSP56300FM Rev5 13-42/43 and 13-147/148 define leading-sign-bit counting and
+normalization. The pinned source is in hardware/sources.json. CLB counts the
+56-bit accumulator, with the documented all-zero exception, and writes the
+signed count into the destination MSP with zero LSP and sign-extended EXP.
+Only N/Z/V change. NORMF accepts signed source counts -55..+56, preserves C/S,
+updates E/U/N/Z/V and retains sticky L after any left-shift sign change.
+
+The native NORMF +56 path previously failed its shared ASR guard. Reference
+execution now composes two legal ASR operations inside one native instruction,
+then restores incoming C. ASR's own bound stays unchanged. Counts outside the
+NORMF range reject before arithmetic. Sixteen-bit CLB/NORMF remain unqualified
+and now reject explicitly with PC/OMR context instead of using 56-bit rules.
+
+  cmake --build --preset strict --target blofeld-dsp-fast-normalization-test
+  ctest --test-dir build/strict -R '^dsp_fast_normalization$' --output-on-failure
+
+The gate checks 35424 independent whole-state cases: 5472 CLB cases spanning
+every leading-bit boundary and 29952 NORMF cases across all six source fields,
+both destinations, aliases, signs, count/extension boundaries, incoming flags
+and three legal scaling modes. Its shift oracle performs individual bit steps;
+the count oracle scans source bits without the SDK's highest-bit algorithm.
+A literal own 45-byte +56 regression pins sign fill and carry preservation.
+
+114 real CLB A,B / NORMF B1,A chains pass the native count directly, with two
+trusted suffix replays each. Another 64 rejected count/mode cases verify retained
+accumulators, checkpoint quarantine and exact trusted recovery (292 restores
+total). These checks establish instruction behavior under the stated reference
+contract, not physical pipeline timing or hardware equivalence. The original
+firmware's Drive path uses these instructions; complete boot/live MIDI/audio
+and instrument acceptance retain their separate outstanding requirements.

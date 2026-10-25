@@ -12,6 +12,14 @@ The SDK does not establish all instruction costs, pipeline fill/stalls, chip
 latency or analog PLL settling. No calibrated MCU/DSP board scheduler follows
 from these counters. No original firmware instruction or memory limit is changed.
 
+The separately selected native_internal_agu_interlocks contract adds nominal
+MOVE-to-AGU readiness and elapsed-unit accounting (dsp-agu-interlocks.txt). It
+retains completion-boundary effects and does not qualify physical pipeline time.
+It permits native_vector_estimates configuration for ordinary prepared steps,
+but actual IRQ preview/entry still rejects before acknowledgement or clock/state
+effects. The broader native_interlock_estimates profile rejects that interrupt
+configuration at construction; its vector contract remains unqualified.
+
 Reference contract
 - begin_step latches the current PCTL requested EXTAL ratio. The completed
   command uses that rate; a changed PCTL affects the next instruction. The model

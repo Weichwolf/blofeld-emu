@@ -1,0 +1,69 @@
+Candidate HCS08 run-mode TPM1 and COP
+
+  cmake --build --preset strict --target blofeld-hcs08-tpm-test \
+    blofeld-hcs08-cop-test blofeld-original-hcs08-timer-wait-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^(hcs08_tpm|hcs08_cop|original_hcs08_timer_wait)$'
+
+Primary GT16A/GT8A Rev.1:4.2,5.3/5.7.2/5.7.4,10.3.1..10.3.3/10.4.1;
+URL/size/hash in hcs08-reference.json. Actual part/mask remains unverified.
+Both owners require explicit candidate_gt8a_run_bus_edges contracts. Bus edges
+are supplied independently of register reads; no oscillator frequency is fitted.
+
+TPM1 (30..34): MOD=0 free-running16-bit up-counter, BUSCLK prescalers1..128,
+TOF read/zero acknowledgment, intervening-overflow invalidation and derived
+TOIE/TOF interrupt request. No CPU interrupt delivery is implied. Either count
+byte latches both; repeated same-byte reads hold the pair until the other byte
+is consumed. Any SC/counter write resets coherency; counter writes clear count.
+Divider phase is an explicit optional observation, never a reset default. Missing
+phase faults on the first active edge. Counter writes/disabling discard phase;
+re-observation requires a disabled timer. Live prescaler changes, modulo/channel
+writes, PWM and synchronized XCLK/external clocks refuse before mutation.
+Only qualified run-mode events/accesses are admitted; BDM/WAIT/STOP integration
+and exact physical enable/reset/divider timing remain required.
+
+COP owns SRS1800 and the existing write-once SOPT1802 behavior together. Enabled
+deadlines are2^13/2^18 BUSCLK periods. Every SRS byte write services COP without
+changing known/unknown reset causes. Batched advance returns only the consumed
+prefix at its first reset request. Subsequent service/read/clock operations
+refuse until explicit coordinated reset. Shortening across an already elapsed
+threshold refuses rather than guessing internal divider history. Reset-source
+bits are explicit board inputs, not inferred from device detection or reset-pin
+state. Other system/reset registers and BDM/WAIT/STOP timing remain unsupported.
+
+Units check all8 divisors and128 declared phases, exact wrap/IRQ/clear history,
+both coherent byte orders and fresh partial-read copies,256 SC classifications,
+unknown phase, unsupported/atomic controls and maximal64-bit input batches.
+COP covers every256 service byte, both deadlines, first-write/disabled behavior,
+late-service quarantine, fresh deadline copies and explicit/unknown SRS flags.
+LDHX direct adds documented4-period timing/VNZ knowledge, preserving unknown H/C.
+
+original_hcs08_timer_wait executes unchanged supplied FLASH atE1C2..E1D1;
+clock/ADC setup before this component is not executed or replaced. Entry A/HX/SP,
+partial CCR and timer/COP histories are declared inputs. RAM begins unknown;
+no NVM rate/completion, debugger command or ready flag is supplied.
+Accesses commit at instruction retirement in this reference clock. Physical
+bus phases and timeout/service arbitration at the silicon write cycle remain
+unqualified.
+Original MOV0F starts TPM; LDHX/CPHX/BCS poll31250 and actual STA1800 services COP.
+Reference divider phases0/127 reach the threshold after4000013/3999887 periods,
+1142861/1142825 instructions and285714/285705 services. H remains unknown.
+One COP prehistory leaves22 periods until expiry; the first actual service at21
+succeeds. A20-period history instead requests reset during that store budget,
+before its retirement; further whole-fixture clocks refuse. Coordinated physical
+reset/abort is not implemented by this event-admission test.
+Eight fresh partial-STA/CPHX joint continuations preserve full state and suffixes.
+The actual next MOV/MOV/CLR configures SPIBR12/SPIC174/SPIC2=0. Its empty
+TX buffer requests IRQ while CPU I still masks admission; no serial event is
+invented. Original JSR pushes its two return bytes and enters the flash writer.
+At37 further periods/10 instructions, FCDIV3D is loaded and CPU FOPT/FPROT
+writes are ignored. The actual idle FSTATFF write faults at1825/PCEA88 after
+41 further periods; no command/NVM completion or IRQ frame is fabricated.
+Copies include SPI buffers/flags and the exact peripheral-write sequence.
+The phase127 component starts with entirely unknown HX. MOV/BRA and a partial
+LDHX budget preserve that mask; only the first actual coherent word load
+establishes both bytes. A stays an explicit known component input.
+Fifteen fixed collector corruptions reject. This is component execution, not normal
+cold/warm controller boot. The earlier original ICGS1/FSTAT/GPIO gates stay strict;
+automatic board routing, scanner/ADC/SPI-edge/COP-reset coupling, complete1.25 boot,
+MIDI/audio/update/recovery, physical timing and stock comparison remain open.

@@ -1,0 +1,32 @@
+Original dual-DMA ring configuration
+
+dsp-foreground-dual.txt adds the original foreground/synthesis/mix/master producer
+to both actual serial outputs; the ring-pattern experiment below remains separate.
+
+  cmake --build --preset strict --target blofeld-original-dsp-audio-dma-test
+  ctest --test-dir build/strict -R '^(original_dsp_audio_dma|original_dsp_peripheral_init)$' --output-on-failure
+
+An own native caller supplies register preloads, known zero priming and64 signed
+test words. Two unchanged original MOVEP instructions enable DMA0/3 with their
+actual DTM5/D3D/DRS22 controls. The complete program record stays intact. This is
+an isolated enable fragment; the original initializer's reserved X:ffff80 write
+still fails in its separate gate. No faulted instruction is resumed or accepted.
+
+Explicit HCKT/ACI reference edges and known empty core occupancy drive both real
+DMA channels. Each consumes132 words, wraps its64-word source ring twice and
+retains DE. Independent endpoint/priority/counter expectations check every word.
+Pin receivers decode66 ESAI frames and66 complete DAX frames plus one retained
+partial preamble unit, including priming, signed corners, BMC boundaries/metadata
+and even parity. Eight directed collector corruptions reject.
+
+A trusted checkpoint holds DMA0's first captured source word. An explicit source
+overwrite then reaches DMA3's later read, while DMA0 retains its captured value;
+both see the new word after wrap. Two complete suffixes reproduce all outputs.
+Native CPU state, original program and source guards remain unchanged. Repeating
+DTD lifetime stays unqualified and full status reads still reject.
+
+HCKT and ACI share a declared reference waveform;54MHz core/12.288MHz ACI rates
+and reset-edge/divider phase are experiment inputs, not measured board clocks.
+The core pauses before the original REP. Automatic concurrent core/DMA timing,
+normal boot, original synthesis/live audio and stock-device equivalence remain
+unqualified. This does not replace the finite voice transport in dsp-voice-pcm.txt.

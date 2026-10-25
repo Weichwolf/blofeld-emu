@@ -38,7 +38,8 @@ and partial program queue. Failures retain committed stack/register/read prefixe
 and quarantine; neither a retry nor a checkpoint from a failed phase is allowed.
 Explicit debugger state replacement/reset discards sequence/queue ownership.
 
-The retained three-byte program queue has no qualified instruction consumer yet.
+The retained queue has an explicit bounded linear consumer (hcs08-prefetch.txt).
+General pipelines and physical invalidation phases remain unqualified.
 Ordinary native stepping and the instruction-retirement clock refuse this owned
 state before charging another instruction. They cannot reread changed memory,
 drop prefetched bytes or convert an IRQ into a next-opcode budget. Untimed
@@ -60,3 +61,26 @@ program byte or successful ISR result is supplied by the host. No instruction
 executes or retires while the real queue remains owned. Full normal controller
 startup, code-queue consumption/invalidation, physical timing and common-clock
 peripheral scheduling remain required. Manufacturer bytes/traces stay local.
+
+reference_owned_program_handoff admits only a completed, matching actual program
+queue (three captured bytes, two ready/one pending) and a real eligible source.
+No period or memory access is charged at admission. The whole prior queue,
+including RTI masks/consumption, discarded reads and counters, moves into the
+IRQ owner's discarded_program. Its pending arrival matures on the first s cycle,
+even when that period's new access fails. Native current PC/SP/register knowledge
+supplies the new frame; existing late selection and source-withdrawal rules apply.
+No source, unfinished instruction or protected next instruction transfers ownership.
+The default RTI IRQ-delay contradiction remains strict. The old unstretched
+contract still rejects owned program queues; callers must explicitly opt in.
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-irq-test blofeld-original-hcs08-prefetch-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_irq|original_hcs08_prefetch_irq)$' --output-on-failure
+
+Handoff units cover128 CCR/priority cases,256 raw-mask cases, two wraps,84 fresh
+suffixes and20 failed access prefixes, plus partial/protected/no-source admission.
+Changed backing code cannot replace the actually discarded bytes. The pinned
+original gate explicitly promotes the genuinely queued first SPI byte, observes
+the new SPTEF IRQ and executes a second original ISR/frame/RTI. Eight contexts,
+60 cuts/120 fresh suffixes retain the full prior queue and new real accesses;
+90 is in the shifter and3C in the transmit buffer, with no supplied serial edge.
+Promotion phase, automatic launch, shared clocks and full boot remain unqualified.

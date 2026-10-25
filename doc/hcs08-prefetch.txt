@@ -1,0 +1,131 @@
+Captured HCS08 IRQ program execution: bounded cycle references
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-test blofeld-hcs08-prefetch-data-test blofeld-original-hcs08-prefetch-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch(_data)?|original_hcs08_prefetch(_data)?)$' --output-on-failure
+
+Family Rev2 p79/95/97 describes actual program fetches and one-period read
+propagation; instruction tables/details supply p/f/s patterns. Source hashes:
+hcs08-reference.json. start_irq_program requires an explicit supported contract
+and the actual completed eleven-period IRQ queue. Two ready bytes plus the
+third in flight transfer without another read. Ordinary step/IRQ/retirement
+clock/BDC GO cannot steal or discard that ownership. Explicit reset/debug state
+replacement remains separate.
+
+Each advance admits the prior read arrival, consumes genuine queued instruction
+bytes and issues only its p-cycle replenishment reads. Twenty-one register,
+immediate, MUL/DIV and push forms are supported. Push uses native semantics for
+the s-cycle before the following p read. Other native register effects complete
+at the end of their p/f budget. This is an explicit internal-register reference
+point, not physical register-phase qualification. Native operand/CCR knownness
+checks remain independent; MUL with partial CCR still refuses. The retained
+reference_linear_program_cycles contract refuses data/flow instructions before
+effects, preserving every captured byte.
+
+Native SLEIGH decoding and knowledge checks use the captured instruction view;
+operand writes retain the real bus. Later RAM/code changes cannot replace bytes
+already fetched. Queue-backed translation caches invalidate before another
+instruction or ordinary debug execution. A failed write/read/observer retains
+committed prefixes and quarantines. CPU/memory joint snapshots retain queue,
+pending arrivals, partially elapsed instruction and completed native effects;
+fresh owners resume without repeating a completed stack write.
+
+Independent units check41 instruction/mask expectations, all235 unsupported
+opcode classifications, every period of a PSHH/LDA17/LDX19/MUL sequence and24
+fresh continuations. Further cases cover program wrap, changed backing code,
+foreign owners, real refill failure/recovery and refusing retirement observers.
+The hash-pinned original gate follows actual FFE0/EA29 reads into native PSHH:
+one H stack write and one fourth-byte read. Eight contexts and three cuts/six
+fresh continuations preserve partial CCR and queued original BRCLR bytes.
+The real next BRCLR remains a strict unqualified data/flow boundary.
+
+reference_data_branch_cycles additionally admits LDA/LDX/CMP direct (rpp,
+three periods), extended (prpp, four periods) and BRSET/BRCLR (rpppp, five periods;
+Family Rev2 p233/235). The genuine r read is captured with its side effects,
+arrives one period later and is consumed exactly once by native SLEIGH. Native
+semantics alone select branch PC and C. Reference register effects one period
+after r (phase2 direct/bit-branch, phase3 extended) are not physical register
+timing. Existing partial-CCR restrictions remain: lower-bit
+branch forms require fully known CCR; bit7 forms also support the existing EF mask.
+Extended LDX now defines VNZ with partial CCR, independently checked by the
+54-form reset classifier. Existing unknown A/HX operand restrictions remain.
+
+Branch reference assumption: p2 reads the sequential successor speculatively;
+that real observation is retained as discarded, including its pending arrival.
+p3..p5 refill from native-selected PC, for taken and not-taken branches. Exact
+p-cycle addresses/refill timing are unverified hypotheses, not silicon facts.
+The explicit opt-in keeps that policy distinct from the retained linear contract.
+Snapshots retain contract, captured operand, consumption and discarded arrival.
+
+Data units cover7680 independent byte/bit/direction/offset/CCR cases and60 fresh
+phase continuations, read-to-change data, failed p2/recovery and changed successor
+code. The separate pinned original gate follows PSHH/BRCLR/LDA/CMP: one real
+SPIS read arms the existing transmitter, followed by one read of each TX cursor.
+Eight contexts,16 cuts/32 fresh continuations preserve ordered actual accesses,
+native flags/registers, unchanged FLASH and the queued next BEQ refusal.
+
+reference_short_branch_refill also admits BRA/BRN, BHI/BLS, BCC/BCS, BEQ/BNE,
+BHCC/BHCS, BPL/BMI and BGE/BLT/BGT/BLE (ppp; Family Rev2 p112/113). The explicit
+reference executes native semantics at phase1, discards the actual ready
+sequential successor and refills p1..p3 from the selected PC for both outcomes.
+Exact address/internal-register phases remain assumptions. Existing partial-CCR
+and unknown-register restrictions stay independent; mask/pin branches remain strict.
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-branch-test blofeld-original-hcs08-prefetch-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_branch|original_hcs08_prefetch_branch)$' --output-on-failure
+
+The native build-copy patch also corrects upstream BGE (N XOR V == 0);640
+ordinary step() cases independently cover all CCR combinations and signed offsets.
+Branch units cover3520 independent conditions/offsets, two16-bit wraps and32
+fresh suffixes. Changed backing code, failed p1/p2/p3 recovery and unknown flags
+retain actual native/queue effects. Original BEQ takes the empty path and the
+send LDA/TAX/INCA path;16 contexts,44 cuts/88 fresh suffixes preserve real reads,
+flags/registers and FLASH. Next MOV/STA refuses before another access or store.
+The prior linear/data contracts and their BRCLR/BEQ frontiers remain unchanged.
+
+reference_peripheral_program_cycles extends the same explicit references with
+STA direct wpp, STA extended/MOV immediate-direct pwpp, LDA indexed8 rpp /
+indexed16 prpp, and PULH ufp (Family Rev2 p255/260/270/280). Native stores execute
+exactly at w with the real bus; no buffered success or deferred host store.
+Indexed H:X must be fully known before the actual r address is supplied; native
+consumption validates that address. PULH captures SP+1 at u, consumes it one
+period later during f, then issues p. Register phases remain explicit references.
+Joint snapshots retain committed writes, captured read arrivals and native effects;
+failed writes retain real prefixes and require coordinated recovery.
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-peripheral-test blofeld-original-hcs08-prefetch-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_peripheral|original_hcs08_prefetch_peripheral)$' --output-on-failure
+
+Peripheral units cover3072 byte/CCR cases and54 fresh suffixes, unknown A/H:X,
+read-to-change operands, failed before/after stores and writes to captured code.
+Original empty/send paths execute control54 or cursor/buffer/SPID stores and
+pull the actual PSHH-saved H.16 contexts,66 cuts/132 fresh suffixes retain exact
+access order and FLASH; both stop before the queued original RTI. SPI shift
+launch/completion remains separate. Older contracts keep
+their strict write frontiers. These are component callers, not full native boot.
+
+The peripheral reference also admits RTI uuuuufppp (Family Rev2 p275): five real
+SP+1..SP+5 reads retain CCR/A/X knowledge masks and require known PC bytes. Each
+arrives one period later; native RTI consumes all five at f6 without rereading RAM
+or host register/PC restoration. Both actually fetched sequential successors
+remain discarded observations; p7..p9 refill from the native restored PC.
+These internal register phases remain explicit assumptions. The p87/p275 IRQ-delay
+conflict and existing RTI policy checks remain; completion does not qualify them.
+Instruction boundaries query actual pending sources before decoding or consuming
+another opcode. Eligible IRQs require the explicit owned-program handoff
+contract (hcs08-irq-bus.txt); advancing alone refuses. The next-instruction RTI
+reference permits exactly one native instruction before another IRQ admission.
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-return-test blofeld-original-hcs08-prefetch-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_return|original_hcs08_prefetch_return)$' --output-on-failure
+
+Return units cover256 flag/data cases,256 raw-mask cases, six stack wraps,40 fresh
+suffixes and16 before/after read failures, plus unknown PC refusals and changed
+backing code/RAM. Three pending-IRQ policies cover boundary refusal and the one
+protected instruction. The original empty/send ISR paths complete RTI in34/48 program
+periods (8/14 native instructions);16 contexts,84 cuts/168 fresh suffixes verify
+the actual IRQ frame, saved H and foreground refill. They stop at the declared
+foreground caller; no normal-boot or automatic SPI launch/arbitration evidence.
+
+No general pipeline, physical branch refill/addresses, nested IRQ/late mask
+sampling, common CPU/ADC/SPI scheduler, physical timing, full boot/live MIDI/audio
+or hardware equivalence claim. No fuzz/physical traffic; original bytes stay local.

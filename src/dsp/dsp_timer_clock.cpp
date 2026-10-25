@@ -14,10 +14,12 @@ constexpr unsigned pce = 0x8000;
 constexpr unsigned tof = 0x100000;
 constexpr unsigned tcf = 0x200000;
 constexpr unsigned mode_mask = 0xf0;
+constexpr unsigned event_mode = 0x30;
 constexpr unsigned capture_mode = 0x60;
 constexpr std::uint64_t counter_range = 0x1000000;
 constexpr unsigned first_load = 0xffff8e;
 constexpr unsigned first_compare = 0xffff8d;
+constexpr unsigned first_control = 0xffff8f;
 }
 
 bool DspTimers::prescaler_enabled() const {
@@ -107,6 +109,14 @@ void DspTimers::advance_clk2(const std::uint64_t edges) {
   const auto prescaled = next.advance_prescaler(edges);
   for (std::size_t index = 0; index < next.timers_.size(); ++index) {
     auto &timer = next.timers_.at(index);
+    if ((timer.control & (mode_mask | pce)) == event_mode) {
+      if (edges != 0 && (timer.control & te) != 0 &&
+          (!timer.synchronized || !timer.synchronized_qualified)) {
+        throw Fault("Unknown DSP event-counter input during clock at X:" +
+                    hex(first_control - (index * 4), 6));
+      }
+      continue;
+    }
     advance_timer(timer, index, (timer.control & pce) != 0 ? prescaled : edges);
   }
   *this = next;

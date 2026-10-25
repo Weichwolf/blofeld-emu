@@ -23,7 +23,9 @@ constexpr unsigned buffer = 0x200, marker = 0x82, marker_value = 0x72;
 constexpr unsigned record_bytes = 514, page_bytes = 512, maximum_steps = 100000;
 constexpr unsigned reference_hz = 6000000, data_canary = 0xa5;
 
-class Memory final : public hcs08::Memory {
+// Programmer address policy; normal-application fixtures can override that policy
+// while sharing the same strict peripheral and reset implementation.
+class Memory : public hcs08::Memory {
 public:
   explicit Memory(Hcs08IdleLaunch idle, unsigned delay);
   Hcs08Flash flash;
@@ -44,6 +46,9 @@ public:
   void retire_instruction() override;
   void reset_peripherals(Hcs08FlashAbort retention = Hcs08FlashAbort::unqualified_retention);
   [[nodiscard]] bool cuts_after_retirement() const;
+
+protected:
+  virtual void check_ram_write(std::uint16_t address) const;
 };
 
 struct Saved {

@@ -3,6 +3,20 @@
 +++ b/HCS_HC.sinc
 @@ -235,0 +236 @@
 +	$(Z) = (result == 0);
+@@ -597 +598 @@
+-	if (($(N) ^ $(V)) == 1) goto REL;
++	if (($(N) ^ $(V)) == 0) goto REL;
 @@ -1012 +1013 @@
 -	op1:2 = *:2 opr8a_16;
 +	op1:2 = opr8a_16;
+@@ -1161,0 +1163,8 @@
++	# Indeterminate A/H/Z use masked representatives in the native owner.
++	if (X != 0) goto <valid_division>;
++	A = 0;
++	HI = 0;
++	$(Z) = 0;
++	$(C) = 1;
++	goto <division_done>;
++<valid_division>
+@@ -1168,0 +1178 @@
++<division_done>

@@ -1,0 +1,70 @@
+Candidate S08ATDV3 ADC: ideal stable-input reference
+
+  cmake --build --preset strict --target blofeld-hcs08-adc-test blofeld-hcs08-adc-flags-test \
+    blofeld-original-hcs08-adc-test blofeld-original-hcs08-clock-startup-test \
+    blofeld-original-hcs08-spi-test format-check
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^(hcs08_adc|hcs08_adc_flags|original_hcs08_adc|original_hcs08_clock_startup|original_hcs08_cold_startup|original_hcs08_spi)$'
+
+Primary GT16A/GT8A Rev.1:4.2,14.3..14.6, equations14-7/8 and A-8/9;
+URL/size/hash in hcs08-reference.json. Actual Keyboard part/mask is unverified.
+Hcs08Adc requires candidate_gt8a_reference_stable_input explicitly. ATDC50,
+ATDSC51, ATDRH/L52/53 and ATDPE54 own power, channels, result formatting,
+CCF/IRQ and abort/restart. Status polling and read-only data writes never advance
+conversion. Either result read clears CCF/IRQ. ATDC/ATDPE writes abort; ATDSC
+write clears CCF and starts a powered conversion. Disabled/reserved/VREFL
+channels convert reference low; VREFH converts full scale as documented.
+
+The owner declares BUSCLK Hz, supply/reference microvolts and stable pin inputs.
+Clock/supply envelopes are checked before any active period. All16 PRS values
+use divisor2*(PRS+1); first/single length is29*divisor+2 BUS periods, subsequent
+continuous length28*divisor (A-9 note2). No poll, host result injection or guessed
+default voltage completes a conversion. Ideal quantization uses equation14-7's
+half-LSB transitions, saturates full scale and maps all eight RES8/DJM/SGN formats.
+These explicit numerical references do not calibrate ICG/FLL or actual silicon.
+
+Inputs/references must stay constant for the whole conversion, including
+continuous runs. In-flight changes fail instead of inventing S/H phase or RC
+settling. Reformatting existing result data is unqualified and fails before
+mutation. The used result-register sections do not establish reset data values;
+result reads stay strict until a conversion. Reset clears digital jobs/results,
+CCF/IRQ and clock/reference qualification, retaining external pin observations.
+Unknown inputs, invalid rates, reserved accesses and unsupported changes fail
+with operation/address/PC/CCR/channel/pending-period context and quarantine.
+Trusted copies retain all observations and pending state without peer callbacks.
+
+Units cover literal format tables,1024 levels, half-LSB boundaries, all32 channel
+selections, sixteen prescalers, supply/rate boundaries, every partial SC period,
+continuous batching, register acknowledgments, aborts/reset and strict inputs.
+original_hcs08_adc runs original setup and scanner BRSET/LDHX/inline dispatch/
+sum/counter arithmetic for channels0/1/2 with five own voltages, two fully-known
+caller CCRs and one unknown-H context:15 cases/45 paths/90 fresh continuations.
+Each native step preserves unknown H until the actual ADD at E152 defines it.
+Independent single-instruction oracles check CCR dependencies, complete CPU/RAM
+effects and arithmetic boundaries; unresolved branch/rotate inputs and missing
+operands refuse before effects. All FLASH stays unchanged; missing enabled input
+refuses at the first offered period. CPU timing stays separate from supplied ADC
+periods; entries and RAM are explicit, not a boot-origin scan. Full averages/
+calibration/event production, analog waveform/accuracy,
+board clock/pin ownership, normal boot/MIDI/audio/update/recovery and stock
+comparison remain open. Existing ICG/FSTAT startup frontiers remain strict.
+
+Shared reference BUSCLK component
+
+  cmake --build --preset strict --target blofeld-original-hcs08-adc-clock-test \
+    blofeld-hcs08-run-clock-test format-check
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^(hcs08_run_clock|original_hcs08_adc_clock)$'
+
+original_hcs08_adc_clock declares ADC-before-native-retirement edge ordering.
+Original MOV/MOV/CLR takes13 periods; BRSET reads CCF on its fifth period.
+Declared conversion phases170/171/172/175/176 test completion after/on/before
+that retirement. A late result stays pending across the real9-period BRSET/JMP
+miss. Ready paths retire53 actual instructions in156/156/157 periods; original
+next-channel stores overlap41 ADC periods, leaving135 outstanding. Twenty-five
+input/phase contexts cover75 ready and15 busy paths. Twelve cuts/24 fresh joint
+CPU/RAM/ADC/BDC/clock continuations include in-flight instruction reservations.
+Unknown pin input faults before a further CPU period or RAM effect. FLASH and
+unrelated SPI/SOPT stay unchanged. Entries/RAM and held BDC windows are explicit
+component inputs. Per-cycle operand/prefetch timing, physical edge ordering,
+ICG/boot provenance and full analog calibration/event/normal runtime remain open.

@@ -50,8 +50,10 @@ The Python collector checks every ordered row against independent expected
 states and fixed negative controls. Missing references skip77; altered references
 fail before native execution. This is directed regression, with no fuzz campaign.
 
-This is a warm conditional startup prefix. Cold A/X knowledge, physical pin/
-reset margins, IRQ/COP/timer/SPI/ADC, live ICG transitions/rates, original FSTAT,
+The separate original_hcs08_cold_startup gate uses fresh power-on register
+knowledge without set_state:68 cases and22 fresh continuations (hcs08-reset.txt).
+Physical pin/reset margins, automatic IRQ/COP/timer/SPI/ADC coupling, live ICG
+transitions/rates, original FSTAT,
 the LCD/BKGD update frontier, complete update/recovery/every interruption phase,
 normal boot/MIDI/audio/persistence,118 manual functions and stock-device
 comparison remain required. No physical traffic or programming is performed.

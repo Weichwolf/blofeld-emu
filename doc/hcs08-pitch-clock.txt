@@ -1,0 +1,40 @@
+Original calibrated pitch on a common CPU/ADC reference clock
+
+  cmake --build --preset strict --target blofeld-original-hcs08-pitch-event-test format-check
+  ctest --test-dir build/strict -j1 -R '^original_hcs08_pitch_(event|clock)$' --output-on-failure
+
+original_hcs08_pitch_clock uses the unchanged supplied Keyboard application,
+ordinary native HCS08 execution and the explicit instruction-retirement clock.
+The existing independent68-context pitch oracle still constrains actual filter,
+integer map, asymmetric suppression and three-byte RAM-ring records. No host
+writes the output. Calibrated RAM and prior sums/filter history remain declared
+component inputs;66 reference-gain contexts and two synthetic width controls do
+not establish boot-origin calibration reachability.
+
+Original setup retires in4+4+5 periods.176 real common-clock periods held through
+BDC produce the selected zero-voltage conversion without a foreground fetch.
+After the explicit caller enters the original ADC poll, the next channel starts
+at115 periods (the independently qualified156-period short path overlaps41).
+Its176-period conversion completes at291 while the longer original calibrated
+pitch path runs. Every offered edge advances ADC before native CPU retirement;
+incomplete budgets preserve architectural registers. These are declared
+reference edges, not measured bus/prefetch or analog acquisition timing.
+
+The caller explicitly masks IRQs. Original stores enable the real SPI source and
+queue unchanged E0/low7/high7 bytes, including8-bit cursor wrap. The read cursor
+stays unchanged, SPID receives no host byte, and no serial edge/IRQ is supplied.
+The separate original_hcs08_pitch_event gate retains actual native IRQ/RTI and
+SPI/SHI transfer coverage. Its complete trace must remain byte-identical.
+
+Seven cuts/two fresh owners each preserve CPU/RAM/ADC/SPI/BDC/clock jointly:
+poll0/1, before/after next-channel start114/115, before/after completion290/291,
+and a native MUL with three of five periods remaining. Endpoint checks include
+complete CPU state/knowledge, peripheral state, RAM/access history and clock
+ownership/counters. The collector checks arithmetic independently and rejects
+finite directed trace corruptions; reported full-path period ranges are observed,
+not a separate hardware timing measurement.
+
+Normal scanner/IRQ scheduling, ICG/FLL/flash-ready history, physical phase/part,
+native DSP execution, full boot/MIDI/audio/update/recovery and stock-hardware
+comparison remain open. No fuzz or physical traffic. Reference identities:
+hcs08-reference.json; clock contract: hcs08-run-clock.txt.

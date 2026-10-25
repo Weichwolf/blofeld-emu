@@ -1,0 +1,30 @@
+Original calibrated pitch ADC producer and SPI delivery
+
+  cmake --build --preset strict --target blofeld-original-hcs08-pitch-event-test format-check
+  ctest --test-dir build/strict -j1 -R '^original_hcs08_pitch_event$' --output-on-failure
+
+Pinned original setup/poll/dispatch executes the real average/IIR, calibrated
+14-bit map, change suppression, TX ring, IRQ/RTI and SPI/SHI transfer. Sixty-eight
+explicit RAM contexts cover endpoints/deadbands, old-value thresholds and TX
+cursors0/253/254/255;66 use reference gains, two are synthetic coefficient-width
+controls for 16-bit multiply/add truncation. They do not prove calibration reachability. Eight nonzero filter corrections include both
+directions and floor boundaries. An independent integer oracle has17 literal
+mapping controls. The current ADC result is produced by a
+real ideal-reference conversion of a declared zero-voltage input; preceding sum,
+filter and calibration history are explicit caller inputs. No host stores an
+output packet or calls a replacement filter/synthesizer.
+
+Only the original producer enables SPI IRQ; native vector/frame/handler/RTI loads
+all output bytes. Three actual following foreground instructions separate later
+IRQ windows. Actual SPSCK/MISO/MOSI observations deliver the packet to SHI and
+receive its declared reply. Six native cuts/twelve fresh CPU/RAM/ADC/SPI owners
+reproduce the producer/IRQ/SHI suffix. FLASH stays unchanged.
+
+The separate shared CPU/ADC reference-clock profile is documented in
+hcs08-pitch-clock.txt; this gate retains its original IRQ/serial schedule.
+
+This untimed calibrated component does not establish boot-origin sample batches,
+calibration acquisition, physical clocks/pads, normal scanner scheduling, DSP
+firmware execution or full device/MIDI/audio/update/recovery equivalence.
+ICG/FSTAT and DSP reserved-memory boot frontiers remain strict. No fuzzing or
+physical device traffic is performed. Reference hashes: hcs08-reference.json.

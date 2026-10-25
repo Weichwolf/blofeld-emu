@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -21,6 +22,9 @@ constexpr auto normal = Hcs08ResetEntry::normal, active = Hcs08ResetEntry::activ
 constexpr auto power_on = Hcs08ResetCause::power_on;
 
 constexpr unsigned lda_immediate = 0xa6;
+constexpr unsigned shift_x = 0x58, pull_x = 0x88, push_x = 0x89;
+constexpr unsigned jmp_direct = 0xbc, jmp_extended = 0xcc;
+constexpr unsigned jmp_indexed16 = 0xdc, jmp_indexed8 = 0xec, jmp_indexed = 0xfc;
 constexpr unsigned lda_direct = 0xb6;
 constexpr unsigned lda_extended = 0xc6;
 constexpr unsigned clra = 0x4f;
@@ -28,6 +32,8 @@ constexpr unsigned tpa = 0x85;
 constexpr unsigned ldx_immediate = 0xae;
 constexpr unsigned clrx = 0x5f;
 constexpr unsigned ldhx_immediate = 0x45;
+constexpr unsigned ldhx_direct = 0x55;
+constexpr unsigned loaded_direct_hx = 0x5a5a;
 constexpr unsigned clrh = 0x8c;
 constexpr unsigned txs = 0x94;
 constexpr unsigned aix = 0xaf;
@@ -189,7 +195,9 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case ldx_immediate:
     case ldx_direct:
     case clrx:
+    case pull_x:
     case ldhx_immediate:
+    case ldhx_direct:
     case clrh:
     case mov_immediate_direct:
     case mov_direct:
@@ -201,6 +209,8 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case bcs:
     case beq:
     case jsr_extended:
+    case jmp_direct:
+    case jmp_extended:
     case ais:
     case nop:
     case bgnd:
@@ -213,10 +223,15 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case aix:
     case cphx_immediate:
     case sthx_direct:
-    case clr_indexed: return s.hx_known == word_mask;
+    case clr_indexed:
+    case jmp_indexed16:
+    case jmp_indexed8:
+    case jmp_indexed: return s.hx_known == word_mask;
     case push_h: return (s.hx_known & reset_hx_known) == reset_hx_known;
     case txa:
-    case inc_x: return (s.hx_known & byte_mask) == byte_mask;
+    case inc_x:
+    case shift_x:
+    case push_x: return (s.hx_known & byte_mask) == byte_mask;
     case tax:
     case inc_a:
     case and_immediate:
@@ -244,7 +259,23 @@ Hcs08State irq_body_effect(const unsigned opcode, Hcs08State s) {
       s.hx_known |= reset_hx_known;
       ++s.sp;
       break;
-    case push_h: --s.sp; break;
+    case push_h:
+    case push_x: --s.sp; break;
+    case pull_x:
+      ++s.sp;
+      s.hx = static_cast<std::uint16_t>((s.hx & reset_hx_known) | data_byte);
+      s.hx_known |= byte_mask;
+      break;
+    case shift_x: {
+      const unsigned old_x = s.hx & byte_mask;
+      const unsigned next_x = (old_x * 2U) & byte_mask;
+      s.hx = static_cast<std::uint16_t>((s.hx & reset_hx_known) | next_x);
+      s.ccr = static_cast<std::uint8_t>(
+          (s.ccr & ~(flag_v | flag_n | flag_z | flag_c)) | ((old_x & sign_bit) != 0 ? flag_c : 0U) |
+          ((next_x & sign_bit) != 0 ? flag_n : 0U) | (next_x == 0 ? flag_z : 0U) |
+          (((next_x ^ old_x) & sign_bit) != 0 ? flag_v : 0U));
+      break;
+    }
     case inc_x:
       ++s.hx;
       s.ccr = initial_ccr;
@@ -297,6 +328,7 @@ unsigned instruction_length(const unsigned opcode) {
     case rti: return 3; // Own RTI frame returns to8003.
     case lda_immediate:
     case lda_direct:
+    case ldhx_direct:
     case ldx_immediate:
     case ldx_direct:
     case and_immediate:
@@ -359,6 +391,11 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
       s.hx_known = word_mask;
       s.ccr = initial_ccr;
       break;
+    case ldhx_direct:
+      s.hx = loaded_direct_hx;
+      s.hx_known = word_mask;
+      s.ccr = initial_ccr;
+      break;
     case txs: s.sp = initial_hx - 1; break;
     case aix: s.hx = initial_hx + operand; break;
     case cphx_immediate: s.ccr = borrow_ccr; break;
@@ -380,6 +417,13 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
   s.pc = static_cast<std::uint16_t>(entry + instruction_length(opcode));
   if (opcode == bra || opcode == bcs || opcode == brclr7) { s.pc += operand; }
   if (opcode == jsr_extended) { s.pc = extended_address; }
+  if (opcode == jmp_direct) { s.pc = operand; }
+  if (opcode == jmp_extended) { s.pc = extended_address; }
+  if (opcode == jmp_indexed) { s.pc = s.hx; }
+  if (opcode == jmp_indexed8 || opcode == jmp_indexed16) {
+    const unsigned offset = opcode == jmp_indexed8 ? operand : extended_address;
+    s.pc = static_cast<std::uint16_t>(s.hx + offset);
+  }
   return s;
 }
 
@@ -499,6 +543,138 @@ void prefixes_and_flags() {
   }
 }
 
+void direct_word_knowledge() {
+  Memory memory;
+  constexpr std::array<std::uint8_t, 2> code{ldhx_direct, operand};
+  constexpr std::array<std::uint8_t, 2> data{data_byte, stack_data_low};
+  memory.install(entry, code);
+  memory.install(operand, data);
+  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+  cpu.set_state({.pc = entry,
+                 .sp = initial_sp,
+                 .ccr_known = reset_ccr,
+                 .ccr = reset_ccr,
+                 .a_known = 0,
+                 .hx_known = 0});
+  const auto before = cpu.state();
+  const auto checkpoint = cpu.checkpoint();
+  const auto initial_memory = memory;
+  cpu.step();
+  const Hcs08State expected{.pc = entry + 2,
+                            .hx = loaded_hx,
+                            .sp = initial_sp,
+                            .ccr_known = load_ccr_known,
+                            .ccr = reset_ccr,
+                            .a_known = 0};
+  require(cpu.state() == expected && memory.retired == 1 &&
+              memory.accesses ==
+                  std::vector<Access>{
+                      {.address = operand, .value = data_byte, .write = false},
+                      {.address = operand + 1, .value = stack_data_low, .write = false}},
+          "Actual direct LDHX defines both HX bytes from ordered reads; A/H/C stay unknown");
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    Memory restored(initial_memory);
+    Hcs08 other(restored, BLOFELD_HCS08_SLA);
+    other.restore_checkpoint(checkpoint);
+    other.step();
+    require(other.state() == expected && restored.accesses == memory.accesses &&
+                restored.retired == 1,
+            "Fresh direct-word continuations preserve the independent register/read oracle");
+  }
+  for (unsigned missing = 0; missing < data.size(); ++missing) {
+    Memory unknown(initial_memory);
+    unknown.known.reset(operand + missing);
+    Hcs08 other(unknown, BLOFELD_HCS08_SLA);
+    other.restore_checkpoint(checkpoint);
+    const auto error = rejected([&] { other.step(); });
+    require(error.contains("read address=" + hex(operand + missing)) &&
+                error.contains("pc=0x8000") && other.faulted() && other.state() == before &&
+                unknown.retired == 0 && unknown.accesses.size() == missing,
+            "Unknown first/second data bytes cannot establish HX or retire the instruction");
+  }
+}
+
+class RetirementMemory final : public Memory {
+public:
+  const Hcs08 *cpu = nullptr;
+  std::optional<Hcs08State> observed;
+  bool refuse = false, checkpoint_blocked = false;
+
+  void retire_instruction() override {
+    observed = cpu->state();
+    checkpoint_blocked = rejected([this] {
+                           static_cast<void>(cpu->checkpoint());
+                         }).contains("healthy completed native boundary");
+    if (refuse) { throw Fault("Own retirement observer failure"); }
+    Memory::retire_instruction();
+  }
+};
+
+void retirement_knowledge() {
+  struct Case {
+    std::array<std::uint8_t, 3> code;
+    unsigned length;
+    Hcs08State expected;
+  };
+
+  constexpr std::array<Case, 3> cases{{{.code = {lda_immediate, loaded_a, 0},
+                                        .length = 2,
+                                        .expected = {.pc = entry + 2,
+                                                     .sp = initial_sp,
+                                                     .a = loaded_a,
+                                                     .ccr_known = load_ccr_known,
+                                                     .ccr = reset_ccr,
+                                                     .hx_known = 0}},
+                                       {.code = {ldhx_immediate, data_byte, stack_data_low},
+                                        .length = 3,
+                                        .expected = {.pc = entry + 3,
+                                                     .hx = loaded_hx,
+                                                     .sp = initial_sp,
+                                                     .ccr_known = load_ccr_known,
+                                                     .ccr = reset_ccr,
+                                                     .a_known = 0}},
+                                       {.code = {ldhx_direct, operand, 0},
+                                        .length = 2,
+                                        .expected = {.pc = entry + 2,
+                                                     .hx = loaded_hx,
+                                                     .sp = initial_sp,
+                                                     .ccr_known = load_ccr_known,
+                                                     .ccr = reset_ccr,
+                                                     .a_known = 0}}}};
+  constexpr std::array<std::uint8_t, 2> data{data_byte, stack_data_low};
+  for (const auto &sample : cases) {
+    for (const bool refuse : {false, true}) {
+      RetirementMemory memory;
+      memory.install(entry, std::span(sample.code).first(sample.length));
+      memory.install(operand, data);
+      memory.refuse = refuse;
+      Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+      memory.cpu = &cpu;
+      cpu.set_state({.pc = entry,
+                     .sp = initial_sp,
+                     .ccr_known = reset_ccr,
+                     .ccr = reset_ccr,
+                     .a_known = 0,
+                     .hx_known = 0});
+      if (refuse) {
+        require(rejected([&] { cpu.step(); }).contains("Own retirement observer failure") &&
+                    cpu.faulted() && memory.retired == 0 &&
+                    rejected([&] { cpu.step(); }).contains("coordinated recovery"),
+                "A failing retirement hook quarantines the owner without undoing actual native "
+                "effects");
+      } else {
+        cpu.step();
+        require(!cpu.faulted() && memory.retired == 1, "A completed hook retires once");
+        static_cast<void>(cpu.checkpoint());
+      }
+      require(memory.observed == sample.expected && cpu.state() == sample.expected &&
+                  memory.checkpoint_blocked,
+              "Retirement sees complete A/HX/CCR facts, while native checkpoint admission stays "
+              "closed");
+    }
+  }
+}
+
 class NoMemory final : public Hcs08BdcMemory {
 public:
   [[nodiscard]] bool secured(ExecutionContext /*context*/) const override {
@@ -595,6 +771,8 @@ int main() {
     masks_and_checkpoint();
     opcodes();
     prefixes_and_flags();
+    direct_word_knowledge();
+    retirement_knowledge();
     bdc_registers();
     bdc_unknown_resume();
     std::cout << "HCS08 cold-register knowledge and native instruction dependencies pass.\n";

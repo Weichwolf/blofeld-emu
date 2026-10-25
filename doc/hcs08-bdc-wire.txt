@@ -47,6 +47,9 @@ frame/value/latch/direction expectations and recorded bus-cycle waveform offsets
 cover every transfer. Original helper bytes and MCU NVM/knownness/erase history
 remain unchanged. A separate directed gate covers every byte value, SYNC,
 timeouts, conflicts, exact asynchronous boundaries and trusted replay.
+Trace validation requires one completion per opened phase and rejects orphan
+events. Four fixed corruptions include a duplicate/missing phase-end pair;
+equal aggregate counts cannot replace complete phase ordering.
 
 An earlier native failure exposed incorrect perceived-clock bit retirement:
 133 host cycles at the declared ratio satisfy the nominal interval, although
@@ -54,14 +57,39 @@ the next perceived-clock interval has not ended. Exact edge timestamps correct
 this without allowing shorter bits. Adapter signed-mask/driver-description
 failures are also preserved locally; no net validation or sanitizer was weakened.
 
-This gate does not execute the original reset/SYNC caller, complete helper,
-controller RAM upload/programming, target application, DSP sender or whole update.
-Its clock ratio is not a measured board rate and cannot be combined with the
-independent6MHz FLASH fixture as a calibrated board profile. Actual timer/clock
-history, part/revision, wiring/analog propagation and physical recovery remain
-unqualified. Full boot/MIDI/audio, all118 manual functions and every update/power
-loss phase remain required by objective.txt/coverage.txt. No physical traffic,
-automatic fuzzing, whole-suite run or hardware flashing is part of these gates.
+The byte-helper gate excludes the reset/SYNC caller and complete helper.
+Its clock ratio is not a measured board rate and cannot calibrate the separate
+6MHz FLASH fixture.
+
+Original reset/SYNC gate
+
+  cmake --build --preset strict --target blofeld-original-keyboard-reset-sync-test
+  ctest --test-dir build/strict -j1 -R '^original_keyboard_reset_sync$' --output-on-failure
+
+Original entry138C executes reset GPIO writes, GPIO/byte-timeout polls,
+TCNT word reads, subtraction, acceptance and BACKGROUND90.
+Declared entry state: locked60MHz PHY source,30MHz bus, TIM bus/4; own caller,
+weak E inputs, passive RESET/BKGD pull-ups and candidate active-reset BDC mode.
+Five native reset cycles precede TIM enable at reference tick100. Independent
+expectations check both actual word-read cycles against the continuing counter,
+separately from instruction completion and target response edges. No TCNT stores
+or host-supplied timestamps/delays are used. Original success writes9/12 itself.
+
+Six cases:4MHz at two phases yields238/239 counts (accepted);3MHz yields318
+and6MHz160 (rejected); unknown PE7 fails at13B0; disconnected target times out.
+Both128-clock low/one-clock speedup responses remain visible, including the
+earlier response to BKGD held low across reset. Four fixed trace corruptions
+must reject. All1018 helper bytes and MCU NVM/knowledge/history remain unchanged;
+the candidate target executes zero HCS08 instructions.
+
+Native target reset/ICG startup, prior target history, actual reached application
+entry, part/revision, wiring/analog timing and physical recovery remain open.
+Nominal4MHz SYNC acceptance does not qualify FLASH: original FCDIV1E divides by31,
+giving about129kHz, below the candidate's150..200kHz range. Neither firmware nor
+divider is altered to hide this unresolved clock requirement. Controller upload,
+programming, target application, DSP sender, full boot/MIDI/audio, all118 manual
+functions and every update/power-loss phase remain required by objective.txt and
+coverage.txt. These gates perform no physical traffic, fuzzing or hardware flash.
 
 Primary reference: MC9S08GT16A/GT8A Rev.1 chapter15, hash/URL in hcs08-reference.json.
 

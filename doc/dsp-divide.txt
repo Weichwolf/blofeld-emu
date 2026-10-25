@@ -1,0 +1,32 @@
+DSP normal-mode DIV iteration
+
+DSP56300FM Rev5 13-53/54 defines source selection from X0/Y0/X1/Y1, destination
+A/B, the sign-controlled nonrestoring add/subtract, carry insertion at bit0,
+C from result bit55, V from the preceding left shift and sticky L. E/U/N/Z/S
+remain unchanged. The pinned manual is in hardware/sources.json.
+
+The SDK's aligned signed64 add/subtract could overflow after the left shift
+changed the extension sign. It now uses unsigned modular arithmetic and an
+explicit bit conversion back to the native register representation. Own input
+D=40000000000000, S=7fffff, C=0 previously stopped under UBSan; its independent
+56-bit result is 7f800001000000 with C/V/L set. The complete 45-byte input is
+retained literally in dsp_divide_test.cpp and executes without a fuzz harness.
+
+  cmake --build --preset strict --target blofeld-dsp-divide-test
+  ctest --test-dir build/strict -R '^dsp_divide$' --output-on-failure
+
+20736 fixed cases compare a separate right-aligned signed56 mathematical model
+against actual native results and complete architectural state. They cover all
+sources/destinations, incoming carry/V/L, preserved flags, legal scaling modes,
+zero/negative divisors and extension/sign boundaries. Eight valid positive
+fractional divisions execute 24 real REP iterations, check each intermediate
+result/carry and the independent final integer quotient, then replay two trusted
+suffixes after replacing the backing REP word with an own NOP.
+
+These are instruction-iteration expectations, not valid quotient claims for
+zero divisors or operands outside |D|<|S|. The manual's printed 39/15-bit heading
+and sixteen-iteration sentence conflict with its detailed normal-mode 55/23-bit
+procedure and 24-bit precision rule; the tests follow the latter. Sixteen-bit
+arithmetic DIV remains unqualified and reference execution now rejects it before
+arithmetic, with PC/OMR context and trusted recovery. No chip timing, physical
+silicon comparison or whole-instrument acceptance follows from these checks.

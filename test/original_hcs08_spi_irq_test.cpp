@@ -6,6 +6,7 @@
 #include "hcs08_programmer_fixture.hpp"
 #include "hcs08_spi_fixture.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_adc.hpp"
 #include "keyboard/hcs08_flash.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
 #include "keyboard/hcs08_spi.hpp"
@@ -174,6 +175,29 @@ void reset_storage_policy(const std::span<const std::uint8_t> records) {
           "Explicit masked storage remains available outside reset without ordinary zero fill");
 }
 
+void unsupported_adc_irq(const std::span<const std::uint8_t> records) {
+  constexpr Hcs08AdcReference reference{
+      .bus_hz = 2000000, .supply_uv = 3300000, .low_uv = 0, .high_uv = 3072000};
+  constexpr unsigned reference_high_channel = 0x1e;
+  constexpr unsigned conversion_periods = 60;
+  app::ApplicationMemory memory(records, {.seed = 0, .trim = packaged_trim, .observation = -1});
+  memory.warm_reset();
+  memory.begin_instruction({.pc = return_pc, .ccr = flags});
+  memory.adc.observe_reference(reference);
+  memory.adc.write({.address = hcs08_adc::control, .value = hcs08_adc::power | hcs08_adc::right});
+  memory.adc.write(
+      {.address = hcs08_adc::status, .value = hcs08_adc::interrupt | reference_high_channel});
+  memory.adc.advance_bus(conversion_periods);
+  const auto pending = memory.adc.state();
+  require(memory.adc.interrupt_requested() &&
+              rejected([&] {
+                (void)memory.interrupt_request(flags);
+              }).contains("IRQ query address=0x0051 pc=0xe000 ccr=0x0061") &&
+              memory.adc.state() == pending && memory.interrupt_entries == 0 &&
+              memory.interrupt_acknowledgements == 0,
+          "An unqualified ADC source cannot disappear behind this SPI-only IRQ fixture");
+}
+
 Hcs08State bus_foreground(const unsigned seed) {
   return {.pc = return_pc,
           .hx = static_cast<std::uint16_t>((seed << byte_shift) | (byte_mask - seed)),
@@ -309,7 +333,8 @@ void run(const std::span<const std::uint8_t> records,
   constexpr std::array<std::uint8_t, 5> cursors{0, 3, 0, 0, 0};
   memory.install(tx_read, cursors);
   memory.install(tx_buffer, event_bytes);
-  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+  // Explicit untimed reference; conflicting physical RTI latency remains unqualified.
+  Hcs08 cpu(memory, BLOFELD_HCS08_SLA, Hcs08RtiIrqContract::reference_immediate);
   const Hcs08State foreground{
       .pc = return_pc,
       .hx = static_cast<std::uint16_t>((seed << byte_shift) | (byte_mask - seed)),
@@ -359,6 +384,7 @@ int main(const int count, char **arguments) {
             "Expected pinned supplied pages, private trace and optional IRQ-bus mode");
     const auto records = hp::read_input(arguments[1], app::records_bytes);
     reset_storage_policy(records);
+    unsupported_adc_irq(records);
     std::ostringstream trace;
     if (bus_mode) {
       run_bus(records, trace);

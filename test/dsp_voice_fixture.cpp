@@ -388,7 +388,7 @@ struct MemoryRange {
 bool stream_profile(const blofeld::test::VoiceInput input) {
   using enum blofeld::test::VoiceInput;
   return input == stream || input == stream_midi || input == stream_release ||
-         input == stream_sustain;
+         input == stream_sustain || input == stream_dual;
 }
 
 bool release_callback(const unsigned address) {
@@ -508,6 +508,7 @@ struct Fixture {
         release_enabled(input == blofeld::test::VoiceInput::stream_release ||
                         input == blofeld::test::VoiceInput::stream_sustain),
         sustain_enabled(input == blofeld::test::VoiceInput::stream_sustain) {
+    repeat.dax.enabled = input == blofeld::test::VoiceInput::stream_dual;
     static_cast<void>(load(bus, s, stop, master, pcm, repeat, sound));
   }
 
@@ -1571,7 +1572,7 @@ struct Fixture {
     unsigned steps = 0;
     do {
       require(steps++ < instruction_limit, "Own repeating DMA entry bound");
-      blofeld::test::VoiceRepeat::instruction(machine);
+      repeat.setup_instruction(machine);
     } while (cpu.state().pc != main_loop);
     const auto before = cpu.debug_state();
     bool refused = false;
@@ -1592,6 +1593,7 @@ struct Fixture {
       repeat.drain(bus, cpu, trace);
       publish_frames(repeat.decoded, repeat.frames);
     }
+    repeat.finalize(bus, cpu, trace);
     rendering = false;
   }
 

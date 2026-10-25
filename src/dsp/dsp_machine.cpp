@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_reference_cycle.hpp"
 #include "dsp/dsp_address_stage.hpp"
+#include "dsp/dsp_agu_interlocks.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dax.hpp"
@@ -29,28 +30,38 @@ namespace {
 struct RunState {
   std::optional<DspRunContract> contract;
   std::optional<DspRunClock> clock;
+  std::optional<DspAguInterlocks> agu;
+  std::optional<DspAguEffect> pending_agu;
   std::optional<DspInterlocks> interlocks;
 };
 
 RunState initial_run(const std::optional<DspRunContract> contract) {
   if (!contract) { return {}; }
+  const bool agu = contract->timing == DspRunTiming::native_internal_agu_interlocks;
   const bool interlocks = contract->timing == DspRunTiming::native_interlock_estimates;
-  if (contract->timing != DspRunTiming::native_internal_estimates && !interlocks) {
+  if (contract->timing != DspRunTiming::native_internal_estimates && !interlocks && !agu) {
     throw Fault("DSP run requires an explicit native-cycle-estimate timing contract");
   }
   if (contract->interrupts != DspInterruptTiming::unqualified &&
       contract->interrupts != DspInterruptTiming::native_vector_estimates) {
     throw Fault("Unsupported DSP interrupt timing contract");
   }
+  // Nominal AGU timing admits ordinary prepared steps; preview/begin still
+  // refuse actual IRQ entry. The broader interlock profile has no vector contract.
   if (interlocks && contract->interrupts != DspInterruptTiming::unqualified) {
     throw Fault("DSP interlock estimates do not qualify interrupt-vector timing");
   }
   if (contract->resets != DspResetTiming::unqualified &&
-      contract->resets != DspResetTiming::reference_instruction_boundary) {
+      contract->resets != DspResetTiming::reference_instruction_boundary &&
+      contract->resets != DspResetTiming::reference_extal_hold) {
     throw Fault("Unsupported DSP reset timing contract");
   }
   return {.contract = contract,
           .clock = DspRunClock(contract->clock),
+          .agu = contract->timing == DspRunTiming::native_internal_agu_interlocks
+                     ? std::optional(DspAguInterlocks{})
+                     : std::nullopt,
+          .pending_agu = std::nullopt,
           .interlocks = interlocks ? std::optional{DspInterlocks{}} : std::nullopt};
 }
 }
@@ -71,9 +82,21 @@ struct DspMachine::State {
       const bool vector_estimates =
           run.contract.value().interrupts == DspInterruptTiming::native_vector_estimates;
       cpu.set_run_hooks(
-          {.begin = [this](const auto state,
-                           const bool interrupt,
-                           const unsigned units) { begin_step(state, interrupt, units); },
+          {.ready =
+               [this] {
+                 if (run.clock->hardware_reset_active()) {
+                   const auto context = cpu.state();
+                   throw Fault("DSP instruction during hardware reset pc=" + hex(context.pc, 6) +
+                               " omr=" + hex(context.omr, 6));
+                 }
+               },
+           .begin =
+               [this](const auto state,
+                      const bool interrupt,
+                      const unsigned units,
+                      const std::optional<std::uint32_t> opcode) {
+                 begin_step(state, interrupt, units, opcode);
+               },
            .complete = [this](const auto cycles) { complete_step(cycles); },
            .failed = [this] { run.clock->fail(); },
            .reset = [this] { reset_clock(); },
@@ -84,11 +107,23 @@ struct DspMachine::State {
              static_cast<void>(bus.memory_resource(access));
            })
                                   : std::function<void(DspMemoryAccess)>{},
-           .vector_estimates = vector_estimates});
+           .vector_estimates = vector_estimates,
+           .timing_opcode = run.agu.has_value()});
     }
   }
 
-  void begin_step(const DspState context, const bool interrupt, const unsigned units) {
+  [[nodiscard]] DspAguEffect preview_agu(const DspCore::StepEstimate &estimate) const {
+    if (!run.agu) { return {}; }
+    if (estimate.interrupt || !estimate.opcode) {
+      throw Fault("Unqualified interrupt entry in nominal DSP AGU timing");
+    }
+    return run.agu->preview(*estimate.opcode);
+  }
+
+  void begin_step(const DspState context,
+                  const bool interrupt,
+                  const unsigned units,
+                  const std::optional<std::uint32_t> opcode) {
     if (!run.clock || !run.contract) { throw Fault("DSP run lost its clock contract"); }
     const bool vector_estimates =
         run.contract->interrupts == DspInterruptTiming::native_vector_estimates;
@@ -102,6 +137,12 @@ struct DspMachine::State {
     }
     if (cpu.native_cycles() != run.clock->epoch_native_cycle_units()) {
       throw Fault("DSP clock/native counters require coordinated recovery");
+    }
+    if (run.agu) {
+      if (interrupt || !opcode) {
+        throw Fault("Unqualified interrupt entry in nominal DSP AGU timing");
+      }
+      run.pending_agu = run.agu->preview(*opcode);
     }
     prepare_interlocks(context, units);
     run.clock->begin_step(bus, {.pc = context.pc, .omr = context.omr});
@@ -133,8 +174,11 @@ struct DspMachine::State {
 
   void complete_step(const unsigned units) {
     if (!run.clock) { throw Fault("DSP instruction completion lost its clock"); }
-    const auto stalls = run.interlocks ? run.interlocks->complete(units) : 0;
+    const auto effect = run.pending_agu.value_or(DspAguEffect{});
+    const auto stalls = effect.stalls + (run.interlocks ? run.interlocks->complete(units) : 0);
     run.clock->finish_step(bus, DspClockUnits{.native = units, .interlocks = stalls});
+    if (run.agu) { run.agu->complete(effect, units); }
+    run.pending_agu.reset();
   }
 
   void reset_clock() {
@@ -147,11 +191,13 @@ struct DspMachine::State {
                   " omr=" + hex(context.omr, 6));
     }
     if (clock.native_cycle_units() != 0 &&
-        run.contract.value().resets != DspResetTiming::reference_instruction_boundary) {
+        run.contract.value().resets == DspResetTiming::unqualified) {
       throw Fault("Clocked DSP reset requires explicit reference reset timing pc=" +
                   hex(context.pc, 6) + " omr=" + hex(context.omr, 6));
     }
     clock.restart_native_epoch();
+    if (run.agu) { run.agu = DspAguInterlocks{}; }
+    run.pending_agu.reset();
     if (run.interlocks) { run.interlocks->reset(); }
   }
 
@@ -199,6 +245,97 @@ const DspCore &DspMachine::cpu() const {
 
 bool DspMachine::clocked() const {
   return state_->run.clock.has_value();
+}
+
+bool DspMachine::hardware_reset_active() const {
+  const auto &clock = state_->run.clock;
+  return clock && clock->hardware_reset_active();
+}
+
+void DspMachine::require_running() const {
+  if (hardware_reset_active()) {
+    const auto context = state_->cpu.state();
+    throw Fault("DSP operation during hardware reset pc=" + hex(context.pc, 6) +
+                " omr=" + hex(context.omr, 6));
+  }
+}
+
+void DspMachine::begin_hardware_reset(const DspHardwareResetInputs inputs) {
+  constexpr unsigned all_modes = 15;
+  constexpr unsigned spi_mode = 5;
+  const auto contract = state_->run.contract;
+  auto &optional_clock = state_->run.clock;
+  const auto context = state_->cpu.state();
+  if (!contract || !optional_clock || contract->resets != DspResetTiming::reference_extal_hold ||
+      inputs.mode_known != all_modes || inputs.mode_levels != spi_mode || !inputs.pinit ||
+      inputs.pinit.value() || inputs.recovery_cycles < 2 || hardware_reset_active() ||
+      state_->cpu.executing()) {
+    throw Fault("DSP hardware reset requires an inactive explicit EXTAL-hold contract, stable "
+                "observed mode5/PINIT-low and qualified recovery of at least2 periods pc=" +
+                hex(context.pc, 6) + " omr=" + hex(context.omr, 6));
+  }
+  auto &clock = optional_clock.value();
+  state_->check_boundary();
+  try {
+    state_->bus.observe_irqa((inputs.mode_levels & 1U) != 0);
+    state_->bus.pll().observe_pinit(inputs.pinit);
+    state_->cpu.reset_spi_boot();
+    clock.begin_hardware_reset(inputs.recovery_cycles);
+  } catch (...) {
+    clock.fail();
+    throw;
+  }
+}
+
+std::uint64_t DspMachine::advance_hardware_reset(const std::uint64_t maximum_extal_cycles) {
+  auto &optional_clock = state_->run.clock;
+  if (!optional_clock || !optional_clock->hardware_reset_active()) {
+    throw Fault("DSP hardware reset is not active");
+  }
+  auto &clock = optional_clock.value();
+  state_->check_boundary();
+  try {
+    return clock.advance_hardware_reset(maximum_extal_cycles);
+  } catch (const std::exception &error) {
+    clock.fail();
+    const auto context = state_->cpu.state();
+    throw Fault("DSP reset EXTAL advance pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
+                ": " + error.what());
+  }
+}
+
+void DspMachine::release_hardware_reset() {
+  auto &optional_clock = state_->run.clock;
+  if (!optional_clock || !optional_clock->hardware_reset_active()) {
+    throw Fault("DSP hardware reset is not active");
+  }
+  auto &clock = optional_clock.value();
+  state_->check_boundary();
+  try {
+    clock.release_hardware_reset();
+  } catch (const std::exception &error) {
+    clock.fail();
+    const auto context = state_->cpu.state();
+    throw Fault("DSP reset release pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
+                ": " + error.what());
+  }
+}
+
+std::uint64_t DspMachine::advance_hardware_reset_ticks(const std::uint64_t maximum_ticks) {
+  auto &optional_clock = state_->run.clock;
+  if (!optional_clock || !optional_clock->hardware_reset_active()) {
+    throw Fault("DSP hardware reset is not active");
+  }
+  auto &clock = optional_clock.value();
+  state_->check_boundary();
+  try {
+    return clock.advance_hardware_reset_ticks(maximum_ticks);
+  } catch (const std::exception &error) {
+    clock.fail();
+    const auto context = state_->cpu.state();
+    throw Fault("DSP reset time advance pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
+                ": " + error.what());
+  }
 }
 
 const DspRunClock &DspMachine::run_clock() const {
@@ -252,6 +389,7 @@ DspDmaBusResult DspMachine::advance_dma(const DspDmaInputs inputs, const DspCore
 }
 
 DspStepPlan DspMachine::plan_step() const {
+  require_running();
   const auto &clock = run_clock();
   state_->check_boundary();
   const auto before = state_->cpu.debug_state();
@@ -260,8 +398,10 @@ DspStepPlan DspMachine::plan_step() const {
     if (!run_contract) { throw Fault("Clocked DSP owner lost its timing contract"); }
     const bool vector_estimates =
         run_contract->interrupts == DspInterruptTiming::native_vector_estimates;
-    const auto estimate = state_->cpu.next_step_cycles(vector_estimates);
-    const auto stalls = state_->preview_stalls(before.cpu, estimate.units);
+    const auto estimate =
+        state_->cpu.next_step_cycles(vector_estimates, nullptr, state_->run.agu.has_value());
+    const auto agu = state_->preview_agu(estimate);
+    const auto stalls = agu.stalls + state_->preview_stalls(before.cpu, estimate.units);
     return {.before = before,
             .native_cycle_units = estimate.units,
             .interlock_cycle_units = stalls,
@@ -284,6 +424,7 @@ void DspMachine::check_admission_contract() const {
 }
 
 void DspMachine::verify_prepared_step(const DspStepPlan &plan) const {
+  require_running();
   check_admission_contract();
   state_->check_boundary();
   const auto before = state_->cpu.debug_state();
@@ -294,8 +435,10 @@ void DspMachine::verify_prepared_step(const DspStepPlan &plan) const {
     }
     DspCore::Admission admission;
     if (plan.interrupt) { admission.interrupt = plan.interrupt->request; }
-    const auto estimate = state_->cpu.next_step_cycles(true, &admission);
-    const auto stalls = state_->preview_stalls(before.cpu, estimate.units);
+    const auto estimate =
+        state_->cpu.next_step_cycles(true, &admission, state_->run.agu.has_value());
+    const auto agu = state_->preview_agu(estimate);
+    const auto stalls = agu.stalls + state_->preview_stalls(before.cpu, estimate.units);
     if (estimate.units != plan.native_cycle_units || estimate.interrupt != plan.interrupt ||
         stalls != plan.interlock_cycle_units ||
         clock.next_step_ticks(state_->bus,

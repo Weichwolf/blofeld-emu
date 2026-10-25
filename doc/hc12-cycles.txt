@@ -113,6 +113,19 @@ from the existing private trace, not this timing decoder. RAM clear, checksum,
 final CPU state and unchanged MCU NVM/history are checked. The additional trace
 stays under build/; no manufacturer program bytes are published.
 
+The same gate also follows the native PE2-to-PE3 loopback branch. MODRR remains
+at reset-zero (100-pin routing), and an explicitly idle PR2 supplies SCI input.
+Q is explicitly undriven; native PERQ/PPSQ writes enable its input pull-downs.
+The original branch skips LDAB IMM(1 cycle) and STAB EXT(3 cycles), while BNE
+changes from not-taken(1) to taken(3): 90312 instructions and 233747 cycles
+including reset. Both paths check native routing writes, all cleared RAM and
+unchanged NVM/history. A third path supplies idle PS4 with loopback present;
+the actual PR2 sample rejects at PC8078/PTR0268 instead of aliasing the source.
+The failed CPU refuses another step without advancing its cycle count.
+Private sidecars .100pin and .missing-source retain these separate outcomes;
+the legacy trace stays unchanged. These are declared pin-routing experiments;
+physical Desktop/Keyboard package, PCB loopback and MIDI routing remain open.
+
 original_cycle_application uses a separate explicit E2/E3 loopback, E0/E1 high,
 Q low, PR2 idle and the same PHY qualification window. With no observed timer
 capture baseline, native execution fails at PC 87ea after 90340 instructions and

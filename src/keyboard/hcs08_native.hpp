@@ -37,6 +37,8 @@ class CodeImage final : public ghidra::LoadImage {
 public:
   explicit CodeImage(Bus &bus) : LoadImage("Blofeld HCS08 target memory"), bus_(bus) {}
 
+  void program(const Bus *view) { program_ = view; }
+
   void
   loadFill(ghidra::uint1 *bytes, const ghidra::int4 size, const ghidra::Address &address) override {
     for (ghidra::int4 index = 0; index < size; ++index) {
@@ -44,7 +46,7 @@ public:
       // Decoder lookahead has no bus side effects. Actual instruction
       // bytes are separately checked before execution.
       const auto target = static_cast<std::uint16_t>(offset & address_mask);
-      bytes[index] = bus_.peek(target);
+      bytes[index] = program_ != nullptr ? program_->peek(target) : bus_.peek(target);
       bus_.note_code_byte(target);
     }
   }
@@ -55,6 +57,7 @@ public:
 
 private:
   Bus &bus_;
+  const Bus *program_ = nullptr;
 };
 
 class BusBank final : public ghidra::MemoryBank {
@@ -204,6 +207,10 @@ public:
     discard_translations();
   }
 
+  void captured_read(Hcs08DataRead *operand) { operand_ = operand; }
+
+  void captured_return(std::array<Hcs08StackRead, 5> *reads) { return_reads_ = reads; }
+
   void prepare_return_frame(const std::optional<std::uint16_t> stack) {
     return_frame_.reset();
     if (stack) { return_frame_ = ReturnFrame{.stack = *stack, .pending = std::nullopt}; }
@@ -217,11 +224,12 @@ public:
     return return_frame_->masks;
   }
 
-  void execute() {
+  void execute(const Bus *program = nullptr) {
     const ExecutionGuard guard(executing_);
-    bus_.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
+    const auto &code = program != nullptr ? *program : bus_;
+    code.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
     const auto &decoded = translation();
-    bus_.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
+    code.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
                         .length = static_cast<unsigned>(decoded.length)});
     bus_.begin_execution({.address = static_cast<std::uint16_t>(address_.getOffset()),
                           .length = static_cast<unsigned>(decoded.length)});
@@ -272,9 +280,9 @@ protected:
 
   void executeStore() override {
     const auto access = memory_access(true);
-    bus_.write_memory({.address = access.address,
-                       .size = access.size,
-                       .value = read_value(currentOp->getInput(2))});
+    write_operand({.address = access.address,
+                   .size = access.size,
+                   .value = read_value(currentOp->getInput(2))});
   }
 
   void executeCallother() override {
@@ -322,7 +330,39 @@ private:
                          .size = static_cast<unsigned>(node->size)});
   }
 
+  [[nodiscard]] Hcs08KnownByte return_byte(const unsigned index) const {
+    if (return_reads_ == nullptr || !return_frame_) {
+      throw Fault("HCS08 captured RTI read lacks its owned frame");
+    }
+    auto &read = return_reads_->at(index);
+    const auto address = static_cast<std::uint16_t>(return_frame_->stack + 1U + index);
+    constexpr unsigned raw_fields = 3;
+    if (!read.value || read.in_flight || read.consumed || read.address != address ||
+        (index >= raw_fields && read.known != Hcs08KnownByte::all)) {
+      throw Fault("HCS08 captured RTI read address=" + hex(address) +
+                  ": missing, immature, repeated, mismatched or unknown PC byte");
+    }
+    read.consumed = true;
+    return {.value = *read.value, .known = read.known};
+  }
+
+  [[nodiscard]] Hcs08KnownByte raw_return_byte(const MemoryRead access,
+                                               const unsigned index) const {
+    if (return_reads_ != nullptr) { return return_byte(index); }
+    if (known_memory_ != nullptr) { return known_memory_->read_known_byte(access.address); }
+    return {.value = static_cast<std::uint8_t>(bus_.read_memory(access))};
+  }
+
   [[nodiscard]] ghidra::uintb read_operand(const MemoryRead access) const {
+    if (operand_ != nullptr) {
+      if (access.size != 1 || !operand_->value || operand_->in_flight || operand_->consumed ||
+          operand_->address != access.address) {
+        throw Fault("HCS08 captured operand read address=" + hex(access.address) +
+                    ": missing, immature, repeated or mismatched actual byte read");
+      }
+      operand_->consumed = true;
+      return *operand_->value;
+    }
     if (return_frame_ && access.size == 1) {
       for (unsigned index = 0; index < return_frame_->masks.size(); ++index) {
         const auto address = static_cast<std::uint16_t>(return_frame_->stack + 1U + index);
@@ -330,10 +370,7 @@ private:
         if ((return_frame_->seen & (1U << index)) != 0) {
           throw Fault("HCS08 RTI repeats a qualified raw frame-byte read");
         }
-        const auto value =
-            known_memory_ != nullptr
-                ? known_memory_->read_known_byte(address)
-                : Hcs08KnownByte{.value = static_cast<std::uint8_t>(bus_.read_memory(access))};
+        const auto value = raw_return_byte(access, index);
         if (return_frame_->pending) {
           throw Fault("HCS08 RTI read precedes completion of its previous raw register copy");
         }
@@ -341,6 +378,17 @@ private:
         return_frame_->pending = index;
         return static_cast<ghidra::uintb>(value.value & value.known);
       }
+    }
+    if (return_reads_ != nullptr) {
+      if (!return_frame_ || access.size != 2 ||
+          access.address != static_cast<std::uint16_t>(return_frame_->stack + 4U)) {
+        throw Fault("HCS08 captured RTI unexpected native read address=" + hex(access.address));
+      }
+      constexpr unsigned pc_high = 3;
+      constexpr unsigned pc_low = 4;
+      const auto high = return_byte(pc_high);
+      const auto low = return_byte(pc_low);
+      return (static_cast<ghidra::uintb>(high.value) << 8U) | low.value;
     }
     if (return_frame_ && access.size == 2 && access.address == address_mask &&
         static_cast<std::uint16_t>(return_frame_->stack + 4U) == access.address) {
@@ -383,9 +431,16 @@ private:
       return;
     }
     if (node->offset > address_mask) { throw Fault("HCS08 constant operand exceeds 16 bits"); }
-    bus_.write_memory({.address = static_cast<std::uint16_t>(node->offset),
-                       .size = static_cast<unsigned>(node->size),
-                       .value = value});
+    write_operand({.address = static_cast<std::uint16_t>(node->offset),
+                   .size = static_cast<unsigned>(node->size),
+                   .value = value});
+  }
+
+  void write_operand(const MemoryWrite access) {
+    if (operand_ != nullptr || return_reads_ != nullptr) {
+      throw Fault("HCS08 captured operand unexpected write address=" + hex(access.address));
+    }
+    bus_.write_memory(access);
   }
 
   [[nodiscard]] MemoryRead memory_access(const bool write) const {
@@ -426,6 +481,8 @@ private:
   const RegisterLayout &layout_;
   ReturnKnowledge knowledge_;
   Hcs08KnownMemory *known_memory_;
+  Hcs08DataRead *operand_ = nullptr;
+  std::array<Hcs08StackRead, 5> *return_reads_ = nullptr;
 
   struct ReturnFrame {
     std::uint16_t stack;

@@ -84,6 +84,9 @@ public:
                           const DspCompletionObserver &after_dsp = {},
                           const DspExternalEvents &external = {});
   void end_system_reset();
+  // Caller supplies the board observation; no GPIO route is inferred here.
+  void begin_dsp_reset(DspHardwareResetInputs inputs);
+  void release_dsp_reset();
   [[nodiscard]] McuDspScheduleCheckpoint checkpoint() const;
   void restore(const McuDspScheduleCheckpoint &checkpoint);
   [[nodiscard]] bool faulted() const;
@@ -97,6 +100,7 @@ public:
 private:
   class Guard;
   void healthy() const;
+  void validate_dsp_reset_observation() const;
   void consumed() const;
   void offer_period(bool waiting = false);
   void finish_boundary();
@@ -124,6 +128,7 @@ private:
   bool shared_write_ = false;
   bool waiting_ = false;
   bool active_ = false;
+  bool observing_signals_ = false;
   bool faulted_ = false;
 };
 }

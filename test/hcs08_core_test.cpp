@@ -107,6 +107,41 @@ void unsupported_effects() {
           "An offered unsupported target interrupt cannot be silently dropped");
 }
 
+void signed_branch_conditions() {
+  Memory bus;
+  Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
+  constexpr std::array<unsigned, 2> opcodes{0x90, 0x91};
+  constexpr std::array<int, 5> offsets{-128, -1, 0, 1, 127};
+  constexpr unsigned greater_equal = 0x90;
+  constexpr unsigned low_flags = 0x1f;
+  for (const auto opcode : opcodes) {
+    for (unsigned bits = 0; bits < 64; ++bits) {
+      const auto flags =
+          static_cast<std::uint8_t>(flags_fixed | (bits & low_flags) | ((bits & 32U) << 2U));
+      const bool unequal = ((flags & flag_n) != 0) != ((flags & flag_v) != 0);
+      const bool taken = opcode == greater_equal ? !unequal : unequal;
+      for (const auto offset : offsets) {
+        const std::array<std::uint8_t, 2> code{static_cast<std::uint8_t>(opcode),
+                                               static_cast<std::uint8_t>(offset)};
+        bus.install(entry, code);
+        bus.accesses.clear();
+        cpu.set_state({.pc = entry,
+                       .hx = high_h + immediate_x,
+                       .sp = stack,
+                       .a = replacement_value,
+                       .ccr = flags});
+        auto expected = cpu.state();
+        expected.pc =
+            static_cast<std::uint16_t>(static_cast<int>(entry) + 2 + (taken ? offset : 0));
+        cpu.step();
+        require(cpu.state() == expected && bus.accesses.empty(),
+                "Independent BGE N==V and BLT N!=V preserve all CCR/register bits across signed "
+                "offsets");
+      }
+    }
+  }
+}
+
 void fixed_condition_bits() {
   Memory bus;
   Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
@@ -131,6 +166,7 @@ int main() {
     failures_and_invalidation();
     unsupported_effects();
     fixed_condition_bits();
+    signed_branch_conditions();
     std::cout << "Native HCS08 stack, background request and strict failure cases passed.\n";
     return 0;
   } catch (const std::exception &error) {

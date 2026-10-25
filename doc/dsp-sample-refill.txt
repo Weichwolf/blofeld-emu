@@ -1,0 +1,39 @@
+Original post-header first refill
+
+  cmake --build --preset strict --target blofeld-original-dsp-sample-receiver-test
+  ctest --test-dir build/strict -R '^original_dsp_sample_refill$' --output-on-failure
+
+Each of142 declared MIDI headers enters through actual Timer1 capture and the
+unchanged original vector/receiver/RTI. A trusted owner/peer checkpoint then
+feeds four independent preparation/drain suffixes. The own caller supplies no
+post-receive timer-busy write. Original preparation produces the real8100,
+first-data-page, ring+252,264-word descriptor and enters the original service.
+Four serial batches retain the complete matrix and validate each partial trace
+before collecting it. Independent initial-owner restores, the16000-instruction
+case bound and220-second native-process bound remain in force.
+
+TIO1 input    Completed low/high polls    Outcome
+unknown      0/0                        strict DI fault P:188a/X:ffff8b
+low          4/0                        healthy original poll; checkpoint allowed
+high         0/1                        strict Port-F control fault P:18a8
+low->high    2/1                        same Port-F control fault
+
+The actual first PCR_F=300 write encounters retained PRR_F=500: bit8 would select
+the reserved function. It fails before committing; prior PCR_F=2ff and intended
+drivers(mask/known500,levels100) survive. Only ready profiles set engine-busy
+bit13. Every descriptor remains queued and unconsumed; active receive state,
+all512 ring cells, configured slot fields, phase and output guards are checked.
+No additional IRQ, refill byte, successful callback or audio result is supplied.
+All seven complete original records remain intact.
+
+Three failed profiles per header refuse implicit retry and checkpoint. Suffixes
+resume only by trusted restore. Diagnostic origin PCs and retained SDK PCs are
+separate: failed two-word BRCLR/MOVEP accesses have consumed their extension
+(188c/18aa); this is interpreter quarantine, not a silicon exception-PC claim.
+
+These are untimed conditional read-session/preparation inputs, not full boot or
+NAND wiring/timing validation. The reserved Port-F transition and Y:002000 boot
+frontier remain unresolved. Physical NAND/address conversion, original header
+request production, delivered refills, live MIDI/audio and hardware comparison
+remain required. Reference identities: dsp-voice-reference.json; prior component
+conditions: dsp-sample-receiver.txt and dsp-sample-timer.txt.

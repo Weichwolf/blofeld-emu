@@ -35,7 +35,7 @@ records of admitted effects and decoder lookahead. Internal rollback stores raw
 register values, derived AGU state, all sixteen stack cells, native REP/IRQ
 continuation, counters and peripheral pacing targets. Compile-time checks require
 trivial copying and at most 1 KiB; this build uses 464 bytes. It does not copy the
-per-PC cycle vector or reconstruct the entire host dispatch cache per access.
+per-PC cycle cache or reconstruct the entire host dispatch cache per access.
 Each attempt decodes its captured opcode afresh, including a loaded REP body;
 partial/warm host dispatch cannot select a different instruction. Pure host cache
 invalidations may remain; nominal reference costs use the captured opcode.
@@ -98,6 +98,30 @@ Explicit bank arbitration combines real pending native stores/loads with a held
 DMA word: a later source overwrite must not replace its already captured value,
 and two coordinated restores must deliver that value to the actual native load.
 
+Owner-coordinated DMA memory admission
+DspMachine::advance_reference_dma(inputs,ticket) validates the current native
+capability before sampling DMA. Its core footprint comes from the actual pending
+word effect. A conflicting fresh DMA source waits while that core effect commits;
+a held destination stalls the core, including its successful write sample. The
+same native ticket remains pending until a later sample permits real admission.
+Independent opcode/extension/data effects can proceed while DMA waits. Results
+contain the selected DMA phase/word and optional actual native progress.
+
+This unclocked interface consumes externally supplied reference DMA samples. It
+does not derive pipeline timestamps, simultaneous X/Y bus phases, peripheral
+arbitration or an automatic scheduler from interpreter order. Clocked owners,
+control markers, indivisible bits and unqualified bank/peripheral sharing reject.
+Parallel effects retain the existing semantic-continuation scope above.
+
+DMA commits before permitted native admission. A failed DMA access leaves the
+native ticket unconsumed. A subsequent native failure retains completed DMA I/O
+and quarantines the CPU; only trusted coordinated restore recovers that prefix.
+Restore renews tickets and requires the caller to restore its reference cursor.
+The dsp_reference_dma_admission gate checks these orderings with real native
+stores/loads, held-source overwrites, two full suffix replays, rejected ownership
+and inputs, missing data, destructive FIFO rejection and explicit control/IRQ
+boundaries. It establishes no physical pipeline or continuous original audio.
+
 The optional original_dsp_boot regression executes the entire currently reached
 13,015-instruction ROM/stage prefix using both ordinary steps and access
 continuations under the same explicit pin interleaving. It compares every byte
@@ -126,8 +150,8 @@ is retained. The public effect variant now includes acknowledgement; rebuild
 matching project and native SDK headers/libraries. Existing frozen consumer
 bundles remain frozen until deliberately rebuilt.
 
-Limits: trusted full checkpoints and code-map storage still allocate, native host
-caches remain large, and yielding uses exceptions. Fixed internal rollback does
+Limits: trusted full checkpoints and code-map storage still allocate, and yielding
+uses exceptions. Fixed internal rollback does
 not establish allocation-free execution or real-time bounds. This path does not
 belong in a real-time audio callback. IRQ-entry clocking, physical
 pipeline/grouping/interlocks, elapsed stall clocks, dynamic deadline placement,

@@ -117,4 +117,11 @@ struct DspReferenceProgress {
   std::optional<DspReferencePending> pending = std::nullopt;
   bool retired = false;
 };
+
+// One explicitly supplied DMA arbitration sample against an actual pending word
+// effect. No pipeline timestamp is inferred. A stalled core has no new progress.
+struct DspReferenceDmaProgress {
+  DspDmaBusResult dma;
+  std::optional<DspReferenceProgress> core = std::nullopt;
+};
 }

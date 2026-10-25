@@ -70,7 +70,9 @@ delay the selected phase against explicitly supplied reference core occupancy;
 it reports held-word core stalls (dsp-bank-arbitration.txt).
 Native semantic bus observations are available (dsp-native-access.txt); they do
 not yet supply arbitration timestamps or stalls.
-No physical HCKT/core frequency, original DMA execution, physical DAX output, PCM transport,
+The isolated original dual-enable fragment and repeating two-channel ring have
+additional reference coverage in dsp-audio-dma.txt. No physical HCKT/core frequency,
+complete original DMA startup, physical DAX output, normal-runtime PCM transport,
 full original boot or hardware equivalence is established.
 
   cmake --build --preset strict --target blofeld-dma-test

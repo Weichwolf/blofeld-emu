@@ -1,0 +1,55 @@
+Original candidate FLASH/GPIO/ICG application continuation
+
+  cmake --build --preset strict --target blofeld-original-hcs08-icg-test
+  ctest --test-dir build/strict -j1 -R '^original_hcs08_icg$' --output-on-failure
+
+The optional gate verifies the local Controller1.4 archive and all seven supplied
+pages through hcs08-reference.json. Native instruction/data fetches use the
+candidate FLASH owner, including actual normal-reset FFFE/FFFF transactions.
+Three directed controls reject RAM-profile, omitted-FLASH and wrapped fetches
+with operation/address/PC/context before retirement or NVM changes.
+Only supplied page bytes are known; omitted bytes and erase history remain
+unknown. No command/transfer/completion or NVM operating rate is supplied.
+
+The application address profile shares the programmer fixture's strict NVM,
+SOPT, ICG and reset implementation. Its explicit RAM/code policy permits the
+real application, while the default programmer policy remains limited to its
+pinned body and marker writes. GPIO registers and resolved physical pad sources
+remain separate owners. No original firmware byte is replaced or skipped.
+
+Three declared warm contexts cover absent PTE observations, nonzero reference
+input8 with unknown live trim, and the same input with known live trim5A.
+All1024 RAM bytes begin unknown. Normal reset reads the actual FLASH vector;
+GPIO setup reaches the independent full CPU/RAM boundary atE04E after6176
+retirements. Missing pads fail there. Known observations continue through actual
+JSR/AIS and packaged FFBE trim load. The actual trim store establishes80; it is
+not automatically copied during reset. Live trim is distinct from an individual
+physical unit's calibration and from an oscillator frequency.
+
+Actual writes004E=80,0048=28,0049=30 precede the first ICGS1 read atE1B0.
+Independent complete CPU, RAM/return-stack, access-order and ICG-state oracles
+check6188 retirements, HX012C/SP0475/A80/CCR69 with maskEF. Software requests are
+28/30, REFS readback remains unknown (maskDF), filter knowledge is discarded and
+trim is80. The status read fails without inventing LOCK/DCOS, a rate or elapsed
+clock behavior. The CPU quarantines; NVM contents/knowledge/history stay exact.
+
+Cuts before PTE input, after trim and after control stores produce14 fresh
+CPU/RAM/NVM/GPIO/ICG continuations with reconnected pad sources. Complete fault
+suffixes and endpoints agree. Two further fresh healthy pre-status boundaries
+reset NVM/SOPT/ICG/GPIO and the CPU together: actual trim80 and RAM persist,
+controls/first-write admission reset, GPIO clears and the actual vector supplies
+E000. The logical CPU vector phase does not reset peripherals a second time.
+
+The shared test-memory translation unit is compiled once per sanitizer using
+an object library. All14 prior consumer preprocessing outputs match the shared
+PIC compilation; consumers retain strict flags and their own policies. This
+changes build reuse, not peripheral effects or test acceptance.
+
+This is an untimed conditional application component with a supplied update
+image, not a unique installed-device image. Cold A/X, actual part/package/nets,
+FLL/clock-loss/filter/status evolution, CPU/peripheral clock coupling, mutable
+FLASH-code cache invalidation, scanner/SPI/ADC/COP and complete boot/update/
+recovery/MIDI/audio remain required. The original strict GPIO and programmer
+gates remain independent. References: hcs08-reference.json, hcs08-icg.txt,
+hcs08-clock-constraints.txt and objective.txt/coverage.txt. Manufacturer assets
+and detailed source-built layout records remain local.

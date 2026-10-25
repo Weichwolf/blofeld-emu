@@ -1,6 +1,6 @@
-DSP56371 mode-zero timers, capture-six and TIO GPIO
+DSP56371 internal timers, external event counters, capture and TIO GPIO
 
-Reference: DSP56371UM chapter 11, especially 11.2.1, 11.3.1.1, 11.3.2.3, 11.4.7 and tables 11-1,
+Reference: DSP56371UM chapter 11, especially 11.2.1, 11.3.1.1/11.3.1.4, 11.3.2.3, 11.4.7 and tables 11-1,
 11-3/11-4; Appendix C figures C-23..C-25; chapter 4 interrupt vector table.
 The pinned manual in hardware/sources.json remains an ignored local reference.
 
@@ -71,6 +71,30 @@ another timer or the prescaler. Boundary expectations, including zero/equal
 compare and reload versus overflow, follow the manual's M-N+1 event model;
 stock-silicon edge-phase behavior is still unverified.
 
+External event counter, mode three
+With PCE clear, timers 0/1 count only selected synchronized TIO transitions:
+rising for INV=0, falling for INV=1. The first event loads TLR; subsequent events
+increment, compare, overflow and optionally reload under the same counter rules
+as mode zero. Repeated levels and opposite edges do not count. GPIO DIR/DO bits
+remain stored but have no pin-driving effect in this mode. With PCE set, all
+three timers use the shared internal prescaler; TIO transitions and INV do not
+alter its pulses. Timer 2 without PCE rejects because it has no TIO pin.
+Reload consumes the following event, as the text and counter sequence specify.
+Figure 11-9's M-N period annotation differs; stock cadence needs qualification.
+
+Missing previous input or unknown load/compare rejects the relevant observation.
+A rejected selected edge is not consumed. Unknown/withdrawn synchronizer timing
+rejects an internal-clock batch atomically, including other timers/prescaler.
+Ordered qualified samples may lag raw pads. Active TIO-source polarity changes,
+TC/PCE changes and compare-boundary TRM changes remain unqualified. Physical
+input frequency, synchronizer latency and board timing remain unverified.
+
+dsp_timer_events checks 64 fixed external sequences against independent literal
+clock transitions, shared prescaling and UINT64_MAX batches, unknown inputs,
+GPIO/capture handover and reset. Own native setup and fast vectors check real
+overflow-before-compare service/source acknowledgement for timers 0/1; four
+coordinated owner restores reproduce both native IRQ/foreground suffixes.
+
 Capture mode six, TRM=0
 Timers 0/1 support one-shot measurement capture. Internal CLK/2 or prescaler
 edges load TLR on the first clock and then increment the 24-bit internal counter.
@@ -114,7 +138,7 @@ and SHI priority, vector fetch acknowledgement, fast/long entry and native RTI
 effects. DMA event history and physical interrupt timing remain pending.
 
 Checks
-  ctest --test-dir build/strict -R '^(dsp_timers|dsp_timer_updates|dsp_capture|native_dsp|original_dsp_boot|original_nand_write)$' --output-on-failure
+  ctest --test-dir build/strict -R '^(dsp_timers|dsp_timer_updates|dsp_timer_events|dsp_capture|native_dsp|original_dsp_boot|original_nand_write)$' --output-on-failure
 Independent register/clock expectations cover reset permissions/unknown values,
 TIO polarity and contention, first preload, M-N+1 compare, reload, live preload,
 wrap/W1C, source acknowledgement, shared/direct clocks, PL changes/maxima,
@@ -127,7 +151,7 @@ compare pairs in free-running and reload mode, with W1C and live preload changes
 The oracle keeps its own pending-reload state and applies each manual clock transition.
 
 Unsupported / unqualified
-Other TC modes (pulse/toggle, external counting, width/period, PWM, watchdog),
+Other TC modes (pulse/toggle, width/period, PWM, watchdog),
 external prescaler clocks, active PCE/TC changes that keep TE enabled, TRM changes
 at a compare/pending-reload boundary, wait/stop clock gating, electrical/PLL timing and full board scheduling
 fail or remain outside this interface. Disabling TE may also clear configuration.

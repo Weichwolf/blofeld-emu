@@ -23,6 +23,10 @@ format changes fail with address/operation/PC/CCR/edge context and quarantine.
 Trusted copies preserve pending bits, flag-ack history and buffers without peers
 or callbacks. MOSI is explicitly unknown in unqualified idle data intervals.
 
+The separate explicit divider-clock owner is described in hcs08-spi-clock.txt.
+Its reference promotion/first-edge/completion boundaries do not qualify physical
+phase or automatic launch. The edge component remains independently usable.
+
 These are untimed digital events. The idle transmit buffer moves to the shifter
 within two BUSCLK cycles according to12.4.4; the text does not select our exact
 write-to-transfer/first-edge or final-sample-to-SPRF phase. No fixed latency or
@@ -49,7 +53,10 @@ retirements/return state. Manufacturer program bytes remain local.
 
 This is bounded direct ISR execution, not actual CPU interrupt admission or a
 boot-origin frame. No native DSP firmware consumer is executed by this gate.
-Full controller boot, ICG/FLL/status, timer/ADC, interrupt timing, master latency,
+The separate original timer gate now continues through real SPI register setup
+and JSR to strict idle FSTAT, preserving masked IRQ, stack and clock histories
+(hcs08-timer-cop.txt). It supplies no serial clock events or physical phase.
+Full controller boot, ICG/FLL/status, complete timer/ADC history, interrupt timing, master latency,
 physical nets, complete MIDI/audio/update/recovery and hardware equivalence
 remain open. Existing warm/cold startup retains its strict ICGS1/unknown-pad
 frontiers. The independent idle-FSTAT store remains unresolved; no broad

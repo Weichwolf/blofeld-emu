@@ -1,0 +1,39 @@
+Original full pitch-calibration sample history
+
+  cmake --build --preset strict --target blofeld-original-hcs08-calibration-test format-check
+  ctest --test-dir build/strict -j1 -R '^original_hcs08_calibration$' --output-on-failure
+
+Actual cold vector/RAM-clear/initialization executes6188 instructions up to the
+strict ICGS1 boundary. It establishes all analog RAM,300 calibration steps,
+initial limits, native caller/stack and partial register knowledge. No host RAM
+store supplies a sum/filter/center/range/gain/counter or output record.
+
+An explicit component handoff selects ADC setup beyond the two unresolved ICG
+status reads; neither is executed or replaced with a ready value. The6MHz ideal
+ADC reference and PortE strap observations are declared inputs. Normal board
+clock history, matrix/COP/flash initialization and scanner scheduling remain
+unqualified. This is cold RAM provenance, not complete board boot.
+
+Original ADC/decimator setup takes21 reference periods and leaves168 of176
+conversion periods. BDC-held periods finish actual pending work between declared
+poll callers. Unmodified ADC polling/dispatch selects channels0/1/2 and starts
+every next conversion. Selected stable codes are512/0/0. Original code executes
+4817 pitch samples/14451 analog windows: the first short batch still divides by16,
+then16-sample batches drive all300 calibration decrements and two post-calibration
+batches. IRQs remain explicitly masked; no SPID byte or serial event is supplied.
+
+An independent whole-history integer oracle checks302 batch states: accumulation,
+IIR, logical16-bit center correction, min/max order, final500-count padding,
+original2258/divisor gain arithmetic and byte truncation, suppression and ring
+positions. Four literal intermediate/end controls constrain the oracle. Expected
+endpoint center2041,min1541,max2541,gains24/24 follows native acquisition. Original
+pressure and pitch producers queue D0/00/7F and E0/00/40; zero modulation does not
+publish a changed value. No replacement arithmetic or output is supplied.
+
+Two late joint cuts include the remaining-one calibration boundary and a real
+partial division-helper frame. Four fresh CPU/RAM/peripheral/BDC/clock owners
+reproduce complete suffix traces, states and access histories without repeating
+the long acquisition prefix. FLASH stays exact. Finite directed collector
+corruptions reject. These observations do not qualify physical analog accuracy,
+normal IRQ/serial scheduling, native DSP, MIDI/audio, full update/recovery or
+stock-device equivalence. No fuzz or physical traffic. References: hcs08-reference.json.

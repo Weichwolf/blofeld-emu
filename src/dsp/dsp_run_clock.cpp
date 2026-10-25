@@ -2,6 +2,7 @@
 #include "dsp/dsp_run_clock.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/dsp_agu_interlocks.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_pll.hpp"
 
@@ -60,12 +61,16 @@ std::uint64_t DspRunClock::next_step_ticks(const DspBus &bus, const unsigned nat
 }
 
 std::uint64_t DspRunClock::next_step_ticks(const DspBus &bus, const DspClockUnits units) const {
-  if (faulted_ || active_) { throw Fault("DSP duration preview requires a healthy step boundary"); }
+  if (faulted_ || active_ || hardware_reset_active()) {
+    throw Fault("DSP duration preview requires a healthy running step boundary");
+  }
   return duration_ticks(units, period_ticks(bus));
 }
 
 void DspRunClock::begin_step(const DspBus &bus, const DspRunContext context) {
-  if (faulted_ || active_) { throw Fault("DSP reference clock requires a healthy step boundary"); }
+  if (faulted_ || active_ || hardware_reset_active()) {
+    throw Fault("DSP reference clock requires a healthy running step boundary");
+  }
   context_ = context;
   try {
     period_ticks_ = period_ticks(bus);
@@ -102,14 +107,35 @@ void DspRunClock::finish_step(DspBus &bus, const DspClockUnits units) {
 }
 
 void DspRunClock::restart_native_epoch() {
-  if (faulted_ || active_ || epoch_ == std::numeric_limits<std::uint64_t>::max()) {
+  if (faulted_ || active_ || hardware_reset_active() ||
+      epoch_ == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("DSP reset epoch requires a healthy inactive representable boundary");
   }
   epoch_start_ = cycles_;
   epoch_interlock_start_ = interlocks_;
   ++epoch_;
+  reset_.reset();
   period_ticks_ = 0;
   context_ = {};
+}
+
+std::uint64_t DspRunClock::next_step_ticks(const DspBus &bus,
+                                           const unsigned native_cycles,
+                                           const unsigned interlock_cycles) const {
+  if (interlock_cycles > DspAguInterlocks::maximum_stall_units) {
+    throw Fault("Invalid nominal DSP AGU stall count");
+  }
+  return next_step_ticks(bus,
+                         DspClockUnits{.native = native_cycles, .interlocks = interlock_cycles});
+}
+
+void DspRunClock::finish_step(DspBus &bus,
+                              const unsigned native_cycles,
+                              const unsigned interlock_cycles) {
+  if (interlock_cycles > DspAguInterlocks::maximum_stall_units) {
+    throw Fault("Invalid nominal DSP AGU stall count");
+  }
+  finish_step(bus, DspClockUnits{.native = native_cycles, .interlocks = interlock_cycles});
 }
 
 void DspRunClock::fail() noexcept {

@@ -11,6 +11,7 @@
 #include "original_update_display_fixture.hpp"
 #include "original_update_forward_fixture.hpp"
 #include "original_update_reset_fixture.hpp"
+#include "original_update_reset_inputs_fixture.hpp"
 #include "original_update_transport_fixture.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/private_file.hpp"
@@ -259,7 +260,8 @@ void continuation(forward::Forward &run,
                   const std::vector<transport::Block> &blocks,
                   const std::vector<unsigned> &caller,
                   const std::string &path,
-                  const CopObservation &cop) {
+                  const CopObservation &cop,
+                  const bool reset_inputs) {
   Drawing drawing;
   constexpr unsigned entry_flags = 0x91;
   const auto initial_flags = run.pair.mcu.bus().read(forward::bus_flags);
@@ -314,7 +316,14 @@ void continuation(forward::Forward &run,
                      << " irq-unknown=" << run.unknown_irq_queries
                      << " unresolved-events=" << run.pair.link.unresolved_events
                      << " storage=1 unknown-tail=" << complete_source << " helper-returned=0\n";
-      blofeld::test::update_reset::execute(run, nvm);
+      if (reset_inputs) {
+        blofeld::test::update_reset::Continuation reset(run, nvm);
+        reset.start();
+        reset.pulse();
+        blofeld::test::reset_inputs::exercise(reset, blocks, path);
+      } else {
+        blofeld::test::update_reset::execute(run, nvm);
+      }
       return;
     }
   }
@@ -324,7 +333,8 @@ void continuation(forward::Forward &run,
 
 int main(const int argc, char **argv) {
   try {
-    require(argc == 5, "Expected original firmware, private packets, own templates and trace");
+    require(argc == 5 || (argc == 6 && std::string_view(argv[5]) == "--reset-inputs"),
+            "Expected original firmware, private packets, own templates, trace [--reset-inputs]");
     const auto firmware = blofeld::Firmware::load(argv[1]);
     const auto blocks = transport::read_blocks(argv[2]);
     const auto templates = transport::read_templates(argv[3]);
@@ -353,7 +363,8 @@ int main(const int argc, char **argv) {
                      caller,
                      std::string(argv[4]) + "." + std::to_string(order) + "." +
                          std::to_string(phase),
-                     cop);
+                     cop,
+                     argc == 6);
       }
     }
     std::cout << "Four native downloads and jointly clocked COP reset continuations verified.\n";

@@ -33,6 +33,14 @@ constexpr unsigned fm = 0x920, scratch = 0x700, output = 0x940, queue = 0x2700;
 constexpr unsigned head = 0x2a14, tail = 0x2a15, active_pointer = 0x2a16;
 constexpr unsigned active_count = 0x2a17, bank = 0xed86;
 constexpr unsigned port_f_data = 0xfffff5, strobe = 0x100;
+constexpr unsigned port_f_control = 0xfffff7, port_f_direction = 0xfffff6;
+constexpr unsigned read_done_control = 0x2ff, read_done_direction = 0x500;
+constexpr unsigned read_done_levels = 0x100;
+constexpr unsigned transmit_control = 0x300, timer_di = 0x1000;
+constexpr std::array<unsigned, 4> drain_pcs{0x188a, 0x188a, 0x18a8, 0x18a8};
+// Failed two-word BRCLR/MOVEP retain the SDK's consumed extension, not a silicon exception PC.
+constexpr std::array<unsigned, 4> drain_after_pcs{0x188c, 0x1889, 0x18aa, 0x18aa};
+constexpr std::array<unsigned, 4> drain_attempts{1, 4, 1, 3}, drain_lows{0, 4, 0, 2};
 constexpr unsigned phase = 0x0c0000, marker = 0x7e0000, next_marker = 0x020000;
 constexpr unsigned guard = 0x13579b, status = 0xc00300, refill_count = 264;
 constexpr unsigned timer_arm = 0x300065;
@@ -75,7 +83,7 @@ unsigned get(DspBus &bus, const DspSpace space, const unsigned address) {
   return bus.read({.space = space, .address = address});
 }
 
-std::array<unsigned, 3> caller(DspBus &bus, const bool native_timer) {
+std::array<unsigned, 3> caller(DspBus &bus, const bool native_timer, const bool drain) {
   DspProgram p;
   p.immediate("omr", mode);
   p.immediate("sr", native_timer ? unmasked_status : status);
@@ -107,7 +115,7 @@ std::array<unsigned, 3> caller(DspBus &bus, const bool native_timer) {
   if (!native_timer) { p.emit("jsr (r6)"); }
   const auto header_stop = p.pc();
   p.emit("nop");
-  p.emit("movep #>" + blofeld::test::number(timer_arm) + ",x:<<$ffff8b");
+  if (!drain) { p.emit("movep #>" + blofeld::test::number(timer_arm) + ",x:<<$ffff8b"); }
   p.immediate("m1", mask);
   p.immediate("m2", mask);
   p.immediate("r3", chain + 2);
@@ -152,10 +160,15 @@ struct Saved {
   Peer peer;
 };
 
+struct DrainStats {
+  unsigned attempts = 0, polls = 0, low = 0, gpio = 0;
+  DspState before;
+};
+
 class Fixture {
 public:
-  explicit Fixture(const Firmware &firmware, const bool native_timer)
-      : original_(firmware), native_timer_(native_timer) {
+  explicit Fixture(const Firmware &firmware, const bool native_timer, const bool drain)
+      : original_(firmware), native_timer_(native_timer), drain_mode_(drain) {
     auto &bus = machine_.bus();
     bus.observe_omr(mode);
     bus.advance_instruction_cycles(3);
@@ -174,8 +187,9 @@ public:
         put(bus, DspSpace::p, timer_vector + i, vector.words.at(i));
       }
     }
-    stops_ = caller(bus, native_timer_);
+    stops_ = caller(bus, native_timer_, drain_mode_);
     machine_.cpu().reset_spi_boot();
+    if (drain_mode_) { initial_.emplace(machine_.checkpoint()); }
   }
 
   void start(const Page &page, const std::optional<unsigned> cutoff = {}) {
@@ -285,6 +299,34 @@ public:
     }
   }
 
+  void drain(const Page &page, std::ostream &trace) {
+    require(drain_mode_ && native_timer_,
+            "Drain profiles require their explicit independent native caller baseline");
+    if (!initial_) { throw Fault("No trusted initial boundary for sample-refill profiles"); }
+    machine_.restore(*initial_);
+    start(page);
+    advance(stops_[0]);
+    check_ring(page_bytes);
+    check_header();
+    report_timer(trace, "HEADER_TIMER", page.id);
+    const Saved header{.owner = machine_.checkpoint(), .peer = peer_};
+    for (unsigned profile = 0; profile < 4; ++profile) {
+      machine_.restore(header.owner);
+      peer_ = header.peer;
+      draining_ = true;
+      drain_stats_ = {};
+      machine_.bus().timers().set_tio_drive(
+          1, profile == 0 ? std::nullopt : std::optional<bool>{profile == 2});
+      const auto error = run_drain(profile);
+      check_drain(profile, error);
+      trace << "DRAIN " << page.id << ' ' << profile << ' ' << drain_stats_.attempts << ' '
+            << drain_stats_.polls << ' ' << drain_stats_.low << ' ' << drain_stats_.gpio << ' '
+            << drain_stats_.before.pc << ' ' << machine_.cpu().state().pc << '\n';
+      trace << "DRAIN_ERROR " << page.id << ' ' << profile << ' ' << error << '\n';
+    }
+    draining_ = false;
+  }
+
   void intact() {
     for (const auto index : records) {
       const auto &record = original_.dsp.at(index);
@@ -304,6 +346,109 @@ public:
   }
 
 private:
+  std::string run_drain(const unsigned profile) {
+    try {
+      while (profile != 1 || drain_stats_.low < 4) {
+        if (profile == 3 && drain_stats_.low == 2) {
+          machine_.bus().timers().set_tio_drive(1, true);
+        }
+        step();
+      }
+    } catch (const Fault &error) { return error.what(); }
+    return "none";
+  }
+
+  void check_drain(const unsigned profile, const std::string &error) {
+    const bool ready = profile >= 2;
+    const auto state = machine_.cpu().state();
+    const unsigned expected_pc = drain_pcs.at(profile);
+    const unsigned attempts = drain_attempts.at(profile);
+    const unsigned polls = profile == 0 ? 0U : attempts;
+    const unsigned low = drain_lows.at(profile);
+    require(drain_stats_.before.pc == expected_pc && state.pc == drain_after_pcs.at(profile) &&
+                state.sp == 1 && state.stack_pc == stops_[1] && drain_stats_.attempts == attempts &&
+                drain_stats_.polls == polls && drain_stats_.low == low &&
+                drain_stats_.gpio == static_cast<unsigned>(ready),
+            "Actual first-refill state differs: profile=" + std::to_string(profile) +
+                " pc=" + hex(state.pc, 6) + " sp=" + std::to_string(state.sp) +
+                " return=" + hex(state.stack_pc, 6) + " expected_return=" + hex(stops_[1], 6) +
+                " attempts=" + std::to_string(drain_stats_.attempts) + " polls=" +
+                std::to_string(drain_stats_.polls) + " low=" + std::to_string(drain_stats_.low) +
+                " gpio=" + std::to_string(drain_stats_.gpio) + " error=" + error);
+    if (profile == 1) {
+      require(error == "none", "Held-low readiness must remain a healthy original poll");
+      static_cast<void>(machine_.checkpoint());
+    } else {
+      require(error.contains("omr=0x600389") &&
+                  error.contains(ready ? "Reserved DSP Port F pin function selected by write at "
+                                         "Y:0xfffff7"
+                                       : "Unknown DSP timer DI read at X:0xffff8b"),
+              "Only the declared unknown input or real reserved Port-F transition may fail");
+      reject_drain_retry();
+    }
+    auto &bus = machine_.bus();
+    const auto pins = bus.gpio(DspPort::f).outputs();
+    require(get(bus, DspSpace::x, 6) == (ready ? 0x2000U : 0U) &&
+                get(bus, DspSpace::x, tail) == queue &&
+                get(bus, DspSpace::x, active_header) == sample_request &&
+                get(bus, DspSpace::x, active_pointer) == ring &&
+                get(bus, DspSpace::x, active_count) == page_bytes &&
+                get(bus, DspSpace::x, slot) == phase && get(bus, DspSpace::x, slot + 7) == 0 &&
+                get(bus, DspSpace::x, output) == guard &&
+                get(bus, DspSpace::y, port_f_control) == read_done_control &&
+                get(bus, DspSpace::y, port_f_direction) == read_done_direction &&
+                pins.mask == read_done_direction && pins.known == read_done_direction &&
+                pins.levels == read_done_levels &&
+                bus.timers().read(timer_status, mask & ~timer_di) == 0 &&
+                peer_.reads == page_bytes && peer_.clocked == page_bytes && peer_.vector_reads == 2,
+            "No failed or held first refill may consume its descriptor, receive data or render");
+    check_preparation();
+    check_ring(page_bytes);
+    check_fields(true, true);
+  }
+
+  void reject_drain_retry() {
+    bool rejected = false;
+    try {
+      machine_.cpu().step();
+    } catch (const Fault &error) {
+      require(std::string(error.what()).contains("requires reset"),
+              "Faulted first-refill execution must retain its quarantine");
+      rejected = true;
+    }
+    require(rejected, "A failed first refill silently retried");
+    rejected = false;
+    try {
+      static_cast<void>(machine_.checkpoint());
+    } catch (const Fault &error) {
+      require(std::string(error.what()).contains("checkpoint requires"),
+              "A failed first refill cannot become a trusted checkpoint");
+      rejected = true;
+    }
+    require(rejected, "A failed first refill produced a healthy checkpoint");
+  }
+
+  void observe_drain(const DspNativeAccess &access) {
+    if (!draining_) { return; }
+    if (access.kind == DspNativeAccessKind::bit && access.target.space == DspSpace::x &&
+        access.target.address == timer_status && access.bit && access.bit->index == 12 &&
+        access.bit->operation == DspBitOperation::test) {
+      if (access.stage == DspNativeAccessStage::before) {
+        ++drain_stats_.attempts;
+      } else {
+        require(access.value.has_value(), "Completed readiness test needs its observed bit");
+        ++drain_stats_.polls;
+        drain_stats_.low += static_cast<unsigned>(access.value == 0);
+      }
+    }
+    if (access.kind == DspNativeAccessKind::write && access.target.space == DspSpace::y &&
+        access.target.address == port_f_control) {
+      require(access.stage == DspNativeAccessStage::before && access.value == transmit_control,
+              "The real first-refill mode transition must fail before committing its PCR write");
+      ++drain_stats_.gpio;
+    }
+  }
+
   void drive() {
     const bool missing = cutoff_ && peer_.clocked == *cutoff_ + 1;
     const auto byte = peer_.clocked == 0 ? 0U : page_->bytes.at(peer_.clocked - 1);
@@ -336,7 +481,9 @@ private:
   void step() {
     observe_capture();
     require(++peer_.steps <= step_limit, "Original sample receive/prepare/render exceeded bound");
+    if (draining_) { drain_stats_.before = machine_.cpu().state(); }
     machine_.cpu().step({.observe = [this](const DspNativeAccess &access) {
+      observe_drain(access);
       if (access.kind == DspNativeAccessKind::vector &&
           access.stage == DspNativeAccessStage::after) {
         require(native_timer_ && peer_.irq_issued && peer_.vector_reads < 2 &&
@@ -360,7 +507,7 @@ private:
     const auto intent = machine_.bus().gpio(DspPort::c).outputs();
     const bool known = (intent.mask & intent.known & strobe) != 0;
     const bool level = (intent.levels & strobe) != 0;
-    if (known && peer_.previous == false && level) {
+    if (!draining_ && known && peer_.previous == false && level) {
       require(peer_.clocked < page_bytes, "Original receiver clocked beyond its528-byte response");
       ++peer_.clocked;
       drive();
@@ -392,14 +539,16 @@ private:
     }
   }
 
-  void check_fields(const bool copied) {
+  void check_fields(const bool copied, const bool configured = false) {
     auto &bus = machine_.bus();
+    const auto seed = configured ? page_->rate : word(*page_, seed_field);
     require(get(bus, DspSpace::x, slot + 4) == (copied ? word(*page_, 10) : guard) &&
                 get(bus, DspSpace::y, slot + 4) == (copied ? word(*page_, 13) : guard) &&
                 get(bus, DspSpace::y, slot + 5) == (copied ? word(*page_, 11) : guard) &&
-                get(bus, DspSpace::x, slot + 6) == (copied ? word(*page_, 8) - 1 : guard) &&
+                get(bus, DspSpace::x, slot + 6) ==
+                    (copied ? word(*page_, 8) - static_cast<unsigned>(!configured) : guard) &&
                 get(bus, DspSpace::y, slot + 6) == (copied ? word(*page_, 12) : guard) &&
-                get(bus, DspSpace::y, slot) == (copied ? word(*page_, seed_field) : guard),
+                get(bus, DspSpace::y, slot) == (copied ? seed : guard),
             "Original C100 receiver must copy exactly its six real header/slot fields");
   }
 
@@ -439,8 +588,9 @@ private:
     require(get(bus, DspSpace::y, slot) == page_->rate && get(bus, DspSpace::y, slot + 1) == 0 &&
                 get(bus, DspSpace::y, slot + 3) == bank &&
                 get(bus, DspSpace::x, slot + 6) == word(*page_, 8) &&
-                get(bus, DspSpace::x, service_counter) == 1,
-            "Real tuned preparation selects the original curve rate, zero FM depth and busy queue");
+                get(bus, DspSpace::x, service_counter) == (draining_ ? 0U : 1U),
+            "Real tuned preparation selects the original curve rate, zero FM depth and queue "
+            "service state");
     const std::array<unsigned, 4> expected{ring_request, word(*page_, 8), ring + 252, refill_count};
     for (unsigned i = 0; i < expected.size(); ++i) {
       require(get(bus, DspSpace::x, queue + i) == expected.at(i),
@@ -450,12 +600,16 @@ private:
 
   const Firmware &original_;
   bool native_timer_;
+  bool drain_mode_;
+  bool draining_ = false;
   DspMachine machine_;
   std::array<unsigned, 3> stops_{};
   const Page *page_ = nullptr;
   Peer peer_;
   std::optional<unsigned> cutoff_;
   std::optional<Saved> saved_;
+  std::optional<DspCheckpoint> initial_;
+  DrainStats drain_stats_;
 };
 
 unsigned read_number(std::istream &stream) {
@@ -471,6 +625,7 @@ unsigned read_number(std::istream &stream) {
 struct Batch {
   std::vector<Page> pages;
   bool native_timer = false;
+  bool drain = false;
 };
 
 Batch load_pages(const std::string &path) {
@@ -478,7 +633,8 @@ Batch load_pages(const std::string &path) {
   std::array<char, 8> magic{};
   stream.read(magic.data(), static_cast<std::streamsize>(magic.size()));
   const std::string signature(magic.data(), magic.size());
-  require(signature == "BSRX0001" || signature == "BSRX0002", "Invalid sample page signature");
+  require(signature == "BSRX0001" || signature == "BSRX0002" || signature == "BSRX0003",
+          "Invalid sample page signature");
   const auto count = read_number(stream);
   require(count > 0 && count <= maximum_pages,
           "Sample receiver input count is outside its bounded scope");
@@ -496,7 +652,9 @@ Batch load_pages(const std::string &path) {
     }
   }
   require(stream.get() == std::char_traits<char>::eof(), "Extra private sample input bytes");
-  return {.pages = std::move(pages), .native_timer = signature == "BSRX0002"};
+  return {.pages = std::move(pages),
+          .native_timer = signature != "BSRX0001",
+          .drain = signature == "BSRX0003"};
 }
 }
 
@@ -506,17 +664,26 @@ int main(const int count, char **arguments) {
     const auto firmware = Firmware::load(arguments[1]);
     const auto batch = load_pages(arguments[2]);
     const auto &pages = batch.pages;
-    Fixture fixture(firmware, batch.native_timer);
+    Fixture fixture(firmware, batch.native_timer, batch.drain);
     std::ofstream trace(arguments[3]);
     trace.exceptions(std::ios::failbit | std::ios::badbit);
     unsigned active = 0;
     for (const auto &page : pages) {
+      if (batch.drain) {
+        fixture.drain(page, trace);
+        continue;
+      }
       fixture.start(page);
       fixture.finish();
       active += page.ready;
       trace << "PAGE " << page.id << ' ' << page.ready << ' ' << page.next_phase << ' '
             << page.result << '\n';
       fixture.report_timer(trace, "TIMER", page.id);
+    }
+    if (batch.drain) {
+      fixture.intact();
+      trace << "DRAIN_RESULT " << pages.size() << ' ' << pages.size() * 4 << '\n';
+      return 0;
     }
     for (const auto cutoff : {0U, 1U, 71U, 72U, 527U}) {
       fixture.failure(pages.front(), cutoff);

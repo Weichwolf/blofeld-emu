@@ -18,6 +18,7 @@ constexpr unsigned te = 1;
 constexpr unsigned toie = 2;
 constexpr unsigned tcie = 4;
 constexpr unsigned mode_mask = 0xf0;
+constexpr unsigned event_mode = 0x30;
 constexpr unsigned capture_mode = 0x60;
 constexpr unsigned inv = 0x100;
 constexpr unsigned trm = 0x200;
@@ -61,7 +62,7 @@ DspTimerPin DspTimers::observe_tio(const unsigned index) const {
     throw Fault("DSP timer has no TIO pin at index " + hex(index, 1));
   }
   const auto control = timers_.at(index).control;
-  if ((control & dir) == 0) { return {.level = external_.at(index)}; }
+  if ((control & mode_mask) != 0 || (control & dir) == 0) { return {.level = external_.at(index)}; }
   const bool level = ((control & data_out) != 0) != ((control & inv) != 0);
   const auto &external = external_.at(index);
   if (external.has_value() && external.value() != level) {
@@ -116,7 +117,8 @@ void DspTimers::validate_control(const std::size_t index, const std::uint32_t va
   const auto &timer = timers_.at(index);
   const auto mode = value & mode_mask;
   const auto previous_mode = timer.control & mode_mask;
-  if ((value & ~allowed) != 0 || (mode != 0 && mode != capture_mode) ||
+  if ((value & ~allowed) != 0 || (mode != 0 && mode != event_mode && mode != capture_mode) ||
+      (mode == event_mode && index == 2 && (value & pce) == 0) ||
       (mode == capture_mode && (index == 2 || (value & (trm | dir | data_out)) != 0)) ||
       (index == 2 && (value & (dir | data_out | inv)) != 0)) {
     throw Fault("Unsupported DSP timer control write at X:" + hex(last - (index * 4), 6) +
@@ -131,6 +133,10 @@ void DspTimers::validate_control(const std::size_t index, const std::uint32_t va
   if (mode == capture_mode && (timer.control & value & te) != 0 &&
       ((timer.control ^ value) & inv) != 0) {
     throw Fault("Unqualified active DSP timer capture polarity change at X:" +
+                hex(last - (index * 4), 6));
+  }
+  if (active && mode == event_mode && (value & pce) == 0 && ((timer.control ^ value) & inv) != 0) {
+    throw Fault("Unqualified active DSP timer event polarity change at X:" +
                 hex(last - (index * 4), 6));
   }
   if (active && ((timer.control ^ value) & pce) != 0) {
@@ -152,7 +158,7 @@ void DspTimers::write_control(const std::size_t index, const std::uint32_t value
   const bool was_prescaled = prescaler_enabled();
   const bool enable = (timer.control & te) == 0 && (value & te) != 0;
   if (previous_mode != mode) {
-    if (previous_mode == 0) { timer.captured = timer.count; }
+    if (mode == capture_mode) { timer.captured = timer.count; }
   }
   timer.control = value & writable;
   timer.flags &= ~(value & (tof | tcf));

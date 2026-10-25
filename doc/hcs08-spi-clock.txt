@@ -1,0 +1,37 @@
+S08SPIV3 BUSCLK divider owner: explicit reference phase
+
+  cmake --build --preset strict --target blofeld-hcs08-spi-clock-test
+  ctest --test-dir build/strict -j1 -R '^hcs08_spi_clock$' --output-on-failure
+
+GT12.3/12.4.3 tables12-5/6 derive the active SPSCK divider from BUSCLK.
+Hcs08SpiClock requires reference_half_period_and_final_edge explicitly:
+begin_transfer promotes an actual queued byte; the first edge follows one
+complete half-period and completion follows edge16. The board selects each
+promotion boundary. Idle periods never start a queued byte automatically.
+These are conditional phase choices, not observed silicon timing. GT12.4.4
+bounds idle promotion within2 BUSCLK; it does not fix our exact first-edge or
+SPRF phase. Physical phase qualification and automatic double-buffer launch
+remain open. Sources/identities: hcs08-reference.json and hcs08-spi.txt.
+
+Each advance consumes one BUSCLK. Only due edges sample MISO/shift MOSI.
+Returned pins retain MOSI at the final sampling event before the peripheral
+releases its unspecified idle data output. The board must publish that event
+to the peer. No peer/callback is retained and no received byte is injected.
+Status/data access may change flag acknowledgements and queue the next byte
+without consuming time. Active baud/format/shifter ownership changes refuse
+before another period. Actual SPE disable/reset aborts without completion.
+
+Unknown MISO fails at its real sample boundary, retaining elapsed periods and
+previous edges. Peripheral and clock require joint recovery. Opaque checkpoints
+retain partial divider/transfer counters; restore first requires the separately
+restored peripheral including pending bytes and acknowledgement history.
+Clock reset requires a separately reset/disabled healthy peripheral.
+
+2048 finite baud/format cases compare every period/edge/sample against literal
+prescaler/divider tables and bit expectations. Paired DSP-SHI transfers use
+384 BUSCLK/48 pin events for three bytes.385 pre/mid/post cuts and770 fresh
+continuations after original destruction reproduce full clock/SPI state,
+pin/byte history and peer outputs/received word. Directed tests check unknown
+sampling, foreign owners, active divisor changes, reset and restore refusal.
+No fuzz or physical traffic. This adds no normal board boot, CPU IRQ/prefetch
+consumer, common CPU/ADC/SPI edge schedule, native DSP firmware or live audio.

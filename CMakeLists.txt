@@ -87,9 +87,22 @@ add_dependencies(blofeld_hcs08 blofeld_hcs08_spec)
 add_library(blofeld_hcs08_icg src/keyboard/hcs08_icg.cpp)
 target_include_directories(blofeld_hcs08_icg PUBLIC src)
 target_link_libraries(blofeld_hcs08_icg PUBLIC blofeld_firmware)
+add_library(blofeld_hcs08_tpm src/keyboard/hcs08_tpm.cpp)
+target_include_directories(blofeld_hcs08_tpm PUBLIC src)
+target_link_libraries(blofeld_hcs08_tpm PUBLIC blofeld_firmware)
+add_library(blofeld_hcs08_cop src/keyboard/hcs08_cop.cpp)
+target_include_directories(blofeld_hcs08_cop PUBLIC src)
+target_link_libraries(blofeld_hcs08_cop PUBLIC blofeld_firmware)
+
 add_library(blofeld_hcs08_spi src/keyboard/hcs08_spi.cpp src/keyboard/hcs08_spi_registers.cpp)
 target_include_directories(blofeld_hcs08_spi PUBLIC src)
 target_link_libraries(blofeld_hcs08_spi PUBLIC blofeld_firmware)
+add_library(blofeld_hcs08_spi_clock src/keyboard/hcs08_spi_clock.cpp)
+target_include_directories(blofeld_hcs08_spi_clock PUBLIC src)
+target_link_libraries(blofeld_hcs08_spi_clock PUBLIC blofeld_hcs08_spi)
+add_library(blofeld_hcs08_adc src/keyboard/hcs08_adc.cpp src/keyboard/hcs08_adc_registers.cpp)
+target_include_directories(blofeld_hcs08_adc PUBLIC src)
+target_link_libraries(blofeld_hcs08_adc PUBLIC blofeld_firmware)
 add_library(blofeld_hcs08_flash src/keyboard/hcs08_flash.cpp src/keyboard/hcs08_flash_registers.cpp
   src/keyboard/hcs08_flash_array.cpp src/keyboard/hcs08_flash_reset.cpp)
 target_include_directories(blofeld_hcs08_flash PUBLIC src)
@@ -106,6 +119,9 @@ target_link_libraries(blofeld_hcs08_reset PUBLIC blofeld_hcs08_bdc)
 add_library(blofeld_hcs08_run_clock src/keyboard/hcs08_instruction_timing.cpp src/keyboard/hcs08_run_clock.cpp)
 target_include_directories(blofeld_hcs08_run_clock PUBLIC src)
 target_link_libraries(blofeld_hcs08_run_clock PUBLIC blofeld_hcs08_bdc)
+add_library(blofeld_hcs08_spi_run_clock src/keyboard/hcs08_spi_run_clock.cpp)
+target_include_directories(blofeld_hcs08_spi_run_clock PUBLIC src)
+target_link_libraries(blofeld_hcs08_spi_run_clock PUBLIC blofeld_hcs08_bdc blofeld_hcs08_spi_clock)
 add_library(blofeld_gpio_pads src/board/gpio_pads.cpp)
 target_include_directories(blofeld_gpio_pads PUBLIC src)
 target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
@@ -131,6 +147,9 @@ add_library(blofeld_nand src/storage/nand.cpp src/storage/nand_write.cpp src/sto
   src/storage/nand_image.cpp src/storage/nand_image_codec.cpp)
 target_include_directories(blofeld_nand PUBLIC src)
 target_link_libraries(blofeld_nand PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
+add_library(blofeld_nand_operation_clock src/storage/nand_operation_clock.cpp)
+target_include_directories(blofeld_nand_operation_clock PUBLIC src)
+target_link_libraries(blofeld_nand_operation_clock PUBLIC blofeld_nand)
 add_library(blofeld_nand_read_timing src/storage/nand_read_timing.cpp)
 target_include_directories(blofeld_nand_read_timing PUBLIC src)
 target_link_libraries(blofeld_nand_read_timing PUBLIC blofeld_nand)
@@ -201,18 +220,19 @@ add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp 
   src/dsp/dsp_dma.cpp src/dsp/dsp_dma_address.cpp src/dsp/dsp_dma_cycle.cpp src/dsp/dsp_bus_dma.cpp
   src/dsp/dsp_dax.cpp src/dsp/dsp_dax_clock.cpp src/dsp/dsp_bus_dax.cpp
   src/dsp/dsp_gpio.cpp src/dsp/dsp_timers.cpp src/dsp/dsp_timer_clock.cpp src/dsp/dsp_timer_capture.cpp src/dsp/dsp_interrupts.cpp
-  src/dsp/dsp_run_clock.cpp)
+  src/dsp/dsp_run_clock.cpp src/dsp/dsp_run_reset.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
-add_library(blofeld_dsp src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp src/dsp/dsp_reference_execution.cpp
-  src/dsp/dsp_program_fetch.cpp src/dsp/dsp_reference_cycle.cpp
+add_library(blofeld_dsp
+  src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
+  src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
+  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
-  src/dsp/dsp_pipeline_execute.cpp
-  src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
-  src/dsp/dsp_interrupt_timing.cpp
-  src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
-  src/dsp/dsp_scheduled_events.cpp)
+  src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
+  src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
+  src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
+  src/dsp/dsp_scheduled_reset.cpp)
 target_include_directories(blofeld_dsp PUBLIC src)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
@@ -241,6 +261,10 @@ add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
+  # One checked translation unit for the shared target-memory reference fixture.
+  add_library(blofeld_hcs08_programmer_fixture OBJECT test/hcs08_programmer_fixture.cpp)
+  target_link_libraries(blofeld_hcs08_programmer_fixture PUBLIC
+    blofeld_hcs08 blofeld_hcs08_flash blofeld_hcs08_icg)
   add_executable(blofeld-hcs08-core-test test/hcs08_core_test.cpp)
   target_link_libraries(blofeld-hcs08-core-test PRIVATE blofeld_hcs08)
   target_compile_definitions(blofeld-hcs08-core-test PRIVATE
@@ -280,7 +304,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-original-hcs08-clock-startup-test test/original_hcs08_clock_startup_test.cpp
     test/hcs08_clock_startup_fixture.cpp)
   target_link_libraries(blofeld-original-hcs08-clock-startup-test PRIVATE blofeld_hcs08
-    blofeld_hcs08_flash blofeld_hcs08_gpio blofeld_hcs08_icg blofeld_hcs08_spi)
+    blofeld_hcs08_flash blofeld_hcs08_gpio blofeld_hcs08_icg blofeld_hcs08_spi blofeld_hcs08_adc)
   target_compile_definitions(blofeld-original-hcs08-clock-startup-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME original_hcs08_clock_startup COMMAND ${Python3_EXECUTABLE}
@@ -299,11 +323,47 @@ if(BUILD_TESTING)
   set_tests_properties(original_hcs08_cold_startup PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-hcs08-spi-test test/hcs08_spi_test.cpp)
   target_link_libraries(blofeld-hcs08-spi-test PRIVATE blofeld_hcs08_spi blofeld_dsp_peripherals)
+  add_executable(blofeld-hcs08-spi-clock-test test/hcs08_spi_clock_test.cpp)
+  target_link_libraries(blofeld-hcs08-spi-clock-test PRIVATE blofeld_hcs08_spi_clock blofeld_dsp_peripherals)
+  add_test(NAME hcs08_spi_clock COMMAND blofeld-hcs08-spi-clock-test)
+  add_executable(blofeld-hcs08-spi-run-clock-test test/hcs08_spi_run_clock_test.cpp)
+  target_link_libraries(blofeld-hcs08-spi-run-clock-test PRIVATE blofeld_hcs08_spi_run_clock)
+  target_compile_definitions(blofeld-hcs08-spi-run-clock-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_spi_run_clock COMMAND blofeld-hcs08-spi-run-clock-test)
+  add_executable(blofeld-original-hcs08-spi-run-clock-test test/original_hcs08_spi_run_clock_test.cpp
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-spi-run-clock-test PRIVATE blofeld_hcs08_spi_run_clock
+    blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio blofeld_hcs08_adc blofeld_dsp_peripherals
+    blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-spi-run-clock-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_spi_run_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_spi_run_clock.py"
+    $<TARGET_FILE:blofeld-original-hcs08-spi-run-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-run-clock.trace")
+  set_tests_properties(original_hcs08_spi_run_clock PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 210)
+  add_test(NAME original_hcs08_spi_jump COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_spi_jump.py"
+    $<TARGET_FILE:blofeld-original-hcs08-spi-run-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-jump.trace")
+  set_tests_properties(original_hcs08_spi_jump PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 210)
+  add_test(NAME original_hcs08_spi_scanner COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_spi_scanner.py"
+    $<TARGET_FILE:blofeld-original-hcs08-spi-run-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-scanner.trace")
+  set_tests_properties(original_hcs08_spi_scanner PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 270)
   add_test(NAME hcs08_spi COMMAND blofeld-hcs08-spi-test)
   add_executable(blofeld-original-hcs08-spi-test test/original_hcs08_spi_test.cpp
-    test/hcs08_clock_startup_fixture.cpp test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-hcs08-spi-test PRIVATE blofeld_hcs08
-    blofeld_hcs08_flash blofeld_hcs08_gpio blofeld_hcs08_icg blofeld_hcs08_spi
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-spi-test PRIVATE blofeld_hcs08_programmer_fixture blofeld_hcs08
+    blofeld_hcs08_flash blofeld_hcs08_gpio blofeld_hcs08_icg blofeld_hcs08_spi blofeld_hcs08_adc
     blofeld_dsp_peripherals blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-spi-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
@@ -314,6 +374,77 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi.trace")
   set_tests_properties(original_hcs08_spi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_executable(blofeld-hcs08-adc-test test/hcs08_adc_test.cpp)
+  add_executable(blofeld-hcs08-adc-flags-test test/hcs08_adc_flags_test.cpp)
+  target_link_libraries(blofeld-hcs08-adc-flags-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-adc-flags-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_adc_flags COMMAND blofeld-hcs08-adc-flags-test)
+  target_link_libraries(blofeld-hcs08-adc-test PRIVATE blofeld_hcs08_adc)
+  add_test(NAME hcs08_adc COMMAND blofeld-hcs08-adc-test)
+  add_executable(blofeld-original-hcs08-adc-test test/original_hcs08_adc_test.cpp
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-adc-test PRIVATE blofeld_hcs08_programmer_fixture
+    blofeld_hcs08_gpio blofeld_hcs08_spi blofeld_hcs08_adc blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-adc-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_adc COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_adc.py"
+    $<TARGET_FILE:blofeld-original-hcs08-adc-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-adc.trace")
+  set_tests_properties(original_hcs08_adc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+
+  add_executable(blofeld-original-hcs08-adc-clock-test test/original_hcs08_adc_clock_test.cpp
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-adc-clock-test PRIVATE blofeld_hcs08_programmer_fixture
+    blofeld_hcs08_run_clock blofeld_hcs08_gpio blofeld_hcs08_spi blofeld_hcs08_adc blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-adc-clock-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_adc_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_adc_clock.py"
+    $<TARGET_FILE:blofeld-original-hcs08-adc-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-adc-clock.trace")
+  set_tests_properties(original_hcs08_adc_clock PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+
+  add_executable(blofeld-original-hcs08-pitch-event-test test/original_hcs08_pitch_event_test.cpp
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-pitch-event-test PRIVATE blofeld_hcs08_programmer_fixture
+    blofeld_hcs08_run_clock blofeld_hcs08_gpio blofeld_hcs08_spi blofeld_hcs08_adc
+    blofeld_dsp_peripherals blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-pitch-event-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_pitch_event COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_pitch_event.py"
+    $<TARGET_FILE:blofeld-original-hcs08-pitch-event-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-pitch-event.trace")
+  set_tests_properties(original_hcs08_pitch_event PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_pitch_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_pitch_clock.py"
+    $<TARGET_FILE:blofeld-original-hcs08-pitch-event-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-pitch-clock.trace")
+  set_tests_properties(original_hcs08_pitch_clock PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_executable(blofeld-original-hcs08-calibration-test test/original_hcs08_calibration_test.cpp
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-calibration-test PRIVATE blofeld_hcs08_programmer_fixture
+    blofeld_hcs08_run_clock blofeld_hcs08_gpio blofeld_hcs08_spi blofeld_hcs08_adc blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-calibration-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_calibration COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_calibration.py"
+    $<TARGET_FILE:blofeld-original-hcs08-calibration-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-calibration.trace")
+  set_tests_properties(original_hcs08_calibration PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+
   add_executable(blofeld-original-device-identity-test test/original_device_identity_test.cpp)
   target_link_libraries(blofeld-original-device-identity-test PRIVATE blofeld_device_identity blofeld_core)
   add_dependencies(blofeld-original-device-identity-test blofeld_hc12_spec)
@@ -344,6 +475,100 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-device-identity-test PRIVATE blofeld_device_identity)
   add_test(NAME device_identity COMMAND blofeld-device-identity-test)
   add_executable(blofeld-hcs08-instruction-reservation-test test/hcs08_instruction_reservation_test.cpp)
+  add_executable(blofeld-hcs08-irq-enable-delay-test test/hcs08_irq_enable_delay_test.cpp)
+  target_link_libraries(blofeld-hcs08-irq-enable-delay-test PRIVATE blofeld_hcs08_run_clock)
+  target_compile_definitions(blofeld-hcs08-irq-enable-delay-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_irq_enable_delay COMMAND blofeld-hcs08-irq-enable-delay-test)
+  add_executable(blofeld-hcs08-prefetch-test test/hcs08_prefetch_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-test PRIVATE blofeld_hcs08_bdc)
+  target_compile_definitions(blofeld-hcs08-prefetch-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch COMMAND blofeld-hcs08-prefetch-test)
+  add_executable(blofeld-hcs08-prefetch-data-test test/hcs08_prefetch_data_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-data-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-data-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_data COMMAND blofeld-hcs08-prefetch-data-test)
+  add_executable(blofeld-hcs08-prefetch-branch-test test/hcs08_prefetch_branch_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-branch-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-branch-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_branch COMMAND blofeld-hcs08-prefetch-branch-test)
+  add_executable(blofeld-hcs08-prefetch-jump-test test/hcs08_prefetch_jump_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-jump-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-jump-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_jump COMMAND blofeld-hcs08-prefetch-jump-test)
+  add_executable(blofeld-hcs08-prefetch-scanner-test test/hcs08_prefetch_scanner_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-scanner-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-scanner-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_scanner COMMAND blofeld-hcs08-prefetch-scanner-test)
+  add_executable(blofeld-hcs08-prefetch-peripheral-test test/hcs08_prefetch_peripheral_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-peripheral-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-peripheral-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_peripheral COMMAND blofeld-hcs08-prefetch-peripheral-test)
+  add_executable(blofeld-hcs08-prefetch-return-test test/hcs08_prefetch_return_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-return-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-return-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_return COMMAND blofeld-hcs08-prefetch-return-test)
+  add_executable(blofeld-hcs08-prefetch-irq-test test/hcs08_prefetch_irq_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-irq-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-irq-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_irq COMMAND blofeld-hcs08-prefetch-irq-test)
+  add_executable(blofeld-original-hcs08-prefetch-test test/original_hcs08_prefetch_test.cpp
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-prefetch-test PRIVATE blofeld_hcs08_programmer_fixture
+    blofeld_hcs08_run_clock blofeld_hcs08_gpio blofeld_hcs08_spi blofeld_hcs08_adc
+    blofeld_dsp_peripherals blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-prefetch-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_prefetch COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_prefetch.py"
+    $<TARGET_FILE:blofeld-original-hcs08-prefetch-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-prefetch.trace")
+  set_tests_properties(original_hcs08_prefetch PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_prefetch_data COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_prefetch_data.py"
+    $<TARGET_FILE:blofeld-original-hcs08-prefetch-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-prefetch-data.trace")
+  set_tests_properties(original_hcs08_prefetch_data PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_prefetch_branch COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_prefetch_branch.py"
+    $<TARGET_FILE:blofeld-original-hcs08-prefetch-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-prefetch-branch.trace")
+  set_tests_properties(original_hcs08_prefetch_branch PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_prefetch_peripheral COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_prefetch_peripheral.py"
+    $<TARGET_FILE:blofeld-original-hcs08-prefetch-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-prefetch-peripheral.trace")
+  set_tests_properties(original_hcs08_prefetch_peripheral PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_prefetch_return COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_prefetch_return.py"
+    $<TARGET_FILE:blofeld-original-hcs08-prefetch-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-prefetch-return.trace")
+  set_tests_properties(original_hcs08_prefetch_return PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_prefetch_irq COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_prefetch_irq.py"
+    $<TARGET_FILE:blofeld-original-hcs08-prefetch-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-prefetch-irq.trace")
+  set_tests_properties(original_hcs08_prefetch_irq PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   target_link_libraries(blofeld-hcs08-instruction-reservation-test PRIVATE blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-hcs08-instruction-reservation-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
@@ -359,8 +584,9 @@ if(BUILD_TESTING)
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_irq COMMAND blofeld-hcs08-irq-test)
   add_executable(blofeld-original-hcs08-spi-irq-test test/original_hcs08_spi_irq_test.cpp
-    test/hcs08_clock_startup_fixture.cpp test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-hcs08-spi-irq-test PRIVATE blofeld_hcs08
+    test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-spi-irq-test PRIVATE blofeld_hcs08_programmer_fixture
+    blofeld_hcs08_adc blofeld_hcs08
     blofeld_hcs08_flash blofeld_hcs08_gpio blofeld_hcs08_icg blofeld_hcs08_spi
     blofeld_dsp_peripherals blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-spi-irq-test PRIVATE
@@ -386,26 +612,61 @@ if(BUILD_TESTING)
   add_executable(blofeld-hcs08-flash-recovery-test test/hcs08_flash_recovery_test.cpp)
   target_link_libraries(blofeld-hcs08-flash-recovery-test PRIVATE blofeld_hcs08_flash)
   add_test(NAME hcs08_flash_recovery COMMAND blofeld-hcs08-flash-recovery-test)
+  add_executable(blofeld-original-hcs08-icg-test test/original_hcs08_icg_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-icg-test PRIVATE
+    blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio blofeld_private_files blofeld_hcs08_run_clock)
+  target_compile_definitions(blofeld-original-hcs08-icg-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_icg COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_icg.py"
+    $<TARGET_FILE:blofeld-original-hcs08-icg-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-icg.trace")
+  set_tests_properties(original_hcs08_icg PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME original_hcs08_periods COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_periods.py"
+    $<TARGET_FILE:blofeld-original-hcs08-icg-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-periods.trace")
+  set_tests_properties(original_hcs08_periods PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-hcs08-flash-clock-test test/hcs08_flash_clock_test.cpp)
   target_link_libraries(blofeld-hcs08-flash-clock-test PRIVATE blofeld_hcs08_flash)
   add_test(NAME hcs08_flash_clock COMMAND blofeld-hcs08-flash-clock-test)
   add_executable(blofeld-hcs08-icg-test test/hcs08_icg_test.cpp)
   target_link_libraries(blofeld-hcs08-icg-test PRIVATE blofeld_hcs08_icg)
   add_test(NAME hcs08_icg COMMAND blofeld-hcs08-icg-test)
+  add_executable(blofeld-hcs08-tpm-test test/hcs08_tpm_test.cpp)
+  target_link_libraries(blofeld-hcs08-tpm-test PRIVATE blofeld_hcs08_tpm)
+  add_test(NAME hcs08_tpm COMMAND blofeld-hcs08-tpm-test)
+  add_executable(blofeld-hcs08-cop-test test/hcs08_cop_test.cpp)
+  target_link_libraries(blofeld-hcs08-cop-test PRIVATE blofeld_hcs08_cop)
+  add_test(NAME hcs08_cop COMMAND blofeld-hcs08-cop-test)
+  add_executable(blofeld-original-hcs08-timer-wait-test test/original_hcs08_timer_wait_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-timer-wait-test PRIVATE blofeld_hcs08_programmer_fixture
+    blofeld_hcs08_tpm blofeld_hcs08_cop blofeld_hcs08_spi blofeld_hcs08_run_clock blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-timer-wait-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_timer_wait COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_timer_wait.py"
+    $<TARGET_FILE:blofeld-original-hcs08-timer-wait-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-timer-wait.trace")
+  set_tests_properties(original_hcs08_timer_wait PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
   add_executable(blofeld-hcs08-icg-native-test test/hcs08_icg_native_test.cpp)
   target_link_libraries(blofeld-hcs08-icg-native-test PRIVATE blofeld_hcs08_icg blofeld_hcs08)
   target_compile_definitions(blofeld-hcs08-icg-native-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_icg_native COMMAND blofeld-hcs08-icg-native-test)
-  add_executable(blofeld-hcs08-peripheral-reset-test test/hcs08_peripheral_reset_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-hcs08-peripheral-reset-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-hcs08-peripheral-reset-test test/hcs08_peripheral_reset_test.cpp)
+  target_link_libraries(blofeld-hcs08-peripheral-reset-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-hcs08-peripheral-reset-test PRIVATE blofeld_hcs08
     blofeld_hcs08_flash)
   add_test(NAME hcs08_peripheral_reset COMMAND blofeld-hcs08-peripheral-reset-test)
-  add_executable(blofeld-original-hcs08-flash-test test/original_hcs08_flash_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-hcs08-flash-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-original-hcs08-flash-test test/original_hcs08_flash_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-flash-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-original-hcs08-flash-test PRIVATE blofeld_hcs08
     blofeld_hcs08_flash blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-flash-test PRIVATE
@@ -417,16 +678,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-flash.trace")
   set_tests_properties(original_hcs08_flash PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 270)
-  add_executable(blofeld-hcs08-bdc-test test/hcs08_bdc_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-hcs08-bdc-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-hcs08-bdc-test test/hcs08_bdc_test.cpp)
+  target_link_libraries(blofeld-hcs08-bdc-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-hcs08-bdc-test PRIVATE blofeld_hcs08_bdc)
   target_compile_definitions(blofeld-hcs08-bdc-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_bdc COMMAND blofeld-hcs08-bdc-test)
-  add_executable(blofeld-original-hcs08-bdc-test test/original_hcs08_bdc_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-hcs08-bdc-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-original-hcs08-bdc-test test/original_hcs08_bdc_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-bdc-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-original-hcs08-bdc-test PRIVATE blofeld_hcs08_bdc
     blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-bdc-test PRIVATE
@@ -438,9 +697,8 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-bdc.trace")
   set_tests_properties(original_hcs08_bdc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 270)
-  add_executable(blofeld-original-hcs08-reset-entry-test test/original_hcs08_reset_entry_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-hcs08-reset-entry-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-original-hcs08-reset-entry-test test/original_hcs08_reset_entry_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-reset-entry-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-original-hcs08-reset-entry-test PRIVATE blofeld_hcs08_run_clock
     blofeld_private_files)
   target_compile_definitions(blofeld-original-hcs08-reset-entry-test PRIVATE
@@ -459,16 +717,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-cold-programmer.trace")
   set_tests_properties(original_hcs08_cold_programmer PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
-  add_executable(blofeld-hcs08-bdc-wire-test test/hcs08_bdc_wire_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-hcs08-bdc-wire-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-hcs08-bdc-wire-test test/hcs08_bdc_wire_test.cpp)
+  target_link_libraries(blofeld-hcs08-bdc-wire-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-hcs08-bdc-wire-test PRIVATE blofeld_hcs08_bdc_wire)
   target_compile_definitions(blofeld-hcs08-bdc-wire-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_bdc_wire COMMAND blofeld-hcs08-bdc-wire-test)
-  add_executable(blofeld-original-keyboard-bdc-wire-test test/original_keyboard_bdc_wire_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-keyboard-bdc-wire-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-original-keyboard-bdc-wire-test test/original_keyboard_bdc_wire_test.cpp)
+  target_link_libraries(blofeld-original-keyboard-bdc-wire-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-original-keyboard-bdc-wire-test PRIVATE blofeld_core
     blofeld_hcs08_bdc_wire)
   target_compile_definitions(blofeld-original-keyboard-bdc-wire-test PRIVATE
@@ -480,16 +736,34 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-bdc-wire.trace")
   set_tests_properties(original_keyboard_bdc_wire PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 360)
-  add_executable(blofeld-hcs08-run-clock-test test/hcs08_run_clock_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-hcs08-run-clock-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-original-keyboard-reset-sync-test test/original_keyboard_reset_sync_test.cpp)
+  target_link_libraries(blofeld-original-keyboard-reset-sync-test PRIVATE blofeld_hcs08_programmer_fixture)
+  target_link_libraries(blofeld-original-keyboard-reset-sync-test PRIVATE blofeld_core blofeld_hcs08_bdc_wire)
+  target_compile_definitions(blofeld-original-keyboard-reset-sync-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_keyboard_reset_sync COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_reset_sync.py"
+    $<TARGET_FILE:blofeld-original-keyboard-reset-sync-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-reset-sync.trace")
+  set_tests_properties(original_keyboard_reset_sync PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-hcs08-run-clock-test test/hcs08_run_clock_test.cpp)
+  target_link_libraries(blofeld-hcs08-run-clock-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-hcs08-run-clock-test PRIVATE blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-hcs08-run-clock-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_run_clock COMMAND blofeld-hcs08-run-clock-test)
+  add_executable(blofeld-hcs08-instruction-timing-test test/hcs08_instruction_timing_test.cpp)
+  target_link_libraries(blofeld-hcs08-instruction-timing-test PRIVATE blofeld_hcs08_run_clock)
+  add_test(NAME hcs08_instruction_timing COMMAND blofeld-hcs08-instruction-timing-test)
+  add_executable(blofeld-hcs08-divide-test test/hcs08_divide_test.cpp)
+  target_link_libraries(blofeld-hcs08-divide-test PRIVATE blofeld_hcs08_run_clock)
+  add_test(NAME hcs08_divide COMMAND blofeld-hcs08-divide-test
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_executable(blofeld-original-keyboard-target-test test/original_keyboard_target_test.cpp
-    test/keyboard_target_fixture.cpp test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-keyboard-target-test PRIVATE blofeld_hcs08_icg)
+    test/keyboard_target_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-target-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-original-keyboard-target-test PRIVATE blofeld_core
     blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-original-keyboard-target-test PRIVATE
@@ -508,29 +782,27 @@ if(BUILD_TESTING)
   target_compile_definitions(blofeld-hcs08-register-knowledge-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_register_knowledge COMMAND blofeld-hcs08-register-knowledge-test)
-  add_executable(blofeld-hcs08-reset-test test/hcs08_reset_test.cpp test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-hcs08-reset-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-hcs08-reset-test test/hcs08_reset_test.cpp)
+  target_link_libraries(blofeld-hcs08-reset-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-hcs08-reset-test PRIVATE blofeld_hcs08_reset)
   target_compile_definitions(blofeld-hcs08-reset-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_reset COMMAND blofeld-hcs08-reset-test)
-  add_executable(blofeld-hcs08-reset-security-test test/hcs08_reset_security_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-hcs08-reset-security-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-hcs08-reset-security-test test/hcs08_reset_security_test.cpp)
+  target_link_libraries(blofeld-hcs08-reset-security-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-hcs08-reset-security-test PRIVATE blofeld_hcs08_bdc)
   target_compile_definitions(blofeld-hcs08-reset-security-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_reset_security COMMAND blofeld-hcs08-reset-security-test)
-  add_executable(blofeld-hcs08-background-reset-test test/hcs08_background_reset_test.cpp
-    test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-hcs08-background-reset-test PRIVATE blofeld_hcs08_icg)
+  add_executable(blofeld-hcs08-background-reset-test test/hcs08_background_reset_test.cpp)
+  target_link_libraries(blofeld-hcs08-background-reset-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-hcs08-background-reset-test PRIVATE blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-hcs08-background-reset-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_background_reset COMMAND blofeld-hcs08-background-reset-test)
   add_executable(blofeld-original-keyboard-reset-test test/original_keyboard_reset_test.cpp
-    test/keyboard_reset_fixture.cpp test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-keyboard-reset-test PRIVATE blofeld_hcs08_icg)
+    test/keyboard_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-reset-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-original-keyboard-reset-test PRIVATE blofeld_core
     blofeld_hcs08_reset blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
   target_compile_definitions(blofeld-original-keyboard-reset-test PRIVATE
@@ -547,8 +819,8 @@ if(BUILD_TESTING)
   add_executable(blofeld-original-keyboard-chain-test test/original_keyboard_chain_test.cpp
     test/keyboard_chain_fixture.cpp test/keyboard_chain_execution.cpp test/keyboard_chain_trace.cpp
     test/keyboard_chain_checkpoint.cpp test/keyboard_chain_overlap.cpp
-    test/keyboard_reset_fixture.cpp test/hcs08_programmer_fixture.cpp)
-  target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_hcs08_icg)
+    test/keyboard_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_hcs08_programmer_fixture)
   target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_core blofeld_mcu_dsp
     blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export
     blofeld_hcs08_reset blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)
@@ -745,6 +1017,9 @@ if(BUILD_TESTING)
     test/dsp_reference_core.cpp test/dsp_reference_dma.cpp test/dsp_reference_interrupts.cpp)
   target_link_libraries(blofeld-reference-access-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_reference_access COMMAND blofeld-reference-access-test)
+  add_executable(blofeld-reference-dma-admission-test test/dsp_reference_dma_admission_test.cpp)
+  target_link_libraries(blofeld-reference-dma-admission-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_reference_dma_admission COMMAND blofeld-reference-dma-admission-test)
   add_executable(blofeld-program-latch-test test/dsp_program_latch_test.cpp)
   target_link_libraries(blofeld-program-latch-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_program_latch COMMAND blofeld-program-latch-test)
@@ -961,6 +1236,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-read-test test/nand_read_test.cpp)
   target_link_libraries(blofeld-nand-read-test PRIVATE blofeld_nand)
   add_test(NAME nand_read COMMAND blofeld-nand-read-test)
+  add_executable(blofeld-nand-operation-clock-test test/nand_operation_clock_test.cpp)
+  target_link_libraries(blofeld-nand-operation-clock-test PRIVATE blofeld_nand_operation_clock)
+  add_test(NAME nand_operation_clock COMMAND blofeld-nand-operation-clock-test)
   add_executable(blofeld-nand-read-timing-test test/nand_read_timing_test.cpp)
   target_link_libraries(blofeld-nand-read-timing-test PRIVATE blofeld_nand_read_timing)
   add_test(NAME nand_read_timing COMMAND blofeld-nand-read-timing-test)
@@ -1008,7 +1286,7 @@ if(BUILD_TESTING)
   add_test(NAME nand_read_setup COMMAND blofeld-nand-read-setup-test)
   add_executable(blofeld-original-nand-read-setup-test test/original_nand_read_setup_test.cpp)
   target_link_libraries(blofeld-original-nand-read-setup-test PRIVATE
-    blofeld_nand_read_setup blofeld_nand_read_timing blofeld_nand_write_timing
+    blofeld_nand_operation_clock blofeld_nand_read_setup blofeld_nand_read_timing blofeld_nand_write_timing
     blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_nand_read_setup COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
@@ -1070,6 +1348,12 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-coupled.trace")
   set_tests_properties(original_update_coupled PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 540)
+  add_test(NAME original_update_reset_inputs COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_reset_inputs.py"
+    $<TARGET_FILE:blofeld-original-update-coupled-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-update-reset-inputs.trace")
+  set_tests_properties(original_update_reset_inputs PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
   add_executable(blofeld-original-update-diagnostic-test test/original_update_diagnostic_test.cpp)
   target_link_libraries(blofeld-original-update-diagnostic-test PRIVATE
     blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export)
@@ -1262,6 +1546,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-capture-test test/dsp_capture_test.cpp)
   target_link_libraries(blofeld-dsp-capture-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_capture COMMAND blofeld-dsp-capture-test)
+  add_executable(blofeld-dsp-timer-events-test test/dsp_timer_events_test.cpp)
+  target_link_libraries(blofeld-dsp-timer-events-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_timer_events COMMAND blofeld-dsp-timer-events-test)
   add_executable(blofeld-dsp-interrupt-test test/dsp_interrupt_test.cpp)
   target_link_libraries(blofeld-dsp-interrupt-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_interrupts COMMAND blofeld-dsp-interrupt-test)
@@ -1333,6 +1620,14 @@ if(BUILD_TESTING)
   add_test(NAME dsp_operand_bounds COMMAND blofeld-dsp-instruction-test --operand-bounds)
   set_tests_properties(dsp_operand_bounds PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
   add_test(NAME native_dsp COMMAND blofeld-dsp-test)
+  add_executable(blofeld-dsp-divide-test test/dsp_divide_test.cpp)
+  target_link_libraries(blofeld-dsp-divide-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
+  add_test(NAME dsp_divide COMMAND blofeld-dsp-divide-test)
+  set_tests_properties(dsp_divide PROPERTIES TIMEOUT 180)
+  add_executable(blofeld-dsp-fast-normalization-test test/dsp_fast_normalization_test.cpp)
+  target_link_libraries(blofeld-dsp-fast-normalization-test PRIVATE blofeld_dsp_instruction_fixture blofeld_dsp_native)
+  add_test(NAME dsp_fast_normalization COMMAND blofeld-dsp-fast-normalization-test)
+  set_tests_properties(dsp_fast_normalization PROPERTIES TIMEOUT 180)
   add_executable(blofeld-original-runtime-clocks-test test/original_runtime_clocks.cpp)
   target_link_libraries(blofeld-original-runtime-clocks-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME original_runtime_clocks COMMAND ${Python3_EXECUTABLE}
@@ -1426,6 +1721,13 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-dispatch-cache-test test/dsp_dispatch_cache_test.cpp)
   target_link_libraries(blofeld-dsp-dispatch-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dispatch_cache COMMAND blofeld-dsp-dispatch-cache-test)
+  add_executable(blofeld-dsp-cycle-cache-test test/dsp_cycle_cache_test.cpp
+    test/dsp_cycle_cache_native.cpp)
+  target_link_libraries(blofeld-dsp-cycle-cache-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_cycle_cache COMMAND blofeld-dsp-cycle-cache-test)
+  add_executable(blofeld-dsp-memory-storage-test test/dsp_memory_storage_test.cpp)
+  target_link_libraries(blofeld-dsp-memory-storage-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_memory_storage COMMAND blofeld-dsp-memory-storage-test)
   add_executable(blofeld-dsp-checkpoint-test test/dsp_checkpoint_test.cpp
     test/dsp_checkpoint_interrupts.cpp test/dsp_checkpoint_peripherals.cpp)
   target_link_libraries(blofeld-dsp-checkpoint-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1507,6 +1809,12 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-timer.trace")
   set_tests_properties(original_dsp_sample_timer PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  add_test(NAME original_dsp_sample_refill COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sample_refill.py"
+    $<TARGET_FILE:blofeld-original-dsp-sample-receiver-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sample-refill.trace")
+  set_tests_properties(original_dsp_sample_refill PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 960)
   add_executable(blofeld-original-dsp-filters-test test/original_dsp_filters_test.cpp
     test/dsp_filter_model.cpp test/dsp_filter_fixture.cpp)
   target_link_libraries(blofeld-original-dsp-filters-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1534,7 +1842,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-envelopes.trace")
   set_tests_properties(original_dsp_envelopes PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_library(blofeld_voice_fixture STATIC test/dsp_voice_fixture.cpp test/dsp_voice_master.cpp
-    test/dsp_voice_pcm.cpp test/dsp_voice_repeat.cpp)
+    test/dsp_voice_pcm.cpp test/dsp_voice_repeat.cpp test/dsp_voice_dax.cpp)
   target_link_libraries(blofeld_voice_fixture PUBLIC blofeld_dsp blofeld_dsp_native blofeld_serial_pcm)
   add_executable(blofeld-original-dsp-voice-test test/original_dsp_voice_test.cpp)
   target_link_libraries(blofeld-original-dsp-voice-test PRIVATE blofeld_voice_fixture)
@@ -1615,6 +1923,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-repeat.trace")
   set_tests_properties(original_dsp_repeat PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+  add_executable(blofeld-original-dsp-dual-output-test test/original_dsp_dual_output_test.cpp)
+  target_link_libraries(blofeld-original-dsp-dual-output-test PRIVATE blofeld_voice_fixture)
+  add_test(NAME original_dsp_dual_output COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_dual_output.py"
+    $<TARGET_FILE:blofeld-original-dsp-dual-output-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-dual-output.trace")
+  set_tests_properties(original_dsp_dual_output PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
   add_executable(blofeld-original-dsp-idle-midi-test test/original_dsp_idle_midi_test.cpp)
   target_link_libraries(blofeld-original-dsp-idle-midi-test PRIVATE blofeld_voice_fixture)
   add_test(NAME original_dsp_idle_midi COMMAND ${Python3_EXECUTABLE}
@@ -1697,6 +2013,16 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-peripheral-init.trace")
   set_tests_properties(original_dsp_peripheral_init PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-dsp-audio-dma-test
+    test/original_dsp_audio_dma_test.cpp test/dsp_audio_dma_fixture.cpp)
+  target_link_libraries(blofeld-original-dsp-audio-dma-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware blofeld_serial_pcm)
+  add_test(NAME original_dsp_audio_dma COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_audio_dma.py"
+    $<TARGET_FILE:blofeld-original-dsp-audio-dma-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-audio-dma.trace")
+  set_tests_properties(original_dsp_audio_dma PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-scheduler-test test/original_dsp_scheduler_test.cpp)
   target_link_libraries(blofeld-original-dsp-scheduler-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_dsp_scheduler COMMAND ${Python3_EXECUTABLE}
@@ -1930,6 +2256,17 @@ if(BUILD_TESTING)
     test/original_owned_clock_fixture.cpp)
   target_link_libraries(blofeld-scheduled-coupling-test PRIVATE blofeld_core blofeld_dsp blofeld_mcu_dsp
     blofeld_dsp_native blofeld_lcd_fixture)
+  add_executable(blofeld-original-reset-start-test test/original_reset_start_test.cpp
+    test/scheduled_coupling_fixture.cpp test/original_owned_clock_fixture.cpp)
+  target_link_libraries(blofeld-original-reset-start-test PRIVATE blofeld_core blofeld_dsp blofeld_mcu_dsp
+    blofeld_dsp_native blofeld_lcd_fixture)
+  add_test(NAME original_reset_start COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_reset_start.py"
+    $<TARGET_FILE:blofeld-original-reset-start-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-reset-start.trace")
+  set_tests_properties(original_reset_start PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME original_shi_routes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_shi_routes.py"
     $<TARGET_FILE:blofeld-headless>
@@ -2015,6 +2352,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-run-clock-test test/dsp_run_clock_test.cpp)
   target_link_libraries(blofeld-dsp-run-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_run_clock COMMAND blofeld-dsp-run-clock-test)
+  add_executable(blofeld-dsp-agu-interlocks-test test/dsp_agu_interlocks_test.cpp)
+  target_link_libraries(blofeld-dsp-agu-interlocks-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_agu_interlocks COMMAND blofeld-dsp-agu-interlocks-test)
   add_executable(blofeld-dsp-interlock-test test/dsp_interlock_clock_test.cpp test/dsp_interlock_state.cpp)
   target_include_directories(blofeld-dsp-interlock-test PRIVATE src)
   target_link_libraries(blofeld-dsp-interlock-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -2030,6 +2370,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-reset-epoch-test test/dsp_reset_epoch_test.cpp)
   target_link_libraries(blofeld-dsp-reset-epoch-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_reset_epoch COMMAND blofeld-dsp-reset-epoch-test)
+  add_executable(blofeld-dsp-reset-interlock-test test/dsp_reset_interlock_test.cpp)
+  target_link_libraries(blofeld-dsp-reset-interlock-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_reset_interlocks COMMAND blofeld-dsp-reset-interlock-test)
+  add_executable(blofeld-dsp-hardware-reset-test test/dsp_hardware_reset_test.cpp)
+  target_link_libraries(blofeld-dsp-hardware-reset-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_hardware_reset COMMAND blofeld-dsp-hardware-reset-test)
   add_executable(blofeld-dsp-irq-clock-test test/dsp_irq_clock_test.cpp)
   target_link_libraries(blofeld-dsp-irq-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_irq_clock COMMAND blofeld-dsp-irq-clock-test)
@@ -2041,6 +2387,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-scheduled-run-test test/dsp_scheduled_run_test.cpp)
   target_link_libraries(blofeld-dsp-scheduled-run-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_scheduled_run COMMAND blofeld-dsp-scheduled-run-test)
+  add_executable(blofeld-joint-dsp-hold-test test/joint_dsp_hold_test.cpp)
+  target_link_libraries(blofeld-joint-dsp-hold-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME joint_dsp_hold COMMAND blofeld-joint-dsp-hold-test)
   add_executable(blofeld-original-dsp-clock-test test/original_dsp_clock_test.cpp)
   target_link_libraries(blofeld-original-dsp-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_dsp_clock COMMAND ${Python3_EXECUTABLE}
@@ -2050,6 +2399,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clock.trace")
   set_tests_properties(original_dsp_clock PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME original_dsp_agu_clock COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_agu_clock.py"
+    $<TARGET_FILE:blofeld-original-dsp-clock-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-agu-clock.trace")
+  set_tests_properties(original_dsp_agu_clock PROPERTIES SKIP_RETURN_CODE 77)
+
   add_test(NAME original_dsp_reset_clock COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_reset_clock.py"
     $<TARGET_FILE:blofeld-original-dsp-clock-test>
@@ -2174,9 +2531,30 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-original-startup-identity-test blofeld-original-identity-main-test
-  DEPENDS blofeld-original-device-identity-test blofeld-virtual-device-state-test blofeld-device-identity-test blofeld-hcs08-instruction-reservation-test blofeld-hcs08-irq-bus-test blofeld-hcs08-irq-test blofeld-original-hcs08-spi-irq-test blofeld-hcs08-spi-test blofeld-original-hcs08-spi-test blofeld-hcs08-register-knowledge-test blofeld-original-hcs08-clock-startup-test blofeld-hcs08-gpio-test blofeld-original-hcs08-gpio-test format-check blofeld-hcs08-peripheral-reset-test blofeld-hcs08-icg-test blofeld-hcs08-icg-native-test blofeld-hcs08-flash-clock-test blofeld-original-hcs08-reset-entry-test blofeld-hcs08-reset-security-test blofeld-hcs08-background-reset-test blofeld-original-keyboard-chain-test blofeld-original-keyboard-reset-test blofeld-hcs08-reset-test blofeld-hcs08-run-clock-test blofeld-original-keyboard-target-test blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
-    blofeld-gpio-pad-checkpoint-test
+  DEPENDS blofeld-original-startup-identity-test blofeld-original-identity-main-test blofeld-original-device-identity-test blofeld-virtual-device-state-test
+    blofeld-device-identity-test blofeld-hcs08-instruction-reservation-test blofeld-hcs08-irq-bus-test blofeld-hcs08-irq-test
+    blofeld-original-hcs08-spi-irq-test blofeld-hcs08-spi-test blofeld-original-hcs08-spi-test blofeld-hcs08-register-knowledge-test
+    blofeld-original-hcs08-clock-startup-test blofeld-hcs08-gpio-test blofeld-original-hcs08-gpio-test format-check
+    blofeld-hcs08-peripheral-reset-test blofeld-hcs08-icg-test blofeld-hcs08-icg-native-test blofeld-hcs08-flash-clock-test
+    blofeld-original-hcs08-reset-entry-test blofeld-hcs08-reset-security-test blofeld-hcs08-background-reset-test blofeld-original-keyboard-chain-test
+    blofeld-original-keyboard-reset-test blofeld-hcs08-reset-test blofeld-hcs08-run-clock-test blofeld-original-keyboard-target-test
+    blofeld-hcs08-bdc-wire-test blofeld-original-keyboard-bdc-wire-test blofeld-hcs08-bdc-test blofeld-original-hcs08-bdc-test
+    blofeld-hcs08-flash-test blofeld-hcs08-flash-recovery-test blofeld-original-hcs08-flash-test blofeld-original-hcs08-test
+    blofeld-hcs08-core-test blofeld-hcs08-arithmetic-test blofeld-gpio-output-test blofeld-gpio-unknown-driver-test
+    blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test
+    blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test
+    blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test
+    blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test
+    blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-gpio-pad-checkpoint-test blofeld-hcs08-prefetch-scanner-test blofeld-hcs08-prefetch-irq-test blofeld-hcs08-prefetch-jump-test
+    blofeld-hcs08-prefetch-return-test blofeld-hcs08-spi-run-clock-test blofeld-original-hcs08-spi-run-clock-test blofeld-usbip-runtime-test
+    blofeld-usbip-suspend-test blofeld-hcs08-prefetch-peripheral-test blofeld-hcs08-prefetch-branch-test blofeld-hcs08-prefetch-data-test
+    blofeld-hcs08-prefetch-test blofeld-original-hcs08-prefetch-test blofeld-hcs08-spi-clock-test blofeld-original-hcs08-calibration-test
+    blofeld-original-hcs08-pitch-event-test blofeld-original-hcs08-adc-clock-test blofeld-hcs08-irq-enable-delay-test blofeld-hcs08-adc-flags-test
+    blofeld-hcs08-adc-test blofeld-original-hcs08-adc-test blofeld-hcs08-tpm-test blofeld-hcs08-cop-test
+    blofeld-original-hcs08-timer-wait-test blofeld-original-hcs08-icg-test blofeld-nand-operation-clock-test blofeld-original-keyboard-reset-sync-test
+    blofeld-hcs08-instruction-timing-test blofeld-hcs08-divide-test blofeld-original-reset-start-test blofeld-joint-dsp-hold-test
+    blofeld-dsp-hardware-reset-test blofeld-dsp-reset-interlock-test blofeld-dsp-timer-events-test blofeld-dsp-memory-storage-test
     blofeld-dsp-irqa-test blofeld-dsp-dma-interrupt-test blofeld-original-dsp-gpio-input-test
     blofeld-original-dsp-gpio-request-test
     blofeld-original-gpio-midi-test
@@ -2209,7 +2587,10 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test blofeld-transfer-pipeline-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
+    blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
+    blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
+    blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom
@@ -2225,7 +2606,8 @@ add_custom_target(quality
     blofeld-hc12-flash-cycles-test
     blofeld-mcu-cycle-test
     blofeld-mcu-run-clock-test
-    blofeld-dsp-run-clock-test blofeld-dsp-reset-epoch-test blofeld-dsp-interlock-test
+    blofeld-dsp-run-clock-test blofeld-dsp-reset-epoch-test blofeld-dsp-interlock-test blofeld-dsp-divide-test
+    blofeld-dsp-fast-normalization-test blofeld-dsp-agu-interlocks-test
     blofeld-dsp-irq-clock-test
     blofeld-dsp-irq-admission-test
     blofeld-dsp-scheduled-run-test
@@ -2236,6 +2618,7 @@ add_custom_target(quality
     blofeld-original-dsp-request-queue-test
     blofeld-original-dsp-workspace-test
     blofeld-original-dsp-peripheral-init-test
+    blofeld-original-dsp-audio-dma-test
     blofeld-original-dsp-shi-receive-test
     blofeld-original-dsp-wire-test
     blofeld-original-dsp-clocked-wire-test
@@ -2262,8 +2645,7 @@ add_custom_target(quality
     blofeld-original-update-coupled-test
     blofeld-mcu-checkpoint-test
     blofeld-shi-test blofeld-mcu-shi-test blofeld-dsp-test blofeld-dsp-boot-test blofeld-dsp-pll-test
-    blofeld-dsp-instruction-test blofeld-dsp-memory-map-test
-    blofeld-dsp-checkpoint-test
+    blofeld-dsp-instruction-test blofeld-dsp-memory-map-test blofeld-dsp-checkpoint-test blofeld-dsp-cycle-cache-test
     blofeld-dsp-gpio-test
     blofeld-dsp-timers-test
     blofeld-dsp-timer-updates-test
@@ -2289,6 +2671,7 @@ add_custom_target(quality
     blofeld-original-dsp-foreground-test
     blofeld-original-dsp-program-guard-test
     blofeld-original-dsp-repeat-test
+    blofeld-original-dsp-dual-output-test
     blofeld-original-dsp-idle-midi-test
     blofeld-original-dsp-release-ring-test blofeld-original-dsp-sustain-ring-test
     blofeld-original-dsp-ring-audio-test

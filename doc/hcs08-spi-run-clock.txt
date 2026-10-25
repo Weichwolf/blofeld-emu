@@ -1,0 +1,54 @@
+HCS08 CPU/SPI reference period owner
+
+Hcs08SpiRunClock offers one native IRQ/program period and one Hcs08SpiClock
+period per successful advance. The board wires both to the same target and owns
+ADC/timers, external pins and BDC transport. Only an actual pending source or an
+already owned IRQ/program queue admits CPU work. Ordinary unowned foreground,
+active BDC clock behavior and unsupported instruction cycles fail visibly.
+
+Both contracts must be explicit: CPU-before-SPI or SPI-before-CPU; promotion
+after one or two subsequent SPI stages. GT16A/GT8A Rev1 p197/198 describes
+automatic buffering and an idle SPTEF latency within two BUSCLK periods. It
+does not establish these exact internal phases/order. Both choices remain
+reference hypotheses; no default physical timing or calibrated frequency follows.
+
+The optional program contract retains the peripheral reference by default.
+reference_jump_program_cycles explicitly adds native JMP continuation
+(hcs08-prefetch-jump.txt). Owned queues and checkpoints must match that choice.
+reference_scanner_byte_cycles additionally admits the qualified scanner byte
+forms and stock-frame/RAM gate described in hcs08-scanner-bytes.txt.
+
+Native SPID writes supply the actual launch byte. Observing queued idle data
+arms a countdown; later periods promote it through the existing shifter owner.
+Completion can arm a queued successor. Observation/status reads never charge a
+period or synthesize readiness. Native disable cancels pending launch or leaves
+a genuine abort for the next SPI stage. SPI snapshots retain that known pending
+disable even when the CPU stage followed this period's SPI stage.
+
+Counters distinguish attempted/completed periods and successful CPU/SPI prefixes.
+A later CPU fault retains actual earlier edge pins in last_pins. Failures retain
+real memory/register/edge effects and quarantine. CPU, BDC, memory/peripherals,
+SPI clock, this owner and external peer observations must be restored jointly;
+fresh restores validate phase ownership and both reference policies.
+
+  cmake --build --preset strict --target blofeld-hcs08-spi-run-clock-test blofeld-original-hcs08-spi-run-clock-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_spi_run_clock|original_hcs08_spi_run_clock|hcs08_spi_clock)$' --output-on-failure
+
+Units cover1024 native byte/order/launch combinations and the original divisor,
+284 fresh period suffixes, real full MOSI/MISO bytes, unknown sampled inputs,
+post-store failure, later IRQ-policy failure, native disable/pending-abort restore,
+foreign phase owners and unsupported BDC/unowned foreground. Both prefix orders
+remain observable instead of rolling back a committed edge or claiming success.
+
+The pinned original gate begins at declared ADC poll E33A with a real busy ADC
+conversion, original TX RAM and eligible SPI source. Every period advances ADC
+first, then both common owners. Two actual ISR/frame/RTI paths queue90/3C;
+automatic promotion produces nine real SPSCK edges/four samples while ADC stays
+busy. The original BRSET then selects JMP at E33D, whose cycle consumer remains
+unqualified. The next attempt fails before a native JMP, retaining the prior
+program arrival and the selected ADC/SPI prefix.32 contexts/four references,
+200 cuts/400 fresh suffixes check38436 successful periods and432 refusals.
+No manufacturer code, foreground loop, completed byte or successful boot is
+supplied by the fixture. General pipeline coverage, original scanner continuation,
+reset/ICG clock qualification, native DSP communication and physical timing remain
+open. No fuzz or physical-device traffic is run.

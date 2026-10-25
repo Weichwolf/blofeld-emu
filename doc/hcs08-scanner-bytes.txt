@@ -1,0 +1,36 @@
+HCS08 scanner byte-cycle reference
+
+reference_scanner_byte_cycles explicitly extends the JMP reference with ASLX p,
+STA/STX SP1 pwpp and PULX ufp. Family Rev2 p206/271/280/283 supplies the
+instruction semantics and access counts; hashes/URLs remain in hcs08-reference.json.
+ASLX affects only X and V/N/Z/C. SP1 uses the native SP plus unsigned byte offset;
+stores execute through SLEIGH and the actual bus at w2. PULX captures its real
+u1 byte and consumes it once at f2, preserving H/CCR and updating X/SP.
+These internal register phases remain explicit hypotheses. Earlier program
+contracts retain their strict unsupported boundaries.
+
+Units cover20992 byte/flag/offset cases, unknown unrelated registers, target wrap,
+captured code,38 fresh suffixes and eight before/after access failures. Unknown
+consumed A/X or stack data must fail; joint recovery retains actual committed
+prefixes instead of silently repeating a store/read.
+
+The original scanner gate first executes6188 actual reset/startup instructions.
+It checks the native JSR/AIS main frame SP0475 and all original initialized RAM
+before the still unqualified ICGS1 read. That RAM supplies the scanner contact
+table; it is not replaced with host-created zeros. The later ADC-poll caller,
+TX record/expiry index and ideal6MHz ADC reference remain declared component
+preconditions. This does not bridge ICG startup or establish a complete boot.
+
+Two original SPI ISR/frame/RTI paths and the real foreground JMP/ASLX/indexed
+loads/SP1 stores/stack pulls execute while CPU/SPI/ADC advance together. Actual
+RAM transactions retain independently checked addresses, values and periods.
+Fourteen serial edges/seven samples precede a strict STHX-cycle refusal. A prior
+SPI stage can commit its fifteenth edge before that CPU fault; actual pins and
+data remain observable. The original gate completes no whole serial byte.
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-scanner-test blofeld-original-hcs08-spi-run-clock-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_scanner|original_hcs08_spi_scanner)$' --output-on-failure
+
+Native multi-byte bus phases, the remaining scanner, physical clock/event order,
+normal boot/native DSP/live MIDI/audio and hardware equivalence remain open.
+No fuzz or physical-device traffic is run.

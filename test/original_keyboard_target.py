@@ -18,6 +18,7 @@ def validate(path, helper, records):
     stage, cursor, cpu = '', 0, 0
     row_case = None
     ended = False
+    case_open, go_seen, case_replays = False, False, 0
     with path.open() as stream:
         for line in stream:
             tag, *fields = line.split()
@@ -25,9 +26,10 @@ def validate(path, helper, records):
             if ended:
                 raise ValueError('Data after original target completion')
             if tag == 'CASE':
-                if cases >= 3 or (row['phase'], row['secure']) != expected_cases[cases]:
+                if case_open or cases >= 3 or (row['phase'], row['secure']) != expected_cases[cases]:
                     raise ValueError('Changed target case/entry assumptions')
                 row_case, stage, cursor, cpu = row, 'prepare', 0, 0
+                case_open, go_seen, case_replays = True, False, 0
             elif tag == 'RX':
                 if stage == 'prepare':
                     frame = [0xe0, 255, 190]
@@ -59,39 +61,42 @@ def validate(path, helper, records):
                     raise ValueError('Original native page-buffer delivery incomplete')
                 stage, cursor = 'start', 0
             elif tag == 'GO':
-                if stage != 'start' or cursor != 15 or row['pc'] != 0xa0 or row['sp'] != 0x47c or row['hx'] != 0x1207:
+                if not case_open or go_seen or stage != 'start' or cursor != 15 or row['pc'] != 0xa0 or row['sp'] != 0x47c or row['hx'] != 0x1207:
                     raise ValueError('Actual original PC/SP/GO must replace distinct initial target registers')
+                go_seen = True
             elif tag == 'CPU':
                 cycles = (2, 4, 6, 10, 12, 16, 18, 22)
                 pcs = (0xa2, 0xa3, 0xa5, 0xa8, 0xaa, 0xad, 0xaf, 0xb2)
                 accumulators = (0x5a, 0x5a, 0x1e, 0x1e, 2, 2, 255, 255)
-                if row_case['secure'] or cpu >= 8 or row != dict(n=cpu + 1, periods=cycles[cpu],
+                if not case_open or not go_seen or row_case['secure'] or cpu >= 8 or row != dict(n=cpu + 1, periods=cycles[cpu],
                         pc=pcs[cpu], hx=0x1278, sp=0x47c if cpu == 0 else 0x1277,
                         a=accumulators[cpu], ccr=0x79 if cpu < 6 else 0x7d):
                     raise ValueError('Independent native HCS08 prologue states/cycle budgets changed')
                 cpu += 1
             elif tag == 'FAULT':
                 secure = row_case['secure']
-                if (cursor != 15 or row != dict(secure=secure,
+                if (not case_open or not go_seen or stage != 'start' or cursor != 15 or row != dict(secure=secure,
                         **{'target-pc': 0xa0 if secure else 0xb2}, retired=0 if secure else 8,
                         executing=0 if secure else 26, commands=682, rx=2722, tx=1, steps=row['steps'])
                         or cpu != (0 if secure else 8)):
                     raise ValueError('Native strict target/host failure no longer has its full causal prefix')
                 stage = 'failed'
             elif tag == 'REPLAY':
-                if stage != 'failed' or row['index'] != replays % 2 or row['bytes'] <= 0 or row['identical'] != 1:
+                if not case_open or stage != 'failed' or case_replays >= 2 or row['index'] != case_replays or row['bytes'] <= 0 or row['identical'] != 1:
                     raise ValueError('Missing complete fresh joint target replay')
+                case_replays += 1
                 replays += 1
             elif tag == 'CASE_END':
                 secure = row_case['secure']
-                if stage != 'failed' or row != dict(phase=row_case['phase'], secure=secure,
+                if not case_open or case_replays != 2 or stage != 'failed' or row != dict(phase=row_case['phase'], secure=secure,
                         **{'host-steps': row['host-steps'], 'target-retired': 0 if secure else 8,
                            'target-executing': 0 if secure else 26}, commands=682, rx=2722, tx=1):
                     raise ValueError('Changed complete target case')
                 host_steps += row['host-steps']
                 cases += 1
+                case_open, stage = False, 'closed'
             elif tag == 'END':
-                if row != {'cases': 3, 'replays': 6, 'RAM-uploads': 3, 'launched': 3, 'NVM-transfers': 0} or cases != 3 or replays != 6:
+                if case_open or row != {'cases': 3, 'replays': 6, 'RAM-uploads': 3, 'launched': 3, 'NVM-transfers': 0} or cases != 3 or replays != 6:
                     raise ValueError('Incomplete original target matrix')
                 ended = True
             elif tag not in ('PIN', 'TICK', 'HOST'):
@@ -103,6 +108,41 @@ def validate(path, helper, records):
                 original_RAM_uploads=3, accepted_RAM_uploads=2, secured_uploads_ignored=1,
                 target_commands=2046, received_bytes=8166, transmitted_bytes=3,
                 strict_idle_FSTAT_cases=2, secure_unknown_RAM_fetch_cases=1, NVM_transfers=0)
+
+
+def check_oracle(path, helper, records):
+    original = path.read_text().splitlines(keepends=True)
+    changed, moved = [], []
+    for line in original:
+        if line.startswith('REPLAY ') and len(moved) < 2:
+            moved.append(line)
+        else:
+            changed.append(line)
+    last = max(n for n, line in enumerate(changed) if line.startswith('CASE_END '))
+    changed[last:last] = moved
+    duplicate = list(original)
+    first = next(n for n, line in enumerate(duplicate) if line.startswith('CASE '))
+    duplicate.insert(first, duplicate[first])
+    omitted, altered, done = [], [], False
+    for line in original:
+        if not line.startswith('GO '):
+            omitted.append(line)
+        if line.startswith('CPU ') and not done:
+            parts = line.split()
+            parts = ['periods=' + str(int(p.split('=')[1]) + 1)
+                     if p.startswith('periods=') else p for p in parts]
+            line, done = ' '.join(parts) + '\n', True
+        altered.append(line)
+    negative = path.with_name(path.name + '.oracle-negative')
+    for lines in (changed, duplicate, omitted, altered):
+        negative.write_text(''.join(lines))
+        try:
+            validate(negative, helper, records)
+        except ValueError:
+            continue
+        raise ValueError('Fixed native target oracle corruption accepted')
+    negative.unlink()
+    return 4
 
 
 def main():
@@ -127,9 +167,11 @@ def main():
     if result.returncode or result.stderr or result.stdout.strip() != allowed:
         raise ValueError('Original Keyboard target failed: ' + result.stdout + result.stderr)
     totals = validate(trace, helper.read_bytes(), records)
+    negative = check_oracle(trace, helper.read_bytes(), records)
     if any(hashlib.sha256(p.read_bytes()).hexdigest() != sha for p, sha in frozen.items()):
         raise ValueError('Original target inputs changed during native execution')
     trace.with_suffix('.json').write_text(json.dumps(dict(passed=True, **totals,
+        fixed_oracle_corruptions=negative,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, complete_update=False, physical_timing_qualified=False,
         original_reset_SYNC_executed=False, full_DSP_transport=False,

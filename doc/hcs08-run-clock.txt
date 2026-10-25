@@ -2,17 +2,35 @@ HCS08 native instruction-retirement reference clock
 
   cmake --build --preset strict --target blofeld-hcs08-run-clock-test
   ctest --test-dir build/strict -j1 -R '^hcs08_run_clock$' --output-on-failure
+  ctest --test-dir build/strict -j1 -R '^original_hcs08_periods$' --output-on-failure
 
 Hcs08RunClock consumes individual target bus periods independently of host
 status reads. The caller must select reference_instruction_retirement; an
-unqualified contract rejects. Primary MC9S08GT16A/GT8A Rev.1 table8-2 supplies
-these unstretched instruction forms (opcode, bytes, bus periods):
+unqualified contract rejects. Family RM Rev.2 Table6-13 (printed130/131),
+Table6-12 and instruction details supply all ordinary unstretched costs:
+251 primary forms plus47 page2 forms. Primary9E dispatches to page2; therefore
+252 first-opcode classifications accept. Undefined8D/AC and STOP8E/WAIT8F refuse.
+STOP/WAIT require indefinite hold/wake owners; their minimum2 periods do not
+establish retirement. BGND uses the existing separate BDC held-state owner.
 
-  LDX immediate AE 2 2     LDA immediate A6 2 2     STA extended C7 3 4
-  TXS           94 1 2     NOP           9D 1 1     BGND         82 1 5+
+The decoder groups addressing costs and names special forms explicitly.
+Notable exceptions: MUL5, DIV6, RTI9, SWI11; CPHX direct5 and page2 SP1 CPHX6;
+indexed STA/STX without displacement2; DBNZ SP1=8; four-byte SP2/LDHX16 fetches.
+An independent literal matrix checks all256 primary and256 secondary values,
+every missing instruction byte, every fetch-wrap boundary and two CCR contexts.
+The previous50 first-opcode/eight secondary timing tuples remain explicit checks.
+No opcode-only cost can hide an unknown operand or perform an architectural read.
+
+Timing metadata does not establish native semantic support: BIH/BIL still need
+a qualified IRQ-pin intrinsic, DAA needs qualified decimal adjustment, and
+STOP/WAIT remain unsupported. Native errors remain visible. No fixed-period
+entry claims hardware bus/prefetch, queue consumption or board-clock fidelity.
+Shared CPU/ADC reference-clock evidence: hcs08-adc.txt. Original calibrated
+pitch/IRQ/SPI/SHI evidence remains instruction-driven: hcs08-pitch-event.txt.
+Shared-clock calibrated producer/overlapping ADC evidence: hcs08-pitch-clock.txt.
 
 BGND's indefinite held interval is separate from its five execution periods.
-All other opcode forms, unknown operands, wrapped fetches, mid-instruction
+Undefined/held opcode forms, unknown operands, wrapped fetches, mid-instruction
 code/register changes and unqualified BDC halt arbitration fail visibly. Native
 architectural effects commit at the end of the documented budget, including
 actual CPU stores and BGND admission through the BDC owner. Failed instructions
@@ -23,8 +41,27 @@ The independent unit checks every period of an own six-instruction program,
 literal PC/HX/SP/A/CCR/store boundaries, all256 opcode classifications, held
 intervals, native access failure/quarantine and two fresh CPU/memory/BDC/clock
 restores from a partially elapsed LDA. TXS uses the complete H:X minus one;
-LDX immediate retains H. Checkpoints do not replace separate CPU/memory/BDC
+LDX immediate retains H. A second own ten-instruction path checks MUL17*19=0143,
+H/C clearing, PSHA/CLRA/PULA, JSR/TAX/RTS, stack byte order and BGND against literal
+register states at every one of33 periods. Two fresh joint continuations from
+inside MUL retain its three remaining periods and complete access histories.
+Checkpoints do not replace separate CPU/memory/BDC
 restoration or clear failed native execution.
+All256 secondary opcodes are classified independently; unknown prefix/operand
+bytes and both prefix/full-fetch wraps refuse. Conditional branches have the
+same documented cost for taken and untaken paths.
+
+original_hcs08_periods uses the same pinned original FLASH/GPIO/ICG application
+and full CPU/RAM/stack oracles as original_hcs08_icg. Independent period totals:
+setup11 + initial loop test11 +1024*(LDHX5+CLR4+AIX2+STHX5+CPHX3+BCS3)
+=22550; calibration33 +GPIO47 reaches PTED at22630. The real trim load/store
+finish at22659/22662; two control MOVs finish at22670. Two further periods
+cannot issue an early status read. The third faults at22673 with6188 retired,
+unchanged ICG/NVM and coordinated-recovery quarantine. Three partial LDHX/MOV/
+status-load cuts produce six fresh CPU/RAM/FLASH/GPIO/ICG/BDC/clock continuations.
+Nine fixed collector corruptions reject. No BDC command, NVM rate/completion or
+clock-ready observation is supplied. Warm entry/pad inputs remain explicit;
+this is an instruction-retirement reference, not a physical clock history.
 
 Instruction admission and late IRQ ownership are qualified separately in
 hcs08-instruction-reservation.txt. The clock samples eligible IRQs before an

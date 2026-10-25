@@ -10,6 +10,26 @@ The session transport is separate (host-audio.txt); isolated original master
 output arithmetic and access scope are tested in dsp-master-output.txt.
 
 Native adaptation
+Unhooked atomic admission reads only its typed PC/SR/OMR/VBA context. SR uses
+the native register getter, including lazy CCR materialization. Timing hooks
+retain the full pre-step DspState observation. Native instructions, interrupt
+selection, bus effects and failure quarantine are unchanged; this avoids unused
+host state copies and supplies no new instruction or timing qualification.
+
+Forced interpreter builds skip the JIT's optional runtime, emitter reservations,
+profiler setup and mode/loop/code-write bookkeeping. Native register writes and
+interpreter dispatch/cycle invalidation remain active. The trampoline's by-value
+runtime still exists; this does not qualify allocation-free or JIT execution.
+
+The explicit SDK Memory::BusOwned constructor retains the logical P/X/Y bounds
+without allocating SDK arrays or host-MMU mappings. DspBus remains the sole word
+owner. All four hooks must handle their operations or throw; declining hooks,
+raw pointers, SDK remapping and array-based assembly export reject with operation,
+area and address. Legacy array constructors remain available to other SDK users.
+This removes 67,895,296 bytes of unused P/X/Y backing per native core, not guest
+memory. Native execution, snapshots and cache bounds retain their existing scope.
+Run dsp_memory_storage and dsp_cycle_cache for storage/hook and actual SDK checks.
+
 The SPI hardware-reset adapter selects OMR=000305: documented CDP1/CDP0=11
 plus mode-five inputs. The generic library's zero OMR is not a derivative reset
 contract. Native MOVEC and software RESET still retain their separate semantics;
@@ -145,7 +165,8 @@ into X0 is fractional 020000, so REP attempts 131072 stores, not two. Continuing
 reaches reserved Y:002000 and fails visibly with PC/OMR context. The manual gives
 the reserved map but does not establish that a write there is safely discarded or
 cannot alias another block. Actual reserved/ROM write behavior requires stronger
-evidence; no broad RAM allocation, dropped-write shortcut or loop skip is used.
+evidence; the normal implementation uses no broad RAM allocation, dropped-write
+shortcut or loop skip.
 The main regression trace stops before that access. Additional isolated checkpoint
 branches exercise native access continuation on the last mapped long store and
 the next current strict-map boundary. They admit X, capture pending Y and restore
@@ -157,6 +178,10 @@ the implemented strict-map failure, not the chip's reserved-write behavior; futu
 hardware evidence may change that map contract. The private sidecar is
 Testing/original-dsp-boot.trace.reference-access.trace; the original main trace
 must match between execution profiles. GPIO/NAND startup has not yet been reached natively.
+
+Private counterfactual continuation experiments retain the unchanged broad clear
+and identify later GPIO/BIU boundaries. They do not qualify reserved/ROM writes,
+physical reset/clock behavior or a successful stock boot. Strict defaults remain.
 
 The same fixture also executes all 13,015 currently reached ROM/stage instructions
 through the explicit access-continuation profile. Its separate
@@ -183,9 +208,10 @@ semantics remain unresolved.
 
 The host supplies pin events with explicit instruction interleaving. The original
 MCU is not the sender in this fixture, no elapsed DSP/MCU clock ratio is
-inferred, and no physical Blofeld has validated the route/timing. Native caches
-currently cover the 24-bit program address space and use substantial memory;
-these diagnostic runs provide no real-time audio performance claim.
+inferred, and no physical Blofeld has validated the route/timing. Native dispatch/
+cycle caches retain 24-bit address coverage through bounded paged storage
+(dsp-cycle-cache.txt). These diagnostic runs provide no real-time audio
+performance claim.
 
 A separate original-MCU regression now executes reset/application and captures
 its complete 97-word GPIO transfer, including the trailing word, under explicit

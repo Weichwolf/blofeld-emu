@@ -2,6 +2,7 @@
 #pragma once
 
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_run_clock.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -13,6 +14,7 @@ namespace blofeld {
 enum class DspStepObservation : std::uint8_t { unqualified, reference_completion_boundary };
 enum class DspScheduleBoundary : std::uint8_t { before, through };
 enum class DspIrqAdmission : std::uint8_t { reject_changes, reference_prepare_boundary };
+enum class DspResetObservation : std::uint8_t { unqualified, reference_extal_hold };
 enum class DspExternalOrder : std::uint8_t {
   unqualified,
   reject_tie,
@@ -34,6 +36,7 @@ struct DspScheduleInputs {
   std::uint64_t epoch_ticks = 0;
   DspStepObservation observation = DspStepObservation::unqualified;
   DspIrqAdmission irq_admission = DspIrqAdmission::reject_changes;
+  DspResetObservation resets = DspResetObservation::unqualified;
   bool operator==(const DspScheduleInputs &) const = default;
 };
 
@@ -54,6 +57,7 @@ private:
   std::uint64_t steps_ = 0;
   DspScheduleBoundary boundary_ = DspScheduleBoundary::through;
   std::optional<DspStepPlan> pending_;
+  std::optional<DspHardwareResetState> reset_;
   bool advanced_ = false;
   bool external_bound_ = false;
   DspExternalOrder external_order_ = DspExternalOrder::unqualified;
@@ -92,6 +96,9 @@ public:
   [[nodiscard]] std::uint64_t next_completion_ticks(const DspMachine &machine) const;
   [[nodiscard]] std::uint64_t next_event_ticks(const DspMachine &machine) const;
   void restore(const DspScheduleCheckpoint &checkpoint, const DspMachine &machine);
+  // Explicit completed-instruction assertion; release may fall between EXTAL periods.
+  void begin_hardware_reset(DspMachine &machine, DspHardwareResetInputs inputs);
+  void release_hardware_reset(DspMachine &machine);
 
   [[nodiscard]] std::uint64_t horizon_ticks() const { return state_.horizon_; }
 
@@ -104,6 +111,9 @@ public:
 private:
   static void verify(const DspScheduleCheckpoint &state, const DspMachine &machine);
   void check_horizon(std::uint64_t horizon, DspScheduleBoundary boundary) const;
+  void require_reset_boundary(const DspMachine &machine) const;
+  void update_reset_clock(const DspMachine &machine);
+  void advance_reset_to(DspMachine &machine, std::uint64_t horizon, DspScheduleBoundary boundary);
   [[nodiscard]] std::optional<std::uint64_t> prepare_native(DspMachine &machine,
                                                             std::uint64_t horizon);
   [[nodiscard]] std::string failure_context(const DspMachine &machine,

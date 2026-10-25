@@ -36,7 +36,11 @@ DspScheduledRun::DspScheduledRun(const DspScheduleInputs inputs, const DspMachin
     machine.check_admission_contract();
   }
   const auto &clock = machine.run_clock();
-  if (machine.timing_faulted() || clock.active() ||
+  if ((inputs.resets != DspResetObservation::unqualified &&
+       inputs.resets != DspResetObservation::reference_extal_hold) ||
+      (machine.hardware_reset_active() &&
+       inputs.resets != DspResetObservation::reference_extal_hold) ||
+      machine.timing_faulted() || clock.active() ||
       inputs.epoch_ticks > std::numeric_limits<std::uint64_t>::max() - clock.elapsed_ticks()) {
     throw Fault("DSP scheduling requires a healthy representable clock epoch");
   }
@@ -45,12 +49,17 @@ DspScheduledRun::DspScheduledRun(const DspScheduleInputs inputs, const DspMachin
   state_.completed_ticks_ = clock.elapsed_ticks();
   state_.completed_cycles_ = clock.native_cycle_units();
   state_.native_epoch_ = clock.native_epoch();
+  state_.reset_ = clock.hardware_reset_state();
   state_.horizon_ = inputs.epoch_ticks + clock.elapsed_ticks();
+  if (machine.hardware_reset_active()) { static_cast<void>(next_event_ticks(machine)); }
 }
 
 void DspScheduledRun::verify(const DspScheduleCheckpoint &state, const DspMachine &machine) {
   const auto &clock = machine.run_clock();
-  if (machine.timing_faulted() || clock.active() || clock.timebase_hz() != state.timebase_hz_ ||
+  if (machine.timing_faulted() || clock.active() ||
+      (machine.hardware_reset_active() &&
+       state.inputs_.resets != DspResetObservation::reference_extal_hold) ||
+      state.reset_ != clock.hardware_reset_state() || clock.timebase_hz() != state.timebase_hz_ ||
       clock.elapsed_ticks() != state.completed_ticks_ ||
       clock.native_cycle_units() != state.completed_cycles_ ||
       clock.native_epoch() != state.native_epoch_) {
@@ -138,6 +147,7 @@ DspScheduledRun::advance_to(DspMachine &machine,
     bind_external(machine, external);
     unsigned external_count = 0;
     while (true) {
+      advance_reset_to(machine, horizon, boundary);
       const bool boundary_input =
           state_.inputs_.irq_admission == DspIrqAdmission::reference_prepare_boundary &&
           !state_.pending_ && state_.next_external_ &&
@@ -195,6 +205,7 @@ void DspScheduledRun::check_horizon(const std::uint64_t horizon,
 
 std::optional<std::uint64_t> DspScheduledRun::prepare_native(DspMachine &machine,
                                                              const std::uint64_t horizon) {
+  if (machine.hardware_reset_active()) { return std::nullopt; }
   if (state_.inputs_.epoch_ticks + state_.completed_ticks_ >= horizon && !state_.pending_) {
     return std::nullopt;
   }
@@ -227,11 +238,21 @@ DspScheduleCheckpoint DspScheduledRun::checkpoint(const DspMachine &machine) con
 std::uint64_t DspScheduledRun::next_completion_ticks(const DspMachine &machine) const {
   if (active_ || faulted_) { throw Fault("DSP completion preview requires a healthy boundary"); }
   verify(state_, machine);
+  if (machine.hardware_reset_active()) { throw Fault("Held DSP has no instruction completion"); }
   return deadline(state_.pending_ ? *state_.pending_ : machine.plan_step());
 }
 
 std::uint64_t DspScheduledRun::next_event_ticks(const DspMachine &machine) const {
-  const auto native = next_completion_ticks(machine);
+  if (active_ || faulted_) { throw Fault("DSP event preview requires a healthy boundary"); }
+  verify(state_, machine);
+  const auto remaining = machine.run_clock().hardware_reset_remaining_ticks();
+  const auto current = state_.inputs_.epoch_ticks + state_.completed_ticks_;
+  if (remaining && *remaining > std::numeric_limits<std::uint64_t>::max() - current) {
+    throw Fault("DSP reset recovery exhausted the declared schedule epoch");
+  }
+  auto native = std::numeric_limits<std::uint64_t>::max();
+  if (remaining) { native = current + *remaining; }
+  if (!machine.hardware_reset_active()) { native = next_completion_ticks(machine); }
   return state_.next_external_ ? std::min(native, *state_.next_external_) : native;
 }
 

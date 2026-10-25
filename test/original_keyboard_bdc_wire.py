@@ -15,17 +15,23 @@ def validate(path):
     phase, pairs, pins, rx, steps, total_steps, cycles = -1, 0, 0, 0, 0, 0, 0
     total, total_pins, ended = 0, 0, False
     bit_start = 0
+    phase_open = False
     with path.open() as stream:
         for line in stream:
             tag, *fields = line.split()
             row = {key: int(value) for key, value in (field.split('=') for field in fields)}
             if ended:
                 raise ValueError('Trailing data after native BDC wire completion')
+            if tag not in ('PHASE', 'END') and not phase_open:
+                raise ValueError('Native BDC event outside an active reference phase')
             if tag == 'PHASE':
+                if phase_open:
+                    raise ValueError('Missing native BDC phase completion')
                 phase += 1
                 if row != dict(index=phase, ratio=8, offset=phase * 2 + 1) or phase >= 8:
                     raise ValueError('Changed reference phase/clock contract')
                 pairs, pins, rx, steps, cycles = 0, 0, 0, 0, 0
+                phase_open = True
             elif tag == 'PIN':
                 if (row['cycles'] <= cycles or row['address'] not in (1, 3)
                         or row['drive'] not in (0, 1, 2) or not 0x142f <= row['pc'] < 0x14db):
@@ -77,8 +83,9 @@ def validate(path):
                 total += pairs
                 total_steps += steps
                 total_pins += pins
+                phase_open = False
             elif tag == 'END':
-                if (phase != 7 or row != dict(phases=8, cases=536, commands=1072, rx=3752,
+                if (phase_open or phase != 7 or row != dict(phases=8, cases=536, commands=1072, rx=3752,
                         tx=536, steps=total_steps, **{'pin-writes': 132928}) or total != 536
                         or total_pins != 132928):
                     raise ValueError('Incomplete original wire matrix')
@@ -90,6 +97,30 @@ def validate(path):
     return dict(phases=8, byte_pairs=536, commands=1072, received_bytes=3752,
                 transmitted_bytes=536, native_HC12_instructions=total_steps,
                 actual_GPIO_writes=132928)
+
+
+def check_oracle(trace):
+    rows = trace.read_text().splitlines(keepends=True)
+    phase_end = next(row for row in rows if row.startswith('PHASE_END index=1 '))
+    first_pin = next(index for index, row in enumerate(rows) if row.startswith('PIN '))
+    variants = [
+        [row for row in rows if not row.startswith('END ')],
+        [row for row in rows if not row.startswith('PHASE_END index=1 ')],
+        [row.replace('value=0 ', 'value=1 ', 1) if index == first_pin else row
+         for index, row in enumerate(rows)],
+        [part for row in rows if not row.startswith('PHASE_END index=2 ')
+         for part in ([row, row] if row == phase_end else [row])],
+    ]
+    changed = trace.with_name(trace.name + '.oracle-negative')
+    for rows in variants:
+        changed.write_text(''.join(rows))
+        try:
+            validate(changed)
+        except ValueError:
+            continue
+        raise ValueError('Fixed native BDC trace corruption accepted')
+    changed.unlink()
+    return len(variants)
 
 
 def main():
@@ -109,9 +140,11 @@ def main():
     if result.returncode or result.stderr or result.stdout.strip() != allowed:
         raise ValueError('Original Keyboard wire failed: ' + result.stdout + result.stderr)
     counts = validate(trace)
+    corruptions = check_oracle(trace)
     if any(hashlib.sha256(path.read_bytes()).hexdigest() != sha for path, sha in frozen.items()):
         raise ValueError('Original wire inputs changed during native execution')
     trace.with_suffix('.json').write_text(json.dumps(dict(passed=True, **counts,
+        fixed_oracle_corruptions=corruptions,
         trace_sha256=hashlib.sha256(trace.read_bytes()).hexdigest(),
         full_boot=False, complete_update=False, physical_timing_qualified=False,
         reference_host_cycles_per_BDC=8, half_host_cycle_phase_offsets=list(range(1, 16, 2)),

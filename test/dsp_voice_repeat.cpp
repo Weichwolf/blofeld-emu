@@ -35,6 +35,7 @@ constexpr unsigned half_count = 0x7c0;
 constexpr unsigned ring_rewind = 0xffffc1;
 // DSP56300FM DTM5, DRS22, mode C, 3D source, fixed Y destination.
 constexpr unsigned repeating = 0xa8b604;
+constexpr unsigned original_priority = 0x20000;
 constexpr unsigned maximum_effects = 64;
 constexpr std::uint64_t maximum_edges = 1000000;
 constexpr auto serial = DspEsaiInstance::secondary;
@@ -52,8 +53,10 @@ void VoiceRepeat::append(DspProgram &program) {
                            DspStore{.address = destination, .value = transmit},
                            DspStore{.address = counter, .value = ring_count},
                            DspStore{.address = control, .value = repeating}}) {
+    if (dax.enabled && store.address == control) { continue; }
     program.emit("movep #>" + number(store.value) + ",x:<<" + number(store.address));
   }
+  if (dax.enabled) { dax.append(program); }
   program.emit("jmp $198"); // Enter the original foreground; it never returns to this caller.
 }
 
@@ -74,6 +77,7 @@ void VoiceRepeat::begin(DspBus &bus) {
   receiver.reset();
   bus.observe_esai_transmit(
       serial, {.high_clock = false, .timing = DspEsaiClockTiming::reference_reset_edges});
+  if (dax.enabled) { dax.begin(bus); }
   static_cast<void>(grant(bus));
   const auto clocks = bus.esai_clock_outputs(serial);
   require(
@@ -89,12 +93,19 @@ DspDmaBusResult VoiceRepeat::grant(DspBus &bus) {
   const auto result = bus.advance_dma(
       {.cycle = cycle++,
        .timing = DspDmaTiming::reference_sampled_cycles,
-       .grant = words == half_words ? DspDmaGrant::wait : DspDmaGrant::available},
+       .grant = words == half_words && (!dax.enabled || dax.words == half_words)
+                    ? DspDmaGrant::wait
+                    : DspDmaGrant::available},
       {.accesses = {}, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
   require(!result.core_stall, "The core is actually paused during serial/DMA phases");
   if (result.word) {
-    require(words < transfers.size(), "No repeating DMA word may be dropped");
-    transfers.at(words++) = *result.word;
+    if (dax.enabled && result.word->channel == 3) {
+      dax.accept(*result.word);
+    } else {
+      require(result.word->channel == 0 && words < transfers.size(),
+              "No repeating DMA word may be dropped or assigned to the wrong channel");
+      transfers.at(words++) = *result.word;
+    }
   }
   return result;
 }
@@ -104,6 +115,7 @@ DspDmaBusResult VoiceRepeat::step(DspBus &bus) {
   ++edge;
   bus.observe_esai_transmit(
       serial, {.high_clock = edge % 2 != 0, .timing = DspEsaiClockTiming::reference_reset_edges});
+  if (dax.enabled) { dax.observe(bus, edge); }
   const auto clocks = bus.esai_clock_outputs(serial);
   const auto data = bus.esai_transmit_outputs(serial);
   require(clocks.driven == 3 && clocks.known == 3,
@@ -126,7 +138,8 @@ void VoiceRepeat::verify(DspBus &bus) const {
   const auto next = ring_start + (((half + 1) % 2) * half_words);
   require(words == half_words && frames == half_frames && read(bus, source) == next &&
               read(bus, counter) == (half % 2 == 0 ? half_count : ring_count) &&
-              read(bus, control) == repeating && read(bus, destination) == transmit,
+              read(bus, control) == (dax.enabled ? repeating | original_priority : repeating) &&
+              read(bus, destination) == transmit,
           "Original stream retains enabled repeating DMA with exact half/ring reload");
   require((bus.read({.space = DspSpace::y, .address = serial_status}) & underrun) == 0,
           "No repeating serial underrun may be hidden");
@@ -136,6 +149,7 @@ void VoiceRepeat::verify(DspBus &bus) const {
                 word.destination == DspDmaAddress{.space = DspDmaSpace::y, .address = transmit},
             "Repeating DMA supplies consecutive original ring words to actual ESAI TX0");
   }
+  if (dax.enabled) { dax.verify(bus, half, transfers); }
 }
 
 void VoiceRepeat::finish(DspBus &bus, const std::uint64_t target) {
@@ -146,6 +160,7 @@ void VoiceRepeat::finish(DspBus &bus, const std::uint64_t target) {
 void VoiceRepeat::drain(DspBus &bus, const DspCore &cpu, std::ostream &trace) {
   const auto before = cpu.debug_state();
   words = frames = 0;
+  if (dax.enabled) { dax.words = 0; }
   const auto target = receiver.completed_frames() + half_frames;
   static_cast<void>(grant(bus));
   static_cast<void>(grant(bus));
@@ -167,6 +182,7 @@ void VoiceRepeat::drain(DspBus &bus, const DspCore &cpu, std::ostream &trace) {
   finish(bus, target);
   require(cpu.debug_state() == before, "Serial phases cannot execute a hidden DSP instruction");
   emit(trace);
+  if (dax.enabled) { dax.emit(trace); }
   ++half;
 }
 

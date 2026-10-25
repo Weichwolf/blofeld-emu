@@ -31,9 +31,12 @@ complete-word/field, native JSR/RTI context and six-record integrity checks.
 The original136-page WPC gate remains unchanged apart from extending the bounded
 private input capacity to142 pages.
 
-The separate Timer1 profile qualifies native capture/vector/RTI entry under
-explicit clock/TIO events (dsp-sample-timer.txt). Declared target rows are not
-observed physical NAND contents. Bad-block/ECC and address translation, actual
-programming, complete transmit turnaround, delivered refills, automatic interrupt
-scheduling, full boot and physical playback remain open. The existing Port-F and
-reserved Y:002000 qualification faults remain strict.
+The Timer1 profile qualifies native capture/vector/RTI entry under explicit
+clock/TIO events (dsp-sample-timer.txt); post-header drain boundaries have their
+own gate (dsp-sample-refill.txt).
+
+Declared target rows are not observed physical NAND contents. Bad-block/ECC and
+address translation, actual programming, complete transmit turnaround, delivered
+refills, automatic interrupt scheduling, full boot and physical playback remain
+open.
+The existing Port-F and reserved Y:002000 qualification faults remain strict.

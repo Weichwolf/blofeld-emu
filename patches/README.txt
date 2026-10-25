@@ -225,3 +225,11 @@ that call the original typed functions. The first sanitized live stream close
 exposed the property callback UB; host_audio preserves lifecycle and cancelled
 operation regressions. All sanitizer checks remain active. Extended unused
 client APIs and JSON parsing are not covered merely by this live adapter test.
+
+HCS08 arithmetic and signed branch corrections
+--------------------------------------------
+ghidra-hcs08-arithmetic.patch applies only to the hash-pinned build copy under
+the Ghidra Apache-2.0 terms. BGE now branches on N XOR V == 0; upstream used
+BLT's condition (Family Rev2 p212). Ordinary step() checks640 independent BGE/BLT
+cases; the separate captured-queue gate checks native ppp branch/refill behavior.
+Installed Ghidra source and firmware bytes stay unchanged.

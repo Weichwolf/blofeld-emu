@@ -16,7 +16,8 @@ enum class VoiceInput : std::uint8_t {
   stream,
   stream_midi,
   stream_release,
-  stream_sustain
+  stream_sustain,
+  stream_dual
 };
 
 // Output objects stay outside peripheral snapshots and must outlive the call.

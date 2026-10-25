@@ -1,0 +1,40 @@
+HCS08 I-unmask instruction history and conditional RTI arbitration
+
+  cmake --build --preset strict --target blofeld-hcs08-irq-enable-delay-test
+  ctest --test-dir build/strict -j1 -R '^hcs08_irq_enable_delay$' --output-on-failure
+
+Family RM Rev.2 printed87,240,286 agree: CLI/TAP changing I1->0 protects the
+following instruction. Polling sources, offered periods, debugger holds and
+partial instruction budgets cannot consume that guarantee. A second CLI with
+I already0 does not extend it. Unknown old/restored I never selects a guessed
+transition. Unresolved eligibility fails with vector/PC/CCR knowledge.
+
+RTI has conflicting descriptions in the same pinned primary: p87 says its
+I-clear delay expires before RTI finishes; RTI detail p275 guarantees a returned
+instruction. The GT16A summary does not resolve this. The default RTI contract
+is unqualified: a restored unmasked pending source faults before arbitration
+or another frame byte. With no source, an actual completed following instruction
+resolves the difference. Restored I still independently masks or remains unknown.
+
+Explicit reference_immediate/reference_next_instruction contracts permit the
+two source-described experiments. They are conditional reference models, not
+hardware qualification. Checkpoints retain delay and immutable RTI contract;
+a receiving CPU with a different contract rejects restoration before mutation.
+Debugger register replacement clears execution history. BDC GO instead resumes
+history and clears only its consumed background request; it cannot discard
+another owner's instruction reservation or retained IRQ queue.
+
+Independent transition/flag/native-frame cases, actual CLI/TAP/RTI, unknown
+masks, repeated queries, real instruction/IRQ reservations, held clocks, pre/
+mid/post budgets, observer refusal and fresh graph continuations qualify the
+state. Default-conflict, both RTI reference choices and contract mismatch have
+separate expectations. Native data failure retains delay and ownership until
+coordinated recovery. No physical bus/prefetch/late-sampling or full boot/normal
+IRQ scheduler claim follows. No fuzz or physical traffic.
+
+Primary URL/size/hash: hcs08-reference.json. Peer WIP was reviewed from a frozen
+read-only copy; its source/index are unchanged. Queue consumption and combined
+CPU/ADC/SPI edge scheduling remain separate requirements.
+
+The existing original SPI IRQ gate selects reference_immediate explicitly. Its
+unchanged trace tests the declared untimed schedule, not physical RTI latency.

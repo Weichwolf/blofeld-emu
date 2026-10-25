@@ -45,8 +45,9 @@ opt-in; restricted ordinary owners retain their actual write policies and the
 application fixture blocks reset-time masked accesses.
 
 This is instruction-retirement reference admission, not the physical instruction
-bus pipeline. The retained IRQ/reset prefetch queue still has no qualified
-consumer; its bytes cannot be dropped to use this clock. Per-cycle operand
+bus pipeline. The retained IRQ queue has a separate bounded linear consumer
+(hcs08-prefetch.txt); its bytes cannot be dropped to use this clock. General
+data/flow consumption and reset-queue integration remain unqualified. Per-cycle operand
 access, source sampling/latching, ICG/physical rate, board event ties, full normal
 Keyboard execution, complete update/recovery and hardware equivalence remain
 unqualified. No fuzzing, physical device traffic or realtime callback is added.

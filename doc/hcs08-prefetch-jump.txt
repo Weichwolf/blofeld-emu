@@ -1,0 +1,36 @@
+HCS08 native JMP program-cycle reference
+
+reference_jump_program_cycles extends the retained peripheral reference with
+JMP DIR/EXT/IX2/IX1/IX. Family Rev2 p253 specifies ppp/pppp/pppp/ppp/ppp,
+respectively; source URL/size/hash remain in hcs08-reference.json.
+
+Explicit address/phase hypothesis: three-byte forms issue one actual sequential
+speculative read on p1. Native SLEIGH executes at p2, retaining that now-ready
+read as discarded; p2..p4 refill from the native destination. One/two-byte forms
+execute at p1, retain their two/one actual ready successors, then refill p1..p3.
+No host-computed destination supplies execution. Exact physical phases remain
+unqualified. Earlier contracts still refuse JMP before native effects or reads.
+
+All forms preserve CCR and register knowledge. Indexed targets require fully
+known H:X; direct/extended jumps preserve unrelated unknown A/H:X. Target/refill
+addresses wrap to16 bits; wrapping instruction encodings remain unqualified.
+Failures retain committed PC/read prefixes and quarantine. Joint snapshots
+retain captured instructions, both discarded successors and pending target reads.
+
+Hcs08SpiRunClock accepts the new program reference explicitly. Its default stays
+the existing peripheral reference. Initial owned queues and restored checkpoints
+must match the selected program contract; CPU/SPI order/launch choices remain
+separate explicit hypotheses.
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-jump-test blofeld-original-hcs08-spi-run-clock-test
+  ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_jump|original_hcs08_spi_jump)$' --output-on-failure
+
+Units independently check4160 opcode/offset/CCR cases, unknown registers,
+captured code despite changed backing bytes, target wrap,44 fresh suffixes and
+34 before/after access failures. The original gate executes both real JMPs from
+the busy ADC branch back to the scanner, then reads the declared expiry index
+through native LDX. Eleven actual SPI edges/five sampled bits coexist with the
+still busy ADC. The next ASLX cycle consumer refuses before execution.
+No supplied foreground loop/PC, completed serial byte or successful boot follows.
+General scanner cycles, physical timing, reset/ICG qualification, native DSP,
+live MIDI/audio and real-device equivalence remain open. No fuzz or physical traffic.

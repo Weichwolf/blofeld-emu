@@ -4,6 +4,7 @@
 #include "audio/serial_pcm.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "dsp_voice_dax.hpp"
 
 #include <array>
 #include <cstdint>
@@ -21,11 +22,14 @@ struct VoiceRepeat {
   SerialPcmReceiver receiver{{.frame_sync_high = false}};
   std::array<DspDmaWord, 32> transfers{};
   std::array<SerialPcmFrame, 16> decoded{};
+  VoiceDax dax;
 
   void append(DspProgram &program);
   static void instruction(DspMachine &machine);
+  void setup_instruction(DspMachine &machine);
   void begin(DspBus &bus);
   void drain(DspBus &bus, const DspCore &cpu, std::ostream &trace);
+  void finalize(DspBus &bus, const DspCore &cpu, std::ostream &trace);
   bool operator==(const VoiceRepeat &) const = default;
 
 private:

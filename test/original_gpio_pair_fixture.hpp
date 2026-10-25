@@ -433,10 +433,13 @@ struct OriginalGpioPair {
     }
     link.last_net = observation;
     const auto irq = mcu.bus().gpio_outputs(McuPort::j);
+    const auto irq_bias = mcu.bus().gpio_biases(McuPort::j);
     dsp.bus().observe_irqa_driver({.active = irq.mask & 1U,
                                    .known = irq.known & 1U,
                                    .levels = irq.levels & 1U,
-                                   .reduced = irq.reduced_drive & 1U});
+                                   .reduced = irq.reduced_drive & 1U,
+                                   .pull_up = irq_bias.up & 1U,
+                                   .pull_down = irq_bias.down & 1U});
   }
 
   void reject_board_qualification() const {

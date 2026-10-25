@@ -104,7 +104,7 @@ void Hcs08Bdc::execute(const Hcs08BdcGrant grant) {
     case hcs08_bdc::go:
       if (!state_.active) { fail("GO", "command requires active background mode"); }
       if (!cpu_.state().pc_known) { fail("GO", "unknown CPU PC; WRITE_PC is required"); }
-      cpu_.set_state(cpu_.state()); // Resume genuine registers and clear the consumed BGND request.
+      cpu_.resume_background(); // Keep execution history; clear only the consumed BGND request.
       state_.active = false;
       return;
     case hcs08_bdc::write_byte:

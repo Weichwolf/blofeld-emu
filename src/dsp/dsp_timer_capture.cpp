@@ -10,7 +10,9 @@ namespace {
 constexpr unsigned te = 1;
 constexpr unsigned inv = 0x100;
 constexpr unsigned mode_mask = 0xf0;
+constexpr unsigned event_mode = 0x30;
 constexpr unsigned capture_mode = 0x60;
+constexpr unsigned pce = 0x8000;
 constexpr unsigned tof = 0x100000;
 constexpr unsigned tcf = 0x200000;
 constexpr unsigned first_load = 0xffff8e;
@@ -23,21 +25,27 @@ void DspTimers::observe_synchronized_tio(const unsigned index, const bool level)
     throw Fault("DSP capture has no synchronized TIO at index " + hex(index, 1));
   }
   auto &timer = timers_.at(index);
-  if ((timer.control & mode_mask) != capture_mode) {
+  const auto mode = timer.control & mode_mask;
+  const bool event = mode == event_mode && (timer.control & pce) == 0;
+  if (mode != capture_mode && !event) {
     timer.synchronized = level;
     timer.synchronized_qualified = true;
     return;
   }
-  const bool enabled = (timer.control & te) != 0 && !timer.halted;
+  const bool enabled = (timer.control & te) != 0 && (event || !timer.halted);
   if (enabled && !timer.synchronized) {
     throw Fault("Unknown previous DSP synchronized TIO level at X:" +
                 hex(first_control - (index * 4), 6));
   }
   const bool edge = timer.synchronized && *timer.synchronized != level;
   if (enabled && edge && level == ((timer.control & inv) == 0)) {
-    timer.captured = timer.count;
-    timer.halted = true;
-    timer.flags |= tcf;
+    if (event) {
+      advance_timer(timer, index, 1);
+    } else {
+      timer.captured = timer.count;
+      timer.halted = true;
+      timer.flags |= tcf;
+    }
   }
   timer.synchronized = level;
   timer.synchronized_qualified = true;

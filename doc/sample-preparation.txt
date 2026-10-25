@@ -29,6 +29,14 @@ four-slot source ring. All 47616 page preparations compare 25141248 independent
 big-endian bytes, adjacent output guards, source cursors and original request
 registers against the complete fixed distribution.
 
+Each copier call executes an independent 1262-instruction budget: 17 own caller
+instructions, four original prefix instructions, 176 seven-instruction loop
+bodies, five suffix instructions and four shared request instructions. Every
+native instruction and declared bus-cycle advance still runs. Actual landing PC
+and native instruction delta must match; complete output and guard comparisons
+remain active. This removes per-instruction host state polling without changing
+the wrapper's 280-second child limit or qualifying physical timing.
+
 The supplied service address is an own observation landing pad. It begins a
 new independent unit case through native instructions, with explicit register
 setup; it never returns a hardware result or invokes the original continuation.

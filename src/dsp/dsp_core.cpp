@@ -39,6 +39,7 @@
 namespace blofeld {
 namespace {
 constexpr unsigned word_mask = 0xffffff;
+constexpr unsigned ccr_mask = 0xff;
 constexpr unsigned address_space = 0x1000000;
 constexpr unsigned native_xy_words = 0x18000;
 constexpr unsigned spi_mode = 5;
@@ -46,6 +47,14 @@ constexpr unsigned reset_core_dma_priority = 0x300;
 constexpr unsigned boot_entry = 0xff0000;
 constexpr std::uint64_t data_mask = 0xffffffffffff;
 constexpr std::uint64_t accumulator_mask = 0xffffffffffffff;
+
+struct StepContext {
+  std::uint32_t pc, sr, omr, vba;
+};
+
+StepContext step_context(const DspState &state) {
+  return {.pc = state.pc, .sr = state.sr, .omr = state.omr, .vba = state.vba};
+}
 
 class ExecutionGuard {
 public:
@@ -294,7 +303,7 @@ public:
       : bus(board),
         native(board),
         access(board, native),
-        memory(access, address_space, native_xy_words, 0),
+        memory(access, dsp56k::Memory::BusOwned{}, address_space, native_xy_words),
         peripherals_x(native, DspSpace::x),
         peripherals_y(native, DspSpace::y),
         cpu(memory, &peripherals_x, &peripherals_y) {
@@ -312,10 +321,20 @@ public:
     }
   }
 
+  [[nodiscard]] StepContext current_step_context() const {
+    const auto &regs = cpu.regs();
+    return {.pc = word(regs.pc),
+            .sr = static_cast<std::uint32_t>(register_value(cpu, dsp56k::Reg_SR)) & word_mask,
+            .omr = word(regs.omr),
+            .vba = word(regs.vba)};
+  }
+
   void begin_run(const DspState before, const bool interrupt) const {
     if (run.begin) {
       const auto units = run.fetched && !interrupt ? cpu.referenceNextCycles() : 0;
-      run.begin(before, interrupt, units);
+      const auto opcode =
+          run.timing_opcode && !interrupt ? std::optional(cpu.referenceNextOpcode()) : std::nullopt;
+      run.begin(before, interrupt, units, opcode);
     }
   }
 
@@ -338,7 +357,7 @@ public:
     }};
   }
 
-  [[nodiscard]] StepEstimate interrupt_estimate(const DspState &before,
+  [[nodiscard]] StepEstimate interrupt_estimate(const StepContext &before,
                                                 const DspInterruptRequest request) const {
     const auto address = before.vba + request.vector;
     const DspInterruptVector vector{
@@ -350,7 +369,7 @@ public:
   }
 
   [[nodiscard]] std::optional<DspInterruptRequest>
-  select_interrupt(const DspState &before, const Admission *admission) const {
+  select_interrupt(const StepContext &before, const Admission *admission) const {
     constexpr unsigned mask_shift = 8;
     constexpr unsigned interrupt_mask = 3;
     const auto mask = (before.sr >> mask_shift) & interrupt_mask;
@@ -783,6 +802,8 @@ void DspCore::reset_spi_boot() {
   impl_->reset_reference();
   impl_->bus.reset();
   impl_->cpu.resetHW();
+  // DSP56300FM2.3.3 clears SR[7:0]; the SDK reset leaves CCR[7:4] behind.
+  impl_->cpu.regs().sr.var = static_cast<std::int32_t>(word(impl_->cpu.regs().sr) & ~ccr_mask);
   // DSP56300FM figure 5-3/table 5-2: hardware reset sets CDP1/CDP0;
   // mode pins select the low nibble. The generic core resets OMR to zero.
   impl_->cpu.regs().omr.var = reset_core_dma_priority | spi_mode;
@@ -808,19 +829,22 @@ std::uint64_t DspCore::native_cycles() const {
 }
 
 DspCore::StepEstimate DspCore::next_step_cycles(const bool vector_estimates,
-                                                const Admission *admission) const {
+                                                const Admission *admission,
+                                                const bool timing_opcode) const {
   if (impl_->active || impl_->faulted || impl_->native.reference().active()) {
     throw Fault("DSP cycle preview requires a healthy completed step");
   }
   const auto before = state();
   try {
     constexpr unsigned compatibility = 0x2000;
-    const auto interrupt = impl_->select_interrupt(before, admission);
+    const auto interrupt = impl_->select_interrupt(step_context(before), admission);
     if ((before.sr & compatibility) != 0 || (interrupt && !vector_estimates)) {
       throw Fault("Unqualified DSP interrupt or compatibility-mode timing preview");
     }
-    if (interrupt) { return impl_->interrupt_estimate(before, *interrupt); }
-    return {.units = impl_->cpu.referenceNextCycles(), .interrupt = std::nullopt};
+    if (interrupt) { return impl_->interrupt_estimate(step_context(before), *interrupt); }
+    const auto word =
+        timing_opcode ? std::optional(impl_->cpu.referenceNextOpcode()) : std::nullopt;
+    return {.units = impl_->cpu.referenceNextCycles(), .opcode = word, .interrupt = std::nullopt};
   } catch (const std::exception &error) {
     throw Fault("DSP cycle preview pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6) + ": " +
                 error.what());
@@ -966,7 +990,8 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
        contract != DspReferenceExecution::access_and_retirement_boundaries &&
        contract != DspReferenceExecution::address_and_retirement_boundaries &&
        contract != DspReferenceExecution::staged_register_boundaries) ||
-      impl_->run.begin || impl_->run.complete || impl_->run.failed || impl_->run.reset) {
+      impl_->run.begin || impl_->run.complete || impl_->run.failed || impl_->run.reset ||
+      impl_->run.ready) {
     throw Fault(
         "Native access suspension requires an explicit healthy unclocked instruction boundary");
   }
@@ -1333,15 +1358,19 @@ void DspCore::step_impl(DspNativeAccessObserver observer, const Admission *admis
   if (impl_->native.reference().active() || impl_->native.reference().fetch().active()) {
     throw Fault("Cannot execute an atomic DSP step while a reference access is pending");
   }
+  if (impl_->run.ready) { impl_->run.ready(); }
   const ExecutionGuard guard(impl_->active);
-  const auto before = state();
+  // Timing/diagnostic hooks retain the same complete pre-step observation.
+  // Unhooked admission needs only PC/SR/OMR/VBA, including actual lazy CCR materialization.
+  const auto snapshot = impl_->run.begin ? std::optional(state()) : std::nullopt;
+  const auto before = snapshot ? step_context(*snapshot) : impl_->current_step_context();
   const auto before_cycles = impl_->cpu.getCycles();
   std::optional<DspInterruptRequest> interrupt;
   StepEstimate estimate;
   try {
     impl_->invalidate();
     interrupt = impl_->select_interrupt(before, admission);
-    impl_->begin_run(before, interrupt.has_value());
+    if (snapshot) { impl_->begin_run(*snapshot, interrupt.has_value()); }
     if (interrupt && impl_->run.vector_estimates) {
       estimate = impl_->interrupt_estimate(before, *interrupt);
     }

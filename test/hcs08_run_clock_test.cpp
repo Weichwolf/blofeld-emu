@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "common/bus.hpp"
 #include "hcs08_bdc_fixture.hpp"
 #include "hcs08_fixture.hpp"
 #include "hcs08_wire_fixture.hpp"
@@ -10,6 +11,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <span>
 #include <sstream>
 #include <string>
 
@@ -116,50 +118,172 @@ void costs_and_replay() {
           "fetch");
 }
 
+// Own architectural program: ordinary stack RAM, independent of the original
+// programmer fixture's deliberately restricted data-write footprint.
+class NoBdcMemory final : public Hcs08BdcMemory {
+public:
+  [[nodiscard]] bool secured(ExecutionContext /*context*/) const override { return false; }
+
+  std::uint8_t read(const std::uint16_t address, const ExecutionContext context) override {
+    throw Fault("Unexpected own-program BDC read address=" + hex(address) +
+                " pc=" + hex(context.pc));
+  }
+
+  void write(const ByteWrite access, const ExecutionContext context) override {
+    throw Fault("Unexpected own-program BDC write address=" + hex(access.address) +
+                " pc=" + hex(context.pc));
+  }
+};
+
+struct MultiplyTarget {
+  blofeld::test::hcs08::Memory memory;
+  Hcs08 cpu{memory, BLOFELD_HCS08_SLA};
+  NoBdcMemory mapping;
+
+  explicit MultiplyTarget(const blofeld::test::hcs08::Memory *snapshot = nullptr)
+      : memory(snapshot != nullptr ? *snapshot : blofeld::test::hcs08::Memory{}) {
+    memory.writable.set(stack);
+    memory.writable.set(stack - 1);
+    cpu.set_state({.pc = algorithm, .hx = seed, .sp = stack, .a = seed_a, .ccr = initial_flags});
+  }
+};
+
+void expect_multiply(const MultiplyTarget &target, const Hcs08Bdc &bdc, const unsigned period) {
+  constexpr std::array<unsigned, 10> boundaries{2, 4, 9, 11, 12, 15, 21, 22, 28, 33};
+
+  struct Registers {
+    unsigned pc, hx, sp, a, ccr;
+  };
+
+  // Literal instruction expectations, independent of the timing decoder:
+  // LDA, LDX, MUL17*19=0143 (H/C cleared), PSHA, CLRA, PULA, JSR, TAX, RTS, BGND.
+  constexpr std::array<Registers, 11> states{
+      {{.pc = 0xa0, .hx = 0x1200, .sp = 0x47c, .a = 0xa5, .ccr = 0x79},
+       {.pc = 0xa2, .hx = 0x1200, .sp = 0x47c, .a = 0x11, .ccr = 0x79},
+       {.pc = 0xa4, .hx = 0x1213, .sp = 0x47c, .a = 0x11, .ccr = 0x79},
+       {.pc = 0xa5, .hx = 0x1201, .sp = 0x47c, .a = 0x43, .ccr = 0x68},
+       {.pc = 0xa6, .hx = 0x1201, .sp = 0x47b, .a = 0x43, .ccr = 0x68},
+       {.pc = 0xa7, .hx = 0x1201, .sp = 0x47b, .a = 0, .ccr = 0x6a},
+       {.pc = 0xa8, .hx = 0x1201, .sp = 0x47c, .a = 0x43, .ccr = 0x6a},
+       {.pc = 0xc0, .hx = 0x1201, .sp = 0x47a, .a = 0x43, .ccr = 0x6a},
+       {.pc = 0xc1, .hx = 0x1243, .sp = 0x47a, .a = 0x43, .ccr = 0x6a},
+       {.pc = 0xab, .hx = 0x1243, .sp = 0x47c, .a = 0x43, .ccr = 0x6a},
+       {.pc = 0xac, .hx = 0x1243, .sp = 0x47c, .a = 0x43, .ccr = 0x6a}}};
+  unsigned retired = 0;
+  for (const auto end : boundaries) { retired += static_cast<unsigned>(period >= end); }
+  const auto row = states.at(retired);
+  const Hcs08State expected{.pc = static_cast<std::uint16_t>(row.pc),
+                            .hx = static_cast<std::uint16_t>(row.hx),
+                            .sp = static_cast<std::uint16_t>(row.sp),
+                            .a = static_cast<std::uint8_t>(row.a),
+                            .ccr = static_cast<std::uint8_t>(row.ccr)};
+  require(target.cpu.state() == expected && target.memory.retired == retired &&
+              bdc.state().active == (period >= boundaries.back()),
+          "Independent multiply/stack/call state at every period " + std::to_string(period));
+  constexpr unsigned call_period = 21;
+  constexpr unsigned return_low = 0xab;
+  constexpr unsigned product_low = 0x43;
+  if (period >= 11) {
+    require(target.memory.bytes[stack] == (period < call_period ? product_low : return_low),
+            "PSHA/JSR write the independently expected stack byte only at retirement");
+  }
+  if (period >= call_period) {
+    require(target.memory.known[stack - 1] && target.memory.bytes[stack - 1] == 0,
+            "JSR writes both return bytes, with the documented stack order");
+  }
+}
+
+void multiply_and_call() {
+  MultiplyTarget target;
+  constexpr unsigned subroutine = 0xc0;
+  constexpr unsigned final_period = 33;
+  constexpr unsigned cut_period = 6;
+  constexpr std::array<std::uint8_t, 12> code{
+      0xa6, 17, 0xae, 19, 0x42, 0x87, 0x4f, 0x86, 0xcd, 0, subroutine, 0x82};
+  constexpr std::array<std::uint8_t, 2> callee{0x97, 0x81};
+  target.memory.install(algorithm, code);
+  target.memory.install(subroutine, callee);
+  Hcs08Bdc bdc(target.cpu, target.mapping, chip, Hcs08BdcReset::bkgd_held_low);
+  Hcs08RunClock clock(target.memory, bdc, timing_contract);
+  go(bdc);
+  for (unsigned period = 1; period <= cut_period; ++period) {
+    clock.advance();
+    expect_multiply(target, bdc, period);
+  }
+  const auto memory = target.memory;
+  const auto cpu = target.cpu.checkpoint();
+  const auto controller = bdc.checkpoint();
+  const auto timer = clock.checkpoint();
+  require(clock.state().remaining_periods == 3 && clock.state().retired_instructions == 2,
+          "Joint snapshot is inside the five-period native MUL before its register effects");
+  for (unsigned period = cut_period + 1; period <= final_period; ++period) {
+    clock.advance();
+    expect_multiply(target, bdc, period);
+  }
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    MultiplyTarget restored(&memory);
+    restored.cpu.restore_checkpoint(cpu);
+    Hcs08Bdc other(restored.cpu, restored.mapping, chip, Hcs08BdcReset::normal);
+    other.restore_checkpoint(controller);
+    Hcs08RunClock fresh(restored.memory, other, timing_contract);
+    fresh.restore_checkpoint(timer);
+    for (unsigned period = cut_period + 1; period <= final_period; ++period) {
+      fresh.advance();
+      expect_multiply(restored, other, period);
+    }
+    require(fresh.state() == clock.state() && other.state() == bdc.state() &&
+                restored.memory.bytes == target.memory.bytes &&
+                restored.memory.known == target.memory.known &&
+                restored.memory.accesses == target.memory.accesses,
+            "Fresh CPU/RAM/BDC/clock restoration preserves the complete MUL/call suffix");
+  }
+}
+
 void decoder_and_unknowns() {
   using blofeld::test::hcs08::Memory;
   constexpr unsigned entry = 0x8000;
   constexpr unsigned flags = 0x68;
-  constexpr unsigned values = 256;
 
   struct Expected {
     unsigned opcode, bytes, periods;
   };
 
-  constexpr std::array<Expected, 6> documented{{{.opcode = 0xae, .bytes = 2, .periods = 2},
-                                                {.opcode = 0xa6, .bytes = 2, .periods = 2},
-                                                {.opcode = 0xc7, .bytes = 3, .periods = 4},
-                                                {.opcode = 0x94, .bytes = 1, .periods = 2},
-                                                {.opcode = 0x9d, .bytes = 1, .periods = 1},
-                                                {.opcode = 0x82, .bytes = 1, .periods = 5}}};
+  constexpr std::array<Expected, 50> documented{
+      {{.opcode = 0x0e, .bytes = 3, .periods = 5}, {.opcode = 0x22, .bytes = 2, .periods = 3},
+       {.opcode = 0x23, .bytes = 2, .periods = 3}, {.opcode = 0x26, .bytes = 2, .periods = 3},
+       {.opcode = 0xcc, .bytes = 3, .periods = 4}, {.opcode = 0x87, .bytes = 1, .periods = 2},
+       {.opcode = 0x89, .bytes = 1, .periods = 2}, {.opcode = 0x8b, .bytes = 1, .periods = 2},
+       {.opcode = 0x86, .bytes = 1, .periods = 3}, {.opcode = 0x8a, .bytes = 1, .periods = 3},
+       {.opcode = 0x97, .bytes = 1, .periods = 1}, {.opcode = 0x9f, .bytes = 1, .periods = 1},
+       {.opcode = 0x4f, .bytes = 1, .periods = 1}, {.opcode = 0x4c, .bytes = 1, .periods = 1},
+       {.opcode = 0xe6, .bytes = 2, .periods = 3}, {.opcode = 0xee, .bytes = 2, .periods = 3},
+       {.opcode = 0xeb, .bytes = 2, .periods = 3}, {.opcode = 0xe7, .bytes = 2, .periods = 3},
+       {.opcode = 0xf1, .bytes = 1, .periods = 3}, {.opcode = 0xf9, .bytes = 1, .periods = 3},
+       {.opcode = 0xf7, .bytes = 1, .periods = 2}, {.opcode = 0xfc, .bytes = 1, .periods = 3},
+       {.opcode = 0xa4, .bytes = 2, .periods = 2}, {.opcode = 0xae, .bytes = 2, .periods = 2},
+       {.opcode = 0xa6, .bytes = 2, .periods = 2}, {.opcode = 0xc7, .bytes = 3, .periods = 4},
+       {.opcode = 0x94, .bytes = 1, .periods = 2}, {.opcode = 0x9d, .bytes = 1, .periods = 1},
+       {.opcode = 0x82, .bytes = 1, .periods = 5}, {.opcode = 0x45, .bytes = 3, .periods = 3},
+       {.opcode = 0x8c, .bytes = 1, .periods = 1}, {.opcode = 0x5f, .bytes = 1, .periods = 1},
+       {.opcode = 0x20, .bytes = 2, .periods = 3}, {.opcode = 0x7f, .bytes = 1, .periods = 4},
+       {.opcode = 0xaf, .bytes = 2, .periods = 2}, {.opcode = 0x65, .bytes = 3, .periods = 3},
+       {.opcode = 0x25, .bytes = 2, .periods = 3}, {.opcode = 0x35, .bytes = 2, .periods = 4},
+       {.opcode = 0xb7, .bytes = 2, .periods = 3}, {.opcode = 0x6e, .bytes = 3, .periods = 4},
+       {.opcode = 0x3f, .bytes = 2, .periods = 5}, {.opcode = 0xb6, .bytes = 2, .periods = 3},
+       {.opcode = 0xa5, .bytes = 2, .periods = 2}, {.opcode = 0x27, .bytes = 2, .periods = 3},
+       {.opcode = 0xc6, .bytes = 3, .periods = 4}, {.opcode = 0xa1, .bytes = 2, .periods = 2},
+       {.opcode = 0xcd, .bytes = 3, .periods = 6}, {.opcode = 0xa7, .bytes = 2, .periods = 2},
+       {.opcode = 0x9e, .bytes = 3, .periods = 5}, {.opcode = 0x55, .bytes = 2, .periods = 4}}};
   Memory memory;
-  unsigned qualified = 0;
-  unsigned rejected_forms = 0;
-  for (unsigned opcode = 0; opcode < values; ++opcode) {
-    const std::array<std::uint8_t, 3> code{static_cast<std::uint8_t>(opcode), 0, store};
+  for (const auto expected : documented) {
+    constexpr std::uint8_t stack_load = 0xfe;
+    const std::array<std::uint8_t, 4> code{
+        static_cast<std::uint8_t>(expected.opcode), stack_load, store, 0};
     memory.install(entry, code);
-    bool known = false;
-    for (const auto expected : documented) {
-      if (expected.opcode != opcode) { continue; }
-      require(hcs08_instruction_timing(memory, {.pc = entry, .ccr = flags}) ==
-                  Hcs08InstructionTiming{.bytes = expected.bytes, .periods = expected.periods},
-              "Six opcode-form lengths/costs independently transcribed from the primary table");
-      known = true;
-      ++qualified;
-    }
-    if (!known) {
-      const auto reason = rejected([&] {
-        static_cast<void>(hcs08_instruction_timing(memory, {.pc = entry, .ccr = flags}));
-      });
-      require(reason.contains("unsupported opcode") && reason.contains("address=0x8000") &&
-                  reason.contains("ccr=0x0068"),
-              "Unimplemented timing forms cannot acquire guessed costs");
-      ++rejected_forms;
-    }
+    require(hcs08_instruction_timing(memory, {.pc = entry, .ccr = flags}) ==
+                Hcs08InstructionTiming{.bytes = expected.bytes, .periods = expected.periods},
+            "All fifty previously qualified first-opcode timing tuples remain exact");
   }
-  constexpr unsigned unsupported = 250;
-  require(qualified == documented.size() && rejected_forms == unsupported,
-          "Every opcode form has an explicit qualified/unsupported timing result");
   constexpr std::array<std::uint8_t, 2> immediate{0xae, 0x78};
   memory.install(entry, immediate);
   memory.known.reset(entry + 1);
@@ -212,12 +336,57 @@ void quarantine() {
               rejected([&] { clock.restore_checkpoint(saved); }).contains("coordinated recovery"),
           "Actual native data faults retain elapsed periods and require joint recovery");
 }
+
+void prefixed_fetches() {
+  using blofeld::test::hcs08::Memory;
+  Memory memory;
+  constexpr unsigned entry = 0x8000;
+  constexpr unsigned prefix = 0x9e;
+  constexpr unsigned load = 0xfe;
+  constexpr unsigned save = 0xff;
+  constexpr unsigned near_end = 0xfffe;
+  constexpr unsigned last = 0xffff;
+  for (const auto expected : std::array<std::array<unsigned, 2>, 8>{{{load, 5},
+                                                                     {save, 5},
+                                                                     {0xee, 4},
+                                                                     {0xe1, 4},
+                                                                     {0x68, 6},
+                                                                     {0x69, 6},
+                                                                     {0xeb, 4},
+                                                                     {0xe9, 4}}}) {
+    const std::array<std::uint8_t, 3> code{prefix, static_cast<std::uint8_t>(expected[0]), 1};
+    memory.install(entry, code);
+    require(hcs08_instruction_timing(memory, {.pc = entry}) ==
+                Hcs08InstructionTiming{.bytes = 3, .periods = expected[1]},
+            "All eight previously qualified secondary timing tuples remain exact");
+  }
+  constexpr std::array<std::uint8_t, 3> code{prefix, load, 1};
+  for (unsigned missing = 1; missing <= 2; ++missing) {
+    memory.install(entry, code);
+    memory.known.reset(entry + missing);
+    require(rejected([&] {
+              static_cast<void>(hcs08_instruction_timing(memory, {.pc = entry}));
+            }).contains("fetch address=" + hex(entry + missing)),
+            "Unknown secondary opcode and displacement both fail before timing admission");
+  }
+  memory.install(near_end, std::span(code).first(2));
+  for (const auto pc : {near_end, last}) {
+    if (pc == last) { memory.install(last, std::span(code).first(1)); }
+    require(rejected([&] {
+              static_cast<void>(
+                  hcs08_instruction_timing(memory, {.pc = static_cast<std::uint16_t>(pc)}));
+            }).contains("instruction fetch wraps"),
+            "Neither prefix decoding nor the full stack-relative fetch can wrap");
+  }
+}
 } // namespace
 
 int main() {
   try {
     costs_and_replay();
+    multiply_and_call();
     decoder_and_unknowns();
+    prefixed_fetches();
     quarantine();
     std::cout << "HCS08 documented instruction budgets, native boundaries, held time and replay "
                  "verified.\n";

@@ -27,6 +27,14 @@ true/false cases check PC progress or a named fault, retained CCR/SP and selecte
 seeded RAM words.
 These are selected flag vectors, not an exhaustive condition-code proof.
 
+Normal-mode DIV has an independent 56-bit iteration/flag matrix, a preserved
+45-byte host-overflow regression and native quotient/REP replay checks;
+sixteen-bit arithmetic DIV rejects explicitly (dsp-divide.txt).
+
+Normal-mode CLB/NORMF have independent whole-state matrices and real count-to-
+normalizer snapshot chains. NORMF +56 executes without broadening ASR's range;
+unqualified sixteen-bit CLB/NORMF reject (dsp-fast-normalization.txt).
+
 The saved own 48-byte oversized-shift input is retained literally in the
 deterministic shift-count regression. An earlier interrupted fuzz attempt stopped
 on UBSan in ASR's carry-bit calculation: count 63 plus native accumulator alignment

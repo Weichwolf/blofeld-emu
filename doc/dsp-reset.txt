@@ -41,3 +41,41 @@ No firmware instructions, RAM maps or unsupported-access checks are changed.
 Physical reset duration, asynchronous assertion, hardware latency, normal full
 startup and real-device equivalence remain open. Reference bytes/traces stay
 local; no fuzz or physical traffic runs.
+
+reference_extal_hold additionally admits an explicit held hardware reset from a
+healthy completed native step. begin_hardware_reset requires observed mode5,
+PINIT-low and a caller-supplied recovery of at least2 EXTAL periods. These pins
+remain stable throughout the declared experiment. PLL-enabled recovery rejects;
+no analog lock duration or PB0 connection is inferred. The native reset transaction
+stages fixed-mode boot registers and resets peripherals at assertion. Firmware
+instruction/plan/scheduler admission stays closed through assertion and recovery.
+release_hardware_reset requires at least2 asserted bypass EXTAL periods; advancing
+recovery stops at its exact supplied endpoint, returning only consumed periods.
+All reset periods add to lifetime ticks/hardware_reset_ticks, without executing
+native units, generating timer CLK2 edges or advancing peripherals. Held/recovery
+owner checkpoints restore that gate and replay literal native/clock suffixes.
+Invalid consumed reset periods quarantine the owner; trusted recovery is required.
+advance_hardware_reset_ticks retains partial reference periods. The whole-period
+API rejects an unaligned phase. Release starts a new supplied recovery duration;
+this is not a calibrated oscillator-edge or first-instruction phase prediction.
+
+DspScheduleInputs.resets=reference_extal_hold explicitly enables held scheduling.
+External events retain their deadlines while no native instructions execute.
+Recovery completion is a deadline, including before/through exclusion. Scheduled
+release accepts fractional assertion periods; assertion still requires the exact
+completed native boundary and cannot discard pending instruction time or events.
+next_event_ticks returns UINT64_MAX for assertion without an external deadline.
+Out-of-band reset/clock changes fail snapshot identity checks. Absolute recovery
+overflow rejects before changing held state.
+
+The adapter also clears the complete CCR on native hardware reset. The SDK
+reset left SR[7:4] set: an own SR=c003ff seed produced c003f0, not the documented
+c00300. All256 input CCR values now have independent reset expectations.
+
+  ctest --test-dir build/strict -R '^dsp_hardware_reset$' --output-on-failure
+  ctest --test-dir build/strict -R '^joint_dsp_hold$' --output-on-failure
+
+References: DSP56300FM2.3.3; DSP56371UM table2-6; DSP56371 data sheet table19
+and note4. Their reset/recovery minima do not supply an exact physical latency.
+Asynchronous in-flight abort, other boot modes, PLL locking, physical recovery
+latency and real reset/ready routing remain unqualified.

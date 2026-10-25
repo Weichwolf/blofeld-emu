@@ -1,0 +1,32 @@
+HCS08 native DIV results and knowledge
+
+  cmake --build --preset strict --target blofeld-hcs08-divide-test
+  ctest --test-dir build/strict -j1 -R '^hcs08_divide$' --output-on-failure
+
+Pinned HCS08RMV1 Rev.2 printed250: DIV divides H:A by X, returning quotient A
+and remainder H; X and CCR V/H/I/N remain unchanged. C reports zero divisor or
+quotient>255. On either error, A and register H are indeterminate; therefore Z
+cannot be known. CCR.H is a separate preserved flag, not register H.
+
+The local SLEIGH patch guards zero division before its host arithmetic. Its
+representatives are masked by native register/CCR knowledge at retirement;
+zero representatives do not establish hardware zero results. Successful DIV
+defines A/H and C/Z. Errors leave only X known, retain unrelated flag knowledge,
+define C=1 and clear Z knowledge. All H/A/X operand bits must be known before
+execution. Guest branches can consume known C; unknown A/H/Z cannot silently
+become known stores, stack bytes or TPA results. Guest LDA/CLRH restore knowledge
+through actual instructions. CPU execution/observer/reservation code is unchanged.
+
+Independent wide division/remainder expectations cover22449 finite boundary
+cases: every divisor, zero/max quotient, remainder boundaries, quotient256 and
+maximum dividend, with stale/preserved flag seeds. Nine partial-CCR cases,
+24 missing operand bits, three invalid consumers and four fresh post-error
+continuations check knowledge. Six-period DIV plus native BCS/LDA/CLRH/BGND
+finishes in17 reference periods; four fresh joint CPU/RAM/BDC/clock suffixes
+start two periods into DIV, with four remaining. Timing stays the explicit
+instruction-retirement reference; bus phases and silicon measurements remain open.
+
+This corrects CPU semantics needed before original calibration-gain acquisition.
+It does not establish that acquisition, full boot, MIDI/audio or device/update
+recovery equivalence. Original ICG/FSTAT/DSP reserved-memory frontiers remain
+strict. No fuzz or physical traffic. Primary identities: hcs08-reference.json.

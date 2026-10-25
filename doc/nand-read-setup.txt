@@ -59,3 +59,28 @@ state match in all four cases. These trusted in-process checkpoints do not
 qualify portable state files. Stock mask ROM, reserved writes/modes, NAND variant,
 physical timing, complete refill/boot, original MIDI/audio, updates/recovery and
 both-profile hardware comparison remain open in coverage.txt.
+
+The same gate retains those four lab-release traces and adds four clocked rows
+plus a missing-byte control. NandOperationClock owns the actual protocol and
+requires reference_maximum explicitly. Real WE latches admit command/address;
+the last address starts the timer. Neither the host nor the poll counter supplies
+completion. A saved first-busy-poll boundary is restored into fresh native/device/
+pin-timing owners; its complete event/read/fault suffix and debug endpoint match.
+A one-tick skewed clock rejects before pin drive. After a missing-byte fault the
+coupled owner refuses further steps before its still-healthy CPU can advance.
+
+Independent fixed timeline for this unchanged 12MHz-CCLK reference caller:
+  1080000000 reference ticks/s, 90ticks/CCLK
+  final address6120; 15us tR maximum ->16200ticks -> event22320
+  first poll starts7740; each BRCLR costs5CCLK=450ticks
+  poll33 retires22590 and publishes Ready; poll34 exits, first RE retires24030
+These are explicit instruction-retirement observations, not calibrated physical
+pin phases. The270-tick publication lag is kept separate from the device event;
+the board's future finer interleaving must not treat it as silicon R/B latency.
+
+Known own reference bytes still reach the fatal original reserved Port F write;
+the missing byte instead faults at the original RE edge with column0 and no
+protocol-byte consumption. Neither path samples CPU payload data or writes its
+buffer. All five busy-state replays pass under ASan/UBSan and separate TSan with
+identical traces; the four preceding lab-release traces remain byte-identical.
+Full initial clear/refill/boot, actual NAND contents and board timing stay open.
