@@ -33,6 +33,32 @@ std::string describe(const DspAddress address) {
   return std::string(names.at(static_cast<unsigned>(address.space))) + hex(address.address, 6);
 }
 
+std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreBusUse core) {
+  // Short-I/O occupancy is separate from RAM. This never dispatches a core transaction;
+  // native E1 still owns register validation and the actual write. DMA-controller writes
+  // can change the arbitration owner and remain unqualified even with inactive channels.
+  std::optional<DspMemoryAccess> peripheral;
+  unsigned data_accesses = 0;
+  for (const auto access : core.accesses) {
+    const auto target = access.target;
+    if (target.space != DspSpace::p) { ++data_accesses; }
+    const bool port = (target.space == DspSpace::x || target.space == DspSpace::y) &&
+                      target.address >= io_base && target.address <= DspDma::full_word &&
+                      access.operation == DspMemoryOperation::write &&
+                      (target.space != DspSpace::x || !DspDma::handles(target.address));
+    if (port) {
+      peripheral = access;
+    } else if (!controller_read(access)) {
+      static_cast<void>(bus.memory_resource(access));
+    }
+  }
+  if (peripheral && data_accesses != 1) {
+    throw Fault("Unqualified concurrent DSP peripheral/data bus effects at " +
+                describe(peripheral->target));
+  }
+  return peripheral;
+}
+
 bool core_conflict(const DspBus &bus, const DspCoreBusUse core, const DspMemoryAccess target) {
   bool conflict = false;
   for (const auto access : core.accesses) {
@@ -119,8 +145,12 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
   if (core.knowledge != DspCoreBusKnowledge::reference_cycle_occupancy) {
     throw Fault("DSP DMA bank arbitration requires explicitly known core-cycle occupancy");
   }
-  for (const auto access : core.accesses) {
-    if (!controller_read(access)) { static_cast<void>(memory_resource(access)); }
+  const auto peripheral = core_peripheral(*this, core);
+  // The idle controller has no source/destination bus phase. Concurrent peripheral/DMA
+  // timing is not qualified: reject before request sampling or either device effect.
+  if (peripheral && dma_.active()) {
+    throw Fault("Unqualified DSP peripheral memory resource write at " +
+                describe(peripheral->target) + " with active DMA");
   }
   DspDmaBusResult result;
   const DspDmaAdmission admission = [&](const DspDmaPhase &phase) {
@@ -131,7 +161,7 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
         .target = {.space = space(selected.space), .address = selected.address},
         .operation = write ? DspMemoryOperation::write : DspMemoryOperation::read};
     if (selected.space != DspDmaSpace::p && selected.address >= io_base) {
-      // Core footprints contain physical memory or DMA-controller reads, not data I/O.
+      // Active DMA permits only physical memory or DMA-controller reads in the core footprint.
       // FM10.2/APR23 section5: these resources do not contend with a data register.
       check_access(selected, write);
       return DspDmaGrant::available;

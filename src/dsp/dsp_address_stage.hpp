@@ -30,6 +30,8 @@ struct DspAddressStageLane {
   bool pointer_update = false;
 };
 
+enum class DspAddressStageKind : std::uint8_t { register_agu, peripheral_immediate };
+
 struct DspAddressStageView {
   DspProgramWord word;
   DspAddressUpdate update;
@@ -38,6 +40,8 @@ struct DspAddressStageView {
   std::optional<DspAddressStageLane> secondary = std::nullopt;
   std::array<DspMemoryAccess, 2> data_accesses{};
   std::size_t data_access_count = 0;
+  DspAddressStageKind kind = DspAddressStageKind::register_agu;
+  std::optional<DspProgramWord> extension = std::nullopt;
 };
 
 struct DspMemoryStageResult {

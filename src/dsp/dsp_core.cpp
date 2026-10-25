@@ -10,6 +10,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupt_timing.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_program_fetch.hpp"
@@ -442,8 +443,10 @@ public:
       base.mModulo.at(index) = source.mModulo.at(index);
       results.addresses.published.at(index) = update.value;
     };
-    bind(record.view.update);
-    if (record.view.secondary) { bind(record.view.secondary->update); }
+    if (record.view.kind == DspAddressStageKind::register_agu) {
+      bind(record.view.update);
+      if (record.view.secondary) { bind(record.view.secondary->update); }
+    }
     for (unsigned reg = 0; reg < visible.registers.r.size(); ++reg) {
       results.pipeline_addresses.at(reg) =
           static_cast<std::uint32_t>(visible.registers.r.at(reg)) & word_mask;
@@ -1197,8 +1200,17 @@ DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t add
   }
   const auto opcode = impl_->native.reference().fetch().peek(address);
   if (!opcode) { throw Fault("Native AG1 awaits actual F2 at P:" + hex(address, 6)); }
+  std::optional<DspProgramWord> extension;
+  const auto form = decode_memory_stage(*opcode);
+  if (form && form->peripheral) {
+    const auto next = (address + 1) & word_mask;
+    const auto value = impl_->native.reference().fetch().peek(next);
+    if (!value) { throw Fault("Native peripheral AG1 awaits actual F2 at P:" + hex(next, 6)); }
+    extension = DspProgramWord{.address = next, .value = *value};
+  }
   const ExecutionGuard guard(impl_->active);
-  const auto slot = impl_->stages.capture(impl_->cpu, {.address = address, .value = *opcode});
+  const auto slot =
+      impl_->stages.capture(impl_->cpu, {.address = address, .value = *opcode}, extension);
   DspAddressStageTicket ticket;
   ticket.owner_ = impl_->reference_owner;
   ticket.slot_ = slot;
@@ -1268,6 +1280,16 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
     DspMemoryStageResult result{.address = view, .inputs = state(), .data = {}, .progress = {}};
     impl_->bind_memory_address(record);
     auto progress = advance_reference_access(pending->ticket);
+    if (view.extension) {
+      if (!progress.pending) { throw Fault("Native peripheral E1 lost its actual extension"); }
+      const auto *actual = std::get_if<DspNativeAccess>(&progress.pending->effect);
+      if (actual == nullptr || actual->kind != DspNativeAccessKind::extension ||
+          actual->target.address != view.extension->address ||
+          progress.pending->latched_program_word != view.extension->value) {
+        throw Fault("Native peripheral E1 extension differs from its actual AG1/F2 word");
+      }
+      progress = advance_reference_access(progress.pending->ticket);
+    }
     for (std::size_t index = 0; index < view.data_access_count; ++index) {
       active_access = view.data_accesses.at(index);
       const auto actual = Impl::commit_addressed_data(*this, progress, active_access);

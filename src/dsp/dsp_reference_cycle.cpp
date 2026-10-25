@@ -19,6 +19,9 @@
 
 namespace blofeld {
 namespace {
+constexpr unsigned short_io_begin = 0xffff80;
+constexpr unsigned address_mask = 0xffffff;
+
 std::string describe(const DspMemoryAccess access) {
   constexpr std::array spaces{"P:", "X:", "Y:"};
   return std::string(access.operation == DspMemoryOperation::read ? "read " : "write ") +
@@ -72,11 +75,35 @@ void append(DspReferenceCycleResult &result, const DspMemoryAccess access) {
   result.core_accesses.at(result.core_access_count++) = access;
 }
 
-void check_resources(const DspBus &bus, const DspReferenceCycleResult &result) {
+std::optional<DspMemoryAccess> peripheral_store(const std::optional<DspAddressStageView> &memory) {
+  if (!memory || memory->kind != DspAddressStageKind::peripheral_immediate) { return std::nullopt; }
+  const auto access = memory->data_accesses[0];
+  if (!memory->extension || memory->pointer_update || memory->secondary ||
+      memory->data_access_count != 1 || access.target.space == DspSpace::p ||
+      access.target.address < short_io_begin || access.target.address > address_mask ||
+      access.operation != DspMemoryOperation::write) {
+    throw Fault("Unqualified immediate native peripheral footprint");
+  }
+  return access;
+}
+
+void check_resources(const DspBus &bus,
+                     const DspReferenceCycleResult &result,
+                     const std::optional<DspMemoryAccess> peripheral) {
   std::array<std::optional<DspMemoryResource>, dsp_reference_cycle_accesses> resources;
+  unsigned data_accesses = 0;
   for (std::size_t index = 0; index < result.core_access_count; ++index) {
     const auto access = result.core_accesses.at(index);
-    if (!controller_read(access)) { resources.at(index) = bus.memory_resource(access); }
+    if (access.target.space != DspSpace::p) { ++data_accesses; }
+    const bool port = peripheral && access.target.space == peripheral->target.space &&
+                      access.target.address == peripheral->target.address &&
+                      access.operation == peripheral->operation;
+    // FM13-134: one short-I/O write over the data/peripheral bus, independent of P fetch.
+    // Register semantics still pass through the strict peripheral owner in native E1.
+    if (!controller_read(access) && !port) { resources.at(index) = bus.memory_resource(access); }
+  }
+  if (peripheral && data_accesses != 1) {
+    throw Fault("Unqualified concurrent native peripheral/data bus effects");
   }
   for (std::size_t index = 0; index < result.core_access_count; ++index) {
     for (std::size_t other = 0; other < index; ++other) {
@@ -116,7 +143,7 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     }
   }
   try {
-    check_resources(bus, result);
+    check_resources(bus, result, peripheral_store(memory));
   } catch (const std::exception &error) {
     if (!memory) { throw; }
     std::string group;

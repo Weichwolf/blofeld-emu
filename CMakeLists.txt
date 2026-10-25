@@ -1082,6 +1082,17 @@ if(BUILD_TESTING)
   add_test(NAME dsp_pipeline_transfers COMMAND blofeld-transfer-pipeline-test fields)
   add_test(NAME dsp_pipeline_agu_dependencies COMMAND blofeld-transfer-pipeline-test agu)
   add_test(NAME dsp_pipeline_transfer_state COMMAND blofeld-transfer-pipeline-test state)
+  add_executable(blofeld-peripheral-pipeline-test test/dsp_peripheral_pipeline_test.cpp
+    test/dsp_peripheral_pipeline_writes.cpp test/dsp_peripheral_pipeline_state.cpp)
+  target_link_libraries(blofeld-peripheral-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_pipeline_peripheral_writes COMMAND blofeld-peripheral-pipeline-test writes)
+  add_test(NAME dsp_pipeline_peripheral_state COMMAND blofeld-peripheral-pipeline-test state)
+  add_test(NAME dsp_pipeline_bootstrap_prefix COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_bootstrap_pipeline.py"
+    $<TARGET_FILE:blofeld-peripheral-pipeline-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-pipeline-bootstrap-prefix.trace")
+  set_tests_properties(dsp_pipeline_bootstrap_prefix PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
   target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)

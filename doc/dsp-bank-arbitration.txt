@@ -22,6 +22,14 @@ Core peripheral resource queries remain unqualified and reject without performin
 I/O. The arbiter separately recognizes controller reads described below. An
 explicitly empty known core footprint needs no sharing query.
 
+With inactive DMA, one explicitly known non-controller short-I/O write may
+coexist with P fetch. This is separate peripheral-path occupancy, not a RAM
+resource or an actual transaction. Native E1 or explicit native-reference
+admission still dispatches the real write through the strict device handler.
+Extra data access, general peripheral reads, controller writes and all active
+DMA/core-peripheral sharing still refuse before request sampling. The selected
+immediate pipeline and its directed failures are in dsp-peripheral-pipeline.txt.
+
 Core read footprints at the 29 DMA-controller addresses X:ffffd8..fffff4 are
 independent of the DMA source/destination data path (FM10.2/10.5, figure10-1).
 The arbiter validates their address/direction without reading the register or

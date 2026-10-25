@@ -13,6 +13,8 @@ namespace blofeld {
 namespace {
 using Type = dsp56k::Instruction;
 using Reg = dsp56k::Register;
+constexpr unsigned high_io_begin = 0xffffc0;
+constexpr unsigned low_io_begin = 0xffff80;
 
 bool data_register(const Reg reg) {
   return reg == Reg::X0 || reg == Reg::X1 || reg == Reg::Y0 || reg == Reg::Y1;
@@ -26,6 +28,25 @@ bool address_register(const Reg reg) {
 bool memory(const Type type) {
   return type == dsp56k::Movex_ea || type == dsp56k::Movey_ea || type == dsp56k::Movel_ea ||
          type == dsp56k::Movexy || type == dsp56k::Movec_ea;
+}
+
+std::optional<DspMemoryForm> peripheral_immediate(const Type type, const unsigned opcode) {
+  if (type != dsp56k::Movep_ppea && type != dsp56k::Movep_Xqqea && type != dsp56k::Movep_Yqqea) {
+    return std::nullopt;
+  }
+  if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) == 0 ||
+      dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode) != 6 ||
+      dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode) != 4) {
+    return std::nullopt;
+  }
+  const bool high = type == dsp56k::Movep_ppea;
+  const auto field = high ? dsp56k::Field_pppppp : dsp56k::Field_qqqqqq;
+  const bool y = type == dsp56k::Movep_Yqqea ||
+                 (high && dsp56k::getFieldValue(type, dsp56k::Field_s, opcode) != 0);
+  return DspMemoryForm{.peripheral =
+                           DspAddress{.space = y ? DspSpace::y : DspSpace::x,
+                                      .address = (high ? high_io_begin : low_io_begin) +
+                                                 dsp56k::getFieldValue(type, field, opcode)}};
 }
 
 DspMemoryOperation
@@ -94,10 +115,9 @@ std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
   auto second = dsp56k::Invalid;
-  if (opcodes.getInstructionTypes(opcode, first, second) == 0 ||
-      dsp56k::Opcodes::getOpcodeLength(opcode, first, second) != 1) {
-    return std::nullopt;
-  }
+  if (opcodes.getInstructionTypes(opcode, first, second) == 0) { return std::nullopt; }
+  if (const auto peripheral = peripheral_immediate(first, opcode)) { return peripheral; }
+  if (dsp56k::Opcodes::getOpcodeLength(opcode, first, second) != 1) { return std::nullopt; }
   const auto type = memory(first) ? first : second;
   if (type == dsp56k::Movex_ea || type == dsp56k::Movey_ea || type == dsp56k::Movec_ea) {
     return single(type, opcode);

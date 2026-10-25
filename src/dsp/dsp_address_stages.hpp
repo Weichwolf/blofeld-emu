@@ -26,7 +26,9 @@ struct DspAddressRecord {
 struct DspAddressStages {
   std::array<std::optional<DspAddressRecord>, 3> records;
   std::uint64_t serial = 0;
-  [[nodiscard]] std::size_t capture(dsp56k::DSP &cpu, DspProgramWord word);
+  [[nodiscard]] std::size_t capture(dsp56k::DSP &cpu,
+                                    DspProgramWord word,
+                                    std::optional<DspProgramWord> extension = std::nullopt);
   [[nodiscard]] const DspAddressRecord &get(DspAddressPosition position) const;
   [[nodiscard]] DspAddressRecord &get(DspAddressPosition position);
 };

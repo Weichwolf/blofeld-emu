@@ -1911,6 +1911,15 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           destination dependencies now hold
                                           consumers at Decode while older stages
                                           drain (dsp-transfer-pipeline.txt).
+                                          Immediate short-I/O MOVEP now captures
+                                          the real F2 literal through AG1/AG2,
+                                          commits one strict native E1 write and
+                                          retires in E2 without a fictitious R
+                                          update or repeated I/O. Three directed
+                                          groups include a document-derived boot
+                                          prefix, stopping at the next branch;
+                                          no full ROM/boot is implied
+                                          (dsp-peripheral-pipeline.txt).
                                           General data-address extensions, DMA/control
                                           stages and default runtime remain open.
                                           Explicit untimed interrupt continuation

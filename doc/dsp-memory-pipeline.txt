@@ -32,8 +32,9 @@ calculated after E1 using the updated live address registers; this order commute
 for the declared forms, whose E1 only changes data registers. Active DMA remains
 an explicit refusal. Actual F2 plus the frozen E1 access derive resource use;
 existing bank/ROM/MMIO refusals remain enforced before any cycle side effects.
-General peripheral access is not qualified by this memory profile. The bus order
-is an explicit internal reference order, not a hardware-measured sampling order.
+Selected immediate short-I/O MOVEP writes now have the separate scope in
+dsp-peripheral-pipeline.txt. General peripheral access remains unqualified. The
+bus order is an explicit reference order, not a hardware-measured sampling order.
 
 Bounded private AG1/AG2/E1 records use owner/slot/serial capabilities; the bound
 is a host continuation bound, not silicon queue depth. Joint snapshots retain

@@ -1,0 +1,42 @@
+Native immediate peripheral pipeline
+
+The opt-in automatic_memory profile accepts two-word immediate MOVEP stores to
+short X/Y I/O. The selected high- and low-I/O encodings use the real F2 opcode
+and extension. Nine own instruction encodings are pinned independently against
+the Freescale assembler; no manufacturer program bytes are embedded in tests.
+Register-source MOVEP and other unqualified forms still fail at Decode.
+
+AG1 captures the actual extension and fixed peripheral address, with no R/N/M
+input or pointer update. AG2 advances that record without inventing a register
+write. Native E1 consumes the same captured opcode/extension and dispatches one
+real write through the existing strict device handler. E2 publishes the actual
+native PC, counters and remaining result without repeating I/O. A neighboring
+AGU dependency cannot turn the immediate port into a fictitious R0 consumer.
+
+The complete reported core footprint retains the short-I/O write and concurrent
+P fetch. The arbiter classifies the idle-controller peripheral path separately
+from RAM; memory_resource itself still refuses peripheral queries. One such
+write and no other data use is admitted only with inactive DMA. Controller
+writes, general peripheral reads, extra data access and active-DMA sharing remain
+unqualified. This also applies to the explicit native-reference DMA admission
+API. Resource admission neither supplies a register implementation nor performs
+I/O: unknown/invalid actual writes still fail at their strict native owner.
+
+Joint snapshots retain extension identity, phase records, actual effects and
+peripheral state. Directed cases cover literal extrema, low X/Y registers, SHI
+transmission without a repeated HTX write, captured/future code replacement,
+trusted replay, unknown Y ownership, reserved bits, failed simultaneous F2,
+active DMA and the separate public native-reference caller.
+
+  cmake --build --preset strict --target blofeld-peripheral-pipeline-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_pipeline_(peripheral_writes|peripheral_state|bootstrap_prefix)$'
+
+The optional local document-derived SPI prefix is SHA-256 pinned. It executes
+three actual instructions over ten reference clocks, then refuses the next
+unqualified branch at P:ff0008. It is a partial document reconstruction, not an
+authentic full mask ROM or normal instrument boot. The modeled bus order remains
+a declared reference order, not a measured silicon trace. General peripheral
+forms, active DMA timing, branches/loops/IRQ/reset fill, authentic ROM/reserved
+Y:002000, original Desktop/Keyboard reset-to-instrument operation and the full
+MIDI/audio/storage/update/recovery/physical acceptance objective remain open.

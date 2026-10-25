@@ -34,6 +34,13 @@ std::optional<unsigned> address_register(const std::uint32_t opcode) {
   if (opcodes.getInstructionTypes(opcode, first, second) == 0) {
     throw Fault("Undefined native address-phase opcode=" + hex(opcode, 6));
   }
+  if ((first == dsp56k::Movep_ppea || first == dsp56k::Movep_Xqqea ||
+       first == dsp56k::Movep_Yqqea) &&
+      dsp56k::getFieldValue(first, dsp56k::Field_W, opcode) != 0 &&
+      dsp56k::getFieldValue(first, dsp56k::Field_MMM, opcode) == 6 &&
+      dsp56k::getFieldValue(first, dsp56k::Field_RRR, opcode) == 4) {
+    return std::nullopt;
+  }
   const auto type = effective(first) || absolute(first) ? first : second;
   if (absolute(type)) { return std::nullopt; }
   if (!effective(type)) {

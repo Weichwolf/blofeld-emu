@@ -95,15 +95,15 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
   const bool arithmetic = std::ranges::contains(allowed, first);
   try {
     if (!decoded) { throw Fault("Undefined native instruction"); }
-    const bool memory = profile == DspFetchPipeline::automatic_memory &&
-                        decode_memory_stage(word.value).has_value();
+    const auto form = decode_memory_stage(word.value);
+    const bool memory = profile == DspFetchPipeline::automatic_memory && form.has_value();
     const bool transfer = profile == DspFetchPipeline::automatic_memory && !memory &&
                           pipeline_transfer_fields(word.value) != DspMoveFields{};
     const bool standalone_move = (memory || transfer) && second == dsp56k::Invalid;
     const auto words = pipeline_word_count(word);
     if ((!arithmetic && !standalone_move) ||
         (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
-        words > (transfer ? 2U : 1U)) {
+        words > ((transfer || (memory && form->peripheral)) ? 2U : 1U)) {
       throw Fault("Unqualified native instruction form");
     }
     if (memory || transfer) { static_cast<void>(decode_move_writeback(word.value)); }

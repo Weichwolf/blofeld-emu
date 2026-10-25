@@ -65,7 +65,9 @@ DspAddressStageView prepare(dsp56k::DSP &cpu,
 }
 }
 
-std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspProgramWord word) {
+std::size_t DspAddressStages::capture(dsp56k::DSP &cpu,
+                                      const DspProgramWord word,
+                                      const std::optional<DspProgramWord> extension) {
   const auto form = decode_memory_stage(word.value);
   if (!form || serial == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Unqualified/exhausted native AG1 at P:" + hex(word.address, 6));
@@ -74,8 +76,26 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspProgramWord wor
     if (records.at(slot)) { continue; }
     const auto source = cpu.referenceAttemptState();
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
-    records.at(slot) = DspAddressRecord{
-        .view = prepare(cpu, *form, word, omr), .source = source, .serial = ++serial};
+    DspAddressStageView view;
+    if (form->peripheral) {
+      if (!extension) { throw Fault("Native peripheral AG1 requires its real F2 extension"); }
+      const auto target = *form->peripheral;
+      view = {.word = word,
+              .update = {.space = target.space,
+                         .address = target.address,
+                         .operation = DspMemoryOperation::write,
+                         .pc = word.address,
+                         .omr = omr},
+              .data_accesses = {DspMemoryAccess{.target = target,
+                                                .operation = DspMemoryOperation::write}},
+              .data_access_count = 1,
+              .kind = DspAddressStageKind::peripheral_immediate,
+              .extension = extension};
+    } else {
+      if (extension) { throw Fault("Unexpected extension for native register AG1"); }
+      view = prepare(cpu, *form, word, omr);
+    }
+    records.at(slot) = DspAddressRecord{.view = view, .source = source, .serial = ++serial};
     return slot;
   }
   throw Fault("Native AG1 continuation capacity exhausted pc=" + hex(word.address, 6));

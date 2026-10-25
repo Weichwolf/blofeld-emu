@@ -75,7 +75,7 @@ std::uint8_t
 pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &preceding,
                           const DspProgramWord consumer) {
   const auto memory = decode_memory_stage(consumer.value);
-  if (!memory) { return 0; }
+  if (!memory || memory->peripheral) { return 0; }
   unsigned read = 0;
   for (unsigned lane = 0; lane < memory->lane_count; ++lane) {
     read |= 1U << memory->lanes.at(lane).reg;
