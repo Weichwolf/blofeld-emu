@@ -64,6 +64,8 @@ public:
 
   [[nodiscard]] DspReferenceExecution execution() const { return state_.execution; }
 
+  [[nodiscard]] std::optional<std::uint32_t> opcode() const;
+
   [[nodiscard]] bool active() const { return state_.active; }
 
   [[nodiscard]] bool intercepting() const { return mode_ != DspReferenceMode::ordinary; }

@@ -7,6 +7,7 @@
 #include "blofeld/dsp_reference_execution.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <optional>
@@ -32,11 +33,17 @@ bool same_effect(const DspReferenceEffect &a, const DspReferenceEffect &b) {
   if (const auto *retire = std::get_if<DspInstructionRetire>(&a)) {
     return *retire == std::get<DspInstructionRetire>(b);
   }
+  if (const auto *address = std::get_if<DspAddressUpdate>(&a)) {
+    return *address == std::get<DspAddressUpdate>(b);
+  }
   const auto *access = std::get_if<DspNativeAccess>(&a);
   return access == nullptr || same_access(*access, std::get<DspNativeAccess>(b));
 }
 
 std::string effect_context(const DspReferenceEffect &effect) {
+  if (const auto *address = std::get_if<DspAddressUpdate>(&effect)) {
+    return "address-register-update R" + std::to_string(address->index);
+  }
   if (const auto *retire = std::get_if<DspInstructionRetire>(&effect)) {
     return "instruction-retirement pc=" + hex(retire->pc, 6) + " next=" + hex(retire->next_pc, 6);
   }
@@ -105,8 +112,10 @@ void DspReferenceTape::restore(const DspReferenceState &state) {
   if (state.used > state.entries.size() || (state.active != state.pending.has_value()) ||
       (state.pending && state.used == state.entries.size() && !retirement) ||
       (state.active && state.execution != DspReferenceExecution::access_boundaries &&
-       state.execution != DspReferenceExecution::access_and_retirement_boundaries) ||
-      (retirement && state.execution != DspReferenceExecution::access_and_retirement_boundaries) ||
+       state.execution != DspReferenceExecution::access_and_retirement_boundaries &&
+       state.execution != DspReferenceExecution::address_and_retirement_boundaries) ||
+      (retirement && state.execution != DspReferenceExecution::access_and_retirement_boundaries &&
+       state.execution != DspReferenceExecution::address_and_retirement_boundaries) ||
       (state.latched_program_word && (!state.pending || !program_read(*state.pending) ||
                                       *state.latched_program_word > word_mask))) {
     throw Fault("Invalid trusted native reference continuation");
@@ -154,11 +163,25 @@ void DspReferenceTape::verify_complete() const {
 void DspReferenceTape::stage_retirement(const DspInstructionRetire result) {
   verify_complete();
   if (!state_.active ||
-      state_.execution != DspReferenceExecution::access_and_retirement_boundaries ||
+      (state_.execution != DspReferenceExecution::access_and_retirement_boundaries &&
+       state_.execution != DspReferenceExecution::address_and_retirement_boundaries) ||
       mode_ != DspReferenceMode::ordinary) {
     throw Fault("Native result requires an explicit retirement boundary");
   }
   state_.pending = result;
+}
+
+std::optional<std::uint32_t> DspReferenceTape::opcode() const {
+  for (std::size_t index = 0; index < state_.used; ++index) {
+    const auto *record = std::get_if<DspReferenceRecord>(&state_.entries.at(index));
+    if (record != nullptr) {
+      const auto *access = std::get_if<DspNativeAccess>(&record->effect);
+      if (access != nullptr && access->kind == DspNativeAccessKind::opcode) {
+        return record->value;
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 void DspReferenceTape::check_capacity() const {
@@ -243,7 +266,8 @@ std::uint32_t DspReferenceTape::peek_program(const std::uint32_t address) {
 }
 
 std::uint32_t DspReferenceTape::perform(const DspReferenceEffect &effect) {
-  if (std::holds_alternative<DspInstructionRetire>(effect)) {
+  if (std::holds_alternative<DspInstructionRetire>(effect) ||
+      std::holds_alternative<DspAddressUpdate>(effect)) {
     throw Fault("Native retirement cannot perform a bus operation");
   }
   if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&effect)) {
@@ -277,7 +301,8 @@ DspReferenceEffect DspReferenceTape::commit() {
     throw Fault("Native reference admission requires an inactive pending access");
   }
   const auto effect = *state_.pending;
-  if (std::holds_alternative<DspInstructionRetire>(effect)) {
+  if (std::holds_alternative<DspInstructionRetire>(effect) ||
+      std::holds_alternative<DspAddressUpdate>(effect)) {
     throw Fault("Native retirement requires its held CPU result, not access replay");
   }
   check_admission();

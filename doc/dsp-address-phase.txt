@@ -1,0 +1,62 @@
+Native memory-address publication
+
+The opt-in address_and_retirement_boundaries contract adds an actual native
+address-register boundary before data access. DSP56300FM Rev5 Table5-1 separates
+AG2 pointer updates from E1 load destinations and E2 arithmetic results. This
+implements the early address result and ordering, not their physical clocks.
+Automatic overlapping decode/AG1/AG2/E1/E2 remains required.
+
+When native execution yields before its real data access, the owner captures
+the native R result. It derives the addressed register/update mode from the
+already admitted opcode and actual pending access, without reading program
+memory again. Post/pre updates, including a zero-offset unchanged result, yield
+a DspAddressUpdate ticket first. Admission publishes only that R register. The
+real data read/store remains pending with its original address and source value.
+Other registers, flags, stack, PC and SDK counts remain at the instruction base.
+
+Qualified memory forms are X/Y, long X/Y-pair and control-register effective
+or absolute moves. All eight R registers use actual native linear/modulo AGU
+results. Indirect, indexed and absolute addressing invent no pointer update.
+Unqualified memory forms fail before real data I/O with operation, address,
+PC and OMR. Ordinary/retirement-only execution retains its separate behavior;
+the new address contract does not admit interrupt entry or loaded REP bodies.
+
+The address ticket has its own position identity. After publication its stale
+ticket cannot admit the following data access. The new data ticket retains the
+same genuine native access; no extra memory footprint or read is introduced.
+The selected reference-cycle arbiter treats address publication as no memory
+port use, while an accompanying real F2 still participates in DMA arbitration.
+
+The original native computation base is retained separately from visible R
+updates. Recomputing after an admitted data effect restores that original base,
+reuses committed bus effects once, then reapplies already published R values.
+It cannot increment an already incremented address or change a captured store
+source. A completed native load/ALU result remains held at its later retirement
+boundary (dsp-retirement.txt). A control load into the same R can consequently
+replace its earlier address value at that later boundary.
+
+Joint snapshots retain original base, visible updates, pending address marker,
+real effects and completed result. Restore/fork refreshes ownership. Unknown
+data after a published R preserves that accepted prefix and quarantines CPU/
+clock; trusted joint recovery resumes from the original computation base.
+Matching rebuilt headers/archives are required; snapshots are trusted local
+objects. No native dependency source changes or new cycle estimates are used.
+
+  cmake --build --preset strict --target blofeld-address-phase-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_address_phase$'
+
+The fixed224-case matrix covers all8 R registers,7 independently expected modes,
+X/Y and load/store directions with literal modulo addresses/results and exact
+visible-state comparisons. Further own cases cover unchanged post-update,
+parallel ADD/CCR/load, fresh-machine forks, long X/Y reads with one update,
+control-load overwrite, short/extended absolute modes and unread FIFO rejection.
+Clock cases check unknown-data failure after publication, prefix/joint recovery,
+F2 plus real X access, immutable later load result, actual DMA code overwrite
+and waits while the already published address remains stable.
+
+Backend begin, address/data/retirement admission and reference clock order are
+still explicit. Per-register E1/E2 publication, overlapping instruction results,
+all simultaneous physical groups, interlocks, loop/IRQ stage timing and default
+runtime integration remain incomplete. Full authentic ROM, reserved Y:002000,
+original reset-to-instrument boot, live MIDI/audio and full hardware acceptance
+remain open (objective.txt, coverage.txt). This is not a real-time callback.

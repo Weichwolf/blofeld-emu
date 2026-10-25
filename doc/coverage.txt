@@ -1735,6 +1735,15 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           (dsp-retirement.txt). Whole-result
                                           publication is not a complete staged
                                           overlapping backend.
+                                          A separate native address boundary
+                                          publishes actual R updates before data
+                                          access, retaining the original private
+                                          computation base through snapshots,
+                                          DMA waits and later held retirement.
+                                          A fixed224-case X/Y/mode/R matrix and
+                                          joint clock cases qualify this ordering,
+                                          not physical AG2 clocks or full staged
+                                          execution (dsp-address-phase.txt).
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

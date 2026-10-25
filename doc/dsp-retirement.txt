@@ -58,3 +58,7 @@ all simultaneous X/Y/P groups, loop/IRQ stage timing or physical clock order.
 It is not a real-time callback implementation. Full ROM, reserved Y:002000,
 full original reset-to-instrument operation, MIDI/audio and all complete-device
 acceptance requirements remain open (objective.txt, coverage.txt).
+
+The separate address_and_retirement_boundaries choice can now publish a genuine
+pre-data-access R update while retaining the original computation base and
+holding later results. Supported forms and remaining limits: dsp-address-phase.txt.

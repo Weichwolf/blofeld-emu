@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_native_access.hpp"
 
@@ -15,7 +16,8 @@ namespace blofeld {
 enum class DspReferenceExecution : std::uint8_t {
   unqualified,
   access_boundaries,
-  access_and_retirement_boundaries
+  access_and_retirement_boundaries,
+  address_and_retirement_boundaries
 };
 
 struct DspPeripheralReset {};
@@ -34,8 +36,24 @@ struct DspInstructionRetire {
   bool operator==(const DspInstructionRetire &) const = default;
 };
 
-using DspReferenceEffect = std::
-    variant<DspNativeAccess, DspPeripheralReset, DspInterruptAcknowledge, DspInstructionRetire>;
+// Genuine native address-register update, held before its actual data access.
+struct DspAddressUpdate {
+  unsigned index = 0;
+  std::uint32_t before = 0;
+  std::uint32_t value = 0;
+  DspSpace space = DspSpace::p;
+  std::uint32_t address = 0;
+  DspMemoryOperation operation = DspMemoryOperation::read;
+  std::uint32_t pc = 0;
+  std::uint32_t omr = 0;
+  bool operator==(const DspAddressUpdate &) const = default;
+};
+
+using DspReferenceEffect = std::variant<DspNativeAccess,
+                                        DspPeripheralReset,
+                                        DspInterruptAcknowledge,
+                                        DspInstructionRetire,
+                                        DspAddressUpdate>;
 
 // Trusted owner identity, invalidated by reset/restore. Not a serialized grant.
 class DspReferenceTicket {
@@ -49,6 +67,7 @@ private:
   struct Position {
     std::uint64_t generation = 0;
     std::size_t record = 0;
+    bool address = false;
     bool operator==(const Position &) const = default;
   };
 

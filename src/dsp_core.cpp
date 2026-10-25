@@ -15,6 +15,7 @@
 #include "dsp56kEmu/peripherals.h"
 #include "dsp56kEmu/registers.h"
 #include "dsp56kEmu/types.h"
+#include "dsp_address_phase.hpp"
 #include "dsp_interrupt_timing.hpp"
 #include "dsp_native_access.hpp"
 #include "dsp_reference_execution.hpp"
@@ -221,17 +222,23 @@ struct DspRetirementResult {
   bool redirected = false;
 };
 
+struct DspNativeResultState {
+  std::optional<dsp56k::DSP::ReferenceAttemptState> base;
+  std::optional<DspRetirementResult> retirement;
+  DspAddressPhase addresses;
+};
+
 struct DspCoreCheckpoint::Storage {
   Storage(dsp56k::DSP::ReferenceState state,
           const DspReferenceState &reference_state,
           const std::uint64_t serial,
-          const std::optional<DspRetirementResult> &result)
-      : cpu(std::move(state)), reference(reference_state), generation(serial), retirement(result) {}
+          const DspNativeResultState &result)
+      : cpu(std::move(state)), reference(reference_state), generation(serial), results(result) {}
 
   const dsp56k::DSP::ReferenceState cpu;
   const DspReferenceState reference;
   const std::uint64_t generation;
-  const std::optional<DspRetirementResult> retirement;
+  const DspNativeResultState results;
 };
 
 DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
@@ -322,16 +329,65 @@ public:
   void reset_reference() {
     auto next_owner = std::make_shared<const bool>(true);
     native.reference().clear();
-    reference_base.reset();
-    retirement.reset();
+    results = {};
     reference_owner = std::move(next_owner);
     generation = 0;
   }
 
   void restore_reference_base() {
-    if (!reference_base) { throw Fault("Native reference instruction lost its base state"); }
+    if (!results.base) { throw Fault("Native reference instruction lost its base state"); }
     const DspReferenceScope restoring(native.reference(), DspReferenceMode::restoring);
-    cpu.restoreReferenceAttempt(*reference_base);
+    cpu.restoreReferenceAttempt(*results.base);
+  }
+
+  void restore_visible_reference() {
+    restore_reference_base();
+    for (unsigned index = 0; index < results.addresses.published.size(); ++index) {
+      if (const auto value = results.addresses.published.at(index)) {
+        cpu.regs().r.at(index).var = static_cast<std::int32_t>(*value);
+      }
+    }
+  }
+
+  void capture_address_phase() {
+    auto &reference = native.reference();
+    if (reference.execution() != DspReferenceExecution::address_and_retirement_boundaries) {
+      return;
+    }
+    const auto &pending = reference.pending();
+    if (!pending) { throw Fault("Native address phase lost its real access"); }
+    const auto *request = std::get_if<DspNativeAccess>(&*pending);
+    if (request == nullptr || request->kind == DspNativeAccessKind::opcode ||
+        request->kind == DspNativeAccessKind::extension) {
+      return;
+    }
+    if (request->kind != DspNativeAccessKind::read && request->kind != DspNativeAccessKind::write) {
+      throw Fault("Unqualified native address-phase access pc=" + hex(request->pc, 6) +
+                  " address=" + hex(request->target.address, 6) + " omr=" + hex(request->omr, 6));
+    }
+    const auto opcode = reference.opcode();
+    if (!opcode || !results.base) {
+      throw Fault("Native address phase lost its fetched instruction base");
+    }
+    std::array<std::uint32_t, 8> before{};
+    std::array<std::uint32_t, 8> partial{};
+    for (unsigned index = 0; index < before.size(); ++index) {
+      before.at(index) =
+          static_cast<std::uint32_t>(results.base->registers.r.at(index)) & word_mask;
+      partial.at(index) = word(cpu.regs().r.at(index));
+    }
+    results.addresses.capture(*opcode, *request, before, partial);
+  }
+
+  DspAddressUpdate publish_address_phase() {
+    if (!results.addresses.pending) {
+      throw Fault("Native address phase lost its held register value");
+    }
+    const auto result = *results.addresses.pending;
+    cpu.regs().r.at(result.index).var = static_cast<std::int32_t>(result.value);
+    results.addresses.published.at(result.index) = result.value;
+    results.addresses.pending.reset();
+    return result;
   }
 
   [[nodiscard]] std::pair<dsp56k::Instruction, std::uint32_t>
@@ -388,20 +444,20 @@ public:
     bus.observe_omr(word(cpu.regs().omr));
     finish_fetch(redirected);
     native.reference().finish();
-    reference_base.reset();
-    retirement.reset();
+    results = {};
   }
 
   DspReferenceEffect retire_reference() {
     const auto &pending = native.reference().pending();
-    if (!retirement || !pending || !std::holds_alternative<DspInstructionRetire>(*pending)) {
+    if (!results.retirement || !pending ||
+        !std::holds_alternative<DspInstructionRetire>(*pending)) {
       throw Fault("Native retirement lost its held instruction result");
     }
     const auto completed = *pending;
-    const bool redirected = retirement->redirected;
+    const bool redirected = results.retirement->redirected;
     {
       const DspReferenceScope restoring(native.reference(), DspReferenceMode::restoring);
-      cpu.restoreReferenceAttempt(retirement->cpu);
+      cpu.restoreReferenceAttempt(results.retirement->cpu);
     }
     finish_reference(redirected);
     return completed;
@@ -423,21 +479,28 @@ public:
       reference.verify_complete();
     } catch (const DspReferenceYield &) {
       access.reset();
-      restore_reference_base();
+      try {
+        capture_address_phase();
+      } catch (...) {
+        restore_visible_reference();
+        throw;
+      }
+      restore_visible_reference();
       return;
     }
     // Validate native continuation constraints without publishing a partial step.
     const auto result = cpu.referenceAttemptState();
     const bool redirected = cpu.referenceRedirected();
-    if (reference.execution() == DspReferenceExecution::access_and_retirement_boundaries) {
+    if (reference.execution() == DspReferenceExecution::access_and_retirement_boundaries ||
+        reference.execution() == DspReferenceExecution::address_and_retirement_boundaries) {
       const auto before = reference.snapshot().context;
       reference.stage_retirement({.pc = before.pc,
                                   .next_pc = word(cpu.regs().pc),
                                   .omr = before.omr,
                                   .next_omr = word(cpu.regs().omr),
                                   .redirected = redirected});
-      retirement = DspRetirementResult{.cpu = result, .redirected = redirected};
-      restore_reference_base();
+      results.retirement = DspRetirementResult{.cpu = result, .redirected = redirected};
+      restore_visible_reference();
     } else {
       finish_reference(redirected);
     }
@@ -454,8 +517,7 @@ public:
   bool faulted = false;
   bool active = false;
   RunHooks run;
-  std::optional<dsp56k::DSP::ReferenceAttemptState> reference_base;
-  std::optional<DspRetirementResult> retirement;
+  DspNativeResultState results;
   std::shared_ptr<const bool> reference_owner;
   std::uint64_t generation = 0;
 };
@@ -530,7 +592,7 @@ DspCoreCheckpoint DspCore::checkpoint() const {
       std::make_shared<const DspCoreCheckpoint::Storage>(impl_->cpu.referenceState(),
                                                          impl_->native.reference().snapshot(),
                                                          impl_->generation,
-                                                         impl_->retirement));
+                                                         impl_->results));
 }
 
 void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
@@ -543,10 +605,10 @@ void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
     impl_->cpu.restoreReferenceState(checkpoint.storage_->cpu);
   }
   impl_->native.reference().restore(checkpoint.storage_->reference);
-  impl_->retirement = checkpoint.storage_->retirement;
+  impl_->results = checkpoint.storage_->results;
   impl_->generation = checkpoint.storage_->generation;
-  if (checkpoint.storage_->reference.active) {
-    impl_->reference_base = impl_->cpu.referenceAttemptState();
+  if (checkpoint.storage_->reference.active && !impl_->results.base) {
+    throw Fault("Native reference checkpoint lost its original computation base");
   }
   impl_->access.reset();
   impl_->faulted = false;
@@ -556,10 +618,12 @@ std::optional<DspReferencePending> DspCore::reference_pending_unchecked() const 
   const auto &reference = impl_->native.reference();
   const auto &pending = reference.pending();
   if (!pending) { return std::nullopt; }
-  return DspReferencePending{.effect = *pending,
+  const auto &address = impl_->results.addresses.pending;
+  return DspReferencePending{.effect = address ? DspReferenceEffect{*address} : *pending,
                              .ticket = DspReferenceTicket(impl_->reference_owner,
                                                           {.generation = impl_->generation,
-                                                           .record = reference.pending_index()}),
+                                                           .record = reference.pending_index(),
+                                                           .address = address.has_value()}),
                              .latched_program_word = reference.latched_program_word(),
                              .execution = reference.execution()};
 }
@@ -590,12 +654,18 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
                                                    const bool interrupt_entry) {
   if (impl_->active || impl_->faulted || impl_->native.reference().active() ||
       (contract != DspReferenceExecution::access_boundaries &&
-       contract != DspReferenceExecution::access_and_retirement_boundaries) ||
+       contract != DspReferenceExecution::access_and_retirement_boundaries &&
+       contract != DspReferenceExecution::address_and_retirement_boundaries) ||
       impl_->run.begin || impl_->run.complete || impl_->run.failed || impl_->run.reset) {
     throw Fault(
         "Native access suspension requires an explicit healthy unclocked instruction boundary");
   }
   const auto before = state();
+  if (contract == DspReferenceExecution::address_and_retirement_boundaries &&
+      (interrupt_entry || impl_->cpu.referenceAttemptState().repeat.remaining != 0)) {
+    throw Fault("Unqualified native address-phase interrupt/REP timeline pc=" + hex(before.pc, 6) +
+                " omr=" + hex(before.omr, 6));
+  }
   if (impl_->native.reference().fetch().active() && interrupt_entry) {
     throw Fault("Unqualified native program-fetch interrupt timeline pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6));
@@ -623,7 +693,7 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
   try {
     impl_->invalidate();
     impl_->access.verify_interrupt_fetch();
-    impl_->reference_base = impl_->cpu.referenceAttemptState();
+    impl_->results.base = impl_->cpu.referenceAttemptState();
     ++impl_->generation;
     std::optional<DspReferenceInterrupt> entry;
     if (interrupt_entry) {
@@ -648,7 +718,8 @@ void DspCore::validate_reference_ticket(const DspReferenceTicket &ticket) const 
   const auto &reference = impl_->native.reference();
   if (impl_->active || impl_->faulted || !reference.pending() ||
       ticket.owner_ != impl_->reference_owner || ticket.position_.generation != impl_->generation ||
-      ticket.position_.record != reference.pending_index()) {
+      ticket.position_.record != reference.pending_index() ||
+      ticket.position_.address != impl_->results.addresses.pending.has_value()) {
     throw Fault("Stale, foreign or unavailable native reference access ticket");
   }
 }
@@ -744,6 +815,9 @@ DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket 
   const auto before = state();
   const ExecutionGuard guard(impl_->active);
   try {
+    if (impl_->results.addresses.pending) {
+      return reference_progress(impl_->publish_address_phase());
+    }
     const auto pending = impl_->native.reference().pending();
     if (pending && std::holds_alternative<DspInstructionRetire>(*pending)) {
       return reference_progress(impl_->retire_reference());

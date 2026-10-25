@@ -40,7 +40,8 @@ void validate_inputs(const DspFetchRunInputs inputs) {
       inputs.extal_hz > maximum_extal || inputs.timebase_hz < inputs.extal_hz ||
       inputs.timebase_hz > maximum_timebase || inputs.timebase_hz % inputs.extal_hz != 0 ||
       (inputs.execution != DspReferenceExecution::access_boundaries &&
-       inputs.execution != DspReferenceExecution::access_and_retirement_boundaries)) {
+       inputs.execution != DspReferenceExecution::access_and_retirement_boundaries &&
+       inputs.execution != DspReferenceExecution::address_and_retirement_boundaries)) {
     throw Fault("DSP fetch run requires an explicit integral EXTAL/reference-cycle clock contract");
   }
 }

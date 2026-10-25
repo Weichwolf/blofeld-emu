@@ -29,7 +29,10 @@ bool controller_read(const DspMemoryAccess access) {
 }
 
 std::optional<DspMemoryAccess> native_access(const DspReferencePending &pending) {
-  if (std::holds_alternative<DspInstructionRetire>(pending.effect)) { return std::nullopt; }
+  if (std::holds_alternative<DspInstructionRetire>(pending.effect) ||
+      std::holds_alternative<DspAddressUpdate>(pending.effect)) {
+    return std::nullopt;
+  }
   const auto *access = std::get_if<DspNativeAccess>(&pending.effect);
   if (access == nullptr) {
     if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&pending.effect)) {
