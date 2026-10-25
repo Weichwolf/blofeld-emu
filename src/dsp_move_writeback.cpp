@@ -17,7 +17,7 @@ using Type = dsp56k::Instruction;
 bool memory(const Type type) {
   return type == dsp56k::Movex_ea || type == dsp56k::Movex_aa || type == dsp56k::Movey_ea ||
          type == dsp56k::Movey_aa || type == dsp56k::Movec_ea || type == dsp56k::Movec_aa ||
-         type == dsp56k::Movel_ea || type == dsp56k::Movel_aa;
+         type == dsp56k::Movel_ea || type == dsp56k::Movel_aa || type == dsp56k::Movexy;
 }
 
 bool transfer(const Type type) {
@@ -47,6 +47,15 @@ Mask operand(const Type type, const dsp56k::Field field, const std::uint32_t opc
 }
 
 Mask destination(const Type type, const std::uint32_t opcode) {
+  if (type == dsp56k::Movexy) {
+    const auto x = dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0
+                       ? operand(type, dsp56k::Field_ee, opcode)
+                       : Mask::None;
+    const auto y = dsp56k::getFieldValue(type, dsp56k::Field_w, opcode) != 0
+                       ? operand(type, dsp56k::Field_ff, opcode)
+                       : Mask::None;
+    return x | y;
+  }
   if (memory(type)) {
     if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) == 0) { return Mask::None; }
     if (type == dsp56k::Movel_ea || type == dsp56k::Movel_aa) {
@@ -64,6 +73,15 @@ Mask destination(const Type type, const std::uint32_t opcode) {
 }
 
 Mask source(const Type type, const std::uint32_t opcode) {
+  if (type == dsp56k::Movexy) {
+    const auto x = dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) == 0
+                       ? operand(type, dsp56k::Field_ee, opcode)
+                       : Mask::None;
+    const auto y = dsp56k::getFieldValue(type, dsp56k::Field_w, opcode) == 0
+                       ? operand(type, dsp56k::Field_ff, opcode)
+                       : Mask::None;
+    return x | y;
+  }
   if (memory(type)) {
     if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0) { return Mask::None; }
     if (type == dsp56k::Movel_ea || type == dsp56k::Movel_aa) {

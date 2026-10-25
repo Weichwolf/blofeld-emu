@@ -1775,9 +1775,16 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           160 fixed modulo forms and independent
                                           overlap/load-store/field/recovery guards
                                           cover selected pure single-word moves
-                                          (dsp-memory-pipeline.txt). Extensions,
-                                          parallel moves, DMA/control stages and
-                                          default original runtime remain open.
+                                          (dsp-memory-pipeline.txt). Long and dual
+                                          native X/Y groups now retain both AG1
+                                          addresses, publish AG2 once and commit
+                                          real E1 effects with F2/PXY resource
+                                          preflight and partial-failure recovery.
+                                          Selected parallel ALU and one-clock
+                                          accumulator move-source interlocks are
+                                          scoped in dsp-parallel-memory.txt.
+                                          General extensions, physical DMA/control
+                                          stages and default runtime remain open.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

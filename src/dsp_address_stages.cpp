@@ -2,43 +2,67 @@
 #include "dsp_address_stages.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/dsp_address_stage.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_program_fetch.hpp"
+#include "blofeld/dsp_reference_execution.hpp"
 #include "dsp56kEmu/dsp.h"
-#include "dsp56kEmu/opcodeanalysis.h"
-#include "dsp56kEmu/opcodes.h"
-#include "dsp56kEmu/opcodetypes.h"
 #include "dsp_memory_form.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <utility>
 
 namespace blofeld {
-std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
-  static const dsp56k::Opcodes opcodes;
-  auto first = dsp56k::Invalid;
-  auto second = dsp56k::Invalid;
-  if (opcodes.getInstructionTypes(opcode, first, second) == 0) { return std::nullopt; }
-  const auto memory = [](const auto type) {
-    return type == dsp56k::Movex_ea || type == dsp56k::Movey_ea;
-  };
-  const auto type = memory(first) ? first : second;
-  if (!memory(type) || (memory(first) ? second != dsp56k::Invalid : first != dsp56k::Nop) ||
-      dsp56k::Opcodes::getOpcodeLength(opcode, first, second) != 1) {
-    return std::nullopt;
+namespace {
+DspAddressStageLane calculate(dsp56k::DSP &cpu,
+                              const DspMemoryLane form,
+                              const DspProgramWord word,
+                              const unsigned omr) {
+  const auto result = cpu.calculateReferenceAddress(form.mode, form.reg, form.dual_encoding);
+  return {.update = {.index = form.reg,
+                     .before = result.before,
+                     .value = result.after,
+                     .space = form.space,
+                     .address = result.address,
+                     .operation = form.operation,
+                     .pc = word.address,
+                     .omr = omr},
+          .pointer_update = form.dual_encoding ? form.mode != 0 : form.mode != 4};
+}
+
+DspMemoryAccess access(const DspAddressUpdate update) {
+  return {.target = {.space = update.space, .address = update.address},
+          .operation = update.operation};
+}
+
+DspAddressStageView prepare(dsp56k::DSP &cpu,
+                            const DspMemoryForm &form,
+                            const DspProgramWord word,
+                            const unsigned omr) {
+  const auto first = calculate(cpu, form.lanes[0], word, omr);
+  DspAddressStageView result{
+      .word = word, .update = first.update, .pointer_update = first.pointer_update};
+  result.data_accesses[0] = access(first.update);
+  result.data_access_count = 1;
+  if (form.lane_count == 2) {
+    result.secondary = calculate(cpu, form.lanes[1], word, omr);
+    result.data_accesses[1] = access(result.secondary->update);
+    result.data_access_count = 2;
+    // The native dual move performs stores before loads, X before Y within each kind.
+    if (result.data_accesses[0].operation == DspMemoryOperation::read &&
+        result.data_accesses[1].operation == DspMemoryOperation::write) {
+      std::swap(result.data_accesses[0], result.data_accesses[1]);
+    }
+  } else if (form.long_pair) {
+    result.data_accesses[1] = result.data_accesses[0];
+    result.data_accesses[1].target.space = DspSpace::y;
+    result.data_access_count = 2;
   }
-  const auto reg = dsp56k::getRegister(type, dsp56k::Field_ddd, opcode);
-  using Reg = dsp56k::Register;
-  if (reg != Reg::X0 && reg != Reg::X1 && reg != Reg::Y0 && reg != Reg::Y1) { return std::nullopt; }
-  const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
-  if (mode > 4) { return std::nullopt; }
-  const bool load = dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0;
-  return DspMemoryForm{.space = type == dsp56k::Movex_ea ? DspSpace::x : DspSpace::y,
-                       .operation = load ? DspMemoryOperation::read : DspMemoryOperation::write,
-                       .mode = mode,
-                       .reg = dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode)};
+  return result;
+}
 }
 
 std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspProgramWord word) {
@@ -49,20 +73,9 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspProgramWord wor
   for (std::size_t slot = 0; slot < records.size(); ++slot) {
     if (records.at(slot)) { continue; }
     const auto source = cpu.referenceAttemptState();
-    const auto result = cpu.calculateReferenceAddress(form->mode, form->reg);
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
-    records.at(slot) = DspAddressRecord{.view = {.word = word,
-                                                 .update = {.index = form->reg,
-                                                            .before = result.before,
-                                                            .value = result.after,
-                                                            .space = form->space,
-                                                            .address = result.address,
-                                                            .operation = form->operation,
-                                                            .pc = word.address,
-                                                            .omr = omr},
-                                                 .pointer_update = form->mode != 4},
-                                        .source = source,
-                                        .serial = ++serial};
+    records.at(slot) = DspAddressRecord{
+        .view = prepare(cpu, *form, word, omr), .source = source, .serial = ++serial};
     return slot;
   }
   throw Fault("Native AG1 continuation capacity exhausted pc=" + hex(word.address, 6));

@@ -119,7 +119,7 @@
 +			std::array<uint64_t, 2> peripheralTargets{};
 +		};
 +		struct ReferenceAddressCalculation { TWord address = 0, before = 0, after = 0; };
-+		ReferenceAddressCalculation calculateReferenceAddress(TWord mode, TWord index);
++		ReferenceAddressCalculation calculateReferenceAddress(TWord mode, TWord index, bool dual = false);
 +		ReferenceAttemptState referenceAttemptState() const;
 +		void restoreReferenceAttempt(const ReferenceAttemptState& state);
 +		void execReferenceAttempt();
@@ -329,7 +329,7 @@
 @@ -264 +280 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +341,348 @@
+@@ -324,0 +341,349 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceAttempt || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -386,15 +386,16 @@
 +		for(size_t i = 0; i < perif.size(); ++i) perif[i]->resetDelayCycles(state.peripheralTargets[i], 0);
 +	}
 +
-+	DSP::ReferenceAddressCalculation DSP::calculateReferenceAddress(const TWord mode, const TWord index)
++	DSP::ReferenceAddressCalculation DSP::calculateReferenceAddress(const TWord mode, const TWord index, const bool dual)
 +	{
 +		verifyReferenceCheckpoint();
-+		if(mode > 4 || index >= reg.r.size())
++		if(mode > (dual ? 3u : 4u) || index >= reg.r.size())
 +			throw std::runtime_error("Unqualified native reference address-generation form");
 +		const auto saved = reg.r[index];
 +		TWord address = 0;
 +		try {
-+			switch(mode) {
++			if(dual) address = decode_XMove_MMRRR(mode, index);
++			else switch(mode) {
 +			case 0: address = decode_MMMRRR_read<0>(index); break;
 +			case 1: address = decode_MMMRRR_read<1>(index); break;
 +			case 2: address = decode_MMMRRR_read<2>(index); break;
@@ -678,7 +679,7 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -331,0 +696,11 @@
+@@ -331,0 +697,11 @@
 +		if(m_referenceAttempt) {
 +			if(Opcodes::isNonParallelOpcode(op)) {
 +				const auto* info = m_opcodes.findNonParallelOpcodeInfo(op);
@@ -690,16 +691,16 @@
 +			// Always decode the captured word, including loaded REP. Never reuse partial dispatch.
 +			m_opcodeCache.at(currentOp) = {&DSP::op_ResolveCache};
 +		}
-@@ -341 +716 @@
+@@ -341 +717 @@
 -				m_cycles += getOpcodeCycles(currentOp);
 +				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
-@@ -413,0 +789,5 @@
+@@ -413,0 +790,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +872,8 @@
+@@ -491,0 +873,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -708,10 +709,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +914,2 @@
+@@ -525,0 +915,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +994,26 @@
+@@ -603,0 +995,26 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -738,52 +739,52 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -684,0 +1101,2 @@
+@@ -684,0 +1102,2 @@
 +		if(m_referenceMode && ssIndex() == 0)
 +			throw std::runtime_error("Unqualified DSP reference stack pop at SP=" + std::to_string(reg.sp.var));
-@@ -687 +1105,4 @@
+@@ -687 +1106,4 @@
 -		--reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 0x1fu) & 0x1fu);
 +		else
 +			--reg.sc.var;
-@@ -691,0 +1113,2 @@
+@@ -691,0 +1114,2 @@
 +		if(m_referenceMode && ssIndex() >= reg.ss.size()-1)
 +			throw std::runtime_error("Unqualified DSP reference stack push at SP=" + std::to_string(reg.sp.var));
-@@ -694 +1117,4 @@
+@@ -694 +1118,4 @@
 -		++reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 1u) & 0x1fu);
 +		else
 +			++reg.sc.var;
-@@ -1152,2 +1577,0 @@
+@@ -1152,2 +1578,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1580 @@
+@@ -1156 +1581 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1187 +1611,2 @@
+@@ -1187 +1612,2 @@
 -			m_opcodeCache[_addr].op = &DSP::op_ResolveCache;
 +			if(auto* entry = m_opcodeCache.find(_addr))
 +				entry->op = &DSP::op_ResolveCache;
-@@ -1306,3 +1731 @@
+@@ -1306,3 +1732 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
-@@ -1341,3 +1764 @@
+@@ -1341,3 +1765 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, value == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, value == minimum);
-@@ -1484,2 +1905 @@
+@@ -1484,2 +1906 @@
 -		m_opcodeCache.clear();
 -		m_opcodeCache.resize(mem.sizeP(), {&DSP::op_ResolveCache});
 +		m_opcodeCache.reset(mem.sizeP(), {&DSP::op_ResolveCache});
-@@ -1570,0 +1991,2 @@
+@@ -1570,0 +1992,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2105,2 @@
+@@ -1682,0 +2106,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl
@@ -1473,3 +1474,37 @@
 -		OpcodeCycles{Movep_eaqq,		2, 1, 1, 0},
 +		OpcodeCycles{Movep_eapp,		6, 1, 1, 0},
 +		OpcodeCycles{Movep_eaqq,		6, 1, 1, 0},
+--- a/source/dsp56kEmu/assembler.cpp
++++ b/source/dsp56kEmu/assembler.cpp
+@@ -860,0 +861,9 @@
++		const auto moves = tokenize(moveStr);
++		if(moves.size() > 1) {
++			if(moves.size() != 2) return 0;
++			const auto pair = encodeMovexy(moves[0], moves[1]);
++			if(!pair.success()) return 0;
++			_success = true;
++			return pair.word[0];
++		}
++
+@@ -1148 +1157 @@
+-		if (mmmX == 6) return result; // absolute address not supported in Movexy
++		if (mmmX != 1 && mmmX != 2 && mmmX != 3 && mmmX != 4) return result;
+@@ -1155 +1164,3 @@
+-		if (mmmY == 6) return result; // absolute not supported
++		if (mmmY != 1 && mmmY != 2 && mmmY != 3 && mmmY != 4) return result;
++
++		if ((rrrX < 4) == (rrrY < 4)) return result; // the two AGUs use opposite banks
+@@ -3311,0 +3323,7 @@
++		// A second MOVE field must never be discarded by a single-move fallback.
++		if(baseMnem == "move" && !moveStr.empty()) {
++			result = encodeMovexy(operands, moveStr);
++			if(!result.success()) result.error = AssembleError::InvalidInstruction;
++			return result;
++		}
++
+@@ -3316,0 +3335,5 @@
++		if(!moveStr.empty()) {
++			result.error = AssembleError::InvalidInstruction;
++			return result;
++		}
++

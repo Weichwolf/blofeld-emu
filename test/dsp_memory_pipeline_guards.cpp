@@ -26,8 +26,8 @@ void unqualified_forms() {
                            "move x:<$7,x0",
                            "move x:(r0)+,r0",
                            "move x:(r0)+,a",
-                           "add x1,a x:(r0)+,x0",
-                           "move x:(r0)+,x0 y:(r4)+,y0"}) {
+                           "add x1,a x:(r0)+,a",
+                           "move x:(r0)+,a y:(r4)+,b"}) {
     DspMachine machine;
     const std::array code{std::string(text)};
     prepare(machine, code);

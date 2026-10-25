@@ -12,9 +12,16 @@
 #include <optional>
 
 namespace blofeld {
-void validate_alu_pipeline_word(DspProgramWord word, std::uint32_t omr);
+void validate_alu_pipeline_word(DspProgramWord word, std::uint32_t omr, bool memory = false);
 [[nodiscard]] std::uint8_t deferred_alu_accumulators(DspProgramWord producer,
                                                      DspProgramWord consumer);
+
+struct DspInstructionDependency {
+  DspProgramWord producer;
+  DspProgramWord consumer;
+};
+
+[[nodiscard]] std::uint8_t memory_source_dependency(DspInstructionDependency instructions);
 
 struct DspInstructionPipeline {
   DspFetchPipeline profile = DspFetchPipeline::automatic_alu;

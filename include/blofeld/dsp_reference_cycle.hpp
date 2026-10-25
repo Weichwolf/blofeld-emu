@@ -27,7 +27,7 @@ struct DspReferenceCycleInputs {
   DspReferenceBusOrder order = DspReferenceBusOrder::unqualified;
 };
 
-inline constexpr std::size_t dsp_reference_cycle_accesses = 2;
+inline constexpr std::size_t dsp_reference_cycle_accesses = 3;
 
 struct DspReferenceCycleResult {
   DspDmaBusResult dma;

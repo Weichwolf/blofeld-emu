@@ -49,10 +49,10 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
   for (std::size_t index = 0; index < fetch.used; ++index) {
     if (fetch.words.at(index).address == view.decode_address) {
       cycle.decode = fetch.words.at(index);
-      if (profile != DspFetchPipeline::automatic_memory ||
-          !decode_memory_stage(cycle.decode->value)) {
-        validate_alu_pipeline_word(*cycle.decode, fetch.omr);
-      }
+      const auto word = *cycle.decode;
+      const bool memory =
+          profile == DspFetchPipeline::automatic_memory && decode_memory_stage(word.value);
+      validate_alu_pipeline_word(word, fetch.omr, memory);
       break;
     }
   }
@@ -80,6 +80,8 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
     cycle.e1_operands = machine.cpu().state();
     if (cycle.execute2) {
       cycle.e1_deferred_accumulators = deferred_alu_accumulators(*cycle.execute2, *cycle.execute1);
+      cycle.memory_source_stall =
+          memory_source_dependency({.producer = *cycle.execute2, .consumer = *cycle.execute1}) != 0;
     }
   }
   if (cycle.execute2) {
@@ -148,6 +150,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     view.awaiting_inputs.reset();
     view.awaiting_deferred_accumulators = 0;
   }
+  if (view.cycle.memory_source_stall) { return; }
   if (view.cycle.execute1) {
     if (bus.memory) {
       if (!bus.memory->progress.pending || bus.memory->address.word != *view.cycle.execute1) {
@@ -159,7 +162,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
       view.cycle.execution_captured = true;
       view.awaiting_retirement = view.cycle.execute1;
       view.awaiting_inputs = bus.memory->inputs;
-      view.awaiting_deferred_accumulators = 0;
+      view.awaiting_deferred_accumulators = view.cycle.e1_deferred_accumulators;
     } else {
       execute(machine);
     }

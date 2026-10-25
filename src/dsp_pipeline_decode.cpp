@@ -4,11 +4,14 @@
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
+#include "dsp_memory_form.hpp"
+#include "dsp_move_writeback.hpp"
 #include "dsp_pipeline.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <exception>
 
 namespace blofeld {
 namespace {
@@ -25,35 +28,88 @@ constexpr std::array allowed{
     dsp56k::Or_SD,     dsp56k::Or_xx,     dsp56k::Rnd,        dsp56k::Sub_SD,    dsp56k::Sub_xx,
     dsp56k::Subl,      dsp56k::Subr,      dsp56k::Tfr,        dsp56k::Tst,       dsp56k::Inc,
     dsp56k::Dec};
+using Mask = dsp56k::RegisterMask;
+
+struct Operands {
+  Mask written = Mask::None;
+  Mask read = Mask::None;
+};
+
+Operands operands(const DspProgramWord word, const bool arithmetic) {
+  static const dsp56k::Opcodes opcodes;
+  Type first = dsp56k::Invalid;
+  Type second = dsp56k::Invalid;
+  Operands result;
+  if (opcodes.getInstructionTypes(word.value, first, second) == 0) { return result; }
+  if (arithmetic) {
+    if (std::ranges::contains(allowed, first)) {
+      dsp56k::getRegisters(result.written, result.read, first, word.value);
+    }
+  } else {
+    static_cast<void>(opcodes.getRegisters(result.written, result.read, word.value));
+  }
+  return result;
 }
 
-std::uint8_t deferred_alu_accumulators(const DspProgramWord producer,
-                                       const DspProgramWord consumer) {
-  static const dsp56k::Opcodes opcodes;
-  using Mask = dsp56k::RegisterMask;
-  auto written = Mask::None;
-  auto read = Mask::None;
-  auto ignored = Mask::None;
-  // The native return value reports nonempty masks; NOP legitimately returns false.
-  static_cast<void>(opcodes.getRegisters(written, ignored, producer.value));
-  static_cast<void>(opcodes.getRegisters(ignored, read, consumer.value));
+std::uint8_t dependency(const Mask written, const Mask read) {
   const bool a = dsp56k::any(written, Mask::A) && dsp56k::any(read, Mask::A);
   const bool b = dsp56k::any(written, Mask::B) && dsp56k::any(read, Mask::B);
   return static_cast<std::uint8_t>((a ? 1U : 0U) | (b ? 2U : 0U));
 }
 
-void validate_alu_pipeline_word(const DspProgramWord word, const std::uint32_t omr) {
+}
+
+std::uint8_t deferred_alu_accumulators(const DspProgramWord producer,
+                                       const DspProgramWord consumer) {
+  return dependency(operands(producer, true).written, operands(consumer, true).read);
+}
+
+std::uint8_t memory_source_dependency(const DspInstructionDependency instructions) {
+  const auto producer = instructions.producer;
+  const auto consumer = instructions.consumer;
+  static const dsp56k::Opcodes opcodes;
+  Type first = dsp56k::Invalid;
+  Type second = dsp56k::Invalid;
+  if (opcodes.getInstructionTypes(consumer.value, first, second) == 0) { return 0; }
+  const auto move = first == dsp56k::Movel_ea ? first : second;
+  if (move != dsp56k::Movel_ea ||
+      dsp56k::getFieldValue(move, dsp56k::Field_W, consumer.value) != 0) {
+    return 0;
+  }
+  Mask written = Mask::None;
+  Mask read = Mask::None;
+  dsp56k::getRegisters(written, read, move, consumer.value);
+  return dependency(operands(producer, false).written, read);
+}
+
+void validate_alu_pipeline_word(const DspProgramWord word,
+                                const std::uint32_t omr,
+                                const bool memory) {
   static const dsp56k::Opcodes opcodes;
   Type first = dsp56k::Invalid;
   Type second = dsp56k::Invalid;
   constexpr unsigned width = 6;
-  if (opcodes.getInstructionTypes(word.value, first, second) == 0 ||
-      !std::ranges::contains(allowed, first) ||
-      (second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
+  const bool decoded = opcodes.getInstructionTypes(word.value, first, second) != 0;
+  const bool arithmetic = std::ranges::contains(allowed, first);
+  const bool standalone_memory = memory && second == dsp56k::Invalid;
+  if (!decoded || (!arithmetic && !standalone_memory) ||
+      (!memory && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
       dsp56k::Opcodes::getOpcodeLength(word.value, first, second) != 1) {
     throw Fault("Unqualified automatic DSP decode P:" + hex(word.address, width) +
                 " opcode=" + hex(word.value, width) + " pc=" + hex(word.address, width) +
                 " omr=" + hex(omr, width));
+  }
+  if (memory) {
+    try {
+      if (!decode_memory_stage(word.value)) {
+        throw Fault("Automatic memory decode lost its native form");
+      }
+      static_cast<void>(decode_move_writeback(word.value));
+    } catch (const std::exception &error) {
+      throw Fault("Unqualified automatic DSP decode P:" + hex(word.address, width) +
+                  " opcode=" + hex(word.value, width) + " pc=" + hex(word.address, width) +
+                  " omr=" + hex(omr, width) + ": " + error.what());
+    }
   }
 }
 }

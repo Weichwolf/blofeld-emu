@@ -412,18 +412,38 @@ public:
     results.visible = visible;
     results.base = visible;
     auto &base = results.base->registers;
-    const auto index = record.view.update.index;
     const auto &source = record.source.registers;
-    base.r.at(index) = source.r.at(index);
-    base.n.at(index) = source.n.at(index);
-    base.m.at(index) = source.m.at(index);
-    base.mMask.at(index) = source.mMask.at(index);
-    base.mModulo.at(index) = source.mModulo.at(index);
-    results.addresses.published.at(index) = record.view.update.value;
+    const auto bind = [&](const DspAddressUpdate update) {
+      const auto index = update.index;
+      base.r.at(index) = source.r.at(index);
+      base.n.at(index) = source.n.at(index);
+      base.m.at(index) = source.m.at(index);
+      base.mMask.at(index) = source.mMask.at(index);
+      base.mModulo.at(index) = source.mModulo.at(index);
+      results.addresses.published.at(index) = update.value;
+    };
+    bind(record.view.update);
+    if (record.view.secondary) { bind(record.view.secondary->update); }
     for (unsigned reg = 0; reg < visible.registers.r.size(); ++reg) {
       results.pipeline_addresses.at(reg) =
           static_cast<std::uint32_t>(visible.registers.r.at(reg)) & word_mask;
     }
+  }
+
+  static DspNativeAccess commit_addressed_data(DspCore &core,
+                                               DspReferenceProgress &progress,
+                                               const DspMemoryAccess expected) {
+    if (!progress.pending) { throw Fault("Native memory E1 lost its actual data access"); }
+    const auto *data = std::get_if<DspNativeAccess>(&progress.pending->effect);
+    const auto kind = expected.operation == DspMemoryOperation::read ? DspNativeAccessKind::read
+                                                                     : DspNativeAccessKind::write;
+    if (data == nullptr || data->kind != kind || data->target.space != expected.target.space ||
+        data->target.address != expected.target.address) {
+      throw Fault("Native memory E1 differs from the actual AG1 address");
+    }
+    progress = core.advance_reference_access(progress.pending->ticket);
+    if (!progress.completed) { throw Fault("Native memory E1 lost its committed data effect"); }
+    return std::get<DspNativeAccess>(*progress.completed);
   }
 
   void apply_move_fields(const DspMoveFields fields) {
@@ -1182,10 +1202,15 @@ void DspCore::validate_reference_address(const DspAddressStageTicket &ticket,
 DspAddressStageView DspCore::publish_reference_address(const DspAddressStageTicket &ticket) {
   validate_reference_address(ticket, false);
   auto &record = impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_});
-  const auto update = record.view.update;
-  if (record.view.pointer_update) {
+  const auto publish = [&](const DspAddressUpdate update, const bool pointer_update) {
+    if (!pointer_update) { return; }
     impl_->cpu.regs().r.at(update.index).var = static_cast<std::int32_t>(update.value);
     impl_->results.pipeline_addresses.at(update.index) = update.value;
+  };
+  publish(record.view.update, record.view.pointer_update);
+  if (record.view.secondary) {
+    const auto second = *record.view.secondary;
+    publish(second.update, second.pointer_update);
   }
   record.view.published = true;
   return record.view;
@@ -1195,6 +1220,7 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
   validate_reference_address(ticket, true);
   const auto record = impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_});
   const auto &view = record.view;
+  auto active_access = view.data_accesses[0];
   try {
     auto pending = reference_pending();
     if (!pending) {
@@ -1211,18 +1237,15 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
     DspMemoryStageResult result{.address = view, .inputs = state(), .data = {}, .progress = {}};
     impl_->bind_memory_address(record);
     auto progress = advance_reference_access(pending->ticket);
-    if (!progress.pending) { throw Fault("Native memory E1 lost its actual data access"); }
-    const auto *data = std::get_if<DspNativeAccess>(&progress.pending->effect);
-    const auto kind = view.update.operation == DspMemoryOperation::read
-                          ? DspNativeAccessKind::read
-                          : DspNativeAccessKind::write;
-    if (data == nullptr || data->kind != kind || data->target.space != view.update.space ||
-        data->target.address != view.update.address) {
-      throw Fault("Native memory E1 differs from the actual AG1 address");
+    for (std::size_t index = 0; index < view.data_access_count; ++index) {
+      active_access = view.data_accesses.at(index);
+      const auto actual = Impl::commit_addressed_data(*this, progress, active_access);
+      if (index == 0) {
+        result.data = actual;
+      } else {
+        result.additional_data = actual;
+      }
     }
-    progress = advance_reference_access(progress.pending->ticket);
-    if (!progress.completed) { throw Fault("Native memory E1 lost its committed data effect"); }
-    result.data = std::get<DspNativeAccess>(*progress.completed);
     if (progress.pending && std::holds_alternative<DspMoveWriteback>(progress.pending->effect)) {
       progress = advance_reference_access(progress.pending->ticket);
       if (!progress.completed) { throw Fault("Native memory E1 lost its real load publication"); }
@@ -1239,9 +1262,10 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
     impl_->faulted = true;
     throw Fault(
         "Native memory E1 " +
-        std::string(view.update.operation == DspMemoryOperation::read ? "read " : "write ") +
-        (view.update.space == DspSpace::x ? "X:" : "Y:") + hex(view.update.address, 6) + " pc=" +
-        hex(view.word.address, 6) + " omr=" + hex(view.update.omr, 6) + ": " + error.what());
+        std::string(active_access.operation == DspMemoryOperation::read ? "read " : "write ") +
+        (active_access.target.space == DspSpace::x ? "X:" : "Y:") +
+        hex(active_access.target.address, 6) + " pc=" + hex(view.word.address, 6) +
+        " omr=" + hex(view.update.omr, 6) + ": " + error.what());
   }
 }
 

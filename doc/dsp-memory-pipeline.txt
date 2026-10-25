@@ -3,8 +3,9 @@ Automatic native memory pipeline
 DspFetchRunInputs.pipeline=automatic_memory extends the automatic ALU profile
 with pure single-word X/Y loads and stores through R0..R7, using (Rn), (Rn)+,
 (Rn)-, (Rn)+Nn or (Rn)-Nn and X0/X1/Y0/Y1 data operands. It requires the same
-staged_register_boundaries execution contract. Extensions, parallel operations,
-pre-offset/pre-decrement, absolute and other register transfers still refuse.
+staged_register_boundaries execution contract. Selected long/dual moves, parallel
+ALU and accumulator-source stalls extend this scope in dsp-parallel-memory.txt.
+Extensions, pre-offset/pre-decrement, absolute and other control forms still refuse.
 
 DSP56300FM Rev5 Table5-1 places data address calculation in AG1, pointer update
 in AG2, and store-source sampling/load-destination publication in E1. The native
@@ -49,7 +50,7 @@ unknown-data recovery, unavailable capabilities and MMIO/FIFO preservation.
 These support the declared internal model, not complete hardware acceptance.
 Native exceptions and full snapshots remain unsuitable for a real-time callback.
 
-Parallel X/Y/P operations, extensions, control/loop/REP/cache/IRQ timelines,
+General X/Y/P grouping, extensions, control/loop/REP/cache/IRQ timelines,
 physical DMA/interlocks, branch/reset fill and original runtime integration
 remain incomplete. Authentic full ROM/reserved Y:002000 semantics, normal
 original Keyboard/Desktop boot, original DSP host audio/MIDI, all118 documented

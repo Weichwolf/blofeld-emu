@@ -5,6 +5,7 @@
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_native_access.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
+#include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
 
@@ -42,6 +43,38 @@ std::optional<unsigned> address_register(const std::uint32_t opcode) {
   if (mode == 4 || mode == 5 || mode == 6) { return std::nullopt; }
   return dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode);
 }
+
+void validate_dual(const std::uint32_t opcode,
+                   const DspAddressPhase &phase,
+                   const std::array<std::uint32_t, 8> &before,
+                   const std::array<std::uint32_t, 8> &native) {
+  constexpr auto type = dsp56k::Movexy;
+  const auto x = dsp56k::getRegister(type, dsp56k::Field_RRR, opcode);
+  const auto y = dsp56k::getRegister(type, dsp56k::Field_rr, opcode);
+  for (unsigned index = 0; index < before.size(); ++index) {
+    const auto reg =
+        static_cast<dsp56k::Register>(static_cast<unsigned>(dsp56k::Register::R0) + index);
+    const bool updated = (reg == x && dsp56k::getFieldValue(type, dsp56k::Field_MM, opcode) != 0) ||
+                         (reg == y && dsp56k::getFieldValue(type, dsp56k::Field_mm, opcode) != 0);
+    if (updated) {
+      const auto value = phase.published.at(index);
+      if (!value || *value != native.at(index)) {
+        throw Fault("Dual native addresses require actual prepublished AG2 results");
+      }
+    } else if (before.at(index) != native.at(index)) {
+      throw Fault("Unqualified additional dual native address-register change");
+    }
+  }
+}
+
+bool dual(const std::uint32_t opcode) {
+  static const dsp56k::Opcodes opcodes;
+  auto first = dsp56k::Invalid;
+  auto second = dsp56k::Invalid;
+  return opcodes.getInstructionTypes(opcode, first, second) != 0 &&
+         (first == dsp56k::Movexy || second == dsp56k::Movexy);
+}
+
 }
 
 void DspAddressPhase::capture(const std::uint32_t opcode,
@@ -49,6 +82,10 @@ void DspAddressPhase::capture(const std::uint32_t opcode,
                               const std::array<std::uint32_t, 8> &before,
                               const std::array<std::uint32_t, 8> &native) {
   try {
+    if (dual(opcode)) {
+      validate_dual(opcode, *this, before, native);
+      return;
+    }
     const auto selected = address_register(opcode);
     for (unsigned index = 0; index < native.size(); ++index) {
       if (selected != index && native.at(index) != before.at(index)) {

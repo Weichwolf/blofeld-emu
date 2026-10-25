@@ -29,6 +29,7 @@ struct DspPipelineCycle {
   std::optional<DspAddressStageView> ag1_address = std::nullopt;
   std::optional<DspAddressStageView> ag2_address = std::nullopt;
   std::optional<DspMemoryStageResult> memory = std::nullopt;
+  bool memory_source_stall = false;
   bool retirement_published = false;
   bool execution_captured = false;
   bool advanced = false;

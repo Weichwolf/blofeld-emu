@@ -78,13 +78,17 @@ void check_resources(const DspBus &bus, const DspReferenceCycleResult &result) {
     const auto access = result.core_accesses.at(index);
     if (!controller_read(access)) { resources.at(index) = bus.memory_resource(access); }
   }
-  if (result.core_access_count != 2) { return; }
-  const auto first = resources.front();
-  const auto second = resources.back();
-  if (result.core_accesses.front().target.space == result.core_accesses.back().target.space ||
-      (first && second && first->bank == second->bank && first->rom == second->rom)) {
-    throw Fault("Unqualified dual core bus-cycle use: " + describe(result.core_accesses.front()) +
-                " and " + describe(result.core_accesses.back()));
+  for (std::size_t index = 0; index < result.core_access_count; ++index) {
+    for (std::size_t other = 0; other < index; ++other) {
+      const auto first = resources.at(index);
+      const auto second = resources.at(other);
+      const auto a = result.core_accesses.at(index);
+      const auto b = result.core_accesses.at(other);
+      if (a.target.space == b.target.space ||
+          (first && second && first->bank == second->bank && first->rom == second->rom)) {
+        throw Fault("Unqualified dual core bus-cycle use: " + describe(a) + " and " + describe(b));
+      }
+    }
   }
 }
 }
@@ -104,23 +108,24 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     if (const auto access = native_access(*pending)) { append(result, *access); }
   }
   if (memory) {
-    if (result.core_access_count == result.core_accesses.size()) {
-      throw Fault("Unqualified extra native memory-stage footprint");
+    for (std::size_t index = 0; index < memory->data_access_count; ++index) {
+      if (result.core_access_count == result.core_accesses.size()) {
+        throw Fault("Unqualified extra native memory-stage footprint");
+      }
+      append(result, memory->data_accesses.at(index));
     }
-    append(result,
-           {.target = {.space = memory->update.space, .address = memory->update.address},
-            .operation = memory->update.operation});
   }
   try {
     check_resources(bus, result);
   } catch (const std::exception &error) {
     if (!memory) { throw; }
-    throw Fault(
-        "Native memory E1 " +
-        describe({.target = {.space = memory->update.space, .address = memory->update.address},
-                  .operation = memory->update.operation}) +
-        " pc=" + hex(memory->word.address, 6) + " omr=" + hex(memory->update.omr, 6) + ": " +
-        error.what());
+    std::string group;
+    for (std::size_t index = 0; index < memory->data_access_count; ++index) {
+      if (index != 0) { group += " and "; }
+      group += describe(memory->data_accesses.at(index));
+    }
+    throw Fault("Native memory E1 " + group + " pc=" + hex(memory->word.address, 6) +
+                " omr=" + hex(memory->update.omr, 6) + ": " + error.what());
   }
   return result;
 }

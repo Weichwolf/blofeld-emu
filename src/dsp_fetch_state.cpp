@@ -80,6 +80,10 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
   if (fetch.pending_address) { result.fetch = DspProgramFetchStage::read; }
   if (pipeline) {
     if (pipeline->view.awaiting_retirement) { result.access = pipeline->retirement(machine); }
+    if (pipeline->view.cycle.memory_source_stall) {
+      result.fetch.reset();
+      return result;
+    }
     result.address_update = pipeline->addresses[0];
     result.memory = pipeline->addresses[1];
     return result;

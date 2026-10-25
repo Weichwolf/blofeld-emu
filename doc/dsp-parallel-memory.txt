@@ -1,0 +1,69 @@
+Parallel native memory stages
+
+The automatic_memory profile now retains up to two native AG1 address lanes and
+up to two ordered E1 data effects for one captured instruction. It supports dual
+X/Y moves using the native MM encoding and long L moves using a shared address.
+The native test assembler now preserves both parallel move fields and rejects
+unsupported trailing fields or dual address modes instead of silently assembling
+a different instruction. Four own encodings are pinned against NXP6.3.28; no
+vendor program words or tool binaries are redistributed.
+
+Ordinary selected single-word ALU instructions may accompany these moves or the
+existing single X/Y moves. This uses the original native ALU, conversions and
+AGU helpers, not a replacement instruction evaluator.
+
+The generic SDK address helper invokes the actual dual-Move decoder for MM
+forms. Native operand metadata selects the opposite Y register bank. Each real
+EA, before/after R and R/N/M/cache input is retained. AG2 publishes both native
+pointer results once. A long access has one pointer update shared by X and Y.
+The host continuation bound still does not establish physical queue depth.
+
+E1 rebinds all captured address inputs while sampling live data registers. Each
+actual native data request must match its captured address/space/direction before
+real I/O. Dual moves perform stores before loads, preserving the native order;
+long moves access X then Y. All actual load destination fields publish after the
+data group, while the remaining native result retires in E2. Native parallel
+MPY/MAC uses its original operands. A/B dependencies deferred to E2 are derived
+from the ALU portion alone; a preceding memory load is not an ALU producer.
+
+DSP56300FM Rev5 Table5-1 and A.2.3 define the selected accumulator move-source
+interlocks. A preceding arithmetic or move destination in the same accumulator
+adds one real reference clock before a raw A10/B10 store can sample its source.
+The older E2 retires, while E1/AG2/AG1/decode/F2/F1 remain held for that clock;
+timers, divider and elapsed time advance normally. The following E1 uses the
+now-ready actual value. This explicit front-hold/bus ordering is an internal
+reference policy, not an observed physical fetch trace or silicon qualification.
+
+The three-resource footprint derives from the actual F2 plus trusted captured
+X/Y effects. Every pair must have distinct logical ports and qualified physical
+storage resources. General MMIO, unknown bank sharing and protected ROM writes
+still fail before DMA sampling or any selected phase. An entered second-data
+failure retains a real first store, accepted older E2 and younger AG2 results,
+quarantines execution and completes no elapsed clock. Trusted joint restore is
+required; a partial instruction cannot silently retry its committed first effect.
+
+Qualified format scope: dual moves use X0/X1 and Y0/Y1 data operands; long loads
+use all eight LLL destination encodings, and raw long stores use A10/B10/X/Y.
+Full-accumulator long stores retain an explicit refusal pending S/L phase
+qualification. ALU/move accumulator destination overlap, extended/offset/pre-
+decrement and other control forms remain refusals. Untimed dual-Move pointer
+publication requires actual prepublished AG2 results; it cannot invent the
+unobserved second address from a later semantic access.
+
+  cmake --build --preset strict --target blofeld-parallel-memory-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_parallel_memory_(addresses|execution|state)$'
+
+Own cases cover512 fixed dual address/direction combinations and32 independent
+opposite-bank selector cases,16 data-field
+combinations, all eight long load destinations, four raw store pairs, parallel
+native arithmetic, same/different-accumulator source hazards, joint snapshots
+through the interlock, partial data failure/recovery and three-resource MMIO/FIFO
+preflight. All eight long load formats use both positive and negative data;
+full sign extension and retained A2/B2 during younger raw A10/B10 publication
+are checked against literal full CPU states across overlapping E1/E2.
+These establish the declared model scope, not complete device behavior.
+Active DMA, physical arbitration/interlocks, full control/loop/REP/cache/IRQ and
+reset/jump fill, authentic full ROM/reserved Y:002000 and original normal
+Keyboard/Desktop MIDI/audio/runtime remain incomplete. The complete hardware
+emulator and every full-device acceptance requirement remain the objective.
