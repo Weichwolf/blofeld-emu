@@ -1,0 +1,53 @@
+Native OMR bit-branch pipeline
+
+The opt-in automatic_memory profile accepts two-word JSET/JCLR with OMR as
+source. SR, data-register and memory/peripheral bit branches remain unqualified.
+The automatic_alu profile retains its own scope. Actual native instruction
+execution and retirement provide the CPU result; early decisions affect fetch
+only and never supply a synthesized CPU result, target word or peripheral reply.
+
+AG1 uses the actual F2 opcode/extension and live OMR to select fetch. The admitted
+ALU and X/Y/A/B/R/N/M move formats cannot write OMR; control destinations and
+interrupt/mode transitions remain guarded. Native E1 and E2 validate OMR,
+next PC and the real redirected flag against that decision. A taken branch to
+the sequential address remains distinct from a false condition.
+
+The owner retains all older queued words and the exact branch pair until their
+native consumption. Only younger samples and issued addresses are discarded.
+The target must be read by a fresh F2, including self targets or addresses still
+present in the retained prefix. Native confirmation preserves those real target
+samples. No younger AG2 pointer update, E1 memory access or device write may
+escape from the discarded path. Actual speculative P reads remain real and can
+still fail at the strict map/unknown-data boundary.
+
+The declared reference schedule uses an AG1 fetch decision, one refill hold
+and actual target F1/F2. It matches the four-clock register-branch baseline.
+FM A.2.6.3 adds one successor Decode clock when the condition is false.
+That hold backpressures F2/F1 as well, preserving actual two-word fetch spacing. Six fixed
+normal-mode vendor windows, with code/readback/PC/register and X/Y canaries,
+agree with those complete primary rules (dsp-branch-reference.json). This does
+not establish a measured silicon branch-resolution stage or bus sampling order.
+The vendor model's switched-memory disagreement remains open.
+
+Joint snapshots retain the owned fetch segment, actual CPU candidate, fresh
+samples and remaining holds. Directed cases cover taken/false paths, same-PC
+and self targets, future target replacement, discarded AGU/I/O/unsupported code,
+unknown target failure, trusted recovery, pending-branch reset and strict source
+refusals. Generic explicit redirects retain their separate clearing behavior.
+
+The own reference program is reproducible without invoking a tool or device:
+
+  python3 tools/prepare_dsp_branch_reference.py doc/local/dsp-branch-reference-generated
+
+It generates only fixed assembly/case metadata for the optional normal-mode
+vendor reference. The C++ cases use the same windows after actual native setup.
+
+  cmake --build --preset strict --target blofeld-branch-pipeline-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_pipeline_(omr_branches|branch_state)$'
+
+The local SHA-pinned document-derived SPI prefix remains a partial reconstruction,
+not authentic full mask ROM. General branches/control/loop/REP/cache/IRQ timing,
+active DMA, complete ROM/reserved Y:002000 and normal original Desktop/Keyboard
+reset-to-instrument MIDI/audio/storage/update/recovery/physical acceptance remain
+required. These selected native-stage cases do not establish full-device fidelity.

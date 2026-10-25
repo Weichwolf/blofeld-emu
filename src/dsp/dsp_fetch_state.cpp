@@ -84,7 +84,9 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
       result.fetch.reset();
       return result;
     }
-    if (pipeline->view.cycle.agu_dependencies != 0) { result.fetch.reset(); }
+    if (pipeline->view.cycle.agu_dependencies != 0 || pipeline->held_branch_decode) {
+      result.fetch.reset();
+    }
     result.address_update = pipeline->addresses[0];
     result.memory = pipeline->addresses[1];
     return result;

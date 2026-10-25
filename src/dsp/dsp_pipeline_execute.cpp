@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
+#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_program_fetch.hpp"
@@ -60,6 +61,9 @@ void DspInstructionPipeline::execute(DspMachine &machine) {
   if (!progress.pending || progress.retired ||
       !std::holds_alternative<DspInstructionRetire>(progress.pending->effect)) {
     throw Fault("Unqualified actual native effect in automatic DSP E1");
+  }
+  if (decode_branch_form(word.value)) {
+    validate_branch(std::get<DspInstructionRetire>(progress.pending->effect));
   }
   view.cycle.execution = progress;
   view.cycle.execution_captured = true;

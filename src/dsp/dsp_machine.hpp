@@ -132,6 +132,7 @@ private:
   friend class DspFetchRun;
   friend struct DspFetchState;
   friend struct DspInstructionPipeline;
+  [[nodiscard]] DspBranchDecision capture_reference_branch(std::uint32_t address);
   [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address);
   [[nodiscard]] DspAddressStageView address_stage(const DspAddressStageTicket &ticket) const;
   [[nodiscard]] DspAddressStageTicket

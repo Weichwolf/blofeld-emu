@@ -226,7 +226,7 @@ target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gp
 add_library(blofeld_dsp
   src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
-  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_reference_cycle.cpp
+  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
   src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
@@ -1082,6 +1082,11 @@ if(BUILD_TESTING)
   add_test(NAME dsp_pipeline_transfers COMMAND blofeld-transfer-pipeline-test fields)
   add_test(NAME dsp_pipeline_agu_dependencies COMMAND blofeld-transfer-pipeline-test agu)
   add_test(NAME dsp_pipeline_transfer_state COMMAND blofeld-transfer-pipeline-test state)
+  add_executable(blofeld-branch-pipeline-test test/dsp_branch_pipeline_test.cpp
+    test/dsp_branch_pipeline_branches.cpp test/dsp_branch_pipeline_state.cpp)
+  target_link_libraries(blofeld-branch-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_pipeline_omr_branches COMMAND blofeld-branch-pipeline-test branches)
+  add_test(NAME dsp_pipeline_branch_state COMMAND blofeld-branch-pipeline-test state)
   add_executable(blofeld-peripheral-pipeline-test test/dsp_peripheral_pipeline_test.cpp
     test/dsp_peripheral_pipeline_writes.cpp test/dsp_peripheral_pipeline_state.cpp)
   target_link_libraries(blofeld-peripheral-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)

@@ -1917,9 +1917,21 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           retires in E2 without a fictitious R
                                           update or repeated I/O. Three directed
                                           groups include a document-derived boot
-                                          prefix, stopping at the next branch;
-                                          no full ROM/boot is implied
-                                          (dsp-peripheral-pipeline.txt).
+                                          prefix, stopping at unsupported SHI
+                                          register MOVEP; no full ROM/boot is
+                                          implied (dsp-peripheral-pipeline.txt).
+                                          Selected OMR JSET/JCLR now preserve
+                                          older F2 words, fetch fresh targets
+                                          and validate actual native E1/E2.
+                                          Six independent quiet windows check
+                                          four-clock taken/five-clock false
+                                          issue spacing, including the extra
+                                          false Decode hold and real F1/F2
+                                          backpressure. Self/identical targets,
+                                          discarded AGU/I/O, snapshots, reset
+                                          and target failures are scoped in
+                                          dsp-branch-pipeline.txt. Physical
+                                          resolution stages remain unqualified.
                                           General data-address extensions, DMA/control
                                           stages and default runtime remain open.
                                           Explicit untimed interrupt continuation

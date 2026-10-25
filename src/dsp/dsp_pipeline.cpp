@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_address_stage.hpp"
+#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_memory_form.hpp"
@@ -35,6 +36,27 @@ void check_context(const DspMachine &machine) {
     throw Fault("Automatic DSP stages cannot adopt an explicit overlap candidate");
   }
 }
+
+void prepare_decode(DspInstructionPipeline &pipeline,
+                    const DspProgramFetchView &fetch,
+                    DspPipelineCycle &cycle) {
+  pipeline.held_branch_decode =
+      pipeline.branch && pipeline.branch_target_ready && pipeline.branch_decode_hold != 0;
+  if (pipeline.branch && (!pipeline.branch_target_ready || pipeline.held_branch_decode)) { return; }
+  // Even an already prefetched successor cannot enter Decode while AG1 resolves
+  // this branch and cuts the discarded path from the owned queue.
+  if (const auto ag1 = cycle.ag1; ag1 && decode_branch_form(ag1->value)) { return; }
+  // Decode sees the prior cycle's F2 latch, never the new F2 of this clock.
+  for (std::size_t index = 0; index < fetch.used; ++index) {
+    if (fetch.words.at(index).address == pipeline.view.decode_address) {
+      cycle.decode = fetch.words.at(index);
+      const auto word = *cycle.decode;
+      cycle.decode_words = decode_pipeline_word(word, fetch.omr, pipeline.profile).words;
+      cycle.agu_dependencies = pipeline_agu_dependencies(pipeline.view.stages, word);
+      return;
+    }
+  }
+}
 }
 
 void DspInstructionPipeline::prepare(const DspMachine &machine) {
@@ -44,16 +66,7 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
                          .ag2 = view.stages[1],
                          .execute1 = view.stages[2],
                          .execute2 = view.awaiting_retirement};
-  // Decode sees the prior cycle's F2 latch, never the new F2 of this clock.
-  for (std::size_t index = 0; index < fetch.used; ++index) {
-    if (fetch.words.at(index).address == view.decode_address) {
-      cycle.decode = fetch.words.at(index);
-      const auto word = *cycle.decode;
-      cycle.decode_words = decode_pipeline_word(word, fetch.omr, profile).words;
-      cycle.agu_dependencies = pipeline_agu_dependencies(view.stages, word);
-      break;
-    }
-  }
+  prepare_decode(*this, fetch, cycle);
   if (cycle.ag1) { cycle.ag1_extension = pipeline_extension(fetch, *cycle.ag1); }
   cycle.e1_extension = extensions[1];
   if (cycle.execute1 &&
@@ -101,10 +114,15 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
     throw Fault("Automatic DSP E2 lost its actual native candidate");
   }
   const auto *effect = std::get_if<DspInstructionRetire>(&pending->effect);
-  if (effect == nullptr || effect->pc != view.awaiting_retirement->address || effect->redirected ||
-      effect->next_pc !=
-          ((effect->pc + pipeline_word_count(*view.awaiting_retirement)) & word_mask) ||
+  if (effect == nullptr || effect->pc != view.awaiting_retirement->address ||
       effect->next_omr != effect->omr) {
+    throw Fault("Automatic DSP E2 differs from its actual native candidate");
+  }
+  if (decode_branch_form(view.awaiting_retirement->value)) {
+    validate_branch(*effect);
+  } else if (effect->redirected ||
+             effect->next_pc !=
+                 ((effect->pc + pipeline_word_count(*view.awaiting_retirement)) & word_mask)) {
     throw Fault("Automatic DSP E2 differs from its actual sequential ALU candidate");
   }
   const auto inputs = view.awaiting_inputs;
@@ -120,6 +138,14 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
 
 void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCycleResult &bus) {
   if (bus.dma.core_stall) { return; }
+  if (branch && !branch_target_ready && bus.fetch) {
+    const auto &fetch = *bus.fetch;
+    if (fetch.used == 0 || fetch.words.at(fetch.used - 1).address != branch->next_pc) {
+      throw Fault("Automatic branch lost its fresh target F2 pc=" + hex(branch->word.address, 6) +
+                  " omr=" + hex(branch->omr, 6));
+    }
+    branch_target_ready = true;
+  }
   if (view.cycle.execute2) {
     if (!bus.progress || !bus.progress->retired) {
       throw Fault("Automatic DSP E2 did not publish its selected actual native result");
@@ -147,6 +173,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     }
   }
   view.cycle.ag2_address = bus.address_update;
+  capture_branch(machine);
   capture_address(machine);
   extensions[1] = extensions[0];
   extensions[0] = view.cycle.ag1_extension;
@@ -156,6 +183,11 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   if (view.stages[0]) {
     view.decode_address = (view.decode_address + view.cycle.decode_words) & word_mask;
     view.cycle.decode_accepted = true;
+    if (branch && branch_target_ready) {
+      branch.reset();
+      branch_decode_hold = 0;
+      branch_target_ready = false;
+    }
   }
   view.cycle.advanced = true;
 }
@@ -180,4 +212,37 @@ void DspInstructionPipeline::capture_address(DspMachine &machine) {
   addresses[0] = next;
 }
 
+void DspInstructionPipeline::capture_branch(DspMachine &machine) {
+  const auto word = view.cycle.ag1;
+  if (!word) { return; }
+  const auto instruction = *word;
+  if (profile != DspFetchPipeline::automatic_memory || !decode_branch_form(instruction.value)) {
+    return;
+  }
+  if (branch) { throw Fault("Automatic branch cannot replace an unresolved fetch decision"); }
+  const auto decision = machine.capture_reference_branch(instruction.address);
+  branch = decision;
+  view.decode_address = decision.next_pc;
+  // One reference refill clock plus the real target F1/F2 gives the four-clock
+  // register-branch baseline. False conditions add I2 Decode delay (FM A.2.6.3).
+  // This is a declared schedule matching fixed windows, not measured silicon phases.
+  branch_fetch_hold = 1;
+  branch_decode_hold = decision.taken ? 0U : 1U;
+  branch_target_ready = false;
+}
+
+void DspInstructionPipeline::validate_branch(const DspInstructionRetire &retirement) const {
+  if (!branch || retirement.pc != branch->word.address || retirement.next_pc != branch->next_pc ||
+      retirement.omr != branch->omr || retirement.next_omr != branch->omr ||
+      retirement.redirected != branch->taken) {
+    throw Fault(
+        "Automatic branch differs from its actual native result pc=" + hex(retirement.pc, 6) +
+        " next=" + hex(retirement.next_pc, 6) + " omr=" + hex(retirement.omr, 6));
+  }
+}
+
+void DspInstructionPipeline::finish_cycle() {
+  if (branch_fetch_hold != 0) { --branch_fetch_hold; }
+  if (held_branch_decode && branch_decode_hold != 0) { --branch_decode_hold; }
+}
 }

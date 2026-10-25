@@ -32,11 +32,13 @@ active DMA and the separate public native-reference caller.
   ctest --test-dir build/strict -j1 --output-on-failure \
     -R '^dsp_pipeline_(peripheral_writes|peripheral_state|bootstrap_prefix)$'
 
-The optional local document-derived SPI prefix is SHA-256 pinned. It executes
-three actual instructions over ten reference clocks, then refuses the next
-unqualified branch at P:ff0008. It is a partial document reconstruction, not an
+The optional local document-derived SPI prefix is SHA-256 pinned. With the
+selected OMR branches it retires eleven native instructions over29 reference
+clocks, then refuses register-source SHI MOVEP at P:ff0019 before the held final
+branch result retires. CLR flags and short-immediate R1 state have independent
+primary expectations. It is a partial document reconstruction, not an
 authentic full mask ROM or normal instrument boot. The modeled bus order remains
 a declared reference order, not a measured silicon trace. General peripheral
-forms, active DMA timing, branches/loops/IRQ/reset fill, authentic ROM/reserved
+forms, active DMA timing, general branches/loops/IRQ/reset fill, authentic ROM/reserved
 Y:002000, original Desktop/Keyboard reset-to-instrument operation and the full
 MIDI/audio/storage/update/recovery/physical acceptance objective remain open.

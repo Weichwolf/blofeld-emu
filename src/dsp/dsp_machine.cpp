@@ -5,6 +5,7 @@
 #include "dsp/detail/dsp_reference_cycle.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_agu_interlocks.hpp"
+#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dax.hpp"
@@ -510,6 +511,11 @@ DspProgramFetchView DspMachine::reference_fetch() const {
 DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTicket &ticket) {
   if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
   return state_->cpu.advance_reference_access(ticket);
+}
+
+DspBranchDecision DspMachine::capture_reference_branch(const std::uint32_t address) {
+  if (clocked()) { throw Fault("Native branch AG1 requires an unclocked reference owner"); }
+  return state_->cpu.capture_reference_branch(address);
 }
 
 DspAddressStageTicket DspMachine::capture_reference_address(const std::uint32_t address) {

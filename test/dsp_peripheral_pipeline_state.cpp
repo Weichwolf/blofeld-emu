@@ -26,6 +26,12 @@ namespace {
 using native_access::fault;
 constexpr unsigned changed_literal = 0x654321;
 constexpr unsigned register_movep = 0x08c43c;
+constexpr unsigned prefix_clocks = 29;
+constexpr unsigned prefix_native_cycles = 21;
+constexpr unsigned spi_mode_branch = 0xff0016;
+constexpr unsigned boot_spi_control = 0xa9;
+constexpr unsigned clear_status = 0x14;
+constexpr unsigned condition_codes = 0xff;
 
 struct WriteFailure {
   std::string_view instruction;
@@ -260,30 +266,44 @@ void bootstrap(const BootstrapFiles &files) {
   DspFetchRun run(contract(), machine);
   std::ofstream output(files.trace);
   output.exceptions(std::ios::failbit | std::ios::badbit);
-  for (unsigned clock = 0; clock < 10; ++clock) {
+  for (unsigned clock = 0; clock < prefix_clocks; ++clock) {
     const auto cycle = run.advance_cycle(machine, fetch_clock::input());
     const auto cpu = machine.cpu().debug_state();
     const auto latch = machine.bus().once_latch();
     output << cycle.completed_cycles << " pc=" << hex(cpu.cpu.pc, 6)
            << " instructions=" << cpu.native_instructions << " native-cycles=" << cpu.native_cycles
            << " once=" << (latch ? hex(*latch, 6) : "unknown") << '\n';
+    if (cycle.completed_cycles == 10) {
+      auto first = reset;
+      first.cpu.pc = boot + 4;
+      first.native_instructions += 3;
+      first.native_cycles += 4;
+      require(cpu == first && latch == 0,
+              "The initial genuine OnCE write and two NOP retirements retain their old timing");
+    }
   }
   auto expected = reset;
-  expected.cpu.pc = boot + 4;
-  expected.native_instructions += 3;
-  expected.native_cycles += 4;
+  require((reset.cpu.sr & condition_codes) == 0, "Hardware-reset prefix begins with clear CCR");
+  // FM13-44 CLR clears A/E/N/V, sets U/Z and preserves C; reset S/L/C are zero.
+  expected.cpu.a = 0;
+  expected.cpu.sr |= clear_status;
+  expected.cpu.r[1] = boot_spi_control;
+  expected.cpu.r[5] = 0;
+  expected.cpu.pc = spi_mode_branch;
+  expected.native_instructions += 11;
+  expected.native_cycles += prefix_native_cycles;
   require(machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0,
-          "Document-derived reset prefix executes its real OnCE write and two NOP retirements");
+          "Native OMR branches reach SPI selection with independently expected CLR/R state");
   const auto saved = run.checkpoint(machine);
   std::string first;
   for (unsigned replay = 0; replay < 2; ++replay) {
     run.restore(saved, machine);
     const auto error =
         fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-    require(error.contains("Unqualified automatic DSP decode P:0xff0008") && run.faulted() &&
-                run.completed_cycles() == 10 && machine.cpu().debug_state() == expected &&
-                machine.bus().once_latch() == 0,
-            "The next genuine branch remains an explicit frontier; no boot routine is skipped");
+    require(error.contains("Unqualified automatic DSP decode P:0xff0019") && run.faulted() &&
+                run.completed_cycles() == prefix_clocks &&
+                machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0,
+            "Register-source SHI MOVEP remains the explicit frontier; no boot routine is skipped");
     if (replay == 0) { first = error; }
     require(error == first, "Both reset-prefix continuations stop at the identical actual branch");
   }

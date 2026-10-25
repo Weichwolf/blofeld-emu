@@ -189,11 +189,13 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
     const auto fetch = machine.reference_fetch();
     const bool source_stall = state.pipeline && (state.pipeline->view.cycle.memory_source_stall ||
                                                  state.pipeline->view.cycle.agu_dependencies != 0);
-    if (!result.bus.dma.core_stall && !source_stall && !fetch.pending_address &&
+    const bool branch_stall = state.pipeline && state.pipeline->hold_fetch();
+    if (!result.bus.dma.core_stall && !source_stall && !branch_stall && !fetch.pending_address &&
         fetch.used < dsp_program_fetch_capacity) {
       const auto issued = machine.advance_reference_fetch(DspProgramFetchStage::address);
       result.issued_address = issued.pending_address;
     }
+    if (state.pipeline) { state.pipeline->finish_cycle(); }
     complete_cycle(machine, result.period_ticks, switch_was_pending);
     state.bind(machine);
     result.completed_cycles = state.cycles;

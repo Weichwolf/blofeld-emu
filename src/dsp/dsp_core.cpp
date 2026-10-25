@@ -7,6 +7,7 @@
 #include "dsp/dsp_address_phase.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_address_stages.hpp"
+#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupt_timing.hpp"
 #include "dsp/dsp_interrupts.hpp"
@@ -685,6 +686,7 @@ public:
       throw Fault("Unqualified native program-fetch mode change pc=" +
                   hex(reference.snapshot().context.pc, 6) + " omr=" + hex(omr, 6));
     }
+    if (fetch.confirm_branch(reference.snapshot().context.pc, next, omr, redirected)) { return; }
     const auto view = fetch.view();
     if (!redirected && next != view.consume_address) {
       throw Fault("Unqualified native program-fetch PC transition pc=" +
@@ -1191,6 +1193,33 @@ DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket 
     throw Fault("Non-standard DSP reference admission failure pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6));
   }
+}
+
+DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address) {
+  if (impl_->active || impl_->faulted || impl_->run.begin ||
+      !impl_->native.reference().fetch().active()) {
+    throw Fault("Native branch AG1 requires a healthy active frontend at P:" + hex(address, 6));
+  }
+  auto &fetch = impl_->native.reference().fetch();
+  const auto opcode = fetch.peek(address);
+  const auto next = (address + 1) & word_mask;
+  const auto extension = fetch.peek(next);
+  const auto form = opcode ? decode_branch_form(*opcode) : std::nullopt;
+  const auto omr = state().omr;
+  if (!form || !extension || fetch.view().omr != omr) {
+    throw Fault("Unqualified native branch AG1/F2 pair at P:" + hex(address, 6) +
+                " pc=" + hex(address, 6) + " omr=" + hex(omr, 6));
+  }
+  // The admitted automatic forms cannot write OMR. This drives only fetch;
+  // actual native E1 and E2 must independently confirm the same branch result.
+  const bool taken = (((omr >> form->bit) & 1U) != 0) == form->set;
+  const DspBranchDecision decision{.word = {.address = address, .value = *opcode},
+                                   .extension = {.address = next, .value = *extension},
+                                   .omr = omr,
+                                   .next_pc = taken ? *extension : ((next + 1) & word_mask),
+                                   .taken = taken};
+  fetch.predict_branch(decision);
+  return decision;
 }
 
 DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t address) {

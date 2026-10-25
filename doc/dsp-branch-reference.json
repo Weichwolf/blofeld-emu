@@ -1,0 +1,89 @@
+{
+  "scope": "Six fixed own initial-map OMR bit-branch timing windows. Independent normal-mode model observations and primary expectations, not silicon phase, ROM or full device equivalence.",
+  "primary_reference": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "TableA-1 JSET/JCLR register baseline",
+      "A.2.6.3 Conditional Instructions: false change of flow delays I2 Decode by one clock"
+    ]
+  },
+  "toolchain": "Pinned Symphony Studio1.1.0 normal-mode56371 reference and NXP assembler6.3.28; local tools/transport qualification in vendor-simulator.txt/reference-tools.json.",
+  "own_program_sha256": "91938e8cd58e24d79de72edda6e48d70b327db6d794e6b04739292e8a8546bb7",
+  "dynamic_own_instructions": 120,
+  "canaries": {
+    "X:000100": "13579b",
+    "Y:000100": "2468ac"
+  },
+  "cases": [
+    {
+      "name": "jset_omr_bit3_skip",
+      "op": "jset",
+      "bit": 3,
+      "taken": false,
+      "expected_x0": 6636321,
+      "expected_anchor_clocks": 13,
+      "observed_anchor_clocks": 13,
+      "agrees_with_primary": true
+    },
+    {
+      "name": "jclr_omr_bit3_skip",
+      "op": "jclr",
+      "bit": 3,
+      "taken": true,
+      "expected_x0": 0,
+      "expected_anchor_clocks": 10,
+      "observed_anchor_clocks": 10,
+      "agrees_with_primary": true
+    },
+    {
+      "name": "jset_omr_bit2_skip",
+      "op": "jset",
+      "bit": 2,
+      "taken": true,
+      "expected_x0": 0,
+      "expected_anchor_clocks": 10,
+      "observed_anchor_clocks": 10,
+      "agrees_with_primary": true
+    },
+    {
+      "name": "jclr_omr_bit2_skip",
+      "op": "jclr",
+      "bit": 2,
+      "taken": false,
+      "expected_x0": 6636321,
+      "expected_anchor_clocks": 13,
+      "observed_anchor_clocks": 13,
+      "agrees_with_primary": true
+    },
+    {
+      "name": "jset_omr_bit2_sequential",
+      "op": "jset",
+      "bit": 2,
+      "taken": true,
+      "expected_x0": 0,
+      "expected_anchor_clocks": 10,
+      "observed_anchor_clocks": 10,
+      "agrees_with_primary": true
+    },
+    {
+      "name": "jclr_omr_bit2_sequential",
+      "op": "jclr",
+      "bit": 2,
+      "taken": false,
+      "expected_x0": 0,
+      "expected_anchor_clocks": 11,
+      "observed_anchor_clocks": 11,
+      "agrees_with_primary": true
+    }
+  ],
+  "anchor_rule": "After eight quiet NOPs, last preceding NOP to sixth following NOP: register-branch4 + false-Decode1 when applicable + executed long-immediate MOVE2 when applicable + six NOPs.",
+  "primary_rule_resolution": "Initial comparison omitted FM A.2.6.3 false-conditional Decode delay. Complete primary rule resolves all six existing observations without program/model/log changes or a rerun.",
+  "all_complete_primary_windows_agree": true,
+  "physical_resolution_stage_qualified": false,
+  "switched_memory_map_qualified": false,
+  "normal_boot_qualified": false,
+  "generator": "tools/prepare_dsp_branch_reference.py",
+  "own_assembly_sha256": "57b3f04c13787ea4645b472b1472d665a1201e044fa0fa2f7401f9f78cbd1f36",
+  "static_own_instructions": 122
+}

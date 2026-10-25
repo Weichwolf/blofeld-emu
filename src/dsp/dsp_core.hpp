@@ -15,6 +15,7 @@
 
 namespace blofeld {
 class DspAddressStageTicket;
+struct DspBranchDecision;
 struct DspAddressStageView;
 struct DspMemoryStageResult;
 
@@ -153,6 +154,7 @@ private:
   [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;
   [[nodiscard]] DspReferenceProgress
   reference_progress(std::optional<DspReferenceEffect> completed = std::nullopt) const;
+  [[nodiscard]] DspBranchDecision capture_reference_branch(std::uint32_t address);
   [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address);
   [[nodiscard]] DspAddressStageView address_stage(const DspAddressStageTicket &ticket) const;
   [[nodiscard]] DspAddressStageTicket

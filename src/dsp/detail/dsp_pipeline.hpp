@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_program_fetch.hpp"
@@ -16,6 +17,7 @@ struct DspPipelineFormat {
   unsigned words = 1;
   bool memory = false;
   bool transfer = false;
+  bool branch = false;
 };
 
 [[nodiscard]] DspPipelineFormat
@@ -42,14 +44,25 @@ struct DspInstructionPipeline {
   DspPipelineView view;
   std::array<std::optional<DspAddressStageTicket>, 2> addresses{};
   std::array<std::optional<DspProgramWord>, 2> extensions{};
+  std::optional<DspBranchDecision> branch = std::nullopt;
+  unsigned branch_fetch_hold = 0;
+  unsigned branch_decode_hold = 0;
+  bool branch_target_ready = false;
+  bool held_branch_decode = false;
 
   void prepare(const DspMachine &machine);
   void rebind(const DspMachine &machine);
   void capture_address(DspMachine &machine);
+
+  [[nodiscard]] bool hold_fetch() const { return branch_fetch_hold != 0 || held_branch_decode; }
+
+  void finish_cycle();
   [[nodiscard]] DspReferenceTicket retirement(const DspMachine &machine) const;
   void complete(DspMachine &machine, const DspReferenceCycleResult &bus);
 
 private:
   void execute(DspMachine &machine);
+  void capture_branch(DspMachine &machine);
+  void validate_branch(const DspInstructionRetire &retirement) const;
 };
 }

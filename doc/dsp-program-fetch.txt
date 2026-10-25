@@ -114,3 +114,8 @@ conditional call, replay two joint snapshots and distinguish the following
 queued NOP from the DMA-written instruction. Existing distinct-target branches,
 JMP/JSR/RTS, zero/extension captures and strict failure cases remain covered.
 These finite ISA cases are deterministic instruction tests, not parser fuzzing.
+
+The selected automatic_memory OMR bit-branch profile owns an early fetch segment
+while preserving older opcode/extension samples. Actual native confirmation
+retains newly read target words; generic explicit redirects above still clear
+their queue. Scope, timing limits and same-address checks: dsp-branch-pipeline.txt.
