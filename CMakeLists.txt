@@ -207,7 +207,8 @@ target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gp
 add_library(blofeld_dsp src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp src/dsp/dsp_reference_execution.cpp
   src/dsp/dsp_program_fetch.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
-  src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp
+  src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
+  src/dsp/dsp_pipeline_execute.cpp
   src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
   src/dsp/dsp_interrupt_timing.cpp
   src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
@@ -777,6 +778,12 @@ if(BUILD_TESTING)
   add_test(NAME dsp_parallel_memory_addresses COMMAND blofeld-parallel-memory-test address)
   add_test(NAME dsp_parallel_memory_execution COMMAND blofeld-parallel-memory-test execution)
   add_test(NAME dsp_parallel_memory_state COMMAND blofeld-parallel-memory-test state)
+  add_executable(blofeld-transfer-pipeline-test test/dsp_transfer_pipeline_fields.cpp
+    test/dsp_transfer_pipeline_agu.cpp test/dsp_transfer_pipeline_state.cpp)
+  target_link_libraries(blofeld-transfer-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_pipeline_transfers COMMAND blofeld-transfer-pipeline-test fields)
+  add_test(NAME dsp_pipeline_agu_dependencies COMMAND blofeld-transfer-pipeline-test agu)
+  add_test(NAME dsp_pipeline_transfer_state COMMAND blofeld-transfer-pipeline-test state)
   add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
   target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)
@@ -2202,7 +2209,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test blofeld-transfer-pipeline-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

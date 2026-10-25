@@ -6,7 +6,6 @@
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_memory_form.hpp"
-#include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
@@ -50,11 +49,16 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
     if (fetch.words.at(index).address == view.decode_address) {
       cycle.decode = fetch.words.at(index);
       const auto word = *cycle.decode;
-      const bool memory =
-          profile == DspFetchPipeline::automatic_memory && decode_memory_stage(word.value);
-      validate_alu_pipeline_word(word, fetch.omr, memory);
+      cycle.decode_words = decode_pipeline_word(word, fetch.omr, profile).words;
+      cycle.agu_dependencies = pipeline_agu_dependencies(view.stages, word);
       break;
     }
+  }
+  if (cycle.ag1) { cycle.ag1_extension = pipeline_extension(fetch, *cycle.ag1); }
+  cycle.e1_extension = extensions[1];
+  if (cycle.execute1 &&
+      cycle.e1_extension.has_value() != (pipeline_word_count(*cycle.execute1) == 2)) {
+    throw Fault("Automatic DSP lost its captured extension-stage alignment");
   }
   if (cycle.execute1 && (fetch.used == 0 || fetch.words.front() != *cycle.execute1 ||
                          fetch.consume_address != cycle.execute1->address)) {
@@ -98,7 +102,9 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
   }
   const auto *effect = std::get_if<DspInstructionRetire>(&pending->effect);
   if (effect == nullptr || effect->pc != view.awaiting_retirement->address || effect->redirected ||
-      effect->next_pc != ((effect->pc + 1) & word_mask) || effect->next_omr != effect->omr) {
+      effect->next_pc !=
+          ((effect->pc + pipeline_word_count(*view.awaiting_retirement)) & word_mask) ||
+      effect->next_omr != effect->omr) {
     throw Fault("Automatic DSP E2 differs from its actual sequential ALU candidate");
   }
   const auto inputs = view.awaiting_inputs;
@@ -110,33 +116,6 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
     throw Fault("Automatic DSP E2 forwarded operand differs from its actual native candidate");
   }
   return pending->ticket;
-}
-
-void DspInstructionPipeline::execute(DspMachine &machine) {
-  if (!view.cycle.execute1) { throw Fault("Automatic DSP E1 lost its phase word"); }
-  view.cycle.candidate_inputs = machine.cpu().state();
-  auto pending = machine.reference_pending();
-  if (!pending) {
-    const auto progress = machine.begin_reference_instruction(execution);
-    pending = progress.pending;
-  }
-  if (!pending) { throw Fault("Automatic DSP E1 lost its actual opcode boundary"); }
-  const auto *access = std::get_if<DspNativeAccess>(&pending->effect);
-  if (access == nullptr || access->kind != DspNativeAccessKind::opcode ||
-      access->target.address != view.cycle.execute1->address ||
-      pending->latched_program_word != view.cycle.execute1->value) {
-    throw Fault("Automatic DSP E1 opcode does not match the real decoded F2 word");
-  }
-  const auto progress = machine.advance_reference_access(pending->ticket);
-  if (!progress.pending || progress.retired ||
-      !std::holds_alternative<DspInstructionRetire>(progress.pending->effect)) {
-    throw Fault("Unqualified actual native effect in automatic DSP ALU E1");
-  }
-  view.cycle.execution = progress;
-  view.cycle.execution_captured = true;
-  view.awaiting_retirement = view.cycle.execute1;
-  view.awaiting_inputs = view.cycle.candidate_inputs;
-  view.awaiting_deferred_accumulators = view.cycle.e1_deferred_accumulators;
 }
 
 void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCycleResult &bus) {
@@ -169,10 +148,15 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   }
   view.cycle.ag2_address = bus.address_update;
   capture_address(machine);
+  extensions[1] = extensions[0];
+  extensions[0] = view.cycle.ag1_extension;
   view.stages[2] = view.stages[1];
   view.stages[1] = view.stages[0];
-  view.stages[0] = view.cycle.decode;
-  if (view.cycle.decode) { view.decode_address = (view.decode_address + 1) & word_mask; }
+  view.stages[0] = view.cycle.agu_dependencies != 0 ? std::nullopt : view.cycle.decode;
+  if (view.stages[0]) {
+    view.decode_address = (view.decode_address + view.cycle.decode_words) & word_mask;
+    view.cycle.decode_accepted = true;
+  }
   view.cycle.advanced = true;
 }
 

@@ -45,8 +45,10 @@ required; a partial instruction cannot silently retry its committed first effect
 Qualified format scope: dual moves use X0/X1 and Y0/Y1 data operands; long loads
 use all eight LLL destination encodings, and raw long stores use A10/B10/X/Y.
 Full-accumulator long stores retain an explicit refusal pending S/L phase
-qualification. ALU/move accumulator destination overlap, extended/offset/pre-
-decrement and other control forms remain refusals. Untimed dual-Move pointer
+qualification. ALU/move accumulator destination overlap, extended data addresses,
+offset/pre-decrement and general control forms remain refusals. Selected
+immediate/register transfers and AGU dependencies are in dsp-transfer-pipeline.txt.
+Untimed dual-Move pointer
 publication requires actual prepublished AG2 results; it cannot invent the
 unobserved second address from a later semantic access.
 

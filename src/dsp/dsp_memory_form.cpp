@@ -18,9 +18,14 @@ bool data_register(const Reg reg) {
   return reg == Reg::X0 || reg == Reg::X1 || reg == Reg::Y0 || reg == Reg::Y1;
 }
 
+bool address_register(const Reg reg) {
+  return (reg >= Reg::R0 && reg <= Reg::R7) || (reg >= Reg::N0 && reg <= Reg::N7) ||
+         (reg >= Reg::M0 && reg <= Reg::M7);
+}
+
 bool memory(const Type type) {
   return type == dsp56k::Movex_ea || type == dsp56k::Movey_ea || type == dsp56k::Movel_ea ||
-         type == dsp56k::Movexy;
+         type == dsp56k::Movexy || type == dsp56k::Movec_ea;
 }
 
 DspMemoryOperation
@@ -30,12 +35,20 @@ operation(const Type type, const dsp56k::Field field, const std::uint32_t opcode
 }
 
 std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode) {
-  if (!data_register(dsp56k::getRegister(type, dsp56k::Field_ddd, opcode))) { return std::nullopt; }
+  const bool control = type == dsp56k::Movec_ea;
+  const auto reg =
+      dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
+  const auto access = operation(type, dsp56k::Field_W, opcode);
+  if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read)) {
+    return std::nullopt;
+  }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
   if (mode > 4) { return std::nullopt; }
   DspMemoryForm result;
-  result.lanes[0] = {.space = type == dsp56k::Movex_ea ? DspSpace::x : DspSpace::y,
-                     .operation = operation(type, dsp56k::Field_W, opcode),
+  const bool y = type == dsp56k::Movey_ea ||
+                 (control && dsp56k::getFieldValue(type, dsp56k::Field_S, opcode) != 0);
+  result.lanes[0] = {.space = y ? DspSpace::y : DspSpace::x,
+                     .operation = access,
                      .mode = mode,
                      .reg = dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode)};
   return result;
@@ -86,7 +99,9 @@ std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
     return std::nullopt;
   }
   const auto type = memory(first) ? first : second;
-  if (type == dsp56k::Movex_ea || type == dsp56k::Movey_ea) { return single(type, opcode); }
+  if (type == dsp56k::Movex_ea || type == dsp56k::Movey_ea || type == dsp56k::Movec_ea) {
+    return single(type, opcode);
+  }
   if (type == dsp56k::Movel_ea) { return long_pair(opcode); }
   if (type == dsp56k::Movexy) { return dual(opcode); }
   return std::nullopt;

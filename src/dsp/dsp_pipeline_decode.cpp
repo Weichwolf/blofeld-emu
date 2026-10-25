@@ -3,7 +3,9 @@
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
+#include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_program_fetch.hpp"
+#include "dsp/dsp_reference_execution.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
@@ -82,34 +84,34 @@ std::uint8_t memory_source_dependency(const DspInstructionDependency instruction
   return dependency(operands(producer, false).written, read);
 }
 
-void validate_alu_pipeline_word(const DspProgramWord word,
-                                const std::uint32_t omr,
-                                const bool memory) {
+DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
+                                       const std::uint32_t omr,
+                                       const DspFetchPipeline profile) {
   static const dsp56k::Opcodes opcodes;
   Type first = dsp56k::Invalid;
   Type second = dsp56k::Invalid;
   constexpr unsigned width = 6;
   const bool decoded = opcodes.getInstructionTypes(word.value, first, second) != 0;
   const bool arithmetic = std::ranges::contains(allowed, first);
-  const bool standalone_memory = memory && second == dsp56k::Invalid;
-  if (!decoded || (!arithmetic && !standalone_memory) ||
-      (!memory && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
-      dsp56k::Opcodes::getOpcodeLength(word.value, first, second) != 1) {
+  try {
+    if (!decoded) { throw Fault("Undefined native instruction"); }
+    const bool memory = profile == DspFetchPipeline::automatic_memory &&
+                        decode_memory_stage(word.value).has_value();
+    const bool transfer = profile == DspFetchPipeline::automatic_memory && !memory &&
+                          pipeline_transfer_fields(word.value) != DspMoveFields{};
+    const bool standalone_move = (memory || transfer) && second == dsp56k::Invalid;
+    const auto words = pipeline_word_count(word);
+    if ((!arithmetic && !standalone_move) ||
+        (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
+        words > (transfer ? 2U : 1U)) {
+      throw Fault("Unqualified native instruction form");
+    }
+    if (memory || transfer) { static_cast<void>(decode_move_writeback(word.value)); }
+    return {.words = words, .memory = memory, .transfer = transfer};
+  } catch (const std::exception &error) {
     throw Fault("Unqualified automatic DSP decode P:" + hex(word.address, width) +
                 " opcode=" + hex(word.value, width) + " pc=" + hex(word.address, width) +
-                " omr=" + hex(omr, width));
-  }
-  if (memory) {
-    try {
-      if (!decode_memory_stage(word.value)) {
-        throw Fault("Automatic memory decode lost its native form");
-      }
-      static_cast<void>(decode_move_writeback(word.value));
-    } catch (const std::exception &error) {
-      throw Fault("Unqualified automatic DSP decode P:" + hex(word.address, width) +
-                  " opcode=" + hex(word.value, width) + " pc=" + hex(word.address, width) +
-                  " omr=" + hex(omr, width) + ": " + error.what());
-    }
+                " omr=" + hex(omr, width) + ": " + error.what());
   }
 }
 }

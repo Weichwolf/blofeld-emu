@@ -1,0 +1,65 @@
+Automatic native transfers and decoded address dependencies
+
+The automatic_memory profile accepts selected register/short-immediate and
+two-word long-immediate transfers, alongside its native memory/ALU forms.
+Sources are literal data or X0/X1/Y0/Y1; destinations are those data registers,
+full/partial A/B and R0..R7/N0..N7/M0..M7. Native conversion, arithmetic and
+modifier-cache updates remain in the interpreter. Control/status/SSH sources
+and destinations, accumulator-source transfers, extended data addresses and
+unqualified forms still fail contextually before actual I/O.
+
+Decode derives instruction length from the captured opcode and skips an actual
+extension as a separate instruction. AG1 retains that extension from the prior
+real F2 buffer. E1 validates and consumes the native opcode/extension requests
+from those captured words, publishes actual move destination fields and holds
+the remaining native result. E2 publishes its true PC/native counters/ALU/CCR.
+No host-injected literal, extra program read or replacement evaluator is used.
+The frontend bandwidth naturally leaves a slot between two-word instruction
+starts; native instruction-cycle counters remain distinct from elapsed clocks.
+
+FM A.2.4 places detection of address-generation dependencies at Decode. An
+explicit R/N/M move destination in preceding AG1/AG2/E1 blocks a memory consumer
+of the same register set. Ordinary implicit AG2 pointer updates do not rearm
+that dependency. Older stages drain while Decode/F1/F2 hold, and real reference
+time/timers continue. The selected distances match existing independent normal
+NXP windows: register/short-immediate producers leave3/2/1/0 extra clocks for
+0..3 intervening NOPs; long immediates leave2/1/0/0. Multiword gaps age real
+clocks rather than just instruction count. Dual consumers check both register
+sets, and multiple producers age independently. The exact frontend hold policy
+is a declared reference order, not a measured silicon fetch/bus trace.
+
+One-word X/Y memory loads may target R/N/M, including control-move M loads.
+A native R destination supersedes its own earlier accepted AG2 update. Its
+actual loaded value replaces the retained pipeline R value so later whole-result
+publication cannot resurrect that old address value. Actual M/mask/modulo fields
+publish together; subsequent native AG1 observes the new modifier behavior.
+Reapplying an older load during restoration or retirement preserves a genuinely
+later accepted AG2 value. A directed trusted-boundary case checks this ordering
+without claiming an automatic elapsed-clock schedule for that explicit sequence.
+
+Trusted joint snapshots retain extension identity, decode/address stages, native
+move fields/caches, pending transfers and elapsed clocks. Captured code remains
+immutable after F2; future reads see subsequent RAM code changes. Unknown real
+extension fetches fail before CPU destination publication or elapsed success,
+quarantine the owner and require joint restore before repaired native execution.
+
+The directed cases include17 own NXP encoding pins, all R/N/M short/long
+destinations, literal full/partial data fields, parallel ALU/register movement,
+480 producer/register/gap combinations over both X/Y memory spaces, same-R load
+precedence, actual modifier caches, dual/two-producer holds, multiword gaps,
+snapshots, unknown-extension recovery and explicit unsupported-source guards.
+Sixteen independent encoding inputs have zero NXP errors/warnings. A separate
+intentional same-R destination input retains its expected assembler diagnostic;
+it does not qualify physical AG2/E1 observation. No warning is disabled and no
+manufacturer program bytes or tool binaries are redistributed.
+
+  cmake --build --preset strict --target blofeld-transfer-pipeline-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_pipeline_(transfers|agu_dependencies|transfer_state)$'
+
+General data-address extensions, full accumulator S/L phases, control/status,
+active physical DMA/arbitration, branch/loop/REP/cache/IRQ/reset fill, authentic
+needed ROM/reserved Y:002000 and actual normal original Keyboard/Desktop startup,
+MIDI/audio/storage/assets/USB/all documented functions remain required. These
+selected tests do not establish the complete hardware-emulator objective or
+real-device, real-time, update/recovery/power-loss acceptance.

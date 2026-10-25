@@ -29,6 +29,12 @@ struct DspPipelineCycle {
   std::optional<DspAddressStageView> ag1_address = std::nullopt;
   std::optional<DspAddressStageView> ag2_address = std::nullopt;
   std::optional<DspMemoryStageResult> memory = std::nullopt;
+  std::optional<DspProgramWord> ag1_extension = std::nullopt;
+  std::optional<DspProgramWord> e1_extension = std::nullopt;
+  std::optional<DspMoveWriteback> transfer = std::nullopt;
+  unsigned decode_words = 1;
+  std::uint8_t agu_dependencies = 0;
+  bool decode_accepted = false;
   bool memory_source_stall = false;
   bool retirement_published = false;
   bool execution_captured = false;

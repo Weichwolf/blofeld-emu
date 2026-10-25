@@ -410,7 +410,8 @@ public:
   void bind_memory_address(const DspAddressRecord &record) {
     const auto visible = cpu.referenceAttemptState();
     results.visible = visible;
-    results.base = visible;
+    if (!results.previous) { results.base = visible; }
+    if (!results.base) { throw Fault("Native memory E1 lost its actual computation base"); }
     auto &base = results.base->registers;
     const auto &source = record.source.registers;
     const auto bind = [&](const DspAddressUpdate update) {
@@ -477,6 +478,11 @@ public:
     if (!results.writeback.pending) { throw Fault("Native move-writeback lost its held fields"); }
     const auto completed = *results.writeback.pending;
     apply_move_fields(completed.fields);
+    for (unsigned index = 0; index < results.pipeline_addresses.size(); ++index) {
+      if ((completed.fields.r & (1U << index)) != 0 && results.pipeline_addresses.at(index)) {
+        results.pipeline_addresses.at(index) = word(cpu.regs().r.at(index));
+      }
+    }
     results.writeback.published = completed.fields;
     results.writeback.pending.reset();
     return completed;

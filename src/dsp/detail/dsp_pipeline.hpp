@@ -12,7 +12,21 @@
 #include <optional>
 
 namespace blofeld {
-void validate_alu_pipeline_word(DspProgramWord word, std::uint32_t omr, bool memory = false);
+struct DspPipelineFormat {
+  unsigned words = 1;
+  bool memory = false;
+  bool transfer = false;
+};
+
+[[nodiscard]] DspPipelineFormat
+decode_pipeline_word(DspProgramWord word, std::uint32_t omr, DspFetchPipeline profile);
+[[nodiscard]] unsigned pipeline_word_count(DspProgramWord word);
+[[nodiscard]] DspMoveFields pipeline_transfer_fields(std::uint32_t opcode);
+[[nodiscard]] std::uint8_t
+pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &preceding,
+                          DspProgramWord consumer);
+[[nodiscard]] std::optional<DspProgramWord> pipeline_extension(const DspProgramFetchView &fetch,
+                                                               DspProgramWord instruction);
 [[nodiscard]] std::uint8_t deferred_alu_accumulators(DspProgramWord producer,
                                                      DspProgramWord consumer);
 
@@ -27,6 +41,7 @@ struct DspInstructionPipeline {
   DspFetchPipeline profile = DspFetchPipeline::automatic_alu;
   DspPipelineView view;
   std::array<std::optional<DspAddressStageTicket>, 2> addresses{};
+  std::array<std::optional<DspProgramWord>, 2> extensions{};
 
   void prepare(const DspMachine &machine);
   void rebind(const DspMachine &machine);

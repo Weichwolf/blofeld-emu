@@ -1783,7 +1783,13 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           Selected parallel ALU and one-clock
                                           accumulator move-source interlocks are
                                           scoped in dsp-parallel-memory.txt.
-                                          General extensions, physical DMA/control
+                                          Selected immediate/register transfers
+                                          retain actual extension words to E1;
+                                          one-word R/N/M loads and explicit
+                                          destination dependencies now hold
+                                          consumers at Decode while older stages
+                                          drain (dsp-transfer-pipeline.txt).
+                                          General data-address extensions, DMA/control
                                           stages and default runtime remain open.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and

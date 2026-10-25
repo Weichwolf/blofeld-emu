@@ -187,7 +187,8 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
     result.bus = machine.advance_reference_bus_cycle(plan);
     if (state.pipeline) { state.pipeline->complete(machine, result.bus); }
     const auto fetch = machine.reference_fetch();
-    const bool source_stall = state.pipeline && state.pipeline->view.cycle.memory_source_stall;
+    const bool source_stall = state.pipeline && (state.pipeline->view.cycle.memory_source_stall ||
+                                                 state.pipeline->view.cycle.agu_dependencies != 0);
     if (!result.bus.dma.core_stall && !source_stall && !fetch.pending_address &&
         fetch.used < dsp_program_fetch_capacity) {
       const auto issued = machine.advance_reference_fetch(DspProgramFetchStage::address);
