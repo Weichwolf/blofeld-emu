@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_scheduled_run.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/hc12.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
+#include "firmware/firmware.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/hc12.hpp"
 #include "original_gpio_pair_fixture.hpp"
 #include "original_update_transport_fixture.hpp"
 

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_pll.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_pll.hpp"
 #include "dsp_norm_fixture.hpp"
 
 namespace blofeld::test::interlocks {

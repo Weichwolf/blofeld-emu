@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/firmware.hpp"
-#include "blofeld/lcd_image.hpp"
-#include "blofeld/private_file.hpp"
+#include "display/lcd_image.hpp"
+#include "firmware/firmware.hpp"
 #include "keyboard_initial_fixture.hpp"
 #include "lcd_fixture.hpp"
 #include "original_gpio_pair_fixture.hpp"
 #include "original_update_transport_fixture.hpp"
+#include "storage/private_file.hpp"
 
 #include <exception>
 #include <fstream>

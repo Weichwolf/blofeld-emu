@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/sample_wave.hpp"
+#include "common/bus.hpp"
 #include "sample_wave_fixture.hpp"
+#include "samples/sample_wave.hpp"
 
 #include <cmath>
 #include <exception>

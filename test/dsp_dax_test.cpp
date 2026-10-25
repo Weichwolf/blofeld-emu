@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_dax.hpp"
 #include "dax_fixture.hpp"
+#include "dsp/dsp_dax.hpp"
 
 #include <array>
 #include <exception>

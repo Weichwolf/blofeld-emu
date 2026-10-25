@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/audio_runtime.hpp"
-#include "blofeld/serial_pcm.hpp"
+#include "audio/audio_runtime.hpp"
+#include "audio/serial_pcm.hpp"
 #include "serial_pcm_fixture.hpp"
 
 #include <chrono>

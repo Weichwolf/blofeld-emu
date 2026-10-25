@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_dma.hpp"
-#include "blofeld/dsp_interrupts.hpp"
 #include "dma_fixture.hpp"
+#include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_interrupts.hpp"
 #include "dsp_dma_interrupt_fixture.hpp"
 
 #include <array>

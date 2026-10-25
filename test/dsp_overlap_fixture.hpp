@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_reference_execution.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_reference_execution.hpp"
 #include "dsp_writeback_fixture.hpp"
 #include "reference_execution_fixture.hpp"
 

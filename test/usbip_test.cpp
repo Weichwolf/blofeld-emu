@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/usb_transfer.hpp"
-#include "blofeld/usbip.hpp"
+#include "common/bus.hpp"
+#include "usb/usb_transfer.hpp"
+#include "usb/usbip.hpp"
 #include "usbip_fixture.hpp"
 
 #include <array>

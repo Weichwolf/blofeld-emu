@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/nand.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 #include "nand_gpio_fixture.hpp"
 #include "nand_program_fixture.hpp"
+#include "storage/nand.hpp"
 
 #include <array>
 #include <cstddef>

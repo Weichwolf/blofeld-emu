@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/nand.hpp"
-#include "blofeld/nand_array.hpp"
-#include "blofeld/nand_store.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_array.hpp"
+#include "storage/nand_store.hpp"
 
 #include <cstdint>
 #include <iosfwd>

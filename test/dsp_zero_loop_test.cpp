@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_timers.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_timers.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_transfer_fixture.hpp"
 

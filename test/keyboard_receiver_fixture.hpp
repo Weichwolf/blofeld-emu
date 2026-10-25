@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_cycles.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_gpio.hpp"
-#include "blofeld/mcu_machine.hpp"
-#include "blofeld/mcu_run_clock.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_cycles.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_gpio.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_run_clock.hpp"
+#include "storage/flash_image.hpp"
 
 #include <algorithm>
 #include <array>

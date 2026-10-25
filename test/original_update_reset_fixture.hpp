@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_run_clock.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_cycles.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_dsp_schedule.hpp"
-#include "blofeld/mcu_machine.hpp"
-#include "blofeld/mcu_reset.hpp"
-#include "blofeld/mcu_run_clock.hpp"
+#include "board/mcu_dsp_schedule.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_cycles.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_reset.hpp"
+#include "mcu/mcu_run_clock.hpp"
 #include "original_update_forward_fixture.hpp"
+#include "storage/flash_image.hpp"
 
 #include <array>
 #include <cstdint>

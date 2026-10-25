@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_shi.hpp"
-#include "blofeld/hcs08_spi.hpp"
+#include "dsp/dsp_shi.hpp"
 #include "hcs08_spi_fixture.hpp"
+#include "keyboard/hcs08_spi.hpp"
 
 #include <algorithm>
 #include <array>

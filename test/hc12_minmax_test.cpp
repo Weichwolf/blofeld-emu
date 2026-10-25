@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/hc12.hpp"
+#include "common/bus.hpp"
 #include "hc12_minmax_fixture.hpp"
+#include "mcu/hc12.hpp"
 
 #include <array>
 #include <cstdint>

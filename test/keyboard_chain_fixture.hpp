@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
 #include "keyboard_handoff_fixture.hpp"
 #include "keyboard_reset_fixture.hpp"
 #include "lcd_fixture.hpp"

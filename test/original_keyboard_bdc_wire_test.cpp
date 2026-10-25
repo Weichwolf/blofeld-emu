@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/firmware.hpp"
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_bdc_wire.hpp"
+#include "firmware/firmware.hpp"
 #include "hcs08_wire_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_bdc_wire.hpp"
 #include "keyboard_bdc_wire_fixture.hpp"
 #include "keyboard_receiver_fixture.hpp"
 

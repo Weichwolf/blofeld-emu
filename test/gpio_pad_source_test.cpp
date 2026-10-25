@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_gpio.hpp"
-#include "blofeld/gpio_pads.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_gpio.hpp"
+#include "board/gpio_pads.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_gpio.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_gpio.hpp"
 
 #include <array>
 #include <cstdint>

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/serial_pcm.hpp"
+#include "audio/serial_pcm.hpp"
 #include "serial_pcm_fixture.hpp"
 
 #include <cstdint>

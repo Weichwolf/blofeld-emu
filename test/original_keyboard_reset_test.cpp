@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/firmware.hpp"
+#include "firmware/firmware.hpp"
 #include "hcs08_fixture.hpp"
 #include "keyboard_receiver_fixture.hpp"
 #include "keyboard_reset_fixture.hpp"

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/lcd_export.hpp"
-#include "blofeld/lcd_image.hpp"
-#include "blofeld/private_file.hpp"
-#include "blofeld/st7565.hpp"
+#include "common/bus.hpp"
+#include "display/lcd_export.hpp"
+#include "display/lcd_image.hpp"
+#include "display/st7565.hpp"
 #include "lcd_image_fixture.hpp"
+#include "storage/private_file.hpp"
 
 #include <exception>
 #include <filesystem>

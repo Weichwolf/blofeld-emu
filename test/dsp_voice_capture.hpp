@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/serial_pcm.hpp"
+#include "audio/serial_pcm.hpp"
 #include "dsp_norm_fixture.hpp"
 
 #include <span>

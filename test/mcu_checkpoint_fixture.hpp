@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_gpio.hpp"
+#include "common/bus.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_gpio.hpp"
+#include "storage/flash_image.hpp"
 
 #include <array>
 #include <cstdint>

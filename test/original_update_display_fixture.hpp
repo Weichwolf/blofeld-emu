@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/st7565.hpp"
+#include "display/st7565.hpp"
+#include "mcu/mcu_bus.hpp"
 #include "original_update_forward_fixture.hpp"
 
 #include <cstdint>

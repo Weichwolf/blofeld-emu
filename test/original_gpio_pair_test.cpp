@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_schedule.hpp"
+#include "common/bus.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 #include "original_gpio_pair_fixture.hpp"
 
 #include <exception>

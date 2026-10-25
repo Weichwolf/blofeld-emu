@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/audio_runtime.hpp"
+#include "audio/audio_runtime.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_voice_capture.hpp"
 #include "dsp_voice_fixture.hpp"

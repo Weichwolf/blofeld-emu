@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/hcs08_flash.hpp"
+#include "common/bus.hpp"
+#include "keyboard/hcs08_flash.hpp"
 
 #include <cstdint>
 #include <string>

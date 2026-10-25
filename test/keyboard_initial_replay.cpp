@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/hc12.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_core.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "keyboard_initial_fixture.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/hc12.hpp"
 #include "original_gpio_pair_fixture.hpp"
 #include "original_update_forward_fixture.hpp"
 

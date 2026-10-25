@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_usb.hpp"
-#include "blofeld/usbip_tcp.hpp"
+#include "common/bus.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_usb.hpp"
+#include "usb/usbip_tcp.hpp"
 #include "usb_device_fixture.hpp"
 #include "usb_host_fixture.hpp"
 #include "usbip_fixture.hpp"

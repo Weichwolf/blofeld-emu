@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/flash_file.hpp"
-#include "blofeld/flash_image.hpp"
+#include "common/bus.hpp"
+#include "storage/flash_file.hpp"
+#include "storage/flash_image.hpp"
 
 #include <array>
 #include <charconv>

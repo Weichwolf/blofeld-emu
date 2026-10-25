@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Execute unchanged original workspace routines with explicit native callers.
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_pll.hpp"
-#include "blofeld/dsp_run_clock.hpp"
-#include "blofeld/firmware.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_pll.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_workspace_fixture.hpp"
+#include "firmware/firmware.hpp"
 
 #include <array>
 #include <exception>

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/firmware.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/mcu_machine.hpp"
+#include "firmware/firmware.hpp"
+#include "mcu/mcu_machine.hpp"
 #include "original_midi_forward_fixture.hpp"
+#include "storage/flash_image.hpp"
 #include "usb_host_fixture.hpp"
 
 #include <optional>

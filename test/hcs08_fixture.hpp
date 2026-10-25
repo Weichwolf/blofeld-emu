@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_known_memory.hpp"
+#include "common/bus.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
 
 #include <array>
 #include <bitset>

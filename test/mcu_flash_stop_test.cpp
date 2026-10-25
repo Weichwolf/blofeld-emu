@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_flash.hpp"
-#include "blofeld/mcu_gpio.hpp"
 #include "flash_stop_fixture.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_flash.hpp"
+#include "mcu/mcu_gpio.hpp"
+#include "storage/flash_image.hpp"
 
 #include <array>
 #include <cstdint>

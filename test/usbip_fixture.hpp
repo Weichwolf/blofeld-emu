@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/usb_transfer.hpp"
+#include "usb/usb_transfer.hpp"
 
 #include <algorithm>
 #include <array>

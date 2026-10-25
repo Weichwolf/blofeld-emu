@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/usb_device.hpp"
+#include "usb/usb_device.hpp"
 #include "usb_host_fixture.hpp"
 
 #include <algorithm>

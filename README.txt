@@ -10,6 +10,28 @@ acceptance scope is in doc/objective.txt; evidence and gaps are in doc/coverage.
 This is not yet a booting Blofeld, a playable synthesizer or a verified
 replacement-firmware target.
 
+Source layout
+Implementation and headers live together under src/. Project include paths are
+relative to that root, for example "dsp/dsp_core.hpp". The areas are:
+
+  app/       Standalone entry point and command-line MIDI runner
+  board/     Device wiring, coupled scheduling and reference-board composition
+  common/    Shared bus interfaces and diagnostics
+  dsp/       DSP core, pipeline, memory and DSP peripherals
+  mcu/       HC12 main CPU, memory and peripherals
+  keyboard/  HCS08 keyboard controller and peripherals
+  firmware/  Firmware archive, MIDI container and input decoding
+  storage/   Flash, NAND, persistence and device identity
+  samples/   Sample libraries, formats and conversion
+  audio/     Serial PCM, host audio, queues and recording
+  midi/      MIDI serial timing and host transport
+  usb/       USB controller host interfaces and USB/IP transport
+  display/   LCD controller, parallel interface and image export
+
+A detail/ directory distinguishes internal headers that share a name with a
+component interface. Test fixtures live under test/; prepared native dependencies
+live in the build directory and retain their own source layout and notices.
+
 Build and quality checks
 Requirements: LLVM 19 (clang, clang-tidy, clang-format, llvm-nm, llvm-readelf and
 sanitizer runtime), CMake >= 3.25, Ninja, Git, GNU patch, Python 3 and Ghidra 12.1.2

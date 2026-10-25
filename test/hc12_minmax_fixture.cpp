@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "hc12_minmax_fixture.hpp"
 
-#include "blofeld/hc12.hpp"
+#include "mcu/hc12.hpp"
 
 namespace blofeld::test {
 void check_minmax_result(const MinmaxMemory &memory,

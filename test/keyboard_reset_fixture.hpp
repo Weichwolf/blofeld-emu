@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/gpio_pads.hpp"
-#include "blofeld/hc12_cycles.hpp"
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_bdc.hpp"
-#include "blofeld/hcs08_bdc_wire.hpp"
-#include "blofeld/hcs08_reset.hpp"
-#include "blofeld/hcs08_run_clock.hpp"
-#include "blofeld/mcu_machine.hpp"
+#include "board/gpio_pads.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
 #include "hcs08_programmer_fixture.hpp"
 #include "hcs08_wire_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_bdc.hpp"
+#include "keyboard/hcs08_bdc_wire.hpp"
+#include "keyboard/hcs08_reset.hpp"
+#include "keyboard/hcs08_run_clock.hpp"
+#include "mcu/hc12_cycles.hpp"
+#include "mcu/mcu_machine.hpp"
 
 #include <cstdint>
 #include <functional>

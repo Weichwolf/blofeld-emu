@@ -2,11 +2,11 @@
 // Independent scalar envelope models; only pinned original firmware executes.
 // Models adapted from Weichwolf/blofeld-src (GPL-3.0-only); provenance is recorded
 // in doc/dsp-envelope-reference.json. No manufacturer program words are embedded.
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/firmware.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 
 #include <algorithm>
 #include <array>

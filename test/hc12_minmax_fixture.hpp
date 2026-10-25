@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/hc12.hpp"
+#include "common/bus.hpp"
+#include "mcu/hc12.hpp"
 
 #include <algorithm>
 #include <array>

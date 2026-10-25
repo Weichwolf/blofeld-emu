@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "application_fixture.hpp"
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/host_midi.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_machine.hpp"
-#include "blofeld/mcu_midi.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_midi.hpp"
+#include "midi/host_midi.hpp"
+#include "storage/flash_image.hpp"
 
 #include <array>
 #include <cstdint>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/midi_serial.hpp"
-#include "blofeld/midi_timed.hpp"
+#include "common/bus.hpp"
+#include "midi/midi_serial.hpp"
+#include "midi/midi_timed.hpp"
 
 #include <array>
 #include <cstdint>

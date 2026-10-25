@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_reference_execution.hpp"
-#include "blofeld/firmware.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_reference_execution.hpp"
 #include "dsp_boot_context.hpp"
 #include "dsp_boot_reference.hpp"
+#include "firmware/firmware.hpp"
 #include "original_dsp_reference.hpp"
 
 #include <algorithm>

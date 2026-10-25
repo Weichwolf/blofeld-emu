@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/firmware.hpp"
+#include "firmware/firmware.hpp"
 #include "original_usb_peer_fixture.hpp"
 #include "usb_host_fixture.hpp"
 

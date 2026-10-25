@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Original scheduler observations adapted from the source checkpoint recorded in
 // doc/dsp-scheduler-reference.json. Independent equations remain in Python.
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/firmware.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 
 #include <array>
 #include <cstdint>

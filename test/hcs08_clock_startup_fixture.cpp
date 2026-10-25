@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "hcs08_clock_startup_fixture.hpp"
 
-#include "blofeld/bus.hpp"
-#include "blofeld/gpio_pads.hpp"
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_flash.hpp"
-#include "blofeld/hcs08_gpio.hpp"
-#include "blofeld/hcs08_icg.hpp"
-#include "blofeld/hcs08_known_memory.hpp"
-#include "blofeld/hcs08_spi.hpp"
-#include "blofeld/hcs08_system_options.hpp"
+#include "board/gpio_pads.hpp"
+#include "common/bus.hpp"
 #include "hcs08_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_flash.hpp"
+#include "keyboard/hcs08_gpio.hpp"
+#include "keyboard/hcs08_icg.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
+#include "keyboard/hcs08_spi.hpp"
+#include "keyboard/hcs08_system_options.hpp"
 
 #include <array>
 #include <cstdint>

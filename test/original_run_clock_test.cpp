@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_cycles.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_gpio.hpp"
-#include "blofeld/mcu_run_clock.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_cycles.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_gpio.hpp"
+#include "mcu/mcu_run_clock.hpp"
 
 #include <array>
 #include <cstdint>

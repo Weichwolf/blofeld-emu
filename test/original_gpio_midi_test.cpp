@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
 #include "original_gpio_midi_fixture.hpp"
 
 #include <array>

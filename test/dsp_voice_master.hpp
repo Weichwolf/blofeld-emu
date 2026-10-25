@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
 #include "dsp_norm_fixture.hpp"
 
 #include <ostream>

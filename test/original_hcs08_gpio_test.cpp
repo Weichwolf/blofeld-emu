@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/gpio_pads.hpp"
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_gpio.hpp"
+#include "board/gpio_pads.hpp"
+#include "common/bus.hpp"
 #include "hcs08_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_gpio.hpp"
 
 #include <array>
 #include <cstdint>

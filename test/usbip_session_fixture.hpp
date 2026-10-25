@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/usbip_export.hpp"
-#include "blofeld/usbip_session.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "usb/usbip_export.hpp"
+#include "usb/usbip_session.hpp"
 #include "usb_device_fixture.hpp"
 #include "usb_host_fixture.hpp"
 

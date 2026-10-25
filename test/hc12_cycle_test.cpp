@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_cycles.hpp"
+#include "common/bus.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_cycles.hpp"
 
 #include <algorithm>
 #include <array>

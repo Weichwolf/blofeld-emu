@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "scheduled_frontier_fixture.hpp"
 
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_run_clock.hpp"
-#include "blofeld/mcu_machine.hpp"
-#include "blofeld/mcu_run_clock.hpp"
+#include "common/bus.hpp"
 #include "coupled_boot_fixture.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_run_clock.hpp"
 #include "original_owned_clock_fixture.hpp"
 #include "scheduled_coupling_fixture.hpp"
 

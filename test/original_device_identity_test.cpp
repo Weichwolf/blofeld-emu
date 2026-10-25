@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/device_identity.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_gpio.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_gpio.hpp"
+#include "storage/device_identity.hpp"
+#include "storage/flash_image.hpp"
 
 #include <cstdint>
 #include <exception>

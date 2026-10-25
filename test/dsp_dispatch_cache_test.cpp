@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_dispatch_cache.hpp"
-#include "blofeld/dsp_machine.hpp"
+#include "dsp/dsp_dispatch_cache.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp56kEmu/assembler.h"
 #include "dsp_norm_fixture.hpp"
 

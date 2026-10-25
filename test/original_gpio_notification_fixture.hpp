@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_scheduled_run.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/hc12_cycles.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_dsp_schedule.hpp"
-#include "blofeld/mcu_gpio.hpp"
+#include "board/mcu_dsp_schedule.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
+#include "firmware/firmware.hpp"
 #include "gpio_notification_wire.hpp"
 #include "gpio_parameter_caller.hpp"
+#include "mcu/hc12_cycles.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_gpio.hpp"
 #include "original_gpio_pair_fixture.hpp"
 
 #include <array>

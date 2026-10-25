@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "audio/audio_runtime.hpp"
+#include "audio/pcm_queue.hpp"
+#include "audio/pcm_sink.hpp"
+#include "audio/serial_pcm.hpp"
 #include "audio_runtime_fixture.hpp"
-#include "blofeld/audio_runtime.hpp"
-#include "blofeld/bus.hpp"
-#include "blofeld/flash_file.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/pcm_queue.hpp"
-#include "blofeld/pcm_sink.hpp"
-#include "blofeld/serial_pcm.hpp"
-#include "reference_board.hpp"
+#include "board/reference_board.hpp"
+#include "common/bus.hpp"
 #include "serial_pcm_fixture.hpp"
+#include "storage/flash_file.hpp"
+#include "storage/flash_image.hpp"
 
 #include <cstddef>
 #include <cstdint>

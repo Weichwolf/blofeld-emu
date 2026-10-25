@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_dma.hpp"
 #include "dma_fixture.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
 
 #include <array>
 #include <cstdint>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/hcs08_flash.hpp"
 #include "hcs08_flash_fixture.hpp"
+#include "keyboard/hcs08_flash.hpp"
 
 #include <cstdint>
 #include <exception>

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/device_identity.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/private_file.hpp"
-#include "blofeld/virtual_device_state.hpp"
+#include "common/bus.hpp"
+#include "storage/device_identity.hpp"
+#include "storage/flash_image.hpp"
+#include "storage/private_file.hpp"
+#include "storage/virtual_device_state.hpp"
 
 #include <array>
 #include <cstdint>

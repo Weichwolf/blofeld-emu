@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/st7565.hpp"
-#include "blofeld/st7565_parallel.hpp"
+#include "common/bus.hpp"
+#include "display/st7565.hpp"
+#include "display/st7565_parallel.hpp"
 
 #include <cstdint>
 #include <exception>

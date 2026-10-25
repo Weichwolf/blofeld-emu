@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/lcd_image.hpp"
-#include "blofeld/st7565.hpp"
+#include "display/lcd_image.hpp"
+#include "display/st7565.hpp"
 #include "lcd_image_fixture.hpp"
 
 #include <algorithm>

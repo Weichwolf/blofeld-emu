@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_fetch_run.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_pipeline.hpp"
-#include "blofeld/dsp_reference_execution.hpp"
+#include "dsp/dsp_fetch_run.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_pipeline.hpp"
+#include "dsp/dsp_reference_execution.hpp"
 #include "dsp_checkpoint_fixture.hpp"
 #include "dsp_fetch_run_fixture.hpp"
 #include "dsp_norm_fixture.hpp"

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp_filter_model.hpp"
 
-#include "blofeld/bus.hpp"
+#include "common/bus.hpp"
 
 #include <algorithm>
 #include <cstddef>

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_reference_execution.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_reference_execution.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "reference_execution_fixture.hpp"
 

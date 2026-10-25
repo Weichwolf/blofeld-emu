@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Original installer/preparation with a test observation landing pad.
 // The landing pad starts a new independent case, never a completion callback or flash success.
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_machine.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp_norm_fixture.hpp"
 
 #include <array>

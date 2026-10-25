@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/pcm_recording.hpp"
-#include "blofeld/pcm_wave.hpp"
-#include "blofeld/private_file.hpp"
+#include "audio/pcm_recording.hpp"
+#include "audio/pcm_wave.hpp"
+#include "common/bus.hpp"
 #include "pcm_transport_fixture.hpp"
 #include "serial_pcm_fixture.hpp"
+#include "storage/private_file.hpp"
 
 #include <algorithm>
 #include <array>

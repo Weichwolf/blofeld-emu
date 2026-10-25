@@ -2,14 +2,14 @@
 #include "application_fixture.hpp"
 #include "application_midi_fixture.hpp"
 #include "application_update_fixture.hpp"
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_machine.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "storage/flash_image.hpp"
 
 #include <exception>
 #include <filesystem>

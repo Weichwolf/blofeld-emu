@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/pcm_wave.hpp"
-#include "blofeld/serial_pcm.hpp"
+#include "audio/pcm_wave.hpp"
+#include "audio/serial_pcm.hpp"
 
 #include <cstdint>
 #include <filesystem>

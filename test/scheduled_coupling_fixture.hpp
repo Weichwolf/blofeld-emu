@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_scheduled_run.hpp"
-#include "blofeld/dsp_shi.hpp"
-#include "blofeld/hc12_cycles.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_dsp_schedule.hpp"
-#include "blofeld/mcu_machine.hpp"
+#include "board/mcu_dsp_schedule.hpp"
 #include "coupled_boot_fixture.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/dsp_shi.hpp"
+#include "mcu/hc12_cycles.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_machine.hpp"
 #include "original_owned_clock_fixture.hpp"
 
 #include <cstdint>

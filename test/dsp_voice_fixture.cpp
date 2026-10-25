@@ -2,18 +2,18 @@
 // Observe unchanged original 1.25 voice blocks; scalar models remain separate.
 #include "dsp_voice_fixture.hpp"
 
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/pcm_sink.hpp"
-#include "blofeld/serial_pcm.hpp"
+#include "audio/pcm_sink.hpp"
+#include "audio/serial_pcm.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_voice_capture.hpp"
 #include "dsp_voice_master.hpp"
 #include "dsp_voice_pcm.hpp"
 #include "dsp_voice_repeat.hpp"
+#include "firmware/firmware.hpp"
 
 #include <algorithm>
 #include <array>

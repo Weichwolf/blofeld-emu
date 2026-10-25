@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/st7565.hpp"
+#include "common/bus.hpp"
+#include "display/st7565.hpp"
 
 #include <cstdint>
 #include <string_view>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/nand_array.hpp"
-#include "blofeld/nand_read_timing.hpp"
+#include "common/bus.hpp"
+#include "storage/nand_array.hpp"
+#include "storage/nand_read_timing.hpp"
 
 #include <array>
 #include <cstdint>

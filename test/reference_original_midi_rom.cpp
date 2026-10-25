@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/firmware.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 
 #include <array>
 #include <cstdint>

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_cycles.hpp"
-#include "blofeld/mcu_machine.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_cycles.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "storage/flash_image.hpp"
 
 #include <array>
 #include <cstdint>

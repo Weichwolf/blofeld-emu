@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_bdc.hpp"
-#include "blofeld/hcs08_run_clock.hpp"
 #include "hcs08_bdc_fixture.hpp"
 #include "hcs08_fixture.hpp"
 #include "hcs08_wire_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_bdc.hpp"
+#include "keyboard/hcs08_run_clock.hpp"
 
 #include <array>
 #include <cstdint>

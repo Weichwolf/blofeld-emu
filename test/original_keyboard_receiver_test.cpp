@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_gpio.hpp"
+#include "common/bus.hpp"
+#include "firmware/firmware.hpp"
 #include "keyboard_receiver_fixture.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_gpio.hpp"
 
 #include <array>
 #include <cstdint>

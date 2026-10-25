@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/firmware.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 #include "original_update_transport_fixture.hpp"
 
 #include <exception>

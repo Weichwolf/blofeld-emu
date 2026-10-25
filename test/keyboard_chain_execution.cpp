@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_flash.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_machine.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "hcs08_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_flash.hpp"
 #include "keyboard_chain_fixture.hpp"
 #include "keyboard_handoff_fixture.hpp"
 #include "keyboard_reset_fixture.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_machine.hpp"
 
 #include <algorithm>
 #include <cstdint>

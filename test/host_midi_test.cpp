@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/host_midi.hpp"
+#include "common/bus.hpp"
+#include "midi/host_midi.hpp"
 
 #include <array>
 #include <cstddef>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_machine.hpp"
+#include "dsp/dsp_machine.hpp"
 
 #include <iosfwd>
 

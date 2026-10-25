@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/mcu_bus.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "keyboard_initial_fixture.hpp"
 #include "lcd_fixture.hpp"
+#include "mcu/mcu_bus.hpp"
 #include "original_gpio_pair_fixture.hpp"
 
 #include <cstdint>

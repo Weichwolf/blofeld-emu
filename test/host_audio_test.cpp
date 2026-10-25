@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/host_audio.hpp"
-#include "blofeld/serial_pcm.hpp"
+#include "audio/host_audio.hpp"
+#include "audio/serial_pcm.hpp"
+#include "common/bus.hpp"
 #include "host_audio_fixture.hpp"
 #include "serial_pcm_fixture.hpp"
 

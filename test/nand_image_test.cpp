@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/nand.hpp"
-#include "blofeld/nand_array.hpp"
-#include "blofeld/nand_image.hpp"
 #include "nand_persistence_fixture.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_array.hpp"
+#include "storage/nand_image.hpp"
 
 #include <algorithm>
 #include <array>

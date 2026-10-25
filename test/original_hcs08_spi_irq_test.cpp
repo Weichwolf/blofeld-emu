@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_shi.hpp"
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_flash.hpp"
-#include "blofeld/hcs08_known_memory.hpp"
-#include "blofeld/hcs08_spi.hpp"
-#include "blofeld/private_file.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_shi.hpp"
 #include "hcs08_clock_startup_fixture.hpp"
 #include "hcs08_fixture.hpp"
 #include "hcs08_programmer_fixture.hpp"
 #include "hcs08_spi_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_flash.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
+#include "keyboard/hcs08_spi.hpp"
+#include "storage/private_file.hpp"
 
 #include <array>
 #include <cstddef>

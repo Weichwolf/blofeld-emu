@@ -77,166 +77,166 @@ set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 include(cmake/Hc12Spec.cmake)
 include(cmake/Hcs08Spec.cmake)
-add_library(blofeld_firmware src/firmware.cpp src/archive.cpp src/midi_file.cpp src/diagnostic.cpp src/bus.cpp)
-target_include_directories(blofeld_firmware PUBLIC include)
+add_library(blofeld_firmware src/firmware/firmware.cpp src/firmware/archive.cpp src/firmware/midi_file.cpp src/common/diagnostic.cpp src/common/bus.cpp)
+target_include_directories(blofeld_firmware PUBLIC src)
 target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
-add_library(blofeld_hcs08 src/hcs08.cpp src/hcs08_interrupts.cpp src/hcs08_registers.cpp src/hcs08_ccr.cpp)
-target_include_directories(blofeld_hcs08 PUBLIC include)
+add_library(blofeld_hcs08 src/keyboard/hcs08.cpp src/keyboard/hcs08_interrupts.cpp src/keyboard/hcs08_registers.cpp src/keyboard/hcs08_ccr.cpp)
+target_include_directories(blofeld_hcs08 PUBLIC src)
 target_link_libraries(blofeld_hcs08 PUBLIC blofeld_firmware PRIVATE blofeld_sleigh)
 add_dependencies(blofeld_hcs08 blofeld_hcs08_spec)
-add_library(blofeld_hcs08_icg src/hcs08_icg.cpp)
-target_include_directories(blofeld_hcs08_icg PUBLIC include)
+add_library(blofeld_hcs08_icg src/keyboard/hcs08_icg.cpp)
+target_include_directories(blofeld_hcs08_icg PUBLIC src)
 target_link_libraries(blofeld_hcs08_icg PUBLIC blofeld_firmware)
-add_library(blofeld_hcs08_spi src/hcs08_spi.cpp src/hcs08_spi_registers.cpp)
-target_include_directories(blofeld_hcs08_spi PUBLIC include)
+add_library(blofeld_hcs08_spi src/keyboard/hcs08_spi.cpp src/keyboard/hcs08_spi_registers.cpp)
+target_include_directories(blofeld_hcs08_spi PUBLIC src)
 target_link_libraries(blofeld_hcs08_spi PUBLIC blofeld_firmware)
-add_library(blofeld_hcs08_flash src/hcs08_flash.cpp src/hcs08_flash_registers.cpp
-  src/hcs08_flash_array.cpp src/hcs08_flash_reset.cpp)
-target_include_directories(blofeld_hcs08_flash PUBLIC include)
+add_library(blofeld_hcs08_flash src/keyboard/hcs08_flash.cpp src/keyboard/hcs08_flash_registers.cpp
+  src/keyboard/hcs08_flash_array.cpp src/keyboard/hcs08_flash_reset.cpp)
+target_include_directories(blofeld_hcs08_flash PUBLIC src)
 target_link_libraries(blofeld_hcs08_flash PUBLIC blofeld_firmware)
-add_library(blofeld_hcs08_bdc src/hcs08_bdc.cpp src/hcs08_bdc_commands.cpp)
-target_include_directories(blofeld_hcs08_bdc PUBLIC include)
+add_library(blofeld_hcs08_bdc src/keyboard/hcs08_bdc.cpp src/keyboard/hcs08_bdc_commands.cpp)
+target_include_directories(blofeld_hcs08_bdc PUBLIC src)
 target_link_libraries(blofeld_hcs08_bdc PUBLIC blofeld_hcs08 blofeld_hcs08_flash)
-add_library(blofeld_hcs08_bdc_wire src/hcs08_bdc_wire.cpp src/hcs08_bdc_sync.cpp)
-target_include_directories(blofeld_hcs08_bdc_wire PUBLIC include)
+add_library(blofeld_hcs08_bdc_wire src/keyboard/hcs08_bdc_wire.cpp src/keyboard/hcs08_bdc_sync.cpp)
+target_include_directories(blofeld_hcs08_bdc_wire PUBLIC src)
 target_link_libraries(blofeld_hcs08_bdc_wire PUBLIC blofeld_hcs08_bdc)
-add_library(blofeld_hcs08_reset src/hcs08_reset.cpp)
-target_include_directories(blofeld_hcs08_reset PUBLIC include)
+add_library(blofeld_hcs08_reset src/keyboard/hcs08_reset.cpp)
+target_include_directories(blofeld_hcs08_reset PUBLIC src)
 target_link_libraries(blofeld_hcs08_reset PUBLIC blofeld_hcs08_bdc)
-add_library(blofeld_hcs08_run_clock src/hcs08_instruction_timing.cpp src/hcs08_run_clock.cpp)
-target_include_directories(blofeld_hcs08_run_clock PUBLIC include)
+add_library(blofeld_hcs08_run_clock src/keyboard/hcs08_instruction_timing.cpp src/keyboard/hcs08_run_clock.cpp)
+target_include_directories(blofeld_hcs08_run_clock PUBLIC src)
 target_link_libraries(blofeld_hcs08_run_clock PUBLIC blofeld_hcs08_bdc)
-add_library(blofeld_gpio_pads src/gpio_pads.cpp)
-target_include_directories(blofeld_gpio_pads PUBLIC include)
+add_library(blofeld_gpio_pads src/board/gpio_pads.cpp)
+target_include_directories(blofeld_gpio_pads PUBLIC src)
 target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
-add_library(blofeld_hcs08_gpio src/hcs08_gpio.cpp)
-target_include_directories(blofeld_hcs08_gpio PUBLIC include)
+add_library(blofeld_hcs08_gpio src/keyboard/hcs08_gpio.cpp)
+target_include_directories(blofeld_hcs08_gpio PUBLIC src)
 target_link_libraries(blofeld_hcs08_gpio PUBLIC blofeld_gpio_pads)
-add_library(blofeld_private_files src/private_file.cpp)
-target_include_directories(blofeld_private_files PUBLIC include)
+add_library(blofeld_private_files src/storage/private_file.cpp)
+target_include_directories(blofeld_private_files PUBLIC src)
 target_link_libraries(blofeld_private_files PUBLIC blofeld_firmware)
-add_library(blofeld_sample_library src/sample_library.cpp src/sample_xml_reader.cpp
-  src/sample_xml_values.cpp src/sample_xml_codec.cpp src/sample_xml_file.cpp src/sample_client.cpp
-  src/sample_wave.cpp src/sample_wave_format.cpp src/sample_wave_metadata.cpp src/sample_pitch.cpp
-  src/sample_wave_client.cpp)
-target_include_directories(blofeld_sample_library PUBLIC include)
+add_library(blofeld_sample_library src/samples/sample_library.cpp src/samples/sample_xml_reader.cpp
+  src/samples/sample_xml_values.cpp src/samples/sample_xml_codec.cpp src/samples/sample_xml_file.cpp src/samples/sample_client.cpp
+  src/samples/sample_wave.cpp src/samples/sample_wave_format.cpp src/samples/sample_wave_metadata.cpp src/samples/sample_pitch.cpp
+  src/samples/sample_wave_client.cpp)
+target_include_directories(blofeld_sample_library PUBLIC src)
 target_link_libraries(blofeld_sample_library PUBLIC blofeld_private_files)
-add_library(blofeld_storage src/flash_image.cpp src/flash_file.cpp)
-target_include_directories(blofeld_storage PUBLIC include)
+add_library(blofeld_storage src/storage/flash_image.cpp src/storage/flash_file.cpp)
+target_include_directories(blofeld_storage PUBLIC src)
 target_link_libraries(blofeld_storage PUBLIC blofeld_firmware PRIVATE blofeld_private_files ZLIB::ZLIB)
-add_library(blofeld_device_identity src/device_identity.cpp src/virtual_device_state.cpp)
-target_include_directories(blofeld_device_identity PUBLIC include)
+add_library(blofeld_device_identity src/storage/device_identity.cpp src/storage/virtual_device_state.cpp)
+target_include_directories(blofeld_device_identity PUBLIC src)
 target_link_libraries(blofeld_device_identity PUBLIC blofeld_storage)
-add_library(blofeld_nand src/nand.cpp src/nand_write.cpp src/nand_array.cpp src/nand_state.cpp
-  src/nand_image.cpp src/nand_image_codec.cpp)
-target_include_directories(blofeld_nand PUBLIC include)
+add_library(blofeld_nand src/storage/nand.cpp src/storage/nand_write.cpp src/storage/nand_array.cpp src/storage/nand_state.cpp
+  src/storage/nand_image.cpp src/storage/nand_image_codec.cpp)
+target_include_directories(blofeld_nand PUBLIC src)
 target_link_libraries(blofeld_nand PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
-add_library(blofeld_nand_read_timing src/nand_read_timing.cpp)
-target_include_directories(blofeld_nand_read_timing PUBLIC include)
+add_library(blofeld_nand_read_timing src/storage/nand_read_timing.cpp)
+target_include_directories(blofeld_nand_read_timing PUBLIC src)
 target_link_libraries(blofeld_nand_read_timing PUBLIC blofeld_nand)
-add_library(blofeld_nand_write_timing src/nand_write_timing.cpp)
-target_include_directories(blofeld_nand_write_timing PUBLIC include)
+add_library(blofeld_nand_write_timing src/storage/nand_write_timing.cpp)
+target_include_directories(blofeld_nand_write_timing PUBLIC src)
 target_link_libraries(blofeld_nand_write_timing PUBLIC blofeld_nand)
-add_library(blofeld_nand_read_setup src/nand_read_setup.cpp)
-target_include_directories(blofeld_nand_read_setup PUBLIC include)
+add_library(blofeld_nand_read_setup src/storage/nand_read_setup.cpp)
+target_include_directories(blofeld_nand_read_setup PUBLIC src)
 target_link_libraries(blofeld_nand_read_setup PUBLIC blofeld_nand)
-add_library(blofeld_nand_store src/nand_file.cpp src/nand_store.cpp)
-target_include_directories(blofeld_nand_store PUBLIC include)
+add_library(blofeld_nand_store src/storage/nand_file.cpp src/storage/nand_store.cpp)
+target_include_directories(blofeld_nand_store PUBLIC src)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
-add_library(blofeld_mcu src/mcu_bus.cpp src/mcu_bus_clone.cpp src/mcu_bus_usb.cpp src/mcu_code_cache.cpp src/mcu_memory.cpp src/mcu_gpio.cpp
-  src/mcu_flash_config.cpp src/mcu_flash.cpp src/mcu_flash_backdoor.cpp src/mcu_flash_memory.cpp src/mcu_bus_flash.cpp
-  src/mcu_clock.cpp src/mcu_cop.cpp src/mcu_reset.cpp src/mcu_run_clock.cpp src/mcu_sci.cpp src/mcu_timer.cpp src/mcu_interrupts.cpp
-  src/mcu_usb.cpp src/mcu_usb_io.cpp src/mcu_usb_status.cpp src/mcu_usb_packets.cpp
-  src/mcu_usb_control.cpp
-  src/mcu_usb_ique_control.cpp src/mcu_usb_reset.cpp src/mcu_usb_host.cpp)
-target_include_directories(blofeld_mcu PUBLIC include)
+add_library(blofeld_mcu src/mcu/mcu_bus.cpp src/mcu/mcu_bus_clone.cpp src/mcu/mcu_bus_usb.cpp src/mcu/mcu_code_cache.cpp src/mcu/mcu_memory.cpp src/mcu/mcu_gpio.cpp
+  src/mcu/mcu_flash_config.cpp src/mcu/mcu_flash.cpp src/mcu/mcu_flash_backdoor.cpp src/mcu/mcu_flash_memory.cpp src/mcu/mcu_bus_flash.cpp
+  src/mcu/mcu_clock.cpp src/mcu/mcu_cop.cpp src/mcu/mcu_reset.cpp src/mcu/mcu_run_clock.cpp src/mcu/mcu_sci.cpp src/mcu/mcu_timer.cpp src/mcu/mcu_interrupts.cpp
+  src/mcu/mcu_usb.cpp src/mcu/mcu_usb_io.cpp src/mcu/mcu_usb_status.cpp src/mcu/mcu_usb_packets.cpp
+  src/mcu/mcu_usb_control.cpp
+  src/mcu/mcu_usb_ique_control.cpp src/mcu/mcu_usb_reset.cpp src/mcu/mcu_usb_host.cpp)
+target_include_directories(blofeld_mcu PUBLIC src)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage blofeld_gpio_pads)
-add_library(blofeld_usb_host src/usb_transfer.cpp src/usb_host.cpp src/usb_host_packets.cpp
-  src/usb_device_probe.cpp src/usb_descriptors.cpp)
-target_include_directories(blofeld_usb_host PUBLIC include)
+add_library(blofeld_usb_host src/usb/usb_transfer.cpp src/usb/usb_host.cpp src/usb/usb_host_packets.cpp
+  src/usb/usb_device_probe.cpp src/usb/usb_descriptors.cpp)
+target_include_directories(blofeld_usb_host PUBLIC src)
 target_link_libraries(blofeld_usb_host PUBLIC blofeld_mcu)
-add_library(blofeld_usbip src/usbip_decode.cpp src/usbip_encode.cpp
-  src/usbip_management.cpp src/usbip_export.cpp src/usbip_session.cpp src/usbip_session_output.cpp)
-target_include_directories(blofeld_usbip PUBLIC include)
+add_library(blofeld_usbip src/usb/usbip_decode.cpp src/usb/usbip_encode.cpp
+  src/usb/usbip_management.cpp src/usb/usbip_export.cpp src/usb/usbip_session.cpp src/usb/usbip_session_output.cpp)
+target_include_directories(blofeld_usbip PUBLIC src)
 target_link_libraries(blofeld_usbip PUBLIC blofeld_usb_host)
-add_library(blofeld_usbip_tcp src/usbip_tcp.cpp src/usbip_tcp_io.cpp src/usbip_runtime.cpp)
-target_include_directories(blofeld_usbip_tcp PUBLIC include)
+add_library(blofeld_usbip_tcp src/usb/usbip_tcp.cpp src/usb/usbip_tcp_io.cpp src/usb/usbip_runtime.cpp)
+target_include_directories(blofeld_usbip_tcp PUBLIC src)
 target_link_libraries(blofeld_usbip_tcp PUBLIC blofeld_usbip)
-add_library(blofeld_display src/st7565.cpp src/st7565_parallel.cpp)
-target_include_directories(blofeld_display PUBLIC include)
+add_library(blofeld_display src/display/st7565.cpp src/display/st7565_parallel.cpp)
+target_include_directories(blofeld_display PUBLIC src)
 target_link_libraries(blofeld_display PUBLIC blofeld_firmware)
-add_library(blofeld_lcd_export src/lcd_image.cpp src/lcd_png.cpp src/lcd_export.cpp)
-target_include_directories(blofeld_lcd_export PUBLIC include)
+add_library(blofeld_lcd_export src/display/lcd_image.cpp src/display/lcd_png.cpp src/display/lcd_export.cpp)
+target_include_directories(blofeld_lcd_export PUBLIC src)
 target_link_libraries(blofeld_lcd_export PUBLIC blofeld_display blofeld_private_files PRIVATE ZLIB::ZLIB)
-add_library(blofeld_core src/hc12.cpp src/hc12_decimal.cpp src/mcu_machine.cpp)
-add_library(blofeld_hc12_cycles src/hc12_cycle_plan.cpp src/hc12_cycle_page2.cpp src/hc12_cycle_bus.cpp)
-target_include_directories(blofeld_hc12_cycles PUBLIC include)
+add_library(blofeld_core src/mcu/hc12.cpp src/mcu/hc12_decimal.cpp src/mcu/mcu_machine.cpp)
+add_library(blofeld_hc12_cycles src/mcu/hc12_cycle_plan.cpp src/mcu/hc12_cycle_page2.cpp src/mcu/hc12_cycle_bus.cpp)
+target_include_directories(blofeld_hc12_cycles PUBLIC src)
 target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
-add_library(blofeld_midi_serial src/midi_serial.cpp)
-target_include_directories(blofeld_midi_serial PUBLIC include)
+add_library(blofeld_midi_serial src/midi/midi_serial.cpp)
+target_include_directories(blofeld_midi_serial PUBLIC src)
 target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
-add_library(blofeld_midi_timed src/midi_timed.cpp)
-target_include_directories(blofeld_midi_timed PUBLIC include)
+add_library(blofeld_midi_timed src/midi/midi_timed.cpp)
+target_include_directories(blofeld_midi_timed PUBLIC src)
 target_link_libraries(blofeld_midi_timed PUBLIC blofeld_midi_serial)
-add_library(blofeld_serial_pcm src/serial_pcm.cpp src/pcm_sink.cpp)
-target_include_directories(blofeld_serial_pcm PUBLIC include)
+add_library(blofeld_serial_pcm src/audio/serial_pcm.cpp src/audio/pcm_sink.cpp)
+target_include_directories(blofeld_serial_pcm PUBLIC src)
 target_link_libraries(blofeld_serial_pcm PUBLIC blofeld_firmware)
-add_library(blofeld_pcm_transport src/pcm_recording.cpp src/pcm_wave.cpp src/pcm_wave_file.cpp)
-target_include_directories(blofeld_pcm_transport PUBLIC include)
+add_library(blofeld_pcm_transport src/audio/pcm_recording.cpp src/audio/pcm_wave.cpp src/audio/pcm_wave_file.cpp)
+target_include_directories(blofeld_pcm_transport PUBLIC src)
 target_link_libraries(blofeld_pcm_transport PUBLIC blofeld_serial_pcm PRIVATE blofeld_private_files)
-add_library(blofeld_host_audio src/host_audio.cpp src/host_audio_pcm.cpp)
-target_include_directories(blofeld_host_audio PUBLIC include)
+add_library(blofeld_host_audio src/audio/host_audio.cpp src/audio/host_audio_pcm.cpp)
+target_include_directories(blofeld_host_audio PUBLIC src)
 target_link_libraries(blofeld_host_audio PUBLIC blofeld_serial_pcm PRIVATE blofeld_pulse)
-add_library(blofeld_pcm_queue src/pcm_queue.cpp)
-target_include_directories(blofeld_pcm_queue PUBLIC include)
+add_library(blofeld_pcm_queue src/audio/pcm_queue.cpp)
+target_include_directories(blofeld_pcm_queue PUBLIC src)
 target_link_libraries(blofeld_pcm_queue PUBLIC blofeld_serial_pcm)
-add_library(blofeld_audio_runtime src/audio_runtime.cpp src/audio_worker.cpp)
-target_include_directories(blofeld_audio_runtime PUBLIC include)
+add_library(blofeld_audio_runtime src/audio/audio_runtime.cpp src/audio/audio_worker.cpp)
+target_include_directories(blofeld_audio_runtime PUBLIC src)
 target_link_libraries(blofeld_audio_runtime PUBLIC blofeld_host_audio blofeld_pcm_queue PRIVATE Threads::Threads)
-add_library(blofeld_mcu_midi src/mcu_midi.cpp src/mcu_clocked_midi.cpp)
-target_include_directories(blofeld_mcu_midi PUBLIC include)
+add_library(blofeld_mcu_midi src/mcu/mcu_midi.cpp src/mcu/mcu_clocked_midi.cpp)
+target_include_directories(blofeld_mcu_midi PUBLIC src)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
-add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_bus.cpp src/dsp_pll.cpp
-  src/dsp_esai.cpp src/dsp_esai_transmit.cpp src/dsp_esai_clock.cpp src/dsp_bus_esai.cpp
-  src/dsp_dma.cpp src/dsp_dma_address.cpp src/dsp_dma_cycle.cpp src/dsp_bus_dma.cpp
-  src/dsp_dax.cpp src/dsp_dax_clock.cpp src/dsp_bus_dax.cpp
-  src/dsp_gpio.cpp src/dsp_timers.cpp src/dsp_timer_clock.cpp src/dsp_timer_capture.cpp src/dsp_interrupts.cpp
-  src/dsp_run_clock.cpp)
-target_include_directories(blofeld_dsp_peripherals PUBLIC include)
+add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp src/dsp/dsp_bus.cpp src/dsp/dsp_pll.cpp
+  src/dsp/dsp_esai.cpp src/dsp/dsp_esai_transmit.cpp src/dsp/dsp_esai_clock.cpp src/dsp/dsp_bus_esai.cpp
+  src/dsp/dsp_dma.cpp src/dsp/dsp_dma_address.cpp src/dsp/dsp_dma_cycle.cpp src/dsp/dsp_bus_dma.cpp
+  src/dsp/dsp_dax.cpp src/dsp/dsp_dax_clock.cpp src/dsp/dsp_bus_dax.cpp
+  src/dsp/dsp_gpio.cpp src/dsp/dsp_timers.cpp src/dsp/dsp_timer_clock.cpp src/dsp/dsp_timer_capture.cpp src/dsp/dsp_interrupts.cpp
+  src/dsp/dsp_run_clock.cpp)
+target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
-add_library(blofeld_dsp src/dsp_memory_form.cpp src/dsp_address_stages.cpp src/dsp_core.cpp src/dsp_move_writeback.cpp src/dsp_address_phase.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
-  src/dsp_program_fetch.cpp src/dsp_reference_cycle.cpp
-  src/dsp_fetch_run.cpp src/dsp_fetch_state.cpp src/dsp_fetch_checkpoint.cpp
-  src/dsp_pipeline.cpp src/dsp_pipeline_decode.cpp
-  src/dsp_interlocks.cpp src/dsp_interlock_decode.cpp
-  src/dsp_interrupt_timing.cpp
-  src/dsp_machine.cpp src/dsp_scheduled_run.cpp
-  src/dsp_scheduled_events.cpp)
-target_include_directories(blofeld_dsp PUBLIC include)
+add_library(blofeld_dsp src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp src/dsp/dsp_reference_execution.cpp
+  src/dsp/dsp_program_fetch.cpp src/dsp/dsp_reference_cycle.cpp
+  src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
+  src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp
+  src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
+  src/dsp/dsp_interrupt_timing.cpp
+  src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
+  src/dsp/dsp_scheduled_events.cpp)
+target_include_directories(blofeld_dsp PUBLIC src)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
   add_library(blofeld_dsp_instruction_fixture test/dsp_instruction_fixture.cpp)
   target_link_libraries(blofeld_dsp_instruction_fixture PUBLIC blofeld_dsp PRIVATE blofeld_dsp_native)
 endif()
 add_dependencies(blofeld_core blofeld_hc12_spec)
-target_include_directories(blofeld_core PUBLIC include)
+target_include_directories(blofeld_core PUBLIC src)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh blofeld_hc12_cycles)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
-add_library(blofeld_mcu_dsp src/mcu_dsp_schedule.cpp)
-target_include_directories(blofeld_mcu_dsp PUBLIC include)
+add_library(blofeld_mcu_dsp src/board/mcu_dsp_schedule.cpp)
+target_include_directories(blofeld_mcu_dsp PUBLIC src)
 target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
-add_library(blofeld_host_midi src/host_midi.cpp)
-target_include_directories(blofeld_host_midi PUBLIC include)
+add_library(blofeld_host_midi src/midi/host_midi.cpp)
+target_include_directories(blofeld_host_midi PUBLIC src)
 target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)
-add_library(blofeld_reference_board src/reference_config.cpp
-  src/reference_board.cpp src/reference_wiring.cpp src/reference_returns.cpp src/reference_checkpoint.cpp
-  src/reference_dsp_inputs.cpp src/reference_dsp_clocks.cpp src/reference_pcm.cpp src/reference_audio.cpp
-  src/reference_midi.cpp src/reference_dsp_midi.cpp)
+add_library(blofeld_reference_board src/board/reference_config.cpp
+  src/board/reference_board.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
+  src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
+  src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
 target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp blofeld_private_files
   blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp)
-add_executable(blofeld-headless src/main.cpp src/host_midi_runner.cpp)
+add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
@@ -2160,7 +2160,7 @@ install(DIRECTORY LICENSES/ DESTINATION share/doc/blofeld-emu/licenses)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla" DESTINATION share/blofeld-emu)
 
 file(GLOB_RECURSE BLOFELD_FORMAT_SOURCES CONFIGURE_DEPENDS
-  "include/*.hpp" "src/*.hpp" "src/*.cpp" "test/*.cpp" "test/*.hpp")
+  "src/*.hpp" "src/*.cpp" "test/*.cpp" "test/*.hpp")
 add_custom_target(format-check
   COMMAND "${BLOFELD_CLANG_FORMAT}" --dry-run --Werror ${BLOFELD_FORMAT_SOURCES}
   VERBATIM)

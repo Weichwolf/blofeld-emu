@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/firmware.hpp"
 #include "dsp_master_output_fixture.hpp"
 #include "dsp_master_output_model.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 
 #include <exception>
 #include <fstream>

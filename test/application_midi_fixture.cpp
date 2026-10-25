@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "application_midi_fixture.hpp"
 
-#include "blofeld/bus.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_midi.hpp"
+#include "common/bus.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_midi.hpp"
 
 #include <array>
 #include <cstdint>

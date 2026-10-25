@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/serial_pcm.hpp"
+#include "audio/serial_pcm.hpp"
+#include "common/bus.hpp"
 
 #include <cstdint>
 #include <exception>

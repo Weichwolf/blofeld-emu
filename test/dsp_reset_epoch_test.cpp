@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_run_clock.hpp"
-#include "blofeld/dsp_scheduled_run.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
 #include "dsp_checkpoint_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
 

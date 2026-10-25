@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/mcu_gpio.hpp"
-#include "blofeld/mcu_machine.hpp"
-#include "blofeld/mcu_usb.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_gpio.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_usb.hpp"
 #include "mcu_checkpoint_fixture.hpp"
 
 #include <array>

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_native_access.hpp"
-#include "blofeld/firmware.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_native_access.hpp"
 #include "dsp_master_output_model.hpp"
+#include "firmware/firmware.hpp"
 
 #include <array>
 #include <cstdint>

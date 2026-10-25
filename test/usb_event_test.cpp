@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/mcu_clock.hpp"
-#include "blofeld/mcu_usb.hpp"
+#include "common/bus.hpp"
+#include "mcu/mcu_clock.hpp"
+#include "mcu/mcu_usb.hpp"
 
 #include <algorithm>
 #include <array>

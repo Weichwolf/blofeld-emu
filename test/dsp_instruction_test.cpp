@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
+#include "common/bus.hpp"
 #include "dsp56kEmu/assembler.h"
 #include "dsp_instruction_fixture.hpp"
 #include "dsp_norm_fixture.hpp"

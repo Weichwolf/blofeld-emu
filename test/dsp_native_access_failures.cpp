@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_native_access.hpp"
-#include "blofeld/dsp_run_clock.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_native_access.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "native_access_fixture.hpp"
 

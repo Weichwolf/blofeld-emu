@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_gpio.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12.hpp"
-#include "blofeld/mcu_dsp_schedule.hpp"
-#include "blofeld/mcu_gpio.hpp"
+#include "board/mcu_dsp_schedule.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_gpio.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
+#include "mcu/hc12.hpp"
+#include "mcu/mcu_gpio.hpp"
 #include "original_gpio_pair_fixture.hpp"
+#include "storage/flash_image.hpp"
 
 #include <exception>
 #include <fstream>

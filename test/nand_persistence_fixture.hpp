@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/nand.hpp"
-#include "blofeld/nand_array.hpp"
-#include "blofeld/nand_image.hpp"
+#include "common/bus.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_array.hpp"
+#include "storage/nand_image.hpp"
 
 #include <cstdint>
 #include <filesystem>

@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_core.hpp"
-#include "blofeld/dsp_gpio.hpp"
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_native_access.hpp"
-#include "blofeld/firmware.hpp"
-#include "blofeld/nand.hpp"
-#include "blofeld/nand_array.hpp"
-#include "blofeld/nand_read_timing.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_native_access.hpp"
 #include "dsp_boot_reference.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "firmware/firmware.hpp"
 #include "nand_gpio_fixture.hpp"
 #include "nand_program_fixture.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_array.hpp"
+#include "storage/nand_read_timing.hpp"
 
 #include <cstddef>
 #include <cstdint>

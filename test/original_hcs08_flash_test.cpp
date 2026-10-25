@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/hcs08.hpp"
-#include "blofeld/hcs08_flash.hpp"
-#include "blofeld/private_file.hpp"
 #include "hcs08_fixture.hpp"
 #include "hcs08_programmer_fixture.hpp"
+#include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_flash.hpp"
+#include "storage/private_file.hpp"
 
 #include <algorithm>
 #include <cstddef>

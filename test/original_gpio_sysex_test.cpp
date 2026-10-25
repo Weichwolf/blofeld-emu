@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/firmware.hpp"
+#include "firmware/firmware.hpp"
 #include "gpio_parameter_caller.hpp"
 #include "original_gpio_pair_fixture.hpp"
 #include "original_gpio_sysex_fixture.hpp"

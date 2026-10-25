@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/sample_library.hpp"
+#include "common/bus.hpp"
+#include "samples/sample_library.hpp"
 
 #include <exception>
 #include <iostream>

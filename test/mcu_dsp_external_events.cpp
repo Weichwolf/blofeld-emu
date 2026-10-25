@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/dsp_machine.hpp"
-#include "blofeld/dsp_run_clock.hpp"
-#include "blofeld/dsp_scheduled_run.hpp"
-#include "blofeld/flash_image.hpp"
-#include "blofeld/hc12_registers.hpp"
-#include "blofeld/mcu_dsp_schedule.hpp"
-#include "blofeld/mcu_gpio.hpp"
-#include "blofeld/mcu_machine.hpp"
-#include "blofeld/mcu_run_clock.hpp"
+#include "board/mcu_dsp_schedule.hpp"
+#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
 #include "dsp_external_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
+#include "mcu/hc12_registers.hpp"
+#include "mcu/mcu_gpio.hpp"
+#include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_run_clock.hpp"
+#include "storage/flash_image.hpp"
 
 #include <array>
 #include <cstdint>

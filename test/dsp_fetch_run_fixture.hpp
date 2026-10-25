@@ -2,11 +2,11 @@
 #pragma once
 
 #include "bank_fixture.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/dsp_dma.hpp"
-#include "blofeld/dsp_fetch_run.hpp"
-#include "blofeld/dsp_machine.hpp"
 #include "dma_fixture.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_fetch_run.hpp"
+#include "dsp/dsp_machine.hpp"
 #include "dsp_checkpoint_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "reference_execution_fixture.hpp"

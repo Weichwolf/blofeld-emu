@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "blofeld/bus.hpp"
-#include "blofeld/mcu_bus.hpp"
-#include "blofeld/usbip_tcp.hpp"
+#include "common/bus.hpp"
+#include "mcu/mcu_bus.hpp"
+#include "usb/usbip_socket.hpp"
+#include "usb/usbip_tcp.hpp"
 #include "usb_host_fixture.hpp"
-#include "usbip_socket.hpp"
 
 #include <algorithm>
 #include <arpa/inet.h>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "blofeld/bus.hpp"
-#include "blofeld/dsp_bus.hpp"
-#include "blofeld/firmware.hpp"
+#include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "firmware/firmware.hpp"
 #include "keyboard_handoff_fixture.hpp"
 #include "original_gpio_pair_fixture.hpp"
 #include "original_update_forward_fixture.hpp"
