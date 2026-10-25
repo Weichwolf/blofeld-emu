@@ -36,13 +36,15 @@ native work, including any real branch redirect that discarded a just-read word.
 
 This composes real actions at an explicitly selected reference boundary. It
 advances no instruction clock, timers, CLK/2 or elapsed-time counters and does
-not assign AG1/AG2/E1/E2 timestamps. Callers still select actions; access ordinals
-cannot determine their physical grouping. The complete overlapped pipeline,
-automatic action scheduling, actual core/DMA time placement, loop/IRQ timelines,
+not itself assign AG1/AG2/E1/E2 timestamps. Explicit callers select actions; the
+automatic profiles own their selected phases separately. Access ordinals cannot
+determine physical grouping. The complete overlapped pipeline, general automatic
+action scheduling, actual core/DMA time placement, loop/IRQ timelines,
 full ROM, reserved Y:002000 and full instrument startup/audio remain open.
 Existing unclocked calls and clocked completion contracts retain their behavior;
 a clocked owner refuses this semantic cycle API. Matching headers/libraries are
-required; no prepared native SDK interface changes in this increment.
+required. The automatic memory profile additionally uses the generic native
+AG1 helper described in dsp-memory-pipeline.txt.
 
 The separate DspFetchRun owner now automates F1/F2 and reference core/peripheral
 clocks around this API (dsp-fetch-clock.txt). Backend admission remains explicit;

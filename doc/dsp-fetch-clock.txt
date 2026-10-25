@@ -55,8 +55,10 @@ cases alter the model command directly; they do not qualify native PCTL stage
 placement. Guard cases check unknown PINIT, invalid period/contract, foreign and
 duplicate owners, machine-only restore and unchanged nominal completion use.
 
-Backend begin/admission is still selected explicitly. Automatic decode, AG1/AG2,
-E1/E2, simultaneous X/Y/P groups, all interlocks, loop/REP and IRQ timelines,
+The explicit_effects profile still selects backend begin/admission explicitly.
+Separate automatic ALU and selected memory profiles own decode/AG1/AG2/E1/E2
+(dsp-automatic-alu-pipeline.txt, dsp-memory-pipeline.txt). General simultaneous
+X/Y/P groups, all interlocks, loop/REP and IRQ timelines,
 physical stage timestamps and default runtime integration remain open. Native
 exceptions/checkpoint allocation are not a real-time callback implementation.
 Authentic full ROM, reserved Y:002000 semantics, full original boot, normal

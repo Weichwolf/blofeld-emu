@@ -2,6 +2,7 @@
 #include "blofeld/dsp_core.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/dsp_address_stage.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_interrupts.hpp"
 #include "blofeld/dsp_native_access.hpp"
@@ -16,6 +17,7 @@
 #include "dsp56kEmu/registers.h"
 #include "dsp56kEmu/types.h"
 #include "dsp_address_phase.hpp"
+#include "dsp_address_stages.hpp"
 #include "dsp_interrupt_timing.hpp"
 #include "dsp_move_writeback.hpp"
 #include "dsp_native_access.hpp"
@@ -259,19 +261,26 @@ struct DspNativeResultState {
   std::optional<DspPreviousResult> previous;
   DspAddressPhase addresses;
   DspMoveWritebackState writeback;
+  std::array<std::optional<std::uint32_t>, 8> pipeline_addresses{};
 };
 
 struct DspCoreCheckpoint::Storage {
   Storage(dsp56k::DSP::ReferenceState state,
           const DspReferenceState &reference_state,
           const std::uint64_t serial,
-          const DspNativeResultState &result)
-      : cpu(std::move(state)), reference(reference_state), generation(serial), results(result) {}
+          const DspNativeResultState &result,
+          const DspAddressStages &address_stages)
+      : cpu(std::move(state)),
+        reference(reference_state),
+        generation(serial),
+        results(result),
+        stages(address_stages) {}
 
   const dsp56k::DSP::ReferenceState cpu;
   const DspReferenceState reference;
   const std::uint64_t generation;
   const DspNativeResultState results;
+  const DspAddressStages stages;
 };
 
 DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
@@ -363,6 +372,7 @@ public:
     auto next_owner = std::make_shared<const bool>(true);
     native.reference().clear();
     results = {};
+    stages = {};
     reference_owner = std::move(next_owner);
     generation = 0;
   }
@@ -386,6 +396,34 @@ public:
       }
     }
     apply_move_fields(results.writeback.published);
+    apply_pipeline_addresses();
+  }
+
+  void apply_pipeline_addresses() {
+    for (unsigned index = 0; index < results.pipeline_addresses.size(); ++index) {
+      if (const auto value = results.pipeline_addresses.at(index)) {
+        cpu.regs().r.at(index).var = static_cast<std::int32_t>(*value);
+      }
+    }
+  }
+
+  void bind_memory_address(const DspAddressRecord &record) {
+    const auto visible = cpu.referenceAttemptState();
+    results.visible = visible;
+    results.base = visible;
+    auto &base = results.base->registers;
+    const auto index = record.view.update.index;
+    const auto &source = record.source.registers;
+    base.r.at(index) = source.r.at(index);
+    base.n.at(index) = source.n.at(index);
+    base.m.at(index) = source.m.at(index);
+    base.mMask.at(index) = source.mMask.at(index);
+    base.mModulo.at(index) = source.mModulo.at(index);
+    results.addresses.published.at(index) = record.view.update.value;
+    for (unsigned reg = 0; reg < visible.registers.r.size(); ++reg) {
+      results.pipeline_addresses.at(reg) =
+          static_cast<std::uint32_t>(visible.registers.r.at(reg)) & word_mask;
+    }
   }
 
   void apply_move_fields(const DspMoveFields fields) {
@@ -627,6 +665,7 @@ public:
       const DspReferenceScope restoring(native.reference(), DspReferenceMode::restoring);
       cpu.restoreReferenceAttempt(results.retirement->cpu);
     }
+    apply_pipeline_addresses();
     finish_reference(redirected);
     return completed;
   }
@@ -700,6 +739,7 @@ public:
   bool active = false;
   RunHooks run;
   DspNativeResultState results;
+  DspAddressStages stages;
   std::shared_ptr<const bool> reference_owner;
   std::uint64_t generation = 0;
 };
@@ -774,7 +814,8 @@ DspCoreCheckpoint DspCore::checkpoint() const {
       std::make_shared<const DspCoreCheckpoint::Storage>(impl_->cpu.referenceState(),
                                                          impl_->native.reference().snapshot(),
                                                          impl_->generation,
-                                                         impl_->results));
+                                                         impl_->results,
+                                                         impl_->stages));
 }
 
 void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
@@ -788,6 +829,7 @@ void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
   }
   impl_->native.reference().restore(checkpoint.storage_->reference);
   impl_->results = checkpoint.storage_->results;
+  impl_->stages = checkpoint.storage_->stages;
   impl_->generation = checkpoint.storage_->generation;
   if (checkpoint.storage_->reference.active && !impl_->results.base) {
     throw Fault("Native reference checkpoint lost its original computation base");
@@ -1094,6 +1136,112 @@ DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket 
     impl_->faulted = true;
     throw Fault("Non-standard DSP reference admission failure pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6));
+  }
+}
+
+DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t address) {
+  if (impl_->active || impl_->faulted || impl_->run.begin ||
+      !impl_->native.reference().fetch().active()) {
+    throw Fault("Native AG1 requires a healthy unclocked frontend");
+  }
+  const auto opcode = impl_->native.reference().fetch().peek(address);
+  if (!opcode) { throw Fault("Native AG1 awaits actual F2 at P:" + hex(address, 6)); }
+  const ExecutionGuard guard(impl_->active);
+  const auto slot = impl_->stages.capture(impl_->cpu, {.address = address, .value = *opcode});
+  DspAddressStageTicket ticket;
+  ticket.owner_ = impl_->reference_owner;
+  ticket.slot_ = slot;
+  const auto &record = impl_->stages.records.at(slot);
+  if (!record) { throw Fault("Native AG1 lost its captured record"); }
+  ticket.serial_ = record->serial;
+  return ticket;
+}
+
+DspAddressStageView DspCore::address_stage(const DspAddressStageTicket &ticket) const {
+  if (impl_->active || impl_->faulted || ticket.owner_ != impl_->reference_owner) {
+    throw Fault("Stale, foreign or unavailable native address-stage owner");
+  }
+  return impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_}).view;
+}
+
+DspAddressStageTicket DspCore::rebind_address_stage(const DspAddressStageTicket &ticket) const {
+  static_cast<void>(impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_}));
+  auto rebound = ticket;
+  rebound.owner_ = impl_->reference_owner;
+  return rebound;
+}
+
+void DspCore::validate_reference_address(const DspAddressStageTicket &ticket,
+                                         const bool published) const {
+  const auto view = address_stage(ticket);
+  if (view.published != published) {
+    throw Fault("Native address-stage phase mismatch pc=" + hex(view.word.address, 6));
+  }
+}
+
+DspAddressStageView DspCore::publish_reference_address(const DspAddressStageTicket &ticket) {
+  validate_reference_address(ticket, false);
+  auto &record = impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_});
+  const auto update = record.view.update;
+  if (record.view.pointer_update) {
+    impl_->cpu.regs().r.at(update.index).var = static_cast<std::int32_t>(update.value);
+    impl_->results.pipeline_addresses.at(update.index) = update.value;
+  }
+  record.view.published = true;
+  return record.view;
+}
+
+DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTicket &ticket) {
+  validate_reference_address(ticket, true);
+  const auto record = impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_});
+  const auto &view = record.view;
+  try {
+    auto pending = reference_pending();
+    if (!pending) {
+      pending =
+          begin_reference_instruction(DspReferenceExecution::staged_register_boundaries).pending;
+    }
+    if (!pending) { throw Fault("Native memory E1 lost its opcode boundary"); }
+    const auto *opcode = std::get_if<DspNativeAccess>(&pending->effect);
+    if (opcode == nullptr || opcode->kind != DspNativeAccessKind::opcode ||
+        opcode->target.address != view.word.address ||
+        pending->latched_program_word != view.word.value) {
+      throw Fault("Native memory E1 does not match its captured F2 word");
+    }
+    DspMemoryStageResult result{.address = view, .inputs = state(), .data = {}, .progress = {}};
+    impl_->bind_memory_address(record);
+    auto progress = advance_reference_access(pending->ticket);
+    if (!progress.pending) { throw Fault("Native memory E1 lost its actual data access"); }
+    const auto *data = std::get_if<DspNativeAccess>(&progress.pending->effect);
+    const auto kind = view.update.operation == DspMemoryOperation::read
+                          ? DspNativeAccessKind::read
+                          : DspNativeAccessKind::write;
+    if (data == nullptr || data->kind != kind || data->target.space != view.update.space ||
+        data->target.address != view.update.address) {
+      throw Fault("Native memory E1 differs from the actual AG1 address");
+    }
+    progress = advance_reference_access(progress.pending->ticket);
+    if (!progress.completed) { throw Fault("Native memory E1 lost its committed data effect"); }
+    result.data = std::get<DspNativeAccess>(*progress.completed);
+    if (progress.pending && std::holds_alternative<DspMoveWriteback>(progress.pending->effect)) {
+      progress = advance_reference_access(progress.pending->ticket);
+      if (!progress.completed) { throw Fault("Native memory E1 lost its real load publication"); }
+      result.move = std::get<DspMoveWriteback>(*progress.completed);
+    }
+    if (!progress.pending ||
+        !std::holds_alternative<DspInstructionRetire>(progress.pending->effect)) {
+      throw Fault("Native memory E1 did not reach actual retirement");
+    }
+    result.progress = progress;
+    impl_->stages.records.at(ticket.slot_).reset();
+    return result;
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault(
+        "Native memory E1 " +
+        std::string(view.update.operation == DspMemoryOperation::read ? "read " : "write ") +
+        (view.update.space == DspSpace::x ? "X:" : "Y:") + hex(view.update.address, 6) + " pc=" +
+        hex(view.word.address, 6) + " omr=" + hex(view.update.omr, 6) + ": " + error.what());
   }
 }
 

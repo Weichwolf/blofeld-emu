@@ -27,6 +27,7 @@ bool program_read(const DspReferencePending &pending) {
 }
 
 void DspFetchState::bind(const DspMachine &machine) {
+  if (pipeline) { pipeline->rebind(machine); }
   const auto pending = machine.reference_pending();
   const auto previous = machine.reference_retirement();
   expected_retirement = previous ? std::optional{previous->ticket} : std::nullopt;
@@ -79,6 +80,8 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
   if (fetch.pending_address) { result.fetch = DspProgramFetchStage::read; }
   if (pipeline) {
     if (pipeline->view.awaiting_retirement) { result.access = pipeline->retirement(machine); }
+    result.address_update = pipeline->addresses[0];
+    result.memory = pipeline->addresses[1];
     return result;
   }
   if (input.retire_previous) {

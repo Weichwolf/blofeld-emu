@@ -204,7 +204,7 @@ add_library(blofeld_dsp_peripherals src/dsp_shi.cpp src/dsp_shi_spi.cpp src/dsp_
   src/dsp_run_clock.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC include)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
-add_library(blofeld_dsp src/dsp_core.cpp src/dsp_move_writeback.cpp src/dsp_address_phase.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
+add_library(blofeld_dsp src/dsp_address_stages.cpp src/dsp_core.cpp src/dsp_move_writeback.cpp src/dsp_address_phase.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
   src/dsp_program_fetch.cpp src/dsp_reference_cycle.cpp
   src/dsp_fetch_run.cpp src/dsp_fetch_state.cpp src/dsp_fetch_checkpoint.cpp
   src/dsp_pipeline.cpp src/dsp_pipeline_decode.cpp
@@ -768,6 +768,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-pipeline-test test/dsp_pipeline_test.cpp test/dsp_pipeline_state.cpp test/dsp_pipeline_guards.cpp)
   target_link_libraries(blofeld-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_automatic_alu_pipeline COMMAND blofeld-pipeline-test)
+  add_executable(blofeld-memory-pipeline-test test/dsp_memory_pipeline_test.cpp test/dsp_memory_pipeline_stream.cpp test/dsp_memory_pipeline_guards.cpp)
+  target_link_libraries(blofeld-memory-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_automatic_memory_pipeline COMMAND blofeld-memory-pipeline-test)
   add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
   target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)
@@ -2193,7 +2196,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test blofeld-pipeline-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

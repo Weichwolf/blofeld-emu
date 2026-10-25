@@ -64,7 +64,7 @@
 @@ -135 +138 @@
 -		std::vector<OpcodeCacheEntry>	m_opcodeCache;
 +		blofeld::DspDispatchCache<OpcodeCacheEntry>	m_opcodeCache;
-@@ -162,0 +166,62 @@
+@@ -162,0 +166,64 @@
 +		bool m_referenceAttempt = false;
 +		bool m_referenceRedirected = false;
 +		bool m_referenceMode = false;
@@ -118,6 +118,8 @@
 +			bool referenceMode = false, longEntry = false, repeatCompleted = false;
 +			std::array<uint64_t, 2> peripheralTargets{};
 +		};
++		struct ReferenceAddressCalculation { TWord address = 0, before = 0, after = 0; };
++		ReferenceAddressCalculation calculateReferenceAddress(TWord mode, TWord index);
 +		ReferenceAttemptState referenceAttemptState() const;
 +		void restoreReferenceAttempt(const ReferenceAttemptState& state);
 +		void execReferenceAttempt();
@@ -127,17 +129,17 @@
 +		void restoreReferenceState(const ReferenceState& state);
 +	private:
 +		void verifyReferenceCheckpoint() const;
-@@ -183 +248,5 @@
+@@ -183 +250,5 @@
 -		void 	setPC							( const TReg24& _val )						{ reg.pc = _val; }
 +		void setPC(const TReg24& _val)
 +		{
 +			reg.pc = _val;
 +			if(m_referenceAttempt) m_referenceRedirected = true;
 +		}
-@@ -189 +258 @@
+@@ -189 +260 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +277,12 @@
+@@ -208 +279,12 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
@@ -151,11 +153,10 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +491,13 @@
+@@ -411 +493 @@
 -		TWord	fetchOpWordB()
--		{
 +		TWord memReadExtension(TWord offset) const
-+		{
+@@ -412,0 +495,11 @@
 +			aarTranslate(MemArea_P, offset);
 +			return mem.getExtension(offset);
 +		}
@@ -167,12 +168,13 @@
 +				throw std::runtime_error("Unexpected extension in single-word reference REP");
 +			if(!m_referenceVectorActive)
 +				extension = memReadExtension(pcCurrentInstruction + 1);
-@@ -416 +507 @@
+@@ -416 +509 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523,15 +614,8 @@
+@@ -523 +616 @@
 -		void	sr_s_update				()
--		{
++		void sr_s_update(const TReg56& _source)
+@@ -525,13 +618,6 @@
 -			if( sr_test_noCache(CCR_S) )
 -				return;
 -
@@ -186,17 +188,17 @@
 -			if	(	(bitvalue(a,bitA) != bitvalue(a,bitB))
 -				|	(bitvalue(b,bitA) != bitvalue(b,bitB)) )
 -				sr_set( CCR_S );
-+		void sr_s_update(const TReg56& _source)
-+		{
 +			if(sr_test_noCache(CCR_S)) return;
 +			// Only the accumulator actually driving a data bus contributes growth.
 +			const int offset = sr_val_noCache(SRB_S1) - sr_val_noCache(SRB_S0);
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -610,11 +694,37 @@
+@@ -610 +696,2 @@
 -		void sr_v_update( const int64_t& _notLimitedResult, TReg56& _result )
--		{
++		// FM3.2.2: round in the unpadded domain, with headroom for a full product plus accumulator.
++		TInt64 roundArithmeticValue(TInt64 value) const
+@@ -612,9 +699,34 @@
 -			if( sr_test_noCache(SR_SM) )
 -			{
 -				const unsigned int test=static_cast<unsigned int>(_result.var>>(47 + g_aluShift))&0x13;
@@ -206,9 +208,6 @@
 -			{
 -				sr_toggle( CCR_V, ((_notLimitedResult>>(48 + g_aluShift))^(_result.var>>(48 + g_aluShift)))&255);
 -			}
-+		// FM3.2.2: round in the unpadded domain, with headroom for a full product plus accumulator.
-+		TInt64 roundArithmeticValue(TInt64 value) const
-+		{
 +			TInt64 bias = 0x800000;
 +			if(sr_test_noCache(SR_S1)) bias >>= 1;
 +			else if(sr_test_noCache(SR_S0)) bias <<= 1;
@@ -243,13 +242,14 @@
 +			auto& result = ab ? reg.b : reg.a;
 +			finishArithmeticResult(result, false);
 +			setCCRDirty(ab, result, CCR_E | CCR_U | CCR_N);
-@@ -726,0 +837 @@
+@@ -726,0 +839 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +847 @@
+@@ -735,0 +849 @@
 +			sr_s_update(reg.b);
-@@ -809,19 +921,12 @@
+@@ -809 +923 @@
 -		void limit_arithmeticSaturation( TReg56& _dst )
--		{
++		bool limit_arithmeticSaturation(TReg56& result, const bool rounded = false)
+@@ -811,17 +925,10 @@
 -			if( !sr_test_noCache(SR_SM) )
 -				return;
 -
@@ -267,8 +267,6 @@
 -			case 6: _dst.var = static_cast<TReg56::MyType>(0xff800000000000ull << g_aluShift);	sr_set(CCR_V);	break;
 -			default: assert( 0 && "impossible" );
 -			}
-+		bool limit_arithmeticSaturation(TReg56& result, const bool rounded = false)
-+		{
 +			// FM3.2.3 table3-1: EXT7, EXT0 and MSP23 select the physical limiter.
 +			const auto raw = static_cast<uint64_t>(result.var) >> g_aluShift;
 +			const auto selector = ((raw >> 53) & 4) | ((raw >> 47) & 3);
@@ -279,17 +277,17 @@
 +			if(rounded && selector < 4) limit = sixteen ? 0x007fff00000000ull : 0x007fffff000000ull;
 +			result.var = static_cast<TInt64>(limit << g_aluShift);
 +			return true;
-@@ -975,0 +1081 @@
+@@ -975,0 +1083 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1111 @@
+@@ -1004,0 +1113 @@
 +			sr_s_update(_src);
-@@ -1098 +1205 @@
+@@ -1098 +1207 @@
 -		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate );
 +		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate, bool _round = false );
-@@ -1101 +1208 @@
+@@ -1101 +1210 @@
 -		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu );
 +		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu, bool _round = false );
-@@ -1468,0 +1576 @@
+@@ -1468,0 +1578 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -301,15 +299,15 @@
 @@ -52 +53 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept
 +	void dspExecInterrupts(DSP* _dsp)
-@@ -65,0 +67,8 @@
-+	}
-+
+@@ -67,0 +69,8 @@
 +	void dspExecCustomPeripherals(DSP* dsp)
 +	{
 +		const auto x = dsp->getPeriph(0)->exec();
 +		const auto y = dsp->getPeriph(1)->exec();
 +		dsp->getPeriph(0)->resetDelayCycles(dsp->getInstructionCounter(), std::min(x, y));
 +		dsp->processExternalInterrupts();
++	}
++
 @@ -74,2 +83 @@
 -		assert(false && "Peripherals configuration is not supported");
 -		return nullptr;
@@ -331,7 +329,7 @@
 @@ -264 +280 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +341,327 @@
+@@ -324,0 +341,348 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceAttempt || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -386,6 +384,27 @@
 +		m_referenceLongEntry = state.longEntry;
 +		m_referenceRepeatCompleted = state.repeatCompleted;
 +		for(size_t i = 0; i < perif.size(); ++i) perif[i]->resetDelayCycles(state.peripheralTargets[i], 0);
++	}
++
++	DSP::ReferenceAddressCalculation DSP::calculateReferenceAddress(const TWord mode, const TWord index)
++	{
++		verifyReferenceCheckpoint();
++		if(mode > 4 || index >= reg.r.size())
++			throw std::runtime_error("Unqualified native reference address-generation form");
++		const auto saved = reg.r[index];
++		TWord address = 0;
++		try {
++			switch(mode) {
++			case 0: address = decode_MMMRRR_read<0>(index); break;
++			case 1: address = decode_MMMRRR_read<1>(index); break;
++			case 2: address = decode_MMMRRR_read<2>(index); break;
++			case 3: address = decode_MMMRRR_read<3>(index); break;
++			case 4: address = decode_MMMRRR_read<4>(index); break;
++			}
++		} catch(...) { reg.r[index] = saved; throw; }
++		const auto after = reg.r[index].toWord();
++		reg.r[index] = saved;
++		return {address, saved.toWord(), after};
 +	}
 +
 +	DSP::ReferenceAttemptState DSP::referenceAttemptState() const
@@ -659,7 +678,7 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -331,0 +675,11 @@
+@@ -331,0 +696,11 @@
 +		if(m_referenceAttempt) {
 +			if(Opcodes::isNonParallelOpcode(op)) {
 +				const auto* info = m_opcodes.findNonParallelOpcodeInfo(op);
@@ -671,16 +690,16 @@
 +			// Always decode the captured word, including loaded REP. Never reuse partial dispatch.
 +			m_opcodeCache.at(currentOp) = {&DSP::op_ResolveCache};
 +		}
-@@ -341 +695 @@
+@@ -341 +716 @@
 -				m_cycles += getOpcodeCycles(currentOp);
 +				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
-@@ -413,0 +768,5 @@
+@@ -413,0 +789,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +851,8 @@
+@@ -491,0 +872,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -689,10 +708,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +893,2 @@
+@@ -525,0 +914,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +973,26 @@
+@@ -603,0 +994,26 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -719,52 +738,52 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -684,0 +1080,2 @@
+@@ -684,0 +1101,2 @@
 +		if(m_referenceMode && ssIndex() == 0)
 +			throw std::runtime_error("Unqualified DSP reference stack pop at SP=" + std::to_string(reg.sp.var));
-@@ -687 +1084,4 @@
+@@ -687 +1105,4 @@
 -		--reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 0x1fu) & 0x1fu);
 +		else
 +			--reg.sc.var;
-@@ -691,0 +1092,2 @@
+@@ -691,0 +1113,2 @@
 +		if(m_referenceMode && ssIndex() >= reg.ss.size()-1)
 +			throw std::runtime_error("Unqualified DSP reference stack push at SP=" + std::to_string(reg.sp.var));
-@@ -694 +1096,4 @@
+@@ -694 +1117,4 @@
 -		++reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 1u) & 0x1fu);
 +		else
 +			++reg.sc.var;
-@@ -1152,2 +1556,0 @@
+@@ -1152,2 +1577,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1559 @@
+@@ -1156 +1580 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1187 +1590,2 @@
+@@ -1187 +1611,2 @@
 -			m_opcodeCache[_addr].op = &DSP::op_ResolveCache;
 +			if(auto* entry = m_opcodeCache.find(_addr))
 +				entry->op = &DSP::op_ResolveCache;
-@@ -1306,3 +1710 @@
+@@ -1306,3 +1731 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
-@@ -1341,3 +1743 @@
+@@ -1341,3 +1764 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, value == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, value == minimum);
-@@ -1484,2 +1884 @@
+@@ -1484,2 +1905 @@
 -		m_opcodeCache.clear();
 -		m_opcodeCache.resize(mem.sizeP(), {&DSP::op_ResolveCache});
 +		m_opcodeCache.reset(mem.sizeP(), {&DSP::op_ResolveCache});
-@@ -1570,0 +1970,2 @@
+@@ -1570,0 +1991,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2084,2 @@
+@@ -1682,0 +2105,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl

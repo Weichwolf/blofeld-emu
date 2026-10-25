@@ -54,7 +54,9 @@ replacement, failed F2/joint recovery and pure phase/profile misuse. A real SHI
 receive survives refused memory placement, and real timer IRQ/DMA activity
 refuses without acknowledgement or invented bus timing.
 
-Automatic memory/parallel-move/extension stages, simultaneous X/Y/P groups,
+The separate automatic_memory profile adds selected actual native AG1/AG2/E1
+loads/stores without changing this ALU-only profile (dsp-memory-pipeline.txt).
+Remaining parallel-move/extension stages, simultaneous X/Y/P groups,
 physical DMA/interlocks, branch/loop/IRQ/cache/REP execution and jump/reset fill
 behavior remain open. Original normal reset-to-instrument startup is not yet
 integrated with this profile. Authentic full ROM/reserved Y:002000, original

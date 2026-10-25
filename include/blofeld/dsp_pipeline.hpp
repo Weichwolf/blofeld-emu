@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_address_stage.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_program_fetch.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
@@ -10,7 +11,7 @@
 #include <optional>
 
 namespace blofeld {
-enum class DspFetchPipeline : std::uint8_t { explicit_effects, automatic_alu };
+enum class DspFetchPipeline : std::uint8_t { explicit_effects, automatic_alu, automatic_memory };
 
 struct DspPipelineCycle {
   std::optional<DspProgramWord> decode = std::nullopt;
@@ -25,6 +26,9 @@ struct DspPipelineCycle {
   std::uint8_t e1_deferred_accumulators = 0;
   std::uint8_t e2_deferred_accumulators = 0;
   std::optional<DspReferenceProgress> execution = std::nullopt;
+  std::optional<DspAddressStageView> ag1_address = std::nullopt;
+  std::optional<DspAddressStageView> ag2_address = std::nullopt;
+  std::optional<DspMemoryStageResult> memory = std::nullopt;
   bool retirement_published = false;
   bool execution_captured = false;
   bool advanced = false;

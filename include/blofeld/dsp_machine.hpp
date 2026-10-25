@@ -107,6 +107,11 @@ private:
   friend class DspScheduledRun;
   friend class DspFetchRun;
   friend struct DspFetchState;
+  friend struct DspInstructionPipeline;
+  [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address);
+  [[nodiscard]] DspAddressStageView address_stage(const DspAddressStageTicket &ticket) const;
+  [[nodiscard]] DspAddressStageTicket
+  rebind_address_stage(const DspAddressStageTicket &ticket) const;
   void validate_reference_overlap(const DspReferenceTicket &ticket) const;
   [[nodiscard]] std::shared_ptr<const bool> reference_clock_owner() const;
   void fail_reference_clock() noexcept;

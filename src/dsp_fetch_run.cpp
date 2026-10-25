@@ -40,8 +40,9 @@ void validate_inputs(const DspFetchRunInputs inputs) {
   constexpr unsigned maximum_extal = 100000000;
   constexpr std::uint64_t maximum_timebase = 1000000000000;
   if ((inputs.pipeline != DspFetchPipeline::explicit_effects &&
-       inputs.pipeline != DspFetchPipeline::automatic_alu) ||
-      (inputs.pipeline == DspFetchPipeline::automatic_alu &&
+       inputs.pipeline != DspFetchPipeline::automatic_alu &&
+       inputs.pipeline != DspFetchPipeline::automatic_memory) ||
+      (inputs.pipeline != DspFetchPipeline::explicit_effects &&
        inputs.execution != DspReferenceExecution::staged_register_boundaries)) {
     throw Fault("Automatic DSP stages require the explicit staged native result contract");
   }
@@ -77,8 +78,9 @@ DspFetchRun::DspFetchRun(const DspFetchRunInputs inputs, DspMachine &machine)
   }
   auto &state = impl_->state;
   state.inputs = inputs;
-  if (inputs.pipeline == DspFetchPipeline::automatic_alu) {
-    state.pipeline = DspAluPipeline{.view = {.decode_address = access->target.address}};
+  if (inputs.pipeline != DspFetchPipeline::explicit_effects) {
+    state.pipeline = DspInstructionPipeline{.profile = inputs.pipeline,
+                                            .view = {.decode_address = access->target.address}};
   }
   const auto last = machine.bus().last_dma_cycle();
   if (last && *last == std::numeric_limits<std::uint64_t>::max()) {

@@ -2,6 +2,7 @@
 #include "blofeld/dsp_machine.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/dsp_address_stage.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_dax.hpp"
@@ -368,6 +369,19 @@ DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTick
   return state_->cpu.advance_reference_access(ticket);
 }
 
+DspAddressStageTicket DspMachine::capture_reference_address(const std::uint32_t address) {
+  if (clocked()) { throw Fault("Native AG1 requires an unclocked reference owner"); }
+  return state_->cpu.capture_reference_address(address);
+}
+
+DspAddressStageView DspMachine::address_stage(const DspAddressStageTicket &ticket) const {
+  return state_->cpu.address_stage(ticket);
+}
+
+DspAddressStageTicket DspMachine::rebind_address_stage(const DspAddressStageTicket &ticket) const {
+  return state_->cpu.rebind_address_stage(ticket);
+}
+
 std::optional<DspReferencePending> DspMachine::reference_pending() const {
   return state_->cpu.reference_pending();
 }
@@ -389,7 +403,16 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
       state_->cpu.validate_reference_admission(*inputs.access, inputs.retirement.has_value());
     }
     if (inputs.fetch) { state_->cpu.validate_reference_fetch(*inputs.fetch); }
-    result = reference_cycle_footprint(state_->bus, inputs, pending, state_->cpu.reference_fetch());
+    std::optional<DspAddressStageView> memory;
+    if (inputs.address_update) {
+      state_->cpu.validate_reference_address(*inputs.address_update, false);
+    }
+    if (inputs.memory) {
+      state_->cpu.validate_reference_address(*inputs.memory, true);
+      memory = state_->cpu.address_stage(*inputs.memory);
+    }
+    result = reference_cycle_footprint(
+        state_->bus, inputs, pending, state_->cpu.reference_fetch(), memory);
   } catch (const std::exception &error) {
     throw Fault("DSP bus-cycle preflight pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
                 ": " + error.what());
@@ -405,6 +428,10 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
       result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);
     }
     if (inputs.access) { result.progress = state_->cpu.advance_reference_access(*inputs.access); }
+    if (inputs.address_update) {
+      result.address_update = state_->cpu.publish_reference_address(*inputs.address_update);
+    }
+    if (inputs.memory) { result.memory = state_->cpu.execute_reference_memory(*inputs.memory); }
     if (inputs.fetch) { result.fetch = state_->cpu.reference_fetch(); }
     return result;
   } catch (const std::exception &error) {

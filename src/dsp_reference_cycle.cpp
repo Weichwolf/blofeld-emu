@@ -2,6 +2,7 @@
 #include "dsp_reference_cycle.hpp"
 
 #include "blofeld/bus.hpp"
+#include "blofeld/dsp_address_stage.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_native_access.hpp"
@@ -11,6 +12,7 @@
 
 #include <array>
 #include <cstddef>
+#include <exception>
 #include <optional>
 #include <string>
 #include <variant>
@@ -90,7 +92,8 @@ void check_resources(const DspBus &bus, const DspReferenceCycleResult &result) {
 DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
                                                   const DspReferenceCycleInputs &inputs,
                                                   const std::optional<DspReferencePending> &pending,
-                                                  const DspProgramFetchView &fetch) {
+                                                  const DspProgramFetchView &fetch,
+                                                  const std::optional<DspAddressStageView> memory) {
   DspReferenceCycleResult result;
   if (inputs.fetch == DspProgramFetchStage::read) {
     if (!fetch.pending_address) { throw Fault("Bus-cycle F2 lost its actual issued address"); }
@@ -100,7 +103,25 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     if (!pending) { throw Fault("Bus-cycle admission lost its actual native pending effect"); }
     if (const auto access = native_access(*pending)) { append(result, *access); }
   }
-  check_resources(bus, result);
+  if (memory) {
+    if (result.core_access_count == result.core_accesses.size()) {
+      throw Fault("Unqualified extra native memory-stage footprint");
+    }
+    append(result,
+           {.target = {.space = memory->update.space, .address = memory->update.address},
+            .operation = memory->update.operation});
+  }
+  try {
+    check_resources(bus, result);
+  } catch (const std::exception &error) {
+    if (!memory) { throw; }
+    throw Fault(
+        "Native memory E1 " +
+        describe({.target = {.space = memory->update.space, .address = memory->update.address},
+                  .operation = memory->update.operation}) +
+        " pc=" + hex(memory->word.address, 6) + " omr=" + hex(memory->update.omr, 6) + ": " +
+        error.what());
+  }
   return result;
 }
 }

@@ -1,0 +1,57 @@
+Automatic native memory pipeline
+
+DspFetchRunInputs.pipeline=automatic_memory extends the automatic ALU profile
+with pure single-word X/Y loads and stores through R0..R7, using (Rn), (Rn)+,
+(Rn)-, (Rn)+Nn or (Rn)-Nn and X0/X1/Y0/Y1 data operands. It requires the same
+staged_register_boundaries execution contract. Extensions, parallel operations,
+pre-offset/pre-decrement, absolute and other register transfers still refuse.
+
+DSP56300FM Rev5 Table5-1 places data address calculation in AG1, pointer update
+in AG2, and store-source sampling/load-destination publication in E1. The native
+SDK's actual templated address helper calculates the EA and R result in AG1;
+the visible R is restored until AG2. No host AGU arithmetic is substituted.
+The selected helper reads R/N/M and modifier caches, touches only its R, and
+performs no bus access. A captured record retains those real native inputs.
+
+AG2 publishes the actual R result once. Indirect addressing occupies the phase
+without inventing a pointer update; an update by zero remains a real event.
+E1 starts native execution with live data registers and the captured address
+inputs. The native data request must match the frozen EA, space and operation.
+The actual bus access commits once; a native load publishes only its real
+destination fields in E1. E2 publishes the remaining actual result/counters.
+Younger accepted R values survive older native whole-result restoration. The
+per-instruction overlay contains actual published register values and ends at
+retirement; it is neither a replacement register file nor guessed AGU state.
+
+Each reference cycle admits idle DMA, actual F2, older E2, AG2, then E1. AG1 is
+calculated after E1 using the updated live address registers; this order commutes
+for the declared forms, whose E1 only changes data registers. Active DMA remains
+an explicit refusal. Actual F2 plus the frozen E1 access derive resource use;
+existing bank/ROM/MMIO refusals remain enforced before any cycle side effects.
+General peripheral access is not qualified by this memory profile. The bus order
+is an explicit internal reference order, not a hardware-measured sampling order.
+
+Bounded private AG1/AG2/E1 records use owner/slot/serial capabilities; the bound
+is a host continuation bound, not silicon queue depth. Joint snapshots retain
+records, phase words, native candidates, frontend words, peripheral state and
+elapsed clock/divider state. Trusted restore rebinds private capabilities to the
+restored core. An entered data failure preserves accepted older E2/younger AG2,
+quarantines execution and completes no elapsed clock; trusted restore is required.
+
+  cmake --build --preset strict --target blofeld-memory-pipeline-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_automatic_memory_pipeline$'
+
+The own fixed cases check 160 modulo addressing forms, all four data-register
+fields, sustained loads, load-to-store live data, load-to-MPY/ADD, captured/future
+opcode replacement, joint snapshots before/after each phase, zero updates,
+unknown-data recovery, unavailable capabilities and MMIO/FIFO preservation.
+These support the declared internal model, not complete hardware acceptance.
+Native exceptions and full snapshots remain unsuitable for a real-time callback.
+
+Parallel X/Y/P operations, extensions, control/loop/REP/cache/IRQ timelines,
+physical DMA/interlocks, branch/reset fill and original runtime integration
+remain incomplete. Authentic full ROM/reserved Y:002000 semantics, normal
+original Keyboard/Desktop boot, original DSP host audio/MIDI, all118 documented
+functions and the complete reset/storage/update/recovery/physical acceptance
+objective remain required. This profile does not bypass the strict boot failure.

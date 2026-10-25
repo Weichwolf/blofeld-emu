@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "blofeld/dsp_address_stage.hpp"
 #include "blofeld/dsp_bus.hpp"
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_program_fetch.hpp"
@@ -21,6 +22,8 @@ struct DspReferenceCycleInputs {
   std::optional<DspProgramFetchStage> fetch = std::nullopt;
   std::optional<DspReferenceTicket> access = std::nullopt;
   std::optional<DspReferenceTicket> retirement = std::nullopt;
+  std::optional<DspAddressStageTicket> address_update = std::nullopt;
+  std::optional<DspAddressStageTicket> memory = std::nullopt;
   DspReferenceBusOrder order = DspReferenceBusOrder::unqualified;
 };
 
@@ -30,6 +33,8 @@ struct DspReferenceCycleResult {
   DspDmaBusResult dma;
   std::optional<DspReferenceProgress> progress = std::nullopt;
   std::optional<DspInstructionRetire> retirement = std::nullopt;
+  std::optional<DspAddressStageView> address_update = std::nullopt;
+  std::optional<DspMemoryStageResult> memory = std::nullopt;
   std::optional<DspProgramFetchView> fetch = std::nullopt;
   std::array<DspMemoryAccess, dsp_reference_cycle_accesses> core_accesses{};
   std::size_t core_access_count = 0;

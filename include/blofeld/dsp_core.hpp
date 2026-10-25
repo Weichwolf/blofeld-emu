@@ -14,6 +14,9 @@
 #include <optional>
 
 namespace blofeld {
+class DspAddressStageTicket;
+struct DspAddressStageView;
+struct DspMemoryStageResult;
 
 struct DspState {
   std::uint32_t pc = 0;
@@ -146,6 +149,13 @@ private:
   [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;
   [[nodiscard]] DspReferenceProgress
   reference_progress(std::optional<DspReferenceEffect> completed = std::nullopt) const;
+  [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address);
+  [[nodiscard]] DspAddressStageView address_stage(const DspAddressStageTicket &ticket) const;
+  [[nodiscard]] DspAddressStageTicket
+  rebind_address_stage(const DspAddressStageTicket &ticket) const;
+  [[nodiscard]] DspAddressStageView publish_reference_address(const DspAddressStageTicket &ticket);
+  void validate_reference_address(const DspAddressStageTicket &ticket, bool published) const;
+  [[nodiscard]] DspMemoryStageResult execute_reference_memory(const DspAddressStageTicket &ticket);
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

@@ -16,7 +16,7 @@
 namespace blofeld {
 struct DspFetchState {
   DspFetchRunInputs inputs;
-  std::optional<DspAluPipeline> pipeline;
+  std::optional<DspInstructionPipeline> pipeline;
   std::uint64_t cycles = 0;
   std::uint64_t ticks = 0;
   std::uint64_t clk2_edges = 0;
