@@ -113,6 +113,23 @@ DspReferenceProgress DspFetchRun::begin_instruction(DspMachine &machine) {
   }
 }
 
+DspReferenceProgress DspFetchRun::overlap_instruction(DspMachine &machine) {
+  check_owner(machine);
+  impl_->state.verify(machine);
+  const auto pending = machine.reference_pending();
+  if (!pending) { throw Fault("DSP fetch overlap requires an actual held result"); }
+  machine.validate_reference_overlap(pending->ticket);
+  const FetchGuard guard(impl_->active);
+  try {
+    const auto progress = machine.overlap_reference_instruction(pending->ticket);
+    impl_->state.bind(machine);
+    return progress;
+  } catch (const std::exception &error) {
+    fail(machine);
+    throw Fault("DSP fetch overlap" + context(machine) + ": " + error.what());
+  }
+}
+
 void DspFetchRun::complete_cycle(DspMachine &machine,
                                  const std::uint64_t period,
                                  const bool switch_was_pending) {

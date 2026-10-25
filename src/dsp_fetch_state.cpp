@@ -28,6 +28,8 @@ bool program_read(const DspReferencePending &pending) {
 
 void DspFetchState::bind(const DspMachine &machine) {
   const auto pending = machine.reference_pending();
+  const auto previous = machine.reference_retirement();
+  expected_retirement = previous ? std::optional{previous->ticket} : std::nullopt;
   expected_cpu = machine.cpu().debug_state();
   expected_ticket = pending ? std::optional{pending->ticket} : std::nullopt;
   expected_latch = pending ? pending->latched_program_word : std::nullopt;
@@ -40,8 +42,10 @@ void DspFetchState::verify(const DspMachine &machine) const {
   const auto pending = machine.reference_pending();
   const auto ticket = pending ? std::optional{pending->ticket} : std::nullopt;
   const auto latch = pending ? pending->latched_program_word : std::nullopt;
+  const auto previous = machine.reference_retirement();
+  const auto retirement = previous ? std::optional{previous->ticket} : std::nullopt;
   if (machine.clocked() || machine.cpu().debug_state() != expected_cpu ||
-      ticket != expected_ticket || latch != expected_latch ||
+      ticket != expected_ticket || retirement != expected_retirement || latch != expected_latch ||
       machine.reference_fetch() != expected_fetch ||
       machine.bus().last_dma_cycle() != expected_dma ||
       machine.reference_clock_owner() != expected_owner) {
@@ -73,6 +77,11 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
                                  .order = DspReferenceBusOrder::dma_then_fetch_then_native};
   const auto fetch = machine.reference_fetch();
   if (fetch.pending_address) { result.fetch = DspProgramFetchStage::read; }
+  if (input.retire_previous) {
+    const auto previous = machine.reference_retirement();
+    if (!previous) { throw Fault("DSP fetch clock has no prior result to retire"); }
+    result.retirement = previous->ticket;
+  }
   if (!input.admit_native) { return result; }
   const auto pending = machine.reference_pending();
   if (!pending) { throw Fault("DSP fetch clock has no pending native effect to admit"); }

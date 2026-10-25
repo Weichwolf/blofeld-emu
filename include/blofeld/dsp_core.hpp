@@ -123,6 +123,12 @@ private:
   void restore_checkpoint(const DspCoreCheckpoint &checkpoint);
   [[nodiscard]] bool executing() const;
   [[nodiscard]] DspReferenceProgress begin_reference_instruction(DspReferenceExecution contract);
+  [[nodiscard]] DspReferenceProgress
+  overlap_reference_instruction(const DspReferenceTicket &ticket);
+  void validate_reference_overlap(const DspReferenceTicket &ticket) const;
+  [[nodiscard]] std::optional<DspReferencePending> reference_retirement() const;
+  void validate_reference_retirement(const DspReferenceTicket &ticket) const;
+  [[nodiscard]] DspInstructionRetire retire_reference_overlap(const DspReferenceTicket &ticket);
   [[nodiscard]] DspReferenceProgress begin_reference_interrupt(DspReferenceExecution contract);
   [[nodiscard]] DspReferenceProgress begin_reference_step(DspReferenceExecution contract,
                                                           bool interrupt_entry);
@@ -132,7 +138,8 @@ private:
   [[nodiscard]] DspProgramFetchView advance_reference_fetch(DspProgramFetchStage stage);
   [[nodiscard]] DspProgramFetchView reference_fetch() const;
   void validate_reference_ticket(const DspReferenceTicket &ticket) const;
-  void validate_reference_admission(const DspReferenceTicket &ticket) const;
+  void validate_reference_admission(const DspReferenceTicket &ticket,
+                                    bool retiring_previous = false) const;
   void validate_reference_fetch(DspProgramFetchStage stage) const;
   void fail_reference_cycle() noexcept;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;

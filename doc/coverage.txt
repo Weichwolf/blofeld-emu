@@ -1753,6 +1753,13 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           overlapping/control targets still fail
                                           explicitly. Physical stage scheduling
                                           remains open (dsp-move-writeback.txt).
+                                          Two actual native candidates can now
+                                          coexist with ordered predecessor/current
+                                          publication, younger R/move preservation,
+                                          joint snapshots and DMA/F2 failure-prefix
+                                          recovery (dsp-native-overlap.txt). This
+                                          does not qualify automatic physical
+                                          stages or operand forwarding timing.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

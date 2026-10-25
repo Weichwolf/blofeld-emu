@@ -245,9 +245,18 @@ struct DspRetirementResult {
   bool redirected = false;
 };
 
+struct DspPreviousResult {
+  DspRetirementResult result;
+  DspInstructionRetire effect;
+  std::uint64_t generation = 0;
+  std::size_t record = 0;
+};
+
 struct DspNativeResultState {
   std::optional<dsp56k::DSP::ReferenceAttemptState> base;
   std::optional<DspRetirementResult> retirement;
+  std::optional<dsp56k::DSP::ReferenceAttemptState> visible;
+  std::optional<DspPreviousResult> previous;
   DspAddressPhase addresses;
   DspMoveWritebackState writeback;
 };
@@ -365,7 +374,12 @@ public:
   }
 
   void restore_visible_reference() {
-    restore_reference_base();
+    if (results.visible) {
+      const DspReferenceScope restoring(native.reference(), DspReferenceMode::restoring);
+      cpu.restoreReferenceAttempt(*results.visible);
+    } else {
+      restore_reference_base();
+    }
     for (unsigned index = 0; index < results.addresses.published.size(); ++index) {
       if (const auto value = results.addresses.published.at(index)) {
         cpu.regs().r.at(index).var = static_cast<std::int32_t>(*value);
@@ -474,6 +488,74 @@ public:
     results.addresses.published.at(result.index) = result.value;
     results.addresses.pending.reset();
     return result;
+  }
+
+  void check_overlap() const {
+    const auto &reference = native.reference();
+    const auto &pending = reference.pending();
+    if (reference.execution() != DspReferenceExecution::staged_register_boundaries ||
+        !results.retirement || !results.base || results.previous || results.addresses.pending ||
+        results.writeback.pending || !pending ||
+        !std::holds_alternative<DspInstructionRetire>(*pending)) {
+      throw Fault("Native overlap requires one actual completed staged result");
+    }
+    const auto effect = std::get<DspInstructionRetire>(*pending);
+    const auto &next = results.retirement->cpu;
+    constexpr unsigned forbidden_status = 0x1a000;
+    constexpr unsigned condition_bits = 0xff;
+    const auto status = static_cast<std::uint32_t>(next.registers.sr);
+    const auto before_status = static_cast<std::uint32_t>(results.base->registers.sr);
+    if (effect.redirected || effect.omr != effect.next_omr || next.repeat.remaining != 0 ||
+        (status & forbidden_status) != 0 || ((status ^ before_status) & ~condition_bits) != 0) {
+      throw Fault("Unqualified native overlap control/mode/REP transition pc=" + hex(effect.pc, 6) +
+                  " omr=" + hex(effect.omr, 6));
+    }
+    const auto fetch = reference.fetch().view();
+    if (reference.fetch().active() &&
+        (fetch.consume_address != effect.next_pc || fetch.omr != effect.next_omr)) {
+      throw Fault("Native overlap lost its actual sequential fetch cursor");
+    }
+    constexpr unsigned mask_shift = 8;
+    constexpr unsigned interrupt_mask = 3;
+    if (bus.interrupt_request((status >> mask_shift) & interrupt_mask)) {
+      throw Fault("Unqualified native overlap interrupt pc=" + hex(effect.next_pc, 6) +
+                  " omr=" + hex(effect.next_omr, 6));
+    }
+  }
+
+  void begin_overlap() {
+    auto &reference = native.reference();
+    const auto pending = reference.pending();
+    if (!pending || !results.retirement) {
+      throw Fault("Native overlap lost its actual predecessor result");
+    }
+    const auto effect = std::get<DspInstructionRetire>(*pending);
+    const auto computation = results.retirement->cpu;
+    const auto visible = cpu.referenceAttemptState();
+    const DspPreviousResult previous{.result = *results.retirement,
+                                     .effect = effect,
+                                     .generation = generation,
+                                     .record = reference.pending_index()};
+    reference.finish();
+    results = {};
+    results.base = computation;
+    results.visible = visible;
+    results.previous = previous;
+    ++generation;
+    reference.begin({.pc = effect.next_pc, .omr = effect.next_omr},
+                    DspReferenceExecution::staged_register_boundaries);
+    resume_reference();
+  }
+
+  DspInstructionRetire publish_previous() {
+    if (!results.previous) { throw Fault("Native overlap lost its prior result"); }
+    const auto previous = *results.previous;
+    results.visible = previous.result.cpu;
+    results.previous.reset();
+    restore_visible_reference();
+    // The younger computation already contains this exact completed predecessor.
+    bus.observe_omr(previous.effect.next_omr);
+    return previous.effect;
   }
 
   [[nodiscard]] std::pair<dsp56k::Instruction, std::uint32_t>
@@ -754,6 +836,57 @@ DspReferenceProgress DspCore::begin_reference_instruction(const DspReferenceExec
   return begin_reference_step(contract, false);
 }
 
+void DspCore::validate_reference_overlap(const DspReferenceTicket &ticket) const {
+  validate_reference_ticket(ticket);
+  impl_->check_overlap();
+  if (impl_->generation == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("Native overlap exhausted its instruction generations");
+  }
+}
+
+DspReferenceProgress DspCore::overlap_reference_instruction(const DspReferenceTicket &ticket) {
+  validate_reference_overlap(ticket);
+  const ExecutionGuard guard(impl_->active);
+  try {
+    impl_->invalidate();
+    impl_->begin_overlap();
+    return reference_progress();
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault("Native overlap: " + std::string(error.what()));
+  }
+}
+
+std::optional<DspReferencePending> DspCore::reference_retirement() const {
+  if (impl_->active || impl_->faulted) { throw Fault("Native overlap owner is unavailable"); }
+  const auto &previous = impl_->results.previous;
+  if (!previous) { return std::nullopt; }
+  return DspReferencePending{
+      .effect = previous->effect,
+      .ticket = DspReferenceTicket(
+          impl_->reference_owner,
+          {.generation = previous->generation, .record = previous->record, .previous = true}),
+      .execution = DspReferenceExecution::staged_register_boundaries};
+}
+
+void DspCore::validate_reference_retirement(const DspReferenceTicket &ticket) const {
+  const auto pending = reference_retirement();
+  if (!pending || ticket != pending->ticket) {
+    throw Fault("Stale, foreign or unavailable previous native retirement ticket");
+  }
+}
+
+DspInstructionRetire DspCore::retire_reference_overlap(const DspReferenceTicket &ticket) {
+  validate_reference_retirement(ticket);
+  const ExecutionGuard guard(impl_->active);
+  try {
+    return impl_->publish_previous();
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault("Native prior retirement: " + std::string(error.what()));
+  }
+}
+
 DspReferenceProgress DspCore::begin_reference_interrupt(const DspReferenceExecution contract) {
   return begin_reference_step(contract, true);
 }
@@ -830,7 +963,8 @@ void DspCore::validate_reference_ticket(const DspReferenceTicket &ticket) const 
       ticket.owner_ != impl_->reference_owner || ticket.position_.generation != impl_->generation ||
       ticket.position_.record != reference.pending_index() ||
       ticket.position_.address != impl_->results.addresses.pending.has_value() ||
-      ticket.position_.move != impl_->results.writeback.pending.has_value()) {
+      ticket.position_.move != impl_->results.writeback.pending.has_value() ||
+      ticket.position_.previous) {
     throw Fault("Stale, foreign or unavailable native reference access ticket");
   }
 }
@@ -838,7 +972,7 @@ void DspCore::validate_reference_ticket(const DspReferenceTicket &ticket) const 
 DspReferencePending DspCore::latch_reference_program(const DspReferenceTicket &ticket) {
   validate_reference_ticket(ticket);
   static_cast<void>(impl_->native.reference().check_program_latch());
-  const auto before = state();
+  const auto before = impl_->native.reference().snapshot().context;
   const ExecutionGuard guard(impl_->active);
   try {
     impl_->native.reference().latch_program();
@@ -882,7 +1016,10 @@ DspProgramFetchView DspCore::reference_fetch() const {
 DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage stage) {
   validate_reference_fetch(stage);
   auto &fetch = impl_->native.reference().fetch();
-  const auto before = state();
+  const auto visible = state();
+  const auto before = impl_->native.reference().active()
+                          ? impl_->native.reference().snapshot().context
+                          : DspNativeAccess{.pc = visible.pc, .omr = visible.omr};
   const auto view = fetch.view();
   const auto address = view.pending_address.value_or(view.next_address);
   const ExecutionGuard guard(impl_->active);
@@ -911,8 +1048,14 @@ void DspCore::validate_reference_fetch(const DspProgramFetchStage stage) const {
   impl_->native.reference().fetch().check_stage(stage);
 }
 
-void DspCore::validate_reference_admission(const DspReferenceTicket &ticket) const {
+void DspCore::validate_reference_admission(const DspReferenceTicket &ticket,
+                                           const bool retiring_previous) const {
   validate_reference_ticket(ticket);
+  const auto pending = reference_pending_unchecked();
+  if (impl_->results.previous && !retiring_previous && pending &&
+      std::holds_alternative<DspInstructionRetire>(pending->effect)) {
+    throw Fault("Younger native result cannot retire before its actual predecessor");
+  }
   impl_->native.reference().check_admission();
   impl_->check_fetch_opcode();
 }
@@ -923,7 +1066,7 @@ void DspCore::fail_reference_cycle() noexcept {
 
 DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
   validate_reference_admission(ticket);
-  const auto before = state();
+  const auto before = impl_->native.reference().snapshot().context;
   const ExecutionGuard guard(impl_->active);
   try {
     if (impl_->results.addresses.pending) {

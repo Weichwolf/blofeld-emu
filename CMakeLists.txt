@@ -764,6 +764,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-address-phase-test test/dsp_address_phase_test.cpp test/dsp_address_phase_clock.cpp)
   target_link_libraries(blofeld-address-phase-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_address_phase COMMAND blofeld-address-phase-test)
+  add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
+  target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)
   add_executable(blofeld-writeback-test test/dsp_writeback_test.cpp test/dsp_writeback_parallel.cpp test/dsp_writeback_clock.cpp)
   target_link_libraries(blofeld-writeback-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_move_writeback COMMAND blofeld-writeback-test)
@@ -2186,7 +2189,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

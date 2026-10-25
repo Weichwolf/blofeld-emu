@@ -320,6 +320,25 @@ DspReferenceProgress DspMachine::begin_reference_instruction(const DspReferenceE
   return state_->cpu.begin_reference_instruction(contract);
 }
 
+void DspMachine::validate_reference_overlap(const DspReferenceTicket &ticket) const {
+  if (clocked()) { throw Fault("Native overlap requires an unclocked reference owner"); }
+  state_->cpu.validate_reference_overlap(ticket);
+}
+
+DspReferenceProgress DspMachine::overlap_reference_instruction(const DspReferenceTicket &ticket) {
+  if (clocked()) { throw Fault("Native overlap requires an unclocked reference owner"); }
+  return state_->cpu.overlap_reference_instruction(ticket);
+}
+
+std::optional<DspReferencePending> DspMachine::reference_retirement() const {
+  return state_->cpu.reference_retirement();
+}
+
+DspInstructionRetire DspMachine::retire_reference_overlap(const DspReferenceTicket &ticket) {
+  if (clocked()) { throw Fault("Native overlap requires an unclocked reference owner"); }
+  return state_->cpu.retire_reference_overlap(ticket);
+}
+
 DspReferenceProgress DspMachine::begin_reference_interrupt(const DspReferenceExecution contract) {
   if (clocked()) { throw Fault("Native access suspension requires an unclocked reference owner"); }
   return state_->cpu.begin_reference_interrupt(contract);
@@ -365,7 +384,10 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
     if (inputs.order != DspReferenceBusOrder::dma_then_fetch_then_native) {
       throw Fault("Native bus cycle requires explicit DMA/fetch/native order");
     }
-    if (inputs.access) { state_->cpu.validate_reference_admission(*inputs.access); }
+    if (inputs.retirement) { state_->cpu.validate_reference_retirement(*inputs.retirement); }
+    if (inputs.access) {
+      state_->cpu.validate_reference_admission(*inputs.access, inputs.retirement.has_value());
+    }
     if (inputs.fetch) { state_->cpu.validate_reference_fetch(*inputs.fetch); }
     result = reference_cycle_footprint(state_->bus, inputs, pending, state_->cpu.reference_fetch());
   } catch (const std::exception &error) {
@@ -379,6 +401,9 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
                      .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
     if (result.dma.core_stall) { return result; }
     if (inputs.fetch) { result.fetch = state_->cpu.advance_reference_fetch(*inputs.fetch); }
+    if (inputs.retirement) {
+      result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);
+    }
     if (inputs.access) { result.progress = state_->cpu.advance_reference_access(*inputs.access); }
     if (inputs.fetch) { result.fetch = state_->cpu.reference_fetch(); }
     return result;

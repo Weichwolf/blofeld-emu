@@ -78,6 +78,11 @@ public:
   [[nodiscard]] DspStepPlan plan_step() const;
   // Untimed owner-controlled access suspension; no automatic IRQ entry or clocking.
   [[nodiscard]] DspReferenceProgress begin_reference_instruction(DspReferenceExecution contract);
+  // Untimed two-candidate ownership; not hardware operand forwarding/stage timing.
+  [[nodiscard]] DspReferenceProgress
+  overlap_reference_instruction(const DspReferenceTicket &ticket);
+  [[nodiscard]] std::optional<DspReferencePending> reference_retirement() const;
+  [[nodiscard]] DspInstructionRetire retire_reference_overlap(const DspReferenceTicket &ticket);
   // Explicit untimed interrupt entry, including both vector fetches and acknowledgement.
   [[nodiscard]] DspReferenceProgress begin_reference_interrupt(DspReferenceExecution contract);
   // Capture the pending opcode/extension now; keep native decoding suspended.
@@ -102,6 +107,7 @@ private:
   friend class DspScheduledRun;
   friend class DspFetchRun;
   friend struct DspFetchState;
+  void validate_reference_overlap(const DspReferenceTicket &ticket) const;
   [[nodiscard]] std::shared_ptr<const bool> reference_clock_owner() const;
   void fail_reference_clock() noexcept;
   void check_admission_contract() const;

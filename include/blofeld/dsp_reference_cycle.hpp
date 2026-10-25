@@ -20,6 +20,7 @@ struct DspReferenceCycleInputs {
   DspDmaInputs dma;
   std::optional<DspProgramFetchStage> fetch = std::nullopt;
   std::optional<DspReferenceTicket> access = std::nullopt;
+  std::optional<DspReferenceTicket> retirement = std::nullopt;
   DspReferenceBusOrder order = DspReferenceBusOrder::unqualified;
 };
 
@@ -28,6 +29,7 @@ inline constexpr std::size_t dsp_reference_cycle_accesses = 2;
 struct DspReferenceCycleResult {
   DspDmaBusResult dma;
   std::optional<DspReferenceProgress> progress = std::nullopt;
+  std::optional<DspInstructionRetire> retirement = std::nullopt;
   std::optional<DspProgramFetchView> fetch = std::nullopt;
   std::array<DspMemoryAccess, dsp_reference_cycle_accesses> core_accesses{};
   std::size_t core_access_count = 0;

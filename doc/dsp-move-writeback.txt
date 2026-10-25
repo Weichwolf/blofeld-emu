@@ -64,3 +64,6 @@ group/interlock, full loop/IRQ/control-register stage timing and normal runtime
 integration remain open. Full authentic ROM/reserved Y:002000, original normal
 Desktop/Keyboard startup, MIDI/audio and all full-device acceptance requirements
 remain incomplete. This reference path is not a real-time callback.
+
+Two-candidate functional ownership and predecessor/current publication are
+specified separately in dsp-native-overlap.txt; physical stages remain open.

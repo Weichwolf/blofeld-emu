@@ -1,0 +1,56 @@
+Actual native candidates with ordered result publication
+
+The staged_register_boundaries reference owner can hold an actual completed
+predecessor while beginning a second native instruction. Its computation starts
+from that exact predecessor result; visible architectural state remains at the
+accepted publication frontier. Native arithmetic, conversion, operand capture
+and real bus effects are retained. This is functional candidate ownership,
+not a claim of hardware forwarding or correctly timed operand sampling.
+
+A distinct predecessor ticket publishes the held result once. The younger
+instruction has its own opcode/address/data/move/retirement tickets. Publishing
+the predecessor restores its actual completed native state, then reapplies
+already accepted younger R/move fields. It cannot erase a younger load or cause
+an instruction or bus effect to run again. Younger retirement refuses while its
+predecessor is held. Two candidates are a current host implementation bound,
+not a measured silicon queue or full physical pipeline depth.
+
+The handoff requires a completed staged predecessor with no pending address or
+move publication, no previous candidate, no redirect, no OMR/status-mode change,
+no loaded REP/loop/cache/compatibility mode and no pending admissible interrupt.
+Sequential frontend cursor/OMR must match. Invalid, crossed, stale and foreign
+roles refuse before mutation. Trusted snapshots/forks retain computation and
+visible bases, both actual results and accepted fields; restore renews ticket
+ownership. Actual redirects and other contracts retain their ordinary paths.
+
+The selected reference bus cycle orders DMA, old F2, predecessor retirement,
+and the current native effect. Both tickets are validated before any mutation.
+Unknown accesses report the executing candidate PC/OMR even while the visible
+architectural PC belongs to the older held instruction.
+Retirement adds no memory footprint; actual F2/current accesses still derive
+occupancy and use existing physical resource arbitration. DMA stalls hold both
+results. A failed F2 precedes either publication; a later failed actual data
+read preserves a predecessor already published in the entered cycle. Failed
+clocks remain quarantined until joint recovery, without completing elapsed time.
+DspFetchRun binds and checkpoints both candidates with its clock/frontend owner.
+
+  cmake --build --preset strict --target blofeld-overlap-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_native_overlap$'
+
+Own literal ADD/MPY/load values, full register/CCR state, younger A1 preservation
+with an older pending full-A result/CCR, ordered native counters,
+fresh pre/post-publication forks, a sustained dependent candidate chain, invalid
+roles/third-candidate refusals, reset of both candidates and preflight refusal,
+concurrent older/younger selected publication,
+actual DMA waits/program overwrite and both sides of failed-cycle publication
+provide supporting emulator checks. They establish neither physical cycle
+placement nor complete original firmware startup.
+
+Next, an automatic stage scheduler must locate actual operand sampling, AG1/AG2,
+E1/E2 publication, forwarding/interlocks and simultaneous memory groups using
+primary evidence. Do not interpret logical dependent candidate capture as a
+silicon bypass or use a completed result to skip a hardware dependency stall.
+Branch/loop/REP/IRQ pipelines, default-runtime integration, authentic full ROM,
+reserved Y:002000, normal original Desktop/Keyboard boot, host MIDI/audio and
+all full-device acceptance remain incomplete. This allocating/exception-based
+reference path is not a real-time audio callback.

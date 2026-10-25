@@ -28,6 +28,7 @@ struct DspFetchCycleInputs {
   DspDmaGrant grant = DspDmaGrant::unknown;
   // Backend phase placement is still explicit; a missing fetched word stalls it.
   bool admit_native = false;
+  bool retire_previous = false;
 };
 
 struct DspFetchCycleResult {
@@ -63,6 +64,7 @@ public:
   DspFetchRun(const DspFetchRun &) = delete;
   DspFetchRun &operator=(const DspFetchRun &) = delete;
   [[nodiscard]] DspReferenceProgress begin_instruction(DspMachine &machine);
+  [[nodiscard]] DspReferenceProgress overlap_instruction(DspMachine &machine);
   [[nodiscard]] DspFetchCycleResult advance_cycle(DspMachine &machine, DspFetchCycleInputs inputs);
   [[nodiscard]] DspFetchCheckpoint checkpoint(const DspMachine &machine) const;
   void restore(const DspFetchCheckpoint &checkpoint, DspMachine &machine);

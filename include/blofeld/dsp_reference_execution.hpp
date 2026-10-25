@@ -86,6 +86,7 @@ private:
     std::size_t record = 0;
     bool address = false;
     bool move = false;
+    bool previous = false;
     bool operator==(const Position &) const = default;
   };
 

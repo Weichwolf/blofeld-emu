@@ -21,6 +21,7 @@ struct DspFetchState {
   std::uint64_t next_dma_cycle = 0;
   DspDebugState expected_cpu;
   std::optional<DspReferenceTicket> expected_ticket;
+  std::optional<DspReferenceTicket> expected_retirement;
   std::optional<std::uint32_t> expected_latch;
   DspProgramFetchView expected_fetch;
   std::optional<std::uint64_t> expected_dma;
