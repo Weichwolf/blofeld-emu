@@ -31,6 +31,10 @@ data remain observable. The original gate completes no whole serial byte.
   cmake --build --preset strict --target blofeld-hcs08-prefetch-scanner-test blofeld-original-hcs08-spi-run-clock-test
   ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_scanner|original_hcs08_spi_scanner)$' --output-on-failure
 
-Native multi-byte bus phases, the remaining scanner, physical clock/event order,
+The separate word/MOV contracts continue past this profile's STHX boundary
+using genuine suspended native stores. They are opt-in; this byte profile's
+fourteen-edge failure remains unchanged (hcs08-scanner-stores.txt).
+
+Further scanner forms, physical multi-byte phases, clock/event order,
 normal boot/native DSP/live MIDI/audio and hardware equivalence remain open.
 No fuzz or physical-device traffic is run.

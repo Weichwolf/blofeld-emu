@@ -2406,3 +2406,12 @@ The original gate derives RAM/main frame SP0475 from actual reset/startup before
 ICGS1, then resumes a declared component caller. Actual contact reads, frame
 stores and pulls coexist with14 serial edges; native STHX bus phases remain a
 visible boundary. This is not a completed startup (hcs08-scanner-bytes.txt).
+The separate word/MOV profiles now resume genuine SLEIGH stores between owned
+byte periods. STHX DIR/EXT/SP1 and MOV DIR/DIR preserve captured code/source,
+committed prefixes, independent flags/knownness and fresh checkpoint suffixes.
+Original word callers cover32 contexts/392 cuts/784 suffixes; MOV callers cover
+160 contexts/2040 cuts/4080 suffixes plus four detached-pad failures. The latter
+joins real serial completion/promotion and ADC conversion under declared6MHz
+clock/order/pad inputs. Older byte/clock/jump profiles retain their strict
+frontiers. Unknown ICG startup, later scanner forms, physical phases/matrix and
+normal boot remain open (hcs08-scanner-stores.txt).

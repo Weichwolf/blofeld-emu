@@ -359,6 +359,23 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-scanner.trace")
   set_tests_properties(original_hcs08_spi_scanner PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 270)
+  foreach(store IN ITEMS word move)
+    add_executable(blofeld-original-hcs08-spi-${store}-test
+      test/original_hcs08_spi_${store}_test.cpp test/hcs08_clock_startup_fixture.cpp)
+    target_link_libraries(blofeld-original-hcs08-spi-${store}-test PRIVATE
+      blofeld_hcs08_spi_run_clock blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio
+      blofeld_hcs08_adc blofeld_dsp_peripherals blofeld_private_files)
+    target_compile_definitions(blofeld-original-hcs08-spi-${store}-test PRIVATE
+      BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+    add_test(NAME original_hcs08_spi_${store} COMMAND ${Python3_EXECUTABLE}
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_spi_stores.py"
+      $<TARGET_FILE:blofeld-original-hcs08-spi-${store}-test>
+      "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+      "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+      "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-${store}.trace" ${store})
+  endforeach()
+  set_tests_properties(original_hcs08_spi_word PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 330)
+  set_tests_properties(original_hcs08_spi_move PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 630)
   add_test(NAME hcs08_spi COMMAND blofeld-hcs08-spi-test)
   add_executable(blofeld-original-hcs08-spi-test test/original_hcs08_spi_test.cpp
     test/hcs08_clock_startup_fixture.cpp)
@@ -515,6 +532,12 @@ if(BUILD_TESTING)
   target_compile_definitions(blofeld-hcs08-prefetch-return-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_prefetch_return COMMAND blofeld-hcs08-prefetch-return-test)
+  add_executable(blofeld-hcs08-prefetch-store-test
+    test/hcs08_prefetch_store_test.cpp test/hcs08_prefetch_move_test.cpp)
+  target_link_libraries(blofeld-hcs08-prefetch-store-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-prefetch-store-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_stores COMMAND blofeld-hcs08-prefetch-store-test)
   add_executable(blofeld-hcs08-prefetch-irq-test test/hcs08_prefetch_irq_test.cpp)
   target_link_libraries(blofeld-hcs08-prefetch-irq-test PRIVATE blofeld_hcs08)
   target_compile_definitions(blofeld-hcs08-prefetch-irq-test PRIVATE
@@ -2531,7 +2554,9 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-original-startup-identity-test blofeld-original-identity-main-test blofeld-original-device-identity-test blofeld-virtual-device-state-test
+  DEPENDS blofeld-hcs08-prefetch-store-test
+    blofeld-original-hcs08-spi-word-test blofeld-original-hcs08-spi-move-test
+    blofeld-original-startup-identity-test blofeld-original-identity-main-test blofeld-original-device-identity-test blofeld-virtual-device-state-test
     blofeld-device-identity-test blofeld-hcs08-instruction-reservation-test blofeld-hcs08-irq-bus-test blofeld-hcs08-irq-test
     blofeld-original-hcs08-spi-irq-test blofeld-hcs08-spi-test blofeld-original-hcs08-spi-test blofeld-hcs08-register-knowledge-test
     blofeld-original-hcs08-clock-startup-test blofeld-hcs08-gpio-test blofeld-original-hcs08-gpio-test format-check

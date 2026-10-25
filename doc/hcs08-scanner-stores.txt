@@ -1,0 +1,44 @@
+HCS08 native store-cycle references
+
+  cmake --build --preset strict --target blofeld-hcs08-prefetch-store-test
+  ctest --test-dir build/strict -R '^hcs08_prefetch_stores$' --output-on-failure
+
+Explicit scanner-word and scanner-move contracts extend the existing byte
+contract. Earlier contracts retain their unsupported-store failures.
+HCS08RMV1 Rev2 specifies STHX DIR wwpp, EXT/SP1 pwwpp, and MOV DIR/DIR
+rpwpp. Internal register/flag phases remain reference hypotheses, not measured
+silicon timing; primary identities remain in hcs08-reference.json.
+
+The real SLEIGH store pauses after STHX's first byte, or before MOV's byte
+write after its actual source read. The retained native operation, effective
+address, value and referenced unique temporaries resume once at the next
+owned write period. No host instruction, reread, repeated prefix or synthetic
+retirement supplies the continuation. Flags follow completed native semantics;
+retirement requires the final program period. Each actual write is one byte.
+
+Trusted in-process CPU checkpoints retain captured code and suspended native
+state. Reconstruct native pointers from the translation, not saved addresses.
+A coordinated fresh CPU/memory restore preserves source samples and committed
+prefixes even after code or source changes. Before/after access failures
+quarantine the CPU; unknown source/register bits and read-only targets remain
+visible failures. Snapshots allocate and are outside any real-time callback.
+
+Independent fixed vectors check byte order, address wraps, PC/flags/knownness,
+all owned periods, strict old contracts and fresh suffixes.
+
+Original scanner regressions share one CPU/SPI/ADC fixture. Existing clock,
+jump and byte-scanner commands retain their contracts and strict frontiers.
+original_hcs08_spi_word checks 32 contexts, 392 cuts and 784 fresh suffixes
+through actual STHX DIR and taken BEQ: two writes at periods 165/166, end171.
+original_hcs08_spi_move checks 160 contexts, 2040 cuts, 4080 fresh suffixes
+and four detached-pad controls: real PTA read172, RAM write174, retirement176,
+serial completion/promotion and ADC conversion. Missing pads fail at the native
+read; restored board GPIO callbacks require explicit reconnection.
+
+  ctest --test-dir build/strict -R '^original_hcs08_spi_(word|move)$' --output-on-failure
+
+The nominal 6 MHz clock, simultaneous event order, launch delay and pad levels
+are declared reference inputs. Reset-derived RAM/main frame does not supply
+unknown ICG status or prove normal reset-to-instrument operation. These gates
+are not complete boot, host MIDI/audio or physical matrix/clock qualification.
+See objective.txt and coverage.txt.

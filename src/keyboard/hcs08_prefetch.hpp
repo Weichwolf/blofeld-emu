@@ -16,6 +16,7 @@ struct PrefetchShape {
   unsigned bytes, periods;
   bool push = false;
   bool read = false, branch = false, write = false, returning = false, jump = false;
+  bool word_write = false, byte_move = false;
 };
 
 [[nodiscard]] inline std::optional<PrefetchShape> jump_shape(const unsigned opcode) {
@@ -76,7 +77,23 @@ struct PrefetchShape {
 
 [[nodiscard]] inline std::optional<PrefetchShape> reference_shape(
     const unsigned opcode, const unsigned second, const Hcs08PrefetchContract contract) {
-  const bool scanner = contract == Hcs08PrefetchContract::reference_scanner_byte_cycles;
+  const bool moves = contract == Hcs08PrefetchContract::reference_scanner_move_cycles;
+  constexpr unsigned mov_direct = 0x4e;
+  if (moves && opcode == mov_direct) {
+    return PrefetchShape{.bytes = 3, .periods = 5, .byte_move = true};
+  }
+  const bool words = contract == Hcs08PrefetchContract::reference_scanner_word_cycles || moves;
+  if (words) {
+    constexpr unsigned direct = 0x35;
+    constexpr unsigned extended = 0x96;
+    constexpr unsigned prefix = 0x9e;
+    constexpr unsigned stack = 0xff;
+    if (opcode == direct) { return PrefetchShape{.bytes = 2, .periods = 4, .word_write = true}; }
+    if (opcode == extended || (opcode == prefix && second == stack)) {
+      return PrefetchShape{.bytes = 3, .periods = 5, .word_write = true};
+    }
+  }
+  const bool scanner = contract == Hcs08PrefetchContract::reference_scanner_byte_cycles || words;
   if (scanner) {
     if (const auto shape = scanner_shape(opcode, second)) { return shape; }
   }
@@ -106,7 +123,9 @@ struct PrefetchShape {
   if (opcode == mul || opcode == div) { return {.bytes = 1, .periods = opcode == mul ? 5U : 6U}; }
   const bool peripheral = contract == Hcs08PrefetchContract::reference_peripheral_program_cycles ||
                           contract == Hcs08PrefetchContract::reference_jump_program_cycles ||
-                          contract == Hcs08PrefetchContract::reference_scanner_byte_cycles;
+                          contract == Hcs08PrefetchContract::reference_scanner_byte_cycles ||
+                          contract == Hcs08PrefetchContract::reference_scanner_word_cycles ||
+                          contract == Hcs08PrefetchContract::reference_scanner_move_cycles;
   if (peripheral) {
     if (const auto shape = reference_shape(opcode, second, contract)) { return *shape; }
   }

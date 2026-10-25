@@ -60,7 +60,9 @@ enum class Hcs08PrefetchContract : std::uint8_t {
   reference_short_branch_refill,
   reference_peripheral_program_cycles,
   reference_jump_program_cycles,
-  reference_scanner_byte_cycles
+  reference_scanner_byte_cycles,
+  reference_scanner_word_cycles,
+  reference_scanner_move_cycles
 };
 
 struct Hcs08DataRead {
@@ -165,6 +167,8 @@ private:
   Hcs08IrqDelay irq_delay_ = Hcs08IrqDelay::none;
   Hcs08RtiIrqContract rti_contract_ = Hcs08RtiIrqContract::unqualified;
   std::optional<Hcs08PrefetchState> prefetch_;
+  struct NativeStorage;
+  std::shared_ptr<const NativeStorage> native_;
 };
 
 enum class Hcs08ResetEntry : std::uint8_t { unqualified, normal, active_background };
@@ -234,15 +238,19 @@ private:
   void resume_background();
   [[nodiscard]] bool matches_reservation(const Hcs08InstructionReservation &reservation) const;
   void execute_instruction(const Hcs08InstructionReservation *reservation);
-  void execute_native(const Hcs08State &before,
+  bool execute_native(const Hcs08State &before,
                       const Bus *program = nullptr,
-                      Hcs08DataRead *operand = nullptr);
+                      Hcs08DataRead *operand = nullptr,
+                      bool word_write = false,
+                      bool byte_move = false);
   void execute_program(Hcs08PrefetchState &program, Hcs08DataRead *operand = nullptr);
   void advance_data_program(Hcs08PrefetchState &program, unsigned phase, bool branch);
   void advance_return_program(Hcs08PrefetchState &program, unsigned phase);
   void advance_short_branch(Hcs08PrefetchState &program, unsigned phase);
   void advance_jump_program(Hcs08PrefetchState &program, unsigned phase);
   void advance_write_program(Hcs08PrefetchState &program, unsigned phase);
+  void advance_program_period(Hcs08PrefetchState &program, unsigned phase);
+  void advance_split_write_program(Hcs08PrefetchState &program, unsigned phase, bool move);
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

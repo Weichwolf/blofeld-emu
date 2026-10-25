@@ -34,7 +34,11 @@ not substitute an IRQ for the next instruction. Complete timing, physical reset,
 timed IRQ/queue integration, complete instruction
 qualification, BDC/security privileges and target peripherals remain required.
 Opaque Hcs08Checkpoint retains all native registers and the BGND request at a
-healthy completed boundary. Its owner must restore memory, peripherals, peers
+healthy completed execution or owned prefetch bus boundary. A suspended native
+STORE also retains its captured operation and unique temporaries; trusted restore
+reconstructs translation pointers instead of persisting raw native addresses
+(hcs08-scanner-stores.txt). Rebuild consumers with matching checkpoint headers
+and libraries. Its owner must restore memory, peripherals, peers
 and schedule separately; failed/reentrant capture rejects. Debug register
 replacement remains separate from a coordinated checkpoint restoration.
 

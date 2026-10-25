@@ -11,6 +11,7 @@
 #include "keyboard/hcs08_native.hpp"
 #include "keyboard/hcs08_prefetch.hpp"
 #include "keyboard/hcs08_registers.hpp"
+#include "keyboard/hcs08_write_state.hpp"
 #include "memstate.hh"
 #include "pcoderaw.hh"
 #include "sleigh.hh"
@@ -90,6 +91,7 @@ public:
   }
 
   void refresh(const bool force = false) {
+    if (executor->suspended()) { return; }
     const auto revision = bus.code_revision();
     if (!force && decoded_valid && decoded_revision == revision) { return; }
     executor->clear_translations();
@@ -101,7 +103,10 @@ public:
     decoded_valid = true;
   }
 
-  void run_native(const Bus *program, Hcs08DataRead *operand) {
+  bool run_native(const Bus *program,
+                  Hcs08DataRead *operand,
+                  const bool word_write,
+                  const bool byte_move) {
     image.program(program);
     executor->captured_read(operand);
     constexpr unsigned rti = 0x80;
@@ -109,9 +114,10 @@ public:
                         ? &prefetch->return_reads
                         : nullptr;
     executor->captured_return(returns);
+    bool complete = false;
     try {
       refresh(program != nullptr);
-      executor->execute(program);
+      complete = executor->execute(program, word_write, byte_move);
       if (operand != nullptr && !operand->consumed) {
         throw Fault("HCS08 native instruction did not consume its actual captured data read");
       }
@@ -130,6 +136,7 @@ public:
     executor->captured_return(nullptr);
     image.program(nullptr);
     if (program != nullptr) { decoded_valid = false; }
+    return complete;
   }
 
   void normalize_ccr() { memory.setValue(&layout.ccr, memory.getValue(&layout.ccr) | fixed_ccr); }
@@ -368,6 +375,10 @@ Hcs08::Hcs08(Bus &bus,
 
 Hcs08::~Hcs08() = default;
 
+struct Hcs08Checkpoint::NativeStorage {
+  native::NativeInstructionState instruction;
+};
+
 void Hcs08::set_state(const Hcs08State &state) {
   const native::ExecutionGuard guard(impl_->active);
   impl_->healthy = false;
@@ -455,6 +466,10 @@ Hcs08Checkpoint Hcs08::checkpoint() const {
   result.irq_delay_ = impl_->irq_delay;
   result.rti_contract_ = impl_->rti_contract;
   result.prefetch_ = impl_->prefetch;
+  if (const auto saved = impl_->executor->checkpoint_write()) {
+    result.native_ = std::make_shared<const Hcs08Checkpoint::NativeStorage>(
+        Hcs08Checkpoint::NativeStorage{.instruction = *saved});
+  }
   return result;
 }
 
@@ -464,6 +479,8 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
     throw Fault("HCS08 checkpoint RTI IRQ reference contract mismatch");
   }
   impl_->healthy = false;
+  impl_->executor->setExecuteAddress(
+      ghidra::Address(impl_->translator.getDefaultCodeSpace(), checkpoint.pc_));
   impl_->refresh(true);
   impl_->registers->setChunk(
       0, static_cast<ghidra::int4>(checkpoint.registers_.size()), checkpoint.registers_.data());
@@ -478,6 +495,31 @@ void Hcs08::restore_checkpoint(const Hcs08Checkpoint &checkpoint) {
   impl_->instruction = checkpoint.instruction_;
   impl_->irq_delay = checkpoint.irq_delay_;
   impl_->prefetch = checkpoint.prefetch_;
+  if (checkpoint.native_) {
+    const auto &owner = impl_->prefetch;
+    if (!owner) { throw Fault("HCS08 suspended native write has no captured program"); }
+    const auto &program = *owner;
+    if ((program.contract != Hcs08PrefetchContract::reference_scanner_word_cycles &&
+         program.contract != Hcs08PrefetchContract::reference_scanner_move_cycles) ||
+        program.native_executed || program.instruction_bytes == 0 ||
+        program.before.pc != checkpoint.native_->instruction.address) {
+      throw Fault("HCS08 suspended native write lost its captured program owner");
+    }
+    const native::PrefetchView view(
+        impl_->bus,
+        program.before.pc,
+        std::span(program.instruction).first(program.instruction_bytes));
+    impl_->image.program(&view);
+    try {
+      impl_->executor->restore_write(checkpoint.native_->instruction);
+    } catch (...) {
+      impl_->image.program(nullptr);
+      impl_->decoded_valid = false;
+      throw;
+    }
+    impl_->image.program(nullptr);
+    impl_->decoded_valid = false;
+  }
   impl_->initialized = true;
   impl_->healthy = true;
 }
@@ -668,7 +710,9 @@ void Hcs08::start_irq_program(const Hcs08PrefetchContract contract) {
       contract != Hcs08PrefetchContract::reference_short_branch_refill &&
       contract != Hcs08PrefetchContract::reference_peripheral_program_cycles &&
       contract != Hcs08PrefetchContract::reference_jump_program_cycles &&
-      contract != Hcs08PrefetchContract::reference_scanner_byte_cycles) {
+      contract != Hcs08PrefetchContract::reference_scanner_byte_cycles &&
+      contract != Hcs08PrefetchContract::reference_scanner_word_cycles &&
+      contract != Hcs08PrefetchContract::reference_scanner_move_cycles) {
     throw Fault("HCS08 prefetch requires an explicit supported program-cycle reference contract");
   }
   const native::ExecutionGuard guard(impl_->active);
@@ -702,8 +746,13 @@ void Hcs08::execute_program(Hcs08PrefetchState &program, Hcs08DataRead *operand)
   const native::PrefetchView view(impl_->bus,
                                   program.before.pc,
                                   std::span(program.instruction).first(program.instruction_bytes));
-  execute_native(program.before, &view, operand);
-  program.native_executed = true;
+  const auto shape =
+      native::prefetch_shape(program.instruction[0],
+                             {.pc = program.before.pc, .ccr = program.before.ccr},
+                             program.contract,
+                             program.instruction_bytes > 1 ? program.instruction[1] : 0U);
+  program.native_executed =
+      execute_native(program.before, &view, operand, shape.word_write, shape.byte_move);
 }
 
 void Hcs08::advance_data_program(Hcs08PrefetchState &program,
@@ -858,6 +907,49 @@ void Hcs08::advance_return_program(Hcs08PrefetchState &program, const unsigned p
   impl_->program_read(program);
 }
 
+void Hcs08::advance_split_write_program(Hcs08PrefetchState &program,
+                                        const unsigned phase,
+                                        const bool move) {
+  const unsigned first = move || program.instruction_bytes == 2 ? 1U : 2U;
+  const unsigned second = move ? 3U : first + 1;
+  // MOV: native r1 suspends before w3; STHX: its two native w periods.
+  if (phase == first || phase == second) {
+    execute_program(program);
+  } else {
+    impl_->program_read(program);
+  }
+}
+
+void Hcs08::advance_program_period(Hcs08PrefetchState &program, const unsigned phase) {
+  const auto before = program.before;
+  impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
+  const auto shape =
+      native::prefetch_shape(program.instruction[0],
+                             {.pc = before.pc, .ccr = before.ccr},
+                             program.contract,
+                             program.instruction_bytes > 1 ? program.instruction[1] : 0U);
+  const bool final = phase == program.instruction_periods;
+  if (shape.word_write || shape.byte_move) {
+    advance_split_write_program(program, phase, shape.byte_move);
+  } else if (shape.jump) {
+    advance_jump_program(program, phase);
+  } else if (shape.returning) {
+    advance_return_program(program, phase);
+  } else if (shape.read) {
+    advance_data_program(program, phase, shape.branch);
+  } else if (shape.write) {
+    advance_write_program(program, phase);
+  } else if (shape.branch) {
+    advance_short_branch(program, phase);
+  } else {
+    if (shape.push && phase == 1) { execute_program(program); }
+    // pp/ppp immediate, sp pushes, p singles, ffffp MUL and fffffp DIV.
+    const bool program_access = final || (!shape.push && shape.bytes > 1);
+    if (program_access) { impl_->program_read(program); }
+    if (!shape.push && final) { execute_program(program); }
+  }
+}
+
 void Hcs08::advance_irq_program() {
   const native::ExecutionGuard guard(impl_->active);
   if (!impl_->healthy) { throw Fault("HCS08 incomplete execution requires coordinated recovery"); }
@@ -874,35 +966,15 @@ void Hcs08::advance_irq_program() {
   Impl::arrive_program_reads(program);
   try {
     if (program.instruction_bytes == 0) { impl_->begin_program_instruction(program, state()); }
-    const auto before = program.before;
-    impl_->bus.begin_instruction({.pc = before.pc, .ccr = before.ccr});
-    const auto shape =
-        native::prefetch_shape(program.instruction[0],
-                               {.pc = before.pc, .ccr = before.ccr},
-                               program.contract,
-                               program.instruction_bytes > 1 ? program.instruction[1] : 0U);
     const auto phase = program.instruction_cycle + 1;
     const bool final = phase == program.instruction_periods;
-    if (shape.jump) {
-      advance_jump_program(program, phase);
-    } else if (shape.returning) {
-      advance_return_program(program, phase);
-    } else if (shape.read) {
-      advance_data_program(program, phase, shape.branch);
-    } else if (shape.write) {
-      advance_write_program(program, phase);
-    } else if (shape.branch) {
-      advance_short_branch(program, phase);
-    } else {
-      if (shape.push && phase == 1) { execute_program(program); }
-      // pp/ppp immediate, sp pushes, p singles, ffffp MUL and fffffp DIV.
-      const bool program_access = final || (!shape.push && shape.bytes > 1);
-      if (program_access) { impl_->program_read(program); }
-      if (!shape.push && final) { execute_program(program); }
-    }
+    advance_program_period(program, phase);
     program.instruction_cycle = phase;
     ++program.completed_periods;
     if (final) {
+      if (!program.native_executed) {
+        throw Fault("HCS08 native instruction remains unfinished at retirement");
+      }
       program.instruction_bytes = 0;
       program.instruction_periods = 0;
       program.instruction_cycle = 0;
@@ -981,7 +1053,11 @@ void Hcs08::step() {
   execute_instruction(nullptr);
 }
 
-void Hcs08::execute_native(const Hcs08State &before, const Bus *program, Hcs08DataRead *operand) {
+bool Hcs08::execute_native(const Hcs08State &before,
+                           const Bus *program,
+                           Hcs08DataRead *operand,
+                           const bool word_write,
+                           const bool byte_move) {
   const auto &code = program != nullptr ? *program : impl_->bus;
   constexpr unsigned rti = 0x80;
   const auto opcode = code.peek(before.pc);
@@ -990,7 +1066,7 @@ void Hcs08::execute_native(const Hcs08State &before, const Bus *program, Hcs08Da
                              : native::registers_after(code, before);
   auto known = returning ? before.ccr_known : native::ccr_after(code, before);
   impl_->executor->prepare_return_frame(returning ? std::optional(before.sp) : std::nullopt);
-  impl_->run_native(program, operand);
+  if (!impl_->run_native(program, operand, word_write, byte_move)) { return false; }
   if (returning) {
     const auto masks = impl_->executor->return_masks();
     known = static_cast<std::uint8_t>(masks[0] | fixed_ccr);
@@ -1003,6 +1079,7 @@ void Hcs08::execute_native(const Hcs08State &before, const Bus *program, Hcs08Da
   impl_->hx_known = registers.hx;
   impl_->normalize_ccr();
   impl_->irq_delay = native::irq_delay_after(before, state(), opcode, impl_->rti_contract);
+  return true;
 }
 
 void Hcs08::execute_instruction(const Hcs08InstructionReservation *reservation) {

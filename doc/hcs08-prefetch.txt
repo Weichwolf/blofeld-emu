@@ -47,7 +47,7 @@ after r (phase2 direct/bit-branch, phase3 extended) are not physical register
 timing. Existing partial-CCR restrictions remain: lower-bit
 branch forms require fully known CCR; bit7 forms also support the existing EF mask.
 Extended LDX now defines VNZ with partial CCR, independently checked by the
-54-form reset classifier. Existing unknown A/HX operand restrictions remain.
+explicit reset classifier. Existing unknown A/HX operand restrictions remain.
 
 Branch reference assumption: p2 reads the sequential successor speculatively;
 that real observation is retained as discarded, including its pending arrival.
@@ -125,6 +125,12 @@ protected instruction. The original empty/send ISR paths complete RTI in34/48 pr
 periods (8/14 native instructions);16 contexts,84 cuts/168 fresh suffixes verify
 the actual IRQ frame, saved H and foreground refill. They stop at the declared
 foreground caller; no normal-boot or automatic SPI launch/arbitration evidence.
+
+The additional reference_scanner_word_cycles and reference_scanner_move_cycles
+contracts retain the actual suspended SLEIGH store across owned byte periods.
+They extend the scanner-byte profile with STHX and direct/direct MOV; earlier
+contracts retain their existing strict boundaries. Byte order, captured native
+temporaries, fresh restore and serial/ADC callers: hcs08-scanner-stores.txt.
 
 No general pipeline, physical branch refill/addresses, nested IRQ/late mask
 sampling, common CPU/ADC/SPI scheduler, physical timing, full boot/live MIDI/audio

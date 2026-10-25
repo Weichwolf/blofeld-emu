@@ -3,10 +3,10 @@
 #include "hcs08_clock_startup_fixture.hpp"
 #include "hcs08_fixture.hpp"
 #include "hcs08_programmer_fixture.hpp"
+#include "hcs08_serial_clock_fixture.hpp"
 #include "hcs08_spi_fixture.hpp"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_adc.hpp"
-#include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_flash.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_spi_clock.hpp"
@@ -33,11 +33,14 @@ namespace app = blofeld::test::hcs08_clock_startup;
 namespace hp = blofeld::test::hcs08_programmer;
 namespace wire = blofeld::test::hcs08_spi_test;
 namespace adc = hcs08_adc;
-constexpr unsigned poll = 0xe33a, stack = 0x47f, cursor = 0x97, tx = 0x100, partial = 0xef;
+namespace shared = blofeld::test::hcs08_serial_clock;
+using shared::Event;
+using shared::Snapshot;
+using shared::startup_ram;
+constexpr unsigned poll = 0xe33a, stack = 0x47f, cursor = 0x97, partial = 0xef;
 constexpr unsigned write_period = 45, conversion_periods = 176, half_period = 8;
 constexpr unsigned retired = 29, reads = 78, ram_accesses = 34, second_irq_end = 70,
                    irq_periods = 22;
-constexpr unsigned reference_uv = 1536000;
 constexpr unsigned stop_period = 123, partial_edges = 9, partial_samples = 4, partial_tx = 9,
                    partial_rx = 0x10;
 constexpr unsigned jump_stop = 134, scan_shift = 0xe210, expiry_index = 0xa8;
@@ -49,8 +52,6 @@ constexpr unsigned contact_high = 0x240, contact_low = 0x241, frame_high = firmw
                    frame_offset = firmware_stack + 2;
 constexpr unsigned current_instructions = 15, second_status = 73, second_data = 104,
                    poll_start = 119;
-constexpr Hcs08AdcReference reference{
-    .bus_hz = 6000000, .supply_uv = 3300000, .low_uv = 0, .high_uv = 3072000};
 constexpr std::array<unsigned, 37> cpu_cuts{
     0,  11, 18, 26, 29, 37, 42, 44,  45,  46,  47,  49,  50,  55,  56,  59,  60,  65, 66,
     67, 70, 71, 77, 85, 88, 96, 102, 103, 104, 105, 109, 114, 115, 118, 119, 120, 123};
@@ -87,129 +88,23 @@ std::set<unsigned> cuts(const Input input) {
   return result;
 }
 
-class NoMemory final : public Hcs08BdcMemory {
-public:
-  [[nodiscard]] bool secured(ExecutionContext /*context*/) const override { return false; }
-
-  std::uint8_t read(std::uint16_t /*address*/, ExecutionContext /*context*/) override {
-    throw Fault("Unexpected original serial-clock BDC memory read");
-  }
-
-  void write(ByteWrite /*access*/, ExecutionContext /*context*/) override {
-    throw Fault("Unexpected original serial-clock BDC memory write");
-  }
-};
-
-struct Event {
-  unsigned period;
-  Access access;
-  bool operator==(const Event &) const = default;
-};
-
-app::ApplicationMemory startup_ram(const std::span<const std::uint8_t> pages, std::ostream &trace) {
-  constexpr unsigned admitted_strap = 8;
-  app::ApplicationMemory memory(pages, {.seed = 0, .trim = 0x80, .observation = admitted_strap});
-  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
-  cpu.set_state(app::warm_state(0));
-  memory.warm_reset();
-  cpu.reset();
-  while (memory.retired < app::status_retired) { cpu.step(); }
-  require(cpu.state().pc == app::status_pc && cpu.state().sp == firmware_stack && !cpu.faulted(),
-          "Actual original reset/JSR/AIS establishes the main frame before strict ICGS1");
-  app::ram_contents(memory, true);
-  trace << "STARTUP retired=" << memory.retired << " pc=" << cpu.state().pc
-        << " sp=" << cpu.state().sp << " ram_known=" << memory.known.count() << '\n';
-  return memory;
+shared::Setup reference_setup(const Input input) {
+  auto program = Hcs08PrefetchContract::reference_peripheral_program_cycles;
+  if (input.jump) { program = Hcs08PrefetchContract::reference_jump_program_cycles; }
+  if (input.scan) { program = Hcs08PrefetchContract::reference_scanner_byte_cycles; }
+  return {.order = input.order,
+          .launch = input.launch,
+          .seed = input.seed,
+          .program = program,
+          .scanner = input.scan,
+          .pads = std::nullopt};
 }
 
-struct Machine {
-  app::ApplicationMemory memory;
-  Hcs08 cpu;
-  NoMemory mapping;
-  std::unique_ptr<Hcs08Bdc> bdc;
-  std::unique_ptr<Hcs08SpiClock> spi;
-  std::unique_ptr<Hcs08SpiRunClock> clock;
-  std::vector<Event> events, ram_events;
-  unsigned transmitted = 0, samples = 0;
-
+struct Machine : shared::Machine {
   Machine(const std::span<const std::uint8_t> pages,
           const Input input,
           const app::ApplicationMemory *startup = nullptr)
-      : memory(startup != nullptr
-                   ? *startup
-                   : app::ApplicationMemory(pages, {.seed = 0, .trim = 0x80, .observation = -1})),
-        cpu(memory, BLOFELD_HCS08_SLA, Hcs08RtiIrqContract::reference_immediate) {
-    require(input.scan == (startup != nullptr),
-            "Scanner caller requires actual original startup RAM");
-    if (!input.scan) { memory.warm_reset(); }
-    memory.retired = 0;
-    memory.accesses.clear();
-    memory.flash_reads.clear();
-    memory.peripheral_accesses.clear();
-    constexpr std::array<std::uint8_t, 5> cursors{0, 3, 0, 0, 0};
-    memory.install(cursor, cursors);
-    memory.install(tx, wire::event_bytes);
-    if (input.jump || input.scan) {
-      const std::array<std::uint8_t, 1> expiry{static_cast<std::uint8_t>(input.seed)};
-      memory.install(expiry_index, expiry);
-    }
-    wire::configure(memory.spi);
-    memory.adc.observe_reference(reference);
-    memory.adc.observe_input(0, reference_uv);
-    memory.adc.write({.address = adc::pins, .value = 7});
-    constexpr unsigned preset = 0xc2;
-    memory.adc.write({.address = adc::control, .value = preset});
-    memory.adc.write({.address = adc::status, .value = 0});
-    require(memory.adc.state().active && memory.adc.state().remaining == conversion_periods,
-            "Declared real conversion remains busy while the original foreground polls its status");
-    cpu.set_state({.pc = poll,
-                   .hx = static_cast<std::uint16_t>((input.seed << 8U) | (byte_mask - input.seed)),
-                   .sp = static_cast<std::uint16_t>(input.scan ? firmware_stack : stack),
-                   .a = static_cast<std::uint8_t>(byte_mask - input.seed),
-                   .ccr_known = partial,
-                   .ccr = flags_fixed | flag_c});
-    bdc = std::make_unique<Hcs08Bdc>(
-        cpu, mapping, Hcs08FlashContract::candidate_gt8a, Hcs08BdcReset::normal);
-    spi = std::make_unique<Hcs08SpiClock>(
-        memory.spi, Hcs08SpiClockContract::reference_half_period_and_final_edge);
-    auto program = Hcs08PrefetchContract::reference_peripheral_program_cycles;
-    if (input.jump) { program = Hcs08PrefetchContract::reference_jump_program_cycles; }
-    if (input.scan) { program = Hcs08PrefetchContract::reference_scanner_byte_cycles; }
-    clock = std::make_unique<Hcs08SpiRunClock>(*bdc, *spi, input.order, input.launch, program);
-  }
-
-  void tick() {
-    const auto before = cpu.state();
-    memory.adc.context({.pc = before.pc, .ccr = before.ccr});
-    memory.adc.advance_bus(
-        1); // Explicit board tie: old ADC work precedes both common-clock stages.
-    const auto peripheral = memory.spi.state();
-    const unsigned bit = peripheral.active && peripheral.samples < wire::samples
-                             ? wire::samples - peripheral.samples - 1
-                             : wire::samples - 1;
-    const bool miso = ((static_cast<unsigned>(wire::reply_bytes[0]) >> bit) & 1U) != 0;
-    const auto begin = memory.peripheral_accesses.size();
-    const auto ram_begin = memory.accesses.size();
-    const auto pins = clock->advance(miso);
-    const auto period = static_cast<unsigned>(clock->state().completed_periods);
-    for (auto n = begin; n < memory.peripheral_accesses.size(); ++n) {
-      events.push_back({.period = period, .access = memory.peripheral_accesses[n]});
-    }
-    for (auto n = ram_begin; n < memory.accesses.size(); ++n) {
-      ram_events.push_back({.period = period, .access = memory.accesses[n]});
-    }
-    if (pins && !pins->clock) {
-      if (!pins->mosi) { throw Fault("Missing original MOSI at a real trailing sampling edge"); }
-      transmitted = (transmitted << 1U) | static_cast<unsigned>(*pins->mosi);
-      ++samples;
-    }
-    require(clock->state().spi_periods == period && spi->state().offered_periods == period &&
-                clock->state().irq_periods + clock->state().program_periods == period &&
-                memory.adc.state().remaining == conversion_periods - period &&
-                memory.adc.state().conversions == 0,
-            "One reference BUSCLK advances genuine CPU/SPI/ADC owners once, never poll-driven "
-            "readiness");
-  }
+      : shared::Machine(pages, reference_setup(input), startup) {}
 };
 
 void endpoint(const Machine &m, const Input input, std::ostream &trace) {
@@ -477,45 +372,13 @@ void frontier(Machine &m, const Input input, std::ostream &trace) {
   trace << '\n';
 }
 
-struct Snapshot {
-  app::ApplicationMemory memory;
-  Hcs08Checkpoint cpu;
-  Hcs08BdcCheckpoint bdc;
-  Hcs08SpiClockCheckpoint spi;
-  Hcs08SpiRunCheckpoint clock;
-  std::vector<Event> events, ram_events;
-  unsigned transmitted, samples;
-};
-
 Snapshot capture(const std::span<const std::uint8_t> pages,
                  const Input input,
                  const unsigned cut,
                  const app::ApplicationMemory *startup) {
   Machine original(pages, input, startup);
   for (unsigned n = 0; n < cut; ++n) { original.tick(); }
-  const auto state = original.cpu.state();
-  return {.memory = original.memory,
-          .cpu = original.cpu.checkpoint(),
-          .bdc = original.bdc->checkpoint(),
-          .spi = original.spi->checkpoint({.pc = state.pc, .ccr = state.ccr}),
-          .clock = original.clock->checkpoint(),
-          .events = original.events,
-          .ram_events = original.ram_events,
-          .transmitted = original.transmitted,
-          .samples = original.samples};
-}
-
-void restore(Machine &m, const Snapshot &s) {
-  m.memory = s.memory;
-  m.cpu.restore_checkpoint(s.cpu);
-  m.bdc->restore_checkpoint(s.bdc);
-  const auto state = m.cpu.state();
-  m.spi->restore_checkpoint(s.spi, {.pc = state.pc, .ccr = state.ccr});
-  m.clock->restore_checkpoint(s.clock);
-  m.events = s.events;
-  m.ram_events = s.ram_events;
-  m.transmitted = s.transmitted;
-  m.samples = s.samples;
+  return shared::capture(original);
 }
 
 void checked_endpoint(const Machine &m, const Input input, std::ostream &trace) {

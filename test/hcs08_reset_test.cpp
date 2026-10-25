@@ -170,7 +170,7 @@ struct PartialExpected {
 constexpr unsigned carry_known = 0x69;
 constexpr unsigned tap_flags = 0x75;
 constexpr unsigned interrupt_cleared = 0x60;
-constexpr std::array<PartialExpected, 60> effects{
+constexpr std::array<PartialExpected, 61> effects{
     {{.opcode = 0x0e, .known = 0x69, .value = 0x69},
      {.opcode = 0x58, .known = 0xef, .value = 0xec},
      {.opcode = 0x88, .known = 0x68, .value = 0x68},
@@ -220,6 +220,7 @@ constexpr std::array<PartialExpected, 60> effects{
      {.opcode = 0x20, .known = reset_status_known, .value = reset_status_known},
      {.opcode = 0xaf, .known = reset_status_known, .value = reset_status_known},
      {.opcode = 0x35, .known = loaded_status_known, .value = reset_status_known},
+     {.opcode = 0x96, .known = loaded_status_known, .value = reset_status_known},
      {.opcode = 0xb7, .known = loaded_status_known, .value = reset_status_known},
      {.opcode = 0x65, .known = 0xef, .value = 0x6d},
      {.opcode = 0x3f, .known = loaded_status_known, .value = 0x6a},
@@ -232,7 +233,23 @@ constexpr std::array<PartialExpected, 60> effects{
      {.opcode = 0xa7, .known = reset_status_known, .value = reset_status_known},
      {.opcode = 0x55, .known = loaded_status_known, .value = 0x6c}}};
 
+void stored_word_registers(const Memory &memory, const Hcs08State &state, const unsigned opcode) {
+  // Family Rev2 p281: STHX defines V/N/Z, preserves H/I/C and writes H then X.
+  constexpr unsigned sthx_direct = 0x35;
+  constexpr unsigned sthx_extended = 0x96;
+  if (opcode == sthx_direct || opcode == sthx_extended) {
+    const bool extended = opcode == sthx_extended;
+    const unsigned address = extended ? 0x7800U : loaded_x;
+    require(memory.bytes[address] == 0 && memory.bytes[address + 1] == loaded_x &&
+                state.pc == entry + (extended ? 3U : 2U) && state.hx == loaded_x &&
+                state.a == loaded_a && state.sp == loaded_sp && state.hx_known == word_mask &&
+                state.a_known == byte_mask,
+            "Independent STHX DIR/EXT byte order and complete preserved register facts");
+  }
+}
+
 void partial_registers(const Memory &memory, const Hcs08State &state, const unsigned opcode) {
+  stored_word_registers(memory, state, opcode);
   constexpr unsigned shift_x = 0x58;
   constexpr unsigned pull_x = 0x88;
   constexpr unsigned shifted_x = 0xf0;

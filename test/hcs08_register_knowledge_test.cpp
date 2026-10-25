@@ -39,6 +39,7 @@ constexpr unsigned txs = 0x94;
 constexpr unsigned aix = 0xaf;
 constexpr unsigned cphx_immediate = 0x65;
 constexpr unsigned sthx_direct = 0x35;
+constexpr unsigned sthx_extended = 0x96;
 constexpr unsigned clr_indexed = 0x7f;
 constexpr unsigned sta_direct = 0xb7;
 constexpr unsigned sta_extended = 0xc7;
@@ -223,6 +224,7 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case aix:
     case cphx_immediate:
     case sthx_direct:
+    case sthx_extended:
     case clr_indexed:
     case jmp_indexed16:
     case jmp_indexed8:
@@ -320,6 +322,7 @@ unsigned instruction_length(const unsigned opcode) {
     case lda_indexed16:
     case cmp_extended:
     case sta_extended:
+    case sthx_extended:
     case cphx_immediate:
     case jsr_extended:
     case mov_immediate_direct:
@@ -400,6 +403,7 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
     case aix: s.hx = initial_hx + operand; break;
     case cphx_immediate: s.ccr = borrow_ccr; break;
     case sthx_direct:
+    case sthx_extended:
     case sta_direct:
     case sta_extended:
     case bit_immediate:
@@ -463,6 +467,14 @@ void opcode_case(Memory &memory, Hcs08 &cpu, const unsigned opcode, const Hcs08S
     if (opcode == mov_direct) {
       require(memory.bytes[operand] == data_byte,
               "MOV direct copies the actual independent source byte");
+    }
+    if (opcode == sthx_direct || opcode == sthx_extended) {
+      const unsigned address = opcode == sthx_direct ? operand : extended_address;
+      const std::vector<Access> expected{
+          {.address = address, .value = index_high, .write = true},
+          {.address = address + 1, .value = index_low, .write = true}};
+      require(memory.accesses == expected,
+              "STHX DIR/EXT writes known H then X while preserving unrelated unknown A");
     }
     if (opcode == mov_immediate_direct) {
       require(memory.bytes[operand] == operand && cpu.state().a_known == before.a_known,

@@ -7,6 +7,7 @@
 #include "globalcontext.hh"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
+#include "keyboard/hcs08_write_state.hpp"
 #include "loadimage.hh"
 #include "memstate.hh"
 #include "opbehavior.hh"
@@ -17,12 +18,14 @@
 #include "types.h"
 #include "xml.hh"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
@@ -192,6 +195,7 @@ public:
   void setExecuteAddress(const ghidra::Address &address) override {
     address_ = address;
     finished_ = true;
+    pending_write_.reset();
   }
 
   [[nodiscard]] ghidra::Address getExecuteAddress() const override { return address_; }
@@ -204,7 +208,55 @@ public:
 
   void clear_translations() {
     if (executing_) { throw Fault("Cannot invalidate an active HCS08 translation"); }
+    if (pending_write_) { throw Fault("Cannot invalidate a suspended HCS08 native write"); }
     discard_translations();
+  }
+
+  [[nodiscard]] bool suspended() const { return pending_write_.has_value(); }
+
+  [[nodiscard]] std::optional<NativeInstructionState> checkpoint_write() const {
+    if (!pending_write_) { return std::nullopt; }
+    NativeInstructionState result{.address = address_.getOffset(),
+                                  .next = next_.getOffset(),
+                                  .index = index_,
+                                  .steps = steps_,
+                                  .write = *pending_write_,
+                                  .temporaries = {}};
+    for (const auto *operation : operations_) {
+      if (const auto *output = operation->getOutput()) { capture_temporary(*output, result); }
+      for (ghidra::int4 n = 0; n < operation->numInput(); ++n) {
+        capture_temporary(*operation->getInput(n), result);
+      }
+    }
+    return result;
+  }
+
+  void restore_write(const NativeInstructionState &saved) {
+    if (executing_ || pending_write_) {
+      throw Fault("HCS08 native restore requires an empty owner");
+    }
+    address_ = ghidra::Address(translator_.getDefaultCodeSpace(), saved.address);
+    const auto &decoded = translation();
+    const bool word = saved.write.access.size == 2 && saved.write.completed == 1;
+    const bool move = saved.write.access.size == 1 && saved.write.completed == 0;
+    if (saved.index >= decoded.operations.size() || saved.steps > operation_limit ||
+        !(word || move) || saved.next != (address_ + decoded.length).getOffset()) {
+      throw Fault("Invalid trusted HCS08 suspended native write");
+    }
+    operations_ = decoded.operations;
+    next_ = ghidra::Address(translator_.getDefaultCodeSpace(), saved.next);
+    index_ = saved.index;
+    steps_ = saved.steps;
+    pending_write_ = saved.write;
+    word_write_ = word;
+    byte_move_ = move;
+    finished_ = false;
+    for (const auto &temporary : saved.temporaries) {
+      memstate->setChunk(temporary.bytes.data(),
+                         translator_.getUniqueSpace(),
+                         temporary.address,
+                         static_cast<ghidra::int4>(temporary.bytes.size()));
+    }
   }
 
   void captured_read(Hcs08DataRead *operand) { operand_ = operand; }
@@ -224,8 +276,19 @@ public:
     return return_frame_->masks;
   }
 
-  void execute(const Bus *program = nullptr) {
+  bool execute(const Bus *program = nullptr,
+               const bool word_write = false,
+               const bool byte_move = false) {
     const ExecutionGuard guard(executing_);
+    if (pending_write_) {
+      if (word_write != word_write_ || byte_move != byte_move_) {
+        throw Fault("HCS08 suspended write requires its original bus-period owner");
+      }
+      commit_write_byte();
+      pending_write_.reset();
+      ++index_;
+      return continue_execution();
+    }
     const auto &code = program != nullptr ? *program : bus_;
     code.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
     const auto &decoded = translation();
@@ -237,9 +300,17 @@ public:
     next_ = address_ + decoded.length;
     memstate->setValue(&program_counter_, next_.getOffset());
     index_ = 0;
+    steps_ = 0;
     finished_ = false;
-    for (unsigned steps = 0; !finished_; ++steps) {
-      if (steps == operation_limit) { throw Fault("HCS08 p-code operation limit exceeded"); }
+    word_write_ = word_write;
+    byte_move_ = byte_move;
+    return continue_execution();
+  }
+
+private:
+  bool continue_execution() {
+    while (!finished_ && !pending_write_) {
+      if (steps_ == operation_limit) { throw Fault("HCS08 p-code operation limit exceeded"); }
       if (index_ == operations_.size()) {
         setExecuteAddress(next_);
         break;
@@ -247,12 +318,48 @@ public:
       currentOp = operations_[index_];
       currentBehave = currentOp->getBehavior();
       executeCurrentOp();
+      ++steps_;
     }
-    memstate->setValue(&program_counter_, address_.getOffset());
+    if (finished_) { memstate->setValue(&program_counter_, address_.getOffset()); }
+    return finished_;
+  }
+
+  void capture_temporary(const ghidra::VarnodeData &node, NativeInstructionState &saved) const {
+    if (node.space != translator_.getUniqueSpace()) { return; }
+    if (node.size == 0 || node.size > sizeof(ghidra::uintb)) {
+      throw Fault("Unqualified HCS08 native temporary width");
+    }
+    if (std::ranges::any_of(saved.temporaries, [&](const auto &cell) {
+          return cell.address == node.offset && cell.bytes.size() == node.size;
+        })) {
+      return;
+    }
+    NativeTemporary cell{.address = node.offset, .bytes = std::vector<std::uint8_t>(node.size)};
+    memstate->getChunk(
+        cell.bytes.data(), node.space, node.offset, static_cast<ghidra::int4>(node.size));
+    saved.temporaries.push_back(std::move(cell));
+  }
+
+  void commit_write_byte() {
+    if (!pending_write_ || pending_write_->access.size == 0 || pending_write_->access.size > 2 ||
+        pending_write_->completed >= pending_write_->access.size) {
+      throw Fault("HCS08 native word write lost its pending byte");
+    }
+    auto &write = *pending_write_;
+    constexpr unsigned byte_bits = 8;
+    constexpr unsigned byte_mask = 0xff;
+    const auto shift = (write.access.size - 1U - write.completed) * byte_bits;
+    bus_.write_memory(
+        {.address = static_cast<std::uint16_t>(write.access.address + write.completed),
+         .size = 1,
+         .value = (write.access.value >> shift) & byte_mask});
+    ++write.completed;
   }
 
 protected:
-  void fallthruOp() override { ++index_; }
+  void fallthruOp() override {
+    if (!pending_write_) { ++index_; }
+  }
 
   void executeUnary() override {
     const auto *input = currentOp->getInput(0);
@@ -440,7 +547,19 @@ private:
     if (operand_ != nullptr || return_reads_ != nullptr) {
       throw Fault("HCS08 captured operand unexpected write address=" + hex(access.address));
     }
-    bus_.write_memory(access);
+    if (!word_write_ && !byte_move_) {
+      bus_.write_memory(access);
+      return;
+    }
+    constexpr unsigned word_mask = 0xffff;
+    constexpr unsigned byte_mask = 0xff;
+    const bool word = word_write_ && !byte_move_ && access.size == 2 && access.value <= word_mask;
+    const bool move = byte_move_ && !word_write_ && access.size == 1 && access.value <= byte_mask;
+    if (pending_write_ || !(word || move)) {
+      throw Fault("Unqualified HCS08 native bus-period write address=" + hex(access.address));
+    }
+    pending_write_ = PendingNativeWrite{.access = access};
+    if (word) { commit_write_byte(); }
   }
 
   [[nodiscard]] MemoryRead memory_access(const bool write) const {
@@ -499,6 +618,9 @@ private:
   std::vector<ghidra::OpBehavior *> behaviors_;
   std::vector<std::string> user_operations_;
   std::size_t index_ = 0;
+  unsigned steps_ = 0;
+  std::optional<PendingNativeWrite> pending_write_;
+  bool word_write_ = false, byte_move_ = false;
   bool finished_ = true;
   bool executing_ = false;
   bool background_ = false;

@@ -24,7 +24,7 @@ constexpr unsigned clrh = 0x8c;
 constexpr unsigned txs = 0x94;
 constexpr unsigned aix = 0xaf;
 constexpr unsigned cphx_immediate = 0x65;
-constexpr unsigned sthx_direct = 0x35;
+constexpr unsigned sthx_direct = 0x35, sthx_extended = 0x96;
 constexpr unsigned clr_indexed = 0x7f;
 constexpr unsigned sta_direct = 0xb7;
 constexpr unsigned sta_extended = 0xc7;
@@ -134,7 +134,8 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case aix:            // AIX
     case cphx_immediate: // CPHX immediate
     case sthx_direct:    // STHX direct
-    case clr_indexed:    // CLR indexed
+    case sthx_extended:
+    case clr_indexed: // CLR indexed
     case jmp_indexed16:
     case jmp_indexed8:
     case jmp_indexed:

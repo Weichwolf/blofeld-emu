@@ -30,7 +30,9 @@ Hcs08SpiRunClock::Hcs08SpiRunClock(Hcs08Bdc &bdc,
   }
   if (program != Hcs08PrefetchContract::reference_peripheral_program_cycles &&
       program != Hcs08PrefetchContract::reference_jump_program_cycles &&
-      program != Hcs08PrefetchContract::reference_scanner_byte_cycles) {
+      program != Hcs08PrefetchContract::reference_scanner_byte_cycles &&
+      program != Hcs08PrefetchContract::reference_scanner_word_cycles &&
+      program != Hcs08PrefetchContract::reference_scanner_move_cycles) {
     fail("requires a supported IRQ program contract");
   }
   healthy();
