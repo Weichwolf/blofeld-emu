@@ -3,6 +3,7 @@
 
 #include "blofeld/dsp_dma.hpp"
 #include "blofeld/dsp_machine.hpp"
+#include "blofeld/dsp_pipeline.hpp"
 #include "blofeld/dsp_program_fetch.hpp"
 #include "blofeld/dsp_reference_cycle.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
@@ -19,6 +20,7 @@ struct DspFetchRunInputs {
   std::uint64_t timebase_hz = 0;
   DspFetchTiming timing = DspFetchTiming::unqualified;
   DspReferenceExecution execution = DspReferenceExecution::access_boundaries;
+  DspFetchPipeline pipeline = DspFetchPipeline::explicit_effects;
   bool operator==(const DspFetchRunInputs &) const = default;
 };
 
@@ -40,6 +42,7 @@ struct DspFetchCycleResult {
   std::optional<std::uint32_t> issued_address = std::nullopt;
   DspProgramFetchView fetch;
   bool native_starved = false;
+  std::optional<DspPipelineCycle> pipeline = std::nullopt;
 };
 
 class DspFetchCheckpoint {
@@ -72,6 +75,7 @@ public:
   [[nodiscard]] std::uint64_t completed_cycles() const;
   [[nodiscard]] std::uint64_t timer_clk2_edges() const;
   [[nodiscard]] bool faulted() const;
+  [[nodiscard]] std::optional<DspPipelineView> pipeline() const;
 
 private:
   void check_owner(const DspMachine &machine) const;

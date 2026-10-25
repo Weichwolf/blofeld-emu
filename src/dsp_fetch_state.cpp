@@ -77,6 +77,10 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
                                  .order = DspReferenceBusOrder::dma_then_fetch_then_native};
   const auto fetch = machine.reference_fetch();
   if (fetch.pending_address) { result.fetch = DspProgramFetchStage::read; }
+  if (pipeline) {
+    if (pipeline->view.awaiting_retirement) { result.access = pipeline->retirement(machine); }
+    return result;
+  }
   if (input.retire_previous) {
     const auto previous = machine.reference_retirement();
     if (!previous) { throw Fault("DSP fetch clock has no prior result to retire"); }

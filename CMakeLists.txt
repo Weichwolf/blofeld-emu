@@ -207,6 +207,7 @@ target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gp
 add_library(blofeld_dsp src/dsp_core.cpp src/dsp_move_writeback.cpp src/dsp_address_phase.cpp src/dsp_native_access.cpp src/dsp_reference_execution.cpp
   src/dsp_program_fetch.cpp src/dsp_reference_cycle.cpp
   src/dsp_fetch_run.cpp src/dsp_fetch_state.cpp src/dsp_fetch_checkpoint.cpp
+  src/dsp_pipeline.cpp src/dsp_pipeline_decode.cpp
   src/dsp_interlocks.cpp src/dsp_interlock_decode.cpp
   src/dsp_interrupt_timing.cpp
   src/dsp_machine.cpp src/dsp_scheduled_run.cpp
@@ -764,6 +765,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-address-phase-test test/dsp_address_phase_test.cpp test/dsp_address_phase_clock.cpp)
   target_link_libraries(blofeld-address-phase-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_address_phase COMMAND blofeld-address-phase-test)
+  add_executable(blofeld-pipeline-test test/dsp_pipeline_test.cpp test/dsp_pipeline_state.cpp test/dsp_pipeline_guards.cpp)
+  target_link_libraries(blofeld-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_automatic_alu_pipeline COMMAND blofeld-pipeline-test)
   add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
   target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)
@@ -2189,7 +2193,7 @@ add_custom_target(quality
     blofeld-bank-test
     blofeld-repeat-test
     blofeld-reference-access-test
-    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test
+    blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test blofeld-overlap-test blofeld-pipeline-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
     blofeld-reference-original-midi-rom

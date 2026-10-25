@@ -6,14 +6,17 @@
 #include "blofeld/dsp_core.hpp"
 #include "blofeld/dsp_machine.hpp"
 #include "blofeld/dsp_native_access.hpp"
+#include "blofeld/dsp_pipeline.hpp"
 #include "blofeld/dsp_program_fetch.hpp"
 #include "blofeld/dsp_reference_execution.hpp"
 #include "dsp_fetch_run.hpp"
+#include "dsp_pipeline.hpp"
 
 #include <cstdint>
 #include <exception>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 
@@ -36,6 +39,12 @@ void validate_inputs(const DspFetchRunInputs inputs) {
   constexpr unsigned minimum_extal = 500000;
   constexpr unsigned maximum_extal = 100000000;
   constexpr std::uint64_t maximum_timebase = 1000000000000;
+  if ((inputs.pipeline != DspFetchPipeline::explicit_effects &&
+       inputs.pipeline != DspFetchPipeline::automatic_alu) ||
+      (inputs.pipeline == DspFetchPipeline::automatic_alu &&
+       inputs.execution != DspReferenceExecution::staged_register_boundaries)) {
+    throw Fault("Automatic DSP stages require the explicit staged native result contract");
+  }
   if (inputs.timing != DspFetchTiming::reference_cycle_order || inputs.extal_hz < minimum_extal ||
       inputs.extal_hz > maximum_extal || inputs.timebase_hz < inputs.extal_hz ||
       inputs.timebase_hz > maximum_timebase || inputs.timebase_hz % inputs.extal_hz != 0 ||
@@ -68,6 +77,9 @@ DspFetchRun::DspFetchRun(const DspFetchRunInputs inputs, DspMachine &machine)
   }
   auto &state = impl_->state;
   state.inputs = inputs;
+  if (inputs.pipeline == DspFetchPipeline::automatic_alu) {
+    state.pipeline = DspAluPipeline{.view = {.decode_address = access->target.address}};
+  }
   const auto last = machine.bus().last_dma_cycle();
   if (last && *last == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("DSP fetch run cannot follow an exhausted DMA cycle index");
@@ -99,6 +111,7 @@ void DspFetchRun::fail(DspMachine &machine) noexcept {
 DspReferenceProgress DspFetchRun::begin_instruction(DspMachine &machine) {
   check_owner(machine);
   impl_->state.verify(machine);
+  if (impl_->state.pipeline) { throw Fault("Automatic DSP stages own native instruction issue"); }
   if (machine.reference_pending()) {
     throw Fault("DSP fetch run already has a pending instruction");
   }
@@ -116,6 +129,7 @@ DspReferenceProgress DspFetchRun::begin_instruction(DspMachine &machine) {
 DspReferenceProgress DspFetchRun::overlap_instruction(DspMachine &machine) {
   check_owner(machine);
   impl_->state.verify(machine);
+  if (impl_->state.pipeline) { throw Fault("Automatic DSP stages own native instruction issue"); }
   const auto pending = machine.reference_pending();
   if (!pending) { throw Fault("DSP fetch overlap requires an actual held result"); }
   machine.validate_reference_overlap(pending->ticket);
@@ -148,6 +162,9 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
                                                const DspFetchCycleInputs inputs) {
   check_owner(machine);
   impl_->state.verify(machine);
+  if (impl_->state.pipeline && (inputs.admit_native || inputs.retire_previous)) {
+    throw Fault("Automatic DSP stages reject caller-selected native phases");
+  }
   if (inputs.admit_native && !machine.reference_pending()) {
     throw Fault("DSP fetch run has no native effect selected for admission");
   }
@@ -157,9 +174,16 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
     DspFetchCycleResult result;
     result.start_ticks = state.ticks;
     result.period_ticks = state.period(machine);
+    if (state.pipeline) {
+      if (machine.bus().dma_.active()) {
+        throw Fault("Unqualified automatic ALU/DMA arbitration at X:0xfffff4" + context(machine));
+      }
+      state.pipeline->prepare(machine);
+    }
     const auto plan = state.plan(machine, inputs, result.native_starved);
     const bool switch_was_pending = machine.bus().switch_delay_ != 0;
     result.bus = machine.advance_reference_bus_cycle(plan);
+    if (state.pipeline) { state.pipeline->complete(machine, result.bus); }
     const auto fetch = machine.reference_fetch();
     if (!result.bus.dma.core_stall && !fetch.pending_address &&
         fetch.used < dsp_program_fetch_capacity) {
@@ -171,6 +195,7 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
     result.completed_cycles = state.cycles;
     result.completion_ticks = state.ticks;
     result.fetch = machine.reference_fetch();
+    if (state.pipeline) { result.pipeline = state.pipeline->view.cycle; }
     return result;
   } catch (const std::exception &error) {
     fail(machine);
@@ -197,5 +222,11 @@ std::uint64_t DspFetchRun::timer_clk2_edges() const {
 
 bool DspFetchRun::faulted() const {
   return impl_->faulted;
+}
+
+std::optional<DspPipelineView> DspFetchRun::pipeline() const {
+  const auto &pipeline = impl_->state.pipeline;
+  if (!pipeline) { return std::nullopt; }
+  return pipeline->view;
 }
 }

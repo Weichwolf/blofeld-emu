@@ -1,0 +1,63 @@
+Automatic native ALU pipeline
+
+DspFetchRunInputs.pipeline=automatic_alu selects automatic F1/F2/decode/AG1/AG2/
+E1/E2 sequencing for the declared normal single-word register ALU formats. The
+staged_register_boundaries execution contract is required. Its cycle input has
+no caller-selected native issue, handoff or retirement; manual phase overrides
+refuse before mutation. The existing explicit_effects profile is unchanged.
+
+DSP56300FM Rev5 5.3/Table5-1/Figure5-2 supply the seven stages; AppendixA.1/A-1
+supplies the selected one-clock ALU formats. A cold empty modeled pipeline first
+captures a native result in E1 at clock6 and publishes it in E2 at clock7; a
+filled stream publishes one per clock. Decode sees the previous F2 latch. Three
+actual decode/AG latches advance before E1; these arithmetic forms perform no
+AGU or data-memory operation. This does not implement memory instruction stages.
+
+F2 performs the actual P read once. Decode and native execution consume that
+captured word; later program replacement cannot rewrite it. A future word
+changed before its real F2 is fetched normally. Native E1 evaluation captures
+an actual CPU result. E2 publishes that result once, with actual flags/PC/SDK
+counters, before evaluating the following instruction. No host ALU replaces it.
+
+Table5-1 places a preceding-ALU accumulator dependency at E2. The E1 register
+snapshot is therefore recorded before the preceding E2 publication. Native
+operand metadata identifies A/B reads deferred to E2. A separate functional
+candidate-input record can use the now-available predecessor result for early
+side-effect-free native evaluation. Before publication at the real E2 position,
+the deferred actual register values must match those candidate inputs. This
+keeps E1 sampling, functional early evaluation and actual E2 operand validation
+distinct; the implementation does not invent an E1 accumulator bypass. Native
+arithmetic is not rerun. Explicit carry/SR consumers remain outside this profile.
+
+Every elapsed reference clock advances the existing PLL-derived period, DMA
+index bookkeeping, map-delay clocks and CLK2, including pipeline fill. The
+cycle result/view exposes stage words and accepted E1/E2 prefixes. Joint clock
+checkpoints retain the actual native result, frontend words and all stage/input
+latches; restore renews native tickets. Failed F2 retains the entered DMA index
+without applying decode or completing time, and requires joint recovery.
+
+An unsupported opcode fails at decode with P address, opcode, PC and OMR before
+native address/data effects. Active DMA, admissible IRQs, cache/loop/REP,
+compatibility and sixteen-bit arithmetic modes are visible frontiers. There is
+no automatic nominal-time fallback. Explicit reference DMA/other contracts keep
+their existing separate behavior. This is selected primary-derived internal ALU
+sequencing with reference bus/clock order, not silicon or complete board timing.
+
+  cmake --build --preset strict --target blofeld-pipeline-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_automatic_alu_pipeline$'
+
+Own literal checks cover cold fill and sustained dependent ADD throughput,
+E1/deferred-E2 operand separation, a signed MPY/ADD/MAC/NEG/ABS/shift/transfer
+stream, actual CLK2 timer effects, pre-E2 checkpoint replay, captured/future code
+replacement, failed F2/joint recovery and pure phase/profile misuse. A real SHI
+receive survives refused memory placement, and real timer IRQ/DMA activity
+refuses without acknowledgement or invented bus timing.
+
+Automatic memory/parallel-move/extension stages, simultaneous X/Y/P groups,
+physical DMA/interlocks, branch/loop/IRQ/cache/REP execution and jump/reset fill
+behavior remain open. Original normal reset-to-instrument startup is not yet
+integrated with this profile. Authentic full ROM/reserved Y:002000, original
+Keyboard/Desktop boot, normal MIDI/audio/default host output, every documented
+function and all full-device acceptance remain incomplete. Native allocations
+and exceptions keep this reference implementation outside an RT callback.

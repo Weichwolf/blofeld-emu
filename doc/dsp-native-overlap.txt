@@ -54,3 +54,7 @@ Branch/loop/REP/IRQ pipelines, default-runtime integration, authentic full ROM,
 reserved Y:002000, normal original Desktop/Keyboard boot, host MIDI/audio and
 all full-device acceptance remain incomplete. This allocating/exception-based
 reference path is not a real-time audio callback.
+
+The first automatic single-word ALU stage owner, including actual deferred-E2
+operand validation, is specified in dsp-automatic-alu-pipeline.txt. Memory and
+control stage integration remains required by the complete hardware objective.

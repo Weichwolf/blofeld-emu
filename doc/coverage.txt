@@ -1760,6 +1760,15 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           recovery (dsp-native-overlap.txt). This
                                           does not qualify automatic physical
                                           stages or operand forwarding timing.
+                                          Automatic single-word ALU mode now
+                                          advances actual F1/F2/D/AG1/AG2/E1/E2,
+                                          validates deferred A/B operands at E2
+                                          and publishes one native result per
+                                          filled clock. Cold fill, real timers,
+                                          captured code and joint recovery are
+                                          scoped in dsp-automatic-alu-pipeline.txt.
+                                          Memory/DMA/control stages and default
+                                          original instrument runtime stay open.
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast
