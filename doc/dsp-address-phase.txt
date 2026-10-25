@@ -60,3 +60,7 @@ all simultaneous physical groups, interlocks, loop/IRQ stage timing and default
 runtime integration remain incomplete. Full authentic ROM, reserved Y:002000,
 original reset-to-instrument boot, live MIDI/audio and full hardware acceptance
 remain open (objective.txt, coverage.txt). This is not a real-time callback.
+
+The separate staged_register_boundaries choice now adds field-selective native
+load/transfer publication before the later ALU/CCR/PC retirement. Its supported
+forms and explicit remaining stage limits are in dsp-move-writeback.txt.

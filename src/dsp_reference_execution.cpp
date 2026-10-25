@@ -36,11 +36,15 @@ bool same_effect(const DspReferenceEffect &a, const DspReferenceEffect &b) {
   if (const auto *address = std::get_if<DspAddressUpdate>(&a)) {
     return *address == std::get<DspAddressUpdate>(b);
   }
+  if (const auto *move = std::get_if<DspMoveWriteback>(&a)) {
+    return *move == std::get<DspMoveWriteback>(b);
+  }
   const auto *access = std::get_if<DspNativeAccess>(&a);
   return access == nullptr || same_access(*access, std::get<DspNativeAccess>(b));
 }
 
 std::string effect_context(const DspReferenceEffect &effect) {
+  if (std::holds_alternative<DspMoveWriteback>(effect)) { return "move-writeback"; }
   if (const auto *address = std::get_if<DspAddressUpdate>(&effect)) {
     return "address-register-update R" + std::to_string(address->index);
   }
@@ -113,9 +117,11 @@ void DspReferenceTape::restore(const DspReferenceState &state) {
       (state.pending && state.used == state.entries.size() && !retirement) ||
       (state.active && state.execution != DspReferenceExecution::access_boundaries &&
        state.execution != DspReferenceExecution::access_and_retirement_boundaries &&
-       state.execution != DspReferenceExecution::address_and_retirement_boundaries) ||
+       state.execution != DspReferenceExecution::address_and_retirement_boundaries &&
+       state.execution != DspReferenceExecution::staged_register_boundaries) ||
       (retirement && state.execution != DspReferenceExecution::access_and_retirement_boundaries &&
-       state.execution != DspReferenceExecution::address_and_retirement_boundaries) ||
+       state.execution != DspReferenceExecution::address_and_retirement_boundaries &&
+       state.execution != DspReferenceExecution::staged_register_boundaries) ||
       (state.latched_program_word && (!state.pending || !program_read(*state.pending) ||
                                       *state.latched_program_word > word_mask))) {
     throw Fault("Invalid trusted native reference continuation");
@@ -164,7 +170,8 @@ void DspReferenceTape::stage_retirement(const DspInstructionRetire result) {
   verify_complete();
   if (!state_.active ||
       (state_.execution != DspReferenceExecution::access_and_retirement_boundaries &&
-       state_.execution != DspReferenceExecution::address_and_retirement_boundaries) ||
+       state_.execution != DspReferenceExecution::address_and_retirement_boundaries &&
+       state_.execution != DspReferenceExecution::staged_register_boundaries) ||
       mode_ != DspReferenceMode::ordinary) {
     throw Fault("Native result requires an explicit retirement boundary");
   }
@@ -267,7 +274,8 @@ std::uint32_t DspReferenceTape::peek_program(const std::uint32_t address) {
 
 std::uint32_t DspReferenceTape::perform(const DspReferenceEffect &effect) {
   if (std::holds_alternative<DspInstructionRetire>(effect) ||
-      std::holds_alternative<DspAddressUpdate>(effect)) {
+      std::holds_alternative<DspAddressUpdate>(effect) ||
+      std::holds_alternative<DspMoveWriteback>(effect)) {
     throw Fault("Native retirement cannot perform a bus operation");
   }
   if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&effect)) {
@@ -302,7 +310,8 @@ DspReferenceEffect DspReferenceTape::commit() {
   }
   const auto effect = *state_.pending;
   if (std::holds_alternative<DspInstructionRetire>(effect) ||
-      std::holds_alternative<DspAddressUpdate>(effect)) {
+      std::holds_alternative<DspAddressUpdate>(effect) ||
+      std::holds_alternative<DspMoveWriteback>(effect)) {
     throw Fault("Native retirement requires its held CPU result, not access replay");
   }
   check_admission();

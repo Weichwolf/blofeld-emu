@@ -1,0 +1,66 @@
+Native move result and later arithmetic publication
+
+The opt-in staged_register_boundaries contract combines the existing native
+pre-data R update with separate move-result publication and later retirement.
+DSP56300FM Rev5 Table5-1 distinguishes E1 memory-load destination writes from
+E2 arithmetic results. The normal-mode references in3.5/A.2 still describe
+separate dependencies; these boundaries do not establish physical stage clocks.
+
+Native execution performs every real admitted data effect and computes its
+actual completed CPU result. Destination fields come from the admitted opcode's
+move operand, never a caller mask or a later program read. A DspMoveWriteback
+ticket holds the declared X/Y24-bit halves, A/B24/24/8-bit parts or whole
+accumulators, or R/N/M destination registers. Its admission copies only those
+actual completed fields into the visible CPU. Accumulator masks respect the
+native left-aligned A/B storage; X/Y remain right-aligned. M updates retain the
+native modifier caches as well. Source conversion, sign extension, limiting and ALU
+calculation remain native; the owner does not reproduce those operations.
+
+Address updates already accepted at the earlier boundary remain visible.
+Move-result publication can overwrite a previously updated R destination.
+Unrelated registers, flags, stack, PC and native diagnostic counters stay at
+their original values. The later retirement ticket publishes the remaining
+actual result, including ALU/CCR and PC/counts. It executes no instruction and
+repeats no bus effect. Parallel arithmetic keeps its original operands even
+when E1 has exposed new data in one of those operand registers.
+
+Qualified single-memory X/Y/control and long X/Y-pair loads, immediate moves
+and register transfers derive their explicit destination fields. Stores invent
+no writeback event. A transfer with an unchanged value still emits its event.
+PC/SR/OMR/stack-control destinations, SSH source side effects and overlapping
+ALU/move accumulator writes
+are not assigned speculative stages. Memory cases reject those conditions
+before actual operand I/O, with operation/address/PC/OMR; computational-only
+cases reject before result publication. Other memory forms retain their strict
+address-phase frontiers (dsp-address-phase.txt).
+
+Each address/move/retirement position has a distinct trusted owner ticket.
+Snapshots/forks retain original computation base, already published address
+and move fields, captured operands and completed result; restored tickets are
+fresh. DMA/F2 waits and entered-cycle failures cannot undo accepted E1 or rerun
+the load. Only trusted joint recovery can resume a quarantined partial clock.
+Matching rebuilt headers/libraries are required; no native SDK source changed.
+
+DspFetchRun retains the explicit execution choice at subsequent begin calls.
+The move-result boundary has no memory footprint; a concurrent real F2 still
+uses the existing arbiter. Each selected reference clock advances its declared
+time and peripherals, including stalled clocks. Begin and address/data/move/
+retirement selection and sampling order remain explicit. Register transfers
+share this reference writeback boundary without a physical timing claim.
+
+  cmake --build --preset strict --target blofeld-writeback-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_move_writeback$'
+
+Own fixed loads check56 destination cases with literal full-register values:
+all data parts/whole accumulators from X/Y, all R/N/M destinations and eight
+long-pair encodings. Further cases check immediate/register conversion, unchanged
+events, real parallel ADD/CCR and MPY old operands, store-only completion,
+unread FIFO/control and overlap guards, pre/post-E1 fresh-machine snapshots,
+clock/F2 overlap, actual DMA code overwrite/waits and failed F2/joint recovery.
+These are emulator checks, not full original instrument or silicon acceptance.
+
+Automatic overlapped decode/AG1/AG2/E1/E2 scheduling, every physical memory
+group/interlock, full loop/IRQ/control-register stage timing and normal runtime
+integration remain open. Full authentic ROM/reserved Y:002000, original normal
+Desktop/Keyboard startup, MIDI/audio and all full-device acceptance requirements
+remain incomplete. This reference path is not a real-time callback.

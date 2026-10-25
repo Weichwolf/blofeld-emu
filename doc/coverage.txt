@@ -1744,6 +1744,15 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           joint clock cases qualify this ordering,
                                           not physical AG2 clocks or full staged
                                           execution (dsp-address-phase.txt).
+                                          Optional native move-result publication
+                                          now separates actual destination fields
+                                          from later ALU/CCR/PC/count retirement.
+                                          Literal load/transfer and parallel ADD/
+                                          MPY cases retain original operands,
+                                          snapshots and real DMA/F2 prefixes;
+                                          overlapping/control targets still fail
+                                          explicitly. Physical stage scheduling
+                                          remains open (dsp-move-writeback.txt).
                                           Explicit untimed interrupt continuation
                                           retains both actual vector reads and
                                           admits acknowledgement once. Fast

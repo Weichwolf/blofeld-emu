@@ -17,7 +17,8 @@ enum class DspReferenceExecution : std::uint8_t {
   unqualified,
   access_boundaries,
   access_and_retirement_boundaries,
-  address_and_retirement_boundaries
+  address_and_retirement_boundaries,
+  staged_register_boundaries
 };
 
 struct DspPeripheralReset {};
@@ -49,11 +50,27 @@ struct DspAddressUpdate {
   bool operator==(const DspAddressUpdate &) const = default;
 };
 
+// X/Y: low/high24; A/B: low24/middle24/extension8; R/N/M: register index.
+struct DspMoveFields {
+  std::uint8_t x = 0, y = 0, a = 0, b = 0, r = 0, n = 0, m = 0;
+  bool operator==(const DspMoveFields &) const = default;
+};
+
+// Actual native move result awaiting field-selective publication, not bus I/O.
+struct DspMoveWriteback {
+  DspMoveFields fields;
+  std::uint32_t opcode = 0;
+  std::uint32_t pc = 0;
+  std::uint32_t omr = 0;
+  bool operator==(const DspMoveWriteback &) const = default;
+};
+
 using DspReferenceEffect = std::variant<DspNativeAccess,
                                         DspPeripheralReset,
                                         DspInterruptAcknowledge,
                                         DspInstructionRetire,
-                                        DspAddressUpdate>;
+                                        DspAddressUpdate,
+                                        DspMoveWriteback>;
 
 // Trusted owner identity, invalidated by reset/restore. Not a serialized grant.
 class DspReferenceTicket {
@@ -68,6 +85,7 @@ private:
     std::uint64_t generation = 0;
     std::size_t record = 0;
     bool address = false;
+    bool move = false;
     bool operator==(const Position &) const = default;
   };
 

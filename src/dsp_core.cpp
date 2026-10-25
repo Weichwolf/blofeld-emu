@@ -17,6 +17,7 @@
 #include "dsp56kEmu/types.h"
 #include "dsp_address_phase.hpp"
 #include "dsp_interrupt_timing.hpp"
+#include "dsp_move_writeback.hpp"
 #include "dsp_native_access.hpp"
 #include "dsp_reference_execution.hpp"
 
@@ -215,6 +216,28 @@ std::uint64_t register_value(const dsp56k::DSP &cpu, const dsp56k::EReg reg) {
   if (!cpu.readRegToInt(reg, value)) { throw Fault("Cannot read native DSP register"); }
   return std::bit_cast<std::uint64_t>(value);
 }
+
+struct MoveMerge {
+  std::int64_t visible = 0;
+  std::int64_t completed = 0;
+  std::uint8_t fields = 0;
+  bool accumulator = false;
+};
+
+std::int64_t merge_move_fields(const MoveMerge input) {
+  constexpr std::uint64_t low = 0xffffff;
+  constexpr std::uint64_t middle = low << 24U;
+  constexpr std::uint64_t high = std::uint64_t{0xff} << 48U;
+  // Native DspRegs stores A/B left-aligned; X/Y remain right-aligned.
+  constexpr unsigned accumulator_offset = 8;
+  const auto offset = input.accumulator ? accumulator_offset : 0;
+  const auto mask =
+      (((input.fields & 1U) != 0 ? low : 0) | ((input.fields & 2U) != 0 ? middle : 0) |
+       ((input.fields & 4U) != 0 ? high : 0))
+      << offset;
+  return std::bit_cast<std::int64_t>((std::bit_cast<std::uint64_t>(input.visible) & ~mask) |
+                                     (std::bit_cast<std::uint64_t>(input.completed) & mask));
+}
 }
 
 struct DspRetirementResult {
@@ -226,6 +249,7 @@ struct DspNativeResultState {
   std::optional<dsp56k::DSP::ReferenceAttemptState> base;
   std::optional<DspRetirementResult> retirement;
   DspAddressPhase addresses;
+  DspMoveWritebackState writeback;
 };
 
 struct DspCoreCheckpoint::Storage {
@@ -347,11 +371,72 @@ public:
         cpu.regs().r.at(index).var = static_cast<std::int32_t>(*value);
       }
     }
+    apply_move_fields(results.writeback.published);
+  }
+
+  void apply_move_fields(const DspMoveFields fields) {
+    if (fields == DspMoveFields{}) { return; }
+    if (!results.retirement) {
+      throw Fault("Native writeback lost its actual completed CPU result");
+    }
+    const auto &completed = results.retirement->cpu.registers;
+    auto &regs = cpu.regs();
+    regs.x.var =
+        merge_move_fields({.visible = regs.x.var, .completed = completed.x, .fields = fields.x});
+    regs.y.var =
+        merge_move_fields({.visible = regs.y.var, .completed = completed.y, .fields = fields.y});
+    regs.a.var = merge_move_fields(
+        {.visible = regs.a.var, .completed = completed.a, .fields = fields.a, .accumulator = true});
+    regs.b.var = merge_move_fields(
+        {.visible = regs.b.var, .completed = completed.b, .fields = fields.b, .accumulator = true});
+    for (unsigned index = 0; index < regs.r.size(); ++index) {
+      const auto bit = 1U << index;
+      if ((fields.r & bit) != 0) { regs.r.at(index).var = completed.r.at(index); }
+      if ((fields.n & bit) != 0) { regs.n.at(index).var = completed.n.at(index); }
+      if ((fields.m & bit) != 0) {
+        regs.m.at(index).var = completed.m.at(index);
+        regs.mMask.at(index) = completed.mMask.at(index);
+        regs.mModulo.at(index) = completed.mModulo.at(index);
+      }
+    }
+  }
+
+  DspMoveWriteback publish_move_writeback() {
+    if (!results.writeback.pending) { throw Fault("Native move-writeback lost its held fields"); }
+    const auto completed = *results.writeback.pending;
+    apply_move_fields(completed.fields);
+    results.writeback.published = completed.fields;
+    results.writeback.pending.reset();
+    return completed;
+  }
+
+  DspMoveFields move_writeback_fields(const DspNativeAccess *request = nullptr,
+                                      const DspMoveDecode scope = DspMoveDecode::all) const {
+    const auto &reference = native.reference();
+    if (reference.execution() != DspReferenceExecution::staged_register_boundaries) { return {}; }
+    const auto opcode = reference.opcode();
+    const auto context = reference.snapshot().context;
+    try {
+      if (!opcode) { throw Fault("Native move-writeback lost its admitted opcode"); }
+      return decode_move_writeback(*opcode, scope);
+    } catch (const std::exception &error) {
+      std::string operation;
+      if (request != nullptr) {
+        constexpr std::array spaces{"P:", "X:", "Y:"};
+        operation = std::string(request->kind == DspNativeAccessKind::write ? " before write "
+                                                                            : " before read ") +
+                    spaces.at(static_cast<unsigned>(request->target.space)) +
+                    hex(request->target.address, 6);
+      }
+      throw Fault("Native move-writeback" + operation + " pc=" + hex(context.pc, 6) +
+                  " omr=" + hex(context.omr, 6) + ": " + error.what());
+    }
   }
 
   void capture_address_phase() {
     auto &reference = native.reference();
-    if (reference.execution() != DspReferenceExecution::address_and_retirement_boundaries) {
+    if (reference.execution() != DspReferenceExecution::address_and_retirement_boundaries &&
+        reference.execution() != DspReferenceExecution::staged_register_boundaries) {
       return;
     }
     const auto &pending = reference.pending();
@@ -369,6 +454,7 @@ public:
     if (!opcode || !results.base) {
       throw Fault("Native address phase lost its fetched instruction base");
     }
+    static_cast<void>(move_writeback_fields(request));
     std::array<std::uint32_t, 8> before{};
     std::array<std::uint32_t, 8> partial{};
     for (unsigned index = 0; index < before.size(); ++index) {
@@ -492,14 +578,28 @@ public:
     const auto result = cpu.referenceAttemptState();
     const bool redirected = cpu.referenceRedirected();
     if (reference.execution() == DspReferenceExecution::access_and_retirement_boundaries ||
-        reference.execution() == DspReferenceExecution::address_and_retirement_boundaries) {
+        reference.execution() == DspReferenceExecution::address_and_retirement_boundaries ||
+        reference.execution() == DspReferenceExecution::staged_register_boundaries) {
       const auto before = reference.snapshot().context;
+      DspMoveFields fields;
+      try {
+        fields = move_writeback_fields();
+      } catch (...) {
+        restore_visible_reference();
+        throw;
+      }
       reference.stage_retirement({.pc = before.pc,
                                   .next_pc = word(cpu.regs().pc),
                                   .omr = before.omr,
                                   .next_omr = word(cpu.regs().omr),
                                   .redirected = redirected});
       results.retirement = DspRetirementResult{.cpu = result, .redirected = redirected};
+      if (fields != DspMoveFields{}) {
+        const auto opcode = reference.opcode();
+        if (!opcode) { throw Fault("Native move-writeback lost its captured opcode"); }
+        results.writeback.pending = DspMoveWriteback{
+            .fields = fields, .opcode = *opcode, .pc = before.pc, .omr = before.omr};
+      }
       restore_visible_reference();
     } else {
       finish_reference(redirected);
@@ -619,11 +719,19 @@ std::optional<DspReferencePending> DspCore::reference_pending_unchecked() const 
   const auto &pending = reference.pending();
   if (!pending) { return std::nullopt; }
   const auto &address = impl_->results.addresses.pending;
-  return DspReferencePending{.effect = address ? DspReferenceEffect{*address} : *pending,
+  const auto &move = impl_->results.writeback.pending;
+  auto effect = *pending;
+  if (address) {
+    effect = *address;
+  } else if (move) {
+    effect = *move;
+  }
+  return DspReferencePending{.effect = effect,
                              .ticket = DspReferenceTicket(impl_->reference_owner,
                                                           {.generation = impl_->generation,
                                                            .record = reference.pending_index(),
-                                                           .address = address.has_value()}),
+                                                           .address = address.has_value(),
+                                                           .move = move.has_value()}),
                              .latched_program_word = reference.latched_program_word(),
                              .execution = reference.execution()};
 }
@@ -655,13 +763,15 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
   if (impl_->active || impl_->faulted || impl_->native.reference().active() ||
       (contract != DspReferenceExecution::access_boundaries &&
        contract != DspReferenceExecution::access_and_retirement_boundaries &&
-       contract != DspReferenceExecution::address_and_retirement_boundaries) ||
+       contract != DspReferenceExecution::address_and_retirement_boundaries &&
+       contract != DspReferenceExecution::staged_register_boundaries) ||
       impl_->run.begin || impl_->run.complete || impl_->run.failed || impl_->run.reset) {
     throw Fault(
         "Native access suspension requires an explicit healthy unclocked instruction boundary");
   }
   const auto before = state();
-  if (contract == DspReferenceExecution::address_and_retirement_boundaries &&
+  if ((contract == DspReferenceExecution::address_and_retirement_boundaries ||
+       contract == DspReferenceExecution::staged_register_boundaries) &&
       (interrupt_entry || impl_->cpu.referenceAttemptState().repeat.remaining != 0)) {
     throw Fault("Unqualified native address-phase interrupt/REP timeline pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6));
@@ -719,7 +829,8 @@ void DspCore::validate_reference_ticket(const DspReferenceTicket &ticket) const 
   if (impl_->active || impl_->faulted || !reference.pending() ||
       ticket.owner_ != impl_->reference_owner || ticket.position_.generation != impl_->generation ||
       ticket.position_.record != reference.pending_index() ||
-      ticket.position_.address != impl_->results.addresses.pending.has_value()) {
+      ticket.position_.address != impl_->results.addresses.pending.has_value() ||
+      ticket.position_.move != impl_->results.writeback.pending.has_value()) {
     throw Fault("Stale, foreign or unavailable native reference access ticket");
   }
 }
@@ -818,11 +929,18 @@ DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket 
     if (impl_->results.addresses.pending) {
       return reference_progress(impl_->publish_address_phase());
     }
+    if (impl_->results.writeback.pending) {
+      return reference_progress(impl_->publish_move_writeback());
+    }
     const auto pending = impl_->native.reference().pending();
     if (pending && std::holds_alternative<DspInstructionRetire>(*pending)) {
       return reference_progress(impl_->retire_reference());
     }
     auto completed = impl_->native.reference().commit();
+    if (const auto *event = std::get_if<DspNativeAccess>(&completed);
+        event != nullptr && event->kind == DspNativeAccessKind::opcode) {
+      static_cast<void>(impl_->move_writeback_fields(nullptr, DspMoveDecode::nonmemory));
+    }
     impl_->resume_reference();
     return reference_progress(completed);
   } catch (const std::exception &error) {
