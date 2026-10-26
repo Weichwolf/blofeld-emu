@@ -13,6 +13,8 @@
 namespace blofeld {
 namespace {
 constexpr unsigned io_base = 0xffff80;
+constexpr unsigned shi_status = 0xffff91;
+constexpr unsigned shi_receive = 0xffff94;
 
 bool controller_read(const DspMemoryAccess access) {
   return access.operation == DspMemoryOperation::read && access.target.space == DspSpace::x &&
@@ -33,14 +35,38 @@ std::string describe(const DspAddress address) {
   return std::string(names.at(static_cast<unsigned>(address.space))) + hex(address.address, 6);
 }
 
+bool program_store_pair(const DspCoreBusUse core) {
+  const bool status_overlap = core.accesses.size() == 3;
+  if (core.accesses.size() != 2 && !status_overlap) { return false; }
+  const auto read = core.accesses[status_overlap ? 1U : 0U];
+  if (status_overlap) {
+    const auto status = core.accesses.front();
+    if (status.phase != DspMemoryPhase::peripheral_sample ||
+        status.operation != DspMemoryOperation::read || status.target.space != DspSpace::x ||
+        status.target.address != shi_status || read.target.space != DspSpace::x ||
+        read.target.address != shi_receive) {
+      return false;
+    }
+  }
+  const auto write = core.accesses.back();
+  const auto port = read.target;
+  return read.phase == DspMemoryPhase::execute && write.phase == DspMemoryPhase::execute &&
+         read.operation == DspMemoryOperation::read &&
+         (port.space == DspSpace::x || port.space == DspSpace::y) && port.address >= io_base &&
+         port.address <= DspDma::full_word && write.target.space == DspSpace::p &&
+         write.operation == DspMemoryOperation::write;
+}
+
 std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreBusUse core) {
   // Short-I/O occupancy is separate from RAM. This never dispatches a core transaction;
-  // native E1 still owns register validation and the actual write. DMA-controller writes
+  // native E1 still owns register validation and the actual read/write. DMA-controller writes
   // can change the arbitration owner and remain unqualified even with inactive channels.
   std::optional<DspMemoryAccess> peripheral;
   unsigned data_accesses = 0;
   bool early = false;
   bool store = false;
+  bool program_read = false;
+  const bool program_pair = program_store_pair(core);
   for (const auto access : core.accesses) {
     const auto target = access.target;
     if (target.space != DspSpace::p) { ++data_accesses; }
@@ -59,11 +85,15 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
       if (store) { throw Fault("Multiple DSP peripheral stores in one execute phase"); }
       store = true;
       peripheral = access;
+    } else if (io && access.operation == DspMemoryOperation::read && program_pair) {
+      program_read = true;
+      peripheral = access;
     } else if (!controller_read(access)) {
       static_cast<void>(bus.memory_resource(access));
     }
   }
-  const unsigned admitted_data = static_cast<unsigned>(early) + static_cast<unsigned>(store);
+  const unsigned admitted_data = static_cast<unsigned>(early) + static_cast<unsigned>(store) +
+                                 static_cast<unsigned>(program_read);
   if (peripheral && data_accesses != admitted_data) {
     throw Fault("Unqualified concurrent DSP peripheral/data bus effects at " +
                 describe(peripheral->target));

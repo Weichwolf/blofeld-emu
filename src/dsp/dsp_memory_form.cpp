@@ -49,6 +49,26 @@ std::optional<DspMemoryForm> peripheral_immediate(const Type type, const unsigne
                                                  dsp56k::getFieldValue(type, field, opcode)}};
 }
 
+std::optional<DspMemoryForm> program_transfer(const Type type, const unsigned opcode) {
+  if (type != dsp56k::Movep_eapp && type != dsp56k::Movep_eaqq) { return std::nullopt; }
+  const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
+  if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0 || mode > 4) {
+    return std::nullopt;
+  }
+  const bool high = type == dsp56k::Movep_eapp;
+  const auto field = high ? dsp56k::Field_pppppp : dsp56k::Field_qqqqqq;
+  const bool y = dsp56k::getFieldValue(type, high ? dsp56k::Field_s : dsp56k::Field_S, opcode) != 0;
+  DspMemoryForm result{.peripheral =
+                           DspAddress{.space = y ? DspSpace::y : DspSpace::x,
+                                      .address = (high ? high_io_begin : low_io_begin) +
+                                                 dsp56k::getFieldValue(type, field, opcode)}};
+  result.lanes[0] = {.space = DspSpace::p,
+                     .operation = DspMemoryOperation::write,
+                     .mode = mode,
+                     .reg = dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode)};
+  return result;
+}
+
 std::optional<DspMemoryForm> peripheral_register(const Type type, const unsigned opcode) {
   if (type != dsp56k::Movep_Spp && type != dsp56k::Movep_SXqq && type != dsp56k::Movep_SYqq) {
     return std::nullopt;
@@ -132,11 +152,16 @@ std::optional<DspMemoryForm> dual(const std::uint32_t opcode) {
 }
 }
 
+bool is_program_transfer(const DspMemoryForm &form) {
+  return form.peripheral.has_value() && form.lanes[0].space == DspSpace::p;
+}
+
 std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
   auto second = dsp56k::Invalid;
   if (opcodes.getInstructionTypes(opcode, first, second) == 0) { return std::nullopt; }
+  if (const auto program = program_transfer(first, opcode)) { return program; }
   if (const auto peripheral = peripheral_immediate(first, opcode)) { return peripheral; }
   if (const auto peripheral = peripheral_register(first, opcode)) { return peripheral; }
   if (dsp56k::Opcodes::getOpcodeLength(opcode, first, second) != 1) { return std::nullopt; }

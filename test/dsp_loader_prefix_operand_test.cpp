@@ -33,14 +33,14 @@ constexpr unsigned loop_last = 0xff0026;
 constexpr unsigned destination = 0x100;
 constexpr unsigned initial_program_word = 0xabcdef;
 constexpr unsigned program_words = 2;
-constexpr unsigned payload_word = 0;
 constexpr unsigned control = 0xffff91;
 constexpr unsigned not_empty = 0x20000;
 constexpr unsigned clear_status = 0x14;
 constexpr unsigned loop_flag = 0x8000;
 constexpr unsigned empty_cycles = 36;
 constexpr unsigned maximum_seek = 40;
-constexpr unsigned maximum_store_seek = 24;
+constexpr unsigned maximum_store_seek = 96;
+constexpr unsigned first_payload = 0x44f400;
 
 void check_state(const DspDebugState &actual, const DspDebugState &expected) {
   require(actual.cpu == expected.cpu && actual.sc == expected.sc && actual.ep == expected.ep &&
@@ -123,24 +123,35 @@ void empty_body(DspFetchRun &run,
 }
 
 void store_frontier(DspFetchRun &run, DspMachine &machine, std::ostream &trace) {
-  spi_prefix::word(machine.bus(), payload_word);
+  spi_prefix::word(machine.bus(), first_payload);
+  bool written = false;
+  unsigned empty_polls = 0;
   for (unsigned index = 0; index < maximum_store_seek; ++index) {
-    try {
-      static_cast<void>(step(run, machine, trace));
-    } catch (const Fault &error) {
-      const std::string message = error.what();
-      require(message.contains("Unqualified automatic DSP decode P:" + hex(program_store, 6)) &&
-                  message.contains("pc=" + hex(program_store, 6)) && message.contains("omr=") &&
-                  run.faulted() && machine.cpu().state().r[0] == destination &&
-                  machine.cpu().state().lc == program_words &&
-                  machine.bus().inspect_program(destination) == initial_program_word &&
-                  (machine.bus().shi().read(control) & not_empty) != 0,
-              "The unsupported P-store remains visible before FIFO consumption or RAM/AGU effects");
-      trace << "Expected strict next frontier: " << message << '\n';
-      return;
+    const auto cycle = step(run, machine, trace);
+    const auto &phase = pipeline::stages(cycle);
+    if (phase.memory && phase.memory->address.word.address == program_store) {
+      require(phase.memory->data.value == first_payload && phase.memory->additional_data &&
+                  phase.memory->additional_data->target.space == DspSpace::p &&
+                  phase.memory->additional_data->target.address == destination &&
+                  phase.memory->additional_data->value == first_payload &&
+                  machine.bus().inspect_program(destination) == first_payload,
+              "The unchanged loader must write the real first SPI payload through native MOVEP");
+      written = true;
+    }
+    if (written && phase.retirement_published && phase.execute2 &&
+        phase.execute2->address == data_poll && machine.cpu().state().lc == 1) {
+      const auto cpu = machine.cpu().state();
+      require(cpu.pc == data_poll && cpu.r[0] == destination + 1 && cpu.r[1] == destination &&
+                  machine.bus().inspect_program(destination) == first_payload &&
+                  machine.bus().inspect_program(destination + 1) == initial_program_word &&
+                  (machine.bus().shi().read(control) & not_empty) == 0,
+              "After its real P write the original HRNE loop must wait for an absent second word");
+      ++empty_polls;
+      if (empty_polls == 8) { return; }
     }
   }
-  throw Fault("Expected the genuine unsupported peripheral-to-P store frontier");
+  throw Fault(
+      "Original loader never completed first P write and eight real empty second-word waits");
 }
 
 struct PrefixFiles {
@@ -156,6 +167,7 @@ void run(const PrefixFiles &files) {
   machine.cpu().reset_spi_boot();
   const auto reset = machine.cpu().debug_state();
   machine.bus().write({.address = destination, .value = initial_program_word});
+  machine.bus().write({.address = destination + 1, .value = initial_program_word});
   static_cast<void>(
       machine.begin_reference_instruction(DspReferenceExecution::staged_register_boundaries));
   machine.bus().shi().observe_spi({.mosi = false});
@@ -192,8 +204,9 @@ int main(const int argc, const char *const *const argv) {
   try {
     require(argc == 3, "Expected the pinned local document SPI prefix and private trace path");
     run({.rom = argv[1], .trace = argv[2]});
-    std::cout << "Document-derived SPI prefix executes actual address copy/DO A0 and real empty "
-                 "body waits\n";
+    std::cout
+        << "Document-derived SPI prefix executes actual first P transfer and subsequent empty "
+           "body waits\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

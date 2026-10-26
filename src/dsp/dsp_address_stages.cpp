@@ -62,6 +62,13 @@ DspAddressStageView prepare(dsp56k::DSP &cpu,
     result.data_accesses[1].target.space = DspSpace::y;
     result.data_access_count = 2;
   }
+  if (is_program_transfer(form)) {
+    const auto peripheral = form.peripheral;
+    if (!peripheral) { throw Fault("Native P-transfer lost its peripheral operand"); }
+    result.data_accesses[1] = result.data_accesses[0];
+    result.data_accesses[0] = {.target = *peripheral};
+    result.data_access_count = 2;
+  }
   return result;
 }
 }
@@ -78,7 +85,7 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruct
     const auto source = cpu.referenceAttemptState();
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
     DspAddressStageView view;
-    if (form->peripheral) {
+    if (form->peripheral && !is_program_transfer(*form)) {
       if (extension.has_value() == form->peripheral_register) {
         throw Fault("Native peripheral AG1 has a mismatched F2 extension form");
       }

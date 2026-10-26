@@ -5,6 +5,7 @@
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
@@ -21,6 +22,8 @@ namespace blofeld {
 namespace {
 constexpr unsigned short_io_begin = 0xffff80;
 constexpr unsigned address_mask = 0xffffff;
+constexpr unsigned shi_receive = 0xffff94;
+constexpr unsigned shi_status = 0xffff91;
 
 std::string describe(const DspMemoryAccess access) {
   constexpr std::array spaces{"P:", "X:", "Y:"};
@@ -75,8 +78,26 @@ void append(DspReferenceCycleResult &result, const DspMemoryAccess access) {
   result.core_accesses.at(result.core_access_count++) = access;
 }
 
-std::optional<DspMemoryAccess> peripheral_store(const std::optional<DspAddressStageView> &memory) {
-  if (!memory || memory->kind == DspAddressStageKind::register_agu) { return std::nullopt; }
+std::optional<DspMemoryAccess> peripheral_data(const std::optional<DspAddressStageView> &memory) {
+  if (!memory) { return std::nullopt; }
+  if (memory->kind == DspAddressStageKind::register_agu) {
+    const auto form = decode_memory_stage(memory->word.value);
+    if (!form || !is_program_transfer(*form)) { return std::nullopt; }
+    const auto peripheral = form->peripheral;
+    if (!peripheral) { throw Fault("Native P-transfer footprint lost its peripheral operand"); }
+    const auto target = *peripheral;
+    const auto port = memory->data_accesses[0];
+    const auto program = memory->data_accesses[1];
+    if (memory->data_access_count != 2 || memory->extension || memory->secondary ||
+        port.target.space != target.space || port.target.address != target.address ||
+        port.operation != DspMemoryOperation::read || program.target.space != DspSpace::p ||
+        program.operation != DspMemoryOperation::write ||
+        program.target.address != memory->update.address || memory->update.space != DspSpace::p ||
+        memory->update.operation != DspMemoryOperation::write) {
+      throw Fault("Unqualified native peripheral-to-P footprint");
+    }
+    return port;
+  }
   const auto access = memory->data_accesses[0];
   const bool immediate = memory->kind == DspAddressStageKind::peripheral_immediate;
   if (memory->extension.has_value() != immediate || memory->pointer_update || memory->secondary ||
@@ -94,10 +115,21 @@ bool same_access(const DspMemoryAccess first, const DspMemoryAccess second) {
          first.phase == second.phase;
 }
 
+void check_port_overlap(const std::optional<DspMemoryAccess> peripheral,
+                        const std::optional<DspMemoryAccess> early) {
+  if (early && peripheral && peripheral->operation == DspMemoryOperation::read &&
+      (peripheral->target.space != DspSpace::x || peripheral->target.address != shi_receive ||
+       early->target.space != DspSpace::x || early->target.address != shi_status)) {
+    throw Fault("Unqualified peripheral read/status overlap: " + describe(*peripheral) + " and " +
+                describe(*early));
+  }
+}
+
 void check_resources(const DspBus &bus,
                      const DspReferenceCycleResult &result,
                      const std::optional<DspMemoryAccess> peripheral,
                      const std::optional<DspMemoryAccess> early) {
+  check_port_overlap(peripheral, early);
   std::array<std::optional<DspMemoryResource>, dsp_reference_cycle_accesses> resources;
   unsigned data_accesses = 0;
   for (std::size_t index = 0; index < result.core_access_count; ++index) {
@@ -117,8 +149,8 @@ void check_resources(const DspBus &bus,
     for (std::size_t other = 0; other < index; ++other) {
       const auto a = result.core_accesses.at(index);
       const auto b = result.core_accesses.at(other);
-      // The independently checked port pipeline has an early read phase followed
-      // by one older E1 store. No extra RAM/dual-data phase is admitted here.
+      // The selected port pipeline admits an early read with one older E1 store,
+      // or SHI status after an older HRX read. No extra data phase is admitted.
       const bool phased_ports = early && peripheral &&
                                 ((same_access(a, *early) && same_access(b, *peripheral)) ||
                                  (same_access(b, *early) && same_access(a, *peripheral)));
@@ -135,12 +167,32 @@ void check_resources(const DspBus &bus,
 
 }
 
+namespace {
+void reject_sampled_program_write(const std::optional<DspAddressStageView> &memory,
+                                  const DspProgramFetchView &fetch) {
+  if (!memory) { return; }
+  const auto form = decode_memory_stage(memory->word.value);
+  if (!form || !is_program_transfer(*form)) { return; }
+  const auto address = memory->update.address;
+  bool sampled = fetch.pending_address == address;
+  for (std::size_t index = 0; index < fetch.used; ++index) {
+    sampled = sampled || fetch.words.at(index).address == address;
+  }
+  if (sampled) {
+    throw Fault(
+        "Unqualified automatic P-write to captured/issued instruction write P:" + hex(address, 6) +
+        " pc=" + hex(memory->word.address, 6) + " omr=" + hex(memory->update.omr, 6));
+  }
+}
+}
+
 DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
                                                   const DspReferenceCycleInputs &inputs,
                                                   const std::optional<DspReferencePending> &pending,
                                                   const DspProgramFetchView &fetch,
                                                   const std::optional<DspAddressStageView> memory,
                                                   const std::optional<DspMemoryAccess> early) {
+  reject_sampled_program_write(memory, fetch);
   DspReferenceCycleResult result;
   if (inputs.fetch == DspProgramFetchStage::read) {
     if (!fetch.pending_address) { throw Fault("Bus-cycle F2 lost its actual issued address"); }
@@ -160,7 +212,7 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     }
   }
   try {
-    check_resources(bus, result, peripheral_store(memory), early);
+    check_resources(bus, result, peripheral_data(memory), early);
   } catch (const std::exception &error) {
     if (!memory) { throw; }
     std::string group;

@@ -29,9 +29,9 @@ substitution cannot satisfy the count/partial-write/CCR/frame expectations.
 The optional SHA-pinned, document-derived165-byte SPI prefix is a local reference,
 not an authentic complete Blofeld mask ROM. Real SPI edges deliver length/address;
 it executes native R0->R1 and DO A0, repeatedly polls actual empty HRX status, then
-visibly refuses the unimplemented peripheral-to-P:(R0)+ MOVEP before consuming its
-payload or changing the declared RAM sentinel/pointer. Two trusted continuations
-check independent CPU/stack/FIFO values and recovery from that visible fault.
+stores a genuine received SPI payload through native peripheral-to-P:(R0)+ MOVEP.
+Two trusted continuations check independent CPU/stack/FIFO values,the first P write
+and eight subsequent empty second-word polls. See dsp-program-memory.txt.
 This does not establish flash update/recovery or normal original instrument boot.
 
   cmake --build --preset strict --target blofeld-auto-loop-test \

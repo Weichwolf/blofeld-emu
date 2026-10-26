@@ -1676,7 +1676,9 @@ DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t add
   const auto &fetch = impl_->native.reference().fetch();
   const auto opcode = fetch.select(address, occurrence);
   const auto form = decode_memory_stage(opcode.word.value);
-  const auto words = form && form->peripheral && !form->peripheral_register ? 2U : 1U;
+  const bool immediate_port =
+      form && form->peripheral && !form->peripheral_register && !is_program_transfer(*form);
+  const auto words = immediate_port ? 2U : 1U;
   const auto captured = fetch.instruction(opcode, words);
   const ExecutionGuard guard(impl_->active);
   const auto slot = impl_->stages.capture(impl_->cpu, captured);

@@ -2591,3 +2591,24 @@ Production BKGD wire ownership:
   and method bodies stay exact;unchanged long startup was not replayed.
 - Physical timing,active-background BUSCLK,full upload/SMF/DSP/FLASH chain,
   normal boot/MIDI/audio/update/recovery remain open. See hcs08-board-wire.txt.
+
+Automatic native peripheral-to-P memory transfers:
+- Actual captured one-word MOVEP uses native AGU/port/P effects and five extra
+  E1 hold periods. Independent unchanged processor-model windows establish six
+  nominal instruction periods and separate preceding R-source hazards.
+- Only older HRX/P with younger HCSR admits the selected status-after-FIFO order;
+  the status read is genuine and once-only. This is a logical subcycle assumption,
+  not a measured physical bus edge. Other overlaps/active DMA/code visibility
+  and owned loop-end hazards remain visible refusals before device effects.
+- Directed candidate evidence covers400semantic/component vectors,13automatic
+  clock/FIFO cases,ten held-period continuations,seven new refusals and the
+  unchanged document prefix's first received P word/eight empty second-word
+  polls. Complete authentic ROM,second-word loader exit/first-stage,normal
+  instrument/MIDI/audio/storage/update/recovery and physical timing remain open.
+  See dsp-program-memory.txt.
+- Actual canonical strict all-target/format/clang-tidy gates pass;63affected
+  ASan/UBSan CTest groups and one separate TSan identity group pass,no skips.
+  Instrumentation/source guards,strict global ELF and the built TSan ELF pass.
+  This is scoped thread identity evidence,not the whole TSan ELF inventory.
+  Both profiles467groups/1086recipes retain all464prior complete contracts and
+  1082full compiler recipes. No fuzz,physical traffic or reference assets.

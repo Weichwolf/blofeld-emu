@@ -50,6 +50,11 @@ struct DspPipelineLoopSetup {
   bool held_decode = false;
 };
 
+struct DspPipelineProgramMemory {
+  DspFetchedWord captured;
+  unsigned remaining = 5;
+};
+
 struct DspInstructionPipeline {
   DspFetchPipeline profile = DspFetchPipeline::automatic_alu;
   DspPipelineView view;
@@ -65,13 +70,15 @@ struct DspInstructionPipeline {
   bool branch_target_ready = false;
   bool held_branch_decode = false;
   std::optional<DspPipelineLoopSetup> loop_setup = std::nullopt;
+  std::optional<DspPipelineProgramMemory> program_memory = std::nullopt;
+  bool held_program_memory = false;
 
   void prepare(const DspMachine &machine);
   void rebind(const DspMachine &machine);
   void capture_address(DspMachine &machine);
 
   [[nodiscard]] bool hold_fetch() const {
-    return branch_fetch_hold != 0 || held_branch_decode ||
+    return held_program_memory || branch_fetch_hold != 0 || held_branch_decode ||
            (loop_setup && (!loop_setup->target || loop_setup->held_decode));
   }
 
@@ -79,6 +86,9 @@ struct DspInstructionPipeline {
   void accept_loop_decode(DspMachine &machine);
   void capture_loop_target(DspMachine &machine);
   void capture_loop_f2(const DspReferenceCycleResult &bus);
+  void prepare_program_memory(const DspMachine &machine, std::optional<DspProgramWord> word);
+  void validate_program_decode(const DspMachine &machine, const DspPipelineCycle &cycle) const;
+  void complete_program_memory();
 
   [[nodiscard]] std::uint64_t peripheral_occurrence() const;
   void finish_cycle();

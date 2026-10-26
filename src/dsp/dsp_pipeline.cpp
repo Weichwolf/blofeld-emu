@@ -118,7 +118,9 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
   validate_stage_samples(view, samples);
   selected =
       select_pipeline_words(std::span(fetched).first(fetch.used), samples, extension_samples);
-  prepare_decode(*this, fetch, cycle);
+  prepare_program_memory(machine, cycle.execute1);
+  if (!held_program_memory) { prepare_decode(*this, fetch, cycle); }
+  validate_program_decode(machine, cycle);
   if (selected.ag1_extension) { cycle.ag1_extension = selected.ag1_extension->word; }
   cycle.e1_extension = extensions[1];
   validate_execute_word(fetch, cycle);
@@ -210,7 +212,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     view.awaiting_inputs.reset();
     view.awaiting_deferred_accumulators = 0;
   }
-  if (view.cycle.memory_source_stall) { return; }
+  if (view.cycle.memory_source_stall || held_program_memory) { return; }
   if (view.cycle.execute1) {
     if (bus.memory) {
       if (!bus.memory->progress.pending || bus.memory->address.word != *view.cycle.execute1) {
@@ -227,6 +229,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
       execute(machine);
     }
   }
+  complete_program_memory();
   capture_loop_target(machine);
   view.cycle.ag2_address = bus.address_update;
   capture_branch(machine);
@@ -336,6 +339,13 @@ std::uint64_t DspInstructionPipeline::peripheral_occurrence() const {
 }
 
 void DspInstructionPipeline::finish_cycle() {
+  if (held_program_memory) {
+    if (!program_memory || program_memory->remaining == 0) {
+      throw Fault("Held program-memory execution lost its actual latency owner");
+    }
+    --program_memory->remaining;
+    return;
+  }
   if (loop_setup && loop_setup->held_decode && loop_setup->decode_hold != 0) {
     --loop_setup->decode_hold;
   }

@@ -1,0 +1,52 @@
+Peripheral-to-program memory pipeline
+=====================================
+
+Selected one-word MOVEP peripheral->P:(Rn) forms use actual native AGU and
+peripheral/P-memory effects. High/low short I/O, X/Y sources,R0..R7 and five
+non-extension addressing modes are decoded. Reverse/extension forms remain
+unsupported. Actual R/N/M hazards precede the separate program-transfer latency.
+No host copy supplies the stored word or acknowledges a missing FIFO input.
+
+The automatic owner retains the real F2 occurrence through five extra E1 hold
+periods. Older retirement and an already issued F2 may finish;younger AGU,I/O
+and new F1 remain held. The native port/P pair then executes once,with E2 one
+period later. Generic unchanged NXP processor-model windows establish six
+instruction periods,consecutive costs and separate preceding R-source hazards.
+They do not measure physical per-clock bus sampling or prove chip equivalence.
+
+DSP56371UM7.4.3/7.4.6.15 specify that consuming the last HRX word clears HRNE.
+Only the selected older X:FFFF94->P transfer with a younger X:FFFF91 sample
+admits the three-access SHI overlap. The one genuine status read follows the
+older native FIFO/P effect. This logical subcycle order is an explicit model
+assumption supported by register semantics and the documented loader sequence;
+it is not a measured silicon edge. Other read/status combinations and active
+DMA refuse before request sampling or device effects. Existing completed-store
+forwarding remains separate. Status is never fabricated or sampled twice.
+
+Concurrent F2/P writes,writing already captured/issued code and placement at
+an owned loop's last instruction remain visible failures with PC/OMR context.
+The documented loader's trailing NOP satisfies the selected loop restriction.
+Trusted joint checkpoints retain all five hold positions without replaying a
+future FIFO read or P write. Broader self-modifying-code/cache/IRQ timelines
+and reverse transfers remain unqualified.
+
+Directed evidence:200 native staged and200 actual memory-component vectors,
+F2/DMA refusals,13 automatic timing/state/FIFO cases,ten held-period checkpoint
+continuations and seven code/loop/status/DMA refusal cases. CPU/frame,actual
+addresses,wire payload,once-only FIFO consumption and RAM expectations are
+independent literals. Ten additional unchanged generic-model windows compare
+103 state points. This is neither physical timing nor real-time acceptance.
+
+The optional SHA-pinned local165-byte document-derived prefix executes actual
+length/address reception,R0->R1,DO A0,the first SPI-payload/P write and eight
+subsequent empty second-word polls in two trusted continuations. It is not the
+complete authentic Blofeld mask ROM. Second-word completion,loader exit,actual
+first-stage continuation and full reset-to-instrument acceptance remain open.
+
+  cmake --build --preset strict --target blofeld-program-memory-test \
+    blofeld-program-memory-clock-test blofeld-program-memory-guard-test \
+    blofeld-loader-prefix-operand-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R \
+    '^(dsp_program_memory_(components|guards)|dsp_automatic_program_memory|dsp_document_spi_loader_operands)$'
+
+Firmware/reference assets and detailed manufacturer analysis stay local.

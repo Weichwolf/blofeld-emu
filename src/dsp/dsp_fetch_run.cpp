@@ -184,13 +184,16 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
     }
     const auto plan = state.plan(machine, inputs, result.native_starved);
     const bool switch_was_pending = machine.bus().switch_delay_ != 0;
-    result.bus = state.pipeline ? machine.advance_reference_bus_cycle_impl(
-                                      plan, state.pipeline->peripheral_occurrence())
-                                : machine.advance_reference_bus_cycle(plan);
+    result.bus =
+        state.pipeline
+            ? machine.advance_reference_bus_cycle_impl(
+                  plan, plan.peripheral_capture ? state.pipeline->peripheral_occurrence() : 0)
+            : machine.advance_reference_bus_cycle(plan);
     if (state.pipeline) { state.pipeline->complete(machine, result.bus); }
     const auto fetch = machine.reference_fetch();
     const bool source_stall = state.pipeline && (state.pipeline->view.cycle.memory_source_stall ||
-                                                 state.pipeline->view.cycle.agu_dependencies != 0);
+                                                 state.pipeline->view.cycle.agu_dependencies != 0 ||
+                                                 state.pipeline->held_program_memory);
     const bool branch_stall = state.pipeline && state.pipeline->hold_fetch();
     if (!result.bus.dma.core_stall && !source_stall && !branch_stall && !fetch.pending_address &&
         fetch.used < dsp_program_fetch_capacity) {

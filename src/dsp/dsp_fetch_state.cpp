@@ -86,6 +86,9 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
       result.fetch.reset();
       return result;
     }
+    // The first held period may finish a genuine pending F2. No new F1 is
+    // issued during the hold, so the eventual P-write owns the free P bus.
+    if (pipeline->held_program_memory) { return result; }
     if (pipeline->view.cycle.agu_dependencies != 0 || pipeline->held_branch_decode) {
       result.fetch.reset();
     }

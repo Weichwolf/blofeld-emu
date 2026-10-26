@@ -31,6 +31,20 @@
 
 namespace blofeld {
 namespace {
+constexpr unsigned shi_receive = 0xffff94;
+constexpr unsigned shi_status = 0xffff91;
+
+bool status_after_receive(const std::optional<DspAddressStageView> &memory,
+                          const std::optional<DspMemoryAccess> early) {
+  if (!memory || !early || memory->data_access_count != 2) { return false; }
+  const auto source = memory->data_accesses[0];
+  const auto destination = memory->data_accesses[1];
+  return source.target.space == DspSpace::x && source.target.address == shi_receive &&
+         source.operation == DspMemoryOperation::read && destination.target.space == DspSpace::p &&
+         destination.operation == DspMemoryOperation::write && early->target.space == DspSpace::x &&
+         early->target.address == shi_status;
+}
+
 struct RunState {
   std::optional<DspRunContract> contract;
   std::optional<DspRunClock> clock;
@@ -210,6 +224,24 @@ struct DspMachine::State {
     if (clock && (clock->faulted() || clock->active() ||
                   cpu.native_cycles() != clock->epoch_native_cycle_units())) {
       throw Fault("DSP checkpoint requires coordinated healthy reference clock counters");
+    }
+  }
+
+  void advance_reference_memory(const DspReferenceCycleInputs &inputs,
+                                DspReferenceCycleResult &result) {
+    // The older register source must be sampled before a younger AG2 R update.
+    // This is a selected reference phase order, not a silicon sampling claim.
+    if (inputs.memory) {
+      const auto view = cpu.address_stage(*inputs.memory);
+      if (view.kind == DspAddressStageKind::peripheral_register) {
+        result.memory = cpu.execute_reference_memory(*inputs.memory);
+      }
+    }
+    if (inputs.address_update) {
+      result.address_update = cpu.publish_reference_address(*inputs.address_update);
+    }
+    if (inputs.memory && !result.memory) {
+      result.memory = cpu.execute_reference_memory(*inputs.memory);
     }
   }
 
@@ -615,6 +647,7 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
   const auto pending = state_->cpu.reference_pending();
   const auto context = state_->cpu.state();
   DspReferenceCycleResult result;
+  bool capture_after_memory = false;
   try {
     if (inputs.peripheral_capture.has_value() != (capture_occurrence != 0)) {
       throw Fault("Pipeline peripheral capture requires its owned actual F2 occurrence");
@@ -640,6 +673,7 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
                            ? std::optional(state_->cpu.pipeline_peripheral_access(
                                  *inputs.peripheral_capture, capture_occurrence))
                            : std::nullopt;
+    capture_after_memory = status_after_receive(memory, early);
     result = reference_cycle_footprint(
         state_->bus, inputs, pending, state_->cpu.reference_fetch(), memory, early);
   } catch (const std::exception &error) {
@@ -653,7 +687,7 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
                      .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
     if (result.dma.core_stall) { return result; }
     if (inputs.fetch) { result.fetch = state_->cpu.advance_reference_fetch(*inputs.fetch); }
-    if (inputs.peripheral_capture) {
+    if (inputs.peripheral_capture && !capture_after_memory) {
       result.peripheral_read = state_->cpu.capture_pipeline_peripheral_read(
           {.address = *inputs.peripheral_capture, .epoch = inputs.dma.cycle}, capture_occurrence);
     }
@@ -661,16 +695,12 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
       result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);
     }
     if (inputs.access) { result.progress = state_->cpu.advance_reference_access(*inputs.access); }
-    // The older register source must be sampled before a younger AG2 R update.
-    // This is a selected reference phase order, not a silicon sampling claim.
-    const bool register_store = inputs.memory && state_->cpu.address_stage(*inputs.memory).kind ==
-                                                     DspAddressStageKind::peripheral_register;
-    if (register_store) { result.memory = state_->cpu.execute_reference_memory(*inputs.memory); }
-    if (inputs.address_update) {
-      result.address_update = state_->cpu.publish_reference_address(*inputs.address_update);
-    }
-    if (inputs.memory && !register_store) {
-      result.memory = state_->cpu.execute_reference_memory(*inputs.memory);
+    state_->advance_reference_memory(inputs, result);
+    // Selected logical subcycle order: a younger SHI status sample observes the
+    // older HRX/P-memory effect. This is not a measured silicon sampling edge.
+    if (inputs.peripheral_capture && capture_after_memory) {
+      result.peripheral_read = state_->cpu.capture_pipeline_peripheral_read(
+          {.address = *inputs.peripheral_capture, .epoch = inputs.dma.cycle}, capture_occurrence);
     }
     if (inputs.fetch) { result.fetch = state_->cpu.reference_fetch(); }
     return result;

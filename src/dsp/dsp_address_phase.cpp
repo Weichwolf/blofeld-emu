@@ -36,10 +36,13 @@ std::optional<unsigned> address_register(const std::uint32_t opcode) {
   if (opcodes.getInstructionTypes(opcode, first, second) == 0) {
     throw Fault("Undefined native address-phase opcode=" + hex(opcode, 6));
   }
-  // Fixed-port stores have no AGU address update; capture still validates all R values.
-  if (const auto form = decode_memory_stage(opcode); form && form->peripheral) {
-    return std::nullopt;
+  const auto form = decode_memory_stage(opcode);
+  if (form && is_program_transfer(*form)) {
+    const auto lane = form->lanes[0];
+    return lane.mode == 4 ? std::nullopt : std::optional(lane.reg);
   }
+  // Fixed-port stores have no AGU address update; capture still validates all R values.
+  if (form && form->peripheral) { return std::nullopt; }
   if (decode_peripheral_read(opcode)) { return std::nullopt; }
   const auto type = effective(first) || absolute(first) ? first : second;
   if (absolute(type)) { return std::nullopt; }

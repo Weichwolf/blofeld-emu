@@ -25,5 +25,7 @@ struct DspMemoryForm {
   bool peripheral_register = false;
 };
 
+[[nodiscard]] bool is_program_transfer(const DspMemoryForm &form);
+
 [[nodiscard]] std::optional<DspMemoryForm> decode_memory_stage(std::uint32_t opcode);
 }
