@@ -24,6 +24,7 @@ struct Hcs08BoardInputs {
   std::optional<Hcs08AdcReference> adc_reference;
   std::array<std::optional<std::uint32_t>, hcs08_adc::channels> analog{};
   std::optional<unsigned> timer_phase;
+  Hcs08BoardClockObservation reset_observation = Hcs08BoardClockObservation::unobserved;
 };
 
 struct Hcs08BoardState {
@@ -43,12 +44,14 @@ private:
                        const Hcs08Checkpoint &cpu,
                        const Hcs08BdcCheckpoint &bdc,
                        const Hcs08RunCheckpoint &clock,
-                       Hcs08BoardState state);
+                       Hcs08BoardState state,
+                       Hcs08RtiIrqContract rti);
   Hcs08BoardMemory memory_;
   Hcs08Checkpoint cpu_;
   Hcs08BdcCheckpoint bdc_;
   Hcs08RunCheckpoint clock_;
   Hcs08BoardState state_;
+  Hcs08RtiIrqContract rti_;
 };
 
 struct Hcs08BoardResetRequest {
@@ -70,10 +73,12 @@ private:
   friend class Hcs08Board;
   Hcs08BoardResetCheckpoint(Hcs08BoardMemory memory,
                             std::optional<Hcs08Checkpoint> cpu,
-                            Hcs08BoardResetRequest request);
+                            Hcs08BoardResetRequest request,
+                            Hcs08RtiIrqContract rti);
   Hcs08BoardMemory memory_;
   std::optional<Hcs08Checkpoint> cpu_;
   Hcs08BoardResetRequest request_;
+  Hcs08RtiIrqContract rti_;
 };
 
 // Native CPU,actual target memory and BDC share one reference-period owner.
@@ -81,13 +86,16 @@ private:
 // supplied. Each caller-provided period advances devices before CPU retirement.
 class Hcs08Board {
 public:
-  [[nodiscard]] static Hcs08BoardResetCheckpoint power_on_checkpoint(const Hcs08FlashImage &image,
-                                                                     Hcs08BoardContract contract,
-                                                                     Hcs08ResetEntry entry);
+  [[nodiscard]] static Hcs08BoardResetCheckpoint
+  power_on_checkpoint(const Hcs08FlashImage &image,
+                      Hcs08BoardContract contract,
+                      Hcs08ResetEntry entry,
+                      Hcs08RtiIrqContract rti = Hcs08RtiIrqContract::unqualified);
   Hcs08Board(const Hcs08FlashImage &image,
              const std::filesystem::path &specification,
              Hcs08BoardContract contract,
-             const Hcs08BoardInputs &inputs);
+             const Hcs08BoardInputs &inputs,
+             Hcs08RtiIrqContract rti = Hcs08RtiIrqContract::unqualified);
   Hcs08Board(const Hcs08BoardCheckpoint &checkpoint, const std::filesystem::path &specification);
   Hcs08Board(const Hcs08BoardResetCheckpoint &checkpoint,
              const std::filesystem::path &specification,
@@ -95,7 +103,8 @@ public:
   Hcs08Board(const Hcs08Board &) = delete;
   Hcs08Board &operator=(const Hcs08Board &) = delete;
   void attach_pad_source(Hcs08GpioPort port, GpioPadReader reader);
-  void advance_reference_period();
+  void advance_reference_period(
+      Hcs08BoardClockObservation observation = Hcs08BoardClockObservation::unobserved);
   void receive_bdc(std::uint8_t byte);
   // Explicit byte-service boundary only;no pin encoding or physical grant is supplied.
   void service_bdc(Hcs08BdcGrant grant);
@@ -112,6 +121,14 @@ public:
 
 private:
   friend class Hcs08BoardWire;
+  friend class Hcs08BoardSerial;
+  static Hcs08 &
+  reset_image_cpu(Hcs08 &cpu, Hcs08BoardMemory &memory, Hcs08BoardClockObservation observation);
+  static Hcs08 &reset_checkpoint_cpu(Hcs08 &cpu,
+                                     Hcs08BoardMemory &memory,
+                                     const std::optional<Hcs08Checkpoint> &before,
+                                     const Hcs08BoardResetRequest &request,
+                                     Hcs08BoardClockObservation observation);
   void healthy(const std::string &operation) const;
   [[noreturn]] void fail(const std::string &operation, const std::string &reason) const;
   Hcs08BoardMemory memory_;
@@ -119,6 +136,7 @@ private:
   Hcs08Bdc bdc_;
   Hcs08RunClock clock_;
   Hcs08BoardState state_;
+  Hcs08RtiIrqContract rti_ = Hcs08RtiIrqContract::unqualified;
   bool healthy_ = true;
 };
 } // namespace blofeld

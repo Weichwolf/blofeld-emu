@@ -2614,6 +2614,27 @@ Production Keyboard upload/GO and asynchronous status:
   it does not resolve the whole-caller LCD/long-low ambiguity or establish
   normal boot,MIDI/audio,FLASH completion,update/recovery or physical timing.
 
+Production HCS08 CPU/SPI ownership:
+- Trusted complete board boundaries retain native memory/CPU/BDC and move into
+  actual IRQ/prefetch/SPI-divider ownership. COP/TPM/ADC advance first;both
+  CPU/SPI orders and one/two-stage launch references require explicit choices.
+  Sixteen real edges form bytes;no target registers,RAM or RX byte is injected.
+- Directed own-code scope checks24 full TX/RX cases,64 fresh joint suffixes,
+  eight logical resets during active transfers and24 refusals/profile. Unknown
+  MISO/history,actual clock faults and eligible default-RTI ambiguity preserve
+  real earlier effects,including an SPI completion before a later CPU failure.
+- Reset-entry/whole-period fault observations are explicit;default unknown
+  histories stay conservative. no_fault never supplies live LOCK/CLKST or
+  erases past uncertainty. Untimed access still admits no clock observations.
+  Exact phases,original firmware SPI consumption,normal boot/MIDI/audio and
+  physical/update/recovery equivalence remain open. See hcs08-board-serial.txt.
+- Canonical strict all-target/format/55AST contexts pass;13ASan/UBSan and12TSan
+  CTest groups pass,no skips,ten native programs/profile. Original reset/
+  startup/upload prefixes retain their strict endpoints. Instrumentation/
+  source guards,strict global ELF and ten built TSan ELF checks pass;whole
+  TSan ELF inventory stays unqualified. Counts472/1093 retain all471/1091prior
+  complete contracts. Sanitizer reset/upload traces match.
+
 Automatic native peripheral-to-P memory transfers:
 - Actual captured one-word MOVEP uses native AGU/port/P effects and five extra
   E1 hold periods. Independent unchanged processor-model windows establish six

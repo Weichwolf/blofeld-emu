@@ -51,7 +51,7 @@ std::uint8_t Hcs08BoardMemory::read_peripheral(const std::uint16_t address) {
   }
   if (Hcs08Spi::contains(address)) {
     const auto spi = spi_.state();
-    if ((spi.active || spi.transmit) &&
+    if (!serial_period_owned_ && (spi.active || spi.transmit) &&
         (address == hcs08_spi::status || address == hcs08_spi::data)) {
       fail("read", address, "live SPI requires qualified transfer and serial clock ownership");
     }

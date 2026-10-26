@@ -13,19 +13,25 @@
 #include <utility>
 
 namespace blofeld {
-namespace {
-Hcs08 &reset_cpu(Hcs08 &cpu,
-                 const std::optional<Hcs08Checkpoint> &before,
-                 const Hcs08BoardResetRequest &request) {
+Hcs08 &Hcs08Board::reset_checkpoint_cpu(Hcs08 &cpu,
+                                        Hcs08BoardMemory &memory,
+                                        const std::optional<Hcs08Checkpoint> &before,
+                                        const Hcs08BoardResetRequest &request,
+                                        const Hcs08BoardClockObservation observation) {
   if (before) { cpu.restore_checkpoint(*before); }
+  if (observation != Hcs08BoardClockObservation::unobserved) {
+    memory.observe_clock_interval(observation);
+    memory.observed_cpu_period_ = true;
+  }
   cpu.reset(request.entry, request.cause);
+  memory.observed_cpu_period_ = false;
   return cpu;
 }
-} // namespace
 
 Hcs08BoardResetCheckpoint Hcs08Board::power_on_checkpoint(const Hcs08FlashImage &image,
                                                           const Hcs08BoardContract contract,
-                                                          const Hcs08ResetEntry entry) {
+                                                          const Hcs08ResetEntry entry,
+                                                          const Hcs08RtiIrqContract rti) {
   if (contract != Hcs08BoardContract::candidate_gt8a_reference_retirement ||
       (entry != Hcs08ResetEntry::normal && entry != Hcs08ResetEntry::active_background)) {
     throw Fault("HCS08 board power-on address=0xfffe pc=unknown agent=CPU: explicit board/reset "
@@ -35,13 +41,15 @@ Hcs08BoardResetCheckpoint Hcs08Board::power_on_checkpoint(const Hcs08FlashImage 
   constexpr unsigned power_on_status = 0x80;
   return {std::move(memory),
           std::nullopt,
-          {.cause = Hcs08ResetCause::power_on, .entry = entry, .reset_sources = power_on_status}};
+          {.cause = Hcs08ResetCause::power_on, .entry = entry, .reset_sources = power_on_status},
+          rti};
 }
 
 Hcs08BoardResetCheckpoint::Hcs08BoardResetCheckpoint(Hcs08BoardMemory memory,
                                                      std::optional<Hcs08Checkpoint> cpu,
-                                                     const Hcs08BoardResetRequest request)
-    : memory_(std::move(memory)), cpu_(std::move(cpu)), request_(request) {}
+                                                     const Hcs08BoardResetRequest request,
+                                                     const Hcs08RtiIrqContract rti)
+    : memory_(std::move(memory)), cpu_(std::move(cpu)), request_(request), rti_(rti) {}
 
 Hcs08BoardResetCheckpoint
 Hcs08Board::reset_checkpoint(const Hcs08BoardResetRequest &request) const {
@@ -65,21 +73,23 @@ Hcs08Board::reset_checkpoint(const Hcs08BoardResetRequest &request) const {
                                                                       : Hcs08IcgReset::warm,
                            request.reset_sources,
                            request.retention);
-  return {std::move(memory), before, request};
+  return {std::move(memory), before, request, rti_};
 }
 
 Hcs08Board::Hcs08Board(const Hcs08BoardResetCheckpoint &checkpoint,
                        const std::filesystem::path &specification,
                        const Hcs08BoardInputs &inputs)
     : memory_(checkpoint.memory_),
-      cpu_(memory_, specification),
-      bdc_(reset_cpu(cpu_, checkpoint.cpu_, checkpoint.request_),
+      cpu_(memory_, specification, checkpoint.rti_),
+      bdc_(reset_checkpoint_cpu(
+               cpu_, memory_, checkpoint.cpu_, checkpoint.request_, inputs.reset_observation),
            memory_,
            Hcs08FlashContract::candidate_gt8a,
            checkpoint.request_.entry == Hcs08ResetEntry::active_background
                ? Hcs08BdcReset::bkgd_held_low
                : Hcs08BdcReset::normal),
-      clock_(memory_, bdc_, Hcs08RunContract::reference_instruction_retirement) {
+      clock_(memory_, bdc_, Hcs08RunContract::reference_instruction_retirement),
+      rti_(checkpoint.rti_) {
   if (inputs.adc_reference) { memory_.observe_adc_reference(*inputs.adc_reference); }
   for (unsigned channel = 0; channel < inputs.analog.size(); ++channel) {
     if (inputs.analog[channel]) { memory_.observe_adc_input(channel, inputs.analog[channel]); }

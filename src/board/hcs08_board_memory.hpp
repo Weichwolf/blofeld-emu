@@ -27,6 +27,16 @@ enum class Hcs08BoardMemoryContract : std::uint8_t {
   candidate_gt8a_reference_bus
 };
 
+// Caller-observed fault events over one entire supplied BUSCLK interval.
+// no_fault does not establish LOCK,CLKST,frequency or other live status bits.
+enum class Hcs08BoardClockObservation : std::uint8_t {
+  unobserved,
+  no_fault,
+  loss_of_lock,
+  loss_of_clock,
+  loss_of_clock_and_lock
+};
+
 struct Hcs08BoardPeriods {
   std::uint64_t attempted = 0, completed = 0, cop_services = 0;
   std::uint8_t service_known = Hcs08KnownByte::all;
@@ -48,7 +58,9 @@ public:
   void attach_pad_source(Hcs08GpioPort port, GpioPadReader reader);
   // Supplied reference periods order COP,TPM,ADC before native CPU retirement.
   // No oscillator or physical MMIO/arbitration contract is established.
-  void advance_reference_bus(ExecutionContext context);
+  void advance_reference_bus(
+      ExecutionContext context,
+      Hcs08BoardClockObservation observation = Hcs08BoardClockObservation::unobserved);
   void observe_adc_reference(Hcs08AdcReference reference);
   void observe_adc_input(unsigned channel, std::optional<std::uint32_t> microvolts);
   void observe_timer_phase(unsigned phase);
@@ -86,8 +98,12 @@ public:
   static constexpr unsigned ram_first = 0x80, ram_end = 0x480, ram_bytes = ram_end - ram_first;
 
 private:
+  friend class Hcs08BoardSerial;
+  friend class Hcs08Board;
+  bool serial_period_owned_ = false, observed_cpu_period_ = false;
   void healthy(const std::string &operation, unsigned address) const;
   void set_context(ExecutionContext context);
+  void observe_clock_interval(Hcs08BoardClockObservation observation);
   void data_access(const std::string &operation, unsigned address) const;
   void change(unsigned address);
   [[nodiscard]] std::uint8_t read_peripheral(std::uint16_t address);

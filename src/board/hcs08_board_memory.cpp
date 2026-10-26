@@ -67,6 +67,8 @@ void Hcs08BoardMemory::reset_peripherals(const Hcs08IcgReset cause,
   adc_.reset();
   timer_.reset();
   if (cause == Hcs08IcgReset::power_on) { ram_.fill({.known = 0}); }
+  serial_period_owned_ = false;
+  observed_cpu_period_ = false;
   periods_ = {};
   healthy_ = true;
 }
@@ -201,7 +203,7 @@ void Hcs08BoardMemory::begin_instruction(const ExecutionContext context) {
   data_access("begin instruction", context.pc);
   healthy_ = false;
   set_context(context);
-  history_.unobserved_interval();
+  if (!observed_cpu_period_) { history_.unobserved_interval(); }
   if (history_.action(true) == Hcs08IcgFaultAction::reset || cop_.state().reset_requested) {
     fail(
         "begin instruction", context.pc, "pending reset requires coordinated CPU/peripheral reset");

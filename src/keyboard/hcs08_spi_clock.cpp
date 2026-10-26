@@ -18,6 +18,13 @@ Hcs08SpiClock::Hcs08SpiClock(Hcs08Spi &spi, const Hcs08SpiClockContract contract
   check_phase({});
 }
 
+Hcs08SpiClock::Hcs08SpiClock(Hcs08Spi &spi,
+                             const Hcs08SpiClockCheckpoint &checkpoint,
+                             const ExecutionContext context)
+    : spi_(spi) {
+  restore_checkpoint(checkpoint, context);
+}
+
 [[noreturn]] void Hcs08SpiClock::fail(const ExecutionContext context,
                                       const std::string &reason,
                                       const unsigned address) const {

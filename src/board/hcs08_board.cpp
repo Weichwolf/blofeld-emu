@@ -26,32 +26,45 @@ Hcs08BoardMemoryContract memory_contract(const Hcs08BoardContract contract) {
   return Hcs08BoardMemoryContract::candidate_gt8a_reference_bus;
 }
 
-Hcs08 &reset(Hcs08 &cpu) {
-  cpu.reset(Hcs08ResetEntry::normal, Hcs08ResetCause::power_on);
-  return cpu;
-}
-
 Hcs08 &restore(Hcs08 &cpu, const Hcs08Checkpoint &checkpoint) {
   cpu.restore_checkpoint(checkpoint);
   return cpu;
 }
 } // namespace
 
+Hcs08 &Hcs08Board::reset_image_cpu(Hcs08 &cpu,
+                                   Hcs08BoardMemory &memory,
+                                   const Hcs08BoardClockObservation observation) {
+  if (observation != Hcs08BoardClockObservation::unobserved) {
+    memory.observe_clock_interval(observation);
+    memory.observed_cpu_period_ = true;
+  }
+  cpu.reset(Hcs08ResetEntry::normal, Hcs08ResetCause::power_on);
+  memory.observed_cpu_period_ = false;
+  return cpu;
+}
+
 Hcs08BoardCheckpoint::Hcs08BoardCheckpoint(Hcs08BoardMemory memory,
                                            const Hcs08Checkpoint &cpu,
                                            const Hcs08BdcCheckpoint &bdc,
                                            const Hcs08RunCheckpoint &clock,
-                                           const Hcs08BoardState state)
-    : memory_(std::move(memory)), cpu_(cpu), bdc_(bdc), clock_(clock), state_(state) {}
+                                           const Hcs08BoardState state,
+                                           const Hcs08RtiIrqContract rti)
+    : memory_(std::move(memory)), cpu_(cpu), bdc_(bdc), clock_(clock), state_(state), rti_(rti) {}
 
 Hcs08Board::Hcs08Board(const Hcs08FlashImage &image,
                        const std::filesystem::path &specification,
                        const Hcs08BoardContract contract,
-                       const Hcs08BoardInputs &inputs)
+                       const Hcs08BoardInputs &inputs,
+                       const Hcs08RtiIrqContract rti)
     : memory_(image, memory_contract(contract)),
-      cpu_(memory_, specification),
-      bdc_(reset(cpu_), memory_, Hcs08FlashContract::candidate_gt8a, Hcs08BdcReset::normal),
-      clock_(memory_, bdc_, Hcs08RunContract::reference_instruction_retirement) {
+      cpu_(memory_, specification, rti),
+      bdc_(reset_image_cpu(cpu_, memory_, inputs.reset_observation),
+           memory_,
+           Hcs08FlashContract::candidate_gt8a,
+           Hcs08BdcReset::normal),
+      clock_(memory_, bdc_, Hcs08RunContract::reference_instruction_retirement),
+      rti_(rti) {
   if (inputs.adc_reference) { memory_.observe_adc_reference(*inputs.adc_reference); }
   for (unsigned channel = 0; channel < inputs.analog.size(); ++channel) {
     if (inputs.analog[channel]) { memory_.observe_adc_input(channel, inputs.analog[channel]); }
@@ -62,13 +75,14 @@ Hcs08Board::Hcs08Board(const Hcs08FlashImage &image,
 Hcs08Board::Hcs08Board(const Hcs08BoardCheckpoint &checkpoint,
                        const std::filesystem::path &specification)
     : memory_(checkpoint.memory_),
-      cpu_(memory_, specification),
+      cpu_(memory_, specification, checkpoint.rti_),
       bdc_(restore(cpu_, checkpoint.cpu_),
            memory_,
            Hcs08FlashContract::candidate_gt8a,
            Hcs08BdcReset::normal),
       clock_(memory_, bdc_, Hcs08RunContract::reference_instruction_retirement),
-      state_(checkpoint.state_) {
+      state_(checkpoint.state_),
+      rti_(checkpoint.rti_) {
   bdc_.restore_checkpoint(checkpoint.bdc_);
   clock_.restore_checkpoint(checkpoint.clock_);
 }
@@ -78,7 +92,7 @@ void Hcs08Board::attach_pad_source(const Hcs08GpioPort port, GpioPadReader reade
   memory_.attach_pad_source(port, std::move(reader));
 }
 
-void Hcs08Board::advance_reference_period() {
+void Hcs08Board::advance_reference_period(const Hcs08BoardClockObservation observation) {
   healthy("reference period");
   healthy_ = false;
   if (state_.phase != Hcs08BoardPhase::boundary || bdc_.state().active) {
@@ -91,13 +105,15 @@ void Hcs08Board::advance_reference_period() {
   }
   ++state_.attempted_periods;
   state_.phase = Hcs08BoardPhase::devices;
+  memory_.observed_cpu_period_ = observation != Hcs08BoardClockObservation::unobserved;
   try {
-    memory_.advance_reference_bus({.pc = cpu.pc, .ccr = cpu.ccr});
+    memory_.advance_reference_bus({.pc = cpu.pc, .ccr = cpu.ccr}, observation);
     state_.phase = Hcs08BoardPhase::cpu;
     clock_.advance();
   } catch (const Fault &error) {
     fail("reference period", "source detail: " + std::string(error.what()));
   }
+  memory_.observed_cpu_period_ = false;
   ++state_.completed_periods;
   state_.phase = Hcs08BoardPhase::boundary;
   healthy_ = true;
@@ -137,7 +153,7 @@ Hcs08BoardCheckpoint Hcs08Board::checkpoint() const {
     fail("checkpoint", "no successful snapshot of a partially completed board period");
   }
   // Copying the const source into the value parameter detaches external pad callbacks.
-  return {memory_, cpu_.checkpoint(), bdc_.checkpoint(), clock_.checkpoint(), state_};
+  return {memory_, cpu_.checkpoint(), bdc_.checkpoint(), clock_.checkpoint(), state_, rti_};
 }
 
 void Hcs08Board::healthy(const std::string &operation) const {

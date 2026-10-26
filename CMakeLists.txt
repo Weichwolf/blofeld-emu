@@ -150,6 +150,9 @@ target_link_libraries(blofeld_hcs08_board PUBLIC blofeld_hcs08_board_memory blof
 add_library(blofeld_hcs08_board_wire src/board/hcs08_board_wire.cpp)
 target_include_directories(blofeld_hcs08_board_wire PUBLIC src)
 target_link_libraries(blofeld_hcs08_board_wire PUBLIC blofeld_hcs08_board blofeld_hcs08_bdc_wire)
+add_library(blofeld_hcs08_board_serial src/board/hcs08_board_serial.cpp)
+target_include_directories(blofeld_hcs08_board_serial PUBLIC src)
+target_link_libraries(blofeld_hcs08_board_serial PUBLIC blofeld_hcs08_board blofeld_hcs08_spi_run_clock)
 add_library(blofeld_private_files src/storage/private_file.cpp)
 target_include_directories(blofeld_private_files PUBLIC src)
 target_link_libraries(blofeld_private_files PUBLIC blofeld_firmware)
@@ -369,6 +372,12 @@ if(BUILD_TESTING)
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_board_status COMMAND blofeld-hcs08-board-status-test)
   set_tests_properties(hcs08_board_status PROPERTIES TIMEOUT 90)
+  add_executable(blofeld-hcs08-board-serial-test test/hcs08_board_serial_test.cpp)
+  target_link_libraries(blofeld-hcs08-board-serial-test PRIVATE blofeld_hcs08_board_serial)
+  target_compile_definitions(blofeld-hcs08-board-serial-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_board_serial COMMAND blofeld-hcs08-board-serial-test)
+  set_tests_properties(hcs08_board_serial PROPERTIES TIMEOUT 120)
   add_executable(blofeld-original-keyboard-board-upload-test
     test/original_keyboard_board_upload_test.cpp test/keyboard_board_upload_fixture.cpp)
   target_link_libraries(blofeld-original-keyboard-board-upload-test PRIVATE
@@ -2901,6 +2910,7 @@ add_custom_target(quality
     blofeld-hcs08-board-reset-test blofeld-original-hcs08-board-reset-test
     blofeld-hcs08-board-wire-test blofeld-original-keyboard-board-reset-test
     blofeld-hcs08-board-status-test blofeld-original-keyboard-board-upload-test
+    blofeld-hcs08-board-serial-test
     blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
     blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test
     blofeld-hcs08-rmw-cycle-test blofeld-original-hcs08-modify-test

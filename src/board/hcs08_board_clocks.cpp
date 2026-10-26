@@ -15,7 +15,8 @@
 #include <optional>
 
 namespace blofeld {
-void Hcs08BoardMemory::advance_reference_bus(const ExecutionContext context) {
+void Hcs08BoardMemory::advance_reference_bus(const ExecutionContext context,
+                                             const Hcs08BoardClockObservation observation) {
   data_access("reference bus period", hcs08_icg::status1);
   healthy_ = false;
   set_context(context);
@@ -28,7 +29,7 @@ void Hcs08BoardMemory::advance_reference_bus(const ExecutionContext context) {
     fail("clock", hcs08_icg::status1, "reference period horizon exhausted");
   }
   ++periods_.attempted;
-  history_.unobserved_interval();
+  observe_clock_interval(observation);
   if (history_.action(true) == Hcs08IcgFaultAction::reset) {
     fail("clock", hcs08_icg::status1, "pending ICG reset requires coordinated board handling");
   }
@@ -38,7 +39,7 @@ void Hcs08BoardMemory::advance_reference_bus(const ExecutionContext context) {
   timer_.advance_bus(1);
   adc_.advance_bus(1);
   const auto spi = spi_.state();
-  if (spi.active || spi.transmit) {
+  if ((spi.active || spi.transmit) && !serial_period_owned_) {
     fail(
         "clock", hcs08_spi::status, "SPI promotion/serial clock and pad ownership are unqualified");
   }
@@ -48,6 +49,29 @@ void Hcs08BoardMemory::advance_reference_bus(const ExecutionContext context) {
   }
   ++periods_.completed;
   healthy_ = true;
+}
+
+void Hcs08BoardMemory::observe_clock_interval(const Hcs08BoardClockObservation observation) {
+  if (observation == Hcs08BoardClockObservation::unobserved) {
+    history_.unobserved_interval();
+    return;
+  }
+  // An observed interval still invalidates unobserved instantaneous status.
+  history_.observe({});
+  switch (observation) {
+    case Hcs08BoardClockObservation::no_fault: return;
+    case Hcs08BoardClockObservation::loss_of_lock:
+      history_.signal(Hcs08IcgFault::loss_of_lock);
+      return;
+    case Hcs08BoardClockObservation::loss_of_clock:
+      history_.signal(Hcs08IcgFault::loss_of_clock);
+      return;
+    case Hcs08BoardClockObservation::loss_of_clock_and_lock:
+      history_.signal(Hcs08IcgFault::loss_of_clock_and_lock);
+      return;
+    case Hcs08BoardClockObservation::unobserved:
+    default: fail("clock observation", hcs08_icg::status1, "unknown interval observation");
+  }
 }
 
 void Hcs08BoardMemory::observe_adc_reference(const Hcs08AdcReference reference) {

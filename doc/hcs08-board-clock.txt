@@ -16,6 +16,12 @@ budget period. SPI promotion/serial clocks,FLASH completion and active-backgroun
 clock gating remain strict. Any device,CPU or transport failure quarantines the
 whole board;further edges and successful snapshots refuse.
 
+The separate production CPU/SPI owner is described in hcs08-board-serial.txt.
+Reset-entry and per-period clock-fault observations are explicit;their default
+stays unobserved and never supplies live LOCK/CLKST. A later no-fault interval
+cannot remove earlier unknown latches. RTI policy defaults to unqualified and
+is retained by whole-board/reset copies. Ordinary SPI clock ownership stays strict.
+
 Opaque in-process checkpoints copy RAM/NVM,peripherals,CPU,BDC,partial native
 reservations and period counters. Fresh owners must reattach external GPIO
 observations. Own literal programs check2/3/1-cycle LDA/STA/NOP effects and flags,

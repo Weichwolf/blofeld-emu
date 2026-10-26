@@ -41,6 +41,7 @@ class Hcs08SpiClock {
 public:
   explicit Hcs08SpiClock(Hcs08Spi &spi,
                          Hcs08SpiClockContract contract = Hcs08SpiClockContract::unqualified);
+  Hcs08SpiClock(Hcs08Spi &spi, const Hcs08SpiClockCheckpoint &checkpoint, ExecutionContext context);
   Hcs08SpiClock(const Hcs08SpiClock &) = delete;
   Hcs08SpiClock &operator=(const Hcs08SpiClock &) = delete;
   // An explicit owner selects this promotion boundary; idle periods never do.
