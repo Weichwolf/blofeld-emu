@@ -147,6 +147,9 @@ target_link_libraries(blofeld_hcs08_board_memory PUBLIC blofeld_hcs08_gpio
 add_library(blofeld_hcs08_board src/board/hcs08_board.cpp src/board/hcs08_board_reset.cpp)
 target_include_directories(blofeld_hcs08_board PUBLIC src)
 target_link_libraries(blofeld_hcs08_board PUBLIC blofeld_hcs08_board_memory blofeld_hcs08_run_clock)
+add_library(blofeld_hcs08_board_wire src/board/hcs08_board_wire.cpp)
+target_include_directories(blofeld_hcs08_board_wire PUBLIC src)
+target_link_libraries(blofeld_hcs08_board_wire PUBLIC blofeld_hcs08_board blofeld_hcs08_bdc_wire)
 add_library(blofeld_private_files src/storage/private_file.cpp)
 target_include_directories(blofeld_private_files PUBLIC src)
 target_link_libraries(blofeld_private_files PUBLIC blofeld_firmware)
@@ -339,6 +342,27 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-board-resets.trace")
   set_tests_properties(original_hcs08_board_resets PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  add_executable(blofeld-hcs08-board-wire-test test/hcs08_board_wire_test.cpp)
+  target_link_libraries(blofeld-hcs08-board-wire-test PRIVATE blofeld_hcs08_board_wire)
+  target_compile_definitions(blofeld-hcs08-board-wire-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_board_wire COMMAND blofeld-hcs08-board-wire-test)
+  set_tests_properties(hcs08_board_wire PROPERTIES TIMEOUT 90)
+  add_executable(blofeld-original-keyboard-board-reset-test
+    test/original_keyboard_board_reset_test.cpp test/keyboard_board_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-board-reset-test PRIVATE
+    blofeld_hcs08_board_wire blofeld_hcs08_reset blofeld_core)
+  target_compile_definitions(blofeld-original-keyboard-board-reset-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_keyboard_board_reset COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_keyboard_board_reset.py"
+    $<TARGET_FILE:blofeld-original-keyboard-board-reset-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-keyboard-board-reset.trace")
+  set_tests_properties(original_keyboard_board_reset PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 420)
   add_executable(blofeld-hcs08-arithmetic-test test/hcs08_arithmetic_test.cpp)
   target_link_libraries(blofeld-hcs08-arithmetic-test PRIVATE blofeld_hcs08)
   target_compile_definitions(blofeld-hcs08-arithmetic-test PRIVATE
@@ -2849,6 +2873,7 @@ add_custom_target(quality
     blofeld-hcs08-board-memory-test blofeld-original-hcs08-board-memory-test
     blofeld-hcs08-board-test blofeld-original-hcs08-board-test
     blofeld-hcs08-board-reset-test blofeld-original-hcs08-board-reset-test
+    blofeld-hcs08-board-wire-test blofeld-original-keyboard-board-reset-test
     blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
     blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test
     blofeld-hcs08-rmw-cycle-test blofeld-original-hcs08-modify-test

@@ -1,0 +1,42 @@
+Production Keyboard BKGD and native reset/SYNC ownership
+
+  cmake --build --preset strict --target blofeld-hcs08-board-wire-test \
+    blofeld-original-keyboard-board-reset-test
+  ctest --preset strict -j1 -R '^(hcs08_board_wire|original_keyboard_board_reset)$' --output-on-failure
+
+Hcs08BoardWire owns production memory,CPU,BDC and the actual bit transport.
+Callers supply separate BDC edges and BUSCLK periods;no ratio,physical rate or
+active-background BUSCLK gating is inferred. There is no direct byte bypass.
+Native command deadlines require a complete target instruction boundary;even
+then running-memory arbitration stays strict. Driver/target/device failures
+quarantine the whole owner. Joint snapshots retain CPU reservations,partial
+bits,replies,time and memory;GPIO callbacks detach. Explicit reset discards wire
+ownership. First BKGD-low power-on supports unknown vectors without assigning PC.
+
+Literal gates cover every byte,secure/unknown-SEC RAM access,pending-service
+refusal,driver collision,timeout,wire-written PC/GO/native RAM instructions and
+fresh partial-bit/reply/CPU-budget/GPIO continuations. Unknown vector erase
+history stays unknown;an inconsistent own preimage is retained as a raw finding.
+
+Original HC12 helper:1018 unchanged local bytes beneath an own native JSR caller.
+Actual PE7/PB1 writes drive nominal reset and BKGD;actual TIM reads determine
+SYNC acceptance. Three cases,two accepted /4 and one rejected /64,retire1086885
+HC12 instructions and zero HCS08 instructions. Six fresh whole-owner suffixes
+match. Reset yields actual unknown A/X/PC,SP00FF,CCR knowledge68 and native C8;
+all1024 target RAM masks remain unknown and the declared NVM stays exact. The
+collector retains the old reset/GPIO/TIM/SYNC/return/replay oracle and independently
+checks new native register knowledge,including11 fixed wrong-state controls.
+
+Inputs remain declared:own target preimage/initial BKGD mode,nominal34/38/six
+reset-edge contract,4MHz BDC cadence/two phases,locked30MHz host,/4 or/64 TIM,
+other PE/PB inputs and ideal pulls. Only BDC time advances while active;target
+BUSCLK/peripheral/debug gating remains unqualified. No full MCU startup,complete
+upload/programmer/SMF/DSP chain,FLASH completion,normal boot,physical timing or
+hardware equivalence is established. Canonical strict all-target build/global
+format and54 project compiler/AST contexts pass. Seven ASan/UBSan and six
+separate TSan CTest groups pass,no skips,including four native programs/profile.
+Dependency/source guards,strict global ELF and the four built TSan ELF checks
+pass;the full TSan ELF inventory stays unqualified. Three collector CLI negatives
+pass. Registration464/1082 preserves462definitions/1078recipes per profile.
+BKGD errors identify the BDC agent,target PC knowledge,pin and actual wire time.
+No fuzz/physical traffic.

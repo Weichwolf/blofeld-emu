@@ -2573,3 +2573,21 @@ Production Keyboard reference-period ownership and coordinated resets:
   recipe counts462/1078 preserve all458/1070 prior entries per profile.
 - Physical timing,full MCU/DSP/Keyboard wiring and normal instrument/MIDI/
   audio/storage/update/recovery remain open. See hcs08-board-{clock,reset}.txt.
+
+Production BKGD wire ownership:
+- Real CPU/memory/BDC and native pulses share quarantine/joint snapshots.
+  Command deadlines cannot consume pending instruction budgets or invent
+  running-memory arbitration. First BKGD-low power-on needs no known vector.
+- Actual PE7/PB1 reset/SYNC executes1086885 original HC12 instructions,three
+  cases and six fresh joint suffixes. Target PC/A/X remain unknown and target
+  execution stays held;SRAM masks/NVM remain exact. Eleven directed collector
+  controls and three CLI failures pass. Sanitizer traces are identical.
+- Canonical strict all-target build/global format/54project AST contexts
+  pass;7ASan/UBSan and6separateTSan CTest groups,no skips,cover four native
+  programs/profile. Instrumentation/source guards,strict global ELF and four
+  built TSan ELF checks pass. Counts464/1082 preserve all462/1078 old entries.
+  The full TSan ELF inventory stays unqualified. BKGD diagnostics retain BDC
+  ownership,target PC knowledge,pin and wire time. Existing Board/reset fields
+  and method bodies stay exact;unchanged long startup was not replayed.
+- Physical timing,active-background BUSCLK,full upload/SMF/DSP/FLASH chain,
+  normal boot/MIDI/audio/update/recovery remain open. See hcs08-board-wire.txt.

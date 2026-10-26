@@ -81,6 +81,9 @@ private:
 // supplied. Each caller-provided period advances devices before CPU retirement.
 class Hcs08Board {
 public:
+  [[nodiscard]] static Hcs08BoardResetCheckpoint power_on_checkpoint(const Hcs08FlashImage &image,
+                                                                     Hcs08BoardContract contract,
+                                                                     Hcs08ResetEntry entry);
   Hcs08Board(const Hcs08FlashImage &image,
              const std::filesystem::path &specification,
              Hcs08BoardContract contract,
@@ -108,6 +111,7 @@ public:
   [[nodiscard]] bool faulted() const;
 
 private:
+  friend class Hcs08BoardWire;
   void healthy(const std::string &operation) const;
   [[noreturn]] void fail(const std::string &operation, const std::string &reason) const;
   Hcs08BoardMemory memory_;

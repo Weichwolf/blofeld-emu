@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/hcs08_board.hpp"
 #include "board/hcs08_board_memory.hpp"
+#include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_flash.hpp"
@@ -21,6 +22,21 @@ Hcs08 &reset_cpu(Hcs08 &cpu,
   return cpu;
 }
 } // namespace
+
+Hcs08BoardResetCheckpoint Hcs08Board::power_on_checkpoint(const Hcs08FlashImage &image,
+                                                          const Hcs08BoardContract contract,
+                                                          const Hcs08ResetEntry entry) {
+  if (contract != Hcs08BoardContract::candidate_gt8a_reference_retirement ||
+      (entry != Hcs08ResetEntry::normal && entry != Hcs08ResetEntry::active_background)) {
+    throw Fault("HCS08 board power-on address=0xfffe pc=unknown agent=CPU: explicit board/reset "
+                "entry contract required");
+  }
+  Hcs08BoardMemory memory(image, Hcs08BoardMemoryContract::candidate_gt8a_reference_bus);
+  constexpr unsigned power_on_status = 0x80;
+  return {std::move(memory),
+          std::nullopt,
+          {.cause = Hcs08ResetCause::power_on, .entry = entry, .reset_sources = power_on_status}};
+}
 
 Hcs08BoardResetCheckpoint::Hcs08BoardResetCheckpoint(Hcs08BoardMemory memory,
                                                      std::optional<Hcs08Checkpoint> cpu,
