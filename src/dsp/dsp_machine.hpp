@@ -11,11 +11,13 @@
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 
 namespace blofeld {
+struct DspFetchedWord;
 
 enum class DspRunTiming : std::uint8_t {
   unqualified,
@@ -142,16 +144,20 @@ private:
   void require_running() const;
   friend class DspFetchRun;
   [[nodiscard]] DspReferenceCycleResult
-  advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs);
+  advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs,
+                                   std::uint64_t capture_occurrence = 0);
   friend struct DspFetchState;
   friend struct DspInstructionPipeline;
+  [[nodiscard]] std::optional<DspFetchedWord> pipeline_fetched_word(std::size_t index) const;
   [[nodiscard]] DspBranchDecision
   preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read);
   [[nodiscard]] DspReferenceProgress
   advance_pipeline_peripheral_read(const DspPeripheralReadTicket &read,
                                    const DspReferenceTicket &native);
-  [[nodiscard]] DspBranchDecision capture_reference_branch(std::uint32_t address);
-  [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address);
+  [[nodiscard]] DspBranchDecision capture_reference_branch(std::uint32_t address,
+                                                           std::uint64_t occurrence = 0);
+  [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address,
+                                                                std::uint64_t occurrence = 0);
   [[nodiscard]] DspAddressStageView address_stage(const DspAddressStageTicket &ticket) const;
   [[nodiscard]] DspAddressStageTicket
   rebind_address_stage(const DspAddressStageTicket &ticket) const;

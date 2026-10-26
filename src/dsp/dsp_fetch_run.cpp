@@ -184,7 +184,8 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
     }
     const auto plan = state.plan(machine, inputs, result.native_starved);
     const bool switch_was_pending = machine.bus().switch_delay_ != 0;
-    result.bus = state.pipeline ? machine.advance_reference_bus_cycle_impl(plan)
+    result.bus = state.pipeline ? machine.advance_reference_bus_cycle_impl(
+                                      plan, state.pipeline->peripheral_occurrence())
                                 : machine.advance_reference_bus_cycle(plan);
     if (state.pipeline) { state.pipeline->complete(machine, result.bus); }
     const auto fetch = machine.reference_fetch();

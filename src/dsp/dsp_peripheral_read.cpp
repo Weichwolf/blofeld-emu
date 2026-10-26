@@ -31,26 +31,21 @@ std::string DspPeripheralRead::context() const {
 
 DspPeripheralRead DspPeripheralRead::capture(DspBus &bus,
                                              const DspProgramFetch &fetch,
-                                             const DspPeripheralReadPoint point) {
+                                             const DspPeripheralReadPoint point,
+                                             const std::uint64_t occurrence) {
   const auto address = point.address;
-  const auto opcode = fetch.peek(address);
-  const auto form = opcode ? decode_peripheral_read(*opcode) : std::nullopt;
+  const auto opcode = fetch.select(address, occurrence);
+  const auto form = decode_peripheral_read(opcode.word.value);
   if (!fetch.active() || !form) {
     throw Fault("Peripheral read requires an actual qualified F2 word at P:" + hex(address, 6));
   }
   DspPeripheralRead result;
-  result.word_ = {.address = address, .value = *opcode};
+  result.fetched_ = fetch.instruction(opcode, form->words);
+  result.word_ = result.fetched_.opcode.word;
   result.form_ = *form;
   result.omr_ = fetch.view().omr;
   result.epoch_ = point.epoch;
-  if (form->words == 2) {
-    const auto next = (address + 1) & word_mask;
-    const auto extension = fetch.peek(next);
-    if (!extension) {
-      throw Fault("Peripheral read awaits real F2 extension: " + result.context());
-    }
-    result.extension_ = DspProgramWord{.address = next, .value = *extension};
-  }
+  if (result.fetched_.extension) { result.extension_ = result.fetched_.extension->word; }
   try {
     if (form->bit && DspBus::handles_peripheral_bit(form->target)) {
       const auto value = bus.access_peripheral_bit(

@@ -308,8 +308,11 @@ void unknown_port() {
             machine.bus(), fetch, {.address = boot, .epoch = write_epoch}));
       },
       "A peripheral read proceeded without the real F2 extension");
-  require(missing.find("awaits real F2 extension") != std::string::npos,
-          "Missing extension reached the unknown port instead of stopping before the read");
+  require(missing.find("Missing adjacent actual F2 extension read P:0xff0001") !=
+                  std::string::npos &&
+              missing.find("pc=0xff0000") != std::string::npos &&
+              missing.find("omr=0x000305") != std::string::npos,
+          "Missing extension must reject before port I/O with actual P-address/PC/OMR: " + missing);
   fetch.issue();
   fetch.capture(machine.bus());
   const auto unknown = checkpoint::rejects(

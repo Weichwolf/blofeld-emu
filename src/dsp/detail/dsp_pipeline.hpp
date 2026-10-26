@@ -4,6 +4,7 @@
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_pipeline.hpp"
+#include "dsp/dsp_pipeline_words.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
@@ -42,6 +43,9 @@ struct DspInstructionDependency {
 struct DspInstructionPipeline {
   DspFetchPipeline profile = DspFetchPipeline::automatic_alu;
   DspPipelineView view;
+  std::array<std::optional<DspFetchedWord>, 3> samples{};
+  std::array<std::optional<DspFetchedWord>, 2> extension_samples{};
+  DspPipelineWords selected{};
   std::array<std::optional<DspAddressStageTicket>, 2> addresses{};
   std::array<std::optional<DspProgramWord>, 2> extensions{};
   std::array<std::optional<DspPeripheralReadTicket>, 2> reads{};
@@ -57,6 +61,7 @@ struct DspInstructionPipeline {
 
   [[nodiscard]] bool hold_fetch() const { return branch_fetch_hold != 0 || held_branch_decode; }
 
+  [[nodiscard]] std::uint64_t peripheral_occurrence() const;
   void finish_cycle();
   [[nodiscard]] DspReferenceTicket retirement(const DspMachine &machine) const;
   void complete(DspMachine &machine, const DspReferenceCycleResult &bus);

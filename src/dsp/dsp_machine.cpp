@@ -2,6 +2,7 @@
 #include "dsp/dsp_machine.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/detail/dsp_reference_cycle.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_agu_interlocks.hpp"
@@ -18,6 +19,7 @@
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -505,6 +507,10 @@ DspProgramFetchView DspMachine::advance_reference_fetch(const DspProgramFetchSta
   return state_->cpu.advance_reference_fetch(stage);
 }
 
+std::optional<DspFetchedWord> DspMachine::pipeline_fetched_word(const std::size_t index) const {
+  return state_->cpu.pipeline_fetched_word(index);
+}
+
 DspProgramFetchView DspMachine::reference_fetch() const {
   return state_->cpu.reference_fetch();
 }
@@ -514,14 +520,16 @@ DspReferenceProgress DspMachine::advance_reference_access(const DspReferenceTick
   return state_->cpu.advance_reference_access(ticket);
 }
 
-DspBranchDecision DspMachine::capture_reference_branch(const std::uint32_t address) {
+DspBranchDecision DspMachine::capture_reference_branch(const std::uint32_t address,
+                                                       const std::uint64_t occurrence) {
   if (clocked()) { throw Fault("Native branch AG1 requires an unclocked reference owner"); }
-  return state_->cpu.capture_reference_branch(address);
+  return state_->cpu.capture_reference_branch(address, occurrence);
 }
 
-DspAddressStageTicket DspMachine::capture_reference_address(const std::uint32_t address) {
+DspAddressStageTicket DspMachine::capture_reference_address(const std::uint32_t address,
+                                                            const std::uint64_t occurrence) {
   if (clocked()) { throw Fault("Native AG1 requires an unclocked reference owner"); }
-  return state_->cpu.capture_reference_address(address);
+  return state_->cpu.capture_reference_address(address, occurrence);
 }
 
 DspAddressStageView DspMachine::address_stage(const DspAddressStageTicket &ticket) const {
@@ -577,7 +585,8 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
 }
 
 DspReferenceCycleResult
-DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs) {
+DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs,
+                                             const std::uint64_t capture_occurrence) {
   if (clocked() || state_->cpu.executing()) {
     throw Fault("Composed native bus cycles require an unclocked healthy reference owner");
   }
@@ -585,6 +594,9 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
   const auto context = state_->cpu.state();
   DspReferenceCycleResult result;
   try {
+    if (inputs.peripheral_capture.has_value() != (capture_occurrence != 0)) {
+      throw Fault("Pipeline peripheral capture requires its owned actual F2 occurrence");
+    }
     if (inputs.order != DspReferenceBusOrder::dma_then_fetch_then_native) {
       throw Fault("Native bus cycle requires explicit DMA/fetch/native order");
     }
@@ -602,10 +614,10 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
       state_->cpu.validate_reference_address(*inputs.memory, true);
       memory = state_->cpu.address_stage(*inputs.memory);
     }
-    const auto early =
-        inputs.peripheral_capture
-            ? std::optional(state_->cpu.pipeline_peripheral_access(*inputs.peripheral_capture))
-            : std::nullopt;
+    const auto early = inputs.peripheral_capture
+                           ? std::optional(state_->cpu.pipeline_peripheral_access(
+                                 *inputs.peripheral_capture, capture_occurrence))
+                           : std::nullopt;
     result = reference_cycle_footprint(
         state_->bus, inputs, pending, state_->cpu.reference_fetch(), memory, early);
   } catch (const std::exception &error) {
@@ -621,7 +633,7 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
     if (inputs.fetch) { result.fetch = state_->cpu.advance_reference_fetch(*inputs.fetch); }
     if (inputs.peripheral_capture) {
       result.peripheral_read = state_->cpu.capture_pipeline_peripheral_read(
-          {.address = *inputs.peripheral_capture, .epoch = inputs.dma.cycle});
+          {.address = *inputs.peripheral_capture, .epoch = inputs.dma.cycle}, capture_occurrence);
     }
     if (inputs.retirement) {
       result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);

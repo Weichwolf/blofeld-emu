@@ -3,13 +3,35 @@
 
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_loop_fetch.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 
+#include <array>
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 
 namespace blofeld {
-// Owner-driven F1/F2 transitions; elapsed clocks belong to the future scheduler.
+// Occurrence metadata, not permission to perform native or peripheral effects.
+struct DspFetchedWord {
+  DspProgramWord word;
+  std::uint64_t occurrence = 0;
+  bool operator==(const DspFetchedWord &) const = default;
+};
+
+class DspProgramFetch;
+
+struct DspFetchedInstruction {
+  DspFetchedWord opcode;
+  std::optional<DspFetchedWord> extension;
+  void check_front(const DspProgramFetch &fetch) const;
+  void check_consumed(const std::array<DspFetchedWord, 2> &actual, std::uint32_t omr) const;
+  bool operator==(const DspFetchedInstruction &) const = default;
+};
+
+// Owner-driven actual F1/F2; native CPU execution still owns architectural loops.
 class DspProgramFetch {
 public:
   [[nodiscard]] DspProgramFetchView view() const { return state_; }
@@ -21,16 +43,46 @@ public:
   void issue();
   void capture(DspBus &bus);
   [[nodiscard]] std::optional<std::uint32_t> peek(std::uint32_t address) const;
+  [[nodiscard]] std::optional<DspFetchedWord> queued(std::size_t index) const;
+  [[nodiscard]] DspFetchedWord select(std::uint32_t address, std::uint64_t identity = 0) const;
+  [[nodiscard]] DspFetchedInstruction instruction(DspFetchedWord opcode, unsigned words) const;
+  [[nodiscard]] std::optional<DspProgramWord> occurrence(std::uint64_t identity) const;
+
+  [[nodiscard]] std::array<DspFetchedWord, 2> consumed_pair() const { return consumed_; }
+
+  [[nodiscard]] bool accepts_loop_control(DspLoopArchitecture native_result) const;
   void check_consume(std::uint32_t address) const;
   [[nodiscard]] std::uint32_t consume(std::uint32_t address);
   void redirect(std::uint32_t pc, std::uint32_t omr);
-  void predict_branch(const DspBranchDecision &decision);
+  void predict_branch(const DspBranchDecision &decision, std::uint64_t identity = 0);
   [[nodiscard]] bool
   confirm_branch(std::uint32_t pc, std::uint32_t next_pc, std::uint32_t omr, bool redirected);
+  void open_loop(const DspLoopOpening &opening, DspFetchedWord opcode, DspFetchedWord extension);
+  [[nodiscard]] bool confirm_loop(DspLoopArchitecture native_result, bool redirected);
+  [[nodiscard]] bool confirm_opening(DspLoopArchitecture native_result, bool redirected);
 
 private:
+  struct Sequence {
+    std::atomic<std::uint64_t> serial{0};
+  };
+
+  [[nodiscard]] std::uint64_t next_occurrence();
+  [[nodiscard]] std::size_t branch_pair(const DspBranchDecision &decision,
+                                        std::uint64_t identity) const;
+  void shift_queue();
+  void clear_continuation();
   DspProgramFetchView state_;
+  std::array<std::uint64_t, dsp_program_fetch_capacity> occurrences_{};
+  std::array<std::optional<DspLoopFetch::Prediction>, dsp_program_fetch_capacity> predictions_{};
+  std::array<std::optional<DspLoopBoundary>, dsp_program_fetch_capacity> boundaries_{};
+  std::array<DspFetchedWord, 2> consumed_{};
+  std::shared_ptr<Sequence> sequence_;
+  std::optional<DspLoopFetch> loop_;
+  std::optional<DspLoopBoundary> consumed_end_;
+  std::optional<DspLoopOpening> opening_;
+  std::optional<DspLoopArchitecture> observed_loop_;
   std::optional<DspBranchDecision> branch_;
+  std::uint64_t branch_occurrence_ = 0;
   bool branch_target_captured_ = false;
 };
 }

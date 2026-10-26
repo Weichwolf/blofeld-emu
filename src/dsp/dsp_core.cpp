@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_native_access.hpp"
+#include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/detail/dsp_reference_execution.hpp"
 #include "dsp/dsp_address_phase.hpp"
 #include "dsp/dsp_address_stage.hpp"
@@ -11,6 +12,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupt_timing.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_loop_fetch.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_native_access.hpp"
@@ -54,6 +56,35 @@ constexpr unsigned reset_core_dma_priority = 0x300;
 constexpr unsigned boot_entry = 0xff0000;
 constexpr std::uint64_t data_mask = 0xffffffffffff;
 constexpr std::uint64_t accumulator_mask = 0xffffffffffffff;
+
+// Only forms whose real native opening and F2 provenance can be retained here.
+bool qualified_fetch_loop(const std::uint32_t opcode) {
+  constexpr unsigned immediate_mask = 0xff00f0;
+  constexpr unsigned immediate_do = 0x060080;
+  constexpr unsigned register_mask = 0xffc0ff;
+  constexpr unsigned register_do = 0x06c000;
+  constexpr unsigned forever_do = 0x000203;
+  constexpr unsigned source_mask = 0x3f;
+  constexpr unsigned source_sp = 0x3b;
+  constexpr unsigned source_ssh = 0x3c;
+  constexpr unsigned source_ssl = 0x3d;
+  const auto source = (opcode >> 8) & source_mask;
+  return (opcode & immediate_mask) == immediate_do || opcode == forever_do ||
+         ((opcode & register_mask) == register_do && source != source_sp && source != source_ssh &&
+          source != source_ssl);
+}
+
+DspLoopArchitecture loop_control(const dsp56k::DSP::ReferenceAttemptState &state) {
+  const auto value = [](const auto field) { return static_cast<std::uint32_t>(field) & word_mask; };
+  const auto &cpu = state.registers;
+  return {.pc = value(cpu.pc),
+          .omr = value(cpu.omr),
+          .la = value(cpu.la),
+          .lc = value(cpu.lc),
+          .sp = value(cpu.sp),
+          .sc = value(cpu.sc),
+          .status = value(cpu.sr) & ~ccr_mask};
+}
 
 struct StepContext {
   std::uint32_t pc, sr, omr, vba;
@@ -282,13 +313,13 @@ struct DspNativeResultState {
 
 struct DspCoreCheckpoint::Storage {
   Storage(dsp56k::DSP::ReferenceState state,
-          const DspReferenceState &reference_state,
+          DspReferenceState reference_state,
           const std::uint64_t serial,
           const DspNativeResultState &result,
           const DspAddressStages &address_stages,
           DspPeripheralReadStages read_stages)
       : cpu(std::move(state)),
-        reference(reference_state),
+        reference(std::move(reference_state)),
         generation(serial),
         results(result),
         stages(address_stages),
@@ -308,6 +339,18 @@ DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
 DspCoreCheckpoint::~DspCoreCheckpoint() = default;
 
 namespace {
+DspFetchedWord capture_read_word(const DspProgramFetch &fetch,
+                                 const DspPeripheralReadPoint point,
+                                 const std::uint64_t occurrence,
+                                 const bool automatic) {
+  if (automatic) { return fetch.select(point.address, occurrence); }
+  const auto head = fetch.queued(0);
+  if (!head || head->word.address != point.address) {
+    throw Fault("Explicit peripheral capture lost its next actual F2 occurrence");
+  }
+  return *head;
+}
+
 template <typename Stages>
 auto &peripheral_record(Stages &stages, const DspPeripheralReadPosition &position) {
   if (position.slot >= stages.records.size()) { throw Fault("Invalid peripheral response slot"); }
@@ -800,7 +843,9 @@ public:
     const auto value = reference.latched_program_word();
     if (!value) { return; }
     const auto [instruction, flags] = fetch_instruction(*value);
-    if ((flags & (dsp56k::OpFlagLoop | dsp56k::OpFlagCacheMod)) != 0 ||
+    const bool loop = qualified_fetch_loop(*value) &&
+                      reference.execution() != DspReferenceExecution::access_boundaries;
+    if (((flags & dsp56k::OpFlagLoop) != 0 && !loop) || (flags & dsp56k::OpFlagCacheMod) != 0 ||
         instruction == dsp56k::Stop || instruction == dsp56k::Wait || instruction == dsp56k::Trap ||
         instruction == dsp56k::Trapcc || instruction == dsp56k::Debug ||
         instruction == dsp56k::Debugcc || instruction == dsp56k::Illegal ||
@@ -817,8 +862,13 @@ public:
     if (!fetch.active()) { return; }
     const auto next = word(cpu.regs().pc);
     const auto omr = word(cpu.regs().omr);
+    const auto control = loop_control(cpu.referenceAttemptState());
+    if (fetch.confirm_opening(control, redirected) || fetch.confirm_loop(control, redirected)) {
+      return;
+    }
     constexpr unsigned loop_cache_or_compatibility = 0x1a000;
-    if ((word(cpu.regs().sr) & loop_cache_or_compatibility) != 0) {
+    if ((word(cpu.regs().sr) & loop_cache_or_compatibility) != 0 &&
+        !fetch.accepts_loop_control(control)) {
       throw Fault("Unqualified native program-fetch mode change pc=" +
                   hex(reference.snapshot().context.pc, 6) + " omr=" + hex(omr, 6));
     }
@@ -854,6 +904,33 @@ public:
     apply_pipeline_addresses();
     finish_reference(redirected);
     return completed;
+  }
+
+  void capture_loop_opening() {
+    auto &reference = native.reference();
+    const auto opcode_word = reference.opcode();
+    if (!reference.fetch().active() || !opcode_word || !qualified_fetch_loop(*opcode_word)) {
+      return;
+    }
+    if (!results.base || !results.retirement) {
+      throw Fault("Native DO lost its actual held CPU result");
+    }
+    const auto opcode = reference.committed_access(DspNativeAccessKind::opcode);
+    const auto extension = reference.committed_access(DspNativeAccessKind::extension);
+    const auto pair = reference.fetch().consumed_pair();
+    if (!opcode || !extension || !opcode->value || !extension->value || opcode->ordinal != 0 ||
+        extension->ordinal != 1 || pair[0].word.address != opcode->target.address ||
+        pair[0].word.value != *opcode->value || pair[1].word.address != extension->target.address ||
+        pair[1].word.value != *extension->value || pair[0].occurrence == 0 ||
+        pair[1].occurrence == 0) {
+      throw Fault("Native DO differs from its actual consumed F2 pair");
+    }
+    reference.fetch().open_loop({.word = pair[0].word,
+                                 .extension = pair[1].word,
+                                 .before = loop_control(*results.base),
+                                 .after = loop_control(results.retirement->cpu)},
+                                pair[0],
+                                pair[1]);
   }
 
   void resume_reference() {
@@ -906,6 +983,12 @@ public:
         if (!opcode) { throw Fault("Native move-writeback lost its captured opcode"); }
         results.writeback.pending = DspMoveWriteback{
             .fields = fields, .opcode = *opcode, .pc = before.pc, .omr = before.omr};
+      }
+      try {
+        capture_loop_opening();
+      } catch (...) {
+        restore_visible_reference();
+        throw;
       }
       restore_visible_reference();
     } else {
@@ -1250,6 +1333,13 @@ DspProgramFetchView DspCore::reference_fetch() const {
   return impl_->native.reference().fetch().view();
 }
 
+std::optional<DspFetchedWord> DspCore::pipeline_fetched_word(const std::size_t index) const {
+  if (impl_->active || impl_->faulted || impl_->run.begin) {
+    throw Fault("Unavailable actual pipeline F2 receipt pc=" + hex(state().pc, 6));
+  }
+  return impl_->native.reference().fetch().queued(index);
+}
+
 DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage stage) {
   validate_reference_fetch(stage);
   auto &fetch = impl_->native.reference().fetch();
@@ -1342,34 +1432,36 @@ DspCore::capture_reference_peripheral_read(const DspPeripheralReadPoint point) {
   return capture_peripheral_read(point, false);
 }
 
-DspMemoryAccess DspCore::pipeline_peripheral_access(const std::uint32_t address) const {
+DspMemoryAccess DspCore::pipeline_peripheral_access(const std::uint32_t address,
+                                                    const std::uint64_t occurrence) const {
   if (impl_->active || impl_->faulted || impl_->run.begin ||
       !impl_->native.reference().fetch().active()) {
     throw Fault("Unavailable pipeline peripheral AG1 pc=" + hex(address, 6));
   }
   const auto &fetch = impl_->native.reference().fetch();
-  const auto opcode = fetch.peek(address);
-  const auto form = opcode ? decode_peripheral_read(*opcode) : std::nullopt;
+  if (occurrence == 0) { throw Fault("Automatic peripheral AG1 requires its actual F2 identity"); }
+  const auto opcode = fetch.select(address, occurrence);
+  const auto form = decode_peripheral_read(opcode.word.value);
   if (!form || fetch.view().omr != state().omr) {
     throw Fault("Unqualified actual peripheral AG1/F2 word pc=" + hex(address, 6));
   }
-  if (!form->bit && decode_move_writeback(*opcode) == DspMoveFields{}) {
+  if (!form->bit && decode_move_writeback(opcode.word.value) == DspMoveFields{}) {
     throw Fault("Unqualified native peripheral destination pc=" + hex(address, 6));
   }
-  if (form->words == 2 && !fetch.peek((address + 1) & word_mask)) {
-    throw Fault("Peripheral AG1 awaits actual extension pc=" + hex(address, 6));
-  }
+  static_cast<void>(fetch.instruction(opcode, form->words));
   return {.target = form->target, .phase = DspMemoryPhase::peripheral_sample};
 }
 
 DspPeripheralReadTicket
-DspCore::capture_pipeline_peripheral_read(const DspPeripheralReadPoint point) {
-  static_cast<void>(pipeline_peripheral_access(point.address));
-  return capture_peripheral_read(point, true);
+DspCore::capture_pipeline_peripheral_read(const DspPeripheralReadPoint point,
+                                          const std::uint64_t occurrence) {
+  static_cast<void>(pipeline_peripheral_access(point.address, occurrence));
+  return capture_peripheral_read(point, true, occurrence);
 }
 
 DspPeripheralReadTicket DspCore::capture_peripheral_read(const DspPeripheralReadPoint point,
-                                                         const bool automatic) {
+                                                         const bool automatic,
+                                                         const std::uint64_t occurrence) {
   const auto &reference = impl_->native.reference();
   if (impl_->active || impl_->faulted || impl_->run.begin || !reference.fetch().active() ||
       impl_->peripheral_epoch() != point.epoch) {
@@ -1387,13 +1479,14 @@ DspPeripheralReadTicket DspCore::capture_peripheral_read(const DspPeripheralRead
     }
     impl_->validate_peripheral_capture(point);
   }
+  const auto selected = capture_read_word(reference.fetch(), point, occurrence, automatic);
   auto &stages = impl_->peripheral_reads;
   if (stages.serial == std::numeric_limits<std::uint64_t>::max() ||
       (stages.last_store_cycle && point.epoch <= *stages.last_store_cycle)) {
     throw Fault("Peripheral capture requires a fresh pre-write phase pc=" + hex(point.address, 6));
   }
   for (const auto &record : stages.records) {
-    if (record && record->point.address == point.address) {
+    if (record && record->sample.fetched().opcode.occurrence == selected.occurrence) {
       throw Fault("Duplicate owned peripheral capture pc=" + hex(point.address, 6));
     }
   }
@@ -1401,7 +1494,8 @@ DspPeripheralReadTicket DspCore::capture_peripheral_read(const DspPeripheralRead
     if (stages.records.at(slot)) { continue; }
     const ExecutionGuard guard(impl_->active);
     try {
-      const auto sample = DspPeripheralRead::capture(impl_->bus, reference.fetch(), point);
+      const auto sample =
+          DspPeripheralRead::capture(impl_->bus, reference.fetch(), point, selected.occurrence);
       stages.records.at(slot) = DspPeripheralReadRecord{.sample = sample,
                                                         .point = point,
                                                         .origin = impl_->reference_owner,
@@ -1452,7 +1546,8 @@ DspBranchDecision DspCore::preview_pipeline_peripheral_branch(const DspPeriphera
                         {.origin = read.origin_, .slot = read.slot_, .serial = read.serial_});
   if (!record.automatic) { throw Fault("Branch preview requires the pipeline read owner"); }
   const auto decision = record.sample.preview_branch(impl_->peripheral_epoch());
-  impl_->native.reference().fetch().predict_branch(decision);
+  impl_->native.reference().fetch().predict_branch(decision,
+                                                   record.sample.fetched().opcode.occurrence);
   return decision;
 }
 
@@ -1489,6 +1584,7 @@ DspReferenceProgress DspCore::advance_peripheral_read(const DspPeripheralReadTic
     if (record.automatic != (execution == DspReferenceExecution::staged_register_boundaries)) {
       throw Fault("Peripheral response has a different execution owner");
     }
+    record.sample.fetched().check_consumed(reference.fetch().consumed_pair(), state().omr);
     const auto value = record.sample.consume(*opcode, extension, *access, epoch);
     const auto completed = reference.commit_owned_read(*access, value);
     impl_->peripheral_reads.records.at(read.slot_).reset();
@@ -1500,51 +1596,49 @@ DspReferenceProgress DspCore::advance_peripheral_read(const DspPeripheralReadTic
   }
 }
 
-DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address) {
+DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
+                                                    const std::uint64_t occurrence) {
   if (impl_->active || impl_->faulted || impl_->run.begin ||
       !impl_->native.reference().fetch().active()) {
     throw Fault("Native branch AG1 requires a healthy active frontend at P:" + hex(address, 6));
   }
   auto &fetch = impl_->native.reference().fetch();
-  const auto opcode = fetch.peek(address);
-  const auto next = (address + 1) & word_mask;
-  const auto extension = fetch.peek(next);
-  const auto form = opcode ? decode_branch_form(*opcode) : std::nullopt;
+  const auto captured = fetch.instruction(fetch.select(address, occurrence), 2);
+  const auto opcode = captured.opcode.word;
+  if (!captured.extension) { throw Fault("Native branch lost its actual F2 extension"); }
+  const auto extension = captured.extension->word;
+  const auto next = extension.address;
+  const auto form = decode_branch_form(opcode.value);
   const auto omr = state().omr;
-  if (!form || !extension || fetch.view().omr != omr) {
+  if (!form || fetch.view().omr != omr) {
     throw Fault("Unqualified native branch AG1/F2 pair at P:" + hex(address, 6) +
                 " pc=" + hex(address, 6) + " omr=" + hex(omr, 6));
   }
   // The admitted automatic forms cannot write OMR. This drives only fetch;
   // actual native E1 and E2 must independently confirm the same branch result.
   const bool taken = (((omr >> form->bit) & 1U) != 0) == form->set;
-  const DspBranchDecision decision{.word = {.address = address, .value = *opcode},
-                                   .extension = {.address = next, .value = *extension},
+  const DspBranchDecision decision{.word = opcode,
+                                   .extension = extension,
                                    .omr = omr,
-                                   .next_pc = taken ? *extension : ((next + 1) & word_mask),
+                                   .next_pc = taken ? extension.value : ((next + 1) & word_mask),
                                    .taken = taken};
-  fetch.predict_branch(decision);
+  fetch.predict_branch(decision, captured.opcode.occurrence);
   return decision;
 }
 
-DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t address) {
+DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t address,
+                                                         const std::uint64_t occurrence) {
   if (impl_->active || impl_->faulted || impl_->run.begin ||
       !impl_->native.reference().fetch().active()) {
     throw Fault("Native AG1 requires a healthy unclocked frontend");
   }
-  const auto opcode = impl_->native.reference().fetch().peek(address);
-  if (!opcode) { throw Fault("Native AG1 awaits actual F2 at P:" + hex(address, 6)); }
-  std::optional<DspProgramWord> extension;
-  const auto form = decode_memory_stage(*opcode);
-  if (form && form->peripheral && !form->peripheral_register) {
-    const auto next = (address + 1) & word_mask;
-    const auto value = impl_->native.reference().fetch().peek(next);
-    if (!value) { throw Fault("Native peripheral AG1 awaits actual F2 at P:" + hex(next, 6)); }
-    extension = DspProgramWord{.address = next, .value = *value};
-  }
+  const auto &fetch = impl_->native.reference().fetch();
+  const auto opcode = fetch.select(address, occurrence);
+  const auto form = decode_memory_stage(opcode.word.value);
+  const auto words = form && form->peripheral && !form->peripheral_register ? 2U : 1U;
+  const auto captured = fetch.instruction(opcode, words);
   const ExecutionGuard guard(impl_->active);
-  const auto slot =
-      impl_->stages.capture(impl_->cpu, {.address = address, .value = *opcode}, extension);
+  const auto slot = impl_->stages.capture(impl_->cpu, captured);
   DspAddressStageTicket ticket;
   ticket.owner_ = impl_->reference_owner;
   ticket.slot_ = slot;
@@ -1612,6 +1706,7 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
       throw Fault("Native memory E1 does not match its captured F2 word");
     }
     DspMemoryStageResult result{.address = view, .inputs = state(), .data = {}, .progress = {}};
+    record.fetched.check_front(impl_->native.reference().fetch());
     impl_->bind_memory_address(record);
     auto progress = advance_reference_access(pending->ticket);
     if (view.extension) {
@@ -1624,6 +1719,8 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
       }
       progress = advance_reference_access(progress.pending->ticket);
     }
+    record.fetched.check_consumed(impl_->native.reference().fetch().consumed_pair(),
+                                  view.update.omr);
     for (std::size_t index = 0; index < view.data_access_count; ++index) {
       active_access = view.data_accesses.at(index);
       const auto actual = Impl::commit_addressed_data(*this, progress, active_access);

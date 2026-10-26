@@ -1,0 +1,97 @@
+Native loop execution with retained program fetches
+
+The explicit access-and-retirement contract can now retain actual F1/F2 words
+across selected normal-mode DO loops. The native interpreter executes DO,
+decrements LC, writes/unwinds the physical stack and produces the real next PC.
+The frontend forecasts only the next program address. It never publishes CPU
+registers or executes an instruction instead of the native CPU.
+
+After actual opcode/extension admission, the core binds the consumed F2 pair
+to the native before/held-after result. The next real F1 selects that result's
+body or annul target; real E2 confirms the opening before publishing native
+state. Fetch of LA predicts an end, including an extension at LA. The ending
+native instruction must confirm the oldest captured end's complete control
+tuple and actual taken flag. An equal source/destination PC can still be a
+taken FOREVER backedge. No caller supplies architectural results to the core.
+
+Primary semantics are DSP56300FM13-56..58, the DO FOREVER instruction, Table12-13
+and the normal-mode zero-loop interpretation in dsp-zero-loops.txt. Independent
+tests use literal opcode fields, PCs, counts, flags and retained stack cells;
+round trips and native agreement alone are insufficient. The manual is pinned
+in hardware/sources.json. These checks do not establish physical stage clocks.
+
+Each actual F2 sample has a distinct private occurrence identity. Queued words
+with equal PCs can contain different values from different iterations. Branch
+discard selects the exact captured pair and restores speculative loop control
+at its retained extension; it removes only unconfirmed younger ends. Confirmed
+ends cannot be resurrected. Sequence identities remain monotonic across copies
+and trusted restore; foreign, discarded and stale prediction cuts reject.
+Occurrence metadata is not permission for native execution or peripheral I/O.
+Existing current-core capabilities remain mandatory at the public interface.
+
+The public fetch view/word ABI is unchanged. Private queue/checkpoint layout has
+changed: rebuild consumers including detail/dsp_program_fetch.hpp. Eight frame,
+pending-end and queue entries are host continuation bounds, not measured silicon
+depths. Shared sequence allocation happens during context initialization; no
+real-time callback allocation or execution bound is claimed.
+
+Automatic E1/AG2/AG1 latches now retain exact opcode occurrence IDs and
+their captured adjacent extension IDs. Decode selects the FIFO position
+after those real older words. It never searches for the first equal PC.
+Mismatched, stale, absent or changed stage samples reject before native
+execution. Checkpoints retain these latches with the owned frontend.
+Private read-only owner methods expose receipt metadata to the pipeline;
+public word/fetch/state/ticket layouts and native capabilities are unchanged.
+Port samples and address records now retain the actual opcode/extension
+occurrences selected at AG1. Native E1 validates queue-head identity before
+address binding; actual data admission checks the consumed pair before I/O
+or owned-response consumption. Existing native read fields, current-owner
+tickets and early-read phase checks remain mandatory. Duplicate capture
+rejects the same occurrence, allowing distinct live samples at the same PC.
+An explicit next-read API derives its queue-head identity only after its
+native-boundary check; a generic ambiguous address selection rejects.
+
+Qualified forms are nonwrapped normal immediate/register DO and DO FOREVER,
+with safe stack positions and strictly contained nesting. Core admission keeps
+SP/SSL/SSH count-source refusals; the native SP/SSL order finding is separate.
+Unsupported modes, relative/memory forms, stack wrapping and unowned loop state
+remain visible failures. Actual unknown program reads retain P address, operation,
+PC and OMR context. The automatic instruction pipeline still refuses DO Decode
+and active LF/FV. Completing exact stage identities, source hazards and setup/
+zero-overhead loop timing is required before automatic clocked loop execution.
+
+  cmake --build --preset strict --target blofeld-loop-fetch-test \
+    blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test \
+    blofeld-loop-identity-thread-test blofeld-pipeline-occurrence-test blofeld-loop-port-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R \
+    '^(dsp_loop_(fetch|program_fetch|native_fetch|identity_threads|port_receipts)|dsp_pipeline_occurrences)$'
+  cmake --build --preset thread --target blofeld-loop-identity-thread-test
+  ctest --test-dir build/thread -j1 --output-on-failure -R '^dsp_loop_identity_threads$'
+
+Three complementary consumers check 45 count/body/ahead forecast cases, 45 real
+F1/F2 cases and 53 connected native count/body/ahead cases plus forever, nesting,
+two-word tail, checkpoint, branch rollback, changed code and strict guards.
+The separate identity test captures 2048 real F2 words on two host-owned copies,
+checking per-copy order and global uniqueness under ASan/UBSan and separately
+TSan. It does not execute CPUs concurrently or qualify host audio scheduling.
+
+The port-receipt test holds two real same-PC HRX responses, verifies exact
+consumed identities and FIFO values, and retains different captured branch
+extensions through later P writes. A genuine native two-iteration HRX loop
+checks complete independent CPU/frame/FIFO state and two trusted restored
+continuations. The thread test also selects/checks exact instruction receipts
+within each owned copy. These are explicit reference phases; automatic DO
+Decode, setup/source-hazard timing and loop scheduling remain unimplemented.
+
+The existing early-read boundary test now expects the adjacent missing P
+extension's actual operation/address/PC/OMR diagnostic before unknown port
+I/O. Its encoding and visibility modes remain independent consumers.
+
+The stage-selection test uses real repeated F1/F2 captures with equal PCs
+and opcodes, independently changed extension values, exact FIFO-position
+expectations and stale/foreign receipt, truncation and starvation guards.
+
+Authentic complete ROM, reserved Y:002000 behavior, full original reset-to-
+instrument operation, MIDI/audio, storage, update/recovery and physical-device
+equivalence remain separate open acceptance requirements. No firmware bytes,
+reference assets, native dependency patch or successful peripheral stub is added.

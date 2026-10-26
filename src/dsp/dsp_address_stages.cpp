@@ -2,6 +2,7 @@
 #include "dsp/dsp_address_stages.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_memory_form.hpp"
@@ -65,9 +66,9 @@ DspAddressStageView prepare(dsp56k::DSP &cpu,
 }
 }
 
-std::size_t DspAddressStages::capture(dsp56k::DSP &cpu,
-                                      const DspProgramWord word,
-                                      const std::optional<DspProgramWord> extension) {
+std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruction &fetched) {
+  const auto word = fetched.opcode.word;
+  const auto extension = fetched.extension ? std::optional(fetched.extension->word) : std::nullopt;
   const auto form = decode_memory_stage(word.value);
   if (!form || serial == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Unqualified/exhausted native AG1 at P:" + hex(word.address, 6));
@@ -98,7 +99,8 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu,
       if (extension) { throw Fault("Unexpected extension for native register AG1"); }
       view = prepare(cpu, *form, word, omr);
     }
-    records.at(slot) = DspAddressRecord{.view = view, .source = source, .serial = ++serial};
+    records.at(slot) =
+        DspAddressRecord{.view = view, .fetched = fetched, .source = source, .serial = ++serial};
     return slot;
   }
   throw Fault("Native AG1 continuation capacity exhausted pc=" + hex(word.address, 6));

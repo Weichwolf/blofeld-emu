@@ -18,8 +18,13 @@ namespace blofeld {
 // this value object is not a caller-supplied or serialized execution grant.
 class DspPeripheralRead {
 public:
-  [[nodiscard]] static DspPeripheralRead
-  capture(DspBus &bus, const DspProgramFetch &fetch, DspPeripheralReadPoint point);
+  [[nodiscard]] static DspPeripheralRead capture(DspBus &bus,
+                                                 const DspProgramFetch &fetch,
+                                                 DspPeripheralReadPoint point,
+                                                 std::uint64_t occurrence = 0);
+
+  [[nodiscard]] const DspFetchedInstruction &fetched() const { return fetched_; }
+
   [[nodiscard]] bool
   forward(DspProgramWord producer, const DspNativeAccess &completed_store, std::uint64_t epoch);
   [[nodiscard]] std::uint32_t consume(const DspNativeAccess &opcode,
@@ -36,6 +41,7 @@ private:
                   std::uint64_t ordinal) const;
   [[nodiscard]] std::string context() const;
   DspProgramWord word_;
+  DspFetchedInstruction fetched_{};
   std::optional<DspProgramWord> extension_;
   DspPeripheralReadForm form_;
   DspNativeAccessKind kind_ = DspNativeAccessKind::read;

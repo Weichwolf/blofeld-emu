@@ -232,7 +232,7 @@ target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gp
 add_library(blofeld_dsp
   src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
-  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
+  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
   src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
@@ -1236,6 +1236,22 @@ if(BUILD_TESTING)
   add_test(NAME dsp_peripheral_automatic_visibility COMMAND blofeld-peripheral-automatic-test visibility)
   add_test(NAME dsp_peripheral_automatic_state COMMAND blofeld-peripheral-automatic-state-test state)
   add_test(NAME dsp_peripheral_automatic_guards COMMAND blofeld-peripheral-automatic-guard-test guards)
+  foreach(kind fetch program_fetch native_fetch identity_thread)
+    string(REPLACE "_" "-" target_kind "${kind}")
+    add_executable(blofeld-loop-${target_kind}-test test/dsp_loop_${kind}_test.cpp)
+    target_link_libraries(blofeld-loop-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  endforeach()
+  target_link_libraries(blofeld-loop-identity-thread-test PRIVATE Threads::Threads)
+  add_test(NAME dsp_loop_fetch COMMAND blofeld-loop-fetch-test)
+  add_test(NAME dsp_loop_program_fetch COMMAND blofeld-loop-program-fetch-test)
+  add_test(NAME dsp_loop_native_fetch COMMAND blofeld-loop-native-fetch-test)
+  add_test(NAME dsp_loop_identity_threads COMMAND blofeld-loop-identity-thread-test)
+  add_executable(blofeld-pipeline-occurrence-test test/dsp_pipeline_occurrence_test.cpp)
+  target_link_libraries(blofeld-pipeline-occurrence-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_pipeline_occurrences COMMAND blofeld-pipeline-occurrence-test)
+  add_executable(blofeld-loop-port-test test/dsp_loop_port_test.cpp)
+  target_link_libraries(blofeld-loop-port-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_loop_port_receipts COMMAND blofeld-loop-port-test)
   add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
   target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)
@@ -2774,6 +2790,8 @@ add_custom_target(quality
     blofeld-repeat-test
     blofeld-reference-access-test
     blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
+    blofeld-loop-fetch-test blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test
+    blofeld-loop-identity-thread-test blofeld-pipeline-occurrence-test blofeld-loop-port-test
     blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test

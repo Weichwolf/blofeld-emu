@@ -8,12 +8,14 @@
 #include "dsp/dsp_reference_execution.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
 
 namespace blofeld {
+struct DspFetchedWord;
 class DspAddressStageTicket;
 class DspPeripheralReadTicket;
 struct DspPeripheralReadPoint;
@@ -147,6 +149,7 @@ private:
   [[nodiscard]] DspProgramFetchView start_reference_fetch(const DspReferenceTicket &ticket);
   [[nodiscard]] DspProgramFetchView advance_reference_fetch(DspProgramFetchStage stage);
   [[nodiscard]] DspProgramFetchView reference_fetch() const;
+  [[nodiscard]] std::optional<DspFetchedWord> pipeline_fetched_word(std::size_t index) const;
   void validate_reference_ticket(const DspReferenceTicket &ticket) const;
   void validate_reference_admission(const DspReferenceTicket &ticket,
                                     bool retiring_previous = false,
@@ -157,8 +160,10 @@ private:
   [[nodiscard]] std::optional<DspReferencePending> reference_pending_unchecked() const;
   [[nodiscard]] DspReferenceProgress
   reference_progress(std::optional<DspReferenceEffect> completed = std::nullopt) const;
-  [[nodiscard]] DspBranchDecision capture_reference_branch(std::uint32_t address);
-  [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address);
+  [[nodiscard]] DspBranchDecision capture_reference_branch(std::uint32_t address,
+                                                           std::uint64_t occurrence = 0);
+  [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address,
+                                                                std::uint64_t occurrence = 0);
   [[nodiscard]] DspAddressStageView address_stage(const DspAddressStageTicket &ticket) const;
   [[nodiscard]] DspAddressStageTicket
   rebind_address_stage(const DspAddressStageTicket &ticket) const;
@@ -173,16 +178,18 @@ private:
   advance_reference_peripheral_read(const DspPeripheralReadTicket &read,
                                     const DspReferenceTicket &native);
   void validate_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const;
-  [[nodiscard]] DspMemoryAccess pipeline_peripheral_access(std::uint32_t address) const;
+  [[nodiscard]] DspMemoryAccess pipeline_peripheral_access(std::uint32_t address,
+                                                           std::uint64_t occurrence) const;
   [[nodiscard]] DspPeripheralReadTicket
-  capture_pipeline_peripheral_read(DspPeripheralReadPoint point);
+  capture_pipeline_peripheral_read(DspPeripheralReadPoint point, std::uint64_t occurrence);
   [[nodiscard]] DspBranchDecision
   preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read);
   [[nodiscard]] DspReferenceProgress
   advance_pipeline_peripheral_read(const DspPeripheralReadTicket &read,
                                    const DspReferenceTicket &native);
   [[nodiscard]] DspPeripheralReadTicket capture_peripheral_read(DspPeripheralReadPoint point,
-                                                                bool automatic);
+                                                                bool automatic,
+                                                                std::uint64_t occurrence = 0);
   [[nodiscard]] DspReferenceProgress advance_peripheral_read(const DspPeripheralReadTicket &read,
                                                              const DspReferenceTicket &native,
                                                              DspReferenceExecution execution);

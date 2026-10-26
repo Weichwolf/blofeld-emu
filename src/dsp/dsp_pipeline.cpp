@@ -9,13 +9,16 @@
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pipeline.hpp"
+#include "dsp/dsp_pipeline_words.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
+#include <span>
 #include <variant>
 
 namespace blofeld {
@@ -38,6 +41,28 @@ void check_context(const DspMachine &machine) {
   }
 }
 
+void validate_stage_samples(const DspPipelineView &view,
+                            const std::array<std::optional<DspFetchedWord>, 3> &samples) {
+  for (std::size_t index = 0; index < samples.size(); ++index) {
+    const auto sample = samples.at(index);
+    const auto word = view.stages.at(index);
+    if (sample && word && sample->word == *word) { continue; }
+    if (!sample && !word) { continue; }
+    throw Fault("Automatic DSP lost its stage/F2 occurrence alignment");
+  }
+}
+
+void validate_execute_word(const DspProgramFetchView &fetch, const DspPipelineCycle &cycle) {
+  if (!cycle.execute1) { return; }
+  const auto word = *cycle.execute1;
+  if (cycle.e1_extension.has_value() != (pipeline_word_count(word) == 2)) {
+    throw Fault("Automatic DSP lost its captured extension-stage alignment");
+  }
+  if (fetch.used == 0 || fetch.words.front() != word || fetch.consume_address != word.address) {
+    throw Fault("Automatic DSP E1 lost its actual previously decoded P word");
+  }
+}
+
 void prepare_decode(DspInstructionPipeline &pipeline,
                     const DspProgramFetchView &fetch,
                     DspPipelineCycle &cycle) {
@@ -51,15 +76,17 @@ void prepare_decode(DspInstructionPipeline &pipeline,
     const auto read = word ? decode_peripheral_read(word->value) : std::nullopt;
     if (read && read->bit) { return; }
   }
+  // Select the FIFO position after the actual older E1/AG2/AG1 occurrences.
   // Decode sees the prior cycle's F2 latch, never the new F2 of this clock.
-  for (std::size_t index = 0; index < fetch.used; ++index) {
-    if (fetch.words.at(index).address == pipeline.view.decode_address) {
-      cycle.decode = fetch.words.at(index);
-      const auto word = *cycle.decode;
-      cycle.decode_words = decode_pipeline_word(word, fetch.omr, pipeline.profile).words;
-      cycle.agu_dependencies = pipeline_agu_dependencies(pipeline.view.stages, word);
-      return;
+  if (pipeline.selected.next) {
+    const auto word = pipeline.selected.next->word;
+    if (word.address != pipeline.view.decode_address) {
+      throw Fault("Automatic Decode cursor differs from its actual F2 occurrence pc=" +
+                  hex(word.address, 6) + " omr=" + hex(fetch.omr, 6));
     }
+    cycle.decode = word;
+    cycle.decode_words = decode_pipeline_word(word, fetch.omr, pipeline.profile).words;
+    cycle.agu_dependencies = pipeline_agu_dependencies(pipeline.view.stages, word);
   }
 }
 }
@@ -71,17 +98,19 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
                          .ag2 = view.stages[1],
                          .execute1 = view.stages[2],
                          .execute2 = view.awaiting_retirement};
+  std::array<DspFetchedWord, dsp_program_fetch_capacity> fetched{};
+  for (std::size_t index = 0; index < fetch.used; ++index) {
+    const auto sample = machine.pipeline_fetched_word(index);
+    if (!sample) { throw Fault("Automatic DSP lost its actual F2 receipt"); }
+    fetched.at(index) = *sample;
+  }
+  validate_stage_samples(view, samples);
+  selected =
+      select_pipeline_words(std::span(fetched).first(fetch.used), samples, extension_samples);
   prepare_decode(*this, fetch, cycle);
-  if (cycle.ag1) { cycle.ag1_extension = pipeline_extension(fetch, *cycle.ag1); }
+  if (selected.ag1_extension) { cycle.ag1_extension = selected.ag1_extension->word; }
   cycle.e1_extension = extensions[1];
-  if (cycle.execute1 &&
-      cycle.e1_extension.has_value() != (pipeline_word_count(*cycle.execute1) == 2)) {
-    throw Fault("Automatic DSP lost its captured extension-stage alignment");
-  }
-  if (cycle.execute1 && (fetch.used == 0 || fetch.words.front() != *cycle.execute1 ||
-                         fetch.consume_address != cycle.execute1->address)) {
-    throw Fault("Automatic DSP E1 lost its actual previously decoded P word");
-  }
+  validate_execute_word(fetch, cycle);
   const std::array words{cycle.ag2, cycle.execute1};
   for (std::size_t index = 0; index < words.size(); ++index) {
     const auto word = words.at(index);
@@ -188,12 +217,18 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   capture_address(machine);
   reads[1] = reads[0];
   reads[0] = bus.peripheral_read;
+  extension_samples[1] = extension_samples[0];
+  extension_samples[0] = selected.ag1_extension;
   extensions[1] = extensions[0];
   extensions[0] = view.cycle.ag1_extension;
+  samples[2] = samples[1];
+  samples[1] = samples[0];
+  samples[0].reset();
   view.stages[2] = view.stages[1];
   view.stages[1] = view.stages[0];
   view.stages[0] = view.cycle.agu_dependencies != 0 ? std::nullopt : view.cycle.decode;
   if (view.stages[0]) {
+    samples[0] = selected.next;
     view.decode_address = (view.decode_address + view.cycle.decode_words) & word_mask;
     view.cycle.decode_accepted = true;
     if (branch && branch_target_ready) {
@@ -220,7 +255,9 @@ void DspInstructionPipeline::capture_address(DspMachine &machine) {
   if (profile == DspFetchPipeline::automatic_memory && word) {
     const auto instruction = *word;
     if (decode_memory_stage(instruction.value)) {
-      next = machine.capture_reference_address(instruction.address);
+      const auto captured = samples[0];
+      next = machine.capture_reference_address(instruction.address,
+                                               captured ? captured->occurrence : 0);
       view.cycle.ag1_address = machine.address_stage(*next);
     }
   }
@@ -245,7 +282,11 @@ void DspInstructionPipeline::capture_branch(DspMachine &machine) {
     if (!ticket) { throw Fault("Peripheral AG2 branch lost its owned AG1 response"); }
     decision = machine.preview_pipeline_peripheral_branch(*ticket);
   } else {
-    decision = machine.capture_reference_branch(ag1->address);
+    const auto captured = samples[0];
+    if (!captured || captured->word != *ag1) {
+      throw Fault("Branch AG1 lost its actual F2 occurrence");
+    }
+    decision = machine.capture_reference_branch(ag1->address, captured->occurrence);
     branch_fetch_hold = 1;
   }
   branch = decision;
@@ -264,6 +305,16 @@ void DspInstructionPipeline::validate_branch(const DspInstructionRetire &retirem
         "Automatic branch differs from its actual native result pc=" + hex(retirement.pc, 6) +
         " next=" + hex(retirement.next_pc, 6) + " omr=" + hex(retirement.omr, 6));
   }
+}
+
+std::uint64_t DspInstructionPipeline::peripheral_occurrence() const {
+  const auto ag1 = view.cycle.ag1;
+  if (!ag1 || !decode_peripheral_read(ag1->value)) { return 0; }
+  const auto captured = samples[0];
+  if (!captured || captured->word != *ag1) {
+    throw Fault("Peripheral AG1 lost its actual F2 occurrence");
+  }
+  return captured->occurrence;
 }
 
 void DspInstructionPipeline::finish_cycle() {

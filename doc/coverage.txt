@@ -1845,8 +1845,27 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           independent ISA expectations, plus
                                           actual memory-bit/conditional-call
                                           DMA and two-restore cases. Physical
-                                          scheduling, loops and IRQ timelines
-                                          remain open. Composed native/F2/DMA
+                                          scheduling and IRQ timelines remain
+                                          open. Explicit held-retirement DO now
+                                          binds actual native openings/ends to
+                                          retained real F2 occurrences: normal
+                                          counts, annulment, nesting, FOREVER,
+                                          two-word tails and trusted restore.
+                                          Branch rollback preserves confirmed
+                                          ends; copied queues retain unique
+                                          sample identities (separate TSan).
+                                          Automatic E1/AG2/AG1 and extension
+                                          latches now retain actual F2 identities;
+                                          Decode selects the next FIFO position.
+                                          Port/address records now retain exact
+                                          opcode/extension receipts; native data
+                                          admission verifies consumed identities.
+                                          Actual same-PC HRX responses, changed
+                                          branch targets and native FIFO-loop
+                                          checkpoint continuations are checked.
+                                          Automatic DO Decode/timing remains
+                                          refused (dsp-loop-fetch.txt).
+                                          Composed native/F2/DMA
                                           admission now derives actual core
                                           addresses/directions and enforces
                                           stalls on the real pending effects;
