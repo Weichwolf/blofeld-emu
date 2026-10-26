@@ -7,7 +7,10 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <span>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 using namespace blofeld;
@@ -55,6 +58,16 @@ void calls_and_stores() {
   require(cpu.state().pc == subroutine && cpu.state().sp == stack - 2 &&
               bus.bytes[stack] == (jsr_pc & byte_mask) && bus.bytes[stack - 1] == (jsr_pc >> 8U),
           "JSR pushes original return low then high using the HCS08 descending stack");
+  const std::vector<Access> writes{{.address = stack, .value = jsr_pc & byte_mask, .write = true},
+                                   {.address = stack - 1, .value = jsr_pc >> 8U, .write = true}};
+  if (bus.accesses != writes) {
+    std::ostringstream actual;
+    for (const auto &access : bus.accesses) {
+      actual << (access.write ? 'w' : 'r') << ' ' << hex(access.address) << '=' << hex(access.value)
+             << ';';
+    }
+    require(false, "JSR must commit native PCL before PCH; actual: " + actual.str());
+  }
   cpu.step();
   require(cpu.state().pc == jsr_pc && cpu.state().sp == stack && cpu.state().hx == high_h &&
               cpu.state().ccr == flags_fixed + flag_c,
@@ -157,6 +170,197 @@ void fixed_condition_bits() {
             "Native TPA reads actual fixed bits along with all six writable flags");
   }
 }
+
+struct CallCase {
+  std::array<std::uint8_t, 3> code;
+  unsigned bytes;
+  std::uint16_t hx, target;
+};
+
+void ordered_calls() {
+  constexpr std::array<CallCase, 6> cases{{
+      {.code = {0xbd, 0x80, 0}, .bytes = 2, .hx = 0x1357, .target = 0x0080},
+      {.code = {0xcd, 0x91, 0xa5}, .bytes = 3, .hx = 0x1357, .target = 0x91a5},
+      {.code = {0xdd, 0x01, 0x23}, .bytes = 3, .hx = 0xff00, .target = 0x0023},
+      {.code = {0xed, 0x01, 0}, .bytes = 2, .hx = 0xffff, .target = 0x0000},
+      {.code = {0xfd, 0, 0}, .bytes = 1, .hx = 0x9200, .target = 0x9200},
+      {.code = {0xad, 0x80, 0}, .bytes = 2, .hx = 0x1357, .target = 0x7f82},
+  }};
+  constexpr std::array<unsigned, 4> stacks{0, 1, stack, word_mask};
+  for (const auto &input : cases) {
+    for (const auto sp : stacks) {
+      Memory bus;
+      bus.install(entry, std::span(input.code).first(input.bytes));
+      const auto high = static_cast<std::uint16_t>(sp + word_mask);
+      bus.writable.set(sp).set(high);
+      Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
+      for (unsigned flags = 0; flags < byte_values; ++flags) {
+        bus.accesses.clear();
+        const auto retired = bus.retired;
+        constexpr unsigned accumulator = 0x5a;
+        const auto expected_flags = static_cast<std::uint8_t>(flags | flags_fixed);
+        cpu.set_state({.pc = entry,
+                       .hx = input.hx,
+                       .sp = static_cast<std::uint16_t>(sp),
+                       .a = accumulator,
+                       .ccr = static_cast<std::uint8_t>(flags)});
+        cpu.step();
+        const unsigned returned = entry + input.bytes;
+        const std::vector<Access> expected{
+            {.address = sp, .value = returned & byte_mask, .write = true},
+            {.address = high, .value = returned >> 8U, .write = true}};
+        require(bus.accesses == expected && bus.retired == retired + 1 &&
+                    cpu.state() ==
+                        Hcs08State{.pc = input.target,
+                                   .hx = input.hx,
+                                   .sp = static_cast<std::uint16_t>(sp + space_bytes - 2U),
+                                   .a = accumulator,
+                                   .ccr = expected_flags},
+                "Six native call forms push literal return PCL/PCH in descending order, including "
+                "wrap");
+      }
+    }
+  }
+}
+
+void independent_returns() {
+  constexpr std::array<unsigned, 4> stacks{0, stack, word_mask - 1, word_mask};
+  constexpr unsigned restored_pc = 0x91a5;
+  constexpr unsigned saved_hx = 0x1234;
+  constexpr unsigned saved_a = 0x56;
+  constexpr std::array<std::uint8_t, 1> code{0x81};
+  for (const auto sp : stacks) {
+    Memory bus;
+    bus.install(entry, code);
+    const auto high = static_cast<std::uint16_t>(sp + 1U);
+    const auto low = static_cast<std::uint16_t>(sp + 2U);
+    bus.bytes[high] = restored_pc >> 8U;
+    bus.bytes[low] = restored_pc & byte_mask;
+    bus.known.set(high).set(low);
+    Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
+    for (unsigned flags = 0; flags < byte_values; ++flags) {
+      bus.accesses.clear();
+      const auto retired = bus.retired;
+      cpu.set_state({.pc = entry,
+                     .hx = saved_hx,
+                     .sp = static_cast<std::uint16_t>(sp),
+                     .a = saved_a,
+                     .ccr = static_cast<std::uint8_t>(flags)});
+      cpu.step();
+      const std::vector<Access> expected{
+          {.address = high, .value = restored_pc >> 8U, .write = false},
+          {.address = low, .value = restored_pc & byte_mask, .write = false}};
+      require(
+          bus.accesses == expected && bus.retired == retired + 1 &&
+              cpu.state() == Hcs08State{.pc = restored_pc,
+                                        .hx = saved_hx,
+                                        .sp = static_cast<std::uint16_t>(sp + 2U),
+                                        .a = saved_a,
+                                        .ccr = static_cast<std::uint8_t>(flags | flags_fixed)},
+          "RTS consumes independent high/low stack data, including wrap, and preserves every flag");
+    }
+  }
+}
+
+class FailingStackMemory : public Memory {
+public:
+  std::uint16_t failure = 0;
+  bool write_failure = true, after = false;
+
+  std::uint8_t read(const std::uint16_t address) override {
+    if (!write_failure && address == failure && !after) { fail(address, "injected stack read"); }
+    const auto value = Memory::read(address);
+    if (!write_failure && address == failure && after) { fail(address, "completed stack read"); }
+    return value;
+  }
+
+  void write(const std::uint16_t address, const std::uint8_t value) override {
+    if (write_failure && address == failure && !after) { fail(address, "injected stack write"); }
+    Memory::write(address, value);
+    if (write_failure && address == failure && after) { fail(address, "completed stack write"); }
+  }
+};
+
+void one_stack_failure(const bool pushing, const unsigned fault) {
+  constexpr std::array<unsigned, 4> prefixes{0, 1, 1, 2};
+  constexpr unsigned returned = 0x8003;
+  constexpr unsigned target = 0x91a5;
+  constexpr std::array<std::uint8_t, 3> call{0xcd, 0x91, 0xa5};
+  constexpr std::array<std::uint8_t, 1> pop{0x81};
+  FailingStackMemory bus;
+  if (pushing) {
+    bus.install(entry, call);
+  } else {
+    bus.install(entry, pop);
+  }
+  const auto first = pushing ? stack : word_mask;
+  const auto second = pushing ? stack - 1U : 0U;
+  bus.bytes[first] = static_cast<std::uint8_t>(pushing ? 0U : target >> 8U);
+  bus.bytes[second] = static_cast<std::uint8_t>(pushing ? 0U : target & byte_mask);
+  bus.known.set(first).set(second);
+  bus.writable.set(first).set(second);
+  bus.failure = static_cast<std::uint16_t>(fault < 2 ? first : second);
+  bus.write_failure = pushing;
+  bus.after = (fault & 1U) != 0;
+  Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
+  cpu.set_state({.pc = entry,
+                 .sp = static_cast<std::uint16_t>(pushing ? stack : word_mask - 1U),
+                 .ccr = flags_fixed + flag_c});
+  const auto error = rejected([&] { cpu.step(); });
+  std::vector<Access> expected{
+      {.address = first, .value = pushing ? returned & byte_mask : target >> 8U, .write = pushing},
+      {.address = second,
+       .value = pushing ? returned >> 8U : target & byte_mask,
+       .write = pushing}};
+  expected.resize(prefixes[fault]);
+  require(cpu.faulted() && cpu.state().pc == entry && bus.retired == 0 &&
+              bus.accesses == expected && error.contains("address=" + hex(bus.failure)) &&
+              error.contains("pc=0x8000"),
+          "Before/after byte failures retain only the actual native call/return prefix");
+  const auto stopped = cpu.state();
+  require(rejected([&] { cpu.step(); }).contains("coordinated recovery") &&
+              cpu.state() == stopped && bus.accesses == expected,
+          "A failed native call/return cannot replay an observed byte or manufacture completion");
+}
+
+void call_and_return_failures() {
+  for (const bool pushing : {false, true}) {
+    for (unsigned fault = 0; fault < 4; ++fault) { one_stack_failure(pushing, fault); }
+  }
+}
+
+void captured_call_and_noncall_word() {
+  constexpr unsigned target = 0x91a5;
+  constexpr std::array<std::uint8_t, 3> call{0xcd, 0x91, 0xa5};
+  for (const unsigned sp : {entry + 1, entry + 2}) {
+    Memory bus;
+    bus.install(entry, call);
+    bus.writable.set(sp).set(sp - 1U);
+    Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
+    cpu.set_state({.pc = entry, .sp = static_cast<std::uint16_t>(sp)});
+    cpu.step();
+    require(cpu.state().pc == target && bus.retired == 1 && bus.accesses.size() == 2 &&
+                bus.accesses[0].address == sp && bus.accesses[1].address == sp - 1U,
+            "Return pushes cannot replace the actual native call target already decoded from code");
+  }
+  Memory bus;
+  bus.install(entry, call);
+  constexpr std::array<std::uint8_t, 2> store{0x35, 0x80};
+  bus.install(target, store);
+  constexpr unsigned value = 0x9234;
+  constexpr unsigned destination = 0x80;
+  bus.writable.set(stack).set(stack - 1).set(destination).set(destination + 1);
+  Hcs08 cpu(bus, BLOFELD_HCS08_SLA);
+  cpu.set_state({.pc = entry, .hx = value, .sp = stack});
+  cpu.step();
+  bus.accesses.clear();
+  cpu.step();
+  const std::vector<Access> expected{
+      {.address = destination, .value = value >> 8U, .write = true},
+      {.address = destination + 1, .value = value & byte_mask, .write = true}};
+  require(bus.accesses == expected && cpu.state().pc == target + store.size() && bus.retired == 2,
+          "A following STHX retains normal high-byte-first data stores after an actual call");
+}
 } // namespace
 
 int main() {
@@ -167,7 +371,12 @@ int main() {
     unsupported_effects();
     fixed_condition_bits();
     signed_branch_conditions();
-    std::cout << "Native HCS08 stack, background request and strict failure cases passed.\n";
+    ordered_calls();
+    independent_returns();
+    call_and_return_failures();
+    captured_call_and_noncall_word();
+    std::cout << "Native HCS08 core:6144 call vectors,1024 independent return vectors,8 failure "
+                 "prefixes,2 code aliases and1 noncall word control passed.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

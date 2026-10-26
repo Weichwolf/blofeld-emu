@@ -1,0 +1,34 @@
+HCS08 indexed-store cycle reference
+
+HCS08RMV1 Rev2, printed280; identity: doc/hcs08-reference.json.
+  STA IX  F7      1 byte  2 periods  wp
+  STA IX1 E7+d8   2 bytes 3 periods  wpp
+  STA IX2 D7+d16  3 bytes 4 periods  pwpp
+STA stores A, defines V=0,N=A7,Z=(A==0), and preserves H/I/C.
+
+The explicit indexed contract extends word/MOV references. Native SLEIGH
+supplies the actual byte write, effective address and flags. No host write,
+instruction substitution or synthetic retirement is introduced. Earlier
+contracts retain their unsupported indexed-store frontier. Native register
+changes at w remain a declared phase reference, not measured silicon timing.
+
+Fixed ISA vectors cover all data bytes, knownness masks, effective-address
+wraps, instruction-end PC wraps, code/data aliases, fresh joint checkpoints,
+read-only/unknown targets and before/after bus failures. Instructions spanning
+the end of the address space still fail visibly as unqualified.
+
+The original-firmware RX/TX/RTI gate requires the actual receive ring writes,
+return frame, foreground continuation, every new-period checkpoint suffix,
+and strict old-contract/next-instruction controls. Test RAM derives from the
+original startup prefix; clock/order/launch/pad observations stay explicit.
+This does not establish normal reset-to-instrument operation, a running DSP
+peer, host MIDI/audio, or physical clock/matrix equivalence.
+
+  ctest --test-dir build/strict -R '^hcs08_prefetch_indexed_store$' --output-on-failure
+  ctest --test-dir build/strict -R '^original_hcs08_spi_indexed_store$' --output-on-failure
+
+The ISA gate requires 33795 independent cases, 66 fresh suffixes and 100 strict
+controls. The original gate requires 16 contexts, 372 cuts, 744 fresh suffixes,
+four old-contract controls and 35 fixed collector-corruption controls.
+Both sanitizer modes produced the same 2270-row original reference trace:
+e3183d9fdee60939f3f91086bc2ac69b51ac37a65b0029119b2d9a9d504f82b4.

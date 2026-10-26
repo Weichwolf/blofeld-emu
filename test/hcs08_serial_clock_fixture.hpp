@@ -176,9 +176,10 @@ struct Machine {
     }
     require(clock->state().spi_periods == period && spi->state().offered_periods == period &&
                 clock->state().irq_periods + clock->state().program_periods == period &&
-                memory.adc.state().remaining == conversion_periods - period &&
+                memory.adc.state().remaining ==
+                    (period < conversion_periods ? conversion_periods - period : 0) &&
                 memory.adc.state().conversions ==
-                    static_cast<unsigned>(period == conversion_periods),
+                    static_cast<unsigned>(period >= conversion_periods),
             "One reference BUSCLK advances genuine CPU/SPI/ADC owners once, never poll-driven "
             "readiness");
   }

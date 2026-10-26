@@ -2442,3 +2442,17 @@ joins real serial completion/promotion and ADC conversion under declared6MHz
 clock/order/pad inputs. Older byte/clock/jump profiles retain their strict
 frontiers. Unknown ICG startup, later scanner forms, physical phases/matrix and
 normal boot remain open (hcs08-scanner-stores.txt).
+
+HCS08 controller period references:
+- Indexed STA, CLR, memory INC/DEC, JSR/BSR and DECA/TSTX/RTS retain native
+  SLEIGH data/flag/SP/PC effects, actual byte transactions and joint snapshots.
+  Explicit reference periods are not measured silicon pipeline/clock timing.
+- Latest original-component gate:16 caller/clock/pad contexts,80 cuts,
+  160 fresh suffixes/profile. The real six-body delay/extra RX-empty-TX IRQ/
+  native return/GPIO copy reaches E2A7 at415 periods;A=FF,X=0,SP=0475.
+  GPIO MOV VNZ follows the transferred byte. ASan/UBSan and separateTSan
+  component traces match. Canonical ASan/UBSan:83 containing-consumer groups;
+  separateTSan:13 component/core/register/CCR groups; no skips or sanitizer findings.
+- Full reset still stops at unqualified ICGS1;authentic clock domains,
+  normal Keyboard boot and physical matrix/controller equivalence remain open.
+  See hcs08-{indexed-stores,clear-cycles,modify-cycles,call-cycles,subroutine-cycles}.txt.

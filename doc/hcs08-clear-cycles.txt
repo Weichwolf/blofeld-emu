@@ -1,0 +1,32 @@
+HCS08 memory CLR cycle reference
+
+API: Hcs08PrefetchContract::reference_clear_program_cycles extends the explicit
+indexed-store contract. Older contracts still reject memory CLR.
+
+Family Rev2 printed241 defines DIR/IX1 rfwpp(5), IX rfwp(4), SP1 prfwpp(6).
+The bus owns the actual r access, including permissions/peripheral effects.
+Qualified Hcs08KnownMemory owners can retain unknown old RAM bits because
+CLR does not consume them. A dedicated Hcs08ClearRead preserves that value,
+mask and arrival phase through trusted joint snapshots. Ordinary unsupported
+reads still fail. Native SLEIGH alone writes zero at w and defines V0/N0/Z1;
+H/I/C and unrelated registers retain their values and knowledge.
+
+The prefetch/checkpoint layout changes; rebuild every containing CPU/BDC/clock
+owner. No persisted-state format or physical phase is established here.
+
+Reproduce after configuring/building the affected targets:
+ctest --test-dir build/strict -j1 --output-on-failure -R '^(hcs08_prefetch_clear|original_hcs08_spi_clear)$'
+Run TSan separately with the corresponding thread build; never overlap native
+queues. These are fixed regressions, with no fuzz execution.
+
+Unit scope per sanitizer:4131 independent vectors,144 fresh suffixes,
+26 strict/failure controls; inherited suspended STHX/MOV suffixes also checked.
+The unchanged local original Keyboard pages execute RX/TX/RTI and their real
+foreground CLR under16 declared contexts,24 cuts and48 fresh suffixes.
+This CLR-only contract still rejects the next original INC; the modify
+reference supports it (hcs08-modify-cycles.txt).
+The complete194-row trace has39 fixed negative collector controls.
+
+Conditional startup inputs and reference clocks remain explicit. Normal
+reset-to-instrument boot, physical matrix/clock timing, host MIDI/audio,
+DSP coupling, complete recovery and hardware equivalence remain open.

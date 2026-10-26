@@ -1,0 +1,27 @@
+Native HCS08 subroutine reference
+================================
+
+reference_subroutine_program_cycles extends the call/scanner reference with
+DECA, TSTX and RTS. Family Rev2 printed249/289: one p for each register
+instruction; native V/N/Z change and H/I/C preservation follow the ISA.
+Printed276 and opcodeTable6-13 give RTS6/uufppp; summaryTable6-12 conflicts
+(5/ufppp). The explicit reference follows the detail and existing timing lookup.
+
+RTS samples real PCH/PCL reads at oldSP+1/+2, wrapping16bit. Fully known
+return bytes are required. Captured bytes arrive next period; genuine native
+LOAD/SP/RETURN completes at f, then three p reads refill the selected PC.
+This matches the existing RTI reference's register-completion policy; it is not
+measured silicon SP-latch timing. Snapshots retain actual read latches; faults
+quarantine the CPU until trusted joint restore. No host return/PC repair.
+
+Original delay code executes n+1 TAX/DECA/TSTX/BNE bodies. The fixed caller
+uses5, retains A=FF/X=0, services the genuine additional RX/empty-TX IRQ and
+returns before its next native GPIO sample. Wire levels, launch/order references
+and caller RAM remain declared inputs; no normal-boot/hardware claim follows.
+
+After canonical integration:
+  ctest --preset strict -R '^(hcs08_prefetch_subroutine|original_hcs08_spi_subroutine)$'
+  ctest --preset thread -R '^(hcs08_prefetch_subroutine|original_hcs08_spi_subroutine)$'
+
+Authentic ICG/FLL/clock domains, complete controller normal boot, physical
+matrix/serial observations and full Desktop/Keyboard instrument acceptance remain open.

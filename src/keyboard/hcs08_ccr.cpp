@@ -26,6 +26,11 @@ constexpr unsigned cmp_immediate = 0xa1, jsr_extended = 0xcd, ais = 0xa7;
 constexpr unsigned ldx_direct = 0xbe, and_immediate = 0xa4, inc_a = 0x4c, inc_x = 0x5c;
 constexpr unsigned ldx_extended = 0xce;
 constexpr unsigned mov_direct = 0x4e, sta_indexed16 = 0xd7, cmp_direct = 0xb1;
+constexpr unsigned inc_direct = 0x3c, dec_direct = 0x3a;
+constexpr unsigned inc_indexed8 = 0x6c, dec_indexed8 = 0x6a;
+constexpr unsigned inc_indexed = 0x7c, dec_indexed = 0x7a;
+constexpr unsigned clr_indexed8 = 0x6f;
+constexpr unsigned sta_indexed8 = 0xe7, sta_indexed = 0xf7;
 constexpr unsigned lda_indexed16 = 0xd6, cmp_extended = 0xc1;
 constexpr unsigned push_h = 0x8b, pull_h = 0x8a, tax = 0x97, txa = 0x9f, brclr7 = 0x0f;
 constexpr unsigned brset7 = 0x0e, bhi = 0x22, bls = 0x23, bne = 0x26, jmp_extended = 0xcc;
@@ -34,6 +39,9 @@ constexpr unsigned push_a = 0x87, push_x = 0x89, pull_a = 0x86;
 constexpr unsigned lda_indexed8 = 0xe6, cmp_indexed = 0xf1;
 constexpr unsigned ldx_stack = 0xee, cmp_stack = 0xe1, asl_stack = 0x68, rol_stack = 0x69,
                    add_stack = 0xeb;
+constexpr unsigned decrement_a = 0x4a, test_x = 0x5d, rts = 0x81;
+constexpr unsigned bsr = 0xad, jsr_direct = 0xbd;
+constexpr unsigned jsr_indexed16 = 0xdd, jsr_indexed8 = 0xed, jsr_indexed = 0xfd;
 constexpr unsigned vnz = 0x86, carry = 1, zero = 2, half = 0x10;
 
 [[noreturn]] void unqualified(const Hcs08State &before, const unsigned opcode) {
@@ -46,6 +54,9 @@ unsigned stack_defined(const Bus &bus, const Hcs08State &before) {
   bus.check_execute({.address = before.pc, .length = 2});
   const auto second = bus.peek(static_cast<std::uint16_t>(before.pc + 1U));
   switch (second) {
+    case inc_indexed8:
+    case dec_indexed8:
+    case clr_indexed8:
     case ldhx_stack:
     case sthx_stack:
     case ldx_stack:
@@ -89,18 +100,29 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     case ldhx_direct:
     case lda_direct:
     case lda_extended:
+    case inc_direct:
+    case dec_direct:
+    case inc_indexed8:
+    case dec_indexed8:
+    case inc_indexed:
+    case dec_indexed:
+    case clr_indexed8:
     case clr_direct:
     case mov_immediate_direct:
     case bit_immediate:
     case ldx_direct:
     case ldx_extended:
     case and_immediate:
+    case decrement_a:
+    case test_x:
     case inc_a:
     case inc_x:
     case mov_direct:
     case lda_indexed16:
     case lda_indexed8:
     case sta_indexed16:
+    case sta_indexed8:
+    case sta_indexed:
     case sta_direct:
     case sthx_direct:
     case sthx_extended:
@@ -128,6 +150,12 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     case bne:
       if ((before.ccr_known & zero) == 0) { unqualified(before, opcode); }
       break;
+    case rts:
+    case bsr:
+    case jsr_direct:
+    case jsr_indexed16:
+    case jsr_indexed8:
+    case jsr_indexed:
     case jsr_extended:
     case jmp_extended:
     case jmp_direct:

@@ -15,7 +15,8 @@ struct Hcs08KnownByte {
 // Optional board capability for genuine unknown register bits stored in RAM.
 // Ordinary Bus reads/fetches must still reject bytes with unknown bits. These
 // operations retain real access checks/effects; they are not peek/zero-fill APIs.
-// Only qualified raw-copy consumers such as RTI may read a partial byte.
+// Only qualified raw-copy (RTI) or unused-value (CLR r) consumers may read
+// a partial byte; address permissions and peripheral effects remain bus-owned.
 class Hcs08KnownMemory {
 public:
   virtual ~Hcs08KnownMemory() = default;

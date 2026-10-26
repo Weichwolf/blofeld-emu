@@ -231,7 +231,7 @@ public:
     return result;
   }
 
-  void restore_write(const NativeInstructionState &saved) {
+  void restore_write(const NativeInstructionState &saved, const std::uint8_t opcode) {
     if (executing_ || pending_write_) {
       throw Fault("HCS08 native restore requires an empty owner");
     }
@@ -250,6 +250,8 @@ public:
     pending_write_ = saved.write;
     word_write_ = word;
     byte_move_ = move;
+    stack_call_ = subroutine_call(opcode);
+    stack_return_ = false;
     finished_ = false;
     for (const auto &temporary : saved.temporaries) {
       memstate->setChunk(temporary.bytes.data(),
@@ -291,6 +293,10 @@ public:
     }
     const auto &code = program != nullptr ? *program : bus_;
     code.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
+    const auto opcode = code.peek(static_cast<std::uint16_t>(address_.getOffset()));
+    constexpr unsigned rts = 0x81;
+    stack_call_ = subroutine_call(opcode);
+    stack_return_ = opcode == rts;
     const auto &decoded = translation();
     code.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
                         .length = static_cast<unsigned>(decoded.length)});
@@ -308,6 +314,15 @@ public:
   }
 
 private:
+  [[nodiscard]] static bool subroutine_call(const unsigned opcode) {
+    constexpr unsigned bsr = 0xad;
+    constexpr unsigned first_jsr = 0xbd;
+    constexpr unsigned last_jsr = 0xfd;
+    constexpr unsigned call_nibble = 0xd;
+    return opcode == bsr ||
+           (opcode >= first_jsr && opcode <= last_jsr && (opcode & 15U) == call_nibble);
+  }
+
   bool continue_execution() {
     while (!finished_ && !pending_write_) {
       if (steps_ == operation_limit) { throw Fault("HCS08 p-code operation limit exceeded"); }
@@ -348,11 +363,11 @@ private:
     auto &write = *pending_write_;
     constexpr unsigned byte_bits = 8;
     constexpr unsigned byte_mask = 0xff;
-    const auto shift = (write.access.size - 1U - write.completed) * byte_bits;
-    bus_.write_memory(
-        {.address = static_cast<std::uint16_t>(write.access.address + write.completed),
-         .size = 1,
-         .value = (write.access.value >> shift) & byte_mask});
+    const unsigned offset = stack_call_ ? 1U - write.completed : write.completed;
+    const auto shift = (write.access.size - 1U - offset) * byte_bits;
+    bus_.write_memory({.address = static_cast<std::uint16_t>(write.access.address + offset),
+                       .size = 1,
+                       .value = (write.access.value >> shift) & byte_mask});
     ++write.completed;
   }
 
@@ -438,12 +453,14 @@ private:
   }
 
   [[nodiscard]] Hcs08KnownByte return_byte(const unsigned index) const {
-    if (return_reads_ == nullptr || !return_frame_) {
-      throw Fault("HCS08 captured RTI read lacks its owned frame");
+    if (return_reads_ == nullptr || (!return_frame_ && !stack_return_)) {
+      throw Fault("HCS08 captured return read lacks its owned frame");
     }
+    if (stack_return_ && index >= 2) { throw Fault("HCS08 RTS has only two stack reads"); }
     auto &read = return_reads_->at(index);
-    const auto address = static_cast<std::uint16_t>(return_frame_->stack + 1U + index);
-    constexpr unsigned raw_fields = 3;
+    const auto stack = stack_return_ ? memstate->getValue(&layout_.sp) : return_frame_->stack + 1U;
+    const auto address = static_cast<std::uint16_t>(stack + index);
+    const unsigned raw_fields = stack_return_ ? 0U : 3U;
     if (!read.value || read.in_flight || read.consumed || read.address != address ||
         (index >= raw_fields && read.known != Hcs08KnownByte::all)) {
       throw Fault("HCS08 captured RTI read address=" + hex(address) +
@@ -486,23 +503,36 @@ private:
         return static_cast<ghidra::uintb>(value.value & value.known);
       }
     }
-    if (return_reads_ != nullptr) {
-      if (!return_frame_ || access.size != 2 ||
-          access.address != static_cast<std::uint16_t>(return_frame_->stack + 4U)) {
-        throw Fault("HCS08 captured RTI unexpected native read address=" + hex(access.address));
-      }
-      constexpr unsigned pc_high = 3;
-      constexpr unsigned pc_low = 4;
-      const auto high = return_byte(pc_high);
-      const auto low = return_byte(pc_low);
-      return (static_cast<ghidra::uintb>(high.value) << 8U) | low.value;
-    }
+    if (return_reads_ != nullptr) { return read_captured_return(access); }
     if (return_frame_ && access.size == 2 && access.address == address_mask &&
         static_cast<std::uint16_t>(return_frame_->stack + 4U) == access.address) {
       const auto high = bus_.read_memory({.address = access.address});
       return (high << 8U) | bus_.read_memory({.address = 0});
     }
+    if (stack_return_ && access.address == address_mask) { return read_wrapped_return(access); }
     return bus_.read_memory(access);
+  }
+
+  [[nodiscard]] ghidra::uintb read_captured_return(const MemoryRead access) const {
+    if (!stack_return_ && !return_frame_) { throw Fault("HCS08 captured return lost its frame"); }
+    const auto expected = stack_return_ ? memstate->getValue(&layout_.sp)
+                                        : static_cast<std::uint16_t>(return_frame_->stack + 4U);
+    if (access.size != 2 || access.address != expected) {
+      throw Fault("HCS08 captured return unexpected native read address=" + hex(access.address));
+    }
+    const unsigned first = stack_return_ ? 0U : 3U;
+    const auto high = return_byte(first);
+    const auto low = return_byte(first + 1U);
+    return (static_cast<ghidra::uintb>(high.value) << 8U) | low.value;
+  }
+
+  [[nodiscard]] ghidra::uintb read_wrapped_return(const MemoryRead access) const {
+    if (access.size != 2 || access.address != memstate->getValue(&layout_.sp)) {
+      throw Fault("Unqualified HCS08 RTS word read address=" + hex(access.address) +
+                  " pc=" + hex(address_.getOffset()));
+    }
+    const auto high = bus_.read_memory({.address = access.address});
+    return (high << 8U) | bus_.read_memory({.address = 0});
   }
 
   void write_register(const ghidra::VarnodeData *node, ghidra::uintb value) {
@@ -548,7 +578,11 @@ private:
       throw Fault("HCS08 captured operand unexpected write address=" + hex(access.address));
     }
     if (!word_write_ && !byte_move_) {
-      bus_.write_memory(access);
+      if (stack_call_) {
+        write_call_word(access);
+      } else {
+        bus_.write_memory(access);
+      }
       return;
     }
     constexpr unsigned word_mask = 0xffff;
@@ -558,8 +592,27 @@ private:
     if (pending_write_ || !(word || move)) {
       throw Fault("Unqualified HCS08 native bus-period write address=" + hex(access.address));
     }
+    if (stack_call_ && (!word || access.address != memstate->getValue(&layout_.sp))) {
+      throw Fault("HCS08 native call write lost its actual stack pointer");
+    }
     pending_write_ = PendingNativeWrite{.access = access};
     if (word) { commit_write_byte(); }
+  }
+
+  void write_call_word(const MemoryWrite access) {
+    constexpr unsigned word_mask = 0xffff;
+    constexpr unsigned byte_mask = 0xff;
+    constexpr unsigned byte_bits = 8;
+    if (access.size != 2 || access.value > word_mask ||
+        access.address != memstate->getValue(&layout_.sp)) {
+      throw Fault("Unqualified HCS08 call word write address=" + hex(access.address) +
+                  " pc=" + hex(address_.getOffset()));
+    }
+    // Family Rev2 p237/254: genuine native return PCL precedes PCH, including stack wrap.
+    bus_.write_memory({.address = static_cast<std::uint16_t>(access.address + 1U),
+                       .size = 1,
+                       .value = access.value & byte_mask});
+    bus_.write_memory({.address = access.address, .size = 1, .value = access.value >> byte_bits});
   }
 
   [[nodiscard]] MemoryRead memory_access(const bool write) const {
@@ -621,6 +674,7 @@ private:
   unsigned steps_ = 0;
   std::optional<PendingNativeWrite> pending_write_;
   bool word_write_ = false, byte_move_ = false;
+  bool stack_call_ = false, stack_return_ = false;
   bool finished_ = true;
   bool executing_ = false;
   bool background_ = false;

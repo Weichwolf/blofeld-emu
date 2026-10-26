@@ -1,0 +1,29 @@
+HCS08 memory INC/DEC cycle reference
+
+API: reference_modify_program_cycles extends the explicit CLR reference.
+Older contracts retain their memory INC/DEC rejection.
+Family Rev2 printed249/252: DIR/IX1 rfwpp(5), IX rfwp(4), SP1 prfwpp(6).
+Native SLEIGH reads the old byte at r, suspends at its real STORE, resumes
+that STORE at w and completes native V/N/Z updates. The f period performs
+no bus access. No host arithmetic supplies a native result or flag.
+H/I/C and unrelated registers retain their values and knowledge.
+Unknown consumed data or indexed address fails visibly. Trusted joint
+snapshots retain native temporaries, pending write and actual queue phase;
+a fresh owner completes the captured result without rereading modified RAM.
+Existing enum values and the CLR public checkpoint layout are unchanged;
+recompile consumers under the same extended enum definition.
+
+Reproduce after configuring/building the two affected targets:
+ctest --test-dir build/strict -j1 --output-on-failure -R '^(hcs08_prefetch_modify|original_hcs08_spi_modify)$'
+Run TSan separately with shared native admission. No automatic fuzz.
+
+Per sanitizer:6214 independent vectors,384 RMW fresh suffixes,2088 strict/
+failure controls; inherited CLR/STHX/MOV snapshots also checked.
+Unchanged original Keyboard pages execute genuine INC7->8, the dependent
+load/compare/taken branch and LDA5 after RX/TX/RTI/CLR. Seed7 is a declared
+caller input.16 contexts,64 cuts,128 fresh suffixes and4 old-contract
+controls produce438 fixed rows;46 collector corruptions reject.
+The modify-only contract still rejects the next original JSR; the call
+reference supports it (hcs08-call-cycles.txt). These conditional
+startup/pad/clock fixtures leave normal reset-to-instrument, physical
+timing, live MIDI/audio, full recovery and hardware equivalence open.

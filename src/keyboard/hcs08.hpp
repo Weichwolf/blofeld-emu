@@ -62,7 +62,12 @@ enum class Hcs08PrefetchContract : std::uint8_t {
   reference_jump_program_cycles,
   reference_scanner_byte_cycles,
   reference_scanner_word_cycles,
-  reference_scanner_move_cycles
+  reference_scanner_move_cycles,
+  reference_indexed_store_cycles,
+  reference_clear_program_cycles,
+  reference_modify_program_cycles,
+  reference_call_program_cycles,
+  reference_subroutine_program_cycles
 };
 
 struct Hcs08DataRead {
@@ -89,6 +94,15 @@ struct Hcs08StackRead {
   bool operator==(const Hcs08StackRead &) const = default;
 };
 
+// CLR observes a real old-byte read without consuming its value or knownness.
+struct Hcs08ClearRead {
+  std::uint16_t address = 0;
+  std::optional<std::uint8_t> value;
+  std::uint8_t known = Hcs08State::all_a;
+  bool in_flight = false;
+  bool operator==(const Hcs08ClearRead &) const = default;
+};
+
 // Explicit bounded cycle references retain actual reads and one-period arrivals.
 // The optional direct-data/bit-branch policy assumes sequential speculation and
 // selected-PC refill; physical addresses/phases and general pipelines are unqualified.
@@ -100,6 +114,7 @@ struct Hcs08PrefetchState {
   unsigned instruction_bytes = 0, instruction_periods = 0, instruction_cycle = 0;
   bool program_byte_in_flight = false, native_executed = false;
   Hcs08DataRead operand{};
+  Hcs08ClearRead clear_read{};
   std::optional<Hcs08DiscardedProgramRead> discarded;
   std::array<Hcs08StackRead, 5> return_reads{};
   std::optional<Hcs08DiscardedProgramRead> return_discarded;
@@ -247,7 +262,10 @@ private:
   void advance_data_program(Hcs08PrefetchState &program, unsigned phase, bool branch);
   void advance_return_program(Hcs08PrefetchState &program, unsigned phase);
   void advance_short_branch(Hcs08PrefetchState &program, unsigned phase);
+  void advance_call_program(Hcs08PrefetchState &program, unsigned phase);
   void advance_jump_program(Hcs08PrefetchState &program, unsigned phase);
+  void advance_modify_program(Hcs08PrefetchState &program, unsigned phase);
+  void advance_clear_program(Hcs08PrefetchState &program, unsigned phase);
   void advance_write_program(Hcs08PrefetchState &program, unsigned phase);
   void advance_program_period(Hcs08PrefetchState &program, unsigned phase);
   void advance_split_write_program(Hcs08PrefetchState &program, unsigned phase, bool move);

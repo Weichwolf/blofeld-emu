@@ -52,6 +52,8 @@ function(blofeld_add_audio_dependencies)
       message(FATAL_ERROR "Audio dependency notice differs: ${packaged}")
     endif()
   endforeach()
+  # Honor scoped libsndfile options on the first configure.
+  set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
   set(BUILD_SHARED_LIBS OFF)
   set(BUILD_TESTING OFF)
   set(BUILD_PROGRAMS OFF)

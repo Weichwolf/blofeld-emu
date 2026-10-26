@@ -16,8 +16,26 @@ struct PrefetchShape {
   unsigned bytes, periods;
   bool push = false;
   bool read = false, branch = false, write = false, returning = false, jump = false;
-  bool word_write = false, byte_move = false;
+  bool word_write = false, byte_move = false, clear = false, modify = false, call = false;
 };
+
+[[nodiscard]] inline std::optional<PrefetchShape> call_shape(const unsigned opcode) {
+  constexpr unsigned bsr = 0xad;
+  constexpr unsigned direct = 0xbd;
+  constexpr unsigned extended = 0xcd;
+  constexpr unsigned indexed16 = 0xdd;
+  constexpr unsigned indexed8 = 0xed;
+  constexpr unsigned indexed = 0xfd;
+  switch (opcode) {
+    case bsr:
+    case direct:
+    case indexed8: return PrefetchShape{.bytes = 2, .periods = 5, .call = true};
+    case extended:
+    case indexed16: return PrefetchShape{.bytes = 3, .periods = 6, .call = true};
+    case indexed: return PrefetchShape{.bytes = 1, .periods = 5, .call = true};
+    default: return std::nullopt;
+  }
+}
 
 [[nodiscard]] inline std::optional<PrefetchShape> jump_shape(const unsigned opcode) {
   constexpr unsigned direct = 0xbc;
@@ -75,9 +93,93 @@ struct PrefetchShape {
   return std::nullopt;
 }
 
+[[nodiscard]] inline std::optional<PrefetchShape> clear_shape(const unsigned opcode,
+                                                              const unsigned second) {
+  constexpr unsigned direct = 0x3f;
+  constexpr unsigned indexed8 = 0x6f;
+  constexpr unsigned indexed = 0x7f;
+  constexpr unsigned prefix = 0x9e;
+  if (opcode == direct || opcode == indexed8) {
+    return PrefetchShape{.bytes = 2, .periods = 5, .clear = true};
+  }
+  if (opcode == indexed) { return PrefetchShape{.bytes = 1, .periods = 4, .clear = true}; }
+  if (opcode == prefix && second == indexed8) {
+    return PrefetchShape{.bytes = 3, .periods = 6, .clear = true};
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] inline std::optional<PrefetchShape> indexed_store_shape(const unsigned opcode) {
+  constexpr unsigned indexed16 = 0xd7;
+  constexpr unsigned indexed8 = 0xe7;
+  constexpr unsigned indexed = 0xf7;
+  if (opcode == indexed16) { return PrefetchShape{.bytes = 3, .periods = 4, .write = true}; }
+  if (opcode == indexed8) { return PrefetchShape{.bytes = 2, .periods = 3, .write = true}; }
+  if (opcode == indexed) { return PrefetchShape{.bytes = 1, .periods = 2, .write = true}; }
+  return std::nullopt;
+}
+
+[[nodiscard]] inline std::optional<PrefetchShape> modify_shape(const unsigned opcode,
+                                                               const unsigned second) {
+  constexpr unsigned increment_direct = 0x3c;
+  constexpr unsigned decrement_direct = 0x3a;
+  constexpr unsigned increment_indexed = 0x7c;
+  constexpr unsigned decrement_indexed = 0x7a;
+  constexpr unsigned increment_indexed8 = 0x6c;
+  constexpr unsigned decrement_indexed8 = 0x6a;
+  constexpr unsigned prefix = 0x9e;
+  if (opcode == increment_direct || opcode == decrement_direct || opcode == increment_indexed8 ||
+      opcode == decrement_indexed8) {
+    return PrefetchShape{.bytes = 2, .periods = 5, .modify = true};
+  }
+  if (opcode == increment_indexed || opcode == decrement_indexed) {
+    return PrefetchShape{.bytes = 1, .periods = 4, .modify = true};
+  }
+  if (opcode == prefix && (second == increment_indexed8 || second == decrement_indexed8)) {
+    return PrefetchShape{.bytes = 3, .periods = 6, .modify = true};
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] inline std::optional<PrefetchShape> extended_memory_shape(
+    const unsigned opcode, const unsigned second, const Hcs08PrefetchContract contract) {
+  const bool subroutine = contract == Hcs08PrefetchContract::reference_subroutine_program_cycles;
+  if (subroutine) {
+    constexpr unsigned decrement_a = 0x4a;
+    constexpr unsigned test_x = 0x5d;
+    constexpr unsigned rts = 0x81;
+    if (opcode == decrement_a || opcode == test_x) {
+      return PrefetchShape{.bytes = 1, .periods = 1};
+    }
+    if (opcode == rts) { return PrefetchShape{.bytes = 1, .periods = 6, .returning = true}; }
+  }
+  const bool calls = subroutine || contract == Hcs08PrefetchContract::reference_call_program_cycles;
+  if (calls) {
+    if (const auto shape = call_shape(opcode)) { return shape; }
+  }
+  const bool modify = calls || contract == Hcs08PrefetchContract::reference_modify_program_cycles;
+  if (modify) {
+    if (const auto shape = modify_shape(opcode, second)) { return shape; }
+  }
+  const bool clear = modify || contract == Hcs08PrefetchContract::reference_clear_program_cycles;
+  if (clear) {
+    if (const auto shape = clear_shape(opcode, second)) { return shape; }
+  }
+  if (clear || contract == Hcs08PrefetchContract::reference_indexed_store_cycles) {
+    return indexed_store_shape(opcode);
+  }
+  return std::nullopt;
+}
+
 [[nodiscard]] inline std::optional<PrefetchShape> reference_shape(
     const unsigned opcode, const unsigned second, const Hcs08PrefetchContract contract) {
-  const bool moves = contract == Hcs08PrefetchContract::reference_scanner_move_cycles;
+  if (const auto shape = extended_memory_shape(opcode, second, contract)) { return shape; }
+  const bool indexed = contract == Hcs08PrefetchContract::reference_indexed_store_cycles ||
+                       contract == Hcs08PrefetchContract::reference_clear_program_cycles ||
+                       contract == Hcs08PrefetchContract::reference_modify_program_cycles ||
+                       contract == Hcs08PrefetchContract::reference_call_program_cycles ||
+                       contract == Hcs08PrefetchContract::reference_subroutine_program_cycles;
+  const bool moves = indexed || contract == Hcs08PrefetchContract::reference_scanner_move_cycles;
   constexpr unsigned mov_direct = 0x4e;
   if (moves && opcode == mov_direct) {
     return PrefetchShape{.bytes = 3, .periods = 5, .byte_move = true};
@@ -125,7 +227,12 @@ struct PrefetchShape {
                           contract == Hcs08PrefetchContract::reference_jump_program_cycles ||
                           contract == Hcs08PrefetchContract::reference_scanner_byte_cycles ||
                           contract == Hcs08PrefetchContract::reference_scanner_word_cycles ||
-                          contract == Hcs08PrefetchContract::reference_scanner_move_cycles;
+                          contract == Hcs08PrefetchContract::reference_scanner_move_cycles ||
+                          contract == Hcs08PrefetchContract::reference_indexed_store_cycles ||
+                          contract == Hcs08PrefetchContract::reference_clear_program_cycles ||
+                          contract == Hcs08PrefetchContract::reference_modify_program_cycles ||
+                          contract == Hcs08PrefetchContract::reference_call_program_cycles ||
+                          contract == Hcs08PrefetchContract::reference_subroutine_program_cycles;
   if (peripheral) {
     if (const auto shape = reference_shape(opcode, second, contract)) { return *shape; }
   }

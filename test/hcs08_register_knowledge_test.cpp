@@ -89,6 +89,13 @@ constexpr unsigned partial_a_mask = 0x55;
 constexpr unsigned stack_data_low = 0xa5;
 constexpr unsigned read_a_command = 0x68;
 constexpr unsigned ldhx_stack = 0xfe;
+constexpr unsigned inc_direct = 0x3c, dec_direct = 0x3a;
+constexpr unsigned inc_indexed8 = 0x6c, dec_indexed8 = 0x6a, clr_indexed8 = 0x6f;
+constexpr unsigned inc_indexed = 0x7c, dec_indexed = 0x7a;
+constexpr unsigned dec_a = 0x4a, test_x = 0x5d, rts = 0x81, bsr = 0xad;
+constexpr unsigned jsr_direct = 0xbd, jsr_indexed16 = 0xdd, jsr_indexed8 = 0xed, jsr_indexed = 0xfd;
+constexpr unsigned incremented_data = 0x5b, decremented_data = 0x59;
+constexpr unsigned return_destination = 0x5a5a;
 
 void cold_reset() {
   Memory memory;
@@ -205,6 +212,11 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case pull_h:
     case brclr7:
     case rti:
+    case rts:
+    case bsr:
+    case jsr_direct:
+    case inc_direct:
+    case dec_direct:
     case clr_direct:
     case bra:
     case bcs:
@@ -226,15 +238,25 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case sthx_direct:
     case sthx_extended:
     case clr_indexed:
+    case clr_indexed8:
+    case inc_indexed8:
+    case dec_indexed8:
+    case inc_indexed:
+    case dec_indexed:
+    case jsr_indexed16:
+    case jsr_indexed8:
+    case jsr_indexed:
     case jmp_indexed16:
     case jmp_indexed8:
     case jmp_indexed: return s.hx_known == word_mask;
     case push_h: return (s.hx_known & reset_hx_known) == reset_hx_known;
     case txa:
+    case test_x:
     case inc_x:
     case shift_x:
     case push_x: return (s.hx_known & byte_mask) == byte_mask;
     case tax:
+    case dec_a:
     case inc_a:
     case and_immediate:
     case cmp_direct:
@@ -325,6 +347,7 @@ unsigned instruction_length(const unsigned opcode) {
     case sthx_extended:
     case cphx_immediate:
     case jsr_extended:
+    case jsr_indexed16:
     case mov_immediate_direct:
     case mov_direct:
     case brclr7:
@@ -342,12 +365,84 @@ unsigned instruction_length(const unsigned opcode) {
     case bit_immediate:
     case cmp_immediate:
     case clr_direct:
+    case inc_direct:
+    case dec_direct:
+    case inc_indexed8:
+    case dec_indexed8:
+    case clr_indexed8:
+    case bsr:
+    case jsr_direct:
+    case jsr_indexed8:
     case bra:
     case bcs:
     case beq:
     case ais: return 2;
     default: return 1;
   }
+}
+
+bool call_opcode(const unsigned opcode) {
+  return opcode == bsr || opcode == jsr_direct || opcode == jsr_extended ||
+         opcode == jsr_indexed16 || opcode == jsr_indexed8 || opcode == jsr_indexed;
+}
+
+Hcs08State controller_effect(const unsigned opcode, Hcs08State s) {
+  // Family Rev2 printed237/254/276: calls/RTS preserve A/HX/CCR knowledge.
+  if (call_opcode(opcode)) { s.sp = initial_sp - 2; }
+  switch (opcode) {
+    case bsr: s.pc = entry + 2 + operand; break;
+    case jsr_direct: s.pc = operand; break;
+    case jsr_indexed16: s.pc = initial_hx + extended_address; break;
+    case jsr_indexed8: s.pc = initial_hx + operand; break;
+    case jsr_indexed: s.pc = initial_hx; break;
+    case rts:
+      s.sp = initial_sp + 2;
+      s.pc = return_destination;
+      break;
+    case dec_a: s.a = decremented_data; break;
+    case clr_indexed8: s.ccr = clear_ccr; break;
+    default: break;
+  }
+  // DEC5A->59 and TSTX34, like memory INC/DEC5A, leave V/N/Z clear.
+  return s;
+}
+
+std::optional<std::vector<Access>> controller_accesses(const unsigned opcode,
+                                                       const Hcs08State before) {
+  if (call_opcode(opcode)) {
+    return std::vector<Access>{
+        {.address = initial_sp, .value = instruction_length(opcode), .write = true},
+        {.address = initial_sp - 1, .value = sign_bit, .write = true}};
+  }
+  if (opcode == rts) {
+    return std::vector<Access>{{.address = initial_sp + 1, .value = data_byte, .write = false},
+                               {.address = initial_sp + 2, .value = data_byte, .write = false}};
+  }
+  unsigned address = operand;
+  bool increment = false;
+  switch (opcode) {
+    case inc_direct: increment = true; break;
+    case dec_direct: break;
+    case inc_indexed:
+      increment = true;
+      address = before.hx;
+      break;
+    case dec_indexed: address = before.hx; break;
+    case inc_indexed8:
+      increment = true;
+      address = before.hx + operand;
+      break;
+    case dec_indexed8: address = before.hx + operand; break;
+    case clr_indexed8:
+      return std::vector<Access>{{.address = before.hx + operand, .value = 0, .write = true}};
+    case dec_a:
+    case test_x: return std::vector<Access>{};
+    default: return {};
+  }
+  return std::vector<Access>{{.address = address, .value = data_byte, .write = false},
+                             {.address = address,
+                              .value = increment ? incremented_data : decremented_data,
+                              .write = true}};
 }
 
 Hcs08State effect(const unsigned opcode, Hcs08State s) {
@@ -428,7 +523,7 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
     const unsigned offset = opcode == jmp_indexed8 ? operand : extended_address;
     s.pc = static_cast<std::uint16_t>(s.hx + offset);
   }
-  return s;
+  return controller_effect(opcode, s);
 }
 
 void opcode_case(Memory &memory, Hcs08 &cpu, const unsigned opcode, const Hcs08State initial) {
@@ -457,9 +552,14 @@ void opcode_case(Memory &memory, Hcs08 &cpu, const unsigned opcode, const Hcs08S
                 cpu.background_requested() == (opcode == bgnd),
             "Literal independent register/flag/PC effects cover each partial-register form " +
                 hex(opcode));
-    if (opcode == jsr_extended) {
-      require(memory.bytes[initial_sp] == 3 && memory.bytes[initial_sp - 1] == sign_bit,
+    if (call_opcode(opcode)) {
+      require(memory.bytes[initial_sp] == instruction_length(opcode) &&
+                  memory.bytes[initial_sp - 1] == sign_bit,
               "Native JSR pushes the genuine return address while A remains unknown");
+    }
+    if (const auto accesses = controller_accesses(opcode, before)) {
+      require(memory.accesses == *accesses,
+              "Independent native controller read/write values, widths and call/return byte order");
     }
     if (opcode == push_h) {
       require(memory.bytes[initial_sp] == index_high, "PSHH pushes actual independently known H");
@@ -508,6 +608,23 @@ void opcodes() {
   }
 }
 
+void controller_prefix(Memory &memory, Hcs08 &cpu, const unsigned second) {
+  auto expected = cpu.state();
+  expected.pc = entry + 3;
+  expected.ccr = second == clr_indexed8 ? clear_ccr : initial_ccr;
+  cpu.step();
+  std::vector<Access> accesses;
+  if (second != clr_indexed8) {
+    accesses.push_back({.address = initial_sp + operand, .value = data_byte, .write = false});
+  }
+  const unsigned modified = second == inc_indexed8 ? incremented_data : decremented_data;
+  accesses.push_back({.address = initial_sp + operand,
+                      .value = second == clr_indexed8 ? 0U : modified,
+                      .write = true});
+  require(cpu.state() == expected && memory.accesses == accesses,
+          "Native SP1 CLR/INC/DEC use known SP/data and preserve unrelated unknown A/X");
+}
+
 void prefixes_and_flags() {
   Memory memory;
   memory.known.set();
@@ -530,9 +647,11 @@ void prefixes_and_flags() {
       require(cpu.state().hx == loaded_hx && cpu.state().hx_known == word_mask &&
                   cpu.state().a_known == 0 && cpu.state().pc == entry + 3,
               "Actual stack-relative LDHX defines both bytes without consuming prior HX");
+    } else if (second == clr_indexed8 || second == inc_indexed8 || second == dec_indexed8) {
+      controller_prefix(memory, cpu, second);
     } else {
       require(rejected([&] { cpu.step(); }).contains("partial-register") && memory.accesses.empty(),
-              "Every other stack prefix, including STHX with unknown X, refuses data effects");
+              "Every remaining stack prefix, including STHX with unknown X, refuses data effects");
     }
   }
   constexpr std::array<std::uint8_t, 1> transfer{tpa};

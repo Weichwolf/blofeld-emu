@@ -25,7 +25,10 @@ constexpr unsigned txs = 0x94;
 constexpr unsigned aix = 0xaf;
 constexpr unsigned cphx_immediate = 0x65;
 constexpr unsigned sthx_direct = 0x35, sthx_extended = 0x96;
-constexpr unsigned clr_indexed = 0x7f;
+constexpr unsigned inc_direct = 0x3c, dec_direct = 0x3a;
+constexpr unsigned inc_indexed8 = 0x6c, dec_indexed8 = 0x6a;
+constexpr unsigned inc_indexed = 0x7c, dec_indexed = 0x7a;
+constexpr unsigned clr_indexed = 0x7f, clr_indexed8 = 0x6f;
 constexpr unsigned sta_direct = 0xb7;
 constexpr unsigned sta_extended = 0xc7;
 constexpr unsigned bit_immediate = 0xa5;
@@ -53,6 +56,9 @@ constexpr unsigned lda_indexed16 = 0xd6, cmp_extended = 0xc1;
 constexpr unsigned push_h = 0x8b, pull_h = 0x8a, tax = 0x97, txa = 0x9f, brclr7 = 0x0f;
 constexpr unsigned jmp_direct = 0xbc, jmp_extended = 0xcc;
 constexpr unsigned jmp_indexed16 = 0xdc, jmp_indexed8 = 0xec, jmp_indexed = 0xfc;
+constexpr unsigned decrement_a = 0x4a, test_x = 0x5d, rts = 0x81;
+constexpr unsigned bsr = 0xad, jsr_direct = 0xbd;
+constexpr unsigned jsr_indexed16 = 0xdd, jsr_indexed8 = 0xed, jsr_indexed = 0xfd;
 constexpr unsigned byte_mask = 0xff, high_mask = 0xff00, word_mask = 0xffff;
 
 [[noreturn]] void unqualified(const Hcs08State &s, const unsigned opcode) {
@@ -65,6 +71,10 @@ constexpr unsigned byte_mask = 0xff, high_mask = 0xff00, word_mask = 0xffff;
 RegisterKnowledge stack(const Bus &bus, const Hcs08State &s) {
   bus.check_execute({.address = s.pc, .length = 2});
   const auto second = bus.peek(static_cast<std::uint16_t>(s.pc + 1U));
+  if (second == inc_indexed8 || second == dec_indexed8) {
+    return {.a = s.a_known, .hx = s.hx_known};
+  }
+  if (second == clr_indexed8) { return {.a = s.a_known, .hx = s.hx_known}; }
   if (second == ldhx_stack) { return {.a = s.a_known, .hx = word_mask}; } // LDHX SP1
   if (second == sthx_stack && s.hx_known == word_mask) {                  // STHX SP1
     return {.a = s.a_known, .hx = s.hx_known};
@@ -119,6 +129,7 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case push_h:
       if ((s.hx_known & high_mask) != high_mask) { unqualified(s, opcode); }
       break;
+    case test_x:
     case inc_x:
     case shift_x:
     case push_x:
@@ -135,7 +146,15 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case cphx_immediate: // CPHX immediate
     case sthx_direct:    // STHX direct
     case sthx_extended:
+    case inc_indexed8:
+    case dec_indexed8:
+    case inc_indexed:
+    case dec_indexed:
+    case clr_indexed8:
     case clr_indexed: // CLR indexed
+    case jsr_indexed16:
+    case jsr_indexed8:
+    case jsr_indexed:
     case jmp_indexed16:
     case jmp_indexed8:
     case jmp_indexed:
@@ -148,6 +167,7 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case cmp_extended:
     case cmp_direct:
     case and_immediate:
+    case decrement_a:
     case inc_a:
     case tap: // TAP
       if (s.a_known != byte_mask) { unqualified(s, opcode); }
@@ -156,10 +176,15 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case mov_immediate_direct: // MOV immediate,direct
     case mov_direct:
     case brclr7:
-    case clr_direct:   // CLR direct
-    case bra:          // BRA
-    case bcs:          // BCS
-    case beq:          // BEQ
+    case inc_direct:
+    case dec_direct:
+    case clr_direct: // CLR direct
+    case bra:        // BRA
+    case bcs:        // BCS
+    case beq:        // BEQ
+    case rts:
+    case bsr:
+    case jsr_direct:
     case jsr_extended: // JSR extended
     case jmp_direct:
     case jmp_extended:

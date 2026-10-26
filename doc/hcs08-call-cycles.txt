@@ -1,0 +1,23 @@
+Native HCS08 call reference
+===========================
+
+reference_call_program_cycles extends the indexed/CLR/RMW references with
+BSR and all five JSR forms. Family RM Rev2 printed237/254: ssppp for
+REL/DIR/IX1/IX; pssppp for EXT/IX2. Genuine native PCL precedes PCH;
+16bit stack addresses wrap. Native SLEIGH supplies return word, SP and target.
+
+The explicit bounded queue policy retains real sequential successor reads,
+discards them after the second stack byte and refills from the native target.
+Native temporaries and the captured instruction survive joint snapshots between
+stack bytes, including changed/overlapping RAM code. Failed accesses quarantine
+the CPU; trusted joint restore is required. Older contracts still reject calls.
+These phases are reference policy, not measured internal pipeline/silicon timing.
+
+Qualification commands after canonical integration:
+  ctest --preset strict -R '^(hcs08_prefetch_call|original_hcs08_spi_call)$'
+  ctest --preset thread -R '^(hcs08_prefetch_call|original_hcs08_spi_call)$'
+
+Original test uses declared caller/clock/pad inputs and unmodified local pages.
+No firmware patches, injected return/target, live MIDI/audio, normal-boot or
+hardware-equivalence claim. Clocked RTS requires reference_subroutine_program_cycles (hcs08-subroutine-cycles.txt).
+Authentic ICG/board timing remains open.

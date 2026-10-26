@@ -7,10 +7,12 @@
 #include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_reset.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <span>
 #include <vector>
 
 namespace {
@@ -170,8 +172,25 @@ struct PartialExpected {
 constexpr unsigned carry_known = 0x69;
 constexpr unsigned tap_flags = 0x75;
 constexpr unsigned interrupt_cleared = 0x60;
-constexpr std::array<PartialExpected, 61> effects{
-    {{.opcode = 0x0e, .known = 0x69, .value = 0x69},
+constexpr std::array<PartialExpected, 78> effects{
+    {{.opcode = 0x3a, .known = 0xee, .value = 0xe8}, // DEC80->7F: V1,N0,Z0.
+     {.opcode = 0x3c, .known = 0xee, .value = 0x6c}, // INC80->81: V0,N1,Z0.
+     {.opcode = 0x6a, .known = 0xee, .value = 0xe8},
+     {.opcode = 0x6c, .known = 0xee, .value = 0x6c},
+     {.opcode = 0x7a, .known = 0xee, .value = 0xe8},
+     {.opcode = 0x7c, .known = 0xee, .value = 0x6c},
+     {.opcode = 0x6f, .known = 0xee, .value = 0x6a},
+     {.opcode = 0xe7, .known = 0xee, .value = 0x68},
+     {.opcode = 0xf7, .known = 0xee, .value = 0x68},
+     {.opcode = 0x4a, .known = 0xee, .value = 0x68}, // DEC55->54.
+     {.opcode = 0x5d, .known = 0xee, .value = 0x68}, // TSTX78.
+     {.opcode = 0x81, .known = 0x68, .value = 0x68},
+     {.opcode = 0xad, .known = 0x68, .value = 0x68},
+     {.opcode = 0xbd, .known = 0x68, .value = 0x68},
+     {.opcode = 0xdd, .known = 0x68, .value = 0x68},
+     {.opcode = 0xed, .known = 0x68, .value = 0x68},
+     {.opcode = 0xfd, .known = 0x68, .value = 0x68},
+     {.opcode = 0x0e, .known = 0x69, .value = 0x69},
      {.opcode = 0x58, .known = 0xef, .value = 0xec},
      {.opcode = 0x88, .known = 0x68, .value = 0x68},
      {.opcode = 0xcc, .known = 0x68, .value = 0x68},
@@ -307,6 +326,69 @@ void partial_registers(const Memory &memory, const Hcs08State &state, const unsi
   }
 }
 
+struct ControllerExpected {
+  unsigned opcode, pc = entry + 1, sp = loaded_sp, a = loaded_a;
+  unsigned address = loaded_x, value = 0, length = 1;
+  bool memory = false, read = false, call = false, returning = false;
+};
+
+constexpr unsigned subroutine_return = 0x81;
+constexpr std::array<ControllerExpected, 17> controller_effects{
+    {{.opcode = 0x3a, .pc = entry + 2, .value = 0x7f, .memory = true, .read = true},
+     {.opcode = 0x3c, .pc = entry + 2, .value = 0x81, .memory = true, .read = true},
+     {.opcode = 0x6a,
+      .pc = entry + 2,
+      .address = 0xf0,
+      .value = 0x7f,
+      .memory = true,
+      .read = true},
+     {.opcode = 0x6c,
+      .pc = entry + 2,
+      .address = 0xf0,
+      .value = 0x81,
+      .memory = true,
+      .read = true},
+     {.opcode = 0x7a, .value = 0x7f, .memory = true, .read = true},
+     {.opcode = 0x7c, .value = 0x81, .memory = true, .read = true},
+     {.opcode = 0x6f, .pc = entry + 2, .address = 0xf0, .memory = true},
+     {.opcode = 0xe7, .pc = entry + 2, .address = 0xf0, .value = loaded_a, .memory = true},
+     {.opcode = 0xf7, .value = loaded_a, .memory = true},
+     {.opcode = 0x4a, .a = 0x54},
+     {.opcode = 0x5d},
+     {.opcode = subroutine_return, .pc = entry + 3, .sp = loaded_sp + 2, .returning = true},
+     {.opcode = 0xad, .pc = entry + 2 + loaded_x, .sp = loaded_sp - 2, .length = 2, .call = true},
+     {.opcode = 0xbd, .pc = loaded_x, .sp = loaded_sp - 2, .length = 2, .call = true},
+     {.opcode = 0xdd, .pc = 0x7878, .sp = loaded_sp - 2, .length = 3, .call = true},
+     {.opcode = 0xed, .pc = 0xf0, .sp = loaded_sp - 2, .length = 2, .call = true},
+     {.opcode = 0xfd, .pc = loaded_x, .sp = loaded_sp - 2, .call = true}}};
+
+void controller_registers(const Hcs08State &state,
+                          const unsigned opcode,
+                          const std::span<const Access> accesses) {
+  const auto *const found =
+      std::ranges::find(controller_effects, opcode, &ControllerExpected::opcode);
+  if (found == controller_effects.end()) { return; }
+  const auto &effect = *found;
+  require(state.pc == effect.pc && state.sp == effect.sp && state.a == effect.a &&
+              state.hx == loaded_x && state.a_known == byte_mask && state.hx_known == word_mask,
+          "Independent controller register/PC effects preserve unrelated reset facts");
+  std::vector<Access> expected;
+  if (effect.memory) {
+    if (effect.read) {
+      expected.push_back({.address = effect.address, .value = 0x80, .write = false});
+    }
+    expected.push_back({.address = effect.address, .value = effect.value, .write = true});
+  } else if (effect.call) {
+    expected = {{.address = loaded_sp, .value = effect.length, .write = true},
+                {.address = loaded_sp - 1, .value = entry >> 8U, .write = true}};
+  } else if (effect.returning) {
+    expected = {{.address = loaded_sp + 1, .value = entry >> 8U, .write = false},
+                {.address = loaded_sp + 2, .value = 3, .write = false}};
+  }
+  require(std::ranges::equal(accesses, expected),
+          "Literal native semantic data effects and descending call/high-low return order");
+}
+
 void partial_flags() {
   Memory memory;
   memory.writable.set();
@@ -330,6 +412,10 @@ void partial_flags() {
       constexpr std::array<std::uint8_t, 1> saved_x{0x5a};
       memory.install(loaded_sp + 1, saved_x);
     }
+    if (opcode == subroutine_return) {
+      constexpr std::array<std::uint8_t, 2> returned{0x80, 3};
+      memory.install(loaded_sp + 1, returned);
+    }
     if (opcode == rti || opcode == pull_a) {
       constexpr std::array<std::uint8_t, 5> frame{0x6b, 0x5a, 0x34, 0x80, 3};
       memory.install(loaded_sp + 1, frame);
@@ -349,6 +435,7 @@ void partial_flags() {
     }
     const auto before = cpu.state();
     const auto retired = memory.retired;
+    const auto first_access = memory.accesses.size();
     if (effect != nullptr) {
       cpu.step();
       ++accepted;
@@ -357,6 +444,7 @@ void partial_flags() {
               "Primary instruction effects establish only defined CCR bits and preserve unknown "
               "status");
       partial_registers(memory, cpu.state(), opcode);
+      controller_registers(cpu.state(), opcode, std::span(memory.accesses).subspan(first_access));
     } else {
       require(rejected([&] { cpu.step(); }).contains("partial-CCR") && cpu.faulted() &&
                   cpu.state() == before && memory.retired == retired,
@@ -397,72 +485,94 @@ void partial_zero() {
   }
 }
 
+struct PrefixExpected {
+  unsigned opcode, a, hx, known, value, high, low_byte;
+};
+
+constexpr std::array<PrefixExpected, 11> prefix_effects{{{.opcode = 0x6a,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xee,
+                                                          .value = 0xe8,
+                                                          .high = 0x7f,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0x6c,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xee,
+                                                          .value = 0x6c,
+                                                          .high = 0x81,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0x6f,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xee,
+                                                          .value = 0x6a,
+                                                          .high = 0,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0xe7,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xee,
+                                                          .value = 0x6a,
+                                                          .high = 0,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0xef,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xee,
+                                                          .value = 0x68,
+                                                          .high = loaded_x,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0xfe,
+                                                          .a = 0,
+                                                          .hx = 0x8000,
+                                                          .known = 0xee,
+                                                          .value = 0x6c,
+                                                          .high = 0x80,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0xff,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xee,
+                                                          .value = 0x68,
+                                                          .high = 0,
+                                                          .low_byte = loaded_x},
+                                                         {.opcode = 0xee,
+                                                          .a = 0,
+                                                          .hx = 0x80,
+                                                          .known = 0xee,
+                                                          .value = 0x6c,
+                                                          .high = 0x80,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0xe1,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xef,
+                                                          .value = 0xed,
+                                                          .high = 0x80,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0x68,
+                                                          .a = 0,
+                                                          .hx = loaded_x,
+                                                          .known = 0xef,
+                                                          .value = 0xeb,
+                                                          .high = 0,
+                                                          .low_byte = 0},
+                                                         {.opcode = 0xeb,
+                                                          .a = 0x80,
+                                                          .hx = loaded_x,
+                                                          .known = 0xff,
+                                                          .value = 0x6c,
+                                                          .high = 0x80,
+                                                          .low_byte = 0}}};
+
 void partial_prefixes() {
   constexpr unsigned stack = 0x200;
   constexpr unsigned high = stack + 1;
   constexpr unsigned low_byte = stack + 2;
   constexpr unsigned prefix = 0x9e;
 
-  struct PrefixExpected {
-    unsigned opcode, a, hx, known, value, high, low_byte;
-  };
-
-  constexpr std::array<PrefixExpected, 8> prefix_effects{{{.opcode = 0xe7,
-                                                           .a = 0,
-                                                           .hx = loaded_x,
-                                                           .known = 0xee,
-                                                           .value = 0x6a,
-                                                           .high = 0,
-                                                           .low_byte = 0},
-                                                          {.opcode = 0xef,
-                                                           .a = 0,
-                                                           .hx = loaded_x,
-                                                           .known = 0xee,
-                                                           .value = 0x68,
-                                                           .high = loaded_x,
-                                                           .low_byte = 0},
-                                                          {.opcode = 0xfe,
-                                                           .a = 0,
-                                                           .hx = 0x8000,
-                                                           .known = 0xee,
-                                                           .value = 0x6c,
-                                                           .high = 0x80,
-                                                           .low_byte = 0},
-                                                          {.opcode = 0xff,
-                                                           .a = 0,
-                                                           .hx = loaded_x,
-                                                           .known = 0xee,
-                                                           .value = 0x68,
-                                                           .high = 0,
-                                                           .low_byte = loaded_x},
-                                                          {.opcode = 0xee,
-                                                           .a = 0,
-                                                           .hx = 0x80,
-                                                           .known = 0xee,
-                                                           .value = 0x6c,
-                                                           .high = 0x80,
-                                                           .low_byte = 0},
-                                                          {.opcode = 0xe1,
-                                                           .a = 0,
-                                                           .hx = loaded_x,
-                                                           .known = 0xef,
-                                                           .value = 0xed,
-                                                           .high = 0x80,
-                                                           .low_byte = 0},
-                                                          {.opcode = 0x68,
-                                                           .a = 0,
-                                                           .hx = loaded_x,
-                                                           .known = 0xef,
-                                                           .value = 0xeb,
-                                                           .high = 0,
-                                                           .low_byte = 0},
-                                                          {.opcode = 0xeb,
-                                                           .a = 0x80,
-                                                           .hx = loaded_x,
-                                                           .known = 0xff,
-                                                           .value = 0x6c,
-                                                           .high = 0x80,
-                                                           .low_byte = 0}}};
   constexpr std::array<std::uint8_t, 2> data{0x80, 0};
   Memory memory;
   memory.writable.set();

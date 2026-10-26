@@ -538,6 +538,101 @@ if(BUILD_TESTING)
   target_compile_definitions(blofeld-hcs08-prefetch-store-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_prefetch_stores COMMAND blofeld-hcs08-prefetch-store-test)
+  add_executable(blofeld-hcs08-subroutine-cycle-test test/subroutine_test.cpp)
+  target_link_libraries(blofeld-hcs08-subroutine-cycle-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-subroutine-cycle-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_subroutine COMMAND blofeld-hcs08-subroutine-cycle-test)
+  add_executable(blofeld-original-hcs08-subroutine-test
+    test/original_subroutine_test.cpp test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-subroutine-test PRIVATE blofeld_hcs08_spi_run_clock
+    blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio blofeld_hcs08_adc
+    blofeld_dsp_peripherals blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-subroutine-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_spi_subroutine COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_subroutine.py"
+    $<TARGET_FILE:blofeld-original-hcs08-subroutine-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-subroutine.trace")
+  set_tests_properties(original_hcs08_spi_subroutine PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-hcs08-call-cycle-test test/call_test.cpp)
+  target_link_libraries(blofeld-hcs08-call-cycle-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-call-cycle-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_call COMMAND blofeld-hcs08-call-cycle-test)
+  add_executable(blofeld-original-hcs08-call-test
+    test/original_call_test.cpp test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-call-test PRIVATE blofeld_hcs08_spi_run_clock
+    blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio blofeld_hcs08_adc
+    blofeld_dsp_peripherals blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-call-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_spi_call COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_call.py"
+    $<TARGET_FILE:blofeld-original-hcs08-call-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-call.trace")
+  set_tests_properties(original_hcs08_spi_call PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-hcs08-rmw-cycle-test test/modify_test.cpp test/modify_inherit.cpp)
+  target_link_libraries(blofeld-hcs08-rmw-cycle-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-rmw-cycle-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_modify COMMAND blofeld-hcs08-rmw-cycle-test)
+  add_executable(blofeld-original-hcs08-modify-test
+    test/original_modify_test.cpp test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-modify-test PRIVATE blofeld_hcs08_spi_run_clock
+    blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio blofeld_hcs08_adc
+    blofeld_dsp_peripherals blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-modify-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_spi_modify COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_modify.py"
+    $<TARGET_FILE:blofeld-original-hcs08-modify-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-modify.trace")
+  set_tests_properties(original_hcs08_spi_modify PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-hcs08-clear-cycle-test test/clear_test.cpp test/clear_inherit.cpp)
+  target_link_libraries(blofeld-hcs08-clear-cycle-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-clear-cycle-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_clear COMMAND blofeld-hcs08-clear-cycle-test)
+  add_executable(blofeld-original-hcs08-clear-test
+    test/original_clear_test.cpp test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-clear-test PRIVATE blofeld_hcs08_spi_run_clock
+    blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio blofeld_hcs08_adc
+    blofeld_dsp_peripherals blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-clear-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_spi_clear COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_clear.py"
+    $<TARGET_FILE:blofeld-original-hcs08-clear-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-clear.trace")
+  set_tests_properties(original_hcs08_spi_clear PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+  add_executable(blofeld-hcs08-indexed-store-test test/indexed_test.cpp test/indexed_inherit.cpp)
+  target_link_libraries(blofeld-hcs08-indexed-store-test PRIVATE blofeld_hcs08)
+  target_compile_definitions(blofeld-hcs08-indexed-store-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_prefetch_indexed_store COMMAND blofeld-hcs08-indexed-store-test)
+  add_executable(blofeld-original-hcs08-indexed-test
+    test/original_receiver_test.cpp test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-indexed-test PRIVATE blofeld_hcs08_spi_run_clock
+    blofeld_hcs08_programmer_fixture blofeld_hcs08_gpio blofeld_hcs08_adc
+    blofeld_dsp_peripherals blofeld_private_files)
+  target_compile_definitions(blofeld-original-hcs08-indexed-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_spi_indexed_store COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_spi_indexed.py"
+    $<TARGET_FILE:blofeld-original-hcs08-indexed-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-spi-indexed.trace")
+  set_tests_properties(original_hcs08_spi_indexed_store PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
   add_executable(blofeld-hcs08-prefetch-irq-test test/hcs08_prefetch_irq_test.cpp)
   target_link_libraries(blofeld-hcs08-prefetch-irq-test PRIVATE blofeld_hcs08)
   target_compile_definitions(blofeld-hcs08-prefetch-irq-test PRIVATE
@@ -2573,7 +2668,12 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-hcs08-prefetch-store-test
+  DEPENDS blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
+    blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test
+    blofeld-hcs08-rmw-cycle-test blofeld-original-hcs08-modify-test
+    blofeld-hcs08-clear-cycle-test blofeld-original-hcs08-clear-test
+    blofeld-hcs08-indexed-store-test blofeld-original-hcs08-indexed-test
+    blofeld-hcs08-prefetch-store-test
     blofeld-original-hcs08-spi-word-test blofeld-original-hcs08-spi-move-test
     blofeld-original-startup-identity-test blofeld-original-identity-main-test blofeld-original-device-identity-test blofeld-virtual-device-state-test
     blofeld-device-identity-test blofeld-hcs08-instruction-reservation-test blofeld-hcs08-irq-bus-test blofeld-hcs08-irq-test
