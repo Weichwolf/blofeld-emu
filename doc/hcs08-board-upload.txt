@@ -1,0 +1,43 @@
+Production Keyboard RAM upload and reset-known execution
+
+  cmake --build --preset strict --target blofeld-hcs08-board-status-test \
+    blofeld-original-keyboard-board-upload-test
+  ctest --preset strict -j1 -R '^(hcs08_board_status|original_keyboard_board_upload)$' --output-on-failure
+
+GT8A15.2.3/Table15-1 and15.4.1:READ_STATUS is nonintrusive,has no extra command
+delay and reads BDCSCR outside CPU memory. Pending CPU budgets admit only this
+command. WRITE_CONTROL clock switching and running-memory grants stay strict.
+Literal tests cover six cuts of native LDA/STA,unchanged RAM/COP/CPU budgets,
+fresh partial-budget copies,and a latched reply across actual BGND retirement.
+Reference service/retirement ordering is explicit;no physical sampling edge.
+
+The unchanged local1018-byte HC12 helper uploads32 clear+132 original programmer
+bytes and512 original page bytes through actual GPIO/BDC into production SRAM.
+Serialized WRITE_PC/WRITE_SP/GO reach00A0/047C. The target starts from an actual
+BKGD-low power-on checkpoint:unknown PC/A/X,RAM and vectors,H=0,CCR knowledge68.
+No debug register seed or direct target RAM injection. The original H/TXS makes
+HX0078/SP0077,not0477;unknown A survives until the native immediate load.
+
+Three cases(two unsecure phases,one secure) execute5145185 HC12 instructions;
+2046 BDC commands receive8166 bytes and transmit3. Six fresh whole-owner suffixes
+reproduce CPU/FLASH/BDC/wire/clock state and complete events. The independent
+collector checks all received bytes,eight literal CPU states/known masks,and
+eight fixed trace corruptions. Unsecure execution refuses idle FSTATFF at00B2
+after8 retired/26 executing periods;secure execution refuses unknown fetch00A0.
+NVM stays exact;no erase/program/status success is fabricated.
+
+Declared component entry:post-SYNC/post-display HC12 context,own factory trim,
+ideal pulls,12MHz oscillator,8host BUSCLK periods per BDC edge,two phases,and
+one target reference period before each BDC edge after actual GO. Background
+BUSCLK remains unqualified. These assumptions do not join the separate reset
+fixture into a complete caller history. LCD/long-low SYNC,FLASH W1C/empty-launch
+priority,whole boot,DSP/MIDI/audio/update/recovery and physical equivalence stay
+open. Manufacturer inputs remain local and hash-pinned. No fuzz/physical traffic.
+
+Canonical qualification:strict all-target build/global format and8 compiler/AST
+contexts pass. Seven ASan/UBSan and six separate TSan CTest groups pass,no
+skips,including four native programs/profile. Instrumentation/source guards,
+strict global ELF and four built TSan ELF checks pass;whole TSan ELF inventory
+stays unqualified. Three collector CLI negatives pass. Sanitizer traces match
+the private candidate exactly. Both profiles469definitions/1089recipes retain
+all467prior complete test contracts/1086compiler recipes.

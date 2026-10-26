@@ -7,8 +7,10 @@ Production Keyboard BKGD and native reset/SYNC ownership
 Hcs08BoardWire owns production memory,CPU,BDC and the actual bit transport.
 Callers supply separate BDC edges and BUSCLK periods;no ratio,physical rate or
 active-background BUSCLK gating is inferred. There is no direct byte bypass.
-Native command deadlines require a complete target instruction boundary;even
-then running-memory arbitration stays strict. Driver/target/device failures
+Native command deadlines require a complete target instruction boundary,except
+READ_STATUS:GT8A15.4.1 places BDCSCR outside CPU memory and permits reads anytime.
+Status service supplies no running-memory grant. Control/clock changes and
+running-memory arbitration stay strict. Driver/target/device failures
 quarantine the whole owner. Joint snapshots retain CPU reservations,partial
 bits,replies,time and memory;GPIO callbacks detach. Explicit reset discards wire
 ownership. First BKGD-low power-on supports unknown vectors without assigning PC.
@@ -40,3 +42,6 @@ pass;the full TSan ELF inventory stays unqualified. Three collector CLI negative
 pass. Registration464/1082 preserves462definitions/1078recipes per profile.
 BKGD errors identify the BDC agent,target PC knowledge,pin and actual wire time.
 No fuzz/physical traffic.
+
+Pending-budget status coverage and original upload/GO into this production owner:
+doc/hcs08-board-upload.txt. Historical reset-only evidence above is unchanged.

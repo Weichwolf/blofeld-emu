@@ -2577,7 +2577,8 @@ Production Keyboard reference-period ownership and coordinated resets:
 Production BKGD wire ownership:
 - Real CPU/memory/BDC and native pulses share quarantine/joint snapshots.
   Command deadlines cannot consume pending instruction budgets or invent
-  running-memory arbitration. First BKGD-low power-on needs no known vector.
+  running-memory arbitration,except read-only BDCSCR service qualified below.
+  First BKGD-low power-on needs no known vector.
 - Actual PE7/PB1 reset/SYNC executes1086885 original HC12 instructions,three
   cases and six fresh joint suffixes. Target PC/A/X remain unknown and target
   execution stays held;SRAM masks/NVM remain exact. Eleven directed collector
@@ -2591,6 +2592,27 @@ Production BKGD wire ownership:
   and method bodies stay exact;unchanged long startup was not replayed.
 - Physical timing,active-background BUSCLK,full upload/SMF/DSP/FLASH chain,
   normal boot/MIDI/audio/update/recovery remain open. See hcs08-board-wire.txt.
+
+Production Keyboard upload/GO and asynchronous status:
+- BDCSCR is outside CPU memory;READ_STATUS may service a pending instruction
+  without stealing its bus/budget. Six native LDA/STA cuts and a latched reply
+  across actual BGND retirement check CPU/RAM/COP ownership and fresh copies.
+  Control-clock changes and running-memory access remain strict.
+- Three original post-display upload/start cases execute5145185 HC12 steps,
+  2046commands/8166received bytes,with six fresh whole-owner suffixes. Native
+  reset A/X/CCR knowledge is retained;actual H/TXS makes SP0077. Eight literal
+  CPU states retain unknown A until its real immediate load. Two unsecure
+  cases refuse idle FSTATFF at00B2 after8retired/26periods;secure RAM ignores
+  writes and GO refuses unknown fetch00A0. No target register/RAM seeding,
+  manufacturer byte changes or NVM transfer. See hcs08-board-upload.txt.
+- Canonical strict all-target/format/8AST contexts pass;7ASan/UBSan and6TSan
+  CTest groups pass,no skips,four native programs/profile. Instrumentation/
+  source guards,strict global ELF and four built TSan ELF checks pass;whole
+  TSan ELF inventory stays unqualified. Eight trace/three CLI negatives pass.
+  Both profiles469/1089 preserve all467/1086prior definitions/recipes.
+- This is a component entry with explicit post-SYNC/context/clock assumptions;
+  it does not resolve the whole-caller LCD/long-low ambiguity or establish
+  normal boot,MIDI/audio,FLASH completion,update/recovery or physical timing.
 
 Automatic native peripheral-to-P memory transfers:
 - Actual captured one-word MOVEP uses native AGU/port/P effects and five extra

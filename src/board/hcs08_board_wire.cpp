@@ -91,7 +91,8 @@ void Hcs08BoardWire::clock_bdc() {
   begin_wire();
   const auto pending = wire_.state();
   if (pending.service_due && pending.next_clock_ticks >= *pending.service_due &&
-      board_.run_state().remaining_periods != 0) {
+      board_.run_state().remaining_periods != 0 &&
+      board_.bdc_state().frame[0] != hcs08_bdc::read_status) {
     fail("service", "native instruction budget is pending;wire service grant unqualified");
   }
   try {
