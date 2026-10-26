@@ -70,9 +70,11 @@ enum class Hcs08PrefetchContract : std::uint8_t {
   reference_subroutine_program_cycles
 };
 
+// Real data-period latch; knownness travels with the byte through its arrival.
 struct Hcs08DataRead {
   std::uint16_t address = 0;
   std::optional<std::uint8_t> value;
+  std::uint8_t known = Hcs08State::all_a;
   bool in_flight = false, consumed = false;
   bool operator==(const Hcs08DataRead &) const = default;
 };

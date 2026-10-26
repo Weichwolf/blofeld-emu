@@ -308,10 +308,9 @@ public:
     constexpr unsigned lda_extended = 0xc6;
     constexpr unsigned sta_direct = 0xb7;
     constexpr unsigned sta_extended = 0xc7;
-    raw_load_ = program == nullptr && known_memory_ != nullptr &&
-                (opcode == lda_direct || opcode == lda_extended);
-    raw_store_ = program == nullptr && (opcode == sta_direct || opcode == sta_extended) &&
-                 knowledge_.a != Hcs08KnownByte::all;
+    raw_load_ = known_memory_ != nullptr && (opcode == lda_direct || opcode == lda_extended);
+    raw_store_ =
+        (opcode == sta_direct || opcode == sta_extended) && knowledge_.a != Hcs08KnownByte::all;
     loaded_operand_.reset();
     constexpr unsigned rts = 0x81;
     stack_call_ = subroutine_call(opcode);
@@ -496,16 +495,25 @@ private:
     return {.value = static_cast<std::uint8_t>(bus_.read_memory(access))};
   }
 
-  [[nodiscard]] ghidra::uintb read_operand(const MemoryRead access) const {
-    if (operand_ != nullptr) {
-      if (access.size != 1 || !operand_->value || operand_->in_flight || operand_->consumed ||
-          operand_->address != access.address) {
-        throw Fault("HCS08 captured operand read address=" + hex(access.address) +
-                    ": missing, immature, repeated or mismatched actual byte read");
-      }
-      operand_->consumed = true;
-      return *operand_->value;
+  [[nodiscard]] ghidra::uintb read_captured_operand(const MemoryRead access) const {
+    if (access.size != 1 || !operand_->value || operand_->in_flight || operand_->consumed ||
+        operand_->address != access.address) {
+      throw Fault("HCS08 captured operand read address=" + hex(access.address) +
+                  ": missing, immature, repeated or mismatched actual byte read");
     }
+    if (raw_load_) {
+      if (loaded_operand_) { throw Fault("HCS08 captured LDA repeats its native byte copy"); }
+      loaded_operand_ = Hcs08KnownByte{.value = *operand_->value, .known = operand_->known};
+    } else if (operand_->known != Hcs08KnownByte::all) {
+      throw Fault("HCS08 captured operand address=" + hex(access.address) +
+                  " pc=" + hex(address_.getOffset()) + ": unqualified partial-byte consumer");
+    }
+    operand_->consumed = true;
+    return static_cast<ghidra::uintb>(*operand_->value & operand_->known);
+  }
+
+  [[nodiscard]] ghidra::uintb read_operand(const MemoryRead access) const {
+    if (operand_ != nullptr) { return read_captured_operand(access); }
     if (return_frame_ && access.size == 1) {
       for (unsigned index = 0; index < return_frame_->masks.size(); ++index) {
         const auto address = static_cast<std::uint16_t>(return_frame_->stack + 1U + index);

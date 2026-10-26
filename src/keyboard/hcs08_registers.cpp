@@ -99,13 +99,13 @@ RegisterKnowledge division(const Bus &bus, const Hcs08State &state) {
 }
 }
 
-RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
+RegisterKnowledge registers_after(const Bus &code, const Hcs08State &before, const Bus &data) {
   const auto &s = before;
   RegisterKnowledge result{.a = s.a_known, .hx = s.hx_known};
-  if (bus.peek(s.pc) == divide_opcode) { return division(bus, s); }
+  if (code.peek(s.pc) == divide_opcode) { return division(code, s); }
   if (s.a_known == byte_mask && s.hx_known == word_mask) { return result; }
-  bus.check_execute({.address = s.pc, .length = 1});
-  const auto opcode = bus.peek(s.pc);
+  code.check_execute({.address = s.pc, .length = 1});
+  const auto opcode = code.peek(s.pc);
   switch (opcode) {
     case lda_immediate:                     // LDA immediate
     case lda_direct:                        // LDA direct
@@ -163,7 +163,7 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
       break;
     case sta_direct:   // STA direct
     case sta_extended: // STA extended
-      if (s.a_known != byte_mask && dynamic_cast<const Hcs08KnownMemory *>(&bus) == nullptr) {
+      if (s.a_known != byte_mask && dynamic_cast<const Hcs08KnownMemory *>(&data) == nullptr) {
         unqualified(s, opcode);
       }
       break;
@@ -177,7 +177,7 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case tap: // TAP
       if (s.a_known != byte_mask) { unqualified(s, opcode); }
       break;
-    case stack_prefix: return stack(bus, s);
+    case stack_prefix: return stack(code, s);
     case mov_immediate_direct: // MOV immediate,direct
     case mov_direct:
     case brclr7:

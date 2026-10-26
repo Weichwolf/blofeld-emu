@@ -95,7 +95,7 @@ failed writes retain real prefixes and require coordinated recovery.
   cmake --build --preset strict --target blofeld-hcs08-prefetch-peripheral-test blofeld-original-hcs08-prefetch-test
   ctest --test-dir build/strict -j1 -R '^(hcs08_prefetch_peripheral|original_hcs08_prefetch_peripheral)$' --output-on-failure
 
-Peripheral units cover3072 byte/CCR cases and54 fresh suffixes, unknown A/H:X,
+Peripheral units cover3072 byte/CCR cases and54 fresh suffixes, unknown H:X/denied masked stores,
 read-to-change operands, failed before/after stores and writes to captured code.
 Original empty/send paths execute control54 or cursor/buffer/SPID stores and
 pull the actual PSHH-saved H.16 contexts,66 cuts/132 fresh suffixes retain exact

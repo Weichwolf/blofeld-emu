@@ -14,5 +14,6 @@ struct RegisterKnowledge {
 
 // Qualify dependencies before native execution, then commit only on retirement.
 // Unknown representatives must never reach an unqualified native consumer.
-[[nodiscard]] RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before);
+[[nodiscard]] RegisterKnowledge
+registers_after(const Bus &code, const Hcs08State &before, const Bus &data);
 }

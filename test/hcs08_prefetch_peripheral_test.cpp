@@ -293,15 +293,16 @@ void unknown_operands() {
                           opcode == sta_direct || opcode == sta_extended ? 0U : byte_mask)};
     Machine machine;
     machine.prepare(input);
+    // Raw A stores are now qualified; the actual target permission still owns refusal.
+    if (writes(input)) { machine.memory.writable.reset(address(input)); }
     for (unsigned n = 1; n < data_phase(input); ++n) { machine.cpu.advance_irq_program(); }
     const auto accesses = machine.memory.accesses;
     require(rejected([&] {
               machine.cpu.advance_irq_program();
-            }).contains(writes(input) ? "partial-register" : "address=unknown") &&
+            }).contains(writes(input) ? "masked RAM write" : "address=unknown") &&
                 machine.cpu.faulted() && machine.memory.accesses == accesses &&
                 machine.memory.reads == 0 && machine.memory.writes == 0,
-            "Unknown native A or effective H:X cannot be replaced by a representative data "
-            "transaction");
+            "Unknown effective H:X and denied partial-A stores cannot produce a data transaction");
   }
 }
 

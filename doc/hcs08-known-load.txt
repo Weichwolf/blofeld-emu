@@ -1,25 +1,28 @@
 HCS08 native partial-byte loads/stores
 
-Untimed LDA direct/extended copies an actual Hcs08KnownMemory byte into native
-A with its mask. Native SLEIGH owns the read, register value and flags; knownness
-commits only after retirement. STA direct/extended retains masks in actual
-board-owned writes. Permissions, ignored-data effects and failures stay bus-owned.
+LDA/STA direct/extended retain actual Hcs08KnownMemory bytes and masks.
+Native SLEIGH owns register values/flags; permissions, ignored-data effects and
+failure prefixes remain owned by the actual data bus, independently of code fetch.
+
+Captured LDA reads once at r (DIR:rpp,EXT:prpp). Value/mask arrive one period
+later and survive changed registers without rereading. Native completion commits
+A/CCR knowledge; the program owner retires at the final period. STA writes the
+actual masked A at w (DIR:wpp,EXT:pwpp). Joint checkpoints retain each latch and
+completed effect. These are explicit unstretched references,not silicon phase proof.
 
 V is clear/known. N is known iff source bit7 is known. Z is known for a known
-one bit or a complete byte. H/I/C retain prior knowledge. Unsupported dependent
-operations reject before using unknown representatives. Ordinary bus reads and
-fetches remain strict; captured program-period partial loads/stores remain strict.
-Existing IRQ/RTI/checkpoint fields retain A/CCR masks. Trusted pending-write
-restoration discards transient raw-load metadata.
+one bit or a complete byte. H/I/C retain prior knowledge. Unqualified dependent
+operations and ordinary reads/fetches of unknown bytes remain strict. Trusted
+pending-write restoration discards transient raw-load metadata.
 
 Primary:hcs08-reference.json Family Rev2 LDA255/STA280;candidateGT5.7.2 COP.
-The own test checks all256 concrete candidates for each value/mask word and
-both LDA forms (65536 words each);each vector runs four native instructions.
-Actual COP service/timeout and denied writes,unknown consumers,IRQ and joint
-restore are checked. An obsolete IRQ test now verifies partial LDA/known-Z branch
-and continued strict arithmetic. Raw prior failure remains local.
+Independent tests enumerate all256 concrete completions:131072 untimed value/mask
+vectors and6144 captured phase cases (all256 masks,six values,four LDA/STA pairs).
+Forty fresh captured checkpoints,actual ICG read-ack invalidation/COP service,
+unknown consumer/fetch/capability and denied or partially committed access cases
+are checked. Existing IRQ/RTI restoration retains raw A/CCR knowledge.
 
-After integration:build blofeld-hcs08-known-load-test;CTest hcs08_known_load.
-Qualify affected CPU consumers and separate sanitizer profiles. No live ICG
-clock/detector or board binding,original reset success,physical timing or hardware
-equivalence follows from these component gates. No fuzz or physical traffic.
+Build targets blofeld-hcs08-{known-load,captured-known}-test;CTest
+hcs08_{known_load,captured_known}. Qualify affected consumers in separate sanitizer
+profiles. Live clock/status detectors,board binding,normal reset-to-instrument
+and physical timing/equivalence remain open. No fuzz or physical traffic.

@@ -800,8 +800,17 @@ void Hcs08::advance_data_program(Hcs08PrefetchState &program,
       program.operand.address = static_cast<std::uint16_t>(
           static_cast<unsigned>(program.operand.address) + program.before.hx);
     }
-    program.operand.value =
-        static_cast<std::uint8_t>(impl_->bus.read_memory({.address = program.operand.address}));
+    constexpr unsigned lda_direct = 0xb6;
+    constexpr unsigned lda_extended = 0xc6;
+    const auto opcode = program.instruction[0];
+    auto *known = dynamic_cast<Hcs08KnownMemory *>(&impl_->bus);
+    const bool raw = known != nullptr && (opcode == lda_direct || opcode == lda_extended);
+    const auto byte =
+        raw ? known->read_known_byte(program.operand.address)
+            : Hcs08KnownByte{.value = static_cast<std::uint8_t>(
+                                 impl_->bus.read_memory({.address = program.operand.address}))};
+    program.operand.value = static_cast<std::uint8_t>(byte.value & byte.known);
+    program.operand.known = byte.known;
     program.operand.in_flight = true;
     return;
   }
@@ -1174,7 +1183,7 @@ bool Hcs08::execute_native(const Hcs08State &before,
   const auto opcode = code.peek(before.pc);
   const bool returning = opcode == rti;
   auto registers = returning ? native::RegisterKnowledge{.a = before.a_known, .hx = before.hx_known}
-                             : native::registers_after(code, before);
+                             : native::registers_after(code, before, impl_->bus);
   auto known = returning ? before.ccr_known : native::ccr_after(code, before);
   impl_->executor->prepare_return_frame(returning ? std::optional(before.sp) : std::nullopt);
   if (!impl_->run_native(program, operand, word_write, byte_move)) { return false; }

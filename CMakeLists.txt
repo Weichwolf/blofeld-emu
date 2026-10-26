@@ -775,6 +775,12 @@ if(BUILD_TESTING)
   target_compile_definitions(blofeld-hcs08-known-load-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_known_load COMMAND blofeld-hcs08-known-load-test)
+  add_executable(blofeld-hcs08-captured-known-test test/hcs08_captured_known_test.cpp)
+  target_link_libraries(blofeld-hcs08-captured-known-test PRIVATE
+    blofeld_hcs08 blofeld_hcs08_cop blofeld_hcs08_icg_status)
+  target_compile_definitions(blofeld-hcs08-captured-known-test PRIVATE
+    BLOFELD_HCS08_SLA=\"${CMAKE_BINARY_DIR}/share/HCS08.sla\")
+  add_test(NAME hcs08_captured_known COMMAND blofeld-hcs08-captured-known-test)
   add_executable(blofeld-hcs08-tpm-test test/hcs08_tpm_test.cpp)
   target_link_libraries(blofeld-hcs08-tpm-test PRIVATE blofeld_hcs08_tpm)
   add_test(NAME hcs08_tpm COMMAND blofeld-hcs08-tpm-test)
@@ -2702,7 +2708,7 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
+  DEPENDS blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
     blofeld-hcs08-icg-clocks-test blofeld-hcs08-icg-status-test
     blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
     blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test

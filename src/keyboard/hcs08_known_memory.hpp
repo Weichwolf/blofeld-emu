@@ -15,9 +15,9 @@ struct Hcs08KnownByte {
 // Optional board capability for genuine unknown register bits stored in RAM.
 // Ordinary Bus reads/fetches must still reject bytes with unknown bits. These
 // operations retain real access checks/effects; they are not peek/zero-fill APIs.
-// Qualified untimed LDA/STA, raw-copy RTI and unused-value CLR consumers retain
-// masks; address permissions and peripheral effects remain bus-owned. Captured
-// program-period LDA/STA still requires fully known data until separately owned.
+// Direct/extended LDA/STA, raw-copy RTI and unused-value CLR retain masks.
+// Captured LDA latches preserve them across the real data-period arrival;
+// permissions and peripheral effects remain owned by the actual board bus.
 class Hcs08KnownMemory {
 public:
   virtual ~Hcs08KnownMemory() = default;

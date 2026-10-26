@@ -67,5 +67,19 @@
       "HCS08RMV1 RTI detail:9 cycles uuuuufppp; AppendixA.2 cycle-code legend"
     ],
     "scope": "Architectural eligible maskable source, hardware stack order, I mask, vector fetch and native RTI. Unknown saved CCR/A/X bits remain memory-owned knowledge. Eleven-cycle entry, bus/prefetch phases, late priority, physical source mapping and boot provenance remain unqualified."
-  }
+  },
+  "icg_application_notes": [
+    {
+      "source": "https://www.nxp.com/docs/en/application-note/AN2494.pdf",
+      "bytes": 517957,
+      "sha256": "40ae3e0dca9b0d572464e402022209a016e803bde357deeb3bb153db443a601f",
+      "scope": "Older GB/GT background only;not a candidate GT8A filter-transfer or synchronization model."
+    },
+    {
+      "source": "https://www.nxp.com/docs/en/application-note/AN2496.pdf",
+      "bytes": 540505,
+      "sha256": "0b56f813225c891104a01c01c0f702de1f6109944b19d9643ac75ea289131a15",
+      "scope": "Older GB/GT trim variation examples,not a candidate GT8A calibration curve. Candidate POR/warm-reset retention takes precedence over this note."
+    }
+  ]
 }

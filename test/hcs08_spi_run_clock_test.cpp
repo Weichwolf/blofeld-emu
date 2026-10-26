@@ -4,6 +4,7 @@
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_flash.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_spi_clock.hpp"
 #include "keyboard/hcs08_spi_run_clock.hpp"
@@ -75,6 +76,20 @@ public:
   unsigned period = 0;
   bool fail_store = false;
   std::vector<AccessAt> peripheral_accesses;
+
+  Hcs08KnownByte read_known_byte(const std::uint16_t address) override {
+    if (Hcs08Spi::contains(address)) { return {.value = read(address)}; }
+    return MaskedMemory::read_known_byte(address);
+  }
+
+  void write_known_byte(const ByteWrite access, const std::uint8_t known) override {
+    if (!Hcs08Spi::contains(access.address)) {
+      MaskedMemory::write_known_byte(access, known);
+      return;
+    }
+    if (known != byte_mask) { fail(access.address, "unknown SPI write mask=" + hex(known)); }
+    write(access.address, access.value);
+  }
 
   std::uint8_t read(const std::uint16_t address) override {
     if (!Hcs08Spi::contains(address)) { return Memory::read(address); }
@@ -175,6 +190,37 @@ struct Machine {
 
   void tick() { tick(miso()); }
 };
+
+void known_memory_mapping() {
+  MemoryOwner memory;
+  memory.writable.set(); // The explicit SPI owner must take precedence over coarse fixture RAM.
+  memory.spi.write({.address = reg::control1, .value = control});
+  memory.begin_instruction({.pc = handler, .ccr = flags_fixed | flag_i});
+  const auto status = memory.read_known_byte(reg::status);
+  require(status.value == reg::transmit_empty && status.known == byte_mask &&
+              memory.accesses.empty() && memory.peripheral_accesses.size() == 1,
+          "Known-byte access performs the actual SPI status read,never an unknown RAM alias");
+  const auto before = memory.spi.state();
+  const auto events = memory.peripheral_accesses;
+  require(rejected([&] {
+            memory.write_known_byte({.address = reg::data, .value = pattern}, 0);
+          }).contains("unknown SPI write mask") &&
+              memory.spi.state() == before && memory.peripheral_accesses == events &&
+              memory.accesses.empty(),
+          "An unsupported partial SPI byte fails before peripheral or aliased-RAM effects");
+  memory.write_known_byte({.address = reg::data, .value = pattern}, byte_mask);
+  require(memory.spi.state().transmit == pattern && memory.peripheral_accesses.size() == 2 &&
+              memory.peripheral_accesses.back().access ==
+                  Access{.address = reg::data, .value = pattern, .write = true} &&
+              memory.accesses.empty(),
+          "The genuine prior SPIS read arms the actual known SPID write on this interface");
+  constexpr std::uint8_t low_nibble = 0x0f;
+  memory.write_known_byte({.address = operand, .value = pattern}, low_nibble);
+  const auto ram = memory.read_known_byte(operand);
+  require(ram.value == (pattern & low_nibble) && ram.known == low_nibble &&
+              memory.peripheral_accesses.size() == 2,
+          "Partial real RAM retains its value mask independently of SPI ownership");
+}
 
 void check_case(const Input input) {
   Machine m(input);
@@ -440,6 +486,7 @@ void program_contracts() {
 
 int main() {
   try {
+    known_memory_mapping();
     for (const auto order : {Hcs08SpiRunContract::reference_cpu_before_spi,
                              Hcs08SpiRunContract::reference_spi_before_cpu}) {
       for (const auto launch : {Hcs08SpiLaunchContract::reference_one_period,
