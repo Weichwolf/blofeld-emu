@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_bdc.hpp"
+#include "keyboard/hcs08_run_clock.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_spi_clock.hpp"
 
@@ -17,8 +18,14 @@ Hcs08SpiRunClock::Hcs08SpiRunClock(Hcs08Bdc &bdc,
                                    Hcs08SpiClock &spi,
                                    const Hcs08SpiRunContract order,
                                    const Hcs08SpiLaunchContract launch,
-                                   const Hcs08PrefetchContract program)
-    : bdc_(bdc), spi_(spi), order_(order), launch_(launch), program_(program) {
+                                   const Hcs08PrefetchContract program,
+                                   const Hcs08SpiForegroundInputs foreground)
+    : bdc_(bdc),
+      spi_(spi),
+      order_(order),
+      launch_(launch),
+      program_(program),
+      foreground_(foreground) {
   expected_ = boundary();
   if (order != Hcs08SpiRunContract::reference_cpu_before_spi &&
       order != Hcs08SpiRunContract::reference_spi_before_cpu) {
@@ -39,6 +46,15 @@ Hcs08SpiRunClock::Hcs08SpiRunClock(Hcs08Bdc &bdc,
       program != Hcs08PrefetchContract::reference_call_program_cycles &&
       program != Hcs08PrefetchContract::reference_subroutine_program_cycles) {
     fail("requires a supported IRQ program contract");
+  }
+  const bool retirement =
+      foreground_.contract == Hcs08SpiForegroundContract::reference_instruction_retirement;
+  if ((foreground_.contract != Hcs08SpiForegroundContract::unqualified && !retirement) ||
+      retirement != (foreground_.clock != nullptr)) {
+    fail("foreground execution requires its explicit retirement reference and matching clock");
+  }
+  if (foreground_.clock != nullptr && &foreground_.clock->bdc_ != &bdc_) {
+    fail("foreground retirement clock belongs to another native CPU/BDC owner");
   }
   healthy();
   check_owner();
@@ -63,11 +79,14 @@ Hcs08SpiRunBoundary Hcs08SpiRunClock::boundary() const {
   return {.cpu = bdc_.cpu_state(),
           .irq = bdc_.irq_bus_state(),
           .program = bdc_.prefetch_state(),
-          .spi = spi_.state()};
+          .spi = spi_.state(),
+          .foreground = foreground_.clock != nullptr ? std::optional{foreground_.clock->state()}
+                                                     : std::nullopt};
 }
 
 void Hcs08SpiRunClock::healthy() const {
-  if (!healthy_ || bdc_.faulted() || spi_.faulted()) {
+  if (!healthy_ || bdc_.faulted() || spi_.faulted() ||
+      (foreground_.clock != nullptr && foreground_.clock->faulted())) {
     fail("incomplete operation requires coordinated recovery");
   }
 }
@@ -76,7 +95,18 @@ void Hcs08SpiRunClock::check_owner() const {
   if (bdc_.state().active) {
     fail("active background CPU/peripheral clock ordering is unqualified");
   }
-  if (bdc_.instruction_reserved()) { fail("instruction budget has another clock owner"); }
+  if (foreground_.clock != nullptr) {
+    foreground_.clock->healthy();
+    foreground_.clock->check_reservation();
+    if (foreground_.clock->state().remaining_periods != 0 &&
+        (bdc_.irq_bus_state() || bdc_.prefetch_state())) {
+      fail("foreground budget overlaps native IRQ/program ownership");
+    }
+  }
+  if (bdc_.instruction_reserved() &&
+      (foreground_.clock == nullptr || foreground_.clock->state().remaining_periods == 0)) {
+    fail("instruction budget has another clock owner");
+  }
   if (boundary() != expected_) { fail("CPU queue/IRQ or SPI clock has another phase owner"); }
   if (expected_.program && expected_.program->contract != program_) {
     fail("owned program queue contract differs from the selected program reference");
@@ -88,13 +118,18 @@ void Hcs08SpiRunClock::check_counters() const {
   constexpr auto limit = std::numeric_limits<std::uint64_t>::max();
   if (state_.attempted_periods == limit || state_.completed_periods == limit ||
       state_.irq_periods == limit || state_.program_periods == limit ||
-      state_.spi_periods == limit || state_.launches == limit) {
+      state_.foreground_periods == limit || state_.spi_periods == limit ||
+      state_.launches == limit) {
     fail("period or event counter exhausted");
   }
 }
 
 void Hcs08SpiRunClock::advance_cpu() {
   state_.phase = Hcs08SpiRunPhase::cpu;
+  if (foreground_.clock != nullptr && foreground_.clock->state().remaining_periods != 0) {
+    advance_foreground();
+    return;
+  }
   auto irq = bdc_.irq_bus_state();
   constexpr unsigned complete_irq = 11;
   if (irq && irq->completed_cycles == complete_irq) {
@@ -114,8 +149,16 @@ void Hcs08SpiRunClock::advance_cpu() {
     bdc_.advance_irq_program();
     ++state_.program_periods;
   } else {
+    advance_foreground();
+  }
+}
+
+void Hcs08SpiRunClock::advance_foreground() {
+  if (foreground_.clock == nullptr) {
     fail("unowned foreground requires a qualified instruction clock or a real eligible IRQ");
   }
+  foreground_.clock->advance();
+  ++state_.foreground_periods;
 }
 
 void Hcs08SpiRunClock::observe_launch() {
@@ -138,6 +181,9 @@ void Hcs08SpiRunClock::observe_launch() {
 
 void Hcs08SpiRunClock::advance_spi(const std::optional<bool> miso) {
   state_.phase = Hcs08SpiRunPhase::spi;
+  if (bdc_.state().active) {
+    fail("active background CPU/peripheral clock ordering is unqualified");
+  }
   const bool scheduled = state_.launch_byte.has_value();
   observe_launch();
   if (scheduled && state_.launch_byte) {
@@ -185,7 +231,8 @@ Hcs08SpiRunState Hcs08SpiRunClock::state() const {
 }
 
 bool Hcs08SpiRunClock::faulted() const {
-  return !healthy_ || bdc_.faulted() || spi_.faulted();
+  return !healthy_ || bdc_.faulted() || spi_.faulted() ||
+         (foreground_.clock != nullptr && foreground_.clock->faulted());
 }
 
 Hcs08SpiRunCheckpoint Hcs08SpiRunClock::checkpoint() const {
@@ -197,6 +244,7 @@ Hcs08SpiRunCheckpoint Hcs08SpiRunClock::checkpoint() const {
   result.order_ = order_;
   result.launch_ = launch_;
   result.program_ = program_;
+  result.foreground_ = foreground_.contract;
   return result;
 }
 
@@ -204,6 +252,9 @@ void Hcs08SpiRunClock::restore_checkpoint(const Hcs08SpiRunCheckpoint &checkpoin
   if (checkpoint.order_ != order_ || checkpoint.launch_ != launch_ ||
       checkpoint.program_ != program_) {
     fail("checkpoint ordering/launch/program contract mismatch");
+  }
+  if (checkpoint.foreground_ != foreground_.contract) {
+    fail("checkpoint foreground contract mismatch");
   }
   healthy_ = false;
   if (bdc_.faulted() || spi_.faulted()) {

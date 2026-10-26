@@ -6,6 +6,7 @@
 #include "board/hcs08_board_memory.hpp"
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_gpio.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_spi_clock.hpp"
@@ -20,6 +21,7 @@ struct Hcs08BoardSerialContract {
   Hcs08SpiRunContract order = Hcs08SpiRunContract::unqualified;
   Hcs08SpiLaunchContract launch = Hcs08SpiLaunchContract::unqualified;
   Hcs08PrefetchContract program = Hcs08PrefetchContract::unqualified;
+  Hcs08SpiForegroundContract foreground = Hcs08SpiForegroundContract::unqualified;
 };
 
 class Hcs08BoardSerialCheckpoint {
@@ -40,7 +42,9 @@ private:
 };
 
 // Transfers a trusted complete instruction boundary into native IRQ/prefetch
-// ownership. Every period advances real COP/TPM/ADC first,then CPU/SPI in the
+// ownership. Explicit foreground retirement additionally owns complete native
+// instruction budgets;partial budgets survive fresh checkpoints and defer IRQs.
+// Every period advances real COP/TPM/ADC first,then CPU/SPI in the
 // declared reference order. No idle byte,status,clock calibration or IRQ is supplied.
 class Hcs08BoardSerial {
 public:
@@ -60,7 +64,9 @@ public:
   reset_checkpoint(const Hcs08BoardResetRequest &request) const;
   [[nodiscard]] Hcs08BoardState board_state() const;
   [[nodiscard]] Hcs08State cpu_state() const;
+  [[nodiscard]] Hcs08BdcState bdc_state() const;
   [[nodiscard]] Hcs08SpiRunState run_state() const;
+  [[nodiscard]] Hcs08RunState foreground_state() const;
   [[nodiscard]] Hcs08SpiClockState clock_state() const;
   [[nodiscard]] const Hcs08BoardMemory &memory() const;
   [[nodiscard]] bool faulted() const;

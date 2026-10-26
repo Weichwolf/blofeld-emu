@@ -59,6 +59,7 @@ public:
   void restore_checkpoint(const Hcs08RunCheckpoint &checkpoint);
 
 private:
+  friend class Hcs08SpiRunClock;
   void healthy() const;
   void check_reservation() const;
   [[noreturn]] void fail(const std::string &reason) const;

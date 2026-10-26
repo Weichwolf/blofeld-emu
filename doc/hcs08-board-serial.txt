@@ -9,8 +9,14 @@ SPI divider/common-clock models. Every period advances COP/TPM/ADC first,then
 CPU/SPI in the explicitly selected order. One/two-stage promotion consumes
 actual native SPID writes;only sixteen real clock edges complete a byte.
 Returned final-edge MOSI and earlier pins survive a later CPU failure in run_state.
-The ordinary board's retirement clock remains held;foreign pending instruction
-ownership refuses. Active-background clocks and unowned foreground stay strict.
+The default holds the ordinary retirement clock and refuses foreign pending
+instruction ownership. Explicit foreground retirement additionally composes that
+same native clock;see hcs08-serial-foreground.txt. Partial adopted bare-board
+budgets still refuse;whole serial checkpoints can resume their own partial budget.
+Active-background clocks remain unqualified. Native BGND preserves its actual
+retirement prefix and refuses an unknown subsequent SPI/device stage. Enabling
+BGND in the own test uses an explicit existing WRITE_CONTROL byte transaction;
+normal reset's disabled ENBDM is unchanged. No BDC clock/grant is fabricated.
 
 RTI eligibility policy is explicit at initial board creation and belongs to
 trusted board/reset copies. Its default stays unqualified at a real eligible
@@ -35,12 +41,9 @@ Reset copies retain policy and exact NVM;the source owner remains unchanged.
 
 References:hcs08-spi-{clock,run-clock}.txt and hcs08-irq.txt. Exact CPU/SPI ties,
 promotion/first-edge/completion phases and RTI eligibility are named references,
-not measured silicon. Canonical strict all-target/global format and55compiler/AST
-contexts pass. Thirteen ASan/UBSan and twelve separate TSan CTest groups pass,
-no skips,including ten native programs/profile and original reset/startup/
-upload prefixes. Instrumentation/source guards,strict global ELF and ten built
-TSan ELF checks pass;whole TSan ELF inventory remains unqualified. Both profiles
-472definitions/1093recipes preserve all471/1091prior complete contracts.
+not measured silicon. The retained IRQ-only regression and its complete prior
+oracles remain part of scoped validation. Foreground composition/current evidence:
+hcs08-serial-foreground.txt. Whole TSan ELF inventory remains unqualified.
 This adds no original-firmware SPI consumer,full boot,DSP/MIDI/audio,physical
 wiring/timing or complete update/recovery. Idle FSTATFF remains strict.
 No fuzz,physical traffic,manufacturer assets or native dependency patch.

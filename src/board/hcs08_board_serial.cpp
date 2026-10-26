@@ -6,6 +6,7 @@
 #include "board/hcs08_board_memory.hpp"
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_gpio.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_spi_clock.hpp"
@@ -30,7 +31,16 @@ Hcs08BoardSerial::Hcs08BoardSerial(const Hcs08BoardCheckpoint &board,
                                    const Hcs08BoardSerialContract contract)
     : board_(board, specification),
       spi_(board_.memory_.spi_, Hcs08SpiClockContract::reference_half_period_and_final_edge),
-      run_(board_.bdc_, spi_, contract.order, contract.launch, contract.program),
+      run_(board_.bdc_,
+           spi_,
+           contract.order,
+           contract.launch,
+           contract.program,
+           {.clock =
+                contract.foreground == Hcs08SpiForegroundContract::reference_instruction_retirement
+                    ? &board_.clock_
+                    : nullptr,
+            .contract = contract.foreground}),
       contract_(contract) {
   if (board_.clock_.state().remaining_periods != 0 || !board_.cpu_.state().pc_known) {
     fail("requires a complete known-PC CPU boundary without a foreign instruction reservation");
@@ -45,7 +55,12 @@ Hcs08BoardSerial::Hcs08BoardSerial(const Hcs08BoardSerialCheckpoint &checkpoint,
            spi_,
            checkpoint.contract_.order,
            checkpoint.contract_.launch,
-           checkpoint.contract_.program),
+           checkpoint.contract_.program,
+           {.clock = checkpoint.contract_.foreground ==
+                             Hcs08SpiForegroundContract::reference_instruction_retirement
+                         ? &board_.clock_
+                         : nullptr,
+            .contract = checkpoint.contract_.foreground}),
       contract_(checkpoint.contract_) {
   run_.restore_checkpoint(checkpoint.run_);
 }
@@ -73,6 +88,9 @@ Hcs08BoardSerial::advance_reference_period(const std::optional<bool> miso,
   healthy();
   healthy_ = false;
   board_.healthy_ = false;
+  if (board_.bdc_.state().active) {
+    fail("active background CPU/device/SPI clock ordering is unqualified");
+  }
   if (board_.state_.phase != Hcs08BoardPhase::boundary || board_.memory_.serial_period_owned_) {
     fail("reference period already has a board/serial owner");
   }
@@ -121,8 +139,16 @@ Hcs08State Hcs08BoardSerial::cpu_state() const {
   return board_.cpu_state();
 }
 
+Hcs08BdcState Hcs08BoardSerial::bdc_state() const {
+  return board_.bdc_state();
+}
+
 Hcs08SpiRunState Hcs08BoardSerial::run_state() const {
   return run_.state();
+}
+
+Hcs08RunState Hcs08BoardSerial::foreground_state() const {
+  return board_.run_state();
 }
 
 Hcs08SpiClockState Hcs08BoardSerial::clock_state() const {

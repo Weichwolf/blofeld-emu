@@ -5,6 +5,7 @@
 #include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_flash.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
+#include "keyboard/hcs08_run_clock.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_spi_clock.hpp"
 #include "keyboard/hcs08_spi_run_clock.hpp"
@@ -462,6 +463,115 @@ void foreign_owners() {
       "Unknown active-background peripheral clock behavior cannot become a synthetic idle tick");
 }
 
+void foreground_owner_contracts() {
+  const Input input{};
+  Machine source(input);
+  Machine foreign(input);
+  Hcs08RunClock matching(
+      source.memory, *source.bdc, Hcs08RunContract::reference_instruction_retirement);
+  Hcs08RunClock other(
+      foreign.memory, *foreign.bdc, Hcs08RunContract::reference_instruction_retirement);
+  const auto before = source.cpu.state();
+  const auto accesses = source.memory.accesses;
+  constexpr auto qualified = Hcs08SpiForegroundContract::reference_instruction_retirement;
+  for (auto *const clock : {&matching, &other}) {
+    const auto policy = clock == &matching ? Hcs08SpiForegroundContract::unqualified : qualified;
+    const auto reason = rejected([&] {
+      const Hcs08SpiRunClock candidate(*source.bdc,
+                                       *source.spi,
+                                       input.order,
+                                       input.launch,
+                                       input.program,
+                                       {.clock = clock, .contract = policy});
+    });
+    require(reason.contains(clock == &matching ? "explicit retirement reference"
+                                               : "another native CPU/BDC") &&
+                source.cpu.state() == before && source.memory.accesses == accesses,
+            "An undeclared or foreign retirement owner is refused before any native access");
+  }
+  require(rejected([&] {
+            const Hcs08SpiRunClock absent(*source.bdc,
+                                          *source.spi,
+                                          input.order,
+                                          input.launch,
+                                          input.program,
+                                          {.clock = nullptr, .contract = qualified});
+          }).contains("matching clock"),
+          "A named foreground reference cannot fabricate its missing native clock");
+}
+
+void foreground_foreign_periods() {
+  const Input input{};
+  Machine source(input);
+  source.memory.spi.write({.address = reg::control1, .value = quiet});
+  Hcs08RunClock foreground(
+      source.memory, *source.bdc, Hcs08RunContract::reference_instruction_retirement);
+  Hcs08SpiRunClock common(
+      *source.bdc,
+      *source.spi,
+      input.order,
+      input.launch,
+      input.program,
+      {.clock = &foreground,
+       .contract = Hcs08SpiForegroundContract::reference_instruction_retirement});
+  static_cast<void>(common.advance(false));
+  require(foreground.state().remaining_periods == 2 && common.state().foreground_periods == 1,
+          "A native BRA owns its remaining two periods before another common-clock period");
+  foreground.advance();
+  require(
+      rejected([&] { static_cast<void>(common.advance(false)); }).contains("another phase owner") &&
+          common.faulted() && source.spi->state().offered_periods == 1,
+      "A foreign foreground period cannot hide inside an unchanged architectural PC");
+}
+
+void foreground_checkpoint_policy() {
+  const Input input{};
+  Machine source(input);
+  source.memory.spi.write({.address = reg::control1, .value = quiet});
+  Hcs08RunClock foreground(
+      source.memory, *source.bdc, Hcs08RunContract::reference_instruction_retirement);
+  const Hcs08SpiRunClock common(
+      *source.bdc,
+      *source.spi,
+      input.order,
+      input.launch,
+      input.program,
+      {.clock = &foreground,
+       .contract = Hcs08SpiForegroundContract::reference_instruction_retirement});
+  const auto saved = common.checkpoint();
+  const auto before = source.cpu.state();
+  require(rejected([&] {
+            source.clock->restore_checkpoint(saved);
+          }).contains("foreground contract mismatch") &&
+              source.cpu.state() == before && source.spi->state().offered_periods == 0,
+          "An opaque foreground-owner checkpoint cannot become an unqualified idle/IRQ clock");
+}
+
+void foreground_foreign_reservation() {
+  const Input input{};
+  Machine source(input);
+  source.memory.spi.write({.address = reg::control1, .value = quiet});
+  Hcs08RunClock foreground(
+      source.memory, *source.bdc, Hcs08RunContract::reference_instruction_retirement);
+  const auto reservation =
+      source.bdc->reserve_instruction(Hcs08InstructionContract::reference_instruction_retirement);
+  require(reservation.has_value(),
+          "Negative case establishes an actual separately owned CPU reservation");
+  require(
+      rejected([&] {
+        const Hcs08SpiRunClock common(
+            *source.bdc,
+            *source.spi,
+            input.order,
+            input.launch,
+            input.program,
+            {.clock = &foreground,
+             .contract = Hcs08SpiForegroundContract::reference_instruction_retirement});
+      }).contains("reservation ownership changed") &&
+          foreground.state().offered_periods == 0 && source.spi->state().offered_periods == 0,
+      "A matching CPU identity does not authorize stealing another actual instruction reservation");
+}
+
 void program_contracts() {
   const Input base{};
   const Input jump{.program = Hcs08PrefetchContract::reference_jump_program_cycles};
@@ -505,6 +615,10 @@ int main() {
     foreign_owners();
     unowned_foreground();
     program_contracts();
+    foreground_owner_contracts();
+    foreground_foreign_periods();
+    foreground_checkpoint_policy();
+    foreground_foreign_reservation();
     std::cout
         << "HCS08 CPU/SPI clock:1024 byte/order/launch cases,real IRQ/RTI,automatic serial edges,"
            "fresh joint suffixes and strict committed failure prefixes pass.\n";

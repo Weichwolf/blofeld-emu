@@ -1,0 +1,56 @@
+Production HCS08 foreground/IRQ/SPI reference composition
+
+  cmake --build --preset strict --target blofeld-hcs08-serial-foreground-test \
+    blofeld-original-hcs08-serial-foreground-test
+  ctest --preset strict -j1 -R '^(hcs08_serial_foreground|original_hcs08_serial_foreground)$' --output-on-failure
+
+Hcs08BoardSerialContract.foreground=reference_instruction_retirement binds the
+actual board retirement clock. The default stays unqualified. SPI and CPU advance
+once in the declared order,after COP/TPM/ADC. A started foreground instruction
+retains its real reservation until its complete documented budget;an arriving
+IRQ waits. The real eleven-period IRQ/stack/vector sequence then owns execution.
+Its native prefetch queue remains owned after RTI;unsupported queued instructions
+still refuse. No queue discard,successful idle period or BDC grant is supplied.
+
+Foreground register/data effects occur at retirement under the existing explicit
+reference contract. This does not qualify physical instruction r/w phases,
+IRQ sampling,CPU/SPI ties or one/two-period shifter promotion. The native engine
+executes every instruction;there is no host instruction or target-state substitute.
+
+Initial adoption requires a complete known-PC board boundary. Opaque whole serial
+checkpoints also retain partial foreground budgets,CPU reservation/code identity,
+IRQ/program queues,actual SPI/divider/launch state and device periods. Fresh
+owners rebind their own clock;no pointer into a destroyed source is restored.
+Warm/cold logical resets retain actual A/X knowledge or discard it respectively.
+H/SP/I reset semantics and NVM uncertainty remain board-owned. Active-background
+CPU/SPI clocks and physical reset/NVM-abort timing remain separate strict limits.
+For enabled native BGND,CPU-first refuses its unknown post-retirement SPI stage;
+SPI-first retains its already completed stage and refuses the next halted period
+before any device advance. The own enable precondition is an actual WRITE_CONTROL
+byte transaction at an explicitly granted complete boundary. It changes neither
+normal reset's ENBDM0 nor disabled/secured BGND admission.
+
+foreground_state() is the retirement owner's historical metadata,not a total
+instruction count after IRQ/prefetch handoff. run_state() separates foreground,
+IRQ and program periods. bdc_state() is read-only and supplies no service grant.
+
+Own native cold setup uses LDHX/TXS/LDA/STA/CLI/NOP;Family Rev2 printed292 pins
+TXS opcode94 to two periods(fp),giving12setup periods. Native TX and RX ISR
+paths emit/receive actual eight-bit pin streams. RX completion during an already
+reserved BRA cannot preempt its remaining budget. Both orders/promotion references,
+full raw-state/knownness suffixes,logical resets,missing MISO and foreign owner/
+policy refusals are directed finite cases,not fuzz.
+
+The original Keyboard instruction stream uses the prior reset fixture's explicitly
+declared per-unit calibration byte FFBE=80;this is not a measured factory value.
+Omitted NVM remains unknown. The prefix retains the complete prior reset/
+ADC/TIM/COP/CPU/FSTAT oracle in both CPU/SPI orders and two timer phases,including
+missing physical-input refusals and fresh partial-budget copies. ADC12MHz/3.3V/
+channel0=0V and timer phases0/127 remain declared inputs,not measured clocks.
+SPI stays inactive;idle FSTATFF at originalEA88 remains strictly unqualified.
+No original-firmware SPI consumer or normal instrument startup is established.
+
+Normal boot,actual board identity/nets/clocks,MCU peer connection,MIDI/audio,
+persistence,full update/recovery/power-loss,realtime and physical equivalence
+remain objective.txt/coverage.txt requirements. No automatic fuzz,physical
+traffic,firmware change,manufacturer asset publication or dependency patch.

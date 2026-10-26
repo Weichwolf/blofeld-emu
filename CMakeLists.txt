@@ -130,7 +130,7 @@ target_include_directories(blofeld_hcs08_run_clock PUBLIC src)
 target_link_libraries(blofeld_hcs08_run_clock PUBLIC blofeld_hcs08_bdc)
 add_library(blofeld_hcs08_spi_run_clock src/keyboard/hcs08_spi_run_clock.cpp)
 target_include_directories(blofeld_hcs08_spi_run_clock PUBLIC src)
-target_link_libraries(blofeld_hcs08_spi_run_clock PUBLIC blofeld_hcs08_bdc blofeld_hcs08_spi_clock)
+target_link_libraries(blofeld_hcs08_spi_run_clock PUBLIC blofeld_hcs08_bdc blofeld_hcs08_spi_clock blofeld_hcs08_run_clock)
 add_library(blofeld_gpio_pads src/board/gpio_pads.cpp)
 target_include_directories(blofeld_gpio_pads PUBLIC src)
 target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
@@ -318,6 +318,23 @@ if(BUILD_TESTING)
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_board COMMAND blofeld-hcs08-board-test)
   set_tests_properties(hcs08_board PROPERTIES TIMEOUT 90)
+  add_executable(blofeld-hcs08-serial-foreground-test test/hcs08_serial_foreground_test.cpp)
+  target_link_libraries(blofeld-hcs08-serial-foreground-test PRIVATE blofeld_hcs08_board_serial)
+  target_compile_definitions(blofeld-hcs08-serial-foreground-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_serial_foreground COMMAND blofeld-hcs08-serial-foreground-test)
+  set_tests_properties(hcs08_serial_foreground PROPERTIES TIMEOUT 180)
+  add_executable(blofeld-original-hcs08-serial-foreground-test test/original_hcs08_serial_foreground_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-serial-foreground-test PRIVATE blofeld_hcs08_board_serial)
+  target_compile_definitions(blofeld-original-hcs08-serial-foreground-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_serial_foreground COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_serial_foreground.py"
+    $<TARGET_FILE:blofeld-original-hcs08-serial-foreground-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-serial-foreground.trace")
+  set_tests_properties(original_hcs08_serial_foreground PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 960)
   add_executable(blofeld-original-hcs08-board-test test/original_hcs08_board_test.cpp)
   target_link_libraries(blofeld-original-hcs08-board-test PRIVATE blofeld_hcs08_board)
   target_compile_definitions(blofeld-original-hcs08-board-test PRIVATE
@@ -2949,6 +2966,7 @@ add_custom_target(quality
     blofeld-gpio-pad-source-test blofeld-original-runtime-clocks-test blofeld-original-mcu-request-release-test blofeld-original-gpio-pair-test
     blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test
     blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test
+    blofeld-hcs08-serial-foreground-test blofeld-original-hcs08-serial-foreground-test
     blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test
     blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test blofeld-hcs08-prefetch-scanner-test blofeld-hcs08-prefetch-irq-test blofeld-hcs08-prefetch-jump-test

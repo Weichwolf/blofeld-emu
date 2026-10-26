@@ -2634,6 +2634,22 @@ Production HCS08 CPU/SPI ownership:
   TSan ELF inventory stays unqualified. Counts472/1093 retain all471/1091prior
   complete contracts. Sanitizer reset/upload traces match.
 
+
+Production HCS08 foreground/IRQ/SPI composition (hcs08-serial-foreground.txt):
+- Optional reference_instruction_retirement binds the actual board CPU clock.
+  Partial native budgets finish before IRQ admission;real IRQ/prefetch ownership
+  remains intact after handoff. Default unowned foreground still refuses.
+  Foreground data/register phases and physical CPU/SPI ties remain unqualified.
+- Each ASan/UBSan and separate TSan profile passes32complete own TX/RX cases,
+  464destroyed-owner fresh suffixes,64logical resets,four enabled native-BGND
+  order cases,12default/missing-pin refusals and six foreign-owner/policy guards.
+  Existing1024generic byte cases and production BoardSerial checks are retained.
+- The complete prior original reset/ADC/TPM/COP/FSTAT oracle also passes in both
+  CPU/SPI orders:10normal resets,four bounded fresh suffixes,four strict EA88/
+  FSTATFF frontiers and34collector controls/profile. Sanitizer traces match.
+  SPIedges=0;original SPI consumption,normal boot/MIDI/audio,all-phase update/
+  recovery/power-loss,realtime and physical equivalence remain open.
+
 Automatic native peripheral-to-P memory transfers:
 - Actual captured one-word MOVEP uses native AGU/port/P effects and five extra
   E1 hold periods. Independent unchanged processor-model windows establish six
