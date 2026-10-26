@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
+#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_program_fetch.hpp"
+#include "dsp/dsp_reference_cycle.hpp"
+#include "dsp/dsp_reference_execution.hpp"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
 
 #include <cstdint>
+#include <optional>
+#include <variant>
 
 namespace blofeld {
 bool pipeline_ccr_immediate(const std::uint32_t opcode) {
@@ -52,6 +58,56 @@ void DspInstructionPipeline::accept_branch_decode() {
   if (!branch || !branch_target_ready) { return; }
   branch_target_decoded = true;
   release_branch();
+}
+
+bool DspInstructionPipeline::capture_omr_branch(DspMachine &machine) {
+  if (deferred_omr_branch) {
+    const auto captured = *deferred_omr_branch;
+    if (!view.cycle.ag2 || view.cycle.ag2 != captured.word || !view.cycle.execute1 ||
+        !decode_omr_move(view.cycle.execute1->value) || branch) {
+      throw Fault("Deferred OMR branch lost its real predecessor/F2 stages");
+    }
+    const auto decision =
+        machine.capture_reference_branch(captured.word.address, captured.occurrence);
+    branch = decision;
+    branch_fetch_hold = 0;
+    branch_decode_hold = decision.taken ? 0U : 1U;
+    branch_target_ready = false;
+    branch_target_decoded = false;
+    branch_retired = false;
+    view.decode_address = decision.next_pc;
+    deferred_omr_branch.reset();
+    return true;
+  }
+  const auto ag1 = view.cycle.ag1;
+  const auto form = ag1 ? decode_branch_form(ag1->value) : std::nullopt;
+  const auto older = view.cycle.ag2;
+  if (!form || form->displacement || form->address_register || !older ||
+      !decode_omr_move(older->value)) {
+    return false;
+  }
+  if (branch || loop_setup) { throw Fault("OMR branch barrier has unresolved control flow"); }
+  const auto captured = samples.front();
+  if (!captured || captured->word != ag1) { throw Fault("OMR branch barrier lost actual F2"); }
+  // Resolve this OMR source in AG2 after its older genuine E1 result exists.
+  // Target F1 remains in the ordinary AG2 period; no extra instruction stall.
+  machine.hold_pipeline_branch(*captured);
+  deferred_omr_branch = captured;
+  branch_fetch_hold = 1;
+  return true;
+}
+
+void DspInstructionPipeline::follow_omr_retirement(const DspReferenceCycleResult &bus) {
+  if (!bus.progress || !bus.progress->completed || !branch) { return; }
+  const auto *effect = std::get_if<DspInstructionRetire>(&*bus.progress->completed);
+  if (effect == nullptr || effect->omr == effect->next_omr || branch->omr == effect->next_omr) {
+    return;
+  }
+  const auto form = decode_branch_form(branch->word.value);
+  if (branch->omr != effect->omr || !form || (!form->displacement && !form->address_register)) {
+    throw Fault("Pending branch lacks its actual older OMR execution context");
+  }
+  branch->omr = effect->next_omr;
 }
 
 }

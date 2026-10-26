@@ -565,6 +565,11 @@ void DspMachine::hold_pipeline_loop(const DspFetchedWord word) {
   state_->cpu.hold_pipeline_loop(word);
 }
 
+void DspMachine::hold_pipeline_branch(const DspFetchedWord word) {
+  if (clocked()) { throw Fault("Native branch barrier requires an unclocked reference owner"); }
+  state_->cpu.hold_pipeline_branch(word);
+}
+
 DspProgramFetchView DspMachine::reference_fetch() const {
   return state_->cpu.reference_fetch();
 }

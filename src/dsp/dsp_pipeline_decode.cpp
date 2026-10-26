@@ -5,6 +5,7 @@
 #include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
+#include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_program_fetch.hpp"
@@ -124,11 +125,15 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
     const bool transfer = profile == DspFetchPipeline::automatic_memory && !memory &&
                           pipeline_transfer_fields(word.value) != DspMoveFields{};
     const bool loop = profile == DspFetchPipeline::automatic_memory && pipeline_counted_loop(word);
-    const bool standalone_move = (memory || transfer || port_read) && second == dsp56k::Invalid;
+    const bool control =
+        profile == DspFetchPipeline::automatic_memory && decode_omr_move(word.value).has_value();
+    const bool standalone_move =
+        (memory || transfer || port_read || control) && second == dsp56k::Invalid;
     const auto words = pipeline_word_count(word);
     if ((!arithmetic && !standalone_move && !branch && !loop) ||
         (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
-        words > ((transfer || branch || loop || (memory && form->peripheral)) ? 2U : 1U)) {
+        words >
+            ((transfer || branch || loop || control || (memory && form->peripheral)) ? 2U : 1U)) {
       throw Fault("Unqualified native instruction form");
     }
     if (memory || transfer || port_read) { static_cast<void>(decode_move_writeback(word.value)); }

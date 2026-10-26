@@ -43,7 +43,8 @@ DspPeripheralRead DspPeripheralRead::capture(DspBus &bus,
   result.fetched_ = fetch.instruction(opcode, form->words);
   result.word_ = result.fetched_.opcode.word;
   result.form_ = *form;
-  result.omr_ = fetch.view().omr;
+  result.sample_omr_ = fetch.view().omr;
+  result.omr_ = fetch.execution_omr(opcode);
   result.epoch_ = point.epoch;
   if (result.fetched_.extension) { result.extension_ = result.fetched_.extension->word; }
   try {
@@ -60,6 +61,17 @@ DspPeripheralRead DspPeripheralRead::capture(DspBus &bus,
     throw Fault("Early peripheral " + result.context() + ": " + error.what());
   }
   return result;
+}
+
+void DspPeripheralRead::follow_context(const DspFetchContext &transition) {
+  const auto writer = transition.writer.extension.value_or(transition.writer.opcode);
+  if (fetched_.opcode.occurrence <= writer.occurrence) { return; }
+  if (!active_ || (omr_ != transition.before && omr_ != transition.after)) {
+    throw Fault("Peripheral context lost its actual preceding native OMR result: " + context());
+  }
+  // The physical sample and its original context remain immutable. Only the
+  // later native execution context follows this actual older control result.
+  omr_ = transition.after;
 }
 
 bool DspPeripheralRead::forward(const DspProgramWord producer,

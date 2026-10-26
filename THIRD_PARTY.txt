@@ -25,7 +25,9 @@ DSP56300:
   GPL-3.0 (see the dependency's LICENSE.md), pinned in doc/dependencies.json.
   The native interpreter is built from a local checkout, patched only in build/.
   Original notices remain in the build copy and source checkout. Its asmjit
-  component uses the Zlib license (source/asmjit/LICENSE.md). Other native source
+  component uses the Zlib license (source/asmjit/LICENSE.md).
+  The build-copy patch also synchronizes AsmJit's host CPU detection with
+  explicit std::call_once initialization; its original notices remain intact. Other native source
   notices remain upstream. Corresponding source and dependency notices must
   accompany any redistributable binary package as required by their licenses.
   The reference core is integrated; combined MCU/DSP board boot remains pending.

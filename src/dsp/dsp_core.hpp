@@ -156,6 +156,7 @@ private:
   [[nodiscard]] std::optional<std::uint32_t> pipeline_loop_last(DspFetchedWord word) const;
   [[nodiscard]] std::uint32_t pipeline_continuation(DspFetchedWord word, unsigned words) const;
   void hold_pipeline_loop(DspFetchedWord word);
+  void hold_pipeline_branch(DspFetchedWord word);
 
   void validate_reference_ticket(const DspReferenceTicket &ticket) const;
   void validate_reference_admission(const DspReferenceTicket &ticket,

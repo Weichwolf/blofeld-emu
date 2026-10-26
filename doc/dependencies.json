@@ -44,7 +44,13 @@
     "revision": "3ff6610d5018d798f35bc784696f3384ade0e3c4",
     "integrated": true,
     "integration": "Native interpreter reference core with strict DSP56371 bus and SHI, plus project-owned paged host dispatch/cycle storage; no combined MCU/DSP board boot.",
-    "patch": "patches/dsp56300-reference-bus.patch"
+    "patch": "patches/dsp56300-reference-bus.patch",
+    "asmjit_host_cpuinfo": {
+      "file": "source/asmjit/src/asmjit/core/cpuinfo.cpp",
+      "upstream_sha256": "6f6d5f17c53b922fa5511a547d462eb9c94fb98afba8808d4e7714a44eb58e86",
+      "integration": "Explicit std::call_once initialization; unchanged host detection operations and values. Required because the upstream build disables thread-safe local statics. Applied only by the existing build-copy patch.",
+      "license": "Zlib; original source notices retained."
+    }
   },
   "dsp56300_assembly_tool": {
     "source": "https://github.com/xemu-project/dsp56300",

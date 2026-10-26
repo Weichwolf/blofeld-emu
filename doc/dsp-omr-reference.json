@@ -1,0 +1,53 @@
+{
+  "scope": "Independent own OMR encoding/register/nominal windows and clocked ownership tests;not physical memory-switch or whole-device validation.",
+  "manuals": [
+    {
+      "file": "doc/hardware/DSP56371UM.pdf",
+      "source": "https://www.nxp.com/docs/en/user-guide/DSP56371UM.pdf",
+      "bytes": 5941916,
+      "sha256": "3303088730c14b47816d6058040d0e8bd18f4c256b9febddb79e02fc3842e8ce",
+      "section": "3.1.3 memory switching: three instruction cycles;debug can complete the switch while stopped."
+    },
+    {
+      "file": "doc/hardware/DSP56300FM.pdf",
+      "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+      "bytes": 24396254,
+      "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+      "section": "MOVEC, OMR fields, register control transfers and nominal/conditional timing."
+    }
+  ],
+  "assembler": {
+    "version": "6.3.28",
+    "sha256": "8e60b2e0d7c9f8251c01335543bcec966884670e2f37d4a63afe6d1169425abd",
+    "package_manifest": "doc/reference-tools.json",
+    "warnings": 0
+  },
+  "independent_model": {
+    "native_control_cases": 50,
+    "literal_statepoints": 560,
+    "composition_cases": 12,
+    "composition_literal_statepoints": 171,
+    "processor_libraries_modified": false,
+    "nominal_direct_short_long": [
+      1,
+      1,
+      2
+    ],
+    "extra_adjacent_X1_R1_source_gap_penalty": 0,
+    "physical_timing_qualified": false,
+    "debug_memory_switch_latency_qualified": false
+  },
+  "native_scope": {
+    "control_cases": 66,
+    "fresh_trusted_retirements": 132,
+    "direct_sources": 12,
+    "clocked_streams": 38,
+    "clocked_restore_suffixes": 14,
+    "branch_streams": 12,
+    "branch_restore_suffixes": 24,
+    "SPI_FIFO_restore_suffixes": 42,
+    "AGU_RAM_restore_suffixes": 42
+  },
+  "full_original_firmware_boot_qualified": false,
+  "reference_assets_redistributed": false
+}

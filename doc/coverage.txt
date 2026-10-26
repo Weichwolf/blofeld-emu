@@ -2676,7 +2676,7 @@ Native single-word relative branch ownership:
   Both profiles471groups/1091recipes retain all469prior complete contracts and
   1089full compiler recipes. No fuzz,physical traffic or reference assets.
 
-Native CCR and direct register-indirect control:
+Native CCR, direct register-indirect and OMR control:
 - Native ANDI #imm,CCR and JMP(R0..R7) retain genuine one-word F2 ownership,
   native architectural effects and three nominal units. Direct control keeps
   its descriptor through both target Decode and native E2. Other control
@@ -2692,14 +2692,21 @@ Native CCR and direct register-indirect control:
   ROM or original1.25 normal boot. EEPROM include/authentic first-stage and
   full instrument/storage/update/recovery/realtime/physical acceptance remain
   open. See dsp-control.txt and dsp-control-reference.json.
-- Canonical strict all-target/format/clang-tidy gates pass;70affected
-  ASan/UBSan groups and one separate TSan identity group pass,no skips.
-  Instrumentation/source guards,strict global ELF and the actual TSan ELF pass;
-  the whole TSan ELF inventory stays unqualified. Both profiles477/1099 retain
-  all472prior complete test contracts and1093full compiler recipes.
+- Direct X/Y/R and short/long immediate OMR writes retain genuine native
+  E1 results until E2. Fetch keeps actual physical origins and queued words;
+  following branches, SPI responses and AGU/RAM accesses preserve ownership.
+  Affected memory aliases require three real subsequent intervals, rather
+  than synthetic Decode NOPs. Other mode bits and loop/map overlaps remain
+  visible refusals. See dsp-omr.txt and dsp-omr-reference.json.
+- The supporting regressions cover66native control cases/132fresh native
+  retirements,38clocked streams/14suffixes,12branches/24suffixes,42SPI FIFO
+  suffixes and42AGU/RAM suffixes. Concurrent OMR checkpoint restoration is
+  tested separately with TSan. These checks do not prove physical phases,
+  complete ROM identity or original reset-to-instrument execution.
 - A separate strict local diagnostic receives all94original first-stage words
   through actual SPI/P stores and retires the genuine loader JMP into them.
-  The next OMR transfer still refuses before a first-stage instruction retires.
+  OMR passes Decode;the next unqualified accumulator-source transfer refuses
+  before a first-stage instruction retires.
   This uses explicit between-period SPI stimulus,not actual MCU scheduling or
   physical pin timing. No reserved/ROM writes are discarded and no firmware
   bytes are changed. This does not establish normal original boot.

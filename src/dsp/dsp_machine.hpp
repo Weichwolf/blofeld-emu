@@ -155,6 +155,7 @@ private:
   [[nodiscard]] std::optional<std::uint32_t> pipeline_loop_last(DspFetchedWord word) const;
   [[nodiscard]] std::uint32_t pipeline_continuation(DspFetchedWord word, unsigned words) const;
   void hold_pipeline_loop(DspFetchedWord word);
+  void hold_pipeline_branch(DspFetchedWord word);
 
   [[nodiscard]] DspBranchDecision
   preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read);

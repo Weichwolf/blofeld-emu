@@ -17,6 +17,7 @@
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_native_access.hpp"
+#include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_peripheral_read.hpp"
 #include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_peripheral_read_stage.hpp"
@@ -681,6 +682,9 @@ public:
     const auto context = reference.snapshot().context;
     try {
       if (!opcode) { throw Fault("Native move-writeback lost its admitted opcode"); }
+      // Control writes remain in the actual native retirement result. They do
+      // not publish a fictitious ordinary register field at the move boundary.
+      if (decode_omr_move(*opcode)) { return {}; }
       return decode_move_writeback(*opcode, scope);
     } catch (const std::exception &error) {
       std::string operation;
@@ -772,8 +776,9 @@ public:
     constexpr unsigned condition_bits = 0xff;
     const auto status = static_cast<std::uint32_t>(next.registers.sr);
     const auto before_status = static_cast<std::uint32_t>(results.base->registers.sr);
-    if (effect.redirected || effect.omr != effect.next_omr || next.repeat.remaining != 0 ||
-        (status & forbidden_status) != 0 || ((status ^ before_status) & ~condition_bits) != 0) {
+    if (reference.fetch().pending_context() || effect.redirected || effect.omr != effect.next_omr ||
+        next.repeat.remaining != 0 || (status & forbidden_status) != 0 ||
+        ((status ^ before_status) & ~condition_bits) != 0) {
       throw Fault("Unqualified native overlap control/mode/REP transition pc=" + hex(effect.pc, 6) +
                   " omr=" + hex(effect.omr, 6));
     }
@@ -857,12 +862,36 @@ public:
     }
   }
 
+  void capture_omr_context() {
+    auto &reference = native.reference();
+    auto &fetch = reference.fetch();
+    const auto opcode = reference.opcode();
+    if (!fetch.active() || !opcode || !decode_omr_move(*opcode) ||
+        reference.execution() != DspReferenceExecution::staged_register_boundaries) {
+      return;
+    }
+    const auto &pending = reference.pending();
+    const auto *effect = pending ? std::get_if<DspInstructionRetire>(&*pending) : nullptr;
+    if (effect == nullptr) { throw Fault("OMR context lost its actual native result"); }
+    fetch.stage_context(*effect, bus);
+    const auto &context = fetch.context();
+    if (!context) { throw Fault("OMR context lost its F2 writer"); }
+    for (auto &record : peripheral_reads.records) {
+      if (record) { record->sample.follow_context(*context); }
+    }
+  }
+
   void finish_fetch(const bool redirected) {
     auto &reference = native.reference();
     auto &fetch = reference.fetch();
     if (!fetch.active()) { return; }
     const auto next = word(cpu.regs().pc);
     const auto omr = word(cpu.regs().omr);
+    const auto before = reference.snapshot().context;
+    if (fetch.confirm_context(
+            {.pc = before.pc, .next_pc = next, .omr = omr, .redirected = redirected}, bus)) {
+      return;
+    }
     const auto control = loop_control(cpu.referenceAttemptState());
     if (fetch.confirm_opening(control, redirected) || fetch.confirm_loop(control, redirected)) {
       return;
@@ -986,6 +1015,7 @@ public:
             .fields = fields, .opcode = *opcode, .pc = before.pc, .omr = before.omr};
       }
       try {
+        capture_omr_context();
         capture_loop_opening();
       } catch (...) {
         restore_visible_reference();
@@ -1409,6 +1439,16 @@ void DspCore::hold_pipeline_loop(const DspFetchedWord word) {
   fetch.hold_after(fetch.instruction(word, 2));
 }
 
+void DspCore::hold_pipeline_branch(const DspFetchedWord word) {
+  static_cast<void>(pipeline_fetched_word(0));
+  const auto form = decode_branch_form(word.word.value);
+  if (!form || form->displacement || form->address_register) {
+    throw Fault("OMR branch barrier requires its actual two-word F2 instruction");
+  }
+  auto &fetch = impl_->native.reference().fetch();
+  fetch.hold_after(fetch.instruction(word, 2));
+}
+
 void DspCore::validate_reference_fetch(const DspProgramFetchStage stage) const {
   if (impl_->active || impl_->faulted || impl_->run.begin) {
     throw Fault("Program fetching requires a healthy unclocked native boundary");
@@ -1647,8 +1687,8 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
   const auto sample = fetch.select(address, occurrence);
   const auto opcode = sample.word;
   const auto form = decode_branch_form(opcode.value);
-  const auto omr = state().omr;
-  if (!form || fetch.view().omr != omr) {
+  const auto omr = fetch.execution_omr(sample);
+  if (!form || fetch.view().omr != state().omr) {
     throw Fault("Unqualified native branch AG1/F2 instruction at P:" + hex(address, 6) +
                 " pc=" + hex(address, 6) + " omr=" + hex(omr, 6));
   }

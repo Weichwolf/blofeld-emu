@@ -1,0 +1,56 @@
+Native OMR control and clocked memory transitions
+===============================================
+
+The native DSP executes MOVEC to OMR from X0/X1/Y0/Y1/R0..R7 and short or long
+immediates. The decoder reports the actual instruction width; it never supplies
+the new register value. The genuine native E1 result remains pending until E2.
+Unsupported control sources and memory forms refuse before automatic admission.
+
+Each actual F2 word retains its physical storage resource and capture context.
+The pending native result supplies the execution context for younger owned
+instructions. E2 confirms that result without clearing or refetching unaffected
+queued words. A following direct/displacement branch retains its actual forecast;
+an immediately following OMR-bit branch resolves after the real older E1 result.
+A captured peripheral response retains its physical sample and is consumed once
+under the confirmed execution context. No host assignment replaces native OMR.
+
+The memory map switches after three real subsequent clock intervals. Accesses
+to affected aliases remain unavailable during those intervals. The implementation
+accepts the qualified MS/MSW, DMA priority and reset-mode field transitions only
+when captured/pending P storage remains unaffected. Cache/other mode bits,
+active loop transitions and unqualified fetch-map overlaps fail visibly. This
+is partial hardware support; those refusals are requirements still to implement.
+
+Manual fields, official assembler output and unchanged vendor processor-model
+windows independently check instruction effects and nominal costs: one unit for
+direct/short, two for long immediate, with no extra tested X1/R1 source gap penalty.
+Twelve additional windows check direct/displacement and true/false OMR-bit branches
+immediately after the write. Debug stepping does not establish physical switch
+latency: DSP56371UM3.1.3 warns that switching may complete while stopped in debug.
+Selected reference pipeline stages are not measured silicon bus edges.
+
+Own programs check complete CPU/retained-frame/counter state, actual opcode and
+extension receipts, stale-ticket rejection, no sequential F1 refetch, delayed
+preserved X-to-P aliases, branch paths, exactly-once SPI FIFO consumption and
+AG2/E1 pointer/RAM effects. Trusted joint snapshots cover transitions on both
+sides of E1/E2 and the memory delay. Two independent owners also restore those
+OMR checkpoints concurrently; run that scope separately under TSan. This also
+checks cold native instance creation. AsmJit host CPU detection uses thread-safe
+std::call_once initialization in the build copy, whose compiler options disable
+thread-safe local statics (patches/README.txt).
+
+The original first-stage diagnostic still fails before its first instruction
+retires. Decode admits OMR but the next accumulator-source transfer is currently
+unsupported. No firmware patch, skipped routine, reserved-write discard or
+invented peripheral success is used. Normal stock boot, complete ROM contents,
+MIDI/audio, storage/update/recovery and physical Desktop/Keyboard equivalence
+remain open. Manufacturer bytes, traces and detailed analysis remain local.
+
+  cmake --build --preset strict --target blofeld-omr-native-test \
+    blofeld-omr-clock-test blofeld-omr-branch-test blofeld-omr-peripheral-test \
+    blofeld-omr-memory-test blofeld-omr-thread-test
+  ctest --preset strict -j1 --output-on-failure -R '^dsp_omr_'
+  cmake --build --preset thread --target blofeld-omr-thread-test
+  ctest --preset thread -j1 --output-on-failure -R '^dsp_omr_thread$'
+
+Reference provenance and exact evidence scope: dsp-omr-reference.json.

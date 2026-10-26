@@ -1672,3 +1672,20 @@ diff --git a/source/dsp56kEmu/memory.h b/source/dsp56kEmu/memory.h
 +		bool hasArrayStorage() const { return x != nullptr || y != nullptr || p != nullptr; }
 @@ -192,0 +201 @@
 +		void requireArrayStorage(const char* _operation, EMemArea _area, TWord _offset) const;
+--- a/source/asmjit/src/asmjit/core/cpuinfo.cpp
++++ b/source/asmjit/src/asmjit/core/cpuinfo.cpp
+@@ -8,0 +9,2 @@
++
++#include <mutex>
+@@ -1157 +1159 @@
+-static uint32_t cpuInfoInitialized;
++static std::once_flag cpuInfoOnce;
+@@ -1161,3 +1163 @@
+-  // This should never cause a problem as the resulting information should always be the same. In the worst case we
+-  // would just overwrite it non-atomically.
+-  if (!cpuInfoInitialized) {
++  std::call_once(cpuInfoOnce, []() noexcept {
+@@ -1179,2 +1179 @@
+-    cpuInfoInitialized = 1;
+-  }
++  });

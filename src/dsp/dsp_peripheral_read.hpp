@@ -25,6 +25,10 @@ public:
 
   [[nodiscard]] const DspFetchedInstruction &fetched() const { return fetched_; }
 
+  void follow_context(const DspFetchContext &transition);
+
+  [[nodiscard]] std::uint32_t sample_omr() const { return sample_omr_; }
+
   [[nodiscard]] bool
   forward(DspProgramWord producer, const DspNativeAccess &completed_store, std::uint64_t epoch);
   [[nodiscard]] std::uint32_t consume(const DspNativeAccess &opcode,
@@ -46,6 +50,7 @@ private:
   DspPeripheralReadForm form_;
   DspNativeAccessKind kind_ = DspNativeAccessKind::read;
   std::uint32_t omr_ = 0;
+  std::uint32_t sample_omr_ = 0;
   std::uint32_t value_ = 0;
   std::uint64_t epoch_ = 0;
   std::optional<std::uint64_t> forward_epoch_;

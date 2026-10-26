@@ -100,6 +100,7 @@ public:
   [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
   [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
   [[nodiscard]] DspMemoryResource memory_resource(DspMemoryAccess access) const;
+  [[nodiscard]] bool stable_program_context(std::uint32_t address, std::uint32_t omr) const;
   [[nodiscard]] DspMemoryConflict memory_conflict(DspMemoryPair pair) const;
   // Decoder lookahead may substitute an unknown word; never use it to admit execution.
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;

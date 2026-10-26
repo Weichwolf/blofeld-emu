@@ -21,6 +21,14 @@ struct DspFetchedWord {
   bool operator==(const DspFetchedWord &) const = default;
 };
 
+struct DspInstructionRetire;
+
+struct DspFetchOrigin {
+  std::uint32_t omr = 0;
+  DspMemoryResource resource;
+  bool operator==(const DspFetchOrigin &) const = default;
+};
+
 class DspProgramFetch;
 
 struct DspFetchedInstruction {
@@ -31,12 +39,34 @@ struct DspFetchedInstruction {
   bool operator==(const DspFetchedInstruction &) const = default;
 };
 
+struct DspFetchContext {
+  DspFetchedInstruction writer;
+  std::uint32_t before = 0;
+  std::uint32_t after = 0;
+};
+
+struct DspFetchCommit {
+  std::uint32_t pc;
+  std::uint32_t next_pc;
+  std::uint32_t omr;
+  bool redirected;
+};
+
 // Owner-driven actual F1/F2; native CPU execution still owns architectural loops.
 class DspProgramFetch {
 public:
   [[nodiscard]] DspProgramFetchView view() const { return state_; }
 
   [[nodiscard]] bool active() const { return state_.active; }
+
+  [[nodiscard]] bool pending_context() const { return context_.has_value(); }
+
+  [[nodiscard]] const std::optional<DspFetchContext> &context() const { return context_; }
+
+  [[nodiscard]] DspFetchOrigin origin(DspFetchedWord captured) const;
+  [[nodiscard]] std::uint32_t execution_omr(DspFetchedWord captured) const;
+  void stage_context(const DspInstructionRetire &result, const DspBus &bus);
+  [[nodiscard]] bool confirm_context(DspFetchCommit completed, const DspBus &bus);
 
   void start(std::uint32_t pc, std::uint32_t omr);
   void check_stage(DspProgramFetchStage stage) const;
@@ -79,11 +109,15 @@ private:
                                             std::uint64_t identity) const;
   void shift_queue();
   void clear_continuation();
+  void validate_context_storage(const DspBus &bus, std::uint32_t omr) const;
   DspProgramFetchView state_;
   std::array<std::uint64_t, dsp_program_fetch_capacity> occurrences_{};
   std::array<std::optional<DspLoopFetch::Prediction>, dsp_program_fetch_capacity> predictions_{};
   std::array<std::optional<DspLoopBoundary>, dsp_program_fetch_capacity> boundaries_{};
   std::array<DspFetchedWord, 2> consumed_{};
+  std::array<DspFetchOrigin, dsp_program_fetch_capacity> origins_{};
+  std::array<DspFetchOrigin, 2> consumed_origins_{};
+  std::optional<DspFetchContext> context_;
   std::shared_ptr<Sequence> sequence_;
   std::optional<DspLoopFetch> loop_;
   std::optional<DspLoopBoundary> consumed_end_;

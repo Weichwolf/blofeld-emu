@@ -289,7 +289,7 @@ void unqualified_sources_and_control() {
                            "move sr,x0",
                            "move n0,x0",
                            "move #>7,sr",
-                           "move #>7,omr",
+                           "move x:(r0),omr",
                            "move r0,x:(r0)",
                            "move x:>$7,x0"}) {
     DspMachine machine;

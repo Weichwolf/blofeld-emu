@@ -40,8 +40,10 @@ Blofeld firmware startup or complete instrument acceptance.
 
 A separate local diagnostic transfers the unchanged 94-word first-stage frame
 from firmware 1.25 through actual SPI/P stores, verifies every word and retires
-the genuine loader JMP into that block. Its next OMR control transfer remains
-unsupported, and no first-stage instruction retirement is established. Valid
+the genuine loader JMP into that block. The OMR control transfer is admitted by
+Decode; the next unqualified accumulator-source transfer still refuses before
+a first-stage instruction retires. The OMR regressions are described in
+dsp-omr.txt. Valid
 SPI words are supplied between explicit completed DSP periods; this is not
 actual MCU scheduling or a physical pin-timing qualification. Reserved/ROM
 writes are never discarded. Detailed firmware analysis and traces stay local.

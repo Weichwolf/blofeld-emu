@@ -7,6 +7,7 @@
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_memory_form.hpp"
+#include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_pipeline_words.hpp"
@@ -73,7 +74,7 @@ void prepare_decode(DspInstructionPipeline &pipeline,
                     const DspProgramFetchView &fetch,
                     DspPipelineCycle &cycle) {
   if (pipeline.held_program_memory || pipeline.hold_ccr_decode(machine)) { return; }
-  if (pipeline.hold_loop_decode()) { return; }
+  if (pipeline.hold_loop_decode() || pipeline.deferred_omr_branch) { return; }
   pipeline.held_branch_decode =
       pipeline.branch && pipeline.branch_target_ready && pipeline.branch_decode_hold != 0;
   if (pipeline.branch && (!pipeline.branch_target_ready || pipeline.held_branch_decode)) { return; }
@@ -171,7 +172,7 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
   }
   const auto *effect = std::get_if<DspInstructionRetire>(&pending->effect);
   if (effect == nullptr || effect->pc != view.awaiting_retirement->address ||
-      effect->next_omr != effect->omr) {
+      (effect->next_omr != effect->omr && !decode_omr_move(view.awaiting_retirement->value))) {
     throw Fault("Automatic DSP E2 differs from its actual native candidate");
   }
   const auto port_read = decode_peripheral_read(view.awaiting_retirement->value);
@@ -209,6 +210,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     if (!bus.progress || !bus.progress->retired) {
       throw Fault("Automatic DSP E2 did not publish its selected actual native result");
     }
+    follow_omr_retirement(bus);
     view.cycle.retirement_published = true;
     retire_branch();
     view.awaiting_retirement.reset();
@@ -287,7 +289,7 @@ void DspInstructionPipeline::capture_address(DspMachine &machine) {
 }
 
 void DspInstructionPipeline::capture_branch(DspMachine &machine) {
-  if (profile != DspFetchPipeline::automatic_memory) { return; }
+  if (profile != DspFetchPipeline::automatic_memory || capture_omr_branch(machine)) { return; }
   const auto ag1 = view.cycle.ag1;
   const auto early = ag1 ? decode_peripheral_read(ag1->value) : std::nullopt;
   if (early && early->bit) { branch_fetch_hold = 1; }

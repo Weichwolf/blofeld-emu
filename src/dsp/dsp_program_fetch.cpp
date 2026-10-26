@@ -25,6 +25,9 @@ constexpr unsigned word_mask = 0xffffff;
 
 void DspProgramFetch::clear_continuation() {
   occurrences_ = {};
+  origins_ = {};
+  consumed_origins_ = {};
+  context_.reset();
   predictions_ = {};
   boundaries_ = {};
   consumed_ = {};
@@ -86,7 +89,9 @@ void DspProgramFetch::capture(DspBus &bus) {
   }
   const auto identity = next_occurrence();
   unsigned value = 0;
+  DspMemoryResource resource;
   try {
+    resource = bus.memory_resource({.target = {.address = address}});
     value = bus.read({.address = address});
   } catch (const std::exception &error) {
     throw Fault("Native F2 read P:" + hex(address, 6) + " pc=" + hex(state_.consume_address, 6) +
@@ -98,6 +103,7 @@ void DspProgramFetch::capture(DspBus &bus) {
     predictions_.at(state_.used) = loop_->prediction();
     state_.next_address = loop_->next_address();
   }
+  origins_.at(state_.used) = {.omr = state_.omr, .resource = resource};
   occurrences_.at(state_.used) = identity;
   state_.words.at(state_.used++) = word;
   state_.pending_address.reset();
@@ -199,11 +205,13 @@ void DspProgramFetch::shift_queue() {
   const auto count = static_cast<std::ptrdiff_t>(state_.used);
   std::move(state_.words.begin() + 1, state_.words.begin() + count, state_.words.begin());
   std::move(occurrences_.begin() + 1, occurrences_.begin() + count, occurrences_.begin());
+  std::move(origins_.begin() + 1, origins_.begin() + count, origins_.begin());
   std::move(predictions_.begin() + 1, predictions_.begin() + count, predictions_.begin());
   std::move(boundaries_.begin() + 1, boundaries_.begin() + count, boundaries_.begin());
   --state_.used;
   state_.words.at(state_.used) = {};
   occurrences_.at(state_.used) = 0;
+  origins_.at(state_.used) = {};
   predictions_.at(state_.used).reset();
   boundaries_.at(state_.used).reset();
 }
@@ -211,6 +219,8 @@ void DspProgramFetch::shift_queue() {
 std::uint32_t DspProgramFetch::consume(const std::uint32_t address) {
   check_consume(address);
   const auto word = state_.words.front();
+  consumed_origins_[0] = consumed_origins_[1];
+  consumed_origins_[1] = origins_.front();
   consumed_[0] = consumed_[1];
   consumed_[1] = {.word = word, .occurrence = occurrences_.front()};
   consumed_end_ = boundaries_.front();
@@ -300,6 +310,7 @@ void DspProgramFetch::hold_after(const DspFetchedInstruction &captured) {
   for (std::size_t index = keep; index < state_.used; ++index) {
     state_.words.at(index) = {};
     occurrences_.at(index) = 0;
+    origins_.at(index) = {};
     predictions_.at(index).reset();
     boundaries_.at(index).reset();
   }
@@ -312,7 +323,8 @@ void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
   const auto form = decode_branch_form(decision.word.value);
   const bool one_word = form && (form->displacement || form->address_register);
-  if (!state_.active || branch_ || opening_ || decision.omr != state_.omr ||
+  if (!state_.active || branch_ || opening_ ||
+      decision.omr != execution_omr(select(decision.word.address, identity)) ||
       decision.next_pc > word_mask || decision.extension.has_value() == one_word ||
       (decision.extension &&
        decision.extension->address != ((decision.word.address + 1) & word_mask))) {
@@ -332,6 +344,7 @@ void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
   for (std::size_t index = keep; index < state_.used; ++index) {
     state_.words.at(index) = {};
     occurrences_.at(index) = 0;
+    origins_.at(index) = {};
     predictions_.at(index).reset();
     boundaries_.at(index).reset();
   }

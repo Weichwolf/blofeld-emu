@@ -82,6 +82,7 @@ struct DspInstructionPipeline {
   std::optional<DspPipelineProgramMemory> program_memory = std::nullopt;
   bool held_program_memory = false;
   std::optional<DspPipelineCcrSync> ccr_sync = std::nullopt;
+  std::optional<DspFetchedWord> deferred_omr_branch = std::nullopt;
 
   void prepare(const DspMachine &machine);
   void rebind(const DspMachine &machine);
@@ -114,5 +115,7 @@ private:
   void release_branch();
   void retire_branch();
   void accept_branch_decode();
+  [[nodiscard]] bool capture_omr_branch(DspMachine &machine);
+  void follow_omr_retirement(const DspReferenceCycleResult &bus);
 };
 }

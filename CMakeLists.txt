@@ -251,6 +251,7 @@ target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gp
 add_library(blofeld_dsp
   src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
+  src/dsp/dsp_omr_move.cpp src/dsp/dsp_fetch_context.cpp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
@@ -1423,6 +1424,13 @@ if(BUILD_TESTING)
   add_test(NAME dsp_program_memory_guards COMMAND blofeld-program-memory-guard-test)
   add_test(NAME dsp_relative_branches COMMAND blofeld-relative-branch-test)
   add_test(NAME dsp_relative_branch_guards COMMAND blofeld-relative-branch-guard-test)
+  foreach(kind native clock branch peripheral memory thread)
+    add_executable(blofeld-omr-${kind}-test test/dsp_omr_${kind}_test.cpp)
+    target_link_libraries(blofeld-omr-${kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
+    add_test(NAME dsp_omr_${kind} COMMAND blofeld-omr-${kind}-test)
+    set_tests_properties(dsp_omr_${kind} PROPERTIES TIMEOUT 120)
+  endforeach()
+  target_link_libraries(blofeld-omr-thread-test PRIVATE Threads::Threads)
   add_test(NAME dsp_ccr_control COMMAND blofeld-ccr-control-test)
   add_test(NAME dsp_indirect_control COMMAND blofeld-indirect-control-test)
   add_test(NAME dsp_control_composition COMMAND blofeld-control-composition-test)
@@ -2994,6 +3002,8 @@ add_custom_target(quality
     blofeld-relative-branch-test blofeld-relative-branch-guard-test
     blofeld-ccr-control-test blofeld-indirect-control-test blofeld-control-composition-test
     blofeld-control-guard-test blofeld-document-loader-entry-test
+    blofeld-omr-native-test blofeld-omr-clock-test blofeld-omr-branch-test
+    blofeld-omr-peripheral-test blofeld-omr-memory-test blofeld-omr-thread-test
     blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test

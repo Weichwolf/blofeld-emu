@@ -129,6 +129,16 @@ to uint32_t before combining it with BaseReg's enum mask. Numeric register
 signatures are preserved under C++23, without suppressing mixed-enum diagnostics.
 This compatibility correction does not enable or validate a JIT backend.
 
+The build-local AsmJit CPU detector uses std::call_once and a shared once flag.
+Its build disables thread-safe local statics, so an explicit once operation is
+required. Upstream's shared initialized flag and global
+copy race when independent DSP instances are constructed concurrently, even
+with the interpreter forced. Detection operations and returned values are
+unchanged; no test prewarm or sanitizer suppression is used. dsp_omr_thread
+runs two cold owners through actual OMR checkpoint suffixes under TSan.
+AsmJit's original Zlib notices remain in the copied source. The pinned original
+cpuinfo.cpp SHA-256 is recorded in doc/dependencies.json.
+
 UBSan caught reset using out-of-range CCR enum values for full SR masks. Reset
 and interrupt entry now use the correct SR-mask overloads. No sanitizer is
 suppressed. Independent native_dsp checks cover flags, unknown fetch/extension,

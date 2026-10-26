@@ -215,6 +215,15 @@ DspBus::MemoryLayout DspBus::memory_layout(const unsigned mode) {
   return layouts.at(mode);
 }
 
+bool DspBus::stable_program_context(const std::uint32_t address, const std::uint32_t omr) const {
+  if (address > word_mask || omr > word_mask) { throw Fault("Invalid DSP program context"); }
+  const unsigned requested = (omr & ms) == 0 ? 0 : 1 + ((omr >> msw_shift) & msw_mask);
+  const auto before = memory_layout(memory_mode_);
+  const auto after = memory_layout(requested);
+  return address < std::min(before.program_end, after.program_end) ||
+         address >= std::max(before.program_end, after.program_end);
+}
+
 bool DspBus::switching_address(const DspAddress access) const {
   const auto before = memory_layout(memory_mode_);
   const auto after = memory_layout(requested_memory_mode_);
