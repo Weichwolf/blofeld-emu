@@ -21,6 +21,29 @@
 namespace blofeld {
 namespace {
 constexpr unsigned word_mask = 0xffffff;
+
+// Retire only completed speculative loop metadata. Actual F1/F2 receipts,
+// addresses, resource origins, branch decisions and CPU state remain owned.
+void release_loop_history(
+    std::optional<DspLoopFetch> &loop,
+    std::optional<DspLoopArchitecture> &observed,
+    std::array<std::optional<DspLoopFetch::Prediction>, dsp_program_fetch_capacity> &predictions,
+    const std::array<std::optional<DspLoopBoundary>, dsp_program_fetch_capacity> &boundaries,
+    const DspLoopArchitecture native_result) {
+  if (!loop || loop->depth() != 0 || loop->pending() != 0) { return; }
+  constexpr unsigned loop_flags = 0x18000;
+  const bool boundary =
+      std::ranges::any_of(boundaries, [](const auto &entry) { return entry.has_value(); });
+  const bool active = std::ranges::any_of(
+      predictions, [](const auto &entry) { return entry && entry->loop_last().has_value(); });
+  if ((native_result.status & loop_flags) != 0 || boundary || active) {
+    throw Fault("Completed loop retains active fetch history read P:" + hex(native_result.pc, 6) +
+                " pc=" + hex(native_result.pc, 6) + " omr=" + hex(native_result.omr, 6));
+  }
+  loop.reset();
+  observed.reset();
+  predictions = {};
+}
 }
 
 void DspProgramFetch::clear_continuation() {
@@ -413,6 +436,7 @@ bool DspProgramFetch::confirm_opening(const DspLoopArchitecture native_result,
   }
   observed_loop_ = native_result;
   opening_.reset();
+  release_loop_history(loop_, observed_loop_, predictions_, boundaries_, native_result);
   return true;
 }
 
@@ -428,6 +452,7 @@ bool DspProgramFetch::confirm_loop(const DspLoopArchitecture native_result, cons
   loop_->confirm(*consumed_end_, native_result);
   observed_loop_ = native_result;
   consumed_end_.reset();
+  release_loop_history(loop_, observed_loop_, predictions_, boundaries_, native_result);
   return true;
 }
 

@@ -6,25 +6,70 @@
 +		virtual bool writeWord(EMemArea, TWord, TWord) const { return false; }
 +		virtual bool readOpcode(TWord, TWord&, TWord&) const { return false; }
 +		virtual bool readExtension(TWord, TWord&) const { return false; }
-@@ -101,0 +107 @@
+@@ -54,0 +60 @@
++		const bool m_busOwned = false;
+@@ -91,0 +98,3 @@
++		// The validator owns every word; no array/MMU fallback is available.
++		struct BusOwned {};
++		explicit Memory(const IMemoryValidator& _memoryMap, BusOwned, TWord _memSizeP, TWord _memSizeXY);
+@@ -101,0 +111 @@
 +		TWord getExtension(TWord offset) const;
+@@ -121,0 +132 @@
++			requireArrayStorage("external-memory remap", MemArea_COUNT, _address);
+@@ -128,0 +140 @@
++			requireArrayStorage("direct pointer", _area, 0);
+@@ -157,0 +170,2 @@
++
++		bool hasArrayStorage() const { return x != nullptr || y != nullptr || p != nullptr; }
+@@ -186,0 +201 @@
++		void requireArrayStorage(const char* _operation, EMemArea _area, TWord _offset) const;
 --- a/source/dsp56kEmu/memory.cpp
 +++ b/source/dsp56kEmu/memory.cpp
-@@ -111,0 +112 @@
+@@ -5,0 +6,2 @@
++#include <stdexcept>
++#include <string>
+@@ -19,0 +22,18 @@
++	Memory::Memory(const IMemoryValidator& _memoryMap, BusOwned, TWord _memSizeP, TWord _memSizeXY)
++		: m_memoryMap(_memoryMap)
++		, m_busOwned(true)
++		, m_size({_memSizeP, _memSizeXY, _memSizeXY})
++		, m_mem({nullptr})
++		, x(nullptr), y(nullptr), p(nullptr)
++		, m_bridgedMemoryAddress(0)
++		, m_dsp(nullptr)
++	{
++	}
++
++	void Memory::requireArrayStorage(const char* _operation, EMemArea _area, TWord _offset) const
++	{
++		if(m_busOwned)
++			throw std::logic_error(std::string("Bus-owned DSP memory ") + _operation +
++				" bypass: area=" + std::to_string(_area) + " address=" + std::to_string(_offset));
++	}
++
+@@ -111,0 +132,2 @@
 +		if(m_memoryMap.writeWord(_area, _offset, _value)) return true;
-@@ -161,0 +163,7 @@
++		requireArrayStorage("write", _area, _offset);
+@@ -161,0 +184,8 @@
 +	TWord Memory::getExtension(TWord offset) const
 +	{
 +		TWord value;
 +		if(m_memoryMap.readExtension(offset, value)) return value;
++		requireArrayStorage("extension", MemArea_P, offset);
 +		return get(MemArea_P, offset);
 +	}
 +
-@@ -163,0 +172,2 @@
+@@ -163,0 +194,3 @@
 +		TWord busValue;
 +		if(m_memoryMap.readWord(_area, _offset, busValue)) return busValue;
-@@ -197,0 +208 @@
++		requireArrayStorage("read", _area, _offset);
+@@ -197,0 +231,2 @@
 +		if(m_memoryMap.readOpcode(_offset, _wordA, _wordB)) return;
++		requireArrayStorage("opcode", MemArea_P, _offset);
+@@ -266,0 +302 @@
++		requireArrayStorage("assembly export", MemArea_P, _offset);
+@@ -379,0 +416 @@
++		requireArrayStorage("init pattern", MemArea_COUNT, 0);
 --- a/source/dsp56kEmu/peripherals.h
 +++ b/source/dsp56kEmu/peripherals.h
 @@ -26 +26,2 @@
@@ -51,20 +96,26 @@
 +		uint32_t exec() noexcept override { return MaxDelayCycles; }
 --- a/source/dsp56kEmu/dsp.h
 +++ b/source/dsp56kEmu/dsp.h
-@@ -3,0 +4,3 @@
+@@ -3,0 +4,4 @@
 +#include <stdexcept>
 +
 +#include "dsp/dsp_dispatch_cache.hpp"
-@@ -40 +43 @@
++#include "dsp/dsp_cycle_cache.hpp"
+@@ -40 +44 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept;
 +	void dspExecInterrupts(DSP* _dsp);
-@@ -86 +89 @@
+@@ -86 +90 @@
 -		typedef void (*TInterruptFunc)(DSP*) noexcept;
 +		typedef void (*TInterruptFunc)(DSP*);
-@@ -135 +138 @@
+@@ -135 +139 @@
 -		std::vector<OpcodeCacheEntry>	m_opcodeCache;
 +		blofeld::DspDispatchCache<OpcodeCacheEntry>	m_opcodeCache;
-@@ -162,0 +166,64 @@
+@@ -138,2 +142,2 @@
+-		// this vector empty because they account cycles per compiled block. 0 = not yet computed.
+-		std::vector<uint8_t>			m_opcodeCycleCache;
++		// this cache empty because they account cycles per compiled block. 0 = not yet computed.
++		blofeld::DspCycleCache		m_opcodeCycleCache;
+@@ -162,0 +167,64 @@
 +		bool m_referenceAttempt = false;
 +		bool m_referenceRedirected = false;
 +		bool m_referenceMode = false;
@@ -92,7 +143,7 @@
 +			uint32_t opLength = 0;
 +			bool referenceMode = false, longEntry = false, repeatCompleted = false;
 +			std::array<uint64_t, 2> peripheralTargets{};
-+			std::vector<uint8_t> opcodeCycleCache;
++			blofeld::DspCycleCache opcodeCycleCache;
 +		};
 +		// Bounded internal rollback; host dispatch/cycle memoization is not architectural state.
 +		struct ReferenceAttemptState {
@@ -129,21 +180,22 @@
 +		void restoreReferenceState(const ReferenceState& state);
 +	private:
 +		void verifyReferenceCheckpoint() const;
-@@ -183 +250,5 @@
+@@ -183 +251,5 @@
 -		void 	setPC							( const TReg24& _val )						{ reg.pc = _val; }
 +		void setPC(const TReg24& _val)
 +		{
 +			reg.pc = _val;
 +			if(m_referenceAttempt) m_referenceRedirected = true;
 +		}
-@@ -189 +260 @@
+@@ -189 +261 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +279,12 @@
+@@ -208 +280,13 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
 +		uint32_t referenceNextCycles() const;
++		TWord referenceNextOpcode() const;
 +		bool referenceInterruptible(TWord nextOpcode) const;
 +		void execReferenceInterrupt(TWord vector, unsigned level);
 +	private:
@@ -153,10 +205,11 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411 +493 @@
+@@ -411,2 +495,13 @@
 -		TWord	fetchOpWordB()
+-		{
 +		TWord memReadExtension(TWord offset) const
-@@ -412,0 +495,11 @@
++		{
 +			aarTranslate(MemArea_P, offset);
 +			return mem.getExtension(offset);
 +		}
@@ -168,13 +221,12 @@
 +				throw std::runtime_error("Unexpected extension in single-word reference REP");
 +			if(!m_referenceVectorActive)
 +				extension = memReadExtension(pcCurrentInstruction + 1);
-@@ -416 +509 @@
+@@ -416 +511 @@
 -			return m_opWordB;
 +			return extension;
-@@ -523 +616 @@
+@@ -523,15 +618,9 @@
 -		void	sr_s_update				()
-+		void sr_s_update(const TReg56& _source)
-@@ -525,13 +618,6 @@
+-		{
 -			if( sr_test_noCache(CCR_S) )
 -				return;
 -
@@ -188,17 +240,18 @@
 -			if	(	(bitvalue(a,bitA) != bitvalue(a,bitB))
 -				|	(bitvalue(b,bitA) != bitvalue(b,bitB)) )
 -				sr_set( CCR_S );
++		void sr_s_update(const TReg56& _source)
++		{
 +			if(sr_test_noCache(CCR_S)) return;
 +			// Only the accumulator actually driving a data bus contributes growth.
-+			const int offset = sr_val_noCache(SRB_S1) - sr_val_noCache(SRB_S0);
++			// FM5-13: down moves the growth test up one bit; up moves it down.
++			const int offset = sr_val_noCache(SRB_S0) - sr_val_noCache(SRB_S1);
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -610 +696,2 @@
+@@ -610,11 +699,37 @@
 -		void sr_v_update( const int64_t& _notLimitedResult, TReg56& _result )
-+		// FM3.2.2: round in the unpadded domain, with headroom for a full product plus accumulator.
-+		TInt64 roundArithmeticValue(TInt64 value) const
-@@ -612,9 +699,34 @@
+-		{
 -			if( sr_test_noCache(SR_SM) )
 -			{
 -				const unsigned int test=static_cast<unsigned int>(_result.var>>(47 + g_aluShift))&0x13;
@@ -208,6 +261,9 @@
 -			{
 -				sr_toggle( CCR_V, ((_notLimitedResult>>(48 + g_aluShift))^(_result.var>>(48 + g_aluShift)))&255);
 -			}
++		// FM3.2.2: round in the unpadded domain, with headroom for a full product plus accumulator.
++		TInt64 roundArithmeticValue(TInt64 value) const
++		{
 +			TInt64 bias = 0x800000;
 +			if(sr_test_noCache(SR_S1)) bias >>= 1;
 +			else if(sr_test_noCache(SR_S0)) bias <<= 1;
@@ -242,14 +298,13 @@
 +			auto& result = ab ? reg.b : reg.a;
 +			finishArithmeticResult(result, false);
 +			setCCRDirty(ab, result, CCR_E | CCR_U | CCR_N);
-@@ -726,0 +839 @@
+@@ -726,0 +842 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +849 @@
+@@ -735,0 +852 @@
 +			sr_s_update(reg.b);
-@@ -809 +923 @@
+@@ -809,19 +926,12 @@
 -		void limit_arithmeticSaturation( TReg56& _dst )
-+		bool limit_arithmeticSaturation(TReg56& result, const bool rounded = false)
-@@ -811,17 +925,10 @@
+-		{
 -			if( !sr_test_noCache(SR_SM) )
 -				return;
 -
@@ -267,6 +322,8 @@
 -			case 6: _dst.var = static_cast<TReg56::MyType>(0xff800000000000ull << g_aluShift);	sr_set(CCR_V);	break;
 -			default: assert( 0 && "impossible" );
 -			}
++		bool limit_arithmeticSaturation(TReg56& result, const bool rounded = false)
++		{
 +			// FM3.2.3 table3-1: EXT7, EXT0 and MSP23 select the physical limiter.
 +			const auto raw = static_cast<uint64_t>(result.var) >> g_aluShift;
 +			const auto selector = ((raw >> 53) & 4) | ((raw >> 47) & 3);
@@ -277,17 +334,17 @@
 +			if(rounded && selector < 4) limit = sixteen ? 0x007fff00000000ull : 0x007fffff000000ull;
 +			result.var = static_cast<TInt64>(limit << g_aluShift);
 +			return true;
-@@ -975,0 +1083 @@
+@@ -975,0 +1086 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1113 @@
+@@ -1004,0 +1116 @@
 +			sr_s_update(_src);
-@@ -1098 +1207 @@
+@@ -1098 +1210 @@
 -		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate );
 +		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate, bool _round = false );
-@@ -1101 +1210 @@
+@@ -1101 +1213 @@
 -		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu );
 +		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu, bool _round = false );
-@@ -1468,0 +1578 @@
+@@ -1468,0 +1581 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -299,15 +356,15 @@
 @@ -52 +53 @@
 -	void dspExecInterrupts(DSP* _dsp) noexcept
 +	void dspExecInterrupts(DSP* _dsp)
-@@ -67,0 +69,8 @@
+@@ -65,0 +67,8 @@
++	}
++
 +	void dspExecCustomPeripherals(DSP* dsp)
 +	{
 +		const auto x = dsp->getPeriph(0)->exec();
 +		const auto y = dsp->getPeriph(1)->exec();
 +		dsp->getPeriph(0)->resetDelayCycles(dsp->getInstructionCounter(), std::min(x, y));
 +		dsp->processExternalInterrupts();
-+	}
-+
 @@ -74,2 +83 @@
 -		assert(false && "Peripherals configuration is not supported");
 -		return nullptr;
@@ -329,7 +386,7 @@
 @@ -264 +280 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +341,349 @@
+@@ -324,0 +341,354 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceAttempt || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -556,7 +613,7 @@
 +			a != Trap && a != Trapcc && a != Debug && a != Debugcc && a != Illegal;
 +	}
 +
-+	uint32_t DSP::referenceNextCycles() const
++	TWord DSP::referenceNextOpcode() const
 +	{
 +		verifyReferenceCheckpoint();
 +		const auto pc = reg.pc.toWord();
@@ -567,7 +624,12 @@
 +			mem.getOpcode(pc, opcode, extension);
 +		if(m_referenceRepeat.remaining && !referenceRepeatTarget(opcode))
 +			throw std::runtime_error("Unsupported reference REP target");
-+		return referenceCycleCost(pc, opcode);
++		return opcode;
++	}
++
++	uint32_t DSP::referenceNextCycles() const
++	{
++		return referenceCycleCost(reg.pc.toWord(), referenceNextOpcode());
 +	}
 +
 +	void DSP::execReference()
@@ -679,7 +741,7 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -331,0 +697,11 @@
+@@ -331,0 +702,11 @@
 +		if(m_referenceAttempt) {
 +			if(Opcodes::isNonParallelOpcode(op)) {
 +				const auto* info = m_opcodes.findNonParallelOpcodeInfo(op);
@@ -691,16 +753,16 @@
 +			// Always decode the captured word, including loaded REP. Never reuse partial dispatch.
 +			m_opcodeCache.at(currentOp) = {&DSP::op_ResolveCache};
 +		}
-@@ -341 +717 @@
+@@ -341 +722 @@
 -				m_cycles += getOpcodeCycles(currentOp);
 +				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
-@@ -413,0 +790,5 @@
+@@ -413,0 +795,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +873,8 @@
+@@ -491,0 +878,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -709,10 +771,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +915,2 @@
+@@ -525,0 +920,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +995,26 @@
+@@ -603,0 +1000,26 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -739,52 +801,58 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -684,0 +1102,2 @@
+@@ -684,0 +1107,2 @@
 +		if(m_referenceMode && ssIndex() == 0)
 +			throw std::runtime_error("Unqualified DSP reference stack pop at SP=" + std::to_string(reg.sp.var));
-@@ -687 +1106,4 @@
+@@ -687 +1111,4 @@
 -		--reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 0x1fu) & 0x1fu);
 +		else
 +			--reg.sc.var;
-@@ -691,0 +1114,2 @@
+@@ -691,0 +1119,2 @@
 +		if(m_referenceMode && ssIndex() >= reg.ss.size()-1)
 +			throw std::runtime_error("Unqualified DSP reference stack push at SP=" + std::to_string(reg.sp.var));
-@@ -694 +1118,4 @@
+@@ -694 +1123,4 @@
 -		++reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 1u) & 0x1fu);
 +		else
 +			++reg.sc.var;
-@@ -1152,2 +1578,0 @@
+@@ -1152,2 +1583,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1581 @@
+@@ -1156 +1586 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1187 +1612,2 @@
+@@ -1187 +1617,2 @@
 -			m_opcodeCache[_addr].op = &DSP::op_ResolveCache;
 +			if(auto* entry = m_opcodeCache.find(_addr))
 +				entry->op = &DSP::op_ResolveCache;
-@@ -1306,3 +1732 @@
+@@ -1189 +1620 @@
+-				m_opcodeCycleCache[_addr] = 0;
++				m_opcodeCycleCache.invalidate(_addr);
+@@ -1306,3 +1737 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
-@@ -1341,3 +1765 @@
+@@ -1341,3 +1770 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, value == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, value == minimum);
-@@ -1484,2 +1906 @@
+@@ -1484,2 +1911 @@
 -		m_opcodeCache.clear();
 -		m_opcodeCache.resize(mem.sizeP(), {&DSP::op_ResolveCache});
 +		m_opcodeCache.reset(mem.sizeP(), {&DSP::op_ResolveCache});
-@@ -1570,0 +1992,2 @@
+@@ -1487 +1913 @@
+-			m_opcodeCycleCache.assign(mem.sizeP(), 0);
++			m_opcodeCycleCache.reset(mem.sizeP());
+@@ -1570,0 +1997,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2106,2 @@
+@@ -1682,0 +2111,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl
@@ -886,10 +954,28 @@
 +			setCCRDirty(D, value, CCR_E | CCR_U | CCR_N);
 +		}
 +		finishSingleShift(D, previousLimit);
-@@ -548,0 +626,2 @@
+@@ -451,0 +529,2 @@
++		if(m_referenceMode && isSixteenBitArithmetic())
++			throw std::runtime_error("Unqualified DSP reference NORMF sixteen-bit arithmetic");
+@@ -456,0 +536,3 @@
++		const auto count = signextend<int,24>(s);
++		if(m_referenceMode && (count < -55 || count > 56))
++			throw std::runtime_error("Unqualified DSP reference NORMF shift count=" + std::to_string(count));
+@@ -464,2 +546,8 @@
+-			// ASR
+-			alu_asr(D, D, static_cast<int>(s));
++			// FM13-147 permits NORMF +56 while ASR itself stops at55.
++			// Compose two legal right shifts; this is still one native instruction.
++			if(m_referenceMode && count == 56) {
++				alu_asr(D, D, 55);
++				alu_asr(D, D, 1);
++			} else {
++				alu_asr(D, D, static_cast<int>(s));
++			}
+@@ -548,0 +637,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference STOP clock state");
-@@ -591,0 +671,2 @@
+@@ -591,0 +682,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference TRAP exception");
 --- a/source/dsp56kEmu/dsp_ops_helper.inl
@@ -947,61 +1033,64 @@
 +		case 0x10:	reg.vba.var = m_referenceMode ? (_val.toWord() & 0xffff00) : _val.toWord();				return;
 --- a/source/dsp56kEmu/dsp_ops_alu.inl
 +++ b/source/dsp56kEmu/dsp_ops_alu.inl
-@@ -87 +86,0 @@
+@@ -4,0 +5,2 @@
++
++#include <bit>
+@@ -87 +88,0 @@
 -		sr_z_update(d);
-@@ -89,2 +88 @@
+@@ -89,2 +90 @@
 -		sr_toggle(CCR_V, overflow);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, overflow);
-@@ -119 +117 @@
+@@ -119 +119 @@
 -				d64 = -d64Signed;
 +				d64 = uint64_t(0) - d64;
-@@ -123 +121 @@
+@@ -123 +123 @@
 -				val = -valSigned;
 +				val = uint64_t(0) - val;
-@@ -134 +132 @@
+@@ -134 +134 @@
 -		// V as for SUB. CMPM compares magnitudes and leaves V clear, which sim56300 confirms.
 +		// Table5-1: signed56 result overflow. CMPM's |min56|-0 exceeds the positive rail.
-@@ -136 +134,3 @@
+@@ -136 +136,3 @@
 -		sr_toggle(CCR_V, !_magnitude && ((d64 ^ val) & (d64 ^ res) & signBit) != 0);
 +		const bool overflow = _magnitude ? d64 >= val && (res & signBit) != 0
 +			: ((d64 ^ val) & (d64 ^ res) & signBit) != 0;
 +		sr_toggle(CCR_V, overflow);
-@@ -199,4 +199,2 @@
+@@ -199,4 +201,2 @@
 -		sr_toggle(CCR_V, overflow);
 -		sr_l_update_by_v();
 -
 -		sr_z_update(d);
 +		finishArithmeticResult(d, overflow);
 +
-@@ -210,0 +209,5 @@
+@@ -210,0 +211,5 @@
 +		// FM 13-16 leaves larger ASR counts undefined. Check before host bit shifts.
 +		const int referenceLimit = isSixteenBitArithmetic() ? 40 : 55;
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > referenceLimit))
 +			throw std::runtime_error("Undefined DSP reference ASR shift count=" + std::to_string(_shiftAmount));
 +
-@@ -236,0 +240,4 @@
+@@ -236,0 +242,4 @@
 +		// Counts outside the qualified 56-bit range must not reach host shifts.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 55))
 +			throw std::runtime_error("Unqualified DSP reference ASL shift count=" + std::to_string(_shiftAmount));
 +
-@@ -271,0 +279,3 @@
+@@ -271,0 +281,3 @@
 +		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
 +			throw std::runtime_error("Unqualified DSP reference LSL count " + std::to_string(_shiftAmount));
-@@ -276 +286 @@
+@@ -276 +288 @@
 -		const int res = (d.var << _shiftAmount) & 0x00ffffff;
 +		const auto res = (static_cast<uint32_t>(d.var) << _shiftAmount) & 0x00ffffff;
-@@ -296,0 +307,3 @@
+@@ -296,0 +309,3 @@
 +		// FM13-93/95: logical shifts beyond the 24-bit word are unqualified.
 +		if(m_referenceMode && (_shiftAmount < 0 || _shiftAmount > 24))
 +			throw std::runtime_error("Unqualified DSP reference LSR count " + std::to_string(_shiftAmount));
-@@ -338,3 +351 @@
+@@ -338,3 +353 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, overflow);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, overflow);
-@@ -347,18 +358,12 @@
+@@ -347,18 +360,12 @@
 -		TReg56& d = ab ? reg.b : reg.a;
 -		const TReg56& s = ab ? reg.a : reg.b;
 -
@@ -1032,7 +1121,7 @@
 +		d.var = static_cast<TInt64>(sum & bits);
 +		sr_toggle(CCR_C, sum < half);
 +		finishArithmeticResult(d, overflow);
-@@ -414,159 +419,37 @@
+@@ -414,159 +421,37 @@
 -	void DSP::alu_mpy( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate )
 -	{
 -	//	assert( sr_test(SR_S0) == 0 && sr_test(SR_S1) == 0 );
@@ -1229,7 +1318,7 @@
 +		commitArithmeticValue(ab, value, rounded, !bothUnsigned);
 +	}
 +
-@@ -575,30 +458,3 @@
+@@ -575,30 +460,3 @@
 -		TReg56& _alu = ab ? reg.b : reg.a;
 -
 -		int64_t rounder = 0x800000ll << g_aluShift;	// the rounding position moves up with the ALU
@@ -1263,7 +1352,7 @@
 +		commitArithmeticValue(ab, (ab ? reg.b : reg.a).var >> g_aluShift, true);
 +	}
 +
-@@ -617,6 +473 @@
+@@ -617,6 +475 @@
 -		alu_mpy(ab, s1, s2, negative, mulAcc);
 -
 -		if(round)
@@ -1271,90 +1360,116 @@
 -			alu_rnd(ab);
 -		}
 +		alu_mpy(ab, s1, s2, negative, mulAcc, round != 0);
-@@ -712,0 +564 @@
+@@ -712,0 +566 @@
 +		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
-@@ -713,0 +566 @@
+@@ -713,0 +568 @@
 +		finishSingleShift(D, previousLimit);
-@@ -716,0 +570 @@
+@@ -716,0 +572 @@
 +		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
-@@ -717,0 +572 @@
+@@ -717,0 +574 @@
 +		finishSingleShift(D, previousLimit);
-@@ -740,0 +596 @@
+@@ -740,0 +598 @@
 +		const bool previousLimit = sr_test_noCache(CCR_L) != 0;
-@@ -741,0 +598 @@
+@@ -741,0 +600 @@
 +		finishSingleShift(D, previousLimit);
-@@ -859 +716 @@
+@@ -763,0 +623,2 @@
++		if(m_referenceMode && isSixteenBitArithmetic())
++			throw std::runtime_error("Unqualified DSP reference CLB sixteen-bit arithmetic");
+@@ -859 +720 @@
 -		// Unsigned, so that the wrap is defined. DEC overflows only by wrapping the minimum round to the maximum and
 +		// Unsigned, so that the wrap is defined. Without SM, DEC overflows only by wrapping the minimum round to the maximum and
-@@ -868,3 +725 @@
+@@ -868,3 +729 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == maximum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == maximum);
-@@ -959,0 +815,4 @@
+@@ -876,0 +736,2 @@
++		if(m_referenceMode && isSixteenBitArithmetic())
++			throw std::runtime_error("Unqualified DSP reference DIV sixteen-bit arithmetic");
+@@ -888,9 +749,10 @@
+-		d.var <<= 1;
+-		d.var |= static_cast<TInt64>(sr_test_noCache(CCR_C) ? 1 : 0) << g_aluShift;	// carry enters at the accumulator LSB
+-
+-		const auto msbNew = bitvalue<55 + g_aluShift>(d);
+-
+-		if( c )
+-			d.var = ((d.var + (signextend<TInt64,24>(s24.var) << (24 + g_aluShift)) )&static_cast<TInt64>(0x00ffffffff000000ull << g_aluShift)) | (d.var & (0xffffffll << g_aluShift));
+-		else
+-			d.var = ((d.var - (signextend<TInt64,24>(s24.var) << (24 + g_aluShift)) )&static_cast<TInt64>(0x00ffffffff000000ull << g_aluShift)) | (d.var & (0xffffffll << g_aluShift));
++		// Aligned 56-bit hardware arithmetic is modular. Signed host add/sub
++		// overflows when the preceding left shift changes the extension sign.
++		const uint64_t shifted = (static_cast<uint64_t>(d.var) << 1) |
++			(static_cast<uint64_t>(sr_test_noCache(CCR_C)) << g_aluShift);
++		const auto msbNew = bitvalue<uint64_t,55 + g_aluShift>(shifted);
++		const auto divisor = static_cast<uint64_t>(signextend<TInt64,24>(s24.var)) << (24 + g_aluShift);
++		const auto result = c ? shifted + divisor : shifted - divisor;
++		constexpr uint64_t upper = 0x00ffffffff000000ull << g_aluShift;
++		constexpr uint64_t lower = 0xffffffull << g_aluShift;
++		d.var = std::bit_cast<TInt64>((result & upper) | (shifted & lower));
+@@ -959,0 +822,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACT width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -985,0 +845,4 @@
+@@ -985,0 +852,4 @@
 +		// FM13-70/72: offset + width beyond the 56-bit source is undefined.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && width + offset > 56)
 +			throw std::runtime_error("Unqualified DSP reference EXTRACTU width=" + std::to_string(width) +
 +				" offset=" + std::to_string(offset));
-@@ -1028 +891 @@
+@@ -1028 +898 @@
 -		// Unsigned, so that the wrap is defined. INC overflows only by wrapping the maximum round to the minimum and
 +		// Unsigned, so that the wrap is defined. Without SM, INC overflows only by wrapping the maximum round to the minimum and
-@@ -1036,3 +899 @@
+@@ -1036,3 +906 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
-@@ -1064,0 +926,4 @@
+@@ -1064,0 +933,4 @@
 +		// FM13-78: normal source width <= 24 and offset + width <= 56.
 +		if(m_referenceMode && !isSixteenBitArithmetic() && (widthField > 24 || widthField + offsetField > 56))
 +			throw std::runtime_error("Unqualified DSP reference INSERT width=" + std::to_string(widthField) +
 +				" offset=" + std::to_string(offsetField));
-@@ -1072 +937 @@
+@@ -1072 +944 @@
 -		else
 +		else if(widthField)
-@@ -1164,0 +1030,4 @@
+@@ -1164,0 +1037,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MAC coefficient=" + std::to_string(sssss));
 +
-@@ -1179,4 +1048 @@
+@@ -1179,4 +1055 @@
 -		alu_mpy( ab, reg, s, negate, _accumulate );
 -
 -		if(_round)
 -			alu_rnd( ab );
 +		alu_mpy(ab, reg, s, negate, _accumulate, _round);
-@@ -1198 +1064 @@
+@@ -1198 +1071 @@
 -		alu_mac( ab, s1, s2, negate, uu );
 +		alu_mpysuuu(ab, s1, s2, negate, true, uu);
-@@ -1210,0 +1077,4 @@
+@@ -1210,0 +1084,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MACR coefficient=" + std::to_string(sssss));
 +
-@@ -1214,2 +1084 @@
+@@ -1214,2 +1091 @@
 -		alu_mac( ab, s1, s2, negate, false );
 -		alu_rnd( ab );
 +		alu_mac(ab, s1, s2, negate, false, true);
-@@ -1304,0 +1174,4 @@
+@@ -1304,0 +1181,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MPY coefficient=" + std::to_string(sssss));
 +
-@@ -1336,0 +1210,4 @@
+@@ -1336,0 +1217,4 @@
 +		// FM table12-16 supplies n=1..22; other encoded coefficients remain unqualified.
 +		if(m_referenceMode && (sssss == 0 || sssss > 22))
 +			throw std::runtime_error("Unqualified DSP reference MPYR coefficient=" + std::to_string(sssss));
 +
-@@ -1340,2 +1217 @@
+@@ -1340,2 +1224 @@
 -		alu_mpy( ab, s1, s2, negate, false );
 -		alu_rnd( ab );
 +		alu_mpy(ab, s1, s2, negate, false, true);
-@@ -1450,7 +1326,14 @@
+@@ -1450,7 +1333,14 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -1376,7 +1491,7 @@
 +		// C uses the subtraction's borrow. Shift-overflow C remains unqualified.
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1458,5 +1341,2 @@
+@@ -1458,5 +1348,2 @@
 -		// Carry bit note: "The Carry bit (C) is set correctly if the source operand does not overflow as a result of the left shift operation.", we do not care at the moment
 -		sr_toggle(CCR_V, bittest(old, 55 + g_aluShift) != bittest(d, 55 + g_aluShift));
 -		sr_z_update(d);
@@ -1384,7 +1499,7 @@
 -		sr_c_update_arithmetic(old, d);
 +		finishArithmeticResult(d, overflow);
 +		sr_toggle(CCR_C, borrow);
-@@ -1468,7 +1348,12 @@
+@@ -1468,7 +1355,12 @@
 -
 -		TReg56&			d = ab ? reg.b : reg.a;
 -		const TReg56&	s = ab ? reg.a : reg.b;
@@ -1404,13 +1519,13 @@
 +		const bool overflow = ((shifted ^ source) & (shifted ^ res) & signBit) != 0;
 +		const bool borrow = shifted < source;
 +		d.var = static_cast<TReg56::MyType>(res);
-@@ -1476,3 +1361,2 @@
+@@ -1476,3 +1368,2 @@
 -		sr_z_update(d);
 -		//sr_l_update_by_v();
 -		sr_c_update_arithmetic(old, d);
 +		finishArithmeticResult(d, overflow);
 +		sr_toggle(CCR_C, borrow);
-@@ -1493,0 +1378,12 @@
+@@ -1493,0 +1385,12 @@
 +		if(m_referenceMode) {
 +			// FM 13-182: raw accumulator parts, not a scaled/limited long MOVE.
 +			const auto source = getFieldValue<Vsl, Field_S>(op);
@@ -1423,7 +1538,7 @@
 +			memWrite(MemArea_Y, address, low);
 +			return;
 +		}
-@@ -1495,2 +1391 @@
+@@ -1495,2 +1398 @@
 -	}
 -}
 +	}}
@@ -1502,102 +1617,12 @@
 +			return result;
 +		}
 +
-@@ -3316,0 +3335,5 @@
+@@ -3315,0 +3334,5 @@
++
 +		if(!moveStr.empty()) {
 +			result.error = AssembleError::InvalidInstruction;
 +			return result;
 +		}
-+
-
-diff --git a/source/dsp56kEmu/dsp.cpp b/source/dsp56kEmu/dsp.cpp
---- a/source/dsp56kEmu/dsp.cpp
-+++ b/source/dsp56kEmu/dsp.cpp
-@@ -567 +567 @@
--	uint32_t DSP::referenceNextCycles() const
-+	TWord DSP::referenceNextOpcode() const
-@@ -578 +578,6 @@
--		return referenceCycleCost(pc, opcode);
-+		return opcode;
-+	}
-+
-+	uint32_t DSP::referenceNextCycles() const
-+	{
-+		return referenceCycleCost(reg.pc.toWord(), referenceNextOpcode());
-@@ -1615 +1620 @@
--				m_opcodeCycleCache[_addr] = 0;
-+				m_opcodeCycleCache.invalidate(_addr);
-@@ -1908 +1913 @@
--			m_opcodeCycleCache.assign(mem.sizeP(), 0);
-+			m_opcodeCycleCache.reset(mem.sizeP());
-diff --git a/source/dsp56kEmu/dsp.h b/source/dsp56kEmu/dsp.h
---- a/source/dsp56kEmu/dsp.h
-+++ b/source/dsp56kEmu/dsp.h
-@@ -6,0 +7 @@
-+#include "dsp/dsp_cycle_cache.hpp"
-@@ -141,2 +142,2 @@
--		// this vector empty because they account cycles per compiled block. 0 = not yet computed.
--		std::vector<uint8_t>			m_opcodeCycleCache;
-+		// this cache empty because they account cycles per compiled block. 0 = not yet computed.
-+		blofeld::DspCycleCache		m_opcodeCycleCache;
-@@ -193 +194 @@
--			std::vector<uint8_t> opcodeCycleCache;
-+			blofeld::DspCycleCache opcodeCycleCache;
-@@ -281,0 +283 @@
-+		TWord referenceNextOpcode() const;
-diff --git a/source/dsp56kEmu/dsp_ops.inl b/source/dsp56kEmu/dsp_ops.inl
---- a/source/dsp56kEmu/dsp_ops.inl
-+++ b/source/dsp56kEmu/dsp_ops.inl
-@@ -528,0 +529,2 @@
-+		if(m_referenceMode && isSixteenBitArithmetic())
-+			throw std::runtime_error("Unqualified DSP reference NORMF sixteen-bit arithmetic");
-@@ -533,0 +536,3 @@
-+		const auto count = signextend<int,24>(s);
-+		if(m_referenceMode && (count < -55 || count > 56))
-+			throw std::runtime_error("Unqualified DSP reference NORMF shift count=" + std::to_string(count));
-@@ -541,2 +546,8 @@
--			// ASR
--			alu_asr(D, D, static_cast<int>(s));
-+			// FM13-147 permits NORMF +56 while ASR itself stops at55.
-+			// Compose two legal right shifts; this is still one native instruction.
-+			if(m_referenceMode && count == 56) {
-+				alu_asr(D, D, 55);
-+				alu_asr(D, D, 1);
-+			} else {
-+				alu_asr(D, D, static_cast<int>(s));
-+			}
-diff --git a/source/dsp56kEmu/dsp_ops_alu.inl b/source/dsp56kEmu/dsp_ops_alu.inl
---- a/source/dsp56kEmu/dsp_ops_alu.inl
-+++ b/source/dsp56kEmu/dsp_ops_alu.inl
-@@ -4,0 +5,2 @@
-+
-+#include <bit>
-@@ -620,0 +623,2 @@
-+		if(m_referenceMode && isSixteenBitArithmetic())
-+			throw std::runtime_error("Unqualified DSP reference CLB sixteen-bit arithmetic");
-@@ -731,0 +736,2 @@
-+		if(m_referenceMode && isSixteenBitArithmetic())
-+			throw std::runtime_error("Unqualified DSP reference DIV sixteen-bit arithmetic");
-@@ -743,9 +749,10 @@
--		d.var <<= 1;
--		d.var |= static_cast<TInt64>(sr_test_noCache(CCR_C) ? 1 : 0) << g_aluShift;	// carry enters at the accumulator LSB
--
--		const auto msbNew = bitvalue<55 + g_aluShift>(d);
--
--		if( c )
--			d.var = ((d.var + (signextend<TInt64,24>(s24.var) << (24 + g_aluShift)) )&static_cast<TInt64>(0x00ffffffff000000ull << g_aluShift)) | (d.var & (0xffffffll << g_aluShift));
--		else
--			d.var = ((d.var - (signextend<TInt64,24>(s24.var) << (24 + g_aluShift)) )&static_cast<TInt64>(0x00ffffffff000000ull << g_aluShift)) | (d.var & (0xffffffll << g_aluShift));
-+		// Aligned 56-bit hardware arithmetic is modular. Signed host add/sub
-+		// overflows when the preceding left shift changes the extension sign.
-+		const uint64_t shifted = (static_cast<uint64_t>(d.var) << 1) |
-+			(static_cast<uint64_t>(sr_test_noCache(CCR_C)) << g_aluShift);
-+		const auto msbNew = bitvalue<uint64_t,55 + g_aluShift>(shifted);
-+		const auto divisor = static_cast<uint64_t>(signextend<TInt64,24>(s24.var)) << (24 + g_aluShift);
-+		const auto result = c ? shifted + divisor : shifted - divisor;
-+		constexpr uint64_t upper = 0x00ffffffff000000ull << g_aluShift;
-+		constexpr uint64_t lower = 0xffffffull << g_aluShift;
-+		d.var = std::bit_cast<TInt64>((result & upper) | (shifted & lower));
-diff --git a/source/dsp56kEmu/jit.cpp b/source/dsp56kEmu/jit.cpp
 --- a/source/dsp56kEmu/jit.cpp
 +++ b/source/dsp56kEmu/jit.cpp
 @@ -123,2 +123,3 @@
@@ -1612,66 +1637,10 @@ diff --git a/source/dsp56kEmu/jit.cpp b/source/dsp56kEmu/jit.cpp
 +		if constexpr(!g_useJIT) return;
 @@ -448,0 +452 @@
 +		if constexpr(!g_useJIT) return;
-diff --git a/source/dsp56kEmu/jitmem.cpp b/source/dsp56kEmu/jitmem.cpp
 --- a/source/dsp56kEmu/jitmem.cpp
 +++ b/source/dsp56kEmu/jitmem.cpp
 @@ -1052,0 +1053 @@
 +		mem.requireArrayStorage("JIT pointer", _area, 0);
-diff --git a/source/dsp56kEmu/memory.cpp b/source/dsp56kEmu/memory.cpp
---- a/source/dsp56kEmu/memory.cpp
-+++ b/source/dsp56kEmu/memory.cpp
-@@ -5,0 +6,2 @@
-+#include <stdexcept>
-+#include <string>
-@@ -19,0 +22,18 @@
-+	Memory::Memory(const IMemoryValidator& _memoryMap, BusOwned, TWord _memSizeP, TWord _memSizeXY)
-+		: m_memoryMap(_memoryMap)
-+		, m_busOwned(true)
-+		, m_size({_memSizeP, _memSizeXY, _memSizeXY})
-+		, m_mem({nullptr})
-+		, x(nullptr), y(nullptr), p(nullptr)
-+		, m_bridgedMemoryAddress(0)
-+		, m_dsp(nullptr)
-+	{
-+	}
-+
-+	void Memory::requireArrayStorage(const char* _operation, EMemArea _area, TWord _offset) const
-+	{
-+		if(m_busOwned)
-+			throw std::logic_error(std::string("Bus-owned DSP memory ") + _operation +
-+				" bypass: area=" + std::to_string(_area) + " address=" + std::to_string(_offset));
-+	}
-+
-@@ -112,0 +133 @@
-+		requireArrayStorage("write", _area, _offset);
-@@ -166,0 +188 @@
-+		requireArrayStorage("extension", MemArea_P, offset);
-@@ -173,0 +196 @@
-+		requireArrayStorage("read", _area, _offset);
-@@ -208,0 +232 @@
-+		requireArrayStorage("opcode", MemArea_P, _offset);
-@@ -277,0 +302 @@
-+		requireArrayStorage("assembly export", MemArea_P, _offset);
-@@ -390,0 +416 @@
-+		requireArrayStorage("init pattern", MemArea_COUNT, 0);
-diff --git a/source/dsp56kEmu/memory.h b/source/dsp56kEmu/memory.h
---- a/source/dsp56kEmu/memory.h
-+++ b/source/dsp56kEmu/memory.h
-@@ -59,0 +60 @@
-+		const bool m_busOwned = false;
-@@ -96,0 +98,3 @@
-+		// The validator owns every word; no array/MMU fallback is available.
-+		struct BusOwned {};
-+		explicit Memory(const IMemoryValidator& _memoryMap, BusOwned, TWord _memSizeP, TWord _memSizeXY);
-@@ -127,0 +132 @@
-+			requireArrayStorage("external-memory remap", MemArea_COUNT, _address);
-@@ -134,0 +140 @@
-+			requireArrayStorage("direct pointer", _area, 0);
-@@ -163,0 +170,2 @@
-+
-+		bool hasArrayStorage() const { return x != nullptr || y != nullptr || p != nullptr; }
-@@ -192,0 +201 @@
-+		void requireArrayStorage(const char* _operation, EMemArea _area, TWord _offset) const;
 --- a/source/asmjit/src/asmjit/core/cpuinfo.cpp
 +++ b/source/asmjit/src/asmjit/core/cpuinfo.cpp
 @@ -8,0 +9,2 @@

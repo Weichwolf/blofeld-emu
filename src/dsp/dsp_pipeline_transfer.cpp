@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
+#include "dsp/dsp_accumulator_transfer.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
@@ -37,6 +38,30 @@ bool immediate(const Type type, const unsigned opcode) {
 bool transfer(const Type type, const unsigned opcode) {
   return type == dsp56k::Mover || type == dsp56k::Movec_S1D2 || immediate(type, opcode);
 }
+
+bool accumulator_source(const Type first, const Type second, const std::uint32_t opcode) {
+  if (first != dsp56k::Mover || second != dsp56k::Invalid) { return false; }
+  const auto source = dsp56k::getRegister(first, dsp56k::Field_eeeee, opcode);
+  if (source != dsp56k::Register::A && source != dsp56k::Register::B) { return false; }
+  auto written = Mask::None;
+  auto read = Mask::None;
+  dsp56k::getRegisters(written, read, first, opcode);
+  constexpr auto destinations = static_cast<std::uint64_t>(Mask::X) |
+                                static_cast<std::uint64_t>(Mask::Y) |
+                                static_cast<std::uint64_t>(Mask::R);
+  return written != Mask::None && (static_cast<std::uint64_t>(written) & ~destinations) == 0;
+}
+
+}
+
+bool accumulator_transfer_source(const std::uint32_t opcode) {
+  constexpr unsigned mask = 0xffffff;
+  if (opcode > mask) { return false; }
+  static const dsp56k::Opcodes opcodes;
+  auto first = dsp56k::Invalid;
+  auto second = dsp56k::Invalid;
+  return opcodes.getInstructionTypes(opcode, first, second) != 0 &&
+         accumulator_source(first, second, opcode);
 }
 
 unsigned pipeline_word_count(const DspProgramWord word) {
@@ -65,11 +90,12 @@ DspMoveFields pipeline_transfer_fields(const std::uint32_t opcode) {
     Mask written = Mask::None;
     Mask read = Mask::None;
     dsp56k::getRegisters(written, read, move, opcode);
-    constexpr auto allowed = static_cast<std::uint64_t>(Mask::X) |
-                             static_cast<std::uint64_t>(Mask::Y) |
-                             static_cast<std::uint64_t>(Mask::R);
+    const auto accumulator = accumulator_source(first, second, opcode) ? Mask::AB : Mask::None;
+    const auto allowed = static_cast<std::uint64_t>(accumulator) |
+                         static_cast<std::uint64_t>(Mask::X) | static_cast<std::uint64_t>(Mask::Y) |
+                         static_cast<std::uint64_t>(Mask::R);
     if ((static_cast<std::uint64_t>(read) & ~allowed) != 0) {
-      throw Fault("Unqualified automatic transfer source; only X/Y/R data sources are admitted");
+      throw Fault("Unqualified automatic transfer source or accumulator destination");
     }
   }
   return decode_move_writeback(opcode, DspMoveDecode::nonmemory);

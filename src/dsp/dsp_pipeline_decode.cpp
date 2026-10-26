@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
+#include "dsp/dsp_accumulator_transfer.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_memory_form.hpp"
@@ -69,6 +70,14 @@ std::uint8_t dependency(const Mask written, const Mask read) {
 std::uint8_t deferred_alu_accumulators(const DspProgramWord producer,
                                        const DspProgramWord consumer) {
   return dependency(operands(producer, true).written, operands(consumer, true).read);
+}
+
+std::uint8_t accumulator_transfer_dependency(const std::uint32_t producer,
+                                             const std::uint32_t consumer) {
+  if (!accumulator_transfer_source(consumer)) { return 0; }
+  // FM3.5.1/3.5.2.1: ALU and move writers interlock only on the same accumulator.
+  return dependency(operands({.value = producer}, false).written,
+                    operands({.value = consumer}, false).read);
 }
 
 std::uint8_t memory_source_dependency(const DspInstructionDependency instructions) {

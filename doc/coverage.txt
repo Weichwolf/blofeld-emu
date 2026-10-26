@@ -2732,10 +2732,22 @@ Native CCR, direct register-indirect and OMR control:
   suffixes and42AGU/RAM suffixes. Concurrent OMR checkpoint restoration is
   tested separately with TSan. These checks do not prove physical phases,
   complete ROM identity or original reset-to-instrument execution.
-- A separate strict local diagnostic receives all94original first-stage words
-  through actual SPI/P stores and retires the genuine loader JMP into them.
-  OMR passes Decode;the next unqualified accumulator-source transfer refuses
-  before a first-stage instruction retires.
-  This uses explicit between-period SPI stimulus,not actual MCU scheduling or
-  physical pin timing. No reserved/ROM writes are discarded and no firmware
-  bytes are changed. This does not establish normal original boot.
+- Standalone full A/B transfers to X/Y/R use actual native E1 destinations
+  and E2 flags. Signed scaling, 24-bit clipping and selected-source sticky
+  S/L follow independent literal expectations. Same-accumulator ALU or move
+  writers require one real consumer period; disjoint writers and one-NOP gaps
+  add none. Other source/control/parallel forms remain explicit refusals.
+- Completed or annulled DO observers retire only after real native confirmation
+  and inactive/pending-free forecasts. Actual F1/F2 receipts remain intact;
+  a subsequent DO uses its current OMR. Active-loop OMR still refuses.
+  Supporting checks cover 1,152 full-state streams, 84 accumulator suffixes,
+  12 producer cases/72 suffixes and 54 loop/OMR/reopen cases/90 suffixes.
+  The concurrent owner scope shares these literal oracles: 696 suffixes and
+  24 scaling streams. These are component/model proofs, not physical timing
+  or full original device acceptance. See dsp-accumulator-transfers.txt.
+- The local original first-stage diagnostic receives all 94 unchanged words
+  through actual SPI/P stores and retires its genuine loader JMP and first
+  received instruction. Its next visible failure is REP Decode, before the
+  older staged OMR and following accumulator MOVE retire. Document-derived
+  ROM and between-period SPI stimulus do not establish authentic ROM identity,
+  calibrated MCU scheduling or normal boot. No reserved write is discarded.

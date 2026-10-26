@@ -50,6 +50,11 @@
       "upstream_sha256": "6f6d5f17c53b922fa5511a547d462eb9c94fb98afba8808d4e7714a44eb58e86",
       "integration": "Explicit std::call_once initialization; unchanged host detection operations and values. Required because the upstream build disables thread-safe local statics. Applied only by the existing build-copy patch.",
       "license": "Zlib; original source notices retained."
+    },
+    "accumulator_bus_growth": {
+      "file": "source/dsp56kEmu/dsp.h",
+      "reference": "DSP56300FM 3.1.6 and 5-13; doc/dsp-accumulator-reference.json",
+      "integration": "Reference-only selected-source S growth uses S0-S1: high bits 46 normal, 47 down, 45 up. Sticky semantics and numeric transfers remain unchanged. The installed upstream checkout is untouched."
     }
   },
   "dsp56300_assembly_tool": {

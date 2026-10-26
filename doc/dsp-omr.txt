@@ -39,12 +39,20 @@ checks cold native instance creation. AsmJit host CPU detection uses thread-safe
 std::call_once initialization in the build copy, whose compiler options disable
 thread-safe local statics (patches/README.txt).
 
-The original first-stage diagnostic still fails before its first instruction
-retires. Decode admits OMR but the next accumulator-source transfer is currently
-unsupported. No firmware patch, skipped routine, reserved-write discard or
-invented peripheral success is used. Normal stock boot, complete ROM contents,
+A completed or annulled native DO releases its finished observer only after
+actual confirmation: no active forecast frame, pending boundary or queued active
+prediction may remain. The native LF/FV flags must be clear. Real F1/F2 words,
+identities, raw origins and branch decisions remain intact. A later DO opens
+under its current OMR. Active-loop OMR transitions still refuse explicitly.
+See dsp-accumulator-transfers.txt for complete state and restoration checks.
+
+The local original first-stage diagnostic receives every original word and
+retires its genuine loader JMP and first received instruction. It now stops at
+an unqualified REP Decode; the older OMR E1 is staged but has not yet retired.
+This uses a document-derived ROM and explicit between-period SPI stimulus,
+not authenticated Blofeld ROM or calibrated MCU scheduling. Normal stock boot,
 MIDI/audio, storage/update/recovery and physical Desktop/Keyboard equivalence
-remain open. Manufacturer bytes, traces and detailed analysis remain local.
+remain open. Manufacturer bytes and detailed traces remain local.
 
   cmake --build --preset strict --target blofeld-omr-native-test \
     blofeld-omr-clock-test blofeld-omr-branch-test blofeld-omr-peripheral-test \

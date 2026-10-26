@@ -2,6 +2,7 @@
 #include "dsp/detail/dsp_pipeline.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/dsp_accumulator_transfer.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_core.hpp"
@@ -26,6 +27,17 @@ namespace blofeld {
 namespace {
 constexpr unsigned word_mask = 0xffffff;
 constexpr auto execution = DspReferenceExecution::staged_register_boundaries;
+
+void check_accumulator_context(const DspMachine &machine,
+                               const std::optional<DspProgramWord> execute) {
+  constexpr unsigned scaling_mask = 0xc00;
+  const auto cpu = machine.cpu().state();
+  if (execute && accumulator_transfer_source(execute->value) &&
+      (cpu.sr & scaling_mask) == scaling_mask) {
+    throw Fault("Unqualified accumulator MOVE scaling read P:" + hex(execute->address, 6) +
+                " pc=" + hex(cpu.pc, 6) + " sr=" + hex(cpu.sr, 6) + " omr=" + hex(cpu.omr, 6));
+  }
+}
 
 void check_context(const DspMachine &machine) {
   const auto cpu = machine.cpu().state();
@@ -102,6 +114,7 @@ void prepare_decode(DspInstructionPipeline &pipeline,
 
 void DspInstructionPipeline::prepare(const DspMachine &machine) {
   check_context(machine);
+  check_accumulator_context(machine, view.stages[2]);
   constexpr unsigned loop_flag = 0x8000;
   if ((machine.cpu().state().sr & loop_flag) != 0 && !machine.pipeline_loop_control()) {
     throw Fault("Automatic DSP LF requires its observed native/F2 owner pc=" +
@@ -155,7 +168,8 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
       const DspInstructionDependency inputs{.producer = *cycle.execute2,
                                             .consumer = *cycle.execute1};
       cycle.memory_source_stall =
-          memory_source_dependency(inputs) != 0 || pipeline_loop_source_dependency(inputs);
+          memory_source_dependency(inputs) != 0 || pipeline_loop_source_dependency(inputs) ||
+          accumulator_transfer_dependency(inputs.producer.value, inputs.consumer.value) != 0;
     }
   }
   if (cycle.execute2) {

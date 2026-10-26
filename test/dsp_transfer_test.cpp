@@ -61,8 +61,8 @@ struct BusResult {
 BusResult expected(const Input input) {
   constexpr unsigned ordinary_growth_high = 46;
   unsigned growth_high = ordinary_growth_high;
-  if ((input.status & scale_up) != 0) { ++growth_high; }
-  if ((input.status & scale_down) != 0) { --growth_high; }
+  if ((input.status & scale_up) != 0) { --growth_high; }
+  if ((input.status & scale_down) != 0) { ++growth_high; }
   auto status = input.status;
   if ((((input.value >> growth_high) ^ (input.value >> (growth_high - 1))) & 1U) != 0) {
     status |= sticky;

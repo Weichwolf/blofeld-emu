@@ -1458,6 +1458,17 @@ if(BUILD_TESTING)
     set_tests_properties(dsp_omr_${kind} PROPERTIES TIMEOUT 120)
   endforeach()
   target_link_libraries(blofeld-omr-thread-test PRIVATE Threads::Threads)
+  foreach(kind clock hazard thread)
+    add_executable(blofeld-accumulator-${kind}-test test/dsp_accumulator_${kind}_test.cpp)
+    target_link_libraries(blofeld-accumulator-${kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
+    add_test(NAME dsp_accumulator_${kind} COMMAND blofeld-accumulator-${kind}-test)
+    set_tests_properties(dsp_accumulator_${kind} PROPERTIES TIMEOUT 120)
+  endforeach()
+  target_link_libraries(blofeld-accumulator-thread-test PRIVATE Threads::Threads)
+  add_executable(blofeld-postloop-context-test test/dsp_postloop_context_test.cpp)
+  target_link_libraries(blofeld-postloop-context-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_postloop_context COMMAND blofeld-postloop-context-test)
+  set_tests_properties(dsp_postloop_context PROPERTIES TIMEOUT 120)
   add_test(NAME dsp_ccr_control COMMAND blofeld-ccr-control-test)
   add_test(NAME dsp_indirect_control COMMAND blofeld-indirect-control-test)
   add_test(NAME dsp_control_composition COMMAND blofeld-control-composition-test)
@@ -3033,6 +3044,8 @@ add_custom_target(quality
     blofeld-control-guard-test blofeld-document-loader-entry-test
     blofeld-omr-native-test blofeld-omr-clock-test blofeld-omr-branch-test
     blofeld-omr-peripheral-test blofeld-omr-memory-test blofeld-omr-thread-test
+    blofeld-accumulator-clock-test blofeld-accumulator-hazard-test
+    blofeld-accumulator-thread-test blofeld-postloop-context-test
     blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test

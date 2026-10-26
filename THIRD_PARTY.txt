@@ -30,6 +30,8 @@ DSP56300:
   explicit std::call_once initialization; its original notices remain intact. Other native source
   notices remain upstream. Corresponding source and dependency notices must
   accompany any redistributable binary package as required by their licenses.
+  The reference data-bus patch also corrects scaled selected-source S growth
+  from DSP56300FM 5-13; numeric transfer operations and notices stay intact.
   The reference core is integrated; combined MCU/DSP board boot remains pending.
 
 Native session audio client:

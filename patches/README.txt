@@ -243,3 +243,15 @@ the Ghidra Apache-2.0 terms. BGE now branches on N XOR V == 0; upstream used
 BLT's condition (Family Rev2 p212). Ordinary step() checks640 independent BGE/BLT
 cases; the separate captured-queue gate checks native ppp branch/refill behavior.
 Installed Ghidra source and firmware bytes stay unchanged.
+
+Selected-source accumulator growth
+---------------------------------
+The reference data-bus S-growth offset is S0-S1, as defined by FM5-13:
+high bit 46 normally, 47 when scaling down and 45 when scaling up. The old
+offset reversed the scaled cases. Sticky S, the selected source, numeric
+scaling/clipping and original notices remain intact. Own full-state streams
+and unchanged vendor-model windows distinguish these cases independently;
+the older own transfer oracle is corrected from the same primary equations.
+The patch uses one zero-context diff per affected upstream file and produces
+the qualified native source bytes. No JIT/physical timing claim is implied.
+See doc/dsp-accumulator-transfers.txt and its reference manifest.

@@ -1,0 +1,55 @@
+Accumulator bus transfers and completed loop context
+===================================================
+
+The automatic memory pipeline executes standalone full A/B sources to
+X0/X1/Y0/Y1/R0..R7 through the native interpreter. Native E1 publishes only
+the genuine destination fields; E2 publishes PC, flags and diagnostic costs.
+The 56-bit source and the other accumulator remain intact. Signed scaling
+precedes signed 24-bit clipping. S growth uses source bits 46/45 normally,
+47/46 when scaling down and 45/44 when scaling up; S and L remain sticky.
+The old native offset and older own transfer oracle reversed the scaled
+growth cases. Both now follow the independent FM5-13 equations.
+
+An adjacent ALU or transfer writer to the same accumulator requires one
+actual consumer period. The older E2 publishes while the real younger E1 is
+held; the consumer then executes once using that native result. Disjoint
+writers or a one-NOP gap introduce no extra period. Partial accumulator
+sources, unqualified destinations and parallel source forms still refuse
+before automatic effects. Reserved scaling refuses before native E1.
+
+A completed or annulled DO releases only finished speculative observer state
+after native confirmation. Forecast depth, pending boundaries, queued active
+predictions and native LF/FV must all permit closure. Real F1/F2 receipts,
+addresses, physical origins and branch decisions remain intact. A subsequent
+native DO opens under its current OMR. An OMR write during an active loop
+remains a visible unsupported transition.
+
+Own literal checks cover 1,152 scaling/destination/source/initial-S streams,
+84 accumulator suffixes, five source/scaling refusals, 12 producer windows
+with 72 suffixes, and 54 loop/OMR/reopen streams with 90 suffixes. Full CPU,
+retained frame cells, stack aliases, flags and diagnostic counters are
+compared every selected period. Zero DO still writes its popped frame cells
+as described by FM13-56/57. The three-period physical memory-map delay remains
+separate from observer closure. Existing native loop cases retain nesting,
+FOREVER, two-word bodies and actual F1/F2 ownership checks.
+
+The concurrent test shares the actual literal accumulator and post-loop
+oracles, rather than substituting a constructor-only check. Two cold owners
+exercise 696 checkpoint suffixes and 24 scaling streams. Run that scope
+separately under TSan. Independent model windows establish numeric results
+and nominal interlocks; selected pipeline periods are not measured silicon
+sampling edges. Reference hashes and scope are in dsp-accumulator-reference.json.
+
+The local original frame still stops at REP Decode, before the older staged
+OMR and following accumulator transfer retire. REP/PLL timelines, complete
+authentic ROM, original reset-to-instrument operation, MIDI/audio, storage,
+update/recovery and physical Desktop/Keyboard equivalence remain open.
+No manufacturer program bytes or private traces are distributed here.
+
+  cmake --build --preset strict --target blofeld-accumulator-clock-test \
+    blofeld-accumulator-hazard-test blofeld-postloop-context-test \
+    blofeld-accumulator-thread-test
+  ctest --preset strict -j1 --output-on-failure -R \
+    '^(dsp_accumulator_(clock|hazard|thread)|dsp_postloop_context)$'
+  cmake --build --preset thread --target blofeld-accumulator-thread-test
+  ctest --preset thread -j1 --output-on-failure -R '^dsp_accumulator_thread$'
