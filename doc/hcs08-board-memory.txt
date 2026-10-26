@@ -1,0 +1,40 @@
+Candidate HCS08 board memory
+
+  cmake --build --preset strict --target blofeld-hcs08-board-memory-test blofeld-original-hcs08-board-memory-test
+  ctest --preset strict -j1 -R '^(hcs08_board_memory|original_hcs08_board_memory)$' --output-on-failure
+
+Hcs08BoardMemory owns candidate GT8A SRAM,FLASH and existing GPIO,ICG/history,
+SPI,ADC,TPM and COP/SOPT components independently of CPU and host transports.
+It does not inherit test RAM or install code,pins,factory calibration or clocks.
+The explicit untimed contract is not a normal timed board implementation.
+
+All1024 SRAM bytes start unknown. Partial native loads/stores preserve masks;
+ordinary reads and actual fetches reject unknown data. Decoder lookahead alone
+returns inert zero padding,with execution permissions checked separately.
+Writes to observed RAM code invalidate translation identity;ordinary data and
+peripheral writes do not. Unsupported addresses report operation,address,PC,CCR.
+Failed read/write transactions quarantine further accesses until coordinated
+recovery. Recovery must also replace/reset the CPU and external owners.
+
+POR invalidates SRAM and uses documented live trim80. Warm reset retains actual
+SRAM/trim. Both restore volatile peripheral state and conservatively invalidate
+interrupted NVM contents. SRS sources are explicit;an unknown cause stays unknown.
+Peripheral reset is separate from the CPU's FFFE/FFFF vector transaction.
+Copies preserve device/memory state and drop external GPIO callbacks.
+
+No polls advance a device. Active timer,ADC,SPI and FLASH status reads refuse
+without their clock/input/completion owners. Uncertain ICG IRQ/reset histories
+remain strict;known CPU I masks only possible interrupts. Idle FSTATFF remains
+unsupported. Original code never becomes a synthesized successful loader.
+
+Three unchanged original Keyboard normal resets qualify memory routing:missing
+pads stop atE04E/6176;declared Port E input08 with missing per-unit calibration
+stops atE1A5/6184. With declared calibration80,the original ICG/ADC setup reaches
+E1CA/6197 and fails at the first live TPM read. Factory data are supplied by the
+test image,never patched by this memory owner. FLASH bytes remain unchanged.
+
+CPU/BDC execution,reset-edge recognition,physical clocks/bus ordering,pin mux,
+missing ROM/NVM,normal reset-to-instrument,MIDI/audio and hardware equivalence
+remain separate unqualified requirements. Canonical CMake collectors and both
+new native groups pass under ASan/UBSan and separate TSan;the strict all-target
+build,format,clang-tidy,dependency checks and applicable ELF hardening pass.

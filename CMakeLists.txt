@@ -137,6 +137,12 @@ target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
 add_library(blofeld_hcs08_gpio src/keyboard/hcs08_gpio.cpp)
 target_include_directories(blofeld_hcs08_gpio PUBLIC src)
 target_link_libraries(blofeld_hcs08_gpio PUBLIC blofeld_gpio_pads)
+add_library(blofeld_hcs08_board_memory src/board/hcs08_board_memory.cpp
+  src/board/hcs08_board_peripherals.cpp)
+target_include_directories(blofeld_hcs08_board_memory PUBLIC src)
+target_link_libraries(blofeld_hcs08_board_memory PUBLIC blofeld_hcs08_gpio
+  blofeld_hcs08_icg_history blofeld_hcs08_adc blofeld_hcs08_spi blofeld_hcs08_tpm
+  blofeld_hcs08_cop blofeld_hcs08_flash)
 add_library(blofeld_private_files src/storage/private_file.cpp)
 target_include_directories(blofeld_private_files PUBLIC src)
 target_link_libraries(blofeld_private_files PUBLIC blofeld_firmware)
@@ -279,6 +285,21 @@ if(BUILD_TESTING)
   target_compile_definitions(blofeld-hcs08-core-test PRIVATE
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_core COMMAND blofeld-hcs08-core-test)
+  add_executable(blofeld-hcs08-board-memory-test test/hcs08_board_memory_test.cpp)
+  target_link_libraries(blofeld-hcs08-board-memory-test PRIVATE blofeld_hcs08_board_memory)
+  add_test(NAME hcs08_board_memory COMMAND blofeld-hcs08-board-memory-test)
+  add_executable(blofeld-original-hcs08-board-memory-test test/original_hcs08_board_memory_test.cpp)
+  target_link_libraries(blofeld-original-hcs08-board-memory-test PRIVATE
+    blofeld_hcs08_board_memory blofeld_hcs08)
+  target_compile_definitions(blofeld-original-hcs08-board-memory-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_board_memory COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_board_memory.py"
+    $<TARGET_FILE:blofeld-original-hcs08-board-memory-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-board-memory.trace")
+  set_tests_properties(original_hcs08_board_memory PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
   add_executable(blofeld-hcs08-arithmetic-test test/hcs08_arithmetic_test.cpp)
   target_link_libraries(blofeld-hcs08-arithmetic-test PRIVATE blofeld_hcs08)
   target_compile_definitions(blofeld-hcs08-arithmetic-test PRIVATE
@@ -2768,6 +2789,7 @@ add_custom_target(quality
     blofeld-hcs08-icg-clocks-test blofeld-hcs08-icg-status-test
     blofeld-hcs08-icg-history-test blofeld-hcs08-known-interrupts-test
     blofeld-original-hcs08-icg-history-test blofeld-original-hcs08-clock-prefix-test
+    blofeld-hcs08-board-memory-test blofeld-original-hcs08-board-memory-test
     blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
     blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test
     blofeld-hcs08-rmw-cycle-test blofeld-original-hcs08-modify-test

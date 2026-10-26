@@ -2530,3 +2530,16 @@ Conservative HCS08 history and coupled reference startup:
 - Native clock generation/synchronization,default reset-to-instrument,native DSP,
   complete MIDI/audio/storage/update/recovery and physical comparison stay open.
   See hcs08-icg-history.txt and hcs08-clock-prefix.txt.
+
+Candidate production HCS08 memory owner:
+- The board bus owns unknown/partial SRAM,strict memory permissions and the
+  existing GPIO,ICG/history,SPI,ADC,TPM,COP/SOPT and FLASH components. It has no
+  test-memory superclass,pin/factory-data defaults,clock source or host bridge.
+- Own RAM/reset/cache/pad-copy/access gates and three original normal resets
+  pass through canonical CMake in ASan/UBSan and separate TSan builds. Missing
+  pads stop atE04E/6176;missing factory calibration atE1A5/6184;declared inputs reach the
+  strict live-TPM frontier atE1CA/6197. NVM bytes stay exact. Registration now
+  450/1060 preserves448definitions/1056recipes per profile. Strict all-target
+  build,format,clang-tidy,instrumentation/source guard and applicable ELF gates
+  pass;the scoped TSan ELF check covers the two new built programs. Whole TSan
+  inventory and timed reset-to-instrument remain unqualified. See hcs08-board-memory.txt.
