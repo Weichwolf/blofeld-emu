@@ -67,6 +67,8 @@ public:
   // CPU reset fetch only: FFFE/FFFF are independent of pre-reset instruction SEC
   // privilege. This does not grant BDC access, supply unknown data or complete NVM.
   [[nodiscard]] std::uint8_t read_reset_vector_byte(std::uint16_t address) const;
+  // Hardware vector fetch only; ordinary CPU/BDC array reads remain direct.
+  [[nodiscard]] std::uint8_t read_interrupt_vector_byte(std::uint16_t address) const;
   void stage(ByteWrite access);
   void observe_bus_clock(std::uint32_t hz);
   void advance(Hcs08FlashMilestone milestone);

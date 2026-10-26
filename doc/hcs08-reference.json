@@ -95,5 +95,10 @@
       "sha256": "4239006903197348d6ddc33449a616133dd8f8cd851b9e2bf659c91260ecdec6",
       "scope": "Vendor simulator interface documentation only;no model execution or hardware validation."
     }
-  ]
+  ],
+  "architectural_vector_routing": {
+    "primary": "primary_reference",
+    "sections": "4.4.6/4.4.7,4.6.2/4.6.4",
+    "scope": "Candidate GT8A partial-protection vector pages;fixed reset and ordinary data/program reads remain direct. CPU hardware IRQ byte reads use an explicit memory-owned capability;physical part/phases remain unverified. Pinned Ghidra SWI currently branches to the vector address without a dereference;native SWI refuses before effects pending complete qualification."
+  }
 }

@@ -13,6 +13,7 @@
 #include "keyboard/hcs08_known_memory.hpp"
 #include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_tpm.hpp"
+#include "keyboard/hcs08_vector_memory.hpp"
 
 #include <array>
 #include <bitset>
@@ -49,7 +50,8 @@ struct Hcs08BoardPeriods {
 class Hcs08BoardMemory final : public Bus,
                                public Hcs08KnownMemory,
                                public Hcs08KnownInterrupts,
-                               public Hcs08BdcMemory {
+                               public Hcs08BdcMemory,
+                               public Hcs08VectorMemory {
 public:
   Hcs08BoardMemory(const Hcs08FlashImage &image, Hcs08BoardMemoryContract contract);
   void reset_peripherals(Hcs08IcgReset cause,
@@ -71,6 +73,7 @@ public:
   void write(ByteWrite access, ExecutionContext context) override;
   [[nodiscard]] std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
+  [[nodiscard]] std::uint8_t read_interrupt_vector_byte(std::uint16_t address) override;
   [[nodiscard]] Hcs08KnownByte read_known_byte(std::uint16_t address) override;
   void write_known_byte(ByteWrite access, std::uint8_t known) override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;

@@ -136,6 +136,14 @@ std::uint8_t Hcs08BoardMemory::read(const std::uint16_t address) {
   return result;
 }
 
+std::uint8_t Hcs08BoardMemory::read_interrupt_vector_byte(const std::uint16_t address) {
+  data_access("interrupt vector read", address);
+  healthy_ = false;
+  const auto value = flash_.read_interrupt_vector_byte(address);
+  healthy_ = true;
+  return value;
+}
+
 Hcs08KnownByte Hcs08BoardMemory::read_known_byte(const std::uint16_t address) {
   data_access("masked read", address);
   if (ram_address(address)) { return ram_.at(address - ram_first); }

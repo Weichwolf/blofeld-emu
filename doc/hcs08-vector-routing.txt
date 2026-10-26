@@ -1,0 +1,34 @@
+Candidate HCS08 hardware-vector routing
+
+  cmake --build --preset strict --target blofeld-hcs08-flash-vector-test \
+    blofeld-hcs08-vector-irq-test blofeld-hcs08-vector-atomic-test
+  ctest --preset strict -j1 -R '^(hcs08_flash_vector|hcs08_vector_irq|hcs08_vector_atomic)$' --output-on-failure
+
+GT16A/GT8A4.4.6/7,4.6.2/4 specify reset-latched FNORED/FPROT routing.
+For candidate GT8A,only partial protection with FNORED0 redirects FFC0..FFFD
+to the last64bytes below the protected block. FC selects FDC0..FDFD;
+FA selects FBC0..FBFD;E0 selects E1C0..E1FD. Full/empty protection and
+FNORED1/FPDIS1 keep the original cells. Fixed reset FFFE/FFFF never redirects.
+
+An explicit memory capability owns each actual hardware-vector byte read.
+The CPU's atomic and period-owned IRQ paths retain logical source selection,
+priority,frame writes and acknowledgement;ordinary data/program reads stay
+direct. Relevant unknown latches/data and active/pending NVM fail visibly.
+No target register/IRQ seed,firmware patch or idle-FSTAT relaxation is added.
+
+Per ASan/UBSan and separate TSan profile:4096option/protection combinations
+x62vector bytes;12main native order/configuration cases,432destroyed-owner
+period suffixes,six untimed one-shot cases and192fresh CPU/memory suffixes.
+Literal18+11+26=55periods,ISR markers,ordinary LDA FFE0,RTI caller state and
+NVM match. Four missing-byte failures and two unused-original-byte controls
+remain strict. The one-shot test bus owns real FLASH/SPI/SOPT and raw SRAM;
+it supplies no ICG/COP timing and refuses all other accesses.
+
+The pinned decoder's SWI uses the vector address as its target without reading
+its contents. Native SWI therefore refuses before CPU/frame/device effects,
+with PC/CCR context;fully known and partial callers are tested. This is an
+explicit unsupported instruction,not completed software-interrupt support.
+
+Exact physical part/mask,IRQ/bus phases,original reset-to-instrument,MIDI/audio,
+persistence,all-phase update/recovery and hardware equivalence remain open.
+See hcs08-reference.json,hcs08-board-irqs.txt and hcs08-flash.txt.

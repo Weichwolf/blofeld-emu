@@ -113,7 +113,8 @@ add_library(blofeld_hcs08_adc src/keyboard/hcs08_adc.cpp src/keyboard/hcs08_adc_
 target_include_directories(blofeld_hcs08_adc PUBLIC src)
 target_link_libraries(blofeld_hcs08_adc PUBLIC blofeld_firmware)
 add_library(blofeld_hcs08_flash src/keyboard/hcs08_flash.cpp src/keyboard/hcs08_flash_registers.cpp
-  src/keyboard/hcs08_flash_array.cpp src/keyboard/hcs08_flash_reset.cpp)
+  src/keyboard/hcs08_flash_array.cpp src/keyboard/hcs08_flash_reset.cpp
+  src/keyboard/hcs08_flash_vectors.cpp)
 target_include_directories(blofeld_hcs08_flash PUBLIC src)
 target_link_libraries(blofeld_hcs08_flash PUBLIC blofeld_firmware)
 add_library(blofeld_hcs08_bdc src/keyboard/hcs08_bdc.cpp src/keyboard/hcs08_bdc_commands.cpp)
@@ -328,6 +329,22 @@ if(BUILD_TESTING)
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_board_irq_native COMMAND blofeld-hcs08-board-irq-native-test)
   set_tests_properties(hcs08_board_irq_native PROPERTIES TIMEOUT 180)
+  add_executable(blofeld-hcs08-flash-vector-test test/hcs08_flash_vector_test.cpp)
+  target_link_libraries(blofeld-hcs08-flash-vector-test PRIVATE blofeld_hcs08_flash)
+  add_test(NAME hcs08_flash_vector COMMAND blofeld-hcs08-flash-vector-test)
+  set_tests_properties(hcs08_flash_vector PROPERTIES TIMEOUT 90)
+  add_executable(blofeld-hcs08-vector-irq-test test/hcs08_vector_irq_test.cpp)
+  target_link_libraries(blofeld-hcs08-vector-irq-test PRIVATE blofeld_hcs08_board_serial)
+  target_compile_definitions(blofeld-hcs08-vector-irq-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_vector_irq COMMAND blofeld-hcs08-vector-irq-test)
+  set_tests_properties(hcs08_vector_irq PROPERTIES TIMEOUT 180)
+  add_executable(blofeld-hcs08-vector-atomic-test test/hcs08_vector_atomic_test.cpp)
+  target_link_libraries(blofeld-hcs08-vector-atomic-test PRIVATE blofeld_hcs08_board_serial)
+  target_compile_definitions(blofeld-hcs08-vector-atomic-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_vector_atomic COMMAND blofeld-hcs08-vector-atomic-test)
+  set_tests_properties(hcs08_vector_atomic PROPERTIES TIMEOUT 180)
   add_executable(blofeld-hcs08-serial-foreground-test test/hcs08_serial_foreground_test.cpp)
   target_link_libraries(blofeld-hcs08-serial-foreground-test PRIVATE blofeld_hcs08_board_serial)
   target_compile_definitions(blofeld-hcs08-serial-foreground-test PRIVATE
@@ -2989,6 +3006,7 @@ add_custom_target(quality
     blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test
     blofeld-hcs08-serial-foreground-test blofeld-original-hcs08-serial-foreground-test
     blofeld-hcs08-board-irq-test blofeld-hcs08-board-irq-native-test
+    blofeld-hcs08-flash-vector-test blofeld-hcs08-vector-irq-test blofeld-hcs08-vector-atomic-test
     blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test
     blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test blofeld-hcs08-prefetch-scanner-test blofeld-hcs08-prefetch-irq-test blofeld-hcs08-prefetch-jump-test

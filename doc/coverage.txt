@@ -2663,6 +2663,21 @@ Production candidate HCS08 ADC/TPM1/SPI IRQ sources (hcs08-board-irqs.txt):
   covered. Original firmware IRQ/scanner,full instrument,MIDI/audio,persistence,
   all-phase update/recovery and physical equivalence remain open.
 
+
+Production candidate HCS08 owned-vector routing (hcs08-vector-routing.txt):
+- Actual CPU vector-byte reads use the memory owner's FNORED/FPROT policy;
+  logical IRQ selection/priority/acknowledgement and fixed reset remain intact.
+  Ordinary data/program reads stay direct;missing relevant latches/data and
+  active NVM fail. Native SWI refuses before effects because the pinned decoder
+  uses the address instead of dereferencing its vector;complete SWI stays open.
+- Per sanitizer profile:4096option/protection combinations x62vector bytes,
+  12main configuration/order cases,432destroyed-owner period suffixes,six
+  untimed one-shot cases/192fresh CPU-memory suffixes,four missing-byte failures,
+  two unused-original-byte controls and two SWI refusals. Independent literal
+  18+11+26=55periods,ISR markers,ordinary LDA and RTI caller/NVM state match.
+  Exact physical part/phases,original reset-to-instrument,MIDI/audio,persistence,
+  all-phase update/recovery and hardware equivalence remain open.
+
 Automatic native peripheral-to-P memory transfers:
 - Actual captured one-word MOVEP uses native AGU/port/P effects and five extra
   E1 hold periods. Independent unchanged processor-model windows establish six
