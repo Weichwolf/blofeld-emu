@@ -1652,12 +1652,16 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
     throw Fault("Unqualified native branch AG1/F2 instruction at P:" + hex(address, 6) +
                 " pc=" + hex(address, 6) + " omr=" + hex(omr, 6));
   }
-  const auto captured = fetch.instruction(sample, form->displacement ? 1U : 2U);
+  const auto captured =
+      fetch.instruction(sample, (form->displacement || form->address_register) ? 1U : 2U);
   // The admitted forms cannot write OMR. The actual native E1/E2 must confirm
   // this occurrence-bound fetch decision without supplying architectural state.
   DspBranchDecision decision{.word = opcode, .omr = omr};
   if (form->displacement) {
     decision.next_pc = (opcode.address + *form->displacement) & word_mask;
+    decision.taken = true;
+  } else if (form->address_register) {
+    decision.next_pc = state().r.at(*form->address_register);
     decision.taken = true;
   } else {
     if (!captured.extension) { throw Fault("Native branch lost its actual F2 extension"); }

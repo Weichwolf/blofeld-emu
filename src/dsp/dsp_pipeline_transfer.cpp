@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
+#include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_program_fetch.hpp"
@@ -76,10 +77,15 @@ std::uint8_t
 pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &preceding,
                           const DspProgramWord consumer) {
   const auto memory = decode_memory_stage(consumer.value);
-  if (!memory || (memory->peripheral && !is_program_transfer(*memory))) { return 0; }
+  const auto branch = decode_branch_form(consumer.value);
   unsigned read = 0;
-  for (unsigned lane = 0; lane < memory->lane_count; ++lane) {
-    read |= 1U << memory->lanes.at(lane).reg;
+  if (branch && branch->address_register) {
+    read = 1U << *branch->address_register;
+  } else {
+    if (!memory || (memory->peripheral && !is_program_transfer(*memory))) { return 0; }
+    for (unsigned lane = 0; lane < memory->lane_count; ++lane) {
+      read |= 1U << memory->lanes.at(lane).reg;
+    }
   }
   unsigned result = 0;
   for (const auto word : preceding) {

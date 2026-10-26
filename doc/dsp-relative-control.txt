@@ -29,9 +29,10 @@ The local SHA-pinned165-byte document-derived prefix receives both actual SPI
 payload words,writes both through native MOVEP and closes its genuine DO frame.
 Two trusted continuations check complete CPU/retained frames and actual FIFO/P
 values. This is not an authentic complete Blofeld mask ROM or normal boot.
-A separate unchanged continuation still visibly refuses the next ANDI CCR
-Decode before its architectural effect;actual loader exit,JMP(R1),received
-entry code,authentic first-stage and full instrument acceptance remain open.
+A separate192-word document-derived main-ROM reference now supports the
+original ANDI CCR/JMP(R1) tail and received entry in two trusted continuations;
+see dsp-control.txt. Authentic first-stage and full instrument acceptance
+remain open.
 
 Detailed model traces,failed input preconditions and reference assets remain
 local. Firmware is neither patched nor redistributed with these tests.

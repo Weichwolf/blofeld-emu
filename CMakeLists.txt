@@ -254,7 +254,7 @@ add_library(blofeld_dsp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
-  src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_loop_source.cpp
+  src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
   src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
   src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
   src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
@@ -1406,7 +1406,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-loop-port-test test/dsp_loop_port_test.cpp)
   target_link_libraries(blofeld-loop-port-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_loop_port_receipts COMMAND blofeld-loop-port-test)
-  foreach(kind auto_loop auto_loop_source auto_loop_transfer_source auto_loop_source_guard auto_loop_a0 r_data_transfer loop_barrier loader_prefix_operand program_memory program_memory_clock program_memory_guard relative_branch relative_branch_guard)
+  foreach(kind auto_loop auto_loop_source auto_loop_transfer_source auto_loop_source_guard auto_loop_a0 r_data_transfer loop_barrier loader_prefix_operand program_memory program_memory_clock program_memory_guard relative_branch relative_branch_guard ccr_control indirect_control control_composition control_guard document_loader_entry)
     string(REPLACE "_" "-" target_kind "${kind}")
     add_executable(blofeld-${target_kind}-test test/dsp_${kind}_test.cpp)
     target_link_libraries(blofeld-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1423,6 +1423,16 @@ if(BUILD_TESTING)
   add_test(NAME dsp_program_memory_guards COMMAND blofeld-program-memory-guard-test)
   add_test(NAME dsp_relative_branches COMMAND blofeld-relative-branch-test)
   add_test(NAME dsp_relative_branch_guards COMMAND blofeld-relative-branch-guard-test)
+  add_test(NAME dsp_ccr_control COMMAND blofeld-ccr-control-test)
+  add_test(NAME dsp_indirect_control COMMAND blofeld-indirect-control-test)
+  add_test(NAME dsp_control_composition COMMAND blofeld-control-composition-test)
+  add_test(NAME dsp_control_guards COMMAND blofeld-control-guard-test)
+  add_test(NAME dsp_document_loader_entry COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_document_loader_entry.py"
+    $<TARGET_FILE:blofeld-document-loader-entry-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-document-loader-entry.trace")
+  set_tests_properties(dsp_document_loader_entry PROPERTIES SKIP_RETURN_CODE 77)
   add_test(NAME dsp_document_spi_loader_operands COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_loader_prefix_operands.py"
     $<TARGET_FILE:blofeld-loader-prefix-operand-test>
@@ -2982,6 +2992,8 @@ add_custom_target(quality
     blofeld-loop-barrier-test blofeld-loader-prefix-operand-test
     blofeld-program-memory-test blofeld-program-memory-clock-test blofeld-program-memory-guard-test
     blofeld-relative-branch-test blofeld-relative-branch-guard-test
+    blofeld-ccr-control-test blofeld-indirect-control-test blofeld-control-composition-test
+    blofeld-control-guard-test blofeld-document-loader-entry-test
     blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test

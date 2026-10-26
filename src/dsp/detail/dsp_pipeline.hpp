@@ -25,6 +25,7 @@ struct DspPipelineFormat {
 decode_pipeline_word(DspProgramWord word, std::uint32_t omr, DspFetchPipeline profile);
 [[nodiscard]] unsigned pipeline_word_count(DspProgramWord word);
 [[nodiscard]] bool pipeline_counted_loop(DspProgramWord word);
+[[nodiscard]] bool pipeline_ccr_immediate(std::uint32_t opcode);
 [[nodiscard]] DspMoveFields pipeline_transfer_fields(std::uint32_t opcode);
 [[nodiscard]] std::uint8_t
 pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &preceding,
@@ -55,6 +56,12 @@ struct DspPipelineProgramMemory {
   unsigned remaining = 5;
 };
 
+struct DspPipelineCcrSync {
+  DspFetchedWord captured;
+  unsigned decode_hold = 2;
+  bool held_decode = false;
+};
+
 struct DspInstructionPipeline {
   DspFetchPipeline profile = DspFetchPipeline::automatic_alu;
   DspPipelineView view;
@@ -68,10 +75,13 @@ struct DspInstructionPipeline {
   unsigned branch_fetch_hold = 0;
   unsigned branch_decode_hold = 0;
   bool branch_target_ready = false;
+  bool branch_target_decoded = false;
+  bool branch_retired = false;
   bool held_branch_decode = false;
   std::optional<DspPipelineLoopSetup> loop_setup = std::nullopt;
   std::optional<DspPipelineProgramMemory> program_memory = std::nullopt;
   bool held_program_memory = false;
+  std::optional<DspPipelineCcrSync> ccr_sync = std::nullopt;
 
   void prepare(const DspMachine &machine);
   void rebind(const DspMachine &machine);
@@ -89,6 +99,8 @@ struct DspInstructionPipeline {
   void prepare_program_memory(const DspMachine &machine, std::optional<DspProgramWord> word);
   void validate_program_decode(const DspMachine &machine, const DspPipelineCycle &cycle) const;
   void complete_program_memory();
+  [[nodiscard]] bool hold_ccr_decode(const DspMachine &machine);
+  void accept_ccr_decode();
 
   [[nodiscard]] std::uint64_t peripheral_occurrence() const;
   void finish_cycle();
@@ -99,5 +111,8 @@ private:
   void execute(DspMachine &machine);
   void capture_branch(DspMachine &machine);
   void validate_branch(const DspInstructionRetire &retirement) const;
+  void release_branch();
+  void retire_branch();
+  void accept_branch_decode();
 };
 }

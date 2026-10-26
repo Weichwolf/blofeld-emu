@@ -69,8 +69,10 @@ DspFetchedWord decode_receipt(const std::optional<DspFetchedWord> word) {
 }
 
 void prepare_decode(DspInstructionPipeline &pipeline,
+                    const DspMachine &machine,
                     const DspProgramFetchView &fetch,
                     DspPipelineCycle &cycle) {
+  if (pipeline.held_program_memory || pipeline.hold_ccr_decode(machine)) { return; }
   if (pipeline.hold_loop_decode()) { return; }
   pipeline.held_branch_decode =
       pipeline.branch && pipeline.branch_target_ready && pipeline.branch_decode_hold != 0;
@@ -119,7 +121,7 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
   selected =
       select_pipeline_words(std::span(fetched).first(fetch.used), samples, extension_samples);
   prepare_program_memory(machine, cycle.execute1);
-  if (!held_program_memory) { prepare_decode(*this, fetch, cycle); }
+  prepare_decode(*this, machine, fetch, cycle);
   validate_program_decode(machine, cycle);
   if (selected.ag1_extension) { cycle.ag1_extension = selected.ag1_extension->word; }
   cycle.e1_extension = extensions[1];
@@ -208,6 +210,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
       throw Fault("Automatic DSP E2 did not publish its selected actual native result");
     }
     view.cycle.retirement_published = true;
+    retire_branch();
     view.awaiting_retirement.reset();
     view.awaiting_inputs.reset();
     view.awaiting_deferred_accumulators = 0;
@@ -252,11 +255,8 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
         machine.pipeline_continuation(decode_receipt(selected.next), view.cycle.decode_words);
     view.cycle.decode_accepted = true;
     accept_loop_decode(machine);
-    if (branch && branch_target_ready) {
-      branch.reset();
-      branch_decode_hold = 0;
-      branch_target_ready = false;
-    }
+    accept_ccr_decode();
+    accept_branch_decode();
   }
   view.cycle.advanced = true;
 }
@@ -308,12 +308,16 @@ void DspInstructionPipeline::capture_branch(DspMachine &machine) {
       throw Fault("Branch AG1 lost its actual F2 occurrence");
     }
     decision = machine.capture_reference_branch(ag1->address, captured->occurrence);
-    branch_fetch_hold = 1;
+    const auto form = decode_branch_form(ag1->value);
+    branch_fetch_hold = form && form->address_register ? 0U : 1U;
   }
   branch = decision;
+  branch_target_decoded = false;
+  branch_retired = false;
   view.decode_address = decision.next_pc;
-  // OMR resolves in AG1; the port source resolves after older E1 writes in AG2.
-  // Both issue the selected F1 after AG2 and retain the FM false Decode delay.
+  // Register control resolves in AG1; port sources follow older E1 writes in AG2.
+  // Direct Rn issues target F1 in the resolving AG1 period; the older forms
+  // retain their later F1 and the FM false Decode delay.
   branch_decode_hold = decision.taken ? 0U : 1U;
   branch_target_ready = false;
 }
@@ -326,6 +330,15 @@ void DspInstructionPipeline::validate_branch(const DspInstructionRetire &retirem
         "Automatic branch differs from its actual native result pc=" + hex(retirement.pc, 6) +
         " next=" + hex(retirement.next_pc, 6) + " omr=" + hex(retirement.omr, 6));
   }
+}
+
+void DspInstructionPipeline::release_branch() {
+  if (!branch || !branch_target_decoded || !branch_retired) { return; }
+  branch.reset();
+  branch_decode_hold = 0;
+  branch_target_ready = false;
+  branch_target_decoded = false;
+  branch_retired = false;
 }
 
 std::uint64_t DspInstructionPipeline::peripheral_occurrence() const {
@@ -346,6 +359,7 @@ void DspInstructionPipeline::finish_cycle() {
     --program_memory->remaining;
     return;
   }
+  if (ccr_sync && ccr_sync->held_decode && ccr_sync->decode_hold != 0) { --ccr_sync->decode_hold; }
   if (loop_setup && loop_setup->held_decode && loop_setup->decode_hold != 0) {
     --loop_setup->decode_hold;
   }

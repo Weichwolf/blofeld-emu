@@ -311,7 +311,7 @@ void DspProgramFetch::hold_after(const DspFetchedInstruction &captured) {
 void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
   const auto form = decode_branch_form(decision.word.value);
-  const bool one_word = form && form->displacement.has_value();
+  const bool one_word = form && (form->displacement || form->address_register);
   if (!state_.active || branch_ || opening_ || decision.omr != state_.omr ||
       decision.next_pc > word_mask || decision.extension.has_value() == one_word ||
       (decision.extension &&

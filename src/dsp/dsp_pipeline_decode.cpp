@@ -109,7 +109,8 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
   Type second = dsp56k::Invalid;
   constexpr unsigned width = 6;
   const bool decoded = opcodes.getInstructionTypes(word.value, first, second) != 0;
-  const bool arithmetic = std::ranges::contains(allowed, first);
+  const bool arithmetic =
+      std::ranges::contains(allowed, first) || pipeline_ccr_immediate(word.value);
   try {
     if (!decoded) { throw Fault("Undefined native instruction"); }
     const auto port_read = profile == DspFetchPipeline::automatic_memory

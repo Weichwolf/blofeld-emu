@@ -2664,9 +2664,9 @@ Native single-word relative branch ownership:
   refusals,single-F2 availability,ten native branch paths and eight fresh joint
   continuations. Existing OMR/port-bit/loop/identity consumers remain strict.
 - Both real document-prefix SPI payloads reach native P stores;the DO frame
-  restores completely in two trusted continuations. The separate full-target
-  run still refuses ANDI CCR Decode before architectural effect. Loader exit,
-  JMP(R1),authentic first-stage and full instrument acceptance remain open.
+  restores completely in two trusted continuations. The separate192-word
+  document-ROM continuation now executes its native CCR/JMP tail and received
+  own program;authentic first-stage/full instrument acceptance remain open.
 - Generic processor-model instruction costs/complete windows are independent
   evidence;selected reference E2 positions are not physical timing validation.
   See dsp-relative-control.txt.
@@ -2676,3 +2676,31 @@ Native single-word relative branch ownership:
   the whole TSan ELF inventory and physical timing remain unqualified.
   Both profiles471groups/1091recipes retain all469prior complete contracts and
   1089full compiler recipes. No fuzz,physical traffic or reference assets.
+
+Native CCR and direct register-indirect control:
+- Native ANDI #imm,CCR and JMP(R0..R7) retain genuine one-word F2 ownership,
+  native architectural effects and three nominal units. Direct control keeps
+  its descriptor through both target Decode and native E2. Other control
+  selectors/addressing modes and invalid ownership remain visible refusals.
+- Directed private proof covers528CCR masks,144indirect/RNM hazard cases,
+  28trusted suffixes,five compositions and field/refusal checks.41unchanged
+  vendor-model windows/403literal register states qualify nominal costs and
+  producer gaps;selected reference stages do not establish physical timing.
+- The SHA-pinned192-word document main ROM retains the earlier55words and
+  provides published code/constants/address-fill without invented padding.
+  Its real SPI loader stores both payloads,closes DO and retires the received
+  own MOVE in two trusted continuations. This is not authenticated Blofeld
+  ROM or original1.25 normal boot. EEPROM include/authentic first-stage and
+  full instrument/storage/update/recovery/realtime/physical acceptance remain
+  open. See dsp-control.txt and dsp-control-reference.json.
+- Canonical strict all-target/format/clang-tidy gates pass;70affected
+  ASan/UBSan groups and one separate TSan identity group pass,no skips.
+  Instrumentation/source guards,strict global ELF and the actual TSan ELF pass;
+  the whole TSan ELF inventory stays unqualified. Both profiles477/1099 retain
+  all472prior complete test contracts and1093full compiler recipes.
+- A separate strict local diagnostic receives all94original first-stage words
+  through actual SPI/P stores and retires the genuine loader JMP into them.
+  The next OMR transfer still refuses before a first-stage instruction retires.
+  This uses explicit between-period SPI stimulus,not actual MCU scheduling or
+  physical pin timing. No reserved/ROM writes are discarded and no firmware
+  bytes are changed. This does not establish normal original boot.

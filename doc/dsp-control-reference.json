@@ -1,0 +1,50 @@
+{
+  "scope": "Documented control encoding, independent nominal model windows and document-derived main boot fixture; no hardware equivalence claim.",
+  "manuals": [
+    {
+      "file": "doc/hardware/DSP56371UM.pdf",
+      "source": "https://www.nxp.com/docs/en/user-guide/DSP56371UM.pdf",
+      "bytes": 5941916,
+      "sha256": "3303088730c14b47816d6058040d0e8bd18f4c256b9febddb79e02fc3842e8ce",
+      "section": "Appendix A.1 main boot block, including published BURN/constants/address-value fill; separate EEPROM include absent."
+    },
+    {
+      "file": "doc/hardware/DSP56300FM.pdf",
+      "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+      "bytes": 24396254,
+      "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+      "section": "ANDI, JMP and appendix A nominal timing/interlocks."
+    }
+  ],
+  "derived_reference": {
+    "file": "doc/local/nxp-main-boot-document.bin",
+    "bytes": 576,
+    "words": 192,
+    "sha256": "4d72a5bd75ad086ec7190c6c25b4438aa1cfaa2ddc0ac510055c2540e886de56",
+    "first_165_bytes_sha256": "26531751e85d9d796795e443869330c84689b6bdb1eccbafc2cbd1554e377f16",
+    "physical_Blofeld_dump": false,
+    "EEPROM_include_present": false,
+    "retained_assumption": "Separate published SerialEEPROM entry address; not verified on physical Blofeld ROM.",
+    "redistribution": "Keep all reference bytes, assembly and detailed manufacturer analysis local."
+  },
+  "assembler": {
+    "version": "6.3.28",
+    "sha256": "8e60b2e0d7c9f8251c01335543bcec966884670e2f37d4a63afe6d1169425abd",
+    "package_manifest": "doc/reference-tools.json",
+    "warnings": 0
+  },
+  "independent_model": {
+    "windows": 41,
+    "literal_register_statepoints": 403,
+    "processor_libraries_modified": false,
+    "physical_timing_qualified": false
+  },
+  "native_scope": {
+    "CCR_masks": 528,
+    "indirect_and_RNM_hazard_cases": 144,
+    "restored_control_suffixes": 28,
+    "compositions": 5,
+    "document_loader_to_received_program_continuations": 2
+  },
+  "full_original_firmware_boot_qualified": false
+}

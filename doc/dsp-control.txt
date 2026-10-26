@@ -1,0 +1,58 @@
+CCR and direct register-indirect control
+========================================
+
+The automatic reference frontend executes native ANDI #imm,CCR and JMP (Rn).
+ANDI accepts only the documented CCR selector; other control selectors remain
+unsupported. All eight direct Rn fields are one-word instructions. Other JMP
+addressing modes remain unsupported. Native execution owns architectural
+PC, SR, register and stack effects. Frontend forecasts control only actual
+instruction fetch and must agree with genuine native retirement.
+
+Independent manual fields, the official assembler and unchanged vendor
+processor-model windows establish nominal costs of three units for each
+instruction. ANDI serializes the next two Decode slots while genuine prefetch
+continues. Direct JMP can issue target F1 in its resolving AG1 period. Its
+captured descriptor survives until both actual target Decode and native E2,
+including sequential and self targets. These are selected reference stages,
+not measured silicon sampling edges.
+
+Explicit R/N/M writes to the selected tuple interlock direct JMP. Independent
+vendor windows show two extra periods for an adjacent two-word producer, one
+for a one-NOP gap, and none for gaps of two or more. The native instruction
+counter and these elapsed interlocks remain separate. The existing reference
+E1 publication of explicit tuple moves shares a selected period with an older
+NOP retirement; tests inspect the complete state before and at that boundary.
+
+The separate local 192-word main boot reference is assembled from Appendix A.1
+of DSP56371UM, including the printed BURN code, constants and address-value
+fill. Its first 55 words are byte-identical to the earlier local SPI prefix.
+It is document-derived, not an authenticated physical Blofeld mask-ROM dump.
+The separately included EEPROM loader is absent, and its assumed published
+entry address is retained explicitly in local provenance. Reference bytes,
+assembly and detailed manufacturer analysis stay local.
+
+Acceptance must retain both actual SPI payload stores, genuine native DO
+frame closure, original ANDI and JMP instructions, and execution of the real
+received MOVE in two trusted continuations. No firmware byte is changed,
+no ROM hole is padded with invented instructions, and the host never supplies
+architectural PC effects. This supporting loader proof is not normal original
+Blofeld firmware startup or complete instrument acceptance.
+
+A separate local diagnostic transfers the unchanged 94-word first-stage frame
+from firmware 1.25 through actual SPI/P stores, verifies every word and retires
+the genuine loader JMP into that block. Its next OMR control transfer remains
+unsupported, and no first-stage instruction retirement is established. Valid
+SPI words are supplied between explicit completed DSP periods; this is not
+actual MCU scheduling or a physical pin-timing qualification. Reserved/ROM
+writes are never discarded. Detailed firmware analysis and traces stay local.
+
+Build, runtime and AST records qualify this scoped instruction integration.
+The complete original reset-to-instrument runtime, authentic ROM identity,
+MIDI/audio, storage, update/recovery, long-run/realtime and physical device
+comparisons remain separate requirements.
+
+  cmake --build --preset strict --target blofeld-ccr-control-test \
+    blofeld-indirect-control-test blofeld-control-composition-test \
+    blofeld-control-guard-test blofeld-document-loader-entry-test
+  ctest --preset strict -j1 --output-on-failure -R \
+    '^(dsp_ccr_control|dsp_indirect_control|dsp_control_composition|dsp_control_guards|dsp_document_loader_entry)$'
