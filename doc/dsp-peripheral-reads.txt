@@ -1,0 +1,48 @@
+Native peripheral-read pipeline
+
+The automatic_memory profile executes selected short X/Y MOVEP register loads
+and JSET/JCLR peripheral-bit branches through the native interpreter. Actual
+F2 words determine the port, destination and extension. Unsupported control,
+stack and full-accumulator destinations fail before I/O. Unknown ports retain
+strict address/operation/PC/OMR failures. An encoding decoder is not proof of
+all destination hazards or all peripheral timing.
+
+The selected logical schedule captures actual port data once in AG1 before
+older E1 writes. A bit branch can forward only a genuine older completed
+same-address native store; full-word loads keep the sampled peripheral word.
+The opaque response records program-word identity, space/address, OMR, epoch,
+capture origin and serial. Native E1 consumes it without a second bus access;
+actual native writeback and E2 publish the architectural result. No caller
+supplies the word. Public reference calls cannot request or adopt automatic
+capture phases. Explicit address-phase callers still reject port reads without
+the corresponding actual automatic response owner.
+
+A peripheral branch previews its owned source in AG2 after older E1 stores,
+then issues only the selected F1. Native E1 and E2 confirm the decision. The
+fresh selected F2 supports self/equal targets; a false condition retains the
+extra Decode clock. An unused unknown target is never fetched. Primary counts
+are four clocks taken and five false. These are logical reference stages,
+not measurements of physical read strobes or acknowledgement timing.
+
+The footprint includes actual early port I/O alongside P fetch and at most
+one older qualified port store. Concurrent RAM/dual-data use, controller
+writes and active DMA remain visible unsupported combinations. Resource
+admission never invents a device implementation. HCSR/HRX effects occur once
+at the declared actual bus read; physical acknowledgement placement is open.
+
+Directed tests cover 208 independently assembled own encodings, 63 independent
+source/forwarding cases in both native and automatic paths, selective GPIO,
+FIFO pops, branch and read snapshots, reset/stale/foreign/discarded-future
+owners, unknown F2/ports, invalid destinations and public phase forgery.
+See dsp-peripheral-read-reference.json for the independent evidence limits.
+
+The optional SHA-pinned document-derived SPI prefix enables SHI and performs
+three real empty HRNE polls by clock43 (16 retirements/38 native diagnostic
+cycles). Empty input keeps the loop running. Supplying a length word of1
+through24 fixture SPI bit clocks reaches A0=1 and the next actual empty
+address poll at clock53 (19 retirements/47 native diagnostic cycles).
+Known fixture wires are declared inputs; this is not a default-board wiring
+claim. It is neither an authentic complete mask ROM nor normal instrument
+boot. Complete ROM/reserved memory, remaining instructions/loops/IRQ/reset
+fill, integrated Desktop/Keyboard runtime, MIDI/audio, persistence and all
+update/recovery/power-loss/physical acceptance requirements remain open.

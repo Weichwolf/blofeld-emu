@@ -12,6 +12,7 @@
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interlocks.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_peripheral_read_stage.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
@@ -535,8 +536,48 @@ std::optional<DspReferencePending> DspMachine::reference_pending() const {
   return state_->cpu.reference_pending();
 }
 
+DspPeripheralReadTicket
+DspMachine::capture_reference_peripheral_read(const DspPeripheralReadPoint point) {
+  if (clocked()) { throw Fault("Peripheral capture requires an unclocked reference owner"); }
+  return state_->cpu.capture_reference_peripheral_read(point);
+}
+
+DspPeripheralReadTicket
+DspMachine::rebind_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const {
+  if (clocked()) { throw Fault("Peripheral rebind requires an unclocked reference owner"); }
+  return state_->cpu.rebind_reference_peripheral_read(ticket);
+}
+
+DspReferenceProgress
+DspMachine::advance_reference_peripheral_read(const DspPeripheralReadTicket &read,
+                                              const DspReferenceTicket &native) {
+  if (clocked()) { throw Fault("Peripheral admission requires an unclocked reference owner"); }
+  return state_->cpu.advance_reference_peripheral_read(read, native);
+}
+
+DspBranchDecision
+DspMachine::preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read) {
+  if (clocked()) { throw Fault("Pipeline branch preview requires an unclocked owner"); }
+  return state_->cpu.preview_pipeline_peripheral_branch(read);
+}
+
+DspReferenceProgress
+DspMachine::advance_pipeline_peripheral_read(const DspPeripheralReadTicket &read,
+                                             const DspReferenceTicket &native) {
+  if (clocked()) { throw Fault("Pipeline read admission requires an unclocked owner"); }
+  return state_->cpu.advance_pipeline_peripheral_read(read, native);
+}
+
 DspReferenceCycleResult
 DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
+  if (inputs.peripheral_capture || state_->cpu.has_reference_peripheral_reads()) {
+    throw Fault("Peripheral pipeline phases require the actual automatic fetch owner");
+  }
+  return advance_reference_bus_cycle_impl(inputs);
+}
+
+DspReferenceCycleResult
+DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs) {
   if (clocked() || state_->cpu.executing()) {
     throw Fault("Composed native bus cycles require an unclocked healthy reference owner");
   }
@@ -549,7 +590,8 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
     }
     if (inputs.retirement) { state_->cpu.validate_reference_retirement(*inputs.retirement); }
     if (inputs.access) {
-      state_->cpu.validate_reference_admission(*inputs.access, inputs.retirement.has_value());
+      state_->cpu.validate_reference_admission(
+          *inputs.access, inputs.retirement.has_value(), inputs.dma.cycle);
     }
     if (inputs.fetch) { state_->cpu.validate_reference_fetch(*inputs.fetch); }
     std::optional<DspAddressStageView> memory;
@@ -560,8 +602,12 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
       state_->cpu.validate_reference_address(*inputs.memory, true);
       memory = state_->cpu.address_stage(*inputs.memory);
     }
+    const auto early =
+        inputs.peripheral_capture
+            ? std::optional(state_->cpu.pipeline_peripheral_access(*inputs.peripheral_capture))
+            : std::nullopt;
     result = reference_cycle_footprint(
-        state_->bus, inputs, pending, state_->cpu.reference_fetch(), memory);
+        state_->bus, inputs, pending, state_->cpu.reference_fetch(), memory, early);
   } catch (const std::exception &error) {
     throw Fault("DSP bus-cycle preflight pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6) +
                 ": " + error.what());
@@ -573,6 +619,10 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
                      .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
     if (result.dma.core_stall) { return result; }
     if (inputs.fetch) { result.fetch = state_->cpu.advance_reference_fetch(*inputs.fetch); }
+    if (inputs.peripheral_capture) {
+      result.peripheral_read = state_->cpu.capture_pipeline_peripheral_read(
+          {.address = *inputs.peripheral_capture, .epoch = inputs.dma.cycle});
+    }
     if (inputs.retirement) {
       result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);
     }

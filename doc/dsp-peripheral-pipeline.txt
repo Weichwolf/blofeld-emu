@@ -4,8 +4,8 @@ The opt-in automatic_memory profile accepts immediate and X/Y/R/N/M register
 MOVEP stores to short X/Y I/O. The selected high- and low-I/O encodings use the
 real F2 opcode and, for immediate data only, its extension. Nine immediate and
 112 register/port own encodings are pinned independently against the Freescale
-assembler. No manufacturer program bytes are embedded in tests. Control, stack,
-accumulator sources and general port reads remain unqualified.
+assembler. No manufacturer program bytes are embedded in tests. Control, stack and accumulator store sources remain unqualified. Selected
+native port reads are described separately in dsp-peripheral-reads.txt.
 
 AG1 captures the fixed port address and actual extension where present, with no
 fictitious AGU input or pointer update. AG2 advances that record without a
@@ -21,8 +21,9 @@ The complete reported core footprint retains the short-I/O write and concurrent
 P fetch. The arbiter classifies the idle-controller peripheral path separately
 from RAM; memory_resource itself still refuses peripheral queries. One such
 write and no other data use is admitted only with inactive DMA. Controller
-writes, general peripheral reads, extra data access and active-DMA sharing remain
-unqualified. This also applies to the explicit native-reference DMA admission
+writes, extra data access and active-DMA sharing remain unqualified. Selected
+early port-read footprints use a separate automatic owner and logical phase;
+ordinary explicit callers cannot claim that phase. This also applies to the explicit native-reference DMA admission
 API. Resource admission neither supplies a register implementation nor performs
 I/O: unknown/invalid actual writes still fail at their strict native owner.
 
@@ -37,17 +38,16 @@ active DMA and the separate public native-reference caller.
   ctest --test-dir build/strict -j1 --output-on-failure \
     -R '^dsp_pipeline_(peripheral_writes|peripheral_state|register_peripheral_writes|register_peripheral_state|bootstrap_prefix)$'
 
-The optional local document-derived SPI prefix is SHA-256 pinned. With the
-selected OMR branches it retires twelve native instructions over30 reference
-clocks, then refuses the peripheral-source JCLR at P:ff001a. The preceding SHI
-register store has only reached Decode and has not enabled SHI. CLR flags and
-short-immediate R1 state have independent primary expectations. It is a partial
-document reconstruction, not an
-authentic full mask ROM or normal instrument boot. The modeled bus order remains
-a declared reference order, not a measured silicon trace. General peripheral
-forms, active DMA timing, general branches/loops/IRQ/reset fill, authentic ROM/reserved
-Y:002000, original Desktop/Keyboard reset-to-instrument operation and the full
-MIDI/audio/storage/update/recovery/physical acceptance objective remain open.
+The optional local document-derived SPI prefix is SHA-256 pinned. It enables
+SHI and reaches three empty HRNE polls after43 reference clocks,16retirements
+and38native diagnostic cycles. Actual SPI length input1 reaches native A0 and
+the next address poll after53/19/47. Empty input keeps the original loop
+running. These independently predicted checkpoints and fixture-wire limits are
+described in dsp-peripheral-reads.txt. This partial document reconstruction is
+not an authentic full mask ROM or normal instrument boot. Physical bus/ack
+stages, further memory forms/branches/loops/IRQ/reset fill, active DMA,
+reserved Y:002000 and the complete original Desktop/Keyboard acceptance
+objective remain open.
 
 FM TableA-1 gives one clock for register-source MOVEP and two for immediate
 data. Six quiet windows agree with these primary counts in the normal vendor

@@ -14,6 +14,10 @@
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_native_access.hpp"
+#include "dsp/dsp_peripheral_read.hpp"
+#include "dsp/dsp_peripheral_read_form.hpp"
+#include "dsp/dsp_peripheral_read_stage.hpp"
+#include "dsp/dsp_peripheral_read_stages.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp56kEmu/disasm.h"
@@ -25,6 +29,7 @@
 #include "dsp56kEmu/registers.h"
 #include "dsp56kEmu/types.h"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -280,24 +285,39 @@ struct DspCoreCheckpoint::Storage {
           const DspReferenceState &reference_state,
           const std::uint64_t serial,
           const DspNativeResultState &result,
-          const DspAddressStages &address_stages)
+          const DspAddressStages &address_stages,
+          DspPeripheralReadStages read_stages)
       : cpu(std::move(state)),
         reference(reference_state),
         generation(serial),
         results(result),
-        stages(address_stages) {}
+        stages(address_stages),
+        peripheral_reads(std::move(read_stages)) {}
 
   const dsp56k::DSP::ReferenceState cpu;
   const DspReferenceState reference;
   const std::uint64_t generation;
   const DspNativeResultState results;
   const DspAddressStages stages;
+  const DspPeripheralReadStages peripheral_reads;
 };
 
 DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
     : storage_(std::move(storage)) {}
 
 DspCoreCheckpoint::~DspCoreCheckpoint() = default;
+
+namespace {
+template <typename Stages>
+auto &peripheral_record(Stages &stages, const DspPeripheralReadPosition &position) {
+  if (position.slot >= stages.records.size()) { throw Fault("Invalid peripheral response slot"); }
+  auto &record = stages.records.at(position.slot);
+  if (!record || record->serial != position.serial || record->origin != position.origin) {
+    throw Fault("Stale, foreign or discarded-future peripheral response");
+  }
+  return *record;
+}
+}
 
 class DspCore::Impl {
 public:
@@ -312,6 +332,103 @@ public:
     static_assert(!dsp56k::g_useJIT);
     static_assert(std::is_trivially_copyable_v<dsp56k::DSP::ReferenceAttemptState>);
     static_assert(sizeof(dsp56k::DSP::ReferenceAttemptState) <= 1024);
+  }
+
+  [[nodiscard]] bool has_peripheral_reads() const {
+    return std::ranges::any_of(peripheral_reads.records,
+                               [](const auto &record) { return record.has_value(); });
+  }
+
+  [[nodiscard]] std::uint64_t peripheral_epoch() const {
+    const auto epoch = bus.last_dma_cycle();
+    if (!epoch || bus.has_active_dma()) {
+      throw Fault("Unqualified peripheral-read cycle/DMA state pc=" + hex(word(cpu.regs().pc), 6));
+    }
+    return *epoch;
+  }
+
+  void validate_peripheral_capture(const DspPeripheralReadPoint point) const {
+    const auto &reference = native.reference();
+    const auto &pending_effect = reference.pending();
+    if (reference.fetch().view().consume_address != point.address || !pending_effect) {
+      throw Fault("Peripheral capture is not the next actual F2 boundary pc=" +
+                  hex(point.address, 6));
+    }
+    const auto &pending = *pending_effect;
+    if (const auto *retirement = std::get_if<DspInstructionRetire>(&pending)) {
+      if (!retirement->redirected && retirement->next_pc == point.address &&
+          retirement->omr == retirement->next_omr) {
+        return;
+      }
+    } else if (const auto *request = std::get_if<DspNativeAccess>(&pending)) {
+      if (request->kind == DspNativeAccessKind::opcode && request->pc == point.address) { return; }
+      const auto opcode = reference.committed_access(DspNativeAccessKind::opcode);
+      const auto form =
+          opcode && opcode->value ? decode_memory_stage(*opcode->value) : std::nullopt;
+      if (request->kind == DspNativeAccessKind::write && form && form->peripheral) {
+        const auto words = form->peripheral_register ? 1U : 2U;
+        if (((request->pc + words) & word_mask) == point.address) { return; }
+      }
+    }
+    throw Fault("Unqualified unresolved control flow before peripheral capture pc=" +
+                hex(point.address, 6));
+  }
+
+  void validate_peripheral_admission(const std::optional<std::uint64_t> cycle) const {
+    if (!has_peripheral_reads()) { return; }
+    const auto &pending = native.reference().pending();
+    const auto *request = pending ? std::get_if<DspNativeAccess>(&*pending) : nullptr;
+    if (request == nullptr) { return; }
+    if (request->kind == DspNativeAccessKind::read || request->kind == DspNativeAccessKind::bit) {
+      for (const auto &record : peripheral_reads.records) {
+        if (record && record->point.address == request->pc) {
+          throw Fault("Native peripheral read requires its owned sampled response at " +
+                      hex(request->target.address, 6) + " pc=" + hex(request->pc, 6));
+        }
+      }
+      return;
+    }
+    constexpr unsigned short_io_begin = 0xffff80;
+    if (request->kind != DspNativeAccessKind::write || request->target.space == DspSpace::p ||
+        request->target.address < short_io_begin) {
+      return;
+    }
+    const auto epoch = cycle ? *cycle : peripheral_epoch();
+    const auto opcode = native.reference().committed_access(DspNativeAccessKind::opcode);
+    const auto form = opcode && opcode->value ? decode_memory_stage(*opcode->value) : std::nullopt;
+    if (!form || !form->peripheral ||
+        (peripheral_reads.last_store_cycle && epoch <= *peripheral_reads.last_store_cycle)) {
+      throw Fault("Unqualified native store/response overlap pc=" + hex(request->pc, 6));
+    }
+    constexpr unsigned read_to_execute = 2;
+    for (const auto &record : peripheral_reads.records) {
+      if (record &&
+          (epoch < record->point.epoch || epoch - record->point.epoch > read_to_execute)) {
+        throw Fault("Expired peripheral sample before native write pc=" + hex(request->pc, 6));
+      }
+    }
+  }
+
+  void observe_peripheral_store(const DspReferenceEffect &completed) {
+    const auto *event = std::get_if<DspNativeAccess>(&completed);
+    constexpr unsigned short_io_begin = 0xffff80;
+    if (event == nullptr || event->kind != DspNativeAccessKind::write ||
+        event->target.space == DspSpace::p || event->target.address < short_io_begin) {
+      return;
+    }
+    const auto epoch = bus.last_dma_cycle();
+    if (!epoch) { return; }
+    if (has_peripheral_reads()) {
+      const auto opcode = native.reference().committed_access(DspNativeAccessKind::opcode);
+      if (!opcode || !opcode->value) { throw Fault("Native store lost its actual opcode receipt"); }
+      for (auto &record : peripheral_reads.records) {
+        if (record) {
+          static_cast<void>(record->sample.forward(
+              {.address = opcode->target.address, .value = *opcode->value}, *event, *epoch));
+        }
+      }
+    }
+    peripheral_reads.last_store_cycle = epoch;
   }
 
   void invalidate() {
@@ -394,6 +511,7 @@ public:
     native.reference().clear();
     results = {};
     stages = {};
+    peripheral_reads = {};
     reference_owner = std::move(next_owner);
     generation = 0;
   }
@@ -534,6 +652,18 @@ public:
     }
   }
 
+  void validate_peripheral_address_owner(const DspNativeAccess &request) const {
+    const bool owned = std::ranges::any_of(peripheral_reads.records, [&](const auto &record) {
+      return record && record->automatic && record->point.address == request.pc;
+    });
+    if (!owned) {
+      throw Fault("Unqualified native memory-address phase read " +
+                  std::string(request.target.space == DspSpace::x ? "X:" : "Y:") +
+                  hex(request.target.address, 6) + " pc=" + hex(request.pc, 6) +
+                  " omr=" + hex(request.omr, 6));
+    }
+  }
+
   void capture_address_phase() {
     auto &reference = native.reference();
     if (reference.execution() != DspReferenceExecution::address_and_retirement_boundaries &&
@@ -547,7 +677,13 @@ public:
         request->kind == DspNativeAccessKind::extension) {
       return;
     }
-    if (request->kind != DspNativeAccessKind::read && request->kind != DspNativeAccessKind::write) {
+    const auto admitted_opcode = reference.opcode();
+    const auto port = admitted_opcode ? decode_peripheral_read(*admitted_opcode) : std::nullopt;
+    if (port) { validate_peripheral_address_owner(*request); }
+    const bool port_bit = request->kind == DspNativeAccessKind::bit && port && port->bit &&
+                          request->bit && request->bit->operation == DspBitOperation::test;
+    if (request->kind != DspNativeAccessKind::read && request->kind != DspNativeAccessKind::write &&
+        !port_bit) {
       throw Fault("Unqualified native address-phase access pc=" + hex(request->pc, 6) +
                   " address=" + hex(request->target.address, 6) + " omr=" + hex(request->omr, 6));
     }
@@ -790,6 +926,7 @@ public:
   RunHooks run;
   DspNativeResultState results;
   DspAddressStages stages;
+  DspPeripheralReadStages peripheral_reads;
   std::shared_ptr<const bool> reference_owner;
   std::uint64_t generation = 0;
 };
@@ -870,7 +1007,8 @@ DspCoreCheckpoint DspCore::checkpoint() const {
                                                          impl_->native.reference().snapshot(),
                                                          impl_->generation,
                                                          impl_->results,
-                                                         impl_->stages));
+                                                         impl_->stages,
+                                                         impl_->peripheral_reads));
 }
 
 void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
@@ -885,6 +1023,7 @@ void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
   impl_->native.reference().restore(checkpoint.storage_->reference);
   impl_->results = checkpoint.storage_->results;
   impl_->stages = checkpoint.storage_->stages;
+  impl_->peripheral_reads = checkpoint.storage_->peripheral_reads;
   impl_->generation = checkpoint.storage_->generation;
   if (checkpoint.storage_->reference.active && !impl_->results.base) {
     throw Fault("Native reference checkpoint lost its original computation base");
@@ -1147,7 +1286,8 @@ void DspCore::validate_reference_fetch(const DspProgramFetchStage stage) const {
 }
 
 void DspCore::validate_reference_admission(const DspReferenceTicket &ticket,
-                                           const bool retiring_previous) const {
+                                           const bool retiring_previous,
+                                           const std::optional<std::uint64_t> cycle) const {
   validate_reference_ticket(ticket);
   const auto pending = reference_pending_unchecked();
   if (impl_->results.previous && !retiring_previous && pending &&
@@ -1156,6 +1296,7 @@ void DspCore::validate_reference_admission(const DspReferenceTicket &ticket,
   }
   impl_->native.reference().check_admission();
   impl_->check_fetch_opcode();
+  impl_->validate_peripheral_admission(cycle);
 }
 
 void DspCore::fail_reference_cycle() noexcept {
@@ -1178,6 +1319,7 @@ DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket 
       return reference_progress(impl_->retire_reference());
     }
     auto completed = impl_->native.reference().commit();
+    impl_->observe_peripheral_store(completed);
     if (const auto *event = std::get_if<DspNativeAccess>(&completed);
         event != nullptr && event->kind == DspNativeAccessKind::opcode) {
       static_cast<void>(impl_->move_writeback_fields(nullptr, DspMoveDecode::nonmemory));
@@ -1192,6 +1334,169 @@ DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket 
     impl_->faulted = true;
     throw Fault("Non-standard DSP reference admission failure pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6));
+  }
+}
+
+DspPeripheralReadTicket
+DspCore::capture_reference_peripheral_read(const DspPeripheralReadPoint point) {
+  return capture_peripheral_read(point, false);
+}
+
+DspMemoryAccess DspCore::pipeline_peripheral_access(const std::uint32_t address) const {
+  if (impl_->active || impl_->faulted || impl_->run.begin ||
+      !impl_->native.reference().fetch().active()) {
+    throw Fault("Unavailable pipeline peripheral AG1 pc=" + hex(address, 6));
+  }
+  const auto &fetch = impl_->native.reference().fetch();
+  const auto opcode = fetch.peek(address);
+  const auto form = opcode ? decode_peripheral_read(*opcode) : std::nullopt;
+  if (!form || fetch.view().omr != state().omr) {
+    throw Fault("Unqualified actual peripheral AG1/F2 word pc=" + hex(address, 6));
+  }
+  if (!form->bit && decode_move_writeback(*opcode) == DspMoveFields{}) {
+    throw Fault("Unqualified native peripheral destination pc=" + hex(address, 6));
+  }
+  if (form->words == 2 && !fetch.peek((address + 1) & word_mask)) {
+    throw Fault("Peripheral AG1 awaits actual extension pc=" + hex(address, 6));
+  }
+  return {.target = form->target, .phase = DspMemoryPhase::peripheral_sample};
+}
+
+DspPeripheralReadTicket
+DspCore::capture_pipeline_peripheral_read(const DspPeripheralReadPoint point) {
+  static_cast<void>(pipeline_peripheral_access(point.address));
+  return capture_peripheral_read(point, true);
+}
+
+DspPeripheralReadTicket DspCore::capture_peripheral_read(const DspPeripheralReadPoint point,
+                                                         const bool automatic) {
+  const auto &reference = impl_->native.reference();
+  if (impl_->active || impl_->faulted || impl_->run.begin || !reference.fetch().active() ||
+      impl_->peripheral_epoch() != point.epoch) {
+    throw Fault("Unqualified peripheral capture pc=" + hex(point.address, 6));
+  }
+  if (automatic) {
+    if (reference.active() &&
+        reference.execution() != DspReferenceExecution::staged_register_boundaries) {
+      throw Fault("Automatic peripheral capture has an incompatible native owner");
+    }
+  } else {
+    if (!reference.active() ||
+        reference.execution() != DspReferenceExecution::access_and_retirement_boundaries) {
+      throw Fault("Unqualified explicit peripheral capture pc=" + hex(point.address, 6));
+    }
+    impl_->validate_peripheral_capture(point);
+  }
+  auto &stages = impl_->peripheral_reads;
+  if (stages.serial == std::numeric_limits<std::uint64_t>::max() ||
+      (stages.last_store_cycle && point.epoch <= *stages.last_store_cycle)) {
+    throw Fault("Peripheral capture requires a fresh pre-write phase pc=" + hex(point.address, 6));
+  }
+  for (const auto &record : stages.records) {
+    if (record && record->point.address == point.address) {
+      throw Fault("Duplicate owned peripheral capture pc=" + hex(point.address, 6));
+    }
+  }
+  for (std::size_t slot = 0; slot < stages.records.size(); ++slot) {
+    if (stages.records.at(slot)) { continue; }
+    const ExecutionGuard guard(impl_->active);
+    try {
+      const auto sample = DspPeripheralRead::capture(impl_->bus, reference.fetch(), point);
+      stages.records.at(slot) = DspPeripheralReadRecord{.sample = sample,
+                                                        .point = point,
+                                                        .origin = impl_->reference_owner,
+                                                        .serial = ++stages.serial,
+                                                        .automatic = automatic};
+      DspPeripheralReadTicket ticket;
+      ticket.owner_ = impl_->reference_owner;
+      ticket.origin_ = impl_->reference_owner;
+      ticket.slot_ = slot;
+      ticket.serial_ = stages.serial;
+      return ticket;
+    } catch (...) {
+      impl_->faulted = true;
+      throw;
+    }
+  }
+  throw Fault("Peripheral response capacity exhausted pc=" + hex(point.address, 6));
+}
+
+void DspCore::validate_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const {
+  if (impl_->active || impl_->faulted || ticket.owner_ != impl_->reference_owner) {
+    throw Fault("Stale, foreign or unavailable native peripheral response owner");
+  }
+  static_cast<void>(peripheral_record(
+      impl_->peripheral_reads,
+      {.origin = ticket.origin_, .slot = ticket.slot_, .serial = ticket.serial_}));
+}
+
+DspPeripheralReadTicket
+DspCore::rebind_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const {
+  if (impl_->active || impl_->faulted) { throw Fault("Unavailable peripheral response rebind"); }
+  static_cast<void>(peripheral_record(
+      impl_->peripheral_reads,
+      {.origin = ticket.origin_, .slot = ticket.slot_, .serial = ticket.serial_}));
+  auto rebound = ticket;
+  rebound.owner_ = impl_->reference_owner;
+  return rebound;
+}
+
+bool DspCore::has_reference_peripheral_reads() const {
+  return impl_->has_peripheral_reads();
+}
+
+DspBranchDecision DspCore::preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read) {
+  validate_reference_peripheral_read(read);
+  const auto &record =
+      peripheral_record(impl_->peripheral_reads,
+                        {.origin = read.origin_, .slot = read.slot_, .serial = read.serial_});
+  if (!record.automatic) { throw Fault("Branch preview requires the pipeline read owner"); }
+  const auto decision = record.sample.preview_branch(impl_->peripheral_epoch());
+  impl_->native.reference().fetch().predict_branch(decision);
+  return decision;
+}
+
+DspReferenceProgress DspCore::advance_reference_peripheral_read(const DspPeripheralReadTicket &read,
+                                                                const DspReferenceTicket &native) {
+  return advance_peripheral_read(
+      read, native, DspReferenceExecution::access_and_retirement_boundaries);
+}
+
+DspReferenceProgress DspCore::advance_pipeline_peripheral_read(const DspPeripheralReadTicket &read,
+                                                               const DspReferenceTicket &native) {
+  return advance_peripheral_read(read, native, DspReferenceExecution::staged_register_boundaries);
+}
+
+DspReferenceProgress DspCore::advance_peripheral_read(const DspPeripheralReadTicket &read,
+                                                      const DspReferenceTicket &native,
+                                                      const DspReferenceExecution execution) {
+  validate_reference_ticket(native);
+  validate_reference_peripheral_read(read);
+  auto &reference = impl_->native.reference();
+  const auto pending = reference_pending_unchecked();
+  const auto opcode = reference.committed_access(DspNativeAccessKind::opcode);
+  const auto extension = reference.committed_access(DspNativeAccessKind::extension);
+  const auto *access = pending ? std::get_if<DspNativeAccess>(&pending->effect) : nullptr;
+  if (!opcode || access == nullptr || reference.execution() != execution) {
+    throw Fault("Owned peripheral admission requires a real pending native data read");
+  }
+  const auto epoch = impl_->peripheral_epoch();
+  const ExecutionGuard guard(impl_->active);
+  try {
+    auto &record =
+        peripheral_record(impl_->peripheral_reads,
+                          {.origin = read.origin_, .slot = read.slot_, .serial = read.serial_});
+    if (record.automatic != (execution == DspReferenceExecution::staged_register_boundaries)) {
+      throw Fault("Peripheral response has a different execution owner");
+    }
+    const auto value = record.sample.consume(*opcode, extension, *access, epoch);
+    const auto completed = reference.commit_owned_read(*access, value);
+    impl_->peripheral_reads.records.at(read.slot_).reset();
+    impl_->resume_reference();
+    return reference_progress(completed);
+  } catch (...) {
+    impl_->faulted = true;
+    throw;
   }
 }
 

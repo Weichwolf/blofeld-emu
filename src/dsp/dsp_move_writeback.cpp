@@ -14,10 +14,15 @@ namespace {
 using Mask = dsp56k::RegisterMask;
 using Type = dsp56k::Instruction;
 
+bool peripheral(const Type type) {
+  return type == dsp56k::Movep_Spp || type == dsp56k::Movep_SXqq || type == dsp56k::Movep_SYqq;
+}
+
 bool memory(const Type type) {
-  return type == dsp56k::Movex_ea || type == dsp56k::Movex_aa || type == dsp56k::Movey_ea ||
-         type == dsp56k::Movey_aa || type == dsp56k::Movec_ea || type == dsp56k::Movec_aa ||
-         type == dsp56k::Movel_ea || type == dsp56k::Movel_aa || type == dsp56k::Movexy;
+  return peripheral(type) || type == dsp56k::Movex_ea || type == dsp56k::Movex_aa ||
+         type == dsp56k::Movey_ea || type == dsp56k::Movey_aa || type == dsp56k::Movec_ea ||
+         type == dsp56k::Movec_aa || type == dsp56k::Movel_ea || type == dsp56k::Movel_aa ||
+         type == dsp56k::Movexy;
 }
 
 bool transfer(const Type type) {
@@ -47,6 +52,15 @@ Mask operand(const Type type, const dsp56k::Field field, const std::uint32_t opc
 }
 
 Mask destination(const Type type, const std::uint32_t opcode) {
+  if (peripheral(type)) {
+    if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0) { return Mask::None; }
+    const auto reg = dsp56k::getRegister(type, dsp56k::Field_dddddd, opcode);
+    if (reg == dsp56k::Register::A || reg == dsp56k::Register::B) {
+      throw Fault("Unqualified full accumulator peripheral-load writeback");
+    }
+    return operand(type, dsp56k::Field_dddddd, opcode);
+  }
+
   if (type == dsp56k::Movexy) {
     const auto x = dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0
                        ? operand(type, dsp56k::Field_ee, opcode)
@@ -73,6 +87,12 @@ Mask destination(const Type type, const std::uint32_t opcode) {
 }
 
 Mask source(const Type type, const std::uint32_t opcode) {
+  if (peripheral(type)) {
+    return dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0
+               ? operand(type, dsp56k::Field_dddddd, opcode)
+               : Mask::None;
+  }
+
   if (type == dsp56k::Movexy) {
     const auto x = dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) == 0
                        ? operand(type, dsp56k::Field_ee, opcode)

@@ -65,6 +65,7 @@ public:
   [[nodiscard]] DspReferenceExecution execution() const { return state_.execution; }
 
   [[nodiscard]] std::optional<std::uint32_t> opcode() const;
+  [[nodiscard]] std::optional<DspNativeAccess> committed_access(DspNativeAccessKind kind) const;
 
   [[nodiscard]] bool active() const { return state_.active; }
 
@@ -98,6 +99,9 @@ public:
   void latch_program();
 
   [[nodiscard]] DspReferenceEffect commit();
+  // DspCore supplies only an owned, identity-checked actual early bus response.
+  [[nodiscard]] DspReferenceEffect commit_owned_read(const DspNativeAccess &access,
+                                                     std::uint32_t value);
   [[nodiscard]] std::uint32_t read(DspAddress target, DspNativeAccessKind kind);
   void write(DspStore target);
   [[nodiscard]] bool bit(DspBitAccess target);
@@ -109,6 +113,7 @@ private:
   [[nodiscard]] std::uint32_t sample(const DspReferenceEffect &effect);
   [[nodiscard]] std::uint32_t perform(const DspReferenceEffect &effect);
   [[nodiscard]] DspNativeAccess decorate(DspNativeAccess access);
+  [[nodiscard]] DspReferenceEffect record_completed(std::uint32_t value);
   void check_capacity() const;
   DspBus &bus_;
   DspReferenceState state_;

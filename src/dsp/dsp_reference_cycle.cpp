@@ -88,44 +88,59 @@ std::optional<DspMemoryAccess> peripheral_store(const std::optional<DspAddressSt
   return access;
 }
 
+bool same_access(const DspMemoryAccess first, const DspMemoryAccess second) {
+  return first.target.space == second.target.space &&
+         first.target.address == second.target.address && first.operation == second.operation &&
+         first.phase == second.phase;
+}
+
 void check_resources(const DspBus &bus,
                      const DspReferenceCycleResult &result,
-                     const std::optional<DspMemoryAccess> peripheral) {
+                     const std::optional<DspMemoryAccess> peripheral,
+                     const std::optional<DspMemoryAccess> early) {
   std::array<std::optional<DspMemoryResource>, dsp_reference_cycle_accesses> resources;
   unsigned data_accesses = 0;
   for (std::size_t index = 0; index < result.core_access_count; ++index) {
     const auto access = result.core_accesses.at(index);
     if (access.target.space != DspSpace::p) { ++data_accesses; }
-    const bool port = peripheral && access.target.space == peripheral->target.space &&
-                      access.target.address == peripheral->target.address &&
-                      access.operation == peripheral->operation;
-    // FM13-134: one short-I/O write over the data/peripheral bus, independent of P fetch.
-    // Register semantics still pass through the strict peripheral owner in native E1.
-    if (!controller_read(access) && !port) { resources.at(index) = bus.memory_resource(access); }
+    const bool port = peripheral && same_access(access, *peripheral);
+    const bool sample = early && same_access(access, *early);
+    if (!controller_read(access) && !port && !sample) {
+      resources.at(index) = bus.memory_resource(access);
+    }
   }
-  if (peripheral && data_accesses != 1) {
+  if ((peripheral || early) && data_accesses != static_cast<unsigned>(peripheral.has_value()) +
+                                                    static_cast<unsigned>(early.has_value())) {
     throw Fault("Unqualified concurrent native peripheral/data bus effects");
   }
   for (std::size_t index = 0; index < result.core_access_count; ++index) {
     for (std::size_t other = 0; other < index; ++other) {
-      const auto first = resources.at(index);
-      const auto second = resources.at(other);
       const auto a = result.core_accesses.at(index);
       const auto b = result.core_accesses.at(other);
-      if (a.target.space == b.target.space ||
-          (first && second && first->bank == second->bank && first->rom == second->rom)) {
+      // The independently checked port pipeline has an early read phase followed
+      // by one older E1 store. No extra RAM/dual-data phase is admitted here.
+      const bool phased_ports = early && peripheral &&
+                                ((same_access(a, *early) && same_access(b, *peripheral)) ||
+                                 (same_access(b, *early) && same_access(a, *peripheral)));
+      const auto first = resources.at(index);
+      const auto second = resources.at(other);
+      if (!phased_ports &&
+          (a.target.space == b.target.space ||
+           (first && second && first->bank == second->bank && first->rom == second->rom))) {
         throw Fault("Unqualified dual core bus-cycle use: " + describe(a) + " and " + describe(b));
       }
     }
   }
 }
+
 }
 
 DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
                                                   const DspReferenceCycleInputs &inputs,
                                                   const std::optional<DspReferencePending> &pending,
                                                   const DspProgramFetchView &fetch,
-                                                  const std::optional<DspAddressStageView> memory) {
+                                                  const std::optional<DspAddressStageView> memory,
+                                                  const std::optional<DspMemoryAccess> early) {
   DspReferenceCycleResult result;
   if (inputs.fetch == DspProgramFetchStage::read) {
     if (!fetch.pending_address) { throw Fault("Bus-cycle F2 lost its actual issued address"); }
@@ -135,6 +150,7 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     if (!pending) { throw Fault("Bus-cycle admission lost its actual native pending effect"); }
     if (const auto access = native_access(*pending)) { append(result, *access); }
   }
+  if (early) { append(result, *early); }
   if (memory) {
     for (std::size_t index = 0; index < memory->data_access_count; ++index) {
       if (result.core_access_count == result.core_accesses.size()) {
@@ -144,7 +160,7 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     }
   }
   try {
-    check_resources(bus, result, peripheral_store(memory));
+    check_resources(bus, result, peripheral_store(memory), early);
   } catch (const std::exception &error) {
     if (!memory) { throw; }
     std::string group;

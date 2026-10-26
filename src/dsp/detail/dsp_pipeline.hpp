@@ -44,6 +44,7 @@ struct DspInstructionPipeline {
   DspPipelineView view;
   std::array<std::optional<DspAddressStageTicket>, 2> addresses{};
   std::array<std::optional<DspProgramWord>, 2> extensions{};
+  std::array<std::optional<DspPeripheralReadTicket>, 2> reads{};
   std::optional<DspBranchDecision> branch = std::nullopt;
   unsigned branch_fetch_hold = 0;
   unsigned branch_decode_hold = 0;

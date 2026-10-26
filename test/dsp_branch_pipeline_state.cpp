@@ -120,7 +120,7 @@ void reset_pending_branch() {
 }
 
 void unsupported_sources_stay_strict() {
-  for (const auto *source : {"sr", "x0", "x:<<$ffff91"}) {
+  for (const auto *source : {"sr", "x0"}) {
     DspMachine machine;
     const std::array<std::string, 1> code{"jset #2," + std::string(source) + ',' +
                                           number(body + 4)};
@@ -130,10 +130,11 @@ void unsupported_sources_stay_strict() {
     clocks(run, machine, 2);
     const auto error =
         fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-    require(error.contains("automatic DSP decode P:") && error.contains("pc=") &&
-                error.contains("omr=") && run.faulted() && run.completed_cycles() == 2 &&
-                machine.cpu().debug_state() == before && !machine.bus().once_latch(),
-            "OMR branch support never admits SR/data/peripheral sources or their operand effects");
+    require(
+        error.contains("automatic DSP decode P:") && error.contains("pc=") &&
+            error.contains("omr=") && run.faulted() && run.completed_cycles() == 2 &&
+            machine.cpu().debug_state() == before && !machine.bus().once_latch(),
+        "Peripheral branch support never admits SR/data register sources or their operand effects");
   }
 }
 }

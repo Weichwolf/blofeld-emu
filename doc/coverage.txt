@@ -315,6 +315,19 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           (dsp-clocked-wire.txt). Physical IRQ
                                           latency and serial baud remain open.
                                           Physical pipeline/PLL/board timing open.
+                                          Selected native automatic short-I/O reads
+                                          use owned once-only AG1 samples and real
+                                          completed store forwarding. Native E1/E2
+                                          and 63 independent source windows agree;
+                                          R/N/M loads precede younger AGU capture.
+                                          FIFO/branch snapshots, selective GPIO,
+                                          strict ports/DMA and public-phase refusal
+                                          checked (dsp-peripheral-reads.txt).
+                                          Document-derived SPI prefix polls empty
+                                          HRNE at43clocks/16retirements; real SPI
+                                          length1 reaches A0/address poll at53/19.
+                                          Physical read/ack stages, authentic ROM
+                                          and complete instrument boot remain open.
                                           Separate NXP initial-map reference:
                                           38 own timing windows/1047 instructions;
                                           38 windows match primary AGU/ALU/SR

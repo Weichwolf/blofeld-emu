@@ -5,6 +5,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_native_access.hpp"
+#include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
@@ -39,6 +40,7 @@ std::optional<unsigned> address_register(const std::uint32_t opcode) {
   if (const auto form = decode_memory_stage(opcode); form && form->peripheral) {
     return std::nullopt;
   }
+  if (decode_peripheral_read(opcode)) { return std::nullopt; }
   const auto type = effective(first) || absolute(first) ? first : second;
   if (absolute(type)) { return std::nullopt; }
   if (!effective(type)) {

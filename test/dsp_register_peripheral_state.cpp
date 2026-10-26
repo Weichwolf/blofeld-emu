@@ -96,7 +96,7 @@ void refused_forms() {
                            "movep a,x:<<$fffffc",
                            "movep b,x:<<$fffffc",
                            "movep a0,x:<<$fffffc",
-                           "movep x:<<$ffff94,r0"}) {
+                           "movep x:<<$ffff94,a"}) {
     DspMachine machine;
     const std::array<std::string, 1> code{text};
     prepare(machine, code);
@@ -105,11 +105,44 @@ void refused_forms() {
     clocks(run, machine, 2);
     const auto error =
         fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-    require(
-        error.contains("automatic DSP decode P:") && error.contains("pc=") &&
-            error.contains("omr=") && run.faulted() && run.completed_cycles() == 2 &&
-            machine.cpu().debug_state() == before && !machine.bus().once_latch(),
-        "Control/stack/accumulator sources and destructive port reads remain explicit frontiers");
+    require(error.contains("automatic DSP decode P:") && error.contains("pc=") &&
+                error.contains("omr=") && run.faulted() && run.completed_cycles() == 2 &&
+                machine.cpu().debug_state() == before && !machine.bus().once_latch(),
+            "Control/stack/accumulator store sources and full-accumulator loads remain explicit "
+            "frontiers");
+  }
+}
+
+void port_load_agu_dependencies() {
+  for (const auto *reg : {"r0", "n0", "m0"}) {
+    const std::string destination(reg);
+    const bool offset = destination == "n0";
+    DspMachine machine;
+    const std::array<std::string, 2> code{"movep x:<<$ffff90," + destination,
+                                          offset ? "move x:(r0)+n0,x0" : "move x:(r0)+,x0"};
+    prepare(machine, code);
+    auto expected = machine.cpu().debug_state();
+    const unsigned address = destination == "r0" ? 1U : 7U;
+    machine.bus().write({.space = DspSpace::x, .address = address, .value = literal});
+    expected.cpu.r[0] = destination == "r0" ? 2U : 6U;
+    if (offset) {
+      expected.cpu.r[0] = 0;
+      expected.cpu.n[0] = 1;
+    }
+    if (destination == "m0") { expected.cpu.m[0] = 1; }
+    expected.cpu.x = (expected.cpu.x & ~std::uint64_t{word_mask}) | literal;
+    expected.cpu.pc = body + 2;
+    expected.native_instructions += 2;
+    expected.native_cycles += 2;
+    DspFetchRun run(contract(), machine);
+    for (unsigned count = 0; count < 32 && machine.cpu().debug_state().native_instructions <
+                                               expected.native_instructions;
+         ++count) {
+      clocks(run, machine, 1);
+    }
+    require(machine.cpu().debug_state() == expected,
+            "Actual native port load must publish the new R/N/M before younger AGU capture: " +
+                destination);
   }
 }
 
@@ -207,6 +240,7 @@ void register_state_checks() {
   captured_opcode(true);
   transmission_once();
   refused_forms();
+  port_load_agu_dependencies();
   strict_write_failure();
   failed_f2();
   active_dma();

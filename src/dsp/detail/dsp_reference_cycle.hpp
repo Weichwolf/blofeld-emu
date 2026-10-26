@@ -14,5 +14,6 @@ reference_cycle_footprint(const DspBus &bus,
                           const DspReferenceCycleInputs &inputs,
                           const std::optional<DspReferencePending> &pending,
                           const DspProgramFetchView &fetch,
-                          std::optional<DspAddressStageView> memory = std::nullopt);
+                          std::optional<DspAddressStageView> memory = std::nullopt,
+                          std::optional<DspMemoryAccess> early = std::nullopt);
 }

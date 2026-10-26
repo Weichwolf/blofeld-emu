@@ -15,6 +15,8 @@
 
 namespace blofeld {
 class DspAddressStageTicket;
+class DspPeripheralReadTicket;
+struct DspPeripheralReadPoint;
 struct DspBranchDecision;
 struct DspAddressStageView;
 struct DspMemoryStageResult;
@@ -147,7 +149,8 @@ private:
   [[nodiscard]] DspProgramFetchView reference_fetch() const;
   void validate_reference_ticket(const DspReferenceTicket &ticket) const;
   void validate_reference_admission(const DspReferenceTicket &ticket,
-                                    bool retiring_previous = false) const;
+                                    bool retiring_previous = false,
+                                    std::optional<std::uint64_t> cycle = std::nullopt) const;
   void validate_reference_fetch(DspProgramFetchStage stage) const;
   void fail_reference_cycle() noexcept;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;
@@ -162,6 +165,28 @@ private:
   [[nodiscard]] DspAddressStageView publish_reference_address(const DspAddressStageTicket &ticket);
   void validate_reference_address(const DspAddressStageTicket &ticket, bool published) const;
   [[nodiscard]] DspMemoryStageResult execute_reference_memory(const DspAddressStageTicket &ticket);
+  [[nodiscard]] DspPeripheralReadTicket
+  capture_reference_peripheral_read(DspPeripheralReadPoint point);
+  [[nodiscard]] DspPeripheralReadTicket
+  rebind_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const;
+  [[nodiscard]] DspReferenceProgress
+  advance_reference_peripheral_read(const DspPeripheralReadTicket &read,
+                                    const DspReferenceTicket &native);
+  void validate_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const;
+  [[nodiscard]] DspMemoryAccess pipeline_peripheral_access(std::uint32_t address) const;
+  [[nodiscard]] DspPeripheralReadTicket
+  capture_pipeline_peripheral_read(DspPeripheralReadPoint point);
+  [[nodiscard]] DspBranchDecision
+  preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read);
+  [[nodiscard]] DspReferenceProgress
+  advance_pipeline_peripheral_read(const DspPeripheralReadTicket &read,
+                                   const DspReferenceTicket &native);
+  [[nodiscard]] DspPeripheralReadTicket capture_peripheral_read(DspPeripheralReadPoint point,
+                                                                bool automatic);
+  [[nodiscard]] DspReferenceProgress advance_peripheral_read(const DspPeripheralReadTicket &read,
+                                                             const DspReferenceTicket &native,
+                                                             DspReferenceExecution execution);
+  [[nodiscard]] bool has_reference_peripheral_reads() const;
   class Impl;
   std::unique_ptr<Impl> impl_;
 };

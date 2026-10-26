@@ -7,6 +7,8 @@
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_native_access.hpp"
+#include "dsp/dsp_peripheral_read_form.hpp"
+#include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
@@ -86,6 +88,11 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
     }
     if (pipeline->view.cycle.agu_dependencies != 0 || pipeline->held_branch_decode) {
       result.fetch.reset();
+    }
+    const auto ag1 = pipeline->view.cycle.ag1;
+    if (pipeline->profile == DspFetchPipeline::automatic_memory && ag1) {
+      const auto word = *ag1;
+      if (decode_peripheral_read(word.value)) { result.peripheral_capture = word.address; }
     }
     result.address_update = pipeline->addresses[0];
     result.memory = pipeline->addresses[1];

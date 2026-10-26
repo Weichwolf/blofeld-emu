@@ -3,7 +3,9 @@
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_native_access.hpp"
+#include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 
@@ -45,7 +47,16 @@ void DspInstructionPipeline::execute(DspMachine &machine) {
   if (view.cycle.e1_extension) {
     progress = extension(machine, progress, *view.cycle.e1_extension);
   }
-  const auto fields = pipeline_transfer_fields(word.value);
+  const auto port_read = decode_peripheral_read(word.value);
+  if (port_read) {
+    const auto ticket = reads[1];
+    if (!ticket || !progress.pending) {
+      throw Fault("Peripheral E1 lost its owned actual data boundary");
+    }
+    progress = machine.advance_pipeline_peripheral_read(*ticket, progress.pending->ticket);
+  }
+  const auto fields =
+      port_read ? decode_move_writeback(word.value) : pipeline_transfer_fields(word.value);
   if (fields != DspMoveFields{}) {
     if (!progress.pending || !std::holds_alternative<DspMoveWriteback>(progress.pending->effect)) {
       throw Fault("Automatic transfer E1 lost its actual native load fields");
@@ -62,7 +73,7 @@ void DspInstructionPipeline::execute(DspMachine &machine) {
       !std::holds_alternative<DspInstructionRetire>(progress.pending->effect)) {
     throw Fault("Unqualified actual native effect in automatic DSP E1");
   }
-  if (decode_branch_form(word.value)) {
+  if (decode_branch_form(word.value) || (port_read && port_read->bit)) {
     validate_branch(std::get<DspInstructionRetire>(progress.pending->effect));
   }
   view.cycle.execution = progress;

@@ -5,6 +5,7 @@
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_peripheral_read_stage.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
@@ -126,12 +127,29 @@ public:
   // Strong exception guarantee; a prior valid checkpoint can recover a fault.
   void restore(const DspCheckpoint &checkpoint);
 
+  // Explicit unclocked reference phases. Automatic stage/resource integration
+  // is a separate contract; no caller supplies the sampled peripheral word.
+  [[nodiscard]] DspPeripheralReadTicket
+  capture_reference_peripheral_read(DspPeripheralReadPoint point);
+  [[nodiscard]] DspPeripheralReadTicket
+  rebind_reference_peripheral_read(const DspPeripheralReadTicket &ticket) const;
+  [[nodiscard]] DspReferenceProgress
+  advance_reference_peripheral_read(const DspPeripheralReadTicket &read,
+                                    const DspReferenceTicket &native);
+
 private:
   friend class DspScheduledRun;
   void require_running() const;
   friend class DspFetchRun;
+  [[nodiscard]] DspReferenceCycleResult
+  advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs);
   friend struct DspFetchState;
   friend struct DspInstructionPipeline;
+  [[nodiscard]] DspBranchDecision
+  preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read);
+  [[nodiscard]] DspReferenceProgress
+  advance_pipeline_peripheral_read(const DspPeripheralReadTicket &read,
+                                   const DspReferenceTicket &native);
   [[nodiscard]] DspBranchDecision capture_reference_branch(std::uint32_t address);
   [[nodiscard]] DspAddressStageTicket capture_reference_address(std::uint32_t address);
   [[nodiscard]] DspAddressStageView address_stage(const DspAddressStageTicket &ticket) const;

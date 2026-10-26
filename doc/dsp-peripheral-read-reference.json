@@ -1,0 +1,89 @@
+{
+  "scope": "63 fixed own initial-map CPU windows in the normal vendor model; primary instruction counts and architectural endpoints. No physical board/strobe/acknowledgement or switched-map qualification.",
+  "primary_reference": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "5.3/Table5-1",
+      "A-1 MOVEP pp,D and S,pp",
+      "A-1 JSET/JCLR pp/qq",
+      "A2.6.3 false Decode delay",
+      "A4.1 peripheral pipeline",
+      "A4.2 read-only forwarding"
+    ]
+  },
+  "toolchain": "Symphony Studio1.1.0 normal-mode56371, Freescale assembler6.3.28. Local RSP Boolean-success transport correction only; installed processor libraries unchanged. Continuous windows exclude debugger accesses between anchors.",
+  "own_program_sha256": {
+    "shi_status": "44ca8b9dbe563cd88578ce9cb979abc50e8e93e015d2cbb324b424139325c0bd",
+    "word_read": "6d745f6da2a09d13f98dc5fb13f2c3e47913c91cf5ae0bcc516bd193a5f43dfa",
+    "clock_branch": "362fd252e596f0546a426058d9af0335f7364fa6e6785d3ea7fd0232832df1ce",
+    "readonly_forwarding": "2863ab15e37b5a90c7cfaf8f0917f811e9e34ebf6a41761c9af815fbb549d3ff"
+  },
+  "observed_cases": 63,
+  "visibility": {
+    "HTX_second_store_to_HCSR_HTDE": {
+      "readers": [
+        "word",
+        "JSET",
+        "JCLR"
+      ],
+      "immediate_gaps_0_1_2": [
+        1,
+        0,
+        0
+      ],
+      "register_gaps_0_1_2": [
+        1,
+        1,
+        0
+      ]
+    },
+    "HCKR_1_to_3": {
+      "word_immediate": [
+        1,
+        3,
+        3
+      ],
+      "word_register": [
+        1,
+        1,
+        3
+      ],
+      "bit1_branches_immediate": [
+        1,
+        1,
+        1
+      ],
+      "bit1_branches_register": [
+        1,
+        1,
+        1
+      ]
+    },
+    "HCSR_unchanged_a9_write_HTDE_RO_field": {
+      "word_all_gaps": 1,
+      "bit_branches_immediate": [
+        0,
+        1,
+        1
+      ],
+      "bit_branches_register": [
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "interpretation": "These endpoints fit an early actual sample with genuine same-address store forwarding only for bit branches. They contradict a universal two-NOP visibility delay and whole-word/bit-branch equivalence. Equivalent shifted physical-stage explanations remain possible.",
+  "not_proven": [
+    "Physical read or acknowledgement stage",
+    "General fully read-only register forwarding",
+    "General mixed-register behavior",
+    "All port destinations and younger AGU hazards",
+    "Unknown external SPI wire states",
+    "Complete authentic mask ROM/reserved memory",
+    "Original complete reset-to-instrument and MIDI/audio/update/recovery acceptance"
+  ],
+  "fuzz_execution": false,
+  "normal_instrument_boot_qualified": false
+}

@@ -7,6 +7,7 @@
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_memory_form.hpp"
+#include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
@@ -46,6 +47,10 @@ void prepare_decode(DspInstructionPipeline &pipeline,
   // Even an already prefetched successor cannot enter Decode while AG1 resolves
   // this branch and cuts the discarded path from the owned queue.
   if (const auto ag1 = cycle.ag1; ag1 && decode_branch_form(ag1->value)) { return; }
+  for (const auto word : {cycle.ag1, cycle.ag2}) {
+    const auto read = word ? decode_peripheral_read(word->value) : std::nullopt;
+    if (read && read->bit) { return; }
+  }
   // Decode sees the prior cycle's F2 latch, never the new F2 of this clock.
   for (std::size_t index = 0; index < fetch.used; ++index) {
     if (fetch.words.at(index).address == pipeline.view.decode_address) {
@@ -82,6 +87,11 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
     const auto word = words.at(index);
     const bool memory = profile == DspFetchPipeline::automatic_memory && word &&
                         decode_memory_stage(word->value).has_value();
+    const bool port_read = profile == DspFetchPipeline::automatic_memory && word &&
+                           decode_peripheral_read(word->value).has_value();
+    if (reads.at(index).has_value() != port_read) {
+      throw Fault("Automatic DSP lost its owned peripheral-read stage alignment");
+    }
     const auto ticket = addresses.at(index);
     if (ticket.has_value() != memory) {
       throw Fault("Automatic DSP lost its address-stage alignment");
@@ -118,7 +128,8 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
       effect->next_omr != effect->omr) {
     throw Fault("Automatic DSP E2 differs from its actual native candidate");
   }
-  if (decode_branch_form(view.awaiting_retirement->value)) {
+  const auto port_read = decode_peripheral_read(view.awaiting_retirement->value);
+  if (decode_branch_form(view.awaiting_retirement->value) || (port_read && port_read->bit)) {
     validate_branch(*effect);
   } else if (effect->redirected ||
              effect->next_pc !=
@@ -175,6 +186,8 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   view.cycle.ag2_address = bus.address_update;
   capture_branch(machine);
   capture_address(machine);
+  reads[1] = reads[0];
+  reads[0] = bus.peripheral_read;
   extensions[1] = extensions[0];
   extensions[0] = view.cycle.ag1_extension;
   view.stages[2] = view.stages[1];
@@ -193,6 +206,9 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
 }
 
 void DspInstructionPipeline::rebind(const DspMachine &machine) {
+  for (auto &ticket : reads) {
+    if (ticket) { ticket = machine.rebind_reference_peripheral_read(*ticket); }
+  }
   for (auto &ticket : addresses) {
     if (ticket) { ticket = machine.rebind_address_stage(*ticket); }
   }
@@ -213,20 +229,29 @@ void DspInstructionPipeline::capture_address(DspMachine &machine) {
 }
 
 void DspInstructionPipeline::capture_branch(DspMachine &machine) {
-  const auto word = view.cycle.ag1;
-  if (!word) { return; }
-  const auto instruction = *word;
-  if (profile != DspFetchPipeline::automatic_memory || !decode_branch_form(instruction.value)) {
-    return;
-  }
+  if (profile != DspFetchPipeline::automatic_memory) { return; }
+  const auto ag1 = view.cycle.ag1;
+  const auto early = ag1 ? decode_peripheral_read(ag1->value) : std::nullopt;
+  if (early && early->bit) { branch_fetch_hold = 1; }
+  const auto ag2 = view.cycle.ag2;
+  const auto read = ag2 ? decode_peripheral_read(ag2->value) : std::nullopt;
+  const bool peripheral = read && read->bit;
+  const bool omr = ag1 && decode_branch_form(ag1->value).has_value();
+  if (!peripheral && !omr) { return; }
   if (branch) { throw Fault("Automatic branch cannot replace an unresolved fetch decision"); }
-  const auto decision = machine.capture_reference_branch(instruction.address);
+  DspBranchDecision decision;
+  if (peripheral) {
+    const auto ticket = reads[0];
+    if (!ticket) { throw Fault("Peripheral AG2 branch lost its owned AG1 response"); }
+    decision = machine.preview_pipeline_peripheral_branch(*ticket);
+  } else {
+    decision = machine.capture_reference_branch(ag1->address);
+    branch_fetch_hold = 1;
+  }
   branch = decision;
   view.decode_address = decision.next_pc;
-  // One reference refill clock plus the real target F1/F2 gives the four-clock
-  // register-branch baseline. False conditions add I2 Decode delay (FM A.2.6.3).
-  // This is a declared schedule matching fixed windows, not measured silicon phases.
-  branch_fetch_hold = 1;
+  // OMR resolves in AG1; the port source resolves after older E1 writes in AG2.
+  // Both issue the selected F1 after AG2 and retain the FM false Decode delay.
   branch_decode_hold = decision.taken ? 0U : 1U;
   branch_target_ready = false;
 }

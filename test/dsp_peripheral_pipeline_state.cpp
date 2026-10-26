@@ -10,6 +10,7 @@
 #include "dsp_fetch_run_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_peripheral_pipeline_fixture.hpp"
+#include "dsp_spi_prefix_fixture.hpp"
 #include "native_access_fixture.hpp"
 #include "reference_execution_fixture.hpp"
 
@@ -242,6 +243,7 @@ void bootstrap(const BootstrapFiles &files) {
   const auto reset = machine.cpu().debug_state();
   static_cast<void>(
       machine.begin_reference_instruction(DspReferenceExecution::staged_register_boundaries));
+  machine.bus().shi().observe_spi({.mosi = false});
   DspFetchRun run(contract(), machine);
   std::ofstream output(files.trace);
   output.exceptions(std::ios::failbit | std::ios::badbit);
@@ -274,21 +276,6 @@ void bootstrap(const BootstrapFiles &files) {
   require(machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0 &&
               (machine.bus().shi().read(control) & 1U) == 0,
           "Native OMR branches reach the SPI store with independently expected CLR/R state");
-  const auto saved = run.checkpoint(machine);
-  std::string first;
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    run.restore(saved, machine);
-    const auto error =
-        fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-    require(error.contains("Unqualified automatic DSP decode P:0xff001a") && run.faulted() &&
-                run.completed_cycles() == prefix_clocks &&
-                machine.cpu().debug_state() == expected && machine.bus().once_latch() == 0 &&
-                (machine.bus().shi().read(control) & 1U) == 0,
-            "SHI peripheral JCLR remains the explicit frontier before the older register store "
-            "executes");
-    if (replay == 0) { first = error; }
-    require(error == first, "Both reset-prefix continuations stop at the identical actual branch");
-  }
-  output << "frontier " << first << '\n';
+  spi_prefix::continue_prefix(run, machine, expected, output);
 }
 }

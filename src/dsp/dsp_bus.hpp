@@ -34,12 +34,14 @@ struct DspStore {
 };
 
 enum class DspMemoryOperation : std::uint8_t { read, write };
+enum class DspMemoryPhase : std::uint8_t { execute, peripheral_sample };
 enum class DspMemoryConflict : std::uint8_t { independent, protected_partition, unqualified };
 enum class DspCoreBusKnowledge : std::uint8_t { unqualified, reference_cycle_occupancy };
 
 struct DspMemoryAccess {
   DspAddress target{};
   DspMemoryOperation operation = DspMemoryOperation::read;
+  DspMemoryPhase phase = DspMemoryPhase::execute;
 };
 
 struct DspMemoryPair {
@@ -105,6 +107,8 @@ public:
   [[nodiscard]] std::uint32_t inspect_program(std::uint32_t address) const;
 
   [[nodiscard]] std::optional<std::uint64_t> last_dma_cycle() const { return dma_.last_cycle(); }
+
+  [[nodiscard]] bool has_active_dma() const { return dma_.active(); }
 
   void install_rom(DspRom image);
   void observe_omr(std::uint32_t value);

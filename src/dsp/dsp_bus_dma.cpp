@@ -39,20 +39,32 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
   // can change the arbitration owner and remain unqualified even with inactive channels.
   std::optional<DspMemoryAccess> peripheral;
   unsigned data_accesses = 0;
+  bool early = false;
+  bool store = false;
   for (const auto access : core.accesses) {
     const auto target = access.target;
     if (target.space != DspSpace::p) { ++data_accesses; }
-    const bool port = (target.space == DspSpace::x || target.space == DspSpace::y) &&
-                      target.address >= io_base && target.address <= DspDma::full_word &&
-                      access.operation == DspMemoryOperation::write &&
-                      (target.space != DspSpace::x || !DspDma::handles(target.address));
-    if (port) {
+    const bool io = (target.space == DspSpace::x || target.space == DspSpace::y) &&
+                    target.address >= io_base && target.address <= DspDma::full_word;
+    if (access.phase == DspMemoryPhase::peripheral_sample) {
+      if (!io || access.operation != DspMemoryOperation::read || early) {
+        throw Fault("Unqualified early peripheral read footprint at " + describe(target));
+      }
+      early = true;
+      peripheral = access;
+    } else if (access.phase != DspMemoryPhase::execute) {
+      throw Fault("Unknown DSP core bus subphase at " + describe(target));
+    } else if (io && access.operation == DspMemoryOperation::write &&
+               (target.space != DspSpace::x || !DspDma::handles(target.address))) {
+      if (store) { throw Fault("Multiple DSP peripheral stores in one execute phase"); }
+      store = true;
       peripheral = access;
     } else if (!controller_read(access)) {
       static_cast<void>(bus.memory_resource(access));
     }
   }
-  if (peripheral && data_accesses != 1) {
+  const unsigned admitted_data = static_cast<unsigned>(early) + static_cast<unsigned>(store);
+  if (peripheral && data_accesses != admitted_data) {
     throw Fault("Unqualified concurrent DSP peripheral/data bus effects at " +
                 describe(peripheral->target));
   }
@@ -149,7 +161,9 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
   // The idle controller has no source/destination bus phase. Concurrent peripheral/DMA
   // timing is not qualified: reject before request sampling or either device effect.
   if (peripheral && dma_.active()) {
-    throw Fault("Unqualified DSP peripheral memory resource write at " +
+    const auto *const operation =
+        peripheral->operation == DspMemoryOperation::write ? "write" : "read";
+    throw Fault("Unqualified DSP peripheral memory resource " + std::string(operation) + " at " +
                 describe(peripheral->target) + " with active DMA");
   }
   DspDmaBusResult result;

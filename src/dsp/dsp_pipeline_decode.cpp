@@ -4,6 +4,7 @@
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
+#include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
@@ -15,6 +16,7 @@
 #include <array>
 #include <cstdint>
 #include <exception>
+#include <optional>
 
 namespace blofeld {
 namespace {
@@ -96,20 +98,24 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
   const bool arithmetic = std::ranges::contains(allowed, first);
   try {
     if (!decoded) { throw Fault("Undefined native instruction"); }
+    const auto port_read = profile == DspFetchPipeline::automatic_memory
+                               ? decode_peripheral_read(word.value)
+                               : std::nullopt;
     const bool branch =
-        profile == DspFetchPipeline::automatic_memory && decode_branch_form(word.value).has_value();
+        profile == DspFetchPipeline::automatic_memory &&
+        (decode_branch_form(word.value).has_value() || (port_read && port_read->bit));
     const auto form = decode_memory_stage(word.value);
     const bool memory = profile == DspFetchPipeline::automatic_memory && form.has_value();
     const bool transfer = profile == DspFetchPipeline::automatic_memory && !memory &&
                           pipeline_transfer_fields(word.value) != DspMoveFields{};
-    const bool standalone_move = (memory || transfer) && second == dsp56k::Invalid;
+    const bool standalone_move = (memory || transfer || port_read) && second == dsp56k::Invalid;
     const auto words = pipeline_word_count(word);
     if ((!arithmetic && !standalone_move && !branch) ||
         (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
         words > ((transfer || branch || (memory && form->peripheral)) ? 2U : 1U)) {
       throw Fault("Unqualified native instruction form");
     }
-    if (memory || transfer) { static_cast<void>(decode_move_writeback(word.value)); }
+    if (memory || transfer || port_read) { static_cast<void>(decode_move_writeback(word.value)); }
     return {.words = words, .memory = memory, .transfer = transfer, .branch = branch};
   } catch (const std::exception &error) {
     throw Fault("Unqualified automatic DSP decode P:" + hex(word.address, width) +

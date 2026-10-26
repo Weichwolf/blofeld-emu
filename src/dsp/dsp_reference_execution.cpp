@@ -191,6 +191,22 @@ std::optional<std::uint32_t> DspReferenceTape::opcode() const {
   return std::nullopt;
 }
 
+std::optional<DspNativeAccess>
+DspReferenceTape::committed_access(const DspNativeAccessKind kind) const {
+  std::optional<DspNativeAccess> result;
+  for (std::size_t index = 0; index < state_.used; ++index) {
+    const auto *record = std::get_if<DspReferenceRecord>(&state_.entries.at(index));
+    if (record == nullptr) { continue; }
+    const auto *access = std::get_if<DspNativeAccess>(&record->effect);
+    if (access == nullptr || access->kind != kind) { continue; }
+    if (result) { throw Fault("Ambiguous committed native access identity"); }
+    result = *access;
+    result->stage = DspNativeAccessStage::after;
+    result->value = record->value;
+  }
+  return result;
+}
+
 void DspReferenceTape::check_capacity() const {
   if (state_.used == state_.entries.size()) {
     throw Fault("Native reference instruction exceeds its admitted-effect bound");
@@ -325,6 +341,13 @@ DspReferenceEffect DspReferenceTape::commit() {
   } catch (const std::exception &error) {
     throw Fault("Native reference " + effect_context(effect) + ": " + error.what());
   }
+  return record_completed(value);
+}
+
+DspReferenceEffect DspReferenceTape::record_completed(const std::uint32_t value) {
+  if (!state_.pending) { throw Fault("Native completion lost its pending effect"); }
+  check_capacity();
+  const auto effect = *state_.pending;
   state_.entries.at(state_.used++) = DspReferenceRecord{.effect = effect, .value = value};
   state_.pending.reset();
   state_.latched_program_word.reset();
@@ -334,6 +357,21 @@ DspReferenceEffect DspReferenceTape::commit() {
     access->value = value;
   }
   return completed;
+}
+
+DspReferenceEffect DspReferenceTape::commit_owned_read(const DspNativeAccess &access,
+                                                       const std::uint32_t value) {
+  const auto *pending = state_.pending ? std::get_if<DspNativeAccess>(&*state_.pending) : nullptr;
+  const bool bit = access.kind == DspNativeAccessKind::bit && access.bit &&
+                   access.bit->operation == DspBitOperation::test;
+  if (!state_.active || mode_ != DspReferenceMode::ordinary || pending == nullptr ||
+      state_.latched_program_word || value > word_mask ||
+      (access.kind != DspNativeAccessKind::read && !bit) || (bit && value > 1) ||
+      !same_access(access, *pending)) {
+    throw Fault("Unavailable native owned peripheral-read admission");
+  }
+  check_admission();
+  return record_completed(value);
 }
 
 DspReferenceScope::DspReferenceScope(DspReferenceTape &tape, const DspReferenceMode mode)
