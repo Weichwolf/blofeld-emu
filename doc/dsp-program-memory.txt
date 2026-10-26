@@ -39,9 +39,10 @@ independent literals. Ten additional unchanged generic-model windows compare
 
 The optional SHA-pinned local165-byte document-derived prefix executes actual
 length/address reception,R0->R1,DO A0,the first SPI-payload/P write and eight
-subsequent empty second-word polls in two trusted continuations. It is not the
-complete authentic Blofeld mask ROM. Second-word completion,loader exit,actual
-first-stage continuation and full reset-to-instrument acceptance remain open.
+subsequent empty second-word polls. Two trusted continuations then write the
+second real SPI word and restore the native DO frame. It is not the complete
+authentic Blofeld mask ROM. ANDI CCR/loader exit,JMP(R1),actual first-stage and
+full reset-to-instrument acceptance remain open. See dsp-relative-control.txt.
 
   cmake --build --preset strict --target blofeld-program-memory-test \
     blofeld-program-memory-clock-test blofeld-program-memory-guard-test \

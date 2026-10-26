@@ -1397,7 +1397,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-loop-port-test test/dsp_loop_port_test.cpp)
   target_link_libraries(blofeld-loop-port-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_loop_port_receipts COMMAND blofeld-loop-port-test)
-  foreach(kind auto_loop auto_loop_source auto_loop_transfer_source auto_loop_source_guard auto_loop_a0 r_data_transfer loop_barrier loader_prefix_operand program_memory program_memory_clock program_memory_guard)
+  foreach(kind auto_loop auto_loop_source auto_loop_transfer_source auto_loop_source_guard auto_loop_a0 r_data_transfer loop_barrier loader_prefix_operand program_memory program_memory_clock program_memory_guard relative_branch relative_branch_guard)
     string(REPLACE "_" "-" target_kind "${kind}")
     add_executable(blofeld-${target_kind}-test test/dsp_${kind}_test.cpp)
     target_link_libraries(blofeld-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1412,6 +1412,8 @@ if(BUILD_TESTING)
   add_test(NAME dsp_program_memory_components COMMAND blofeld-program-memory-test)
   add_test(NAME dsp_automatic_program_memory COMMAND blofeld-program-memory-clock-test)
   add_test(NAME dsp_program_memory_guards COMMAND blofeld-program-memory-guard-test)
+  add_test(NAME dsp_relative_branches COMMAND blofeld-relative-branch-test)
+  add_test(NAME dsp_relative_branch_guards COMMAND blofeld-relative-branch-guard-test)
   add_test(NAME dsp_document_spi_loader_operands COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_loader_prefix_operands.py"
     $<TARGET_FILE:blofeld-loader-prefix-operand-test>
@@ -2969,6 +2971,7 @@ add_custom_target(quality
     blofeld-auto-loop-source-guard-test blofeld-auto-loop-a0-test blofeld-r-data-transfer-test
     blofeld-loop-barrier-test blofeld-loader-prefix-operand-test
     blofeld-program-memory-test blofeld-program-memory-clock-test blofeld-program-memory-guard-test
+    blofeld-relative-branch-test blofeld-relative-branch-guard-test
     blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test

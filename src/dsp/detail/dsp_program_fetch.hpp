@@ -75,8 +75,8 @@ private:
 
   [[nodiscard]] std::uint64_t next_occurrence();
   [[nodiscard]] std::size_t position(DspFetchedWord captured) const;
-  [[nodiscard]] std::size_t branch_pair(const DspBranchDecision &decision,
-                                        std::uint64_t identity) const;
+  [[nodiscard]] std::size_t branch_position(const DspBranchDecision &decision,
+                                            std::uint64_t identity) const;
   void shift_queue();
   void clear_continuation();
   DspProgramFetchView state_;

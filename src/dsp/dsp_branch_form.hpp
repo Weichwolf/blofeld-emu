@@ -10,12 +10,14 @@ namespace blofeld {
 struct DspBranchForm {
   unsigned bit = 0;
   bool set = false;
+  // A signed short displacement is retained as a sign-extended 24-bit word.
+  std::optional<std::uint32_t> displacement = std::nullopt;
 };
 
 // An early frontend decision, never an architectural CPU result or bus response.
 struct DspBranchDecision {
   DspProgramWord word;
-  DspProgramWord extension;
+  std::optional<DspProgramWord> extension = std::nullopt;
   std::uint32_t omr = 0;
   std::uint32_t next_pc = 0;
   bool taken = false;

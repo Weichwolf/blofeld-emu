@@ -41,6 +41,8 @@ constexpr unsigned empty_cycles = 36;
 constexpr unsigned maximum_seek = 40;
 constexpr unsigned maximum_store_seek = 96;
 constexpr unsigned first_payload = 0x44f400;
+constexpr unsigned second_payload = 0x123456;
+constexpr unsigned target_padding = 16;
 
 void check_state(const DspDebugState &actual, const DspDebugState &expected) {
   require(actual.cpu == expected.cpu && actual.sc == expected.sc && actual.ep == expected.ep &&
@@ -154,6 +156,59 @@ void store_frontier(DspFetchRun &run, DspMachine &machine, std::ostream &trace) 
       "Original loader never completed first P write and eight real empty second-word waits");
 }
 
+void finish_payload(DspFetchRun &run,
+                    DspMachine &machine,
+                    std::ostream &trace,
+                    const DspDebugState &reset) {
+  const auto before = machine.cpu().debug_state();
+  spi_prefix::word(machine.bus(), second_payload);
+  bool written = false;
+  unsigned polls = 0;
+  for (unsigned index = 0; index < maximum_store_seek; ++index) {
+    const auto cycle = step(run, machine, trace);
+    const auto &phase = pipeline::stages(cycle);
+    if (phase.memory && phase.memory->address.word.address == program_store) {
+      require(phase.memory->data.value == second_payload && phase.memory->additional_data &&
+                  phase.memory->additional_data->target.space == DspSpace::p &&
+                  phase.memory->additional_data->target.address == destination + 1 &&
+                  phase.memory->additional_data->value == second_payload && !written,
+              "The unchanged loader stores the actual second SPI word exactly once");
+      written = true;
+    }
+    if (!phase.retirement_published || !phase.execute2) { continue; }
+    const auto pc = phase.execute2->address;
+    if (pc == data_poll) {
+      ++polls;
+    } else if (pc == program_store) {
+      require(written, "Native program-store E2 must follow its real port/P effects");
+    } else if (pc == loop_last) {
+      auto expected = reset;
+      expected.cpu.pc = loop_last + 1;
+      expected.cpu.a = program_words;
+      expected.cpu.r[0] = destination + program_words;
+      expected.cpu.r[1] = destination;
+      expected.cpu.r[5] = 0;
+      expected.cpu.sr |= clear_status;
+      expected.stack_high.at(1) = reset.cpu.la;
+      expected.stack_low.at(1) = reset.cpu.lc;
+      expected.stack_high.at(2) = data_poll;
+      expected.stack_low.at(2) = reset.cpu.sr | clear_status;
+      expected.native_instructions = before.native_instructions + polls + 2;
+      check_state(machine.cpu().debug_state(), expected);
+      require(
+          written && polls != 0 && machine.bus().inspect_program(destination) == first_payload &&
+              machine.bus().inspect_program(destination + 1) == second_payload &&
+              (machine.bus().shi().read(control) & not_empty) == 0,
+          "Both actual P words and independent complete DO frame restoration precede loader exit");
+      return;
+    } else {
+      throw Fault(
+          "Unexpected native instruction before the declared document-loader copy boundary");
+    }
+  }
+  throw Fault("The unchanged loader never completed both real P stores and its native DO exit");
+}
+
 struct PrefixFiles {
   std::filesystem::path rom;
   std::filesystem::path trace;
@@ -168,6 +223,9 @@ void run(const PrefixFiles &files) {
   const auto reset = machine.cpu().debug_state();
   machine.bus().write({.address = destination, .value = initial_program_word});
   machine.bus().write({.address = destination + 1, .value = initial_program_word});
+  for (unsigned index = 2; index < target_padding; ++index) {
+    machine.bus().write({.address = destination + index, .value = 0});
+  }
   static_cast<void>(
       machine.begin_reference_instruction(DspReferenceExecution::staged_register_boundaries));
   machine.bus().shi().observe_spi({.mosi = false});
@@ -196,6 +254,7 @@ void run(const PrefixFiles &files) {
             "Joint restore replaces the faulted owner and discards future FIFO/P-store state");
     empty_body(owner, machine, opened, trace);
     store_frontier(owner, machine, trace);
+    finish_payload(owner, machine, trace, reset);
   }
 }
 }
@@ -204,9 +263,7 @@ int main(const int argc, const char *const *const argv) {
   try {
     require(argc == 3, "Expected the pinned local document SPI prefix and private trace path");
     run({.rom = argv[1], .trace = argv[2]});
-    std::cout
-        << "Document-derived SPI prefix executes actual first P transfer and subsequent empty "
-           "body waits\n";
+    std::cout << "Document-derived SPI prefix executes both native P writes and actual DO exit\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

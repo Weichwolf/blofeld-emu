@@ -1,0 +1,42 @@
+Single-word relative branch ownership
+====================================
+
+The automatic reference frontend admits native short BRA with a signed9-bit
+relative displacement. The SDK fields are the separate high4/low5 groups,not
+one contiguous12-bit field. Independent manual encodings and unchanged generic
+processor-model windows cover sign limits,field boundaries,self and sequential
+branches. Native execution supplies all architectural PC/register/CCR effects;
+the early frontend decision controls only actual instruction fetch.
+
+Branch descriptors retain an optional genuine F2 extension. Short BRA owns one
+word;the existing OMR/peripheral bit branches retain both actual words. Wrong
+width,value,identity or extension adjacency refuses before queue mutation.
+The captured/consumed occurrence,actual target F2 and native E1/E2 must agree.
+There is no dummy extension and no following-word read required for short BRA.
+
+Directed evidence covers512 valid displacement fields,five ownership refusals,
+a single-F2 forecast,ten native branch paths and eight trusted continuations
+across AG1,target F1/F2 and native retirement. Existing OMR,peripheral-bit,loop
+forecast/rollback and concurrent identity consumers remain complementary.
+The native cycle account has4units per short branch;target NOP costs1. The
+complete last-prefix-NOP to target-NOP window and steady self-branch spacing
+match the unchanged generic model. Selected E2 positions follow the existing
+seven-stage reference contract;the model's instruction-cost attribution does
+not establish physical E2 or bus-sample edges. Interrupt/cache timing remains
+unqualified rather than synthesized.
+
+The local SHA-pinned165-byte document-derived prefix receives both actual SPI
+payload words,writes both through native MOVEP and closes its genuine DO frame.
+Two trusted continuations check complete CPU/retained frames and actual FIFO/P
+values. This is not an authentic complete Blofeld mask ROM or normal boot.
+A separate unchanged continuation still visibly refuses the next ANDI CCR
+Decode before its architectural effect;actual loader exit,JMP(R1),received
+entry code,authentic first-stage and full instrument acceptance remain open.
+
+Detailed model traces,failed input preconditions and reference assets remain
+local. Firmware is neither patched nor redistributed with these tests.
+
+  cmake --build --preset strict --target blofeld-relative-branch-test \
+    blofeld-relative-branch-guard-test blofeld-loader-prefix-operand-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R \
+    '^(dsp_relative_branches|dsp_relative_branch_guards|dsp_document_spi_loader_operands)$'

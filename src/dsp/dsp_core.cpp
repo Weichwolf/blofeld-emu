@@ -1644,25 +1644,29 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
     throw Fault("Native branch AG1 requires a healthy active frontend at P:" + hex(address, 6));
   }
   auto &fetch = impl_->native.reference().fetch();
-  const auto captured = fetch.instruction(fetch.select(address, occurrence), 2);
-  const auto opcode = captured.opcode.word;
-  if (!captured.extension) { throw Fault("Native branch lost its actual F2 extension"); }
-  const auto extension = captured.extension->word;
-  const auto next = extension.address;
+  const auto sample = fetch.select(address, occurrence);
+  const auto opcode = sample.word;
   const auto form = decode_branch_form(opcode.value);
   const auto omr = state().omr;
   if (!form || fetch.view().omr != omr) {
-    throw Fault("Unqualified native branch AG1/F2 pair at P:" + hex(address, 6) +
+    throw Fault("Unqualified native branch AG1/F2 instruction at P:" + hex(address, 6) +
                 " pc=" + hex(address, 6) + " omr=" + hex(omr, 6));
   }
-  // The admitted automatic forms cannot write OMR. This drives only fetch;
-  // actual native E1 and E2 must independently confirm the same branch result.
-  const bool taken = (((omr >> form->bit) & 1U) != 0) == form->set;
-  const DspBranchDecision decision{.word = opcode,
-                                   .extension = extension,
-                                   .omr = omr,
-                                   .next_pc = taken ? extension.value : ((next + 1) & word_mask),
-                                   .taken = taken};
+  const auto captured = fetch.instruction(sample, form->displacement ? 1U : 2U);
+  // The admitted forms cannot write OMR. The actual native E1/E2 must confirm
+  // this occurrence-bound fetch decision without supplying architectural state.
+  DspBranchDecision decision{.word = opcode, .omr = omr};
+  if (form->displacement) {
+    decision.next_pc = (opcode.address + *form->displacement) & word_mask;
+    decision.taken = true;
+  } else {
+    if (!captured.extension) { throw Fault("Native branch lost its actual F2 extension"); }
+    const auto extension = captured.extension->word;
+    const bool taken = (((omr >> form->bit) & 1U) != 0) == form->set;
+    decision.extension = extension;
+    decision.next_pc = taken ? extension.value : ((extension.address + 1) & word_mask);
+    decision.taken = taken;
+  }
   fetch.predict_branch(decision, captured.opcode.occurrence);
   return decision;
 }

@@ -2625,7 +2625,7 @@ Automatic native peripheral-to-P memory transfers:
 - Directed candidate evidence covers400semantic/component vectors,13automatic
   clock/FIFO cases,ten held-period continuations,seven new refusals and the
   unchanged document prefix's first received P word/eight empty second-word
-  polls. Complete authentic ROM,second-word loader exit/first-stage,normal
+  polls. Complete authentic ROM,loader exit/first-stage,normal
   instrument/MIDI/audio/storage/update/recovery and physical timing remain open.
   See dsp-program-memory.txt.
 - Actual canonical strict all-target/format/clang-tidy gates pass;63affected
@@ -2634,3 +2634,24 @@ Automatic native peripheral-to-P memory transfers:
   This is scoped thread identity evidence,not the whole TSan ELF inventory.
   Both profiles467groups/1086recipes retain all464prior complete contracts and
   1082full compiler recipes. No fuzz,physical traffic or reference assets.
+
+Native single-word relative branch ownership:
+- Short BRA retains one actual F2 occurrence and an optional genuine extension;
+  old OMR/peripheral forms retain both words. Native E1/E2 confirms target/redirect.
+  Width/value/identity/adjacency errors refuse before changing the fetch queue.
+- Directed private evidence covers512valid displacement fields,five ownership
+  refusals,single-F2 availability,ten native branch paths and eight fresh joint
+  continuations. Existing OMR/port-bit/loop/identity consumers remain strict.
+- Both real document-prefix SPI payloads reach native P stores;the DO frame
+  restores completely in two trusted continuations. The separate full-target
+  run still refuses ANDI CCR Decode before architectural effect. Loader exit,
+  JMP(R1),authentic first-stage and full instrument acceptance remain open.
+- Generic processor-model instruction costs/complete windows are independent
+  evidence;selected reference E2 positions are not physical timing validation.
+  See dsp-relative-control.txt.
+- Canonical strict all-target/format/clang-tidy gates pass;65affected
+  ASan/UBSan groups and one separate TSan identity group pass,no skips.
+  Instrumentation/source guards,strict global ELF and the rebuilt TSan ELF pass;
+  the whole TSan ELF inventory and physical timing remain unqualified.
+  Both profiles471groups/1091recipes retain all469prior complete contracts and
+  1089full compiler recipes. No fuzz,physical traffic or reference assets.

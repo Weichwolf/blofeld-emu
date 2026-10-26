@@ -228,12 +228,13 @@ void DspProgramFetch::redirect(const std::uint32_t pc, const std::uint32_t omr) 
   clear_continuation();
 }
 
-std::size_t DspProgramFetch::branch_pair(const DspBranchDecision &decision,
-                                         const std::uint64_t identity) const {
+std::size_t DspProgramFetch::branch_position(const DspBranchDecision &decision,
+                                             const std::uint64_t identity) const {
   std::optional<std::size_t> found;
-  for (std::size_t index = 0; index + 1 < state_.used; ++index) {
+  for (std::size_t index = 0; index < state_.used; ++index) {
     if (state_.words.at(index) != decision.word ||
-        state_.words.at(index + 1) != decision.extension ||
+        (decision.extension &&
+         (index + 1 >= state_.used || state_.words.at(index + 1) != *decision.extension)) ||
         (identity != 0 && occurrences_.at(index) != identity)) {
       continue;
     }
@@ -243,7 +244,7 @@ std::size_t DspProgramFetch::branch_pair(const DspBranchDecision &decision,
     found = index;
   }
   if (!found) {
-    throw Fault("Native branch lost actual F2 pair read P:" + hex(decision.word.address, 6) +
+    throw Fault("Native branch lost actual F2 instruction read P:" + hex(decision.word.address, 6) +
                 " pc=" + hex(decision.word.address, 6) + " omr=" + hex(decision.omr, 6));
   }
   return *found;
@@ -309,14 +310,17 @@ void DspProgramFetch::hold_after(const DspFetchedInstruction &captured) {
 
 void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
+  const auto form = decode_branch_form(decision.word.value);
+  const bool one_word = form && form->displacement.has_value();
   if (!state_.active || branch_ || opening_ || decision.omr != state_.omr ||
-      decision.next_pc > word_mask ||
-      decision.extension.address != ((decision.word.address + 1) & word_mask)) {
+      decision.next_pc > word_mask || decision.extension.has_value() == one_word ||
+      (decision.extension &&
+       decision.extension->address != ((decision.word.address + 1) & word_mask))) {
     throw Fault("Unavailable native branch AG1 read P:" + hex(decision.word.address, 6) +
                 " pc=" + hex(decision.word.address, 6) + " omr=" + hex(decision.omr, 6));
   }
-  const auto pair = branch_pair(decision, identity);
-  const auto keep = pair + 2;
+  const auto pair = branch_position(decision, identity);
+  const auto keep = pair + (decision.extension ? 2U : 1U);
   if (loop_) {
     const auto &prediction = predictions_.at(keep - 1);
     if (!prediction || boundaries_.at(pair) || boundaries_.at(keep - 1)) {
@@ -344,10 +348,12 @@ bool DspProgramFetch::confirm_branch(const std::uint32_t pc,
                                      const bool redirected) {
   if (!branch_ || branch_->word.address != pc) { return false; }
   const auto decision = *branch_;
-  const auto sequential = (decision.extension.address + 1) & word_mask;
+  const auto last = decision.extension.value_or(decision.word);
+  const auto sequential = (last.address + 1) & word_mask;
+  const auto consumed = decision.extension ? consumed_.front() : consumed_.back();
   if (next_pc != decision.next_pc || omr != decision.omr || redirected != decision.taken ||
       !branch_target_captured_ || state_.used == 0 || state_.words.front().address != next_pc ||
-      state_.consume_address != sequential || consumed_.front().occurrence != branch_occurrence_) {
+      state_.consume_address != sequential || consumed.occurrence != branch_occurrence_) {
     throw Fault("Native branch retirement differs from owned F2 pc=" + hex(pc, 6) +
                 " next=" + hex(next_pc, 6) + " omr=" + hex(omr, 6));
   }

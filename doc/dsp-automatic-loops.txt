@@ -30,8 +30,10 @@ The optional SHA-pinned, document-derived165-byte SPI prefix is a local referenc
 not an authentic complete Blofeld mask ROM. Real SPI edges deliver length/address;
 it executes native R0->R1 and DO A0, repeatedly polls actual empty HRX status, then
 stores a genuine received SPI payload through native peripheral-to-P:(R0)+ MOVEP.
-Two trusted continuations check independent CPU/stack/FIFO values,the first P write
-and eight subsequent empty second-word polls. See dsp-program-memory.txt.
+Two trusted continuations check independent CPU/stack/FIFO values,the first P write,
+eight subsequent empty second-word polls,the second genuine P write and complete
+native DO frame restoration. ANDI CCR/loader exit remain open.
+See dsp-program-memory.txt and dsp-relative-control.txt.
 This does not establish flash update/recovery or normal original instrument boot.
 
   cmake --build --preset strict --target blofeld-auto-loop-test \
