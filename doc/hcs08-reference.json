@@ -81,5 +81,19 @@
       "sha256": "0b56f813225c891104a01c01c0f702de1f6109944b19d9643ac75ea289131a15",
       "scope": "Older GB/GT trim variation examples,not a candidate GT8A calibration curve. Candidate POR/warm-reset retention takes precedence over this note."
     }
+  ],
+  "icg_simulator_documentation": [
+    {
+      "source": "https://www.nxp.com/docs/en/reference-manual/CWMCUDEBUGGERRM.pdf",
+      "bytes": 11711665,
+      "sha256": "5492f5476bdc605583fd53ee803a3f26b7b790d1d2090153c4a73d22dd138ea6",
+      "scope": "Vendor simulator interface documentation only;no model execution or hardware validation."
+    },
+    {
+      "source": "https://www.nxp.com/docs/en/application-note/AN2616.pdf",
+      "bytes": 1300536,
+      "sha256": "4239006903197348d6ddc33449a616133dd8f8cd851b9e2bf659c91260ecdec6",
+      "scope": "Vendor simulator interface documentation only;no model execution or hardware validation."
+    }
   ]
 }

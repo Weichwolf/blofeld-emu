@@ -1,0 +1,37 @@
+Conditional original Keyboard reset with coupled device clocks
+
+  cmake --build --preset strict --target blofeld-original-hcs08-clock-prefix-test
+  ctest --preset strict -j1 -R '^original_hcs08_clock_prefix$' --output-on-failure
+
+Unmodified pinned Keyboard1.4 pages execute from the real normal POR vector;
+no entry PC, ready/status byte, routine or command is replaced. Period counts
+start after the actual reset-vector transaction. Incoming BUSCLK periods use
+an explicit reference order:COP,TPM,ADC,then native CPU instruction retirement.
+Physical reset duration, bus/MMIO tie ordering and ICG generation stay open.
+
+Missing ADC reference fails at22690 offered periods/6193 retired instructions,
+PCE1BC. With a declared ADC reference but no divider phase, the first active
+TPM edge fails at22702/6196,PCE1C5. Device failures occur before another CPU
+period and quarantine the complete owner; no successful snapshot or retry.
+
+Declared diagnostic ADC inputs:12MHz BUSCLK,3.3V supply/reference,channel0=0V.
+These are not measured Blofeld values or a frequency derived from ICG controls.
+Declared TPM phases0/127 exercise two independent original-loop endpoints.
+Actual ICG status stays unknown; A keeps maskFE through real data-ignoring COP
+services. ADC completion comes from supplied bus periods and a stable input.
+Both cases retain all firmware/FLASH bytes and reach the actual idle FSTATFF
+store atEA88, which remains visibly unsupported. No FLASH launch/completion,
+SPI serial traffic, IRQ frame, physical calibration or full instrument boot.
+
+Phase0:4022751 offered periods,1149066 retired instructions,285714 COP services.
+Phase127:4022625 periods,1149030 instructions,285705 services. Independent totals
+combine the reviewed22697-period reset/setup prefix and14-period poll body.
+Fresh joint CPU/RAM/BDC/clock/ICG/ADC/TPM/COP copies resume an actual partial
+ICGS1-load budget and reproduce a bounded native suffix. Each sanitizer runs
+two missing-input controls,two declared-reference resets and two fresh copies.
+
+Canonical original-archive collectors pass under ASan/UBSan and separate TSan;
+both reject11fixed wrong-state outputs. The four new CTest definitions retain
+all prior444definitions and1046recipes,now448/1056 per profile. Containing CPU,
+IRQ and clock consumers pass;coverage.txt records the precise quality scope.
+No fuzz or physical traffic. Default instrument startup remains unqualified.

@@ -1,0 +1,46 @@
+HCS08 conservative ICG event history
+
+  cmake --build --preset strict --target blofeld-hcs08-icg-history-test blofeld-hcs08-known-interrupts-test blofeld-original-hcs08-icg-history-test
+  ctest --preset strict -j1 -R '^(hcs08_icg_history|hcs08_known_interrupts|original_hcs08_icg_history)$' --output-on-failure
+
+Hcs08IcgHistory retains the finite set of possible fault-latch/read-arm states.
+An unobserved interval permits no event or any combination of LOL/LOC events
+and invalidates prior CLKST/REFST/LOCK/ERCS/DCOS observations. It establishes
+neither an oscillator rate nor a detector result. At most eight histories
+(two source bits, one acknowledgement bit) are retained without callbacks.
+
+read_known returns only bits shared by every possible actual status read;
+all real read/ack-arm effects remain in the corresponding histories. Strict
+reads refuse before effects if any bit is unknown. A new possible interrupt
+invalidates the old read/clear sequence. Clear writes can establish definite
+clear latches only when every possible actual sequence warrants it.
+
+Effective IRQ/reset selection must agree across all histories. CPU masking
+suppresses only IRQ action, never a possible reset. Unknown selection fails
+with operation/address/PC/CCR/context. Changed routing with a possibly pending
+fault refuses transactionally. A board must resolve/coordinately service
+interrupts or reset before further execution; this is not a clock/reset owner.
+
+Tests use a separate literal finite-state oracle for all8^5 operation sequences
+under four reset-route settings:131072 sequences per sanitizer profile. Cases
+cover unknown bits, read/clear/new events, strict reads, failed route changes,
+CPU masking, reset priority and copied-state invalidation. No fuzz execution.
+
+Original-prefix consumer is an untimed diagnostic using unmodified pinned
+seven-page Keyboard code and real reset/CPU/GPIO/FLASH/ADC/TPM owners. It must
+not fabricate elapsed timer/COP/ADC periods, a conversion result or live clock
+status. Automatic oscillator/detector/synchronization, normal reset-to-instrument,
+physical part/mask/calibration and original DSP/MIDI/audio remain unqualified.
+
+Hcs08KnownInterrupts optionally supplies actual Hcs08State to an uncertain
+source owner. The legacy Bus query still receives I cleared; native CPU
+arbitration remains authoritative. Unknown I never excludes a possible source.
+CLI next-instruction masking and fresh copied continuations are retained;
+a separate board reset guard must still run during that masking guarantee.
+
+Canonical collectors and affected native IRQ/clock consumers pass under
+ASan/UBSan and separate TSan; strict build, clang-tidy and format pass.
+Actual original normal power-on entry retires6197 instructions, preserving
+unknown ICGS1/2 through native ADC setup. First live TPM read atE1CA refuses
+before retirement: clock history/prescaler phase unqualified. This is a scoped
+untimed diagnostic; default reset-to-instrument boot remains unqualified.

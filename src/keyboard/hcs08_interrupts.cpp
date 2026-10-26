@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_known_interrupts.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -22,9 +23,12 @@ constexpr unsigned mask = 8, first_vector = 0xffc0, last_vector = 0xfffa;
 std::optional<std::uint16_t>
 pending_interrupt(const Bus &bus, const Hcs08State &state, const Hcs08IrqDelay delay) {
   if (delay == Hcs08IrqDelay::next_instruction) { return {}; }
-  // Ask for local pending sources without substituting an unknown global I bit.
-  // CPU masking is decided here; querying a source does not acknowledge it.
-  const auto request = bus.interrupt_request(static_cast<std::uint8_t>(state.ccr & ~mask));
+  // Legacy owners expose local sources without a substituted global I bit.
+  // An owner of uncertain history needs the actual mask and its knowledge.
+  const auto *const known = dynamic_cast<const Hcs08KnownInterrupts *>(&bus);
+  const auto request = known != nullptr
+                           ? known->interrupt_request(state)
+                           : bus.interrupt_request(static_cast<std::uint8_t>(state.ccr & ~mask));
   if (!request) { return {}; }
   if (request->kind != InterruptKind::maskable) {
     fail(state, request->vector, "unsupported HCS08 interrupt kind");

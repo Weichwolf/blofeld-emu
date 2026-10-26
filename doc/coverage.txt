@@ -2508,3 +2508,25 @@ HCS08 byte knowledge and ICG observations:
 - Original reset still stops at ICGS1. Live clocks/status detectors,board binding,
   normal Keyboard boot and physical controller equivalence remain open.
   See hcs08-{known-load,icg-events,icg-clocks,icg-status}.txt.
+
+Conservative HCS08 history and coupled reference startup:
+- Finite fault/read-arm histories retain only common known ICG bits and discard
+  stale clock observations. Actual CPU mask knowledge excludes uncertain IRQs
+  only when I is known set;board resets stay independent of CLI protection.
+- Unmodified normal POR in the untimed diagnostic reaches6197/E1CA with unknown
+  ICGS1/2. The coupled reference without ADC input stops22690/6193/E1BC;with ADC
+  supplied but missing phase,it stops22702/6196/E1C5 before another CPU period.
+- Explicit diagnostic ADC12MHz/3.3V/channel0=0 and phases0/127 reach actual idle
+  FSTATFF/EA88 after4022751/4022625 periods,1149066/1149030 instructions and
+  285714/285705 real COP services. Firmware/FLASH bytes remain exact. These
+  reference inputs do not establish physical ICG clocks,voltage,phase or timing.
+- Canonical registration retains444definitions/1046recipes,now448/1056 per
+  profile. Full strict build,clang-tidy and global format pass. Fourteen affected
+  native CTest groups pass per sanitizer;dependency instrumentation/source guard
+  pass in both. Strict global ELF hardening and the14built TSan ELFs pass.
+  The global TSan ELF gate remains unqualified:other declared executables are
+  not built by this scoped integration. Its missing-executable failure is kept.
+  Bounded fresh joint copies retain partial status-load/COP/ADC/TPM history.
+- Native clock generation/synchronization,default reset-to-instrument,native DSP,
+  complete MIDI/audio/storage/update/recovery and physical comparison stay open.
+  See hcs08-icg-history.txt and hcs08-clock-prefix.txt.

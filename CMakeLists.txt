@@ -93,6 +93,9 @@ target_link_libraries(blofeld_hcs08_icg_clocks PUBLIC blofeld_firmware)
 add_library(blofeld_hcs08_icg_status src/keyboard/hcs08_icg_status.cpp)
 target_include_directories(blofeld_hcs08_icg_status PUBLIC src)
 target_link_libraries(blofeld_hcs08_icg_status PUBLIC blofeld_hcs08_icg)
+add_library(blofeld_hcs08_icg_history src/keyboard/hcs08_icg_history.cpp)
+target_include_directories(blofeld_hcs08_icg_history PUBLIC src)
+target_link_libraries(blofeld_hcs08_icg_history PUBLIC blofeld_hcs08_icg_status)
 add_library(blofeld_hcs08_tpm src/keyboard/hcs08_tpm.cpp)
 target_include_directories(blofeld_hcs08_tpm PUBLIC src)
 target_link_libraries(blofeld_hcs08_tpm PUBLIC blofeld_firmware)
@@ -770,6 +773,43 @@ if(BUILD_TESTING)
   add_executable(blofeld-hcs08-icg-status-test test/hcs08_icg_status_test.cpp)
   target_link_libraries(blofeld-hcs08-icg-status-test PRIVATE blofeld_hcs08_icg_status)
   add_test(NAME hcs08_icg_status COMMAND blofeld-hcs08-icg-status-test)
+  add_executable(blofeld-hcs08-icg-history-test test/hcs08_icg_history_test.cpp)
+  target_link_libraries(blofeld-hcs08-icg-history-test PRIVATE blofeld_hcs08_icg_history)
+  add_test(NAME hcs08_icg_history COMMAND blofeld-hcs08-icg-history-test)
+  add_executable(blofeld-hcs08-known-interrupts-test test/hcs08_known_interrupts_test.cpp)
+  target_link_libraries(blofeld-hcs08-known-interrupts-test PRIVATE
+    blofeld_hcs08 blofeld_hcs08_icg_history)
+  target_compile_definitions(blofeld-hcs08-known-interrupts-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_known_interrupts COMMAND blofeld-hcs08-known-interrupts-test)
+  add_executable(blofeld-original-hcs08-icg-history-test test/original_history_startup_test.cpp
+    test/history_startup_memory.cpp test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-icg-history-test PRIVATE
+    blofeld_hcs08 blofeld_hcs08_icg_history blofeld_hcs08_adc blofeld_hcs08_gpio
+    blofeld_hcs08_flash blofeld_hcs08_spi blofeld_hcs08_tpm)
+  target_compile_definitions(blofeld-original-hcs08-icg-history-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_icg_history COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_icg_history.py"
+    $<TARGET_FILE:blofeld-original-hcs08-icg-history-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-icg-history.trace")
+  set_tests_properties(original_hcs08_icg_history PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_executable(blofeld-original-hcs08-clock-prefix-test test/original_clock_prefix_test.cpp
+    test/clock_prefix_memory.cpp test/history_startup_memory.cpp test/hcs08_clock_startup_fixture.cpp)
+  target_link_libraries(blofeld-original-hcs08-clock-prefix-test PRIVATE
+    blofeld_hcs08_run_clock blofeld_hcs08_cop blofeld_hcs08_icg_history
+    blofeld_hcs08_adc blofeld_hcs08_gpio blofeld_hcs08_flash blofeld_hcs08_spi blofeld_hcs08_tpm)
+  target_compile_definitions(blofeld-original-hcs08-clock-prefix-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME original_hcs08_clock_prefix COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_hcs08_clock_prefix.py"
+    $<TARGET_FILE:blofeld-original-hcs08-clock-prefix-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/BlofeldKBC14.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-clock-prefix.trace")
+  set_tests_properties(original_hcs08_clock_prefix PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 960)
   add_executable(blofeld-hcs08-known-load-test test/hcs08_known_load_test.cpp)
   target_link_libraries(blofeld-hcs08-known-load-test PRIVATE blofeld_hcs08 blofeld_hcs08_cop)
   target_compile_definitions(blofeld-hcs08-known-load-test PRIVATE
@@ -2726,6 +2766,8 @@ add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
     blofeld-hcs08-icg-clocks-test blofeld-hcs08-icg-status-test
+    blofeld-hcs08-icg-history-test blofeld-hcs08-known-interrupts-test
+    blofeld-original-hcs08-icg-history-test blofeld-original-hcs08-clock-prefix-test
     blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
     blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test
     blofeld-hcs08-rmw-cycle-test blofeld-original-hcs08-modify-test
