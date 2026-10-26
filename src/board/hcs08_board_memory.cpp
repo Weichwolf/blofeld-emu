@@ -15,6 +15,7 @@
 #include "keyboard/hcs08_tpm.hpp"
 
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <optional>
 #include <string>
@@ -24,9 +25,22 @@ namespace blofeld {
 namespace {
 constexpr unsigned address_space = 65536, normal_vector = 0xfffe;
 constexpr unsigned power_on_status = 0x80, interrupt_mask = 8, spi_vector = 0xffe0;
+constexpr unsigned adc_vector = 0xffd0, timer_vector = 0xffee;
 
 bool ram_address(const unsigned address) {
   return address >= Hcs08BoardMemory::ram_first && address < Hcs08BoardMemory::ram_end;
+}
+
+bool pending_source(const std::uint16_t vector,
+                    const Hcs08Tpm &timer,
+                    const Hcs08Spi &spi,
+                    const Hcs08Adc &adc) {
+  switch (vector) {
+    case timer_vector: return timer.interrupt_requested();
+    case spi_vector: return spi.interrupt_requested();
+    case adc_vector: return adc.interrupt_requested();
+    default: return false;
+  }
 }
 } // namespace
 
@@ -250,11 +264,12 @@ std::optional<InterruptRequest> Hcs08BoardMemory::interrupt_request(const Hcs08S
                 " ccr-known=" + hex(state.ccr_known) + " agent=CPU: coordinated service required");
   }
   if (masked) { return {}; }
-  if (adc_.interrupt_requested() || timer_.interrupt_requested()) {
-    fail("IRQ query", hcs08_icg::status1, "ADC/TPM vector priority is unqualified");
-  }
-  if (spi_.interrupt_requested()) {
-    return InterruptRequest{.vector = spi_vector, .kind = InterruptKind::maskable};
+  // GT16A/GT8A Table5-1:TPM1 overflow(priority8),SPI(15),ATD(23).
+  for (const auto vector : {timer_vector, spi_vector, adc_vector}) {
+    if (pending_source(static_cast<std::uint16_t>(vector), timer_, spi_, adc_)) {
+      return InterruptRequest{.vector = static_cast<std::uint16_t>(vector),
+                              .kind = InterruptKind::maskable};
+    }
   }
   return {};
 } catch (const Fault &error) {
@@ -266,18 +281,19 @@ std::optional<InterruptRequest> Hcs08BoardMemory::interrupt_request(const Hcs08S
 
 void Hcs08BoardMemory::begin_interrupt(const InterruptRequest request, const bool reuse_stack) {
   data_access("IRQ begin", request.vector);
-  if (reuse_stack || request.kind != InterruptKind::maskable || request.vector != spi_vector ||
-      !spi_.interrupt_requested()) {
+  if (reuse_stack || request.kind != InterruptKind::maskable ||
+      !pending_source(request.vector, timer_, spi_, adc_)) {
     fail("IRQ begin", request.vector, "unsupported source, frame reuse or vector");
   }
 }
 
 void Hcs08BoardMemory::acknowledge_interrupt(const std::uint16_t vector) {
   data_access("IRQ acknowledge", vector);
-  if (vector != spi_vector || !spi_.interrupt_requested()) {
+  if (!pending_source(vector, timer_, spi_, adc_)) {
     fail("IRQ acknowledge", vector, "source is absent or unqualified");
   }
-  // Native CPU acceptance does not clear the peripheral's SPRF/SPTEF flags.
+  // Native vector acceptance does not clear TOF,SPRF/SPTEF or COCO.
+  // Only the corresponding real peripheral read/write sequence acknowledges it.
 }
 
 bool Hcs08BoardMemory::faulted() const {

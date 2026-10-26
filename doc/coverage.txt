@@ -2650,6 +2650,19 @@ Production HCS08 foreground/IRQ/SPI composition (hcs08-serial-foreground.txt):
   SPIedges=0;original SPI consumption,normal boot/MIDI/audio,all-phase update/
   recovery/power-loss,realtime and physical equivalence remain open.
 
+
+Production candidate HCS08 ADC/TPM1/SPI IRQ sources (hcs08-board-irqs.txt):
+- Actual enabled pending flags select documented FFEE>FFE0>FFD0 priority.
+  Native vector/frame acceptance preserves TOF/COCO/SPI flags; real peripheral
+  acknowledgement remains necessary. Unknown ICG/reset histories stay strict.
+- Own cold-reset code configures peripherals, waits for the first timer wrap
+  and performs three native IRQ/ISR/RTI sequences in both CPU/SPI orders.
+  Literal65578+33+52=65663periods,ADC512,TPM23 and72destroyed-owner fresh
+  suffixes/profile are scoped references, not measured physical timing.
+  All eight flag/enable combinations, masks, acknowledgements and resets are
+  covered. Original firmware IRQ/scanner,full instrument,MIDI/audio,persistence,
+  all-phase update/recovery and physical equivalence remain open.
+
 Automatic native peripheral-to-P memory transfers:
 - Actual captured one-word MOVEP uses native AGU/port/P effects and five extra
   E1 hold periods. Independent unchanged processor-model windows establish six

@@ -318,6 +318,16 @@ if(BUILD_TESTING)
     BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
   add_test(NAME hcs08_board COMMAND blofeld-hcs08-board-test)
   set_tests_properties(hcs08_board PROPERTIES TIMEOUT 90)
+  add_executable(blofeld-hcs08-board-irq-test test/hcs08_board_irq_test.cpp)
+  target_link_libraries(blofeld-hcs08-board-irq-test PRIVATE blofeld_hcs08_board_memory)
+  add_test(NAME hcs08_board_irq COMMAND blofeld-hcs08-board-irq-test)
+  set_tests_properties(hcs08_board_irq PROPERTIES TIMEOUT 90)
+  add_executable(blofeld-hcs08-board-irq-native-test test/hcs08_board_irq_native_test.cpp)
+  target_link_libraries(blofeld-hcs08-board-irq-native-test PRIVATE blofeld_hcs08_board_serial)
+  target_compile_definitions(blofeld-hcs08-board-irq-native-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_board_irq_native COMMAND blofeld-hcs08-board-irq-native-test)
+  set_tests_properties(hcs08_board_irq_native PROPERTIES TIMEOUT 180)
   add_executable(blofeld-hcs08-serial-foreground-test test/hcs08_serial_foreground_test.cpp)
   target_link_libraries(blofeld-hcs08-serial-foreground-test PRIVATE blofeld_hcs08_board_serial)
   target_compile_definitions(blofeld-hcs08-serial-foreground-test PRIVATE
@@ -2967,6 +2977,7 @@ add_custom_target(quality
     blofeld-original-gpio-pair-checkpoint-test blofeld-original-gpio-sequence-test blofeld-original-gpio-parameter-test blofeld-original-gpio-sound-test
     blofeld-original-gpio-notification-test blofeld-original-gpio-usb-notification-test blofeld-original-gpio-sysex-test blofeld-original-gpio-global-wait-test
     blofeld-hcs08-serial-foreground-test blofeld-original-hcs08-serial-foreground-test
+    blofeld-hcs08-board-irq-test blofeld-hcs08-board-irq-native-test
     blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test
     blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test blofeld-hcs08-prefetch-scanner-test blofeld-hcs08-prefetch-irq-test blofeld-hcs08-prefetch-jump-test

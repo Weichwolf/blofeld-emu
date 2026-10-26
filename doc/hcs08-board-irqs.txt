@@ -1,0 +1,29 @@
+Production candidate ADC/TPM1/SPI interrupt sources
+
+  cmake --build --preset strict --target blofeld-hcs08-board-irq-test \
+    blofeld-hcs08-board-irq-native-test
+  ctest --preset strict -j1 -R '^hcs08_board_irq(_native)?$' --output-on-failure
+
+GT16A/GT8A Rev1 Table5-1,p68 specifies TPM1 overflow FFEE(priority8),SPI
+FFE0(15),ATD FFD0(23),in descending priority. The existing candidate memory
+owner now selects actual enabled pending events. Known CPU I excludes them;
+unknown I never creates a known mask. Native frame/vector acceptance leaves
+peripheral flags intact. TOF needs its actual read/write-zero sequence;ADC
+result reads clear COCO;SPI retains its existing status/data/enable semantics.
+Unknown ICG history/reset,unimplemented vectors/stack reuse and idle FSTAT
+remain strict. No clock event,IRQ request,handler address or data is injected.
+
+Directed source tests cover all eight actual flag/enable combinations,read/query
+purity,copies,acknowledgements,disabled/absent sources and logical warm/cold reset.
+The own native consumer starts at genuine cold reset with A/X unknown. Its code
+sets HX/SP,COP,ADC,SPI and TPM,then polls the real first65536-edge timer wrap.
+After CLI's protected NOP,actual IRQ/stack/vector/ISR/RTI sequences service
+TPM1,SPI,ADC. Independent literal vector periods,costs,register/CCR knowledge,
+TPM count23 and ADC512 match in both CPU/SPI orders.72 destroyed-owner fresh
+suffixes per sanitizer profile retain all CPU/peripheral/RAM/NVM/clock owners.
+
+ADC12MHz/3.3V/channel0=1.65V,timer phase0,device-first periods and immediate
+RTI admission are explicit existing references,not physical measurements.
+Own known NVM belongs only to this diagnostic image. Original reset-to-scanner,
+exact part/mask/nets/clocks,physical IRQ phases,normal MIDI/audio,persistence,
+full update/recovery/power-loss and hardware equivalence remain open.
