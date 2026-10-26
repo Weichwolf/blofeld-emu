@@ -6,7 +6,9 @@ Candidate HCS08 board memory
 Hcs08BoardMemory owns candidate GT8A SRAM,FLASH and existing GPIO,ICG/history,
 SPI,ADC,TPM and COP/SOPT components independently of CPU and host transports.
 It does not inherit test RAM or install code,pins,factory calibration or clocks.
-The explicit untimed contract is not a normal timed board implementation.
+The explicit untimed and reference-bus contracts do not establish a normal
+hardware-timed instrument. Reference mode consumes supplied COP/TPM/ADC periods;
+Hcs08Board binds actual CPU/BDC/clock ownership (hcs08-board-clock.txt).
 
 All1024 SRAM bytes start unknown. Partial native loads/stores preserve masks;
 ordinary reads and actual fetches reject unknown data. Decoder lookahead alone
@@ -22,8 +24,9 @@ interrupted NVM contents. SRS sources are explicit;an unknown cause stays unknow
 Peripheral reset is separate from the CPU's FFFE/FFFF vector transaction.
 Copies preserve device/memory state and drop external GPIO callbacks.
 
-No polls advance a device. Active timer,ADC,SPI and FLASH status reads refuse
-without their clock/input/completion owners. Uncertain ICG IRQ/reset histories
+No polls advance a device. Untimed active timer/ADC reads refuse;reference
+mode requires actual supplied periods and observations. SPI/FLASH status reads
+remain strict while their clock/input/completion owners are unqualified. Uncertain ICG IRQ/reset histories
 remain strict;known CPU I masks only possible interrupts. Idle FSTATFF remains
 unsupported. Original code never becomes a synthesized successful loader.
 
@@ -33,7 +36,10 @@ stops atE1A5/6184. With declared calibration80,the original ICG/ADC setup reache
 E1CA/6197 and fails at the first live TPM read. Factory data are supplied by the
 test image,never patched by this memory owner. FLASH bytes remain unchanged.
 
-CPU/BDC execution,reset-edge recognition,physical clocks/bus ordering,pin mux,
+BDC byte access shares RAM/FLASH,with actual SEC gating and CPU privilege
+restoration. Other peripheral/debug interactions remain unsupported.
+
+CPU/BDC execution timing,reset-edge recognition,physical clocks/bus ordering,pin mux,
 missing ROM/NVM,normal reset-to-instrument,MIDI/audio and hardware equivalence
 remain separate unqualified requirements. Canonical CMake collectors and both
 new native groups pass under ASan/UBSan and separate TSan;the strict all-target

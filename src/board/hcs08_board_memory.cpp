@@ -11,6 +11,7 @@
 #include "keyboard/hcs08_icg.hpp"
 #include "keyboard/hcs08_icg_events.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
+#include "keyboard/hcs08_spi.hpp"
 #include "keyboard/hcs08_tpm.hpp"
 
 #include <cstdint>
@@ -31,9 +32,10 @@ bool ram_address(const unsigned address) {
 
 Hcs08BoardMemory::Hcs08BoardMemory(const Hcs08FlashImage &image,
                                    const Hcs08BoardMemoryContract contract)
-    : flash_(image, Hcs08FlashContract::candidate_gt8a) {
-  if (contract != Hcs08BoardMemoryContract::candidate_gt8a_untimed) {
-    fail("configure", ram_first, "requires explicit candidate GT8A untimed memory contract");
+    : flash_(image, Hcs08FlashContract::candidate_gt8a), contract_(contract) {
+  if (contract != Hcs08BoardMemoryContract::candidate_gt8a_untimed &&
+      contract != Hcs08BoardMemoryContract::candidate_gt8a_reference_bus) {
+    fail("configure", ram_first, "requires explicit candidate GT8A memory/clock contract");
   }
   reset_peripherals(Hcs08IcgReset::power_on, power_on_status);
 }
@@ -56,6 +58,7 @@ void Hcs08BoardMemory::reset_peripherals(const Hcs08IcgReset cause,
   ++generation_;
   ++code_generation_;
   flash_ = next_flash;
+  flash_.context(context_);
   cop_ = next_cop;
   gpio_.reset();
   icg_.reset(cause);
@@ -64,6 +67,7 @@ void Hcs08BoardMemory::reset_peripherals(const Hcs08IcgReset cause,
   adc_.reset();
   timer_.reset();
   if (cause == Hcs08IcgReset::power_on) { ram_.fill({.known = 0}); }
+  periods_ = {};
   healthy_ = true;
 }
 
@@ -196,6 +200,16 @@ void Hcs08BoardMemory::note_code_byte(const std::uint16_t address) const {
 void Hcs08BoardMemory::begin_instruction(const ExecutionContext context) {
   data_access("begin instruction", context.pc);
   healthy_ = false;
+  set_context(context);
+  history_.unobserved_interval();
+  if (history_.action(true) == Hcs08IcgFaultAction::reset || cop_.state().reset_requested) {
+    fail(
+        "begin instruction", context.pc, "pending reset requires coordinated CPU/peripheral reset");
+  }
+  healthy_ = true;
+}
+
+void Hcs08BoardMemory::set_context(const ExecutionContext context) {
   context_ = context;
   flash_.context(context);
   icg_.context(context);
@@ -204,12 +218,6 @@ void Hcs08BoardMemory::begin_instruction(const ExecutionContext context) {
   adc_.context(context);
   timer_.context(context);
   cop_.context(context);
-  history_.unobserved_interval();
-  if (history_.action(true) == Hcs08IcgFaultAction::reset || cop_.state().reset_requested) {
-    fail(
-        "begin instruction", context.pc, "pending reset requires coordinated CPU/peripheral reset");
-  }
-  healthy_ = true;
 }
 
 void Hcs08BoardMemory::begin_reset(const ExecutionContext context) {
@@ -292,6 +300,14 @@ Hcs08TpmState Hcs08BoardMemory::timer_state() const {
 
 Hcs08CopState Hcs08BoardMemory::cop_state() const {
   return cop_.state();
+}
+
+Hcs08SpiState Hcs08BoardMemory::spi_state() const {
+  return spi_.state();
+}
+
+Hcs08FlashState Hcs08BoardMemory::flash_state() const {
+  return flash_.state();
 }
 
 [[noreturn]] void Hcs08BoardMemory::fail(const std::string &operation,

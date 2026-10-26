@@ -12,6 +12,7 @@
 #include "keyboard/hcs08_tpm.hpp"
 
 #include <cstdint>
+#include <limits>
 
 namespace blofeld {
 namespace {
@@ -42,7 +43,8 @@ std::uint8_t Hcs08BoardMemory::read_peripheral(const std::uint16_t address) {
   if (icg_register(address)) { return icg_.read(address); }
   if (Hcs08Gpio::contains(address)) { return gpio_.read(address, context_); }
   if (Hcs08Adc::contains(address)) {
-    if (adc_.state().active && address >= hcs08_adc::status && address <= hcs08_adc::low) {
+    if (contract_ == Hcs08BoardMemoryContract::candidate_gt8a_untimed && adc_.state().active &&
+        address >= hcs08_adc::status && address <= hcs08_adc::low) {
       fail("read", address, "live ADC requires elapsed periods and reference/input observations");
     }
     return adc_.read(address);
@@ -58,7 +60,8 @@ std::uint8_t Hcs08BoardMemory::read_peripheral(const std::uint16_t address) {
   if (cop_register(address)) { return cop_.read(address); }
   if (timer_register(address)) {
     constexpr unsigned bus_clock = 8;
-    if ((timer_.state().control & bus_clock) != 0) {
+    if (contract_ == Hcs08BoardMemoryContract::candidate_gt8a_untimed &&
+        (timer_.state().control & bus_clock) != 0) {
       fail("read", address, "live TPM requires elapsed bus periods and prescaler phase");
     }
     return timer_.read(address);
@@ -80,7 +83,12 @@ void Hcs08BoardMemory::write_peripheral(const ByteWrite access, const std::uint8
     return;
   }
   if (access.address == Hcs08Cop::status) {
+    if (periods_.cop_services == std::numeric_limits<std::uint64_t>::max()) {
+      fail("write", access.address, "COP diagnostic counter exhausted");
+    }
     cop_.write(access); // Every SRS data bit is ignored, including unknown payload bits.
+    ++periods_.cop_services;
+    periods_.service_known = known;
     return;
   }
   if (known != Hcs08KnownByte::all) {

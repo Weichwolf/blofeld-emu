@@ -1,0 +1,46 @@
+Candidate Keyboard reference board
+
+  cmake --build --preset strict --target blofeld-hcs08-board-test blofeld-original-hcs08-board-test
+  ctest --preset strict -j1 -R '^(hcs08_board|original_hcs08_board)$' --output-on-failure
+
+Hcs08Board owns actual Hcs08BoardMemory,Hcs08 CPU,BDC and the existing native
+instruction-retirement clock. Normal POR reads the real FFFE/FFFF vector.
+No PC/routine override,clock calibration,pad sample or NVM completion is supplied.
+Each explicit caller-provided reference period orders COP,TPM,ADC,then CPU.
+Physical reset duration,MMIO tie ordering and instruction bus periods remain
+unqualified;this contract is not a normal hardware-timed instrument runtime.
+
+ADC reference/input and TPM prescaler phase are explicit optional inputs.
+Missing observations fail at their first active device edge,before another CPU
+budget period. SPI promotion/serial clocks,FLASH completion and active-background
+clock gating remain strict. Any device,CPU or transport failure quarantines the
+whole board;further edges and successful snapshots refuse.
+
+Opaque in-process checkpoints copy RAM/NVM,peripherals,CPU,BDC,partial native
+reservations and period counters. Fresh owners must reattach external GPIO
+observations. Own literal programs check2/3/1-cycle LDA/STA/NOP effects and flags,
+three-cycle BRA,8192-period COP expiry before CPU progress and five-cycle BGND
+with native GO continuation.
+
+Actual BDC byte commands use the same RAM/FLASH owner. GT4.5 secure RAM writes
+are ignored and reads return zero;unknown SEC bits refuse. Background protection
+access does not leak privilege to CPU stores. Native frame service requires an
+explicit reference grant at a complete instruction boundary. BKGD pin encoding,
+bit/byte time and physical bus arbitration are not supplied by this interface.
+Other peripheral/debug interactions remain unsupported.
+
+Unchanged original Keyboard reset:missing ADC reference or input stops at
+22690/6193/E1BC;missing TPM phase at22702/6196/E1C5. Declared ADC12MHz/3.3V/0V
+and phases0/127 reproduce4022751/4022625 offered periods,1149066/1149030 native
+retirements and285714/285705 actual COP stores. Both stop at idle FSTATFF/EA88
+with all FLASH bytes intact. Two fresh bounded original suffixes retain the
+partial ICG-load budget and actual ADC clocks. These inputs establish no Blofeld
+clock,voltage,phase or target identity;automatic ICG status remains unknown.
+
+Canonical CMake preserves458definitions/1070recipes,now462/1078 per profile.
+The strict all-target build,global format and24project AST contexts pass.
+Six affected native programs per sanitizer pass with no skips;dependency and
+source guards,strict global ELF and the six built TSan ELF checks pass.
+The complete TSan ELF inventory remains unqualified.
+Full MCU/DSP/Keyboard wiring,ROM/MIDI/audio/storage/update/recovery,pin mux,
+physical clock/reset behavior and instrument/hardware equivalence remain open.

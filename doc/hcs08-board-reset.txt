@@ -1,0 +1,28 @@
+HCS08 coordinated logical reset checkpoints
+
+The reference board creates a fresh owner from actual memory and an explicit
+architectural cause,normal/BKGD-low entry and optional SRS observations. This is
+not RESET pin timing or a default reset detector. The source remains unchanged.
+Warm entry retains healthy native A/X knowledge and SRAM;power-on clears their
+known masks. H/SP/CCR,BDC frames/replies/reservations,device latches and period
+budgets reset together. Copied GPIO callbacks detach;clock/phase references must
+be supplied again. Warm recovery of a faulted native CPU remains unsupported.
+
+Interrupted launched/active FLASH uses conservative retention by default:unknown
+NVM includes reset vectors and SEC bits. Normal entry refuses unknown vectors;
+BKGD-low entry has no known PC. Native status replies grant neither GO nor RAM
+write success when launch/security knowledge is absent. Command-range retention
+remains an explicit component hypothesis,not hardware qualification.
+
+Literal own vectors cover14 instruction reset cuts,COP expiry/restart,five
+partial/complete unserviced BDC frames,pending replies,detached pads and five
+NVM program-launch cuts per profile. Original SHA-pinned seven-page input
+covers eight warm/cold cuts and missing-ADC-reference recovery. Each bounded
+suffix reaches22700periods/6195retired/PC E1C2,ADC remaining165,with unchanged
+NVM. Declared ADC12MHz/3.3V/channel0=0 and TPM phase0 are reference inputs.
+
+Canonical qualification covers six native programs per sanitizer,including
+the original memory/clock consumers,with dependency/source/hardening gates.
+Registration462/1078 preserves458definitions/1070recipes per profile.
+Normal boot,physical reset/ICG/MMIO timing,complete NVM update/recovery and
+real-device equivalence remain unqualified.

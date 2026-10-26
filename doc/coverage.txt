@@ -2552,3 +2552,24 @@ Candidate production HCS08 memory owner:
   build,format,clang-tidy,instrumentation/source guard and applicable ELF gates
   pass;the scoped TSan ELF check covers the two new built programs. Whole TSan
   inventory and timed reset-to-instrument remain unqualified. See hcs08-board-memory.txt.
+
+
+Production Keyboard reference-period ownership and coordinated resets:
+- Real CPU,memory,BDC and native instruction-budget owners share explicit
+  COP/TPM/ADC periods before CPU retirement. Inputs/status are not synthesized.
+  Failed stages quarantine progress;fresh snapshots detach external GPIO.
+- Native BDC RAM/FLASH access retains SEC gating and complete-instruction
+  grants. Warm/cold logical resets preserve actual committed state,drop
+  volatile ownership and conservatively invalidate interrupted NVM certainty.
+  Failed native CPU warm retention and physical pin/clock arbitration stay strict.
+- Actual canonical qualification:strict all-target build/global format and
+  24project AST contexts;9ASan/UBSan and8separateTSan CTest groups,no skips,
+  including six affected native programs/profile. Instrumentation/source
+  guards,strict global ELF and six built TSan ELF checks pass. Whole TSan
+  ELF inventory stays unqualified. Six collector CLI negative controls pass.
+- Both declared original timer phases retain strict EA88 endpoints;missing
+  ADC reference/input or TPM phase refuses before CPU progress. Eight original
+  reset cuts reach22700/6195/E1C2,ADC165remaining;NVM stays exact. Definition/
+  recipe counts462/1078 preserve all458/1070 prior entries per profile.
+- Physical timing,full MCU/DSP/Keyboard wiring and normal instrument/MIDI/
+  audio/storage/update/recovery remain open. See hcs08-board-{clock,reset}.txt.
