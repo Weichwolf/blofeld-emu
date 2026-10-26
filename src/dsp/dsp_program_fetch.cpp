@@ -249,6 +249,64 @@ std::size_t DspProgramFetch::branch_pair(const DspBranchDecision &decision,
   return *found;
 }
 
+std::size_t DspProgramFetch::position(const DspFetchedWord captured) const {
+  for (std::size_t index = 0; index < state_.used; ++index) {
+    if (state_.words.at(index) == captured.word && occurrences_.at(index) == captured.occurrence &&
+        captured.occurrence != 0) {
+      return index;
+    }
+  }
+  throw Fault("Unavailable captured F2 context read P:" + hex(captured.word.address, 6) +
+              " pc=" + hex(state_.consume_address, 6) + " omr=" + hex(state_.omr, 6));
+}
+
+std::optional<std::uint32_t> DspProgramFetch::loop_last(const DspFetchedWord captured) const {
+  const auto index = position(captured);
+  if (boundaries_.at(index)) { return captured.word.address; }
+  const auto &prediction = predictions_.at(index);
+  return prediction ? prediction->loop_last() : std::nullopt;
+}
+
+std::uint32_t DspProgramFetch::continuation_after(const DspFetchedInstruction &captured) const {
+  const auto words = captured.extension ? 2U : 1U;
+  if (instruction(captured.opcode, words) != captured) {
+    throw Fault("Continuation differs from actual F2 instruction read P:" +
+                hex(captured.opcode.word.address, 6) + " pc=" + hex(state_.consume_address, 6) +
+                " omr=" + hex(state_.omr, 6));
+  }
+  const auto last = captured.extension.value_or(captured.opcode);
+  const auto &boundary = boundaries_.at(position(last));
+  return boundary ? boundary->expected.pc : ((last.word.address + 1) & word_mask);
+}
+
+void DspProgramFetch::hold_after(const DspFetchedInstruction &captured) {
+  if (!state_.active || branch_ || opening_ || !captured.extension ||
+      instruction(captured.opcode, 2) != captured) {
+    throw Fault(
+        "Unavailable actual Decode fetch barrier read P:" + hex(captured.opcode.word.address, 6) +
+        " pc=" + hex(state_.consume_address, 6) + " omr=" + hex(state_.omr, 6));
+  }
+  const auto keep = position(captured.opcode) + 2;
+  const auto next = (captured.extension->word.address + 1) & word_mask;
+  if (loop_) {
+    const auto &prediction = predictions_.at(keep - 1);
+    if (!prediction || boundaries_.at(keep - 2) || boundaries_.at(keep - 1)) {
+      throw Fault("Unqualified Decode barrier at DSP loop end read P:" +
+                  hex(captured.opcode.word.address, 6));
+    }
+    loop_->discard_after(*prediction, next);
+  }
+  for (std::size_t index = keep; index < state_.used; ++index) {
+    state_.words.at(index) = {};
+    occurrences_.at(index) = 0;
+    predictions_.at(index).reset();
+    boundaries_.at(index).reset();
+  }
+  state_.used = keep;
+  state_.pending_address.reset();
+  state_.next_address = next;
+}
+
 void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
   if (!state_.active || branch_ || opening_ || decision.omr != state_.omr ||
@@ -360,4 +418,29 @@ bool DspProgramFetch::accepts_loop_control(const DspLoopArchitecture native_resu
   expected.pc = native_result.pc;
   return expected == native_result;
 }
+
+bool DspProgramFetch::owns_loop_result(const DspLoopArchitecture native_result,
+                                       const bool redirected) const {
+  if (opening_) {
+    const auto &opening = *opening_;
+    const auto body = (opening.word.address + 2) & word_mask;
+    if (native_result != opening.after || redirected != (opening.after.pc != body) ||
+        state_.consume_address != native_result.pc) {
+      throw Fault("Native held DO differs from its consumed F2 opening pc=" +
+                  hex(opening.word.address, 6) + " omr=" + hex(native_result.omr, 6));
+    }
+    return true;
+  }
+  if (!consumed_end_) { return false; }
+  const auto &end = *consumed_end_;
+  if (!loop_ || consumed_.back().word != end.last || consumed_.back().occurrence == 0 ||
+      native_result != end.expected || redirected != end.backedge ||
+      state_.consume_address != native_result.pc) {
+    throw Fault("Native held loop end differs from its consumed F2 receipt read P:" +
+                hex(end.last.address, 6) + " pc=" + hex(native_result.pc, 6) +
+                " omr=" + hex(native_result.omr, 6));
+  }
+  return true;
+}
+
 }

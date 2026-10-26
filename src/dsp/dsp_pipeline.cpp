@@ -28,7 +28,7 @@ constexpr auto execution = DspReferenceExecution::staged_register_boundaries;
 
 void check_context(const DspMachine &machine) {
   const auto cpu = machine.cpu().state();
-  constexpr unsigned unsupported_status = 0xba000; // CE, SA, FV, LF, SC.
+  constexpr unsigned unsupported_status = 0xb2000; // CE, SA, FV, SC.
   constexpr unsigned mask_shift = 8;
   constexpr unsigned interrupt_mask = 3;
   if ((cpu.sr & unsupported_status) != 0 ||
@@ -63,9 +63,15 @@ void validate_execute_word(const DspProgramFetchView &fetch, const DspPipelineCy
   }
 }
 
+DspFetchedWord decode_receipt(const std::optional<DspFetchedWord> word) {
+  if (!word) { throw Fault("Accepted Decode lost its actual F2 receipt"); }
+  return *word;
+}
+
 void prepare_decode(DspInstructionPipeline &pipeline,
                     const DspProgramFetchView &fetch,
                     DspPipelineCycle &cycle) {
+  if (pipeline.hold_loop_decode()) { return; }
   pipeline.held_branch_decode =
       pipeline.branch && pipeline.branch_target_ready && pipeline.branch_decode_hold != 0;
   if (pipeline.branch && (!pipeline.branch_target_ready || pipeline.held_branch_decode)) { return; }
@@ -93,6 +99,11 @@ void prepare_decode(DspInstructionPipeline &pipeline,
 
 void DspInstructionPipeline::prepare(const DspMachine &machine) {
   check_context(machine);
+  constexpr unsigned loop_flag = 0x8000;
+  if ((machine.cpu().state().sr & loop_flag) != 0 && !machine.pipeline_loop_control()) {
+    throw Fault("Automatic DSP LF requires its observed native/F2 owner pc=" +
+                hex(machine.cpu().state().pc, 6));
+  }
   const auto fetch = machine.reference_fetch();
   DspPipelineCycle cycle{.ag1 = view.stages[0],
                          .ag2 = view.stages[1],
@@ -136,8 +147,10 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
     cycle.e1_operands = machine.cpu().state();
     if (cycle.execute2) {
       cycle.e1_deferred_accumulators = deferred_alu_accumulators(*cycle.execute2, *cycle.execute1);
+      const DspInstructionDependency inputs{.producer = *cycle.execute2,
+                                            .consumer = *cycle.execute1};
       cycle.memory_source_stall =
-          memory_source_dependency({.producer = *cycle.execute2, .consumer = *cycle.execute1}) != 0;
+          memory_source_dependency(inputs) != 0 || pipeline_loop_source_dependency(inputs);
     }
   }
   if (cycle.execute2) {
@@ -160,9 +173,10 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
   const auto port_read = decode_peripheral_read(view.awaiting_retirement->value);
   if (decode_branch_form(view.awaiting_retirement->value) || (port_read && port_read->bit)) {
     validate_branch(*effect);
-  } else if (effect->redirected ||
-             effect->next_pc !=
-                 ((effect->pc + pipeline_word_count(*view.awaiting_retirement)) & word_mask)) {
+  } else if (!machine.pipeline_loop_result() &&
+             (effect->redirected ||
+              effect->next_pc !=
+                  ((effect->pc + pipeline_word_count(*view.awaiting_retirement)) & word_mask))) {
     throw Fault("Automatic DSP E2 differs from its actual sequential ALU candidate");
   }
   const auto inputs = view.awaiting_inputs;
@@ -178,6 +192,7 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
 
 void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCycleResult &bus) {
   if (bus.dma.core_stall) { return; }
+  capture_loop_f2(bus);
   if (branch && !branch_target_ready && bus.fetch) {
     const auto &fetch = *bus.fetch;
     if (fetch.used == 0 || fetch.words.at(fetch.used - 1).address != branch->next_pc) {
@@ -212,6 +227,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
       execute(machine);
     }
   }
+  capture_loop_target(machine);
   view.cycle.ag2_address = bus.address_update;
   capture_branch(machine);
   capture_address(machine);
@@ -229,8 +245,10 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   view.stages[0] = view.cycle.agu_dependencies != 0 ? std::nullopt : view.cycle.decode;
   if (view.stages[0]) {
     samples[0] = selected.next;
-    view.decode_address = (view.decode_address + view.cycle.decode_words) & word_mask;
+    view.decode_address =
+        machine.pipeline_continuation(decode_receipt(selected.next), view.cycle.decode_words);
     view.cycle.decode_accepted = true;
+    accept_loop_decode(machine);
     if (branch && branch_target_ready) {
       branch.reset();
       branch_decode_hold = 0;
@@ -318,6 +336,9 @@ std::uint64_t DspInstructionPipeline::peripheral_occurrence() const {
 }
 
 void DspInstructionPipeline::finish_cycle() {
+  if (loop_setup && loop_setup->held_decode && loop_setup->decode_hold != 0) {
+    --loop_setup->decode_hold;
+  }
   if (branch_fetch_hold != 0) { --branch_fetch_hold; }
   if (held_branch_decode && branch_decode_hold != 0) { --branch_decode_hold; }
 }

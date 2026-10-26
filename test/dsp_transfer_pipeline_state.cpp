@@ -287,7 +287,7 @@ void unknown_extension_recovery() {
 void unqualified_sources_and_control() {
   for (const auto *text : {"move a,x0",
                            "move sr,x0",
-                           "move r0,x0",
+                           "move n0,x0",
                            "move #>7,sr",
                            "move #>7,omr",
                            "move r0,x:(r0)",

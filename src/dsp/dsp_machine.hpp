@@ -149,6 +149,13 @@ private:
   friend struct DspFetchState;
   friend struct DspInstructionPipeline;
   [[nodiscard]] std::optional<DspFetchedWord> pipeline_fetched_word(std::size_t index) const;
+  // Read-only native-owned loop proofs and actual occurrence metadata.
+  [[nodiscard]] bool pipeline_loop_control() const;
+  [[nodiscard]] bool pipeline_loop_result() const;
+  [[nodiscard]] std::optional<std::uint32_t> pipeline_loop_last(DspFetchedWord word) const;
+  [[nodiscard]] std::uint32_t pipeline_continuation(DspFetchedWord word, unsigned words) const;
+  void hold_pipeline_loop(DspFetchedWord word);
+
   [[nodiscard]] DspBranchDecision
   preview_pipeline_peripheral_branch(const DspPeripheralReadTicket &read);
   [[nodiscard]] DspReferenceProgress

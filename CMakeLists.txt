@@ -244,6 +244,7 @@ add_library(blofeld_dsp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
+  src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_loop_source.cpp
   src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
   src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
   src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
@@ -1313,6 +1314,24 @@ if(BUILD_TESTING)
   add_executable(blofeld-loop-port-test test/dsp_loop_port_test.cpp)
   target_link_libraries(blofeld-loop-port-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_loop_port_receipts COMMAND blofeld-loop-port-test)
+  foreach(kind auto_loop auto_loop_source auto_loop_transfer_source auto_loop_source_guard auto_loop_a0 r_data_transfer loop_barrier loader_prefix_operand)
+    string(REPLACE "_" "-" target_kind "${kind}")
+    add_executable(blofeld-${target_kind}-test test/dsp_${kind}_test.cpp)
+    target_link_libraries(blofeld-${target_kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  endforeach()
+  add_test(NAME dsp_automatic_counted_loops COMMAND blofeld-auto-loop-test)
+  add_test(NAME dsp_automatic_loop_sources COMMAND blofeld-auto-loop-source-test)
+  add_test(NAME dsp_automatic_loop_transfer_sources COMMAND blofeld-auto-loop-transfer-source-test)
+  add_test(NAME dsp_automatic_loop_source_guards COMMAND blofeld-auto-loop-source-guard-test)
+  add_test(NAME dsp_automatic_loop_a0 COMMAND blofeld-auto-loop-a0-test)
+  add_test(NAME dsp_r_data_transfers COMMAND blofeld-r-data-transfer-test)
+  add_test(NAME dsp_loop_decode_barrier COMMAND blofeld-loop-barrier-test)
+  add_test(NAME dsp_document_spi_loader_operands COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_loader_prefix_operands.py"
+    $<TARGET_FILE:blofeld-loader-prefix-operand-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-document-loader-operands.trace")
+  set_tests_properties(dsp_document_spi_loader_operands PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-overlap-test test/dsp_overlap_test.cpp test/dsp_overlap_clock.cpp)
   target_link_libraries(blofeld-overlap-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_native_overlap COMMAND blofeld-overlap-test)
@@ -2856,6 +2875,9 @@ add_custom_target(quality
     blofeld-program-latch-test blofeld-prefetch-queue-test blofeld-prefetch-condition-test blofeld-reference-cycle-test
     blofeld-loop-fetch-test blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test
     blofeld-loop-identity-thread-test blofeld-pipeline-occurrence-test blofeld-loop-port-test
+    blofeld-auto-loop-test blofeld-auto-loop-source-test blofeld-auto-loop-transfer-source-test
+    blofeld-auto-loop-source-guard-test blofeld-auto-loop-a0-test blofeld-r-data-transfer-test
+    blofeld-loop-barrier-test blofeld-loader-prefix-operand-test
     blofeld-fetch-run-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test

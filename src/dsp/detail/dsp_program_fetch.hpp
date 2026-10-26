@@ -46,6 +46,13 @@ public:
   [[nodiscard]] std::optional<DspFetchedWord> queued(std::size_t index) const;
   [[nodiscard]] DspFetchedWord select(std::uint32_t address, std::uint64_t identity = 0) const;
   [[nodiscard]] DspFetchedInstruction instruction(DspFetchedWord opcode, unsigned words) const;
+  // Stop speculative fetch after the actual decoded two-word instruction.
+  // This neither opens a native loop nor authorizes architectural effects.
+  void hold_after(const DspFetchedInstruction &captured);
+  [[nodiscard]] bool owns_loop_result(DspLoopArchitecture native_result, bool redirected) const;
+  // Occurrence-bound forecast metadata, never an architectural CPU result.
+  [[nodiscard]] std::optional<std::uint32_t> loop_last(DspFetchedWord captured) const;
+  [[nodiscard]] std::uint32_t continuation_after(const DspFetchedInstruction &captured) const;
   [[nodiscard]] std::optional<DspProgramWord> occurrence(std::uint64_t identity) const;
 
   [[nodiscard]] std::array<DspFetchedWord, 2> consumed_pair() const { return consumed_; }
@@ -67,6 +74,7 @@ private:
   };
 
   [[nodiscard]] std::uint64_t next_occurrence();
+  [[nodiscard]] std::size_t position(DspFetchedWord captured) const;
   [[nodiscard]] std::size_t branch_pair(const DspBranchDecision &decision,
                                         std::uint64_t identity) const;
   void shift_queue();

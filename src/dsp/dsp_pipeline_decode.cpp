@@ -2,6 +2,7 @@
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/dsp_branch_form.hpp"
+#include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_peripheral_read_form.hpp"
@@ -87,6 +88,19 @@ std::uint8_t memory_source_dependency(const DspInstructionDependency instruction
   return dependency(operands(producer, false).written, read);
 }
 
+bool pipeline_counted_loop(const DspProgramWord word) {
+  return automatic_loop_source(word.value).has_value();
+}
+
+bool pipeline_loop_source_dependency(const DspInstructionDependency instructions) {
+  const auto source = automatic_loop_source(instructions.consumer.value);
+  if (source != DspLoopCountSource::a && source != DspLoopCountSource::a0) { return false; }
+  // FM A2.3 and retained NXP windows: an adjacent single-word arithmetic or
+  // transfer writer needs one period. A two-word immediate already separates
+  // Decode by two periods and is no longer the E2 producer at DO E1.
+  return dsp56k::any(operands(instructions.producer, false).written, Mask::A);
+}
+
 DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
                                        const std::uint32_t omr,
                                        const DspFetchPipeline profile) {
@@ -108,11 +122,12 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
     const bool memory = profile == DspFetchPipeline::automatic_memory && form.has_value();
     const bool transfer = profile == DspFetchPipeline::automatic_memory && !memory &&
                           pipeline_transfer_fields(word.value) != DspMoveFields{};
+    const bool loop = profile == DspFetchPipeline::automatic_memory && pipeline_counted_loop(word);
     const bool standalone_move = (memory || transfer || port_read) && second == dsp56k::Invalid;
     const auto words = pipeline_word_count(word);
-    if ((!arithmetic && !standalone_move && !branch) ||
+    if ((!arithmetic && !standalone_move && !branch && !loop) ||
         (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
-        words > ((transfer || branch || (memory && form->peripheral)) ? 2U : 1U)) {
+        words > ((transfer || branch || loop || (memory && form->peripheral)) ? 2U : 1U)) {
       throw Fault("Unqualified native instruction form");
     }
     if (memory || transfer || port_read) { static_cast<void>(decode_move_writeback(word.value)); }

@@ -24,6 +24,7 @@ struct DspPipelineFormat {
 [[nodiscard]] DspPipelineFormat
 decode_pipeline_word(DspProgramWord word, std::uint32_t omr, DspFetchPipeline profile);
 [[nodiscard]] unsigned pipeline_word_count(DspProgramWord word);
+[[nodiscard]] bool pipeline_counted_loop(DspProgramWord word);
 [[nodiscard]] DspMoveFields pipeline_transfer_fields(std::uint32_t opcode);
 [[nodiscard]] std::uint8_t
 pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &preceding,
@@ -39,6 +40,15 @@ struct DspInstructionDependency {
 };
 
 [[nodiscard]] std::uint8_t memory_source_dependency(DspInstructionDependency instructions);
+[[nodiscard]] bool pipeline_loop_source_dependency(DspInstructionDependency instructions);
+
+struct DspPipelineLoopSetup {
+  DspFetchedInstruction captured;
+  std::optional<std::uint32_t> target;
+  unsigned decode_hold = 0;
+  bool target_ready = false;
+  bool held_decode = false;
+};
 
 struct DspInstructionPipeline {
   DspFetchPipeline profile = DspFetchPipeline::automatic_alu;
@@ -54,12 +64,21 @@ struct DspInstructionPipeline {
   unsigned branch_decode_hold = 0;
   bool branch_target_ready = false;
   bool held_branch_decode = false;
+  std::optional<DspPipelineLoopSetup> loop_setup = std::nullopt;
 
   void prepare(const DspMachine &machine);
   void rebind(const DspMachine &machine);
   void capture_address(DspMachine &machine);
 
-  [[nodiscard]] bool hold_fetch() const { return branch_fetch_hold != 0 || held_branch_decode; }
+  [[nodiscard]] bool hold_fetch() const {
+    return branch_fetch_hold != 0 || held_branch_decode ||
+           (loop_setup && (!loop_setup->target || loop_setup->held_decode));
+  }
+
+  [[nodiscard]] bool hold_loop_decode();
+  void accept_loop_decode(DspMachine &machine);
+  void capture_loop_target(DspMachine &machine);
+  void capture_loop_f2(const DspReferenceCycleResult &bus);
 
   [[nodiscard]] std::uint64_t peripheral_occurrence() const;
   void finish_cycle();

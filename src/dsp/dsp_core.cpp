@@ -13,6 +13,7 @@
 #include "dsp/dsp_interrupt_timing.hpp"
 #include "dsp/dsp_interrupts.hpp"
 #include "dsp/dsp_loop_fetch.hpp"
+#include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
 #include "dsp/dsp_native_access.hpp"
@@ -1366,6 +1367,46 @@ DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage 
     throw Fault("Non-standard DSP program-fetch failure at P:" + hex(address, 6) +
                 " pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6));
   }
+}
+
+bool DspCore::pipeline_loop_control() const {
+  if (impl_->active || impl_->faulted || impl_->run.begin) {
+    throw Fault("Native loop control requires a healthy suspension boundary");
+  }
+  const auto &fetch = impl_->native.reference().fetch();
+  return fetch.active() &&
+         fetch.accepts_loop_control(loop_control(impl_->cpu.referenceAttemptState()));
+}
+
+bool DspCore::pipeline_loop_result() const {
+  if (impl_->active || impl_->faulted || impl_->run.begin) {
+    throw Fault("Native loop result requires a healthy suspension boundary");
+  }
+  const auto &result = impl_->results.retirement;
+  return result && impl_->native.reference().fetch().owns_loop_result(loop_control(result->cpu),
+                                                                      result->redirected);
+}
+
+std::optional<std::uint32_t> DspCore::pipeline_loop_last(const DspFetchedWord word) const {
+  static_cast<void>(pipeline_fetched_word(0));
+  return impl_->native.reference().fetch().loop_last(word);
+}
+
+std::uint32_t DspCore::pipeline_continuation(const DspFetchedWord word,
+                                             const unsigned words) const {
+  static_cast<void>(pipeline_fetched_word(0));
+  const auto &fetch = impl_->native.reference().fetch();
+  return fetch.continuation_after(fetch.instruction(word, words));
+}
+
+void DspCore::hold_pipeline_loop(const DspFetchedWord word) {
+  static_cast<void>(pipeline_fetched_word(0));
+  if (!automatic_loop_source(word.word.value)) {
+    throw Fault("Unqualified automatic DO source read P:" + hex(word.word.address, 6) +
+                " pc=" + hex(state().pc, 6) + " omr=" + hex(state().omr, 6));
+  }
+  auto &fetch = impl_->native.reference().fetch();
+  fetch.hold_after(fetch.instruction(word, 2));
 }
 
 void DspCore::validate_reference_fetch(const DspProgramFetchStage stage) const {

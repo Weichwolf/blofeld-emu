@@ -56,9 +56,9 @@ with safe stack positions and strictly contained nesting. Core admission keeps
 SP/SSL/SSH count-source refusals; the native SP/SSL order finding is separate.
 Unsupported modes, relative/memory forms, stack wrapping and unowned loop state
 remain visible failures. Actual unknown program reads retain P address, operation,
-PC and OMR context. The automatic instruction pipeline still refuses DO Decode
-and active LF/FV. Completing exact stage identities, source hazards and setup/
-zero-overhead loop timing is required before automatic clocked loop execution.
+PC and OMR context. Automatic selected counted DO, source interlocks and native
+LF/end ownership now have separate scoped coverage in dsp-automatic-loops.txt.
+Automatic FOREVER, other count forms and broader timelines remain unqualified.
 
   cmake --build --preset strict --target blofeld-loop-fetch-test \
     blofeld-loop-program-fetch-test blofeld-loop-native-fetch-test \
@@ -80,8 +80,8 @@ consumed identities and FIFO values, and retains different captured branch
 extensions through later P writes. A genuine native two-iteration HRX loop
 checks complete independent CPU/frame/FIFO state and two trusted restored
 continuations. The thread test also selects/checks exact instruction receipts
-within each owned copy. These are explicit reference phases; automatic DO
-Decode, setup/source-hazard timing and loop scheduling remain unimplemented.
+within each owned copy. These explicit reference phases remain distinct from
+selected automatic execution and its open timing/whole-device requirements.
 
 The existing early-read boundary test now expects the adjacent missing P
 extension's actual operation/address/PC/OMR diagnostic before unknown port

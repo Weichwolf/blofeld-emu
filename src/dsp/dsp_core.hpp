@@ -150,6 +150,13 @@ private:
   [[nodiscard]] DspProgramFetchView advance_reference_fetch(DspProgramFetchStage stage);
   [[nodiscard]] DspProgramFetchView reference_fetch() const;
   [[nodiscard]] std::optional<DspFetchedWord> pipeline_fetched_word(std::size_t index) const;
+  // Read-only native-owned loop proofs and actual occurrence metadata.
+  [[nodiscard]] bool pipeline_loop_control() const;
+  [[nodiscard]] bool pipeline_loop_result() const;
+  [[nodiscard]] std::optional<std::uint32_t> pipeline_loop_last(DspFetchedWord word) const;
+  [[nodiscard]] std::uint32_t pipeline_continuation(DspFetchedWord word, unsigned words) const;
+  void hold_pipeline_loop(DspFetchedWord word);
+
   void validate_reference_ticket(const DspReferenceTicket &ticket) const;
   void validate_reference_admission(const DspReferenceTicket &ticket,
                                     bool retiring_previous = false,

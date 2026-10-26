@@ -62,10 +62,11 @@ DspMoveFields pipeline_transfer_fields(const std::uint32_t opcode) {
     Mask written = Mask::None;
     Mask read = Mask::None;
     dsp56k::getRegisters(written, read, move, opcode);
-    constexpr auto allowed =
-        static_cast<std::uint64_t>(Mask::X) | static_cast<std::uint64_t>(Mask::Y);
+    constexpr auto allowed = static_cast<std::uint64_t>(Mask::X) |
+                             static_cast<std::uint64_t>(Mask::Y) |
+                             static_cast<std::uint64_t>(Mask::R);
     if ((static_cast<std::uint64_t>(read) & ~allowed) != 0) {
-      throw Fault("Unqualified automatic transfer source; only X/Y data registers are admitted");
+      throw Fault("Unqualified automatic transfer source; only X/Y/R data sources are admitted");
     }
   }
   return decode_move_writeback(opcode, DspMoveDecode::nonmemory);

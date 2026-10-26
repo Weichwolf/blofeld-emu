@@ -53,6 +53,13 @@ class DspLoopFetch {
 
 public:
   class Prediction {
+  public:
+    [[nodiscard]] std::optional<std::uint32_t> loop_last() const {
+      if (depth_ == 0) { return std::nullopt; }
+      return frames_.at(depth_ - 1).last;
+    }
+
+  private:
     friend class DspLoopFetch;
     std::array<Frame, dsp_program_fetch_capacity> frames_{};
     DspLoopArchitecture forecast_;

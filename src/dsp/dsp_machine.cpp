@@ -511,6 +511,28 @@ std::optional<DspFetchedWord> DspMachine::pipeline_fetched_word(const std::size_
   return state_->cpu.pipeline_fetched_word(index);
 }
 
+bool DspMachine::pipeline_loop_control() const {
+  return state_->cpu.pipeline_loop_control();
+}
+
+bool DspMachine::pipeline_loop_result() const {
+  return state_->cpu.pipeline_loop_result();
+}
+
+std::optional<std::uint32_t> DspMachine::pipeline_loop_last(const DspFetchedWord word) const {
+  return state_->cpu.pipeline_loop_last(word);
+}
+
+std::uint32_t DspMachine::pipeline_continuation(const DspFetchedWord word,
+                                                const unsigned words) const {
+  return state_->cpu.pipeline_continuation(word, words);
+}
+
+void DspMachine::hold_pipeline_loop(const DspFetchedWord word) {
+  if (clocked()) { throw Fault("Native DO Decode requires an unclocked reference owner"); }
+  state_->cpu.hold_pipeline_loop(word);
+}
+
 DspProgramFetchView DspMachine::reference_fetch() const {
   return state_->cpu.reference_fetch();
 }
