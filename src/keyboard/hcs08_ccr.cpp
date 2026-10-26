@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_division.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
 
 #include <cstdint>
 
@@ -79,9 +80,25 @@ bool carry_or_zero_known(const Hcs08State &before) {
 }
 }
 
+std::uint8_t byte_vnz_after(const Hcs08State &before, const Hcs08KnownByte source) {
+  constexpr unsigned negative = 4;
+  constexpr unsigned source_sign = 0x80;
+  constexpr unsigned overflow = 0x80;
+  const unsigned known_negative = (source.known & source_sign) != 0 ? negative : 0U;
+  const unsigned known_zero =
+      (source.value & source.known) != 0 || source.known == Hcs08KnownByte::all ? zero : 0U;
+  return static_cast<std::uint8_t>((before.ccr_known & ~vnz) | overflow | known_negative |
+                                   known_zero);
+}
+
 std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
   constexpr unsigned all = 0xff;
   constexpr unsigned interrupt = 8;
+  if ((bus.peek(before.pc) == sta_direct || bus.peek(before.pc) == sta_extended) &&
+      before.a_known != Hcs08KnownByte::all) {
+    bus.check_execute({.address = before.pc, .length = 1});
+    return byte_vnz_after(before, {.value = before.a, .known = before.a_known});
+  }
   if (bus.peek(before.pc) == divide_opcode) {
     bus.check_execute({.address = before.pc, .length = 1});
     // Z depends on the quotient. C is defined even when A/H are indeterminate.

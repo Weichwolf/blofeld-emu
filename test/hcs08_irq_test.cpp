@@ -377,7 +377,7 @@ void return_failures() {
   }
 }
 
-void partial_read_refusal() {
+void partial_load_and_strict_consumers() {
   IrqMemory memory;
   Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
   auto s = foreground;
@@ -391,10 +391,30 @@ void partial_read_refusal() {
                 memory.check_execute({.address = saved_ccr, .length = 1});
               }).contains("fetch"),
           "Ordinary data reads and fetches never treat unknown frame bits as known zeros");
-  constexpr std::array<std::uint8_t, 3> load{0xc6, 2, 0x3c}; // Own LDA $023C.
+  // Own LDA $023C; BEQ skips CMP only on zero; CMP #0 remains unqualified for partial A.
+  constexpr std::array<std::uint8_t, 7> load{0xc6, 2, 0x3c, 0x27, 2, 0xa1, 0};
   memory.install(handler, load);
-  require(rejected([&] { cpu.step(); }).contains("address=0x023c") && cpu.faulted(),
-          "Only qualified native RTI raw copies may consume masked frame storage");
+  cpu.step();
+  auto expected = foreground;
+  expected.pc = handler + 3;
+  expected.sp = stack - 5;
+  expected.a = saved_flags;
+  expected.a_known = partial_ccr;
+  expected.ccr = entry_flags;
+  expected.ccr_known = partial_ccr;
+  require(
+      cpu.state() == expected && !cpu.faulted() && memory.return_reads == 1 &&
+          memory.accesses.back() ==
+              Access{
+                  .address = saved_ccr, .value = saved_flags, .write = false, .known = partial_ccr},
+      "Native LDA preserves the saved H-bit uncertainty in A; known nonzero and bit7 define Z/N");
+  cpu.step();
+  expected.pc = handler + 5;
+  require(cpu.state() == expected && memory.retired == 2,
+          "A real branch can consume known Z without consuming unknown A bits");
+  require(rejected([&] { cpu.step(); }).contains("unknown operand") && cpu.faulted() &&
+              memory.return_reads == 1 && memory.retired == 2,
+          "Unqualified arithmetic cannot use the partial loaded byte or retire silently");
 }
 
 class PlainMemory final : public Bus {
@@ -535,7 +555,7 @@ int main() {
     masking_and_invalid();
     failures();
     return_failures();
-    partial_read_refusal();
+    partial_load_and_strict_consumers();
     required_capability();
     policy_capability();
     bdc_ownership();

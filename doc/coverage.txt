@@ -2464,8 +2464,23 @@ HCS08 controller period references:
   160 fresh suffixes/profile. The real six-body delay/extra RX-empty-TX IRQ/
   native return/GPIO copy reaches E2A7 at415 periods;A=FF,X=0,SP=0475.
   GPIO MOV VNZ follows the transferred byte. ASan/UBSan and separateTSan
-  component traces match. Canonical ASan/UBSan:83 containing-consumer groups;
-  separateTSan:13 component/core/register/CCR groups; no skips or sanitizer findings.
+  component traces match. The period-reference qualification at6ce6774 covered
+  83 ASan/UBSan and13 TSan groups; explicit periods are not silicon timing.
 - Full reset still stops at unqualified ICGS1;authentic clock domains,
   normal Keyboard boot and physical matrix/controller equivalence remain open.
   See hcs08-{indexed-stores,clear-cycles,modify-cycles,call-cycles,subroutine-cycles}.txt.
+
+HCS08 byte knowledge and ICG observations:
+- Untimed direct/extended LDA/STA retain actual value masks, native effects and
+  V/N/Z knowledge; H/I/C remain unchanged. Independent concrete-byte expectations
+  cover131072 value/mask vectors/profile. Real COP service/reset, permissions,
+  dependent-operand refusal and IRQ/RTI/checkpoint recovery are checked.
+- ICG fault/read-ack, optional observed status bits and exact rational routing
+  remain separate from oscillator/detector generation and software target ratios.
+  Unknown required facts stay unknown or fail with context; no ready defaults.
+- Current canonical qualification:87 affected ASan/UBSan groups and13 separate
+  TSan component/core/IRQ/reset groups,zero skips. All433 prior test definitions
+  and1030 compiler recipes retained;437 tests now registered,not a full replay.
+- Original reset still stops at ICGS1. Live clocks/status detectors,board binding,
+  captured-program partial data and physical controller equivalence remain open.
+  See hcs08-{known-load,icg-events,icg-clocks,icg-status}.txt.

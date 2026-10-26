@@ -249,6 +249,9 @@ public:
     steps_ = saved.steps;
     pending_write_ = saved.write;
     word_write_ = word;
+    raw_load_ = false;
+    raw_store_ = false;
+    loaded_operand_.reset();
     byte_move_ = move;
     stack_call_ = subroutine_call(opcode);
     stack_return_ = false;
@@ -278,6 +281,13 @@ public:
     return return_frame_->masks;
   }
 
+  [[nodiscard]] std::optional<Hcs08KnownByte> loaded_operand() const {
+    if (raw_load_ && !loaded_operand_) {
+      throw Fault("HCS08 qualified LDA did not consume its actual byte operand");
+    }
+    return loaded_operand_;
+  }
+
   bool execute(const Bus *program = nullptr,
                const bool word_write = false,
                const bool byte_move = false) {
@@ -294,6 +304,15 @@ public:
     const auto &code = program != nullptr ? *program : bus_;
     code.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()), .length = 1});
     const auto opcode = code.peek(static_cast<std::uint16_t>(address_.getOffset()));
+    constexpr unsigned lda_direct = 0xb6;
+    constexpr unsigned lda_extended = 0xc6;
+    constexpr unsigned sta_direct = 0xb7;
+    constexpr unsigned sta_extended = 0xc7;
+    raw_load_ = program == nullptr && known_memory_ != nullptr &&
+                (opcode == lda_direct || opcode == lda_extended);
+    raw_store_ = program == nullptr && (opcode == sta_direct || opcode == sta_extended) &&
+                 knowledge_.a != Hcs08KnownByte::all;
+    loaded_operand_.reset();
     constexpr unsigned rts = 0x81;
     stack_call_ = subroutine_call(opcode);
     stack_return_ = opcode == rts;
@@ -510,7 +529,18 @@ private:
       return (high << 8U) | bus_.read_memory({.address = 0});
     }
     if (stack_return_ && access.address == address_mask) { return read_wrapped_return(access); }
+    if (raw_load_) { return read_raw_load(access); }
     return bus_.read_memory(access);
+  }
+
+  [[nodiscard]] ghidra::uintb read_raw_load(const MemoryRead access) const {
+    if (access.size != 1 || loaded_operand_ || known_memory_ == nullptr) {
+      throw Fault("HCS08 LDA read address=" + hex(access.address) + " pc=" +
+                  hex(address_.getOffset()) + " ccr=" + hex(memstate->getValue(&layout_.ccr)) +
+                  " agent=CPU: unqualified raw operand transaction");
+    }
+    loaded_operand_ = known_memory_->read_known_byte(access.address);
+    return static_cast<ghidra::uintb>(loaded_operand_->value & loaded_operand_->known);
   }
 
   [[nodiscard]] ghidra::uintb read_captured_return(const MemoryRead access) const {
@@ -576,6 +606,19 @@ private:
   void write_operand(const MemoryWrite access) {
     if (operand_ != nullptr || return_reads_ != nullptr) {
       throw Fault("HCS08 captured operand unexpected write address=" + hex(access.address));
+    }
+    if (raw_store_) {
+      if (access.size != 1 || known_memory_ == nullptr ||
+          access.value != memstate->getValue(&layout_.a)) {
+        throw Fault("HCS08 STA write address=" + hex(access.address) + " pc=" +
+                    hex(address_.getOffset()) + " ccr=" + hex(memstate->getValue(&layout_.ccr)) +
+                    " agent=CPU: unqualified masked operand transaction");
+      }
+      known_memory_->write_known_byte(
+          {.address = access.address,
+           .value = static_cast<std::uint8_t>(access.value & knowledge_.a)},
+          knowledge_.a);
+      return;
     }
     if (!word_write_ && !byte_move_) {
       if (stack_call_) {
@@ -664,6 +707,7 @@ private:
   };
 
   mutable std::optional<ReturnFrame> return_frame_;
+  mutable std::optional<Hcs08KnownByte> loaded_operand_;
   ghidra::Address address_;
   ghidra::Address next_;
   std::span<ghidra::PcodeOpRaw *const> operations_;
@@ -675,6 +719,7 @@ private:
   std::optional<PendingNativeWrite> pending_write_;
   bool word_write_ = false, byte_move_ = false;
   bool stack_call_ = false, stack_return_ = false;
+  bool raw_load_ = false, raw_store_ = false;
   bool finished_ = true;
   bool executing_ = false;
   bool background_ = false;

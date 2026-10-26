@@ -1,0 +1,22 @@
+HCS08 candidate observed ICG status
+
+Hcs08IcgStatus composes independently supplied synchronized CLKST/REFST/LOCK/
+ERCS/DCOS observations with Hcs08IcgEvents fault/read-ack ownership. Raw CLKST
+is a two-bit status field, independent of software CLKS requests. SCM/FBE
+prove LOCK clear; contradictory observations reject before mutation.
+
+read_known retains unknown bits and performs the genuine ICGS1 read/ack-arm
+side effect. Ordinary byte reads reject incomplete facts before admission.
+ICGS2 bits7..1 read zero. Writes ignore read-only data; a masked ICGS1 write
+requires known ICGIF. Another interrupt invalidates an older read-clear pair.
+Copies retain observations and armed sequence; reset discards live facts.
+
+No oscillator, status detector, elapsed-time synchronization, CPU load/store
+knownness consumer or board binding is supplied. Unknown bits are never ready
+or stable defaults. Candidate part/mask and complete original boot remain
+unqualified. Primary:hcs08-reference.json GT Rev1 sections9.3.3/9.3.4.
+
+After integration:build blofeld-hcs08-icg-status-test;run CTest hcs08_icg_status
+under each sanitizer separately. Per mode:351 accepted observed points,
+54 impossible LOCK points and3072 masked fault/read/ack cases plus strict
+context/reset checks. No fuzz or physical traffic.

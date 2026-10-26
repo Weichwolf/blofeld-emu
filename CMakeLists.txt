@@ -84,9 +84,15 @@ add_library(blofeld_hcs08 src/keyboard/hcs08.cpp src/keyboard/hcs08_interrupts.c
 target_include_directories(blofeld_hcs08 PUBLIC src)
 target_link_libraries(blofeld_hcs08 PUBLIC blofeld_firmware PRIVATE blofeld_sleigh)
 add_dependencies(blofeld_hcs08 blofeld_hcs08_spec)
-add_library(blofeld_hcs08_icg src/keyboard/hcs08_icg.cpp)
+add_library(blofeld_hcs08_icg src/keyboard/hcs08_icg.cpp src/keyboard/hcs08_icg_events.cpp)
 target_include_directories(blofeld_hcs08_icg PUBLIC src)
 target_link_libraries(blofeld_hcs08_icg PUBLIC blofeld_firmware)
+add_library(blofeld_hcs08_icg_clocks src/keyboard/hcs08_icg_clocks.cpp)
+target_include_directories(blofeld_hcs08_icg_clocks PUBLIC src)
+target_link_libraries(blofeld_hcs08_icg_clocks PUBLIC blofeld_firmware)
+add_library(blofeld_hcs08_icg_status src/keyboard/hcs08_icg_status.cpp)
+target_include_directories(blofeld_hcs08_icg_status PUBLIC src)
+target_link_libraries(blofeld_hcs08_icg_status PUBLIC blofeld_hcs08_icg)
 add_library(blofeld_hcs08_tpm src/keyboard/hcs08_tpm.cpp)
 target_include_directories(blofeld_hcs08_tpm PUBLIC src)
 target_link_libraries(blofeld_hcs08_tpm PUBLIC blofeld_firmware)
@@ -755,6 +761,20 @@ if(BUILD_TESTING)
   add_executable(blofeld-hcs08-icg-test test/hcs08_icg_test.cpp)
   target_link_libraries(blofeld-hcs08-icg-test PRIVATE blofeld_hcs08_icg)
   add_test(NAME hcs08_icg COMMAND blofeld-hcs08-icg-test)
+  add_executable(blofeld-hcs08-icg-events-test test/hcs08_icg_events_test.cpp)
+  target_link_libraries(blofeld-hcs08-icg-events-test PRIVATE blofeld_hcs08_icg)
+  add_test(NAME hcs08_icg_events COMMAND blofeld-hcs08-icg-events-test)
+  add_executable(blofeld-hcs08-icg-clocks-test test/hcs08_icg_clocks_test.cpp)
+  target_link_libraries(blofeld-hcs08-icg-clocks-test PRIVATE blofeld_hcs08_icg_clocks)
+  add_test(NAME hcs08_icg_clock_routes COMMAND blofeld-hcs08-icg-clocks-test)
+  add_executable(blofeld-hcs08-icg-status-test test/hcs08_icg_status_test.cpp)
+  target_link_libraries(blofeld-hcs08-icg-status-test PRIVATE blofeld_hcs08_icg_status)
+  add_test(NAME hcs08_icg_status COMMAND blofeld-hcs08-icg-status-test)
+  add_executable(blofeld-hcs08-known-load-test test/hcs08_known_load_test.cpp)
+  target_link_libraries(blofeld-hcs08-known-load-test PRIVATE blofeld_hcs08 blofeld_hcs08_cop)
+  target_compile_definitions(blofeld-hcs08-known-load-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_known_load COMMAND blofeld-hcs08-known-load-test)
   add_executable(blofeld-hcs08-tpm-test test/hcs08_tpm_test.cpp)
   target_link_libraries(blofeld-hcs08-tpm-test PRIVATE blofeld_hcs08_tpm)
   add_test(NAME hcs08_tpm COMMAND blofeld-hcs08-tpm-test)
@@ -2682,7 +2702,9 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
+  DEPENDS blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
+    blofeld-hcs08-icg-clocks-test blofeld-hcs08-icg-status-test
+    blofeld-hcs08-subroutine-cycle-test blofeld-original-hcs08-subroutine-test
     blofeld-hcs08-call-cycle-test blofeld-original-hcs08-call-test
     blofeld-hcs08-rmw-cycle-test blofeld-original-hcs08-modify-test
     blofeld-hcs08-clear-cycle-test blofeld-original-hcs08-clear-test

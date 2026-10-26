@@ -1,0 +1,31 @@
+HCS08 candidate ICG clock-routing facts
+
+Hcs08IcgClocks separates software FLL target ratios from observed actual
+operating points. The target ratio maps the selected reference to intended
+ICGOUT, not BUSCLK. Requested28/30 gives640/7; neither that ratio nor trim
+establishes an observed oscillator, current clock mode, LOCK or DCOS.
+
+The caller must supply current synchronized mode/effective divider controls
+and actual positive rational source frequencies. This is a combinational
+routing component, not a clock/status producer. Unknown required facts fail
+with operation/address/PC/CCR/context. No register read is newly admitted.
+
+SCM/FEI use actual DCO/R; FBE uses actual external/R. BUSCLK is ICGOUT/2.
+FEE initial acquisition and MFD-change relocking use DCO/(2R); unexpected
+unlock after first lock uses DCO/R. FEE XCLK selects external/2 only when
+P*N/R>=4 and LOCK is known set; otherwise BUSCLK. SCM/FEI XCLK is gated.
+An absent output means a known gated clock. Unknown/static sources and
+unrepresentable fractions fail; no float rounding or synthetic zero Hz.
+
+Part/mask, electrical limits, DCO/trim transfer, lock/stability detectors,
+mode synchronization, live source history and CPU/peripheral tick coupling
+remain unqualified. Effective operating points are declared reference inputs;
+this does not unblock normal Keyboard reset or establish physical timing.
+Primary: hcs08-reference.json GT Rev1,9.3.2/9.4.2..7/9.4.11/9.5 tables9-11/12.
+
+After canonical integration:
+  cmake --build --preset strict --target blofeld-hcs08-icg-clocks-test
+  ctest --preset strict -R '^hcs08_icg_clock_routes$' --output-on-failure
+Use the separate thread profile for TSan under shared native admission.
+Per sanitizer:65536 target words,1376256 mode/history routes plus24 literal/
+representation checks and19 strict controls. No fuzz or physical traffic.

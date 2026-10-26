@@ -1,0 +1,22 @@
+ICG fault-event latches (candidate GT8A)
+
+Primary: hcs08-reference.json, GT9.3.2/9.3.3/9.4.8/9.4.9.
+Hcs08IcgEvents owns LOLS/LOCS/ICGIF from established detector events.
+Its known mask 0x15 excludes clock/mode/LOCK/DCOS bits. A status read arms
+interrupt acknowledgement; writing ICGIF=1 clears interrupt-routed causes.
+A new IRQ invalidates the earlier read, including a repeated latched source.
+Reset-routed causes persist until explicit reset; reset requests take priority.
+Changing routing for an already latched source remains a visible unsupported
+transaction; unrelated routing changes preserve its read history.
+
+Copies retain latch, routing and read history without callbacks or peers.
+The full register owner must validate all clock/status bits before committing
+the latch read. This component neither detects clock loss nor generates a
+frequency, LOCK/DCOS, mode transition, CPU reset or complete ICGS1 response.
+The existing strict ICG owner and normal-reset frontier remain unchanged.
+
+  ctest --test-dir build/strict -R '^hcs08_icg_events$' --output-on-failure
+
+The fixed byte matrix, event races and copies cover 393228 cases, 1536 fresh
+suffixes and 4 refusal controls per sanitizer. No native firmware, full clock,
+board timing, audio callback or physical-device equivalence is established.

@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_division.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
 
 #include <cstdint>
 
@@ -160,8 +161,12 @@ RegisterKnowledge registers_after(const Bus &bus, const Hcs08State &before) {
     case jmp_indexed:
       if (s.hx_known != word_mask) { unqualified(s, opcode); }
       break;
-    case sta_direct:    // STA direct
-    case sta_extended:  // STA extended
+    case sta_direct:   // STA direct
+    case sta_extended: // STA extended
+      if (s.a_known != byte_mask && dynamic_cast<const Hcs08KnownMemory *>(&bus) == nullptr) {
+        unqualified(s, opcode);
+      }
+      break;
     case bit_immediate: // BIT immediate
     case cmp_immediate: // CMP immediate
     case cmp_extended:

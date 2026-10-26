@@ -388,6 +388,8 @@ void snapshots_and_halted_time() {
 void incomplete_and_unknown() {
   constexpr std::array<std::uint8_t, 5> missing{cli, 0xc6, 0, operand, 0x9d};
   Machine machine(missing);
+  // Keep an actual unmapped-source failure distinct from a supported unknown RAM byte.
+  machine.memory.writable.reset(operand);
   machine.memory.interrupt = {.vector = vector};
   machine.cpu.step();
   const auto before = machine.cpu.checkpoint();
@@ -432,6 +434,41 @@ void incomplete_and_unknown() {
               unknown.cpu.faulted() && unknown.memory.accesses == effects &&
               unknown.cpu.irq_delay() == uncertain,
           "Unknown-transition IRQ service fails before any frame byte with actual context");
+}
+
+void partial_data_consumes_delay() {
+  constexpr std::array<std::uint8_t, 5> code{cli, 0xc6, 0, operand, 0x9d};
+  constexpr unsigned result_known = byte_mask & ~(flag_n | flag_z);
+  Machine machine(code);
+  machine.memory.interrupt = {.vector = vector};
+  machine.cpu.step();
+  require(machine.cpu.irq_delay() == required, "Actual CLI protects the next native instruction");
+  const auto token = machine.cpu.reserve_instruction(instruction_contract);
+  if (!token) { throw Fault("Expected protected partial-load reservation"); }
+  machine.cpu.retire_reserved_instruction(*token);
+  const Hcs08State expected{.pc = entry + 4,
+                            .hx = hx,
+                            .sp = stack,
+                            .a = 0,
+                            .ccr_known = result_known,
+                            .ccr = flags,
+                            .a_known = 0};
+  const std::vector<Access> read{{.address = operand, .value = 0, .write = false, .known = 0}};
+  require(machine.cpu.state() == expected && !machine.cpu.faulted() &&
+              !machine.cpu.instruction_reserved() && machine.cpu.irq_delay() == none &&
+              machine.memory.retired == 2 && machine.memory.accesses == read &&
+              machine.cpu.pending_interrupt() == vector,
+          "Retired partial LDA consumes delay once; A/N/Z stay unknown and unrelated "
+          "registers/flags retain knownness");
+  require(machine.cpu.service_interrupt() && !machine.memory.known[stack - 3] &&
+              machine.memory.partial_known[stack - 3] == 0 &&
+              machine.memory.partial_known[stack - 4] == result_known,
+          "The now-eligible real IRQ stores the unchanged partial A/CCR fields");
+  machine.cpu.step();
+  require(machine.cpu.state() == expected && machine.cpu.irq_delay() == required &&
+              machine.memory.retired == 3,
+          "Actual RTI restores those masks and starts its independently declared next-instruction "
+          "guarantee");
 }
 
 void go_cannot_discard_owned_work() {
@@ -500,6 +537,7 @@ int main() {
     unrelated_flags();
     snapshots_and_halted_time();
     incomplete_and_unknown();
+    partial_data_consumes_delay();
     go_cannot_discard_owned_work();
     observers_and_debug();
     std::cout << "HCS08 CLI/TAP/RTI next-instruction delay and trusted recovery pass.\n";

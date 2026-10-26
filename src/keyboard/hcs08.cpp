@@ -1178,6 +1178,10 @@ bool Hcs08::execute_native(const Hcs08State &before,
   auto known = returning ? before.ccr_known : native::ccr_after(code, before);
   impl_->executor->prepare_return_frame(returning ? std::optional(before.sp) : std::nullopt);
   if (!impl_->run_native(program, operand, word_write, byte_move)) { return false; }
+  if (const auto loaded = impl_->executor->loaded_operand()) {
+    registers.a = loaded->known;
+    known = native::byte_vnz_after(before, *loaded);
+  }
   if (returning) {
     const auto masks = impl_->executor->return_masks();
     known = static_cast<std::uint8_t>(masks[0] | fixed_ccr);
