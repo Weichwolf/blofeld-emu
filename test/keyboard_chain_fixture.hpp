@@ -2,8 +2,8 @@
 #pragma once
 #include "common/bus.hpp"
 #include "firmware/firmware.hpp"
+#include "keyboard_board_reset_fixture.hpp"
 #include "keyboard_handoff_fixture.hpp"
-#include "keyboard_reset_fixture.hpp"
 #include "lcd_fixture.hpp"
 #include "original_update_transport_fixture.hpp"
 
@@ -18,7 +18,7 @@
 
 namespace blofeld::test::keyboard_chain {
 namespace kh = keyboard_handoff;
-namespace kr = keyboard_reset;
+namespace kr = keyboard_board_reset;
 namespace transport = update_transport;
 constexpr unsigned data_offset = 1020, page_offset = 1023, page_bytes = 512, record_bytes = 514;
 constexpr unsigned frame = 0x21e7, text_entry = 0xa6ee, text_return = 0x124b, buffer_ready = 0x12fc;
@@ -89,8 +89,7 @@ struct Chain {
         const std::vector<transport::Block> &blocks,
         const transport::Templates &templates,
         std::ostream &output,
-        Scenario inputs,
-        const hcs08_programmer::Memory *snapshot = nullptr);
+        Scenario inputs);
   void connect();
   void prefix();
   void step();

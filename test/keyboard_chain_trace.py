@@ -173,8 +173,9 @@ def reset(case):
         expected.append(dict(ticks=tick, edges=(tick-first)//15+1, phase=index+1,
                              mode=2 if index < 2 else 1))
     equal(case, 'RESET', expected)
-    equal(case, 'TARGET', [dict(pc=0, **{'pc-known': 0}, hx=0x22, sp=255, a=0xa5,
-                               ccr=0x68, known=0x68, status=0xc8)])
+    equal(case, 'TARGET', [dict(pc=0, **{'pc-known': 0}, hx=0, sp=255, a=0,
+                               ccr=0x68, known=0x68, status=0xc8,
+                               **{'a-known':0, 'hx-known':0xff00})])
     equal(case, 'SAVING_BOUNDARY', [dict(pc=0xa6ee, sp=0x21e0, rx=1, commands=0)])
     serial = rows.get('SYNC', [])
     require([(r['phase'], r['count']) for r in serial] ==
@@ -205,6 +206,7 @@ def frontier(case):
     diagnostic = case['rows'].get('DIAGNOSTIC', [])
     require(len(diagnostic) == 1 and all(token in diagnostic[0] for token in
             ('HC12 cycle execution pc=0x143f', 'MCU write at 0x0001', 'BDC-cycles=',
+             'agent=BDC', 'address=BKGD',
              'host falling edge before the preceding bit/SYNC finished')),
             'Missing actual operation/address/native context diagnostic')
     retained = case['rows'].get('RETAINED', [])
@@ -240,7 +242,8 @@ def validate(text, expected):
 def controls(text, expected):
     changes = []
     for tag, key in (('SOURCE', 'value'), ('CHUNK', 'value'), ('COPY_BOUNDARY', 'ccr'),
-                     ('TARGET', 'known'), ('TARGET', 'pc-known'), ('TEXT', 'x'), ('TEXT', 'mode'),
+                     ('TARGET', 'known'), ('TARGET', 'pc-known'),
+                     ('TARGET', 'a-known'), ('TARGET', 'hx-known'), ('TEXT', 'x'), ('TEXT', 'mode'),
                      ('WIRE_FRONTIER', 'uploaded'), ('REPLAY', 'identical')):
         changes.append(re.sub(r'(^'+tag+r' (?:[^\n]* )?'+re.escape(key)+r'=)(\d+)',
                               lambda match:match[1]+str(int(match[2])+1), text, count=1, flags=re.M))

@@ -2,6 +2,7 @@
 #pragma once
 #include "board/gpio_pads.hpp"
 #include "board/hcs08_board.hpp"
+#include "board/hcs08_board_memory.hpp"
 #include "board/hcs08_board_wire.hpp"
 #include "common/bus.hpp"
 #include "firmware/firmware.hpp"
@@ -10,7 +11,9 @@
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_machine.hpp"
 
+#include <bitset>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -46,6 +49,13 @@ struct Fixture {
           unsigned first_edge,
           unsigned timer_prescale,
           std::ostream &output);
+  Fixture(McuMachine &machine,
+          const Firmware &image,
+          const std::vector<std::uint8_t> &code,
+          unsigned first_edge,
+          std::ostream &output);
+  std::function<void(std::uint8_t)> received_byte;
+  [[nodiscard]] std::bitset<Hcs08BoardMemory::ram_bytes> ram_known() const;
   void bind();
   [[nodiscard]] Hcs08BoardWire &target_owner();
   [[nodiscard]] const Hcs08BoardWire &target_owner() const;

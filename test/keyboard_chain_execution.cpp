@@ -3,9 +3,9 @@
 #include "hcs08_fixture.hpp"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_flash.hpp"
+#include "keyboard_board_reset_fixture.hpp"
 #include "keyboard_chain_fixture.hpp"
 #include "keyboard_handoff_fixture.hpp"
-#include "keyboard_reset_fixture.hpp"
 #include "lcd_fixture.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_machine.hpp"
@@ -76,12 +76,12 @@ void Chain::step() {
     ++bytes;
   }
   if (after.pc == page_ready && !uploaded) {
-    require(text_returns == 1 && peer->target.memory.known.count() == upload_bytes &&
+    require(text_returns == 1 && peer->ram_known().count() == upload_bytes &&
                 pair.mcu.bus().peek(trim_slot) == trim,
             "Actual reset/drawing/trim read precede complete original RAM upload");
     uploaded = true;
-    trace << "UPLOAD commands=" << peer->controller().state().serviced << " rx=" << peer->received
-          << " known=" << peer->target.memory.known.count() << '\n';
+    trace << "UPLOAD commands=" << peer->target_owner().bdc_state().serviced
+          << " rx=" << peer->received << " known=" << peer->ram_known().count() << '\n';
   }
 }
 
@@ -96,17 +96,23 @@ void Chain::until_buffer() {
               pair.mcu.cpu().state().sp == frame && uploaded && bytes == stream_bytes &&
               samples == stream_samples && sender.sent == sent_chunks &&
               sender.loaded == loaded_words && cursor == buffer_rx &&
-              peer->controller().state().serviced == buffer_commands,
+              peer->target_owner().bdc_state().serviced == buffer_commands,
           "Original DSP stream/address/cache/BDC upload reaches one coherent first-page boundary");
   for (unsigned n = 0; n < page_bytes; ++n) {
-    require(peer->target.memory.known[target_buffer + n] &&
-                peer->target.memory.bytes[target_buffer + n] == source_byte(page_offset + 2 + n),
+    require(peer->target_owner()
+                        .memory()
+                        .inspect_ram(static_cast<std::uint16_t>(target_buffer + n))
+                        .known == byte_mask &&
+                peer->target_owner()
+                        .memory()
+                        .inspect_ram(static_cast<std::uint16_t>(target_buffer + n))
+                        .value == source_byte(page_offset + 2 + n),
             "Every original page byte reaches target RAM through the actual three-CPU transport");
   }
   buffered = true;
   trace << "BUFFER sp=" << pair.mcu.cpu().state().sp << " bytes=" << bytes << " samples=" << samples
         << " sent=" << sender.sent << " loaded=" << sender.loaded << " rx=" << cursor
-        << " commands=" << peer->controller().state().serviced << '\n';
+        << " commands=" << peer->target_owner().bdc_state().serviced << '\n';
 }
 
 void Chain::guards() {
@@ -119,12 +125,14 @@ void Chain::guards() {
             "Entire actually copied helper remains unchanged");
   }
   constexpr unsigned vector = 0xfffe;
-  const auto target_image = peer->target.memory.flash.image();
-  require(!peer->target.cpu.state().pc_known && !target_image.known[vector - hcs08_flash::first] &&
+  const auto target_image = peer->target_owner().memory().flash_image();
+  require(!peer->target_owner().cpu_state().pc_known &&
+              !target_image.known[vector - hcs08_flash::first] &&
               !target_image.known[vector + 1 - hcs08_flash::first],
           "Continuous original chain preserves pre-vector target PC and NVM unknownness");
   require(pair.link.unresolved_queries == 0 && sender.irq_unknown == 0 &&
-              peer->target.memory.transfers == 0 && !peer->target.memory.flash.state().active,
+              !peer->target_owner().memory().flash_state().divider_loaded &&
+              !peer->target_owner().memory().flash_state().active,
           "No unknown consumed pad, successful target NVM transfer or completion is supplied");
   for (const unsigned index : {2U, 3U}) {
     const auto layout = kh::layouts.at(index);

@@ -1117,8 +1117,8 @@ if(BUILD_TESTING)
   add_executable(blofeld-original-keyboard-chain-test test/original_keyboard_chain_test.cpp
     test/keyboard_chain_fixture.cpp test/keyboard_chain_execution.cpp test/keyboard_chain_trace.cpp
     test/keyboard_chain_checkpoint.cpp test/keyboard_chain_overlap.cpp
-    test/keyboard_reset_fixture.cpp)
-  target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_hcs08_programmer_fixture)
+    test/keyboard_board_reset_fixture.cpp)
+  target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_hcs08_board_wire)
   target_link_libraries(blofeld-original-keyboard-chain-test PRIVATE blofeld_core blofeld_mcu_dsp
     blofeld_dsp_native blofeld_lcd_fixture blofeld_lcd_export
     blofeld_hcs08_reset blofeld_hcs08_bdc_wire blofeld_hcs08_run_clock)

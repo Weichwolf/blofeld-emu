@@ -2185,21 +2185,20 @@ The current machine is an i5-1135G7 (4 cores, 8 threads); its sufficiency is not
 established. Vulkan would require a separate equivalent DSP execution backend and
 synchronization model. No GPU backend is currently planned or implemented.
 
-Original Keyboard stage2/reset/LCD chain (keyboard-chain.txt): two actual native
-DSP download/sender -> MCU XIRQ/copy/helper/checksum -> reset/SYNC -> recursive
-saving-text physical LCD contexts, plus four fresh joint suffix restorations.
-Independent original bytes/frames/clock-response geometry and complete font PBM/
-PNG pixels are checked; shared warm reset/CCR/TIM and wire inputs remain explicit.
-Active-background entry now precedes vector fetch; target PC and both vector
-bytes remain unknown until explicit input establishes them (hcs08-reset.txt).
-This removes the valid-vector dependency without qualifying cold/secured recovery.
-The current direct-PB1/reference128-period model refuses the original first trim
-command after LCD long-low activity. This is not an exact silicon detector or
-collision-recovery specification, physical firmware defect, target upload/GO/
-FSTAT success, full stage1/SMF update, boot/audio or hardware qualification.
-The wire unit additionally checks two conservatively long active-mode SYNCs
-and subsequent BACKGROUND with CPU/RAM/NVM held unchanged. All complete-update,
-every-phase recovery/power-loss and118 manual acceptance obligations remain open.
+Original Keyboard stage2/reset/LCD chain (keyboard-chain.txt): original DSP
+sender -> MCU XIRQ/copy/helper/checksum -> reset/SYNC -> recursive native LCD.
+Two declared order/phase contexts and four fresh joint suffixes retain independent
+original frames and complete PBM/PNG font pixels. Production BoardMemory/CPU/BDC/
+wire replace the programmer test-memory target: candidate cold H=0,A/X unknown,
+PC/RAM/NVM/vectors unknown,no debug register seed or RAM canary. The shared
+reset-only consumer retains three cases/six suffixes. Fresh comparisons include
+complete CPU knownness,board counters and available peripheral/RAM/NVM states.
+Collectors retain the prior complete oracles and strengthen cold-knownness/context
+checks (chain21/reset11 fixed corruptions). The direct-PB1/reference128-period
+model still refuses the original trim command after LCD long-low activity.
+No fitted detector threshold,trim reply,upload,GO,target retirement or NVM result
+is supplied. Exact silicon timing/routing,full stage1/SMF,normal boot/MIDI/audio,
+every-phase update/recovery/power-loss and physical equivalence remain open.
 
 HCS08 active-background reset: normal reset retains actual FFFE/FFFF reads;
 explicit pre-vector debug entry leaves numerical PC unknown and does not read

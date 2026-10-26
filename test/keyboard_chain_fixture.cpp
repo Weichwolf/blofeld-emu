@@ -6,10 +6,9 @@
 #include "dsp/dsp_gpio.hpp"
 #include "firmware/firmware.hpp"
 #include "hcs08_fixture.hpp"
-#include "hcs08_programmer_fixture.hpp"
 #include "keyboard/hcs08_bdc.hpp"
+#include "keyboard_board_reset_fixture.hpp"
 #include "keyboard_handoff_fixture.hpp"
-#include "keyboard_reset_fixture.hpp"
 #include "lcd_fixture.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/hc12_registers.hpp"
@@ -34,13 +33,12 @@ namespace fw = update_forward;
 using hcs08::require;
 
 namespace {
-constexpr unsigned ram_first = 0x80, ram_end = 0x480, algorithm = 0xa0, algorithm_offset = 838,
-                   upload_end = 0x124;
+constexpr unsigned ram_first = 0x80, algorithm = 0xa0, algorithm_offset = 838, upload_end = 0x124;
 constexpr unsigned trim_address = 0xffbe, buffer = 0x200, stack_low = 0x7c;
 constexpr unsigned word_bytes = 3, byte_mask = 255, helper_prefix = 2, helper_extent = 1018;
 constexpr unsigned tscr2 = 0x4d, active_timer = 0x90;
 constexpr std::array<std::uint8_t, 3> own_clear_call{0x16, 0x8d, 0x70};
-constexpr unsigned caller_ddre_operand = 16, lcd_enable = 0x10, unknown_ram_canary = 0xcc;
+constexpr unsigned caller_ddre_operand = 16, lcd_enable = 0x10;
 
 std::vector<std::uint8_t> extract(const std::vector<transport::Block> &blocks) {
   std::vector<std::uint8_t> result;
@@ -58,8 +56,7 @@ Chain::Chain(const Firmware &image,
              const std::vector<transport::Block> &blocks,
              const transport::Templates &templates,
              std::ostream &output,
-             const Scenario inputs,
-             const hcs08_programmer::Memory *snapshot)
+             const Scenario inputs)
     : firmware(image),
       trace(output),
       scenario(inputs),
@@ -85,18 +82,7 @@ Chain::Chain(const Firmware &image,
   // Explicit application-timer fixture input, not inferred application startup.
   pair.mcu.bus().write(tscr2, 2);
   pair.mcu.bus().write(hc12::tscr1, active_timer);
-  peer = std::make_unique<kr::Fixture>(
-      pair.mcu, image, helper, scenario.target_phase, trace, snapshot);
-  auto &memory = peer->target.memory;
-  if (snapshot == nullptr) {
-    for (unsigned a = ram_first; a < ram_end; ++a) {
-      memory.known.reset(a);
-      memory.bytes[a] = unknown_ram_canary;
-    }
-    ++memory.generation;
-    ++memory.code_generation;
-    memory.accesses.clear();
-  }
+  peer = std::make_unique<kr::Fixture>(pair.mcu, image, helper, scenario.target_phase, trace);
   expected = {blofeld::hcs08_bdc::background,
               blofeld::hcs08_bdc::read_byte,
               trim_address >> 8U,

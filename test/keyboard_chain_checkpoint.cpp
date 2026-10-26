@@ -2,13 +2,14 @@
 #include "board/mcu_dsp_schedule.hpp"
 #include "display/lcd_image.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "hcs08_board_fixture.hpp"
 #include "hcs08_fixture.hpp"
 #include "keyboard/hcs08_bdc.hpp"
 #include "keyboard/hcs08_bdc_wire.hpp"
 #include "keyboard/hcs08_run_clock.hpp"
+#include "keyboard_board_reset_fixture.hpp"
 #include "keyboard_chain_fixture.hpp"
 #include "keyboard_handoff_fixture.hpp"
-#include "keyboard_reset_fixture.hpp"
 #include "lcd_fixture.hpp"
 #include "original_update_forward_fixture.hpp"
 
@@ -84,16 +85,15 @@ void Chain::compare_endpoint(const Chain &other) const {
               pair.schedule->ties() == op.schedule->ties() &&
               pair.schedule->completed_steps() == op.schedule->completed_steps() &&
               peer->endpoint() == other.peer->endpoint() &&
-              peer->target.memory.bytes == other.peer->target.memory.bytes &&
-              peer->target.memory.known == other.peer->target.memory.known &&
-              peer->target.memory.flash.image() == other.peer->target.memory.flash.image() &&
-              peer->target.memory.flash.state() == other.peer->target.memory.flash.state() &&
-              peer->controller().state() == other.peer->controller().state() &&
-              peer->transport().state() == other.peer->transport().state() &&
-              peer->run_clock().state() == other.peer->run_clock().state() &&
+              peer->target_owner().cpu_state() == other.peer->target_owner().cpu_state() &&
+              peer->target_owner().board_state() == other.peer->target_owner().board_state() &&
+              peer->target_owner().bdc_state() == other.peer->target_owner().bdc_state() &&
+              peer->target_owner().wire_state() == other.peer->target_owner().wire_state() &&
+              peer->target_owner().run_state() == other.peer->target_owner().run_state() &&
               peer->reset_sequence().state() == other.peer->reset_sequence().state() &&
               capture_lcd(display->controller(), {.width = 128, .reverse_commons = true}) ==
                   capture_lcd(other.display->controller(), {.width = 128, .reverse_commons = true}),
           "Fresh three-CPU/reset/wire/clock/LCD owners reproduce complete native endpoints");
+  board::same_memory(peer->target_owner().memory(), other.peer->target_owner().memory());
 }
 } // namespace blofeld::test::keyboard_chain

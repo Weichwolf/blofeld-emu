@@ -57,8 +57,7 @@ void run_case(const Inputs input,
   trace << complete;
   for (unsigned n = 0; n < 2; ++n) {
     std::ostringstream actual;
-    Chain restored(
-        input.firmware, input.blocks, input.templates, actual, scenario, &saved.peer.memory);
+    Chain restored(input.firmware, input.blocks, input.templates, actual, scenario);
     restored.restore(saved);
     actual.str({});
     actual.clear();

@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <memory>
 #include <ostream>
@@ -86,6 +87,37 @@ Fixture::Fixture(const Firmware &image,
   bus.write(hc12::tscr1, timer_enable);
   host.cpu().set_state({.pc = caller, .sp = stack, .ccr = host_flags});
   bind();
+}
+
+Fixture::Fixture(McuMachine &machine,
+                 const Firmware &image,
+                 const std::vector<std::uint8_t> &code,
+                 const unsigned first_edge,
+                 std::ostream &output)
+    : firmware(image),
+      helper(code),
+      host(machine),
+      pre_reset(Hcs08Board::power_on_checkpoint(
+                    board_wire::blank(), board_wire::contract, Hcs08ResetEntry::active_background),
+                BLOFELD_HCS08_SLA,
+                {}),
+      next_edge(first_edge),
+      trace(output) {
+  require(first_edge > 0 && first_edge <= target_period && code.size() == helper_bytes,
+          "Declared borrowed controller clock/phase/reference extent");
+  const auto now = host.run_clock().elapsed_ticks();
+  if (now >= next_edge) { next_edge += ((now - next_edge) / target_period + 1) * target_period; }
+}
+
+std::bitset<Hcs08BoardMemory::ram_bytes> Fixture::ram_known() const {
+  std::bitset<Hcs08BoardMemory::ram_bytes> result;
+  for (unsigned n = 0; n < Hcs08BoardMemory::ram_bytes; ++n) {
+    result[n] = target_owner()
+                    .memory()
+                    .inspect_ram(static_cast<std::uint16_t>(Hcs08BoardMemory::ram_first + n))
+                    .known != 0;
+  }
+  return result;
 }
 
 Hcs08BoardWire &Fixture::target_owner() {
@@ -251,6 +283,7 @@ void Fixture::edge(const std::uint64_t ticks) {
     const auto byte = control.frame.at(control.received - 1);
     require(byte == blofeld::hcs08_bdc::background,
             "Actual original BACKGROUND is the only decoded command");
+    if (received_byte) { received_byte(byte); }
     received = after.received_bytes;
     trace << "RX value=" << static_cast<unsigned>(byte) << " ticks=" << ticks << '\n';
   }
