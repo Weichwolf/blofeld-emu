@@ -115,8 +115,9 @@ Buffers and transactions
   configuration/interface selection clear their affected halts. An existing
   halt becomes explicitly unknown after EPRST, whose protocol-state effect is
   not documented; see usb-endpoint-reset.txt. Control-pipe protocol STALL still
-  ends on new SETUP. Endpoint GET_STATUS and SET/CLEAR_HALT command decoding
-  remain unsupported; this does not qualify full USB enumeration or timing.
+  ends on new SETUP. Automatic GET_STATUS reports known physical2/3 halt state
+  (usb-endpoint-status.txt). Default control-pipe Halt and SET/CLEAR_HALT command
+  decoding remain unsupported; full USB enumeration and timing stay unqualified.
 
 Tests and evidence
 Run blofeld-usb-event-test, blofeld-usb-isr-test, blofeld-memory-usb-test under
@@ -127,6 +128,9 @@ ACK loss, duplicate suppression, ownership and DATA0/DATA1 transitions.
 usb_functional_halt checks 52 directed bulk/interrupt cases with actual address
 and configuration SETUP/status, exact data/flags/PID retention, copied states,
 reset-domain uncertainty and selective interface reset, plus control-pipe STALL.
+usb_endpoint_status adds data-endpoint status reads with explicit reset/mapping
+uncertainty; usb_endpoint_status_native connects own HC12 register producers to
+the MCU-backed host queue (usb-endpoint-status.txt).
 Its independent expectations follow USB2.0 8.4.5/9.4.5/9.4.10 and
 S12USB20D6E2FV1 3.1.11/3.1.12. These specify protocol behavior, not measured
 silicon clock edges.

@@ -484,7 +484,14 @@ USB device/transport              partial  PHY control and register/data-side en
                                           52 directed bulk/interrupt cases cover
                                           data/PID/flags, copies and reset scopes;
                                           prior halt after EPRST stays unknown.
-                                          Host endpoint-status/halt commands and
+                                          Automatic data-endpoint GET_STATUS
+                                          reports known Halt with15 reserved zeros.
+                                          24 patterns/192 copied replays,8 resets,
+                                          9 Request Errors/9 strict guards and4
+                                          selective-interface cases are checked.
+                                          Six own native reset/LDS/LDD/STD cases
+                                          drive actual MCU-backed host transfers.
+                                          Default control Halt,SET/CLEAR_HALT and
                                           physical USB timing remain unqualified.
                                           Original cold-start reset/configuration
                                           IRQs now return through native RTI/WAI.

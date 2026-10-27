@@ -1,0 +1,37 @@
+USB20 automatic data-endpoint GET_STATUS
+
+  cmake --build --preset strict --target blofeld-usb-endpoint-status-test blofeld-usb-endpoint-status-native-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(usb_endpoint_status|usb_endpoint_status_native)$'
+
+USB2.0 section9.4.5 requires a two-byte little-endian endpoint status: Halt in
+bit0, all fifteen reserved bits zero. S12USB20D6E2FV1 section4.2.5.1 assigns
+standard control transfers to the hardware command decoder. Supported active
+physical2/3 bulk/interrupt endpoints report their known functional halt, including
+an armed software STALL command and the halt retained after its self-clear.
+
+Only an actual status-data ACK and opposite-direction DATA1/ZLP complete the
+control read. Lost ACKs repeat the same DATA1 bytes; copies retain every phase.
+Reads do not clear the data endpoint halt, consume its payload, change DATA PID,
+DVALID/size/TCIE/completion, or retire host transport evidence. Actual interface
+selection changes only its own halt; subsequent queries report that state.
+Well-formed nonzero endpoints absent from the current address/configuration/
+alternate setting return Request Error. No request is forwarded as firmware SETUP.
+
+A prior halt remains unknown after EPRST. Queries fail until a documented
+selection/reset establishes it; a read cannot invent the unknown data PID.
+Default control-pipe functional Halt and physical4/5 endpoint status remain
+unsupported. Reserved address bits, ambiguous mappings, active interface
+uncertainty, reserved NISOF and overlapping firmware requests fail visibly.
+SET/CLEAR_HALT register effects, IQUE, electrical timing and original USTB/NISOF
+initialization conflicts remain separate requirements.
+
+The model test checks24 independent bulk/interrupt/state patterns,192 snapshot
+replays, eight reset patterns, nine specified Request Errors, nine strict guards
+and four selective-interface cases. The native test uses only own HC12 programs
+and endpoint descriptions, not manufacturer bytes. Six cases fetch their own reset
+vector and execute native LDS/LDD/STD with independently expected PC/register/NZV
+results. The actual MCU-backed host queue completes data/ACK/status without a
+firmware SETUP ISR. Peripheral/PHY inputs and valid address/configuration remain
+an explicit untimed fixture, not a clocked whole-board POR. These fixtures support the
+complete hardware emulator; they do not establish normal original enumeration,
+full board boot, original DSP audio, flash safety or physical equivalence.

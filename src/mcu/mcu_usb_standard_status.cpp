@@ -6,8 +6,40 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace blofeld {
+namespace {
+std::optional<unsigned> status_buffer(const std::array<std::uint32_t, 7> &descriptions,
+                                      const UsbConfigurationInfo &configuration,
+                                      const std::uint8_t address) {
+  constexpr unsigned number_mask = 15;
+  constexpr unsigned input_bit = 0x80;
+  constexpr unsigned direction_bit = 0x10;
+  constexpr unsigned field_mask = 15;
+  std::optional<unsigned> result;
+  for (unsigned index = 1; index < 5; ++index) {
+    const auto description = descriptions.at(index);
+    const auto input = (description & direction_bit) != 0;
+    const auto selected = (description >> 7U) & field_mask;
+    if ((description & number_mask) != (address & number_mask) ||
+        input != ((address & input_bit) != 0) || configuration.configuration == 0 ||
+        selected != configuration.configuration) {
+      continue;
+    }
+    const auto interface = (description >> 11U) & field_mask;
+    if (interface >= configuration.interfaces || interface >= configuration.alternatives.size()) {
+      throw Fault("Unqualified USB endpoint status interface outside active configuration");
+    }
+    const auto alternate = (description >> 15U) & field_mask;
+    if (alternate != configuration.alternatives.at(interface)) { continue; }
+    if (result) { throw Fault("Ambiguous USB endpoint status mapping"); }
+    result = index + 1;
+  }
+  return result;
+}
+}
+
 std::optional<McuUsb::AutomaticRead>
 McuUsb::decode_status_setup(const std::array<std::uint8_t, 8> &data) const {
   constexpr unsigned type = 0x60;
@@ -18,12 +50,35 @@ McuUsb::decode_status_setup(const std::array<std::uint8_t, 8> &data) const {
   if (data[2] != 0 || data[3] != 0 || data[5] != 0 || data[6] != 2 || data[7] != 0) {
     throw Fault("Unqualified USB GET_STATUS value/index/length");
   }
-  if (data[0] == endpoint_input) {
-    throw Fault("Unimplemented USB automatic standard request 0x00 recipient=endpoint");
-  }
   if ((configuration_status_ & usb::configuration_request) != 0 ||
       (status_ & (usb::setup | usb::setup_overrun)) != 0) {
     throw Fault("Unqualified USB GET_STATUS overlapping firmware SETUP/configuration");
+  }
+  if (data[0] == endpoint_input) {
+    constexpr unsigned reserved_address = 0x70;
+    constexpr unsigned number_mask = 15;
+    static_cast<void>(current_configuration("endpoint GET_STATUS"));
+    if ((data[4] & reserved_address) != 0) {
+      throw Fault("Reserved USB endpoint GET_STATUS address bits");
+    }
+    if ((data[4] & number_mask) == 0) {
+      throw Fault("Unqualified USB default control endpoint functional-halt status");
+    }
+    const auto index = status_buffer(configuration_, host_configuration(), data[4]);
+    if (!index) { return AutomaticRead{.size = 2, .error = true}; }
+    if (*index >= buffers_data_.size()) {
+      throw Fault("Unimplemented USB endpoint halt status physical-endpoint=" +
+                  std::to_string(*index));
+    }
+    static_cast<void>(maximum_packet(*index));
+    const auto &buffer = buffers_data_.at(*index);
+    const auto commanded = (buffer.control & usb::stall) != 0;
+    if (!buffer.functional_halt && !commanded) {
+      throw Fault("Unqualified USB functional-halt status after endpoint reset physical-endpoint=" +
+                  std::to_string(*index));
+    }
+    const auto halted = commanded || buffer.functional_halt.value_or(false);
+    return AutomaticRead{.value = {static_cast<std::uint8_t>(halted), 0}, .size = 2};
   }
   if (data[0] == interface_input) {
     auto result = interface_selection(data[4], "GET_STATUS");

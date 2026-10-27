@@ -190,15 +190,16 @@ void test_invalid_admission_and_context() {
     static_cast<void>(queue.poll(bus, context));
   } catch (const Fault &fault) {
     const std::string_view text = fault.what();
-    require(
-        text.contains("seq=2") && text.contains("endpoint=0x80") && text.contains("phase=setup") &&
-            text.contains("mcu-pc=0x8123") && text.contains("ccr=0x42") &&
-            text.contains("Unimplemented USB automatic standard request"),
-        "Unsupported automatic requests preserve endpoint, phase and actual MCU execution context");
+    require(text.contains("seq=2") && text.contains("endpoint=0x80") &&
+                text.contains("phase=setup") && text.contains("mcu-pc=0x8123") &&
+                text.contains("ccr=0x42") &&
+                text.contains("Unqualified USB default control endpoint functional-halt status"),
+            "Unqualified control-endpoint status preserves endpoint, phase and actual MCU "
+            "execution context");
     require(queue.faulted(), "The failed hardware path poisons further polling");
     return;
   }
-  throw Fault("Unsupported standard request reported host success");
+  throw Fault("Unqualified control-endpoint status reported host success");
 }
 
 void test_automatic_selection_transfers() {
