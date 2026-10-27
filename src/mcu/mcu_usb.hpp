@@ -105,6 +105,7 @@ private:
     std::uint16_t control = 0;
     bool data1 = false;
     bool pid_known = true;
+    std::optional<bool> functional_halt = false;
     std::optional<UsbInPacket> transmitted = std::nullopt;
   };
 

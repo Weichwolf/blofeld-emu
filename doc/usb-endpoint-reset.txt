@@ -21,11 +21,17 @@ decoder fields, UIMR, UCCSR/configuration, UTSR, static endpoint descriptions,
 configuration-word staging, selectors, buffer payload/knowledge and CRG phase.
 Configured IQUE/B registers remain unsupported; EPRST does not add queue data.
 The guide does not specify the resulting DATA PID or automatic optional-request
-phase here. These become unknown rather than guessed. Empty IN still NAKs;
+phase here. These become unknown rather than guessed. Without a prior functional
+halt, empty IN still NAKs;
 data-bearing transfers reject until a new SETUP establishes control DATA1,
 a configuration/interface acknowledgement establishes affected bulk DATA0, or
 a decoded bus reset establishes its initial state. An old automatic optional
 STALL response rejects until new SETUP/bus reset. Unknown payload stays unknown.
+For a previously halted non-control endpoint, EPRST does not establish whether
+the functional halt survives. Transactions fail visibly until a documented
+configuration/interface selection or bus reset establishes that protocol state.
+Trusted copies retain this uncertainty. The self-clearing STALL register bit
+and the persistent functional halt remain distinct (mcu-usb.txt).
 
 The test uses own descriptors, data and HC12 instructions. A native LDD/STD
 issues the real command with independent final PC/register/CCR expectations.

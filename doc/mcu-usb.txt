@@ -107,6 +107,16 @@ Buffers and transactions
   reads during an in-flight IN packet, fail at explicitly unresolved ownership/
   timing boundaries. OUT size writes and active endpoint descriptions outside
   the implemented local full-speed configurations also fail visibly.
+- Physical endpoints 2/3 retain functional halt separately from their software
+  STALL command. The command bit self-clears on the first stalled transaction;
+  subsequent IN/OUT still return STALL without consuming data, advancing DATA
+  PID or asserting completion. Software flag writes, unrelated control SETUP,
+  SOF and suspend/resume do not end that halt. Bus reset and completed
+  configuration/interface selection clear their affected halts. An existing
+  halt becomes explicitly unknown after EPRST, whose protocol-state effect is
+  not documented; see usb-endpoint-reset.txt. Control-pipe protocol STALL still
+  ends on new SETUP. Endpoint GET_STATUS and SET/CLEAR_HALT command decoding
+  remain unsupported; this does not qualify full USB enumeration or timing.
 
 Tests and evidence
 Run blofeld-usb-event-test, blofeld-usb-isr-test, blofeld-memory-usb-test under
@@ -114,6 +124,16 @@ build/strict, or the complete quality target. Independent literal register and
 payload vectors cover masks/flags, resume levels, SOF, configuration handshake,
 bank aliases, staging, reset, packet boundaries, bad CRC indications, NAKs,
 ACK loss, duplicate suppression, ownership and DATA0/DATA1 transitions.
+usb_functional_halt checks 52 directed bulk/interrupt cases with actual address
+and configuration SETUP/status, exact data/flags/PID retention, copied states,
+reset-domain uncertainty and selective interface reset, plus control-pipe STALL.
+Its independent expectations follow USB2.0 8.4.5/9.4.5/9.4.10 and
+S12USB20D6E2FV1 3.1.11/3.1.12. These specify protocol behavior, not measured
+silicon clock edges.
+
+  cmake --build --preset strict --target blofeld-usb-functional-halt-test
+  ctest --test-dir build/strict -R '^usb_functional_halt$' --output-on-failure
+
 usb_configuration_status adds 36 configuration/interface/deconfiguration
 combinations of TCIE, DVALID and TXSIZ, plus actual SETUP/reset cancellation
 and STALL. Literal packet/flags/IRQ expectations cover ACK loss and copies.

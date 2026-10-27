@@ -58,7 +58,11 @@ unsigned McuUsb::maximum_packet(const unsigned index) const {
 
 UsbResponse McuUsb::stall_response(const unsigned index) {
   auto &buffer = buffers_data_.at(index);
-  if (index >= 2) { buffer.control = static_cast<std::uint16_t>(buffer.control & ~usb::stall); }
+  if (index >= 2) {
+    // The CSR command self-clears; the functional halt persists (USB2.0 8.4.5).
+    buffer.control = static_cast<std::uint16_t>(buffer.control & ~usb::stall);
+    buffer.functional_halt = true;
+  }
   return UsbResponse::stall;
 }
 
@@ -137,7 +141,13 @@ UsbResponse McuUsb::receive_out(const UsbOutPacket packet) {
     return UsbResponse::stall;
   }
   auto &buffer = buffers_data_[index];
-  if ((buffer.control & usb::stall) != 0) { return stall_response(index); }
+  if ((buffer.control & usb::stall) != 0 || buffer.functional_halt.value_or(false)) {
+    return stall_response(index);
+  }
+  if (!buffer.functional_halt) {
+    throw Fault("Unqualified USB functional halt after endpoint reset at physical endpoint " +
+                std::to_string(index));
+  }
   if (!buffer.pid_known) {
     throw Fault("Unknown USB OUT DATA PID after endpoint reset at physical endpoint " +
                 std::to_string(index));
@@ -209,7 +219,13 @@ UsbInPacket McuUsb::request_automatic_in() {
 UsbInPacket McuUsb::request_local_in(const UsbBuffer endpoint, const unsigned maximum) {
   const auto index = buffer_index(endpoint);
   auto &buffer = buffers_data_[index];
-  if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }
+  if ((buffer.control & usb::stall) != 0 || buffer.functional_halt.value_or(false)) {
+    return {.response = stall_response(index)};
+  }
+  if (!buffer.functional_halt) {
+    throw Fault("Unqualified USB functional halt after endpoint reset at physical endpoint " +
+                std::to_string(index));
+  }
   if ((buffer.control & usb::data_valid) == 0) { return {.response = UsbResponse::nak}; }
   if (pending_in_ && pending_in_->buffer == index) { return pending_in_->packet; }
   if (buffer.transmitted) {

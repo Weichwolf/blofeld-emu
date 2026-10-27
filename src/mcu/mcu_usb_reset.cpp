@@ -12,6 +12,8 @@ void McuUsb::reset_endpoints() {
     buffer.transmitted.reset();
     // The module guide defines the register reset, not the post-EPRST DATA PID.
     buffer.pid_known = false;
+    // EPRST documents CSR reset, not whether an existing functional halt ends.
+    if (buffer.functional_halt.value_or(true)) { buffer.functional_halt.reset(); }
   }
   ique_controls_.fill(0);
   pending_in_.reset();

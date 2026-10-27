@@ -479,6 +479,13 @@ USB device/transport              partial  PHY control and register/data-side en
                                           buffers, setup/overrun, W1C/IRQs, SOF and
                                           DATA0/DATA1 retries checked. Real HC12
                                           setup/IN/OUT ISRs and priority chaining.
+                                          Functional halt persists after the
+                                          software STALL command self-clears.
+                                          52 directed bulk/interrupt cases cover
+                                          data/PID/flags, copies and reset scopes;
+                                          prior halt after EPRST stays unknown.
+                                          Host endpoint-status/halt commands and
+                                          physical USB timing remain unqualified.
                                           Original cold-start reset/configuration
                                           IRQs now return through native RTI/WAI.
                                           Actual configuration SETUP decodes
