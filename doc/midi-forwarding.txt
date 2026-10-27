@@ -50,8 +50,8 @@ instructions/IRQs are counted once instead of once per replay.
 
 Full boot, original endpoint setup, host USB-MIDI binding, bidirectional natural
 MIDI/SysEx, Wine Spectre, keyboard/PipeWire routing, DSP/audio, realtime behavior
-and physical equivalence remain open. The USTB/NISOF/automatic configuration-
-status frontiers remain strict. No fuzzing, physical traffic, module loading or
+and physical equivalence remain open. USTB/NISOF failures remain strict;
+conditional configuration status/ACK is scoped in usb-reset.txt. No fuzzing, physical traffic, module loading or
 system routing is used.
 
   cmake --build --preset strict --target blofeld-original-midi-forward-test

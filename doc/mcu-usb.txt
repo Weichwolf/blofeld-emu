@@ -37,8 +37,10 @@ Registers and interrupts
   application SETUP/SETOVR. Class/vendor request numbers still reach firmware.
   Status IN returns the documented NAK while SETECR remains set, even if firmware
   sets DVALID. A NAK creates no packet ownership or completion. After DONEECRU,
-  automatic status completion fails visibly: exact endpoint register/interrupt
-  effects remain unqualified. No successful status packet is synthesized.
+  status IN returns DATA1 with zero payload, independently of local FIFO/size.
+  Retries retain that packet; only host ACK clears DVALID, sets TFRC and
+  completes the automatic phase. TCIE gates the ordinary control-IN IRQ.
+  These are document-derived rules; physical status/ACK timing is unverified.
   Replacing an unresolved configuration request, or a pending firmware SETUP/
   SETOVR, also remains unqualified. Rejected overlap preserves USTB and UCCSR.
 - Status, application SETUP, configuration update and SOF use vectors 0xffd4,
@@ -101,6 +103,9 @@ build/strict, or the complete quality target. Independent literal register and
 payload vectors cover masks/flags, resume levels, SOF, configuration handshake,
 bank aliases, staging, reset, packet boundaries, bad CRC indications, NAKs,
 ACK loss, duplicate suppression, ownership and DATA0/DATA1 transitions.
+usb_configuration_status adds 36 configuration/interface/deconfiguration
+combinations of TCIE, DVALID and TXSIZ, plus actual SETUP/reset cancellation
+and STALL. Literal packet/flags/IRQ expectations cover ACK loss and copies.
 
 An own HC12 ISR acknowledges SETUP, copies an own descriptor from emulated ROM
 into USB RAM and queues it. Host ACK then drives a separate completion ISR;
@@ -126,6 +131,8 @@ flags; 9S12UF32DGV1 table 5-1 defines vectors. USB 2.0 sections 8.6.2..8.6.4 def
 retry/toggle behavior. doc/hardware/sources.json pins both official NXP and USB-IF
 reference archives. Native exception/operand definitions use S12CPUV2 7.5/7.8.
 USB 2.0 sections 9.4.7/9.4.10 define the configuration/interface request fields.
-The additionally pinned NXP DRM062 reference design and M68EVB912UF32UM board
-guide do not resolve USTB-after-ack retention, reserved NISOF or automatic status
-completion effects. Their firmware listings are not part of this implementation.
+Automatic no-data status uses USB2.0 sections 8.5.3/8.5.3.1 (DATA1/ZLP/ACK),
+UCCSR section 3.1.6 (SETECR/DONEECRU gate) and UEPCSR0 section 3.1.9
+(transaction completion/DVALID/TFRC/TCIE). Silicon comparison remains open.
+The additionally pinned NXP DRM062 and M68EVB912UF32UM do not resolve
+USTB-after-ack retention or reserved NISOF. Their firmware is not included.

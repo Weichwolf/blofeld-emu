@@ -38,6 +38,8 @@
 namespace {
 constexpr unsigned reset_vector = 0xffd4;
 constexpr unsigned configuration_vector = 0xffd0;
+constexpr unsigned control_in_vector = 0xffce;
+constexpr unsigned control_in_return = 0xbe5e;
 constexpr unsigned reset_poll = 0xbdf9;
 constexpr unsigned reset_delay = 0xbdf1;
 constexpr unsigned reset_return = 0xbe10;
@@ -217,8 +219,9 @@ void Session::step(const unsigned vector) {
               "Every real WAI frame byte matches the independent NXP register order");
     }
   }
-  if (before.pc == (vector == reset_vector ? reset_return : configuration_return) ||
-      (vector == reset_vector && before.pc == suspend_return)) {
+  if ((vector == reset_vector && (before.pc == reset_return || before.pc == suspend_return)) ||
+      (vector == configuration_vector && before.pc == configuration_return) ||
+      (vector == control_in_vector && before.pc == control_in_return)) {
     auto expected = interrupted;
     expected[4] = main_stack;
     require(result.instruction_executed && registers(machine.cpu().state()) == expected &&
@@ -323,6 +326,7 @@ void Session::finish_configuration() {
   const auto pending = save();
   const auto pending_queue = queue;
   std::optional<Outcome> expected;
+  std::optional<Outcome> expected_status;
   constexpr unsigned requested = 0x2000;
   constexpr unsigned valid_configuration = 0x8100;
   for (unsigned replay = 0; replay < 3; ++replay) {
@@ -343,27 +347,39 @@ void Session::finish_configuration() {
     if (!expected) { expected = actual; }
     require(actual == *expected,
             "Pending configuration snapshot replays CPU/RAM/USB/write prefix through native RTI");
-    bool rejected = false;
-    try {
-      static_cast<void>(queue.poll(machine.bus(), context()));
-    } catch (const blofeld::Fault &fault) {
-      require(std::string_view(fault.what())
-                  .contains("automatic configuration status completion after DONEECRU"),
-              "Automatic status completion retains its specific unresolved boundary");
-      const std::string_view reason = fault.what();
-      require(reason.contains("seq=7 endpoint=0x00 phase=status") &&
-                  reason.contains("mcu-pc=" + blofeld::hex(machine.cpu().state().pc)) &&
-                  queue.faulted() && queue.pending() == 1,
-              "Host transfer preserves sequence/phase/actual MCU context and poisons on fault");
-      trace_ << "CONFIGURATION_HOST_FRONTIER " << reason << '\n';
-      trace_ << "CONFIGURATION_STATUS_FRONTIER "
-             << reason.substr(reason.find("Unqualified USB automatic configuration")) << '\n';
-      rejected = true;
-    }
-    require(rejected && outcome() == actual,
-            "Unknown status completion cannot mutate CPU/RAM/USB/NVM or synthesize host success");
-    check_flash();
     report("CONFIGURATION");
+    const auto completed = queue.poll(machine.bus(), context());
+    const blofeld::UsbTransferCompletion expected_completion{
+        .sequence = 7,
+        .status = blofeld::UsbTransferStatus::success,
+        .transferred = 0,
+        .input = {},
+        .input_direction = false};
+    require(completed.size() == 1 && completed.front() == expected_completion &&
+                queue.pending() == 0 && !queue.faulted(),
+            "Original DONEECRU plus actual DATA1/ZLP/ACK completes exactly one real host transfer");
+    constexpr unsigned endpoint_control = 0x314;
+    constexpr unsigned acknowledged_status = 0x3000;
+    require(word(endpoint_control) == acknowledged_status && machine.cpu().pending_interrupt(),
+            "Host ACK produces literal TFRC/TCIE with DVALID clear and a real pending CPU IRQ");
+    trace_ << "CONFIGURATION_HOST_STATUS 7 0 0 " << word(endpoint_control) << '\n';
+    counters = {};
+    interrupted = registers(machine.cpu().state());
+    do {
+      require(counters.native < instruction_limit, "Original control-IN IRQ must return to WAI");
+      step(control_in_vector);
+    } while (!machine.cpu().waiting() || machine.cpu().pending_interrupt());
+    constexpr unsigned ready_control = 0x1000;
+    require(counters.entries == 1 && counters.returns == 1 &&
+                word(endpoint_control) == ready_control &&
+                queue.poll(machine.bus(), context()).empty(),
+            "Original control-IN ISR acknowledges actual TFRC and returns through native RTI/WAI");
+    const auto status_outcome = outcome();
+    if (!expected_status) { expected_status = status_outcome; }
+    require(status_outcome == *expected_status,
+            "Original status IRQ replays all CPU/RAM/USB state and actual write ordering");
+    check_flash();
+    report("CONFIGURATION_STATUS");
   }
 }
 

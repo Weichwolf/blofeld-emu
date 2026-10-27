@@ -42,7 +42,8 @@ A reset pulse remains observable even when its final decoder levels equal their
 earlier values. Before import, changed current configuration/alternates also
 retire metadata. After exclusive import, actual configuration/description changes
 belong to that same host; its lease can never be automatically re-published.
-Pending or unsupported automatic configuration status still fails in McuUsb.
+Pending configuration status NAKs until actual DONEECRU; unsupported control
+phases still fail in McuUsb. Conditional original completion: usb-reset.txt.
 
 Board checkpoint restore reinstates modeled MCU/DSP state but increments a
 separate transport revision. A subsequent poll of the old adapter closes every
@@ -71,7 +72,8 @@ No manufacturer program bytes, automatic fuzzing or physical traffic are used.
 
 Remaining requirements
 - Original ordinary SETUP still reaches invalid USTB0x033f at PC0xbc3d. Reserved
-  bulk NISOF=2 and automatic configuration-status completion remain strict.
+  bulk NISOF=2 also remains strict. Decoded configuration status/ACK has a
+  conditional original IRQ regression (usb-reset.txt), not host qualification.
 - Kernel USB attachment, normal descriptor/address/configuration enumeration,
   USB-MIDI driver binding, bidirectional MIDI/SysEx/sample transfer, Wine Spectre
   and keyboard/PipeWire routing remain unqualified. USB/IP remote port reset is

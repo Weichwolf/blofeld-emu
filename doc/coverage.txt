@@ -463,9 +463,13 @@ USB device/transport              partial  PHY control and register/data-side en
                                           into SETECR and pending status NAK;
                                           original FFD0/DONEECRU/RTI/WAI replayed
                                           twice from the pending request.
-                                          Automatic status completion after
-                                          DONEECRU remains explicitly unqualified;
-                                          no host configuration success claimed.
+                                          Actual DONEECRU releases DATA1/ZLP;
+                                          host ACK completes that queued request
+                                          and drives original FFCE/RTI/WAI.
+                                          Both phases replay twice. 38 directed
+                                          peripheral cases cover retries/flags/
+                                          IRQ/reset/STALL. Document-derived rules;
+                                          physical status/ACK effects unverified.
                                           Three observed reset profiles include
                                           255 genuine delay calls on timeout;
                                           two mid-ISR replays retain CPU/RAM and

@@ -106,7 +106,8 @@ Explicit runtime CLI/common-clock board binding has own native/actual-process
 tests and capture/session invalidation guards (usb-runtime.txt). There is no
 kernel USB attachment. Normal original enumeration, USB-MIDI class binding,
 Wine Spectre transfer, keyboard/PipeWire routing and full boot/MIDI/audio remain
-open. Original USTB/NISOF/automatic configuration status frontiers remain strict.
+open. Original USTB/NISOF failures remain strict; conditional configuration
+status/ACK has separate original IRQ evidence (usb-reset.txt).
 Loopback own-fixture tests are not hardware or original-firmware equivalence.
 No fuzzing, physical device traffic, module loading or system routing is used.
 

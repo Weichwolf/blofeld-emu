@@ -19,9 +19,10 @@ exists (usbip-session.txt). Explicit reference-board/CLI binding has own runtime
 tests (usb-runtime.txt); kernel attachment and actual USB-MIDI remain absent.
 Actual SET_CONFIGURATION/SET_INTERFACE SETUP decoding and pending-status NAK are
 modeled; the former executes the original configuration ISR and replays through
-RTI/WAI. Automatic status completion after DONEECRU is still an explicit failure
-until its endpoint register/interrupt effects are qualified. No host status
-success follows merely from firmware acknowledging the configuration interrupt.
+RTI/WAI. After actual DONEECRU, document-derived DATA1/ZLP and host ACK
+complete that queued control transfer and drive the original FFCE handler
+through RTI/WAI. Two joint restores reproduce both phases (usb-reset.txt).
+This conditional result does not establish normal enumeration or silicon timing.
 --midi-device is a read-only legacy RawMIDI input, with no output or USB-device
 enumeration. The editor's XML/WAV commands are offline functionality.
 

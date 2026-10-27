@@ -4,7 +4,8 @@ USB2.0 section9.1.1.6 requires device status, address and configuration to survi
 suspend. S12USB20D6E2FV1 sections3.1.2/4.2.2 describe the corresponding USD/USSC
 observations and suspend/resume block. These facts do not specify raw wire
 detection timing or prove a particular Blofeld's silicon behavior. The original
-USTB/NISOF/configuration-status boundaries in usb-reset.txt remain unchanged.
+USTB/NISOF boundaries remain visible; conditional configuration status/ACK
+and original IRQ evidence are recorded separately in usb-reset.txt.
 
 The existing reference-board decoder input supplies an explicit suspend/resume
 observation on a known full-speed link. Suspend changes USD/USSC but does not

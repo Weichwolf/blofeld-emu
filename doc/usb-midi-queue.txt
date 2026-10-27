@@ -62,7 +62,8 @@ counted once in the measured execution report, not again for every replay.
 
 Whole boot, natural MIDI routing, normal host enumeration, USB-MIDI class binding,
 Wine Spectre, DSP/audio, real-time behavior and physical equivalence remain open.
-The original USTB/NISOF/automatic configuration-status failures remain visible.
+Original USTB/NISOF failures remain visible. Conditional automatic status/ACK
+and its original IRQ regression are scoped separately in usb-reset.txt.
 No fuzzing, physical traffic, module loading or system routing is used.
 
   cmake --build --preset strict --target blofeld-original-usb-queue-test

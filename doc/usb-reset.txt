@@ -47,11 +47,16 @@ configuration 1 through the USB/IP transfer-stage decoder and MCU-backed host
 queue. Hardware ACKs the SETUP and NAKs status IN before CPU execution.
 Its original FFD0 ISR writes DONEECRU, returns through RTI and reaches main WAI.
 Two joint queue/pending-request snapshot restores repeat the complete CPU/RAM/register/write
-prefix and unchanged NVM result. Automatic status IN after DONEECRU still fails
-explicitly: its endpoint register/interrupt effects remain unqualified. There
-is no synthesized zero-length success, TFRC or completed host configuration.
-The adapter retains its pending request, poisons further polling and reports the
-actual MCU context and request identity. No import/listener/host attach is implied.
+prefix and unchanged NVM result. Actual DONEECRU releases a zero-length
+DATA1 status packet; host ACK completes precisely that queued transfer.
+UEPCSR0 becomes 0x3000 (TFRC/TCIE, DVALID clear), raising FFCE. The unchanged
+original control-IN ISR clears TFRC, returns through RTI and reaches WAI;
+UEPCSR0 is then 0x1000. Each suffix executes 52 configuration and 64
+status/foreground instructions. Both joint restores also reproduce the
+complete status-phase CPU/RAM/USB/write prefix and unchanged NVM.
+The status model follows USB2.0 8.5.3/8.5.3.1 and controller 3.1.6/3.1.9;
+physical silicon effects and timing remain unverified. No normal enumeration,
+import/listener/host attach or MIDI delivery is established by this fixture.
 
 Four alternating decoded suspend/resume changes also enter the original status
 handler through its actual WAI frame. The seven-instruction path acknowledges

@@ -237,15 +237,11 @@ constexpr unsigned pending_input_control = 0x5000;
 constexpr unsigned pending_interface = 0xe100;
 constexpr unsigned pending_deconfiguration = 0xa000;
 
-void reject_configuration_completion(blofeld::McuUsb &usb) {
-  try {
-    static_cast<void>(usb.request_in(blofeld::UsbBuffer::control_in));
-  } catch (const blofeld::Fault &fault) {
-    require(std::string(fault.what()).contains("automatic configuration status completion"),
-            "Automatic status completion retains its specific unqualified boundary");
-    return;
-  }
-  throw blofeld::Fault("DONEECRU cannot manufacture a qualified automatic status packet");
+void check_configuration_retry(blofeld::McuUsb &usb) {
+  const auto packet = usb.request_in(blofeld::UsbBuffer::control_in);
+  require(packet.response == blofeld::UsbResponse::data && packet.size == 0 && packet.data1,
+          "Actual DONEECRU releases a zero-length DATA1 status packet");
+  usb.finish_in(false);
 }
 
 void test_configuration_setup_and_pending_status() {
@@ -287,9 +283,9 @@ void test_configuration_setup_and_pending_status() {
     require(word(usb, configuration_status) == completed_configuration &&
                 usb.interrupt_sources() == 0,
             "Actual DONEECRU write acknowledges only the configuration request");
-    reject_configuration_completion(usb);
+    check_configuration_retry(usb);
     require(word(usb, endpoint0) == pending_input_control,
-            "Unknown automatic completion does not consume DVALID or set TFRC");
+            "Unacknowledged status does not consume DVALID or set TFRC");
   };
   firmware_pending();
   usb = pending;
@@ -301,13 +297,13 @@ void test_configuration_setup_and_pending_status() {
               usb.request_in(blofeld::UsbBuffer::control_in).response == blofeld::UsbResponse::nak,
           "SET_INTERFACE decodes its own INTFVALID/SETECR without a synthetic host decoder call");
   usb.write({.address = configuration_status, .value = endpoint_ie});
-  reject_configuration_completion(usb);
+  check_configuration_retry(usb);
   constexpr std::array<std::uint8_t, 8> unconfigure{0, 9, 0, 0, 0, 0, 0, 0};
   require(usb.receive_setup(unconfigure) == blofeld::UsbResponse::ack &&
               word(usb, configuration_status) == pending_deconfiguration,
           "Configuration zero is a real deconfiguration request, not a configured interface");
   usb.write({.address = configuration_status, .value = endpoint_ie});
-  reject_configuration_completion(usb);
+  check_configuration_retry(usb);
   usb.receive_setup(descriptor_request);
   require(usb.request_in(blofeld::UsbBuffer::control_in).response == blofeld::UsbResponse::nak &&
               usb.interrupt_sources() == 2,
@@ -392,7 +388,7 @@ void test_configuration_setup_nonzero_interface_and_alternate() {
   usb.write({.address = configuration_status, .value = endpoint_ie});
   require(word(usb, configuration_status) == completed_interface,
           "DONEECRU retains the actual configuration/interface/alternate fields");
-  reject_configuration_completion(usb);
+  check_configuration_retry(usb);
   constexpr std::array<std::array<std::uint8_t, 8>, 3> unsupported_interface{
       {{1, 11, 3, 0, 1, 0, 0, 0}, {1, 11, 2, 0, 2, 0, 0, 0}, {1, 11, 2, 0, 1, 1, 0, 0}}};
   for (const auto &request : unsupported_interface) {

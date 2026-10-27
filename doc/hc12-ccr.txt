@@ -44,8 +44,8 @@ and official firmware remain local (usb-midi-producer-reference.json).
 
 This does not qualify queue_usb_midi_event, original endpoint configuration,
 normal boot/enumeration, USB-MIDI class binding, MIDI input, DSP/audio, physical
-timing or device equivalence. The original USTB/NISOF/automatic configuration
-status frontiers remain strict and are tested separately in usb-reset.txt.
+timing or device equivalence. Original USTB/NISOF failures and conditional
+configuration status/ACK evidence are tested separately in usb-reset.txt.
 The separately scoped queue/callee qualification is in usb-midi-queue.txt.
 
   cmake --build --preset strict --target blofeld-hc12-ccr-test blofeld-original-usb-midi-test

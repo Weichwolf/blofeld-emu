@@ -157,7 +157,13 @@ UsbInPacket McuUsb::request_in(const UsbBuffer endpoint) {
     if ((configuration_status_ & usb::configuration_request) != 0) {
       return {.response = UsbResponse::nak};
     }
-    throw Fault("Unqualified USB automatic configuration status completion after DONEECRU");
+    auto &buffer = buffers_data_[index];
+    if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }
+    if (pending_in_ && pending_in_->buffer == index) { return pending_in_->packet; }
+    // UCCSR gates the automatic no-data status; USB2.0 requires DATA1/ZLP.
+    const UsbInPacket packet{.response = UsbResponse::data, .size = 0, .data1 = true};
+    pending_in_ = PendingIn{.buffer = index, .packet = packet};
+    return packet;
   }
   auto &buffer = buffers_data_[index];
   if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }
@@ -187,6 +193,7 @@ void McuUsb::finish_in(const bool acknowledged) {
   if (!pending_in_) { throw Fault("USB IN handshake without an outstanding data packet"); }
   require_packet();
   if (acknowledged) {
+    if (pending_in_->buffer == 0 && configuration_control_) { configuration_control_ = false; }
     auto &buffer = buffers_data_.at(pending_in_->buffer);
     buffer.control =
         static_cast<std::uint16_t>((buffer.control & ~usb::data_valid) | usb::transfer_complete);

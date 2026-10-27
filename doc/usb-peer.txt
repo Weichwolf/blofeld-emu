@@ -58,7 +58,7 @@ unknown states, GPIO observations, PID and native write/strobe history. Unrelate
 RAM and every NVM byte/knowledge/erase-history bit remain guarded. Captured
 prefix instructions/IRQs/strobes count once rather than once per replay.
 
-Original startup, USTB/NISOF/automatic status behavior, normal host enumeration,
+Original startup, USTB/NISOF behavior, normal host enumeration,
 USB-MIDI binding, natural peer/DSP coupling, audio, Wine Spectre/keyboard routing,
 physical clocks and device equivalence remain open. No fuzzing, physical traffic,
 module loading or system routing is used. Raw headers above 15 remain

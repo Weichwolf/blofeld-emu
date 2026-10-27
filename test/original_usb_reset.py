@@ -48,14 +48,16 @@ def validate(text):
         raise ValueError("Missing original configuration IRQ acknowledgement and two replays")
     if re.findall(r"^CONFIGURATION_SETUP (.+)$", text, re.M) != ["ACK NAK"]:
         raise ValueError("Missing actual configuration SETUP and pending status NAK")
-    completion = "Unqualified USB automatic configuration status completion after DONEECRU"
-    if re.findall(r"^CONFIGURATION_STATUS_FRONTIER (.+)$", text, re.M) != [completion] * 3:
-        raise ValueError("Missing automatic configuration completion boundary and replays")
-    host = re.findall(r"^CONFIGURATION_HOST_FRONTIER (.+)$", text, re.M)
-    if (len(host) != 3 or len(set(host)) != 1 or not re.fullmatch(
-            r"USB host request seq=7 endpoint=0x00 phase=status mcu-pc=0x8315 "
-            r"ccr=0x[0-9a-f]{2}: " + re.escape(completion), host[0])):
-        raise ValueError("Missing poisoned host request with original native context and replays")
+    status = rows("CONFIGURATION_STATUS")
+    if (len(status) != 3 or status != [status[0]] * 3 or
+            status[0][:5] != (1, 0, 0, 1, 1) or status[0][-1] <= 0):
+        raise ValueError("Missing original control-IN TFRC IRQ/RTI/WAI and two replays")
+    host = [tuple(map(int, row)) for row in re.findall(
+        r"^CONFIGURATION_HOST_STATUS (\d+) (\d+) (\d+) (\d+)$", text, re.M)]
+    if host != [(7, 0, 0, 0x3000)] * 3:
+        raise ValueError("Missing actual zero-length status/ACK host completion or literal TFRC/TCIE")
+    if re.search(r"^CONFIGURATION_.*FRONTIER", text, re.M):
+        raise ValueError("The old unsupported configuration-status frontier must not remain")
     frontiers = re.findall(r"^MIDI_FRONTIER (IN|OUT) (.+)$", text, re.M)
     if len(frontiers) != 2 or {kind for kind, _ in frontiers} != {"IN", "OUT"}:
         raise ValueError("Missing original MIDI descriptor failure evidence")
@@ -95,14 +97,17 @@ def validate(text):
             "reset_configuration_instructions": reset_instructions,
             "reset_profiles": len(resets), "replays": len(replays),
             "configuration_irqs": len(configurations), "configuration_replays": 2,
-            "configuration_host_faults": len(host),
+            "configuration_host_completions": len(host),
+            "configuration_status_irqs": len(status),
+            "configuration_status_instructions": sum(row[-1] for row in status),
             "original_descriptor_probe_refusals": len(probe),
             "original_runtime_refusals": len(runtime),
             "original_runtime_restore_retirements": sum(row[5] for row in runtime),
             "runtime_native_instructions": sum(row[1] for row in runtime),
             "reserved_midi_failures": len(frontiers),
             "original_delay_calls": sum(row[2] for row in resets),
-            "native_instructions": reset_instructions + setup_instructions + sum(row[1] for row in runtime)}
+            "native_instructions": reset_instructions + setup_instructions +
+            sum(row[-1] for row in status) + sum(row[1] for row in runtime)}
 
 
 def main():
@@ -121,13 +126,14 @@ def main():
     diagnostics = result.stdout + result.stderr
     trace.with_suffix(".log").write_text(diagnostics)
     if result.returncode or any(marker in diagnostics for marker in (
-            "AddressSanitizer", "LeakSanitizer", "UndefinedBehaviorSanitizer", "runtime error:")):
+            "AddressSanitizer", "LeakSanitizer", "UndefinedBehaviorSanitizer", "ThreadSanitizer", "runtime error:")):
         raise ValueError(f"Original USB reset execution failed: {diagnostics}")
     totals = validate(trace.read_text())
     report.write_text(json.dumps({"passed": True, **totals, "scope": reference["qualification"],
                                   "fuzz_execution": False, "physical_traffic": False}, indent=2) + "\n")
-    print("Verified original cold-start USB reset/configuration IRQs and two joint mid-ISR "
-          "replays, eight original SETUP branches, seven conditional descriptor sizes and sixteen "
+    print("Verified original cold-start USB reset/configuration and status-IN IRQs, actual "
+          "DATA1/ZLP/ACK host completion and two joint restores, "
+          "eight original SETUP branches, seven conditional descriptor sizes and sixteen "
           "pre-read restores. Ordinary/chained SETUP retains its invalid-USTB boundary; "
           "original MIDI endpoints retain their reserved NISOF failure. Three fresh production runtime "
           "attempts return exact zero-device TCP lists and retire on trusted restore. "

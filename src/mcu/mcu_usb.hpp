@@ -66,8 +66,8 @@ struct UsbEndpointInfo {
   std::optional<bool> data1; // Unknown after an unqualified endpoint reset.
 };
 
-// USB20D6E2F register/buffer side, with configuration SETUP decoding/pending NAK.
-// Wire decoding, automatic status completion, other automatic standard requests,
+// USB20D6E2F register/buffer side, including decoded configuration status/ACK.
+// Wire decoding, other automatic standard requests,
 // high-speed packets and IQUE data remain unsupported.
 class McuUsb {
 public:
