@@ -73,6 +73,25 @@ class UsbObservationTest(unittest.TestCase):
         self.assertEqual(raw, OWN_DESCRIPTOR)
         self.assertEqual(metadata["observations"]["attributes"]["idVendor"]["value"], "1234")
 
+    def test_attribute_padding_is_preserved_and_changes_are_detected(self):
+        (self.device / "product").write_text(" Blofeld fixture \n")
+        metadata, _ = self.capture()
+        self.assertEqual(metadata["observations"]["attributes"]["product"]["value"], " Blofeld fixture ")
+        read = OBSERVER.read_bytes
+        changed = False
+
+        def alter_padding(path, limit):
+            nonlocal changed
+            data = read(path, limit)
+            if path.name == "descriptors" and not changed:
+                changed = True
+                (self.device / "product").write_text("Blofeld fixture\n")
+            return data
+
+        with mock.patch.object(OBSERVER, "read_bytes", side_effect=alter_padding):
+            with self.assertRaisesRegex(OBSERVER.CaptureError, "changed during observation"):
+                self.capture()
+
     def test_reenumeration_between_observations_fails(self):
         read = OBSERVER.read_bytes
         changed = False

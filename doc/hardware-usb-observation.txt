@@ -22,6 +22,10 @@ are required. This detects observed re-enumeration and binding changes; it is
 not an atomic hardware snapshot. Reads accept short chunks and do not rely on
 sysfs file sizes. Optional missing or unreadable attributes remain explicit;
 missing required identity, oversized input and unstable observations fail.
+Text attributes retain all characters except one trailing LF added by sysfs;
+padding changes therefore remain visible to the repeated-read comparison.
+Reference: Linux drivers/usb/core/sysfs.c, usb_string_attr:
+  https://github.com/torvalds/linux/blob/master/drivers/usb/core/sysfs.c
 
 The selected new output directory must be Git-ignored under doc/local/.
 descriptors.bin retains the exact cached bytes; capture.json records their

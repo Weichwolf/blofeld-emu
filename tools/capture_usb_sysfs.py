@@ -55,7 +55,7 @@ def attributes(path, names, required=()):
     result = {}
     for name in names:
         try:
-            value = read_bytes(path / name, ATTRIBUTE_LIMIT).decode("utf-8").strip()
+            value = read_bytes(path / name, ATTRIBUTE_LIMIT).decode("utf-8").removesuffix("\n")
             result[name] = {"status": "observed", "value": value}
         except OSError as error:
             if name in required:
