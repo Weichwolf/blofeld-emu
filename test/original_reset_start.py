@@ -105,22 +105,17 @@ def verify(trace):
         events = Path(str(output) + ".trace").read_text()
         ticks_at, _ = clock_ledger(prefix + events)
         result = {"observed": observed,
-                  "mcu": verify_mcu(output, observed, ticks_at, 5 if index == 0 else 3)}
-        if index == 0:
-            assert "Unknown MCU GPIO input at 0x0278 mask=0x3e" in line
-            assert observed["retired"] == 1672474 and observed["mcu"] == 0xb98d
-            assert observed["units"] == observed["dsp_attempts"] == observed["frames"] == 0
-            assert observed["dsp_ticks"] == observed["reset_ticks"]
-            assert not Path(str(output) + ".dsp.jsonl").read_bytes()
-        else:
-            assert all(observed[name] == value for name, value in POSITIVE.items())
-            assert "Unmapped DSP memory write at Y:0x002000" in line
-            result["dsp"] = verify_dsp(output, observed, events)
-            result["wire"] = verify_wire(events, ticks_at)
-            assert result["dsp"]["failed_completion"] == observed["common"] + 17
+                  "mcu": verify_mcu(output, observed, ticks_at, 3)}
+        assert all(observed[name] == value for name, value in POSITIVE.items())
+        assert "Unmapped DSP memory write at Y:0x002000" in line
+        result["dsp"] = verify_dsp(output, observed, events)
+        result["wire"] = verify_wire(events, ticks_at)
+        assert result["dsp"]["failed_completion"] == observed["common"] + 17
         cases.append(result)
     for suffix in (".trace", ".mcu.jsonl", ".dsp.jsonl", ".phases.json"):
-        assert Path(str(trace) + ".1" + suffix).read_bytes() == Path(str(trace) + ".2" + suffix).read_bytes()
+        expected = Path(str(trace) + ".0" + suffix).read_bytes()
+        assert expected == Path(str(trace) + ".1" + suffix).read_bytes()
+        assert expected == Path(str(trace) + ".2" + suffix).read_bytes()
     assert "REPLAY native=1 ram=1 events=1" in text
     ticks_at, _ = clock_ledger(prefix)
     held_costs = verify_mcu(Path(str(trace) + ".held"), held, ticks_at, 1)

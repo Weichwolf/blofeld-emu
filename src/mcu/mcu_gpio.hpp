@@ -3,6 +3,7 @@
 
 #include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
+#include "common/masked_bus.hpp"
 
 #include <array>
 #include <cstddef>
@@ -68,6 +69,7 @@ public:
   [[nodiscard]] PinBiases biases(McuPort port) const;
   [[nodiscard]] static std::string_view register_name(std::uint16_t offset);
   [[nodiscard]] std::uint8_t read(std::uint16_t offset) const;
+  [[nodiscard]] std::uint8_t read_masked(MaskedByteRead access) const;
   void write(ByteWrite write);
 
 private:
@@ -87,7 +89,7 @@ private:
   [[nodiscard]] std::uint8_t sample(McuPort port, std::uint8_t requested) const;
   [[nodiscard]] PinSample resolve(McuPort port, std::uint8_t requested) const;
   [[nodiscard]] unsigned pull_enable(McuPort port) const;
-  [[nodiscard]] std::uint8_t data(McuPort port) const;
+  [[nodiscard]] std::uint8_t data(McuPort port, std::uint8_t mask) const;
   [[nodiscard]] std::uint8_t tied_low(McuPort port) const;
   std::array<PortState, port_count> ports_{};
   std::array<GpioPadBinding, port_count> pads_{};

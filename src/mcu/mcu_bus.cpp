@@ -3,6 +3,7 @@
 
 #include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
+#include "common/masked_bus.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_clock.hpp"
 #include "mcu/mcu_cop.hpp"
@@ -230,6 +231,22 @@ std::uint8_t McuBus::read(const std::uint16_t address) {
     }
   }
   return memory_.read(address);
+}
+
+std::uint8_t McuBus::read_masked_byte(const MaskedByteRead access) {
+  const auto address = access.address;
+  const auto mask = access.mask;
+  const auto location = memory_.locate(address);
+  if (location.space != McuSpace::registers || McuGpio::register_name(location.offset).empty()) {
+    return MaskedByteBus::read_masked_byte(access);
+  }
+  try {
+    return gpio_.read_masked({.address = location.offset, .mask = mask});
+  } catch (const Fault &fault) {
+    throw Fault("MCU masked read at " + hex(address) + " mask=" + hex(mask, 2) +
+                " (register offset " + hex(location.offset) + ") pc=" + hex(context_.pc) +
+                " ccr=" + hex(context_.ccr, 2) + ": " + fault.what());
+  }
 }
 
 void McuBus::write(const std::uint16_t address, const std::uint8_t value) {

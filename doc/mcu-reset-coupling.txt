@@ -94,12 +94,13 @@ establish physical wiring, a passive voltage winner or whole-board recovery.
 
   ctest --test-dir build/strict -R '^original_update_reset_inputs$' --output-on-failure
 
-Supplemental local ASan/UBSan diagnostics continue the same low-Q7/order0/phase0
-owner beyond8200. Without a TIO0 observation, the native timer fails at87ea after
+Retained local ASan/UBSan diagnostics from the earlier whole-byte frontend
+continue the same low-Q7/order0/phase0 owner beyond8200. Without a TIO0 observation, the native timer fails at87ea after
 28 application instructions. Observing idle-high PT0 before capture activation
 permits1582162 application instructions/9233816 MCU reference ticks, then the
-actual PU read0278 atb98d fails with unknown mask3f. These deltas match the
-independent original_cycle_application cold-start census. MCU NVM stays exact;
+actual PU read0278 atb98d fails with unknown mask3f. The current selected-bit
+original_cycle_application census retains these deltas while requiring only
+PU0; its missing-input diagnostic reports mask01. MCU NVM stays exact;
 the DSP remains in its original transferred helper at2e6b/R1=144ba, epoch1.
 This diagnostic is not CTest-adopted or separately TSan/hardware validated.
 Shorter bounded runs stop inside real delay counters, not a proven reply wait.
@@ -111,8 +112,9 @@ with PB0-high serial boot. Additional gating is not evidenced.
 PU0 is a stronger source-consistent reset/readback candidate: PTU=00/DDRU=01
 holds low through all delays; DDRU=00 atb98a releases it before the bit0 poll.
 DSP RESET has an internal pull-up (DSP56371UM table2-6). Continuity is unproved;
-direct active-low HREQ has the opposite ready polarity. Unknown mask3f is the
-implemented whole-port mask, not six ready signals; unused inputs stay unknown.
+direct active-low HREQ has the opposite ready polarity. The original BRCLR
+observes only PU0; the selected-bit native interface preserves unknown unused
+inputs (hc12-masked-gpio.txt).
 Shared scheduling admits an explicit fixed-mode EXTAL hold (dsp-reset.txt).
 begin_dsp_reset/release_dsp_reset accept a consumed MCU instruction boundary or
 the actual observe_write signal callback; unrelated active callbacks reject.
@@ -131,12 +133,13 @@ original_reset_start starts the DSP reference owner at the actual U0-low write
 (B944); earlier DSP power-on history remains outside this experiment. All original
 MCU startup/delay instructions execute. U0 release at B98A resolves against the
 declared DSP RESET pull-up, without a fixed ready delay or a PC-triggered reply.
-Unknown U1..5 still fault with mask3e. A separate declared weak pull-down profile
-permits native transmission of97 frames/7275 stores and all94 stage words; only
-the original trailing UI word remains in the copied FIFO. Held-reset replay
-compares full observed CPU/stack state, all5120 MCU SRAM bytes and event/census
-suffixes. Independent manual costs audit both timelines through the unchanged
-Y002000 fault. This does not qualify PU0 continuity, physical latency or full boot.
+U1..5 remain unknown when unused; a second declared weak pull-down profile
+provides a comparison. Both must preserve native transmission of97 frames/7275
+stores and all94 stage words; only the original trailing UI word remains in the
+copied FIFO. All three held-reset continuations must have identical full observed
+CPU/stack state, all5120 MCU SRAM bytes and event/census suffixes. Independent
+manual costs audit both timelines through the unchanged Y002000 fault. This
+does not qualify PU0 continuity, physical latency or full boot.
 
   ctest --test-dir build/strict -R '^original_reset_start$' --output-on-failure
 

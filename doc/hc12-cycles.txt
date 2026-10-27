@@ -164,3 +164,7 @@ The pinned NXP bundle in hardware/sources.json contains S12CPUV2 sections 6.6,
 7.5/7.8 and its instruction glossary, and HCS12COREUG (S12CPU15UG V1.2), RTI
 page 289. Document-derived cycle and instruction facts do not qualify a Blofeld
 board profile without the remaining evidence.
+
+BRCLR/BRSET selected-bit reads retain their native predicates, flags and actual
+byte-read slot while GPIO leaves unused bits unknown. Ordinary native byte
+loads remain strict. See hc12-masked-gpio.txt for exact scope and native checks.

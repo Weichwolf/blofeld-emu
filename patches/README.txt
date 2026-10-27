@@ -280,3 +280,8 @@ p-code for Family Rev2 Table A-2. Both corrections use original A/H/C;the
 owner rejects unspecified inputs and tracks undefined V. The pinned build
 copy retains Ghidra Apache-2.0 terms;installed SDK/firmware stay unchanged.
 Independent decimal/table/snapshot tests:doc/hcs08-decimal.txt.
+
+ghidra-hc12-masked-read.patch routes only BRCLR/BRSET byte observations through
+an explicit selected-bit intrinsic. Effective-address subtables retain native
+address updates and avoid an extra data read. Native predicates/CCR/PC and the
+ordinary whole-byte paths remain; see doc/hc12-masked-gpio.txt.

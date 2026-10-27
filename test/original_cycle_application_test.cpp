@@ -85,8 +85,8 @@ void check_failure(const ApplicationCase &item,
           "Original application must expose the expected timed hardware frontier with context");
   if (item.capture_handover) {
     constexpr unsigned stack = 0x25ec;
-    require(state.sp == stack && error.contains("MCU read at 0x0278") &&
-                error.contains("mask=0x3f"),
+    require(state.sp == stack && error.contains("MCU masked read at 0x0278") &&
+                error.contains("mask=0x01"),
             "PU input must stay unknown, with actual native read address and mask");
   } else {
     require(error.contains("MCU timer advance at 0x0040") && error.contains("mask=0x01"),

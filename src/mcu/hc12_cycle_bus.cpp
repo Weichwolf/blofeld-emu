@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "common/masked_bus.hpp"
 #include "mcu/hc12_cycles.hpp"
 
 #include <cstdint>
@@ -119,6 +120,15 @@ std::uint64_t Hc12CycleBus::read_word_bytes(const MemoryRead transfer, const cha
 }
 
 std::uint64_t Hc12CycleBus::read_memory(const MemoryRead transfer) {
+  return read_operand(transfer, std::nullopt);
+}
+
+std::uint8_t Hc12CycleBus::read_masked_byte(const MaskedByteRead access) {
+  return static_cast<std::uint8_t>(read_operand({.address = access.address}, access.mask));
+}
+
+std::uint64_t Hc12CycleBus::read_operand(const MemoryRead transfer,
+                                         const std::optional<std::uint8_t> mask) {
   const auto kind = access(transfer, false);
   auto timing = Hc12ReadTiming::single_cycle;
   if (read_timing_) {
@@ -136,7 +146,8 @@ std::uint64_t Hc12CycleBus::read_memory(const MemoryRead transfer) {
   }
   tick({.kind = kind, .address = transfer.address, .size = transfer.size});
   try {
-    return bus_.read_memory(transfer);
+    return mask ? observe_masked_byte(bus_, {.address = transfer.address, .mask = *mask})
+                : bus_.read_memory(transfer);
   } catch (const std::exception &error) { fail(error.what()); }
 }
 

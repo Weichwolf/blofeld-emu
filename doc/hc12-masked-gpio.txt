@@ -1,0 +1,34 @@
+Native HC12 bit-branch GPIO reads
+
+BRCLR and BRSET use the original native SLEIGH predicates, address generation,
+PC and unchanged CCR. Their six constructors pass the effective address and
+literal mask to a selected-byte bus operation. Forming the address performs no
+extra data read. Pre/post updates occur once. No host selects the branch result.
+
+MaskedByteBus is an optional MCU-side Bus extension; the ordinary Bus interface
+is unchanged. Hc12CycleBus preserves the existing real byte-read slot. Ordinary
+backends still execute their full read and side effects. The MCU GPIO backend
+requires every selected input/latch bit known and keeps other bits unknown.
+Selected conflicts and unsupported functions fail with address, mask, PC and CCR.
+PTU output reads retain the latch; PTIU reads the actual resolved pin instead.
+Whole-byte native loads and bit read-modify-write instructions remain strict.
+
+S12CPUV2 BRCLR/BRSET tables define the byte masks, unchanged condition codes
+and unstretched internal-memory slots: DIR/shortIDX4, EXT/IDX1 5, IDX2 6.
+This does not qualify physical pin synchronization, board wiring or missing
+peripherals. In particular, reading PU0 alone does not prove a PU0/RESET net.
+
+  cmake --build --preset strict --target blofeld-hc12-masked-gpio-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^hc12_masked_gpio$'
+
+Own native tests enumerate all256 masks and256 values for both predicates in
+three addressing forms:393216 complete architectural states with literal flags
+and exact read counts/slots. Four indexed update/width cases check single address
+evaluation. GPIO controls cover unknown selected/unselected bits, latch-versus-pin
+contention, actual PU0 branches, ordinary native LDAB rejection and quarantine.
+A zero mask still performs one real backend read. Missing selected inputs never
+become guessed levels, successful responses or a hardware-equivalence claim.
+
+Original firmware and detailed linked-boot evidence remain local. Complete
+Desktop/Keyboard boot, authentic ROM, reserved Y002000 behavior, physical clocks,
+MIDI/audio/storage/update/recovery and real-device comparisons remain open.

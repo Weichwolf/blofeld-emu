@@ -395,6 +395,9 @@ void exercise(Lab &lab,
     lab.observed = ci;
     lab.unused_pulldowns = replay != 0;
     lab.bind_u();
+    const auto unused = lab.net(other_u);
+    require(unused.known == (lab.unused_pulldowns ? other_u : 0U),
+            "Unused U pins retain declared knowledge independently of native PU0 reads");
     link.schedule().restore(cs);
     link.restore_wires(wires);
     trace.str({});
@@ -407,30 +410,23 @@ void exercise(Lab &lab,
     owned_clock::check_nvm(mcu, McuFlashImage::from_known(firmware.mcu));
     require(mcu.timing_faulted() && link.schedule().faulted(),
             "Actual source failure quarantines the shared owner");
-    if (replay == 0) {
-      require(error.contains("Unknown MCU GPIO input at 0x0278 mask=0x3e") &&
-                  mcu.cpu().state().pc == coupled::ready_poll &&
-                  dsp.run_clock().native_cycle_units() == 0,
-              "Only undeclared unused U pins fail; reset pull-up cannot invent their levels");
+    require(error.contains("Unmapped DSP memory write at Y:0x002000") &&
+                error.contains("mcu-pc=0xb9ad") && dsp.timing_faulted() &&
+                dsp.cpu().state().omr == stage_mode,
+            "Original source retains its strict reserved-write frontier");
+    verify_payload(dsp, firmware, link);
+    if (expected_mcu && expected_dsp && expected_ram) {
+      require(owned_clock::same_cpu(mcu.cpu().state(), *expected_mcu) &&
+                  dsp.cpu().debug_state() == *expected_dsp && ram(mcu) == *expected_ram &&
+                  error == expected_error && trace.str() == expected_trace,
+              "Held-reset replay retains every event, full observed CPU/stack state and all MCU "
+              "SRAM");
     } else {
-      require(error.contains("Unmapped DSP memory write at Y:0x002000") &&
-                  error.contains("mcu-pc=0xb9ad") && dsp.timing_faulted() &&
-                  dsp.cpu().state().omr == stage_mode,
-              "Original source retains its strict reserved-write frontier");
-      verify_payload(dsp, firmware, link);
-      if (expected_mcu && expected_dsp && expected_ram) {
-        require(owned_clock::same_cpu(mcu.cpu().state(), *expected_mcu) &&
-                    dsp.cpu().debug_state() == *expected_dsp && ram(mcu) == *expected_ram &&
-                    error == expected_error && trace.str() == expected_trace,
-                "Held-reset replay retains every event, full observed CPU/stack state and all MCU "
-                "SRAM");
-      } else {
-        expected_mcu = mcu.cpu().state();
-        expected_dsp = dsp.cpu().debug_state();
-        expected_ram = ram(mcu);
-        expected_error = error;
-        expected_trace = trace.str();
-      }
+      expected_mcu = mcu.cpu().state();
+      expected_dsp = dsp.cpu().debug_state();
+      expected_ram = ram(mcu);
+      expected_error = error;
+      expected_trace = trace.str();
     }
     record(replay, lab, dsp, link, summary, error);
     const auto output = path + "." + std::to_string(replay);

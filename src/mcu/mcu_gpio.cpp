@@ -3,6 +3,7 @@
 
 #include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
+#include "common/masked_bus.hpp"
 #include "mcu/hc12_registers.hpp"
 
 #include <array>
@@ -268,18 +269,18 @@ std::uint8_t McuGpio::sample(const McuPort port, const std::uint8_t requested) c
   return observation.levels;
 }
 
-std::uint8_t McuGpio::data(const McuPort port) const {
+std::uint8_t McuGpio::data(const McuPort port, const std::uint8_t mask) const {
   const auto index = port_index(port);
   const auto &state = ports_[index];
   if (port == McuPort::e && (assignment_e_ & port_e_clock_disable) == 0) {
     throw Fault("Unimplemented MCU ECLK pin function at " + hex(hc12::porte));
   }
-  if ((state.direction & ~state.latch_known) != 0) {
+  if ((state.direction & ~state.latch_known & mask) != 0) {
     throw Fault("Uninitialized MCU GPIO output latch at " + hex(specs[index].base));
   }
-  const auto inputs =
-      static_cast<std::uint8_t>(~static_cast<unsigned>(state.direction) & specs[index].valid);
-  return static_cast<std::uint8_t>((state.latch & state.direction) | sample(port, inputs));
+  const auto inputs = static_cast<std::uint8_t>(~static_cast<unsigned>(state.direction) &
+                                                specs[index].valid & mask);
+  return static_cast<std::uint8_t>(((state.latch & state.direction) | sample(port, inputs)) & mask);
 }
 
 std::string_view McuGpio::register_name(const std::uint16_t offset) {
@@ -303,22 +304,30 @@ std::string_view McuGpio::register_name(const std::uint16_t offset) {
 }
 
 std::uint8_t McuGpio::read(const std::uint16_t offset) const {
+  return read_masked({.address = offset, .mask = byte_mask});
+}
+
+std::uint8_t McuGpio::read_masked(const MaskedByteRead access) const {
+  const auto offset = access.address;
+  const auto mask = access.mask;
   switch (offset) {
-    case hc12::pear: return assignment_e_;
-    case hc12::pucr: return pull_control_;
-    case hc12::modrr: return routing_;
+    case hc12::pear: return static_cast<std::uint8_t>(assignment_e_ & mask);
+    case hc12::pucr: return static_cast<std::uint8_t>(pull_control_ & mask);
+    case hc12::modrr: return static_cast<std::uint8_t>(routing_ & mask);
     default: break;
   }
   const auto reg = lookup(offset);
   if (!reg) { throw Fault("Unknown MCU GPIO read at " + hex(offset)); }
   const auto &state = ports_[port_index(reg->port)];
   switch (reg->kind) {
-    case 0: return data(reg->port);
-    case 1: return sample(reg->port, static_cast<std::uint8_t>(specs[port_index(reg->port)].valid));
-    case 2: return state.direction;
-    case 3: return state.reduced_drive;
-    case 4: return state.pull_enable;
-    case 5: return state.pull_down;
+    case 0: return data(reg->port, mask);
+    case 1:
+      return sample(reg->port,
+                    static_cast<std::uint8_t>(specs[port_index(reg->port)].valid & mask));
+    case 2: return static_cast<std::uint8_t>(state.direction & mask);
+    case 3: return static_cast<std::uint8_t>(state.reduced_drive & mask);
+    case 4: return static_cast<std::uint8_t>(state.pull_enable & mask);
+    case 5: return static_cast<std::uint8_t>(state.pull_down & mask);
     default: throw Fault("Unknown MCU GPIO register kind");
   }
 }

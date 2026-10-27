@@ -213,6 +213,11 @@ CPU instruction fidelity          partial  Arithmetic/flags, stack/call overwrit
                                           changing reads/failures and real GPIO
                                           snapshots qualify this nominal CPU scope
                                           (hc12-minmax.txt), not physical timing.
+                                          BRCLR/BRSET selected-byte GPIO reads retain
+                                          native predicates, unchanged CCR and one
+                                          actual operand cycle.393216 literal states,
+                                          address updates and unknown selected bits
+                                          are checked (hc12-masked-gpio.txt).
                                           Independent reset/opcode reference:
                                           HCS12COREUG section 3.1 and Appendix A.
 RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tracking,
@@ -1211,7 +1216,7 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           Conditional original U0 assert/release
                                           now clocks the native97-frame SPI path
                                           without a synthetic ready input, with
-                                          unknown-unused-pin failure and held
+                                          unused pins remaining unknown and held
                                           replay; pre-assert DSP history/routing
                                           remain outside that test's scope.
                                           Asynchronous assertion and physical

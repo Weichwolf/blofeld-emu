@@ -2,6 +2,7 @@
 #pragma once
 
 #include "common/bus.hpp"
+#include "common/masked_bus.hpp"
 #include "mcu/mcu_clock.hpp"
 #include "mcu/mcu_cop.hpp"
 #include "mcu/mcu_flash.hpp"
@@ -39,7 +40,7 @@ struct McuWaitClockGates {
 
 // Initial strict bring-up model. Unimplemented reads fail rather than returning
 // fabricated ready flags. Register and pin coverage is expanded from traces.
-class McuBus final : public Bus {
+class McuBus final : public MaskedByteBus {
 public:
   explicit McuBus(std::span<const std::uint8_t> flash);
   explicit McuBus(const McuFlashImage &image);
@@ -47,6 +48,7 @@ public:
   [[nodiscard]] std::unique_ptr<McuBus> clone() const;
   [[nodiscard]] McuFlashImage power_off_flash_image() const;
   std::uint8_t read(std::uint16_t address) override;
+  [[nodiscard]] std::uint8_t read_masked_byte(MaskedByteRead access) override;
   void write(std::uint16_t address, std::uint8_t value) override;
   void write_memory(MemoryWrite access) override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;

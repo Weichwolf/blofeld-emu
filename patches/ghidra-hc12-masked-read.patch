@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: GPL-3.0-only
+--- HCS_HC12.sinc
++++ HCS_HC12.sinc
+@@ -229,0 +230 @@
++define pcodeop readMaskedByte;
+@@ -1945,3 +1946,4 @@
+-:BRCLR opr8a_8, msk8, rel8    is Prefix18=0 & op8=0x4F; opr8a_8; msk8; rel8
+-{
+-	result:1 = opr8a_8 & msk8;
++:BRCLR opr8a, msk8, rel8    is UseGPAGE=0 & Prefix18=0 & op8=0x4F; opr8a; msk8; rel8
++{
++	selected:1 = readMaskedByte(opr8a, msk8);
++	result:1 = selected & msk8;
+@@ -1951,3 +1953,4 @@
+-:BRCLR opr16a_8, msk8, rel8    is Prefix18=0 & op8=0x1F; opr16a_8; msk8; rel8
+-{
+-	result:1 = opr16a_8 & msk8;
++:BRCLR opr16a, msk8, rel8    is Prefix18=0 & op8=0x1F; opr16a; msk8; rel8
++{
++	selected:1 = readMaskedByte(opr16a, msk8);
++	result:1 = selected & msk8;
+@@ -1957,3 +1960,4 @@
+-:BRCLR indexed1_3, msk8, rel8    is Prefix18=0 & op8=0x0F; indexed1_3; msk8; rel8
+-{
+-	result:1 = indexed1_3 & msk8;
++:BRCLR indexed3, msk8, rel8    is Prefix18=0 & op8=0x0F; indexed3; msk8; rel8
++{
++	selected:1 = readMaskedByte(indexed3, msk8);
++	result:1 = selected & msk8;
+@@ -1968,3 +1972,4 @@
+-:BRSET opr8a_8, msk8, rel8    is Prefix18=0 & op8=0x4E; opr8a_8; msk8; rel8
+-{
+-	result:1 = ~opr8a_8 & msk8;
++:BRSET opr8a, msk8, rel8    is UseGPAGE=0 & Prefix18=0 & op8=0x4E; opr8a; msk8; rel8
++{
++	selected:1 = readMaskedByte(opr8a, msk8);
++	result:1 = ~selected & msk8;
+@@ -1974,3 +1979,4 @@
+-:BRSET opr16a_8, msk8, rel8    is Prefix18=0 & op8=0x1E; opr16a_8; msk8; rel8
+-{
+-	result:1 = ~opr16a_8 & msk8;
++:BRSET opr16a, msk8, rel8    is Prefix18=0 & op8=0x1E; opr16a; msk8; rel8
++{
++	selected:1 = readMaskedByte(opr16a, msk8);
++	result:1 = ~selected & msk8;
+@@ -1980,3 +1986,4 @@
+-:BRSET indexed1_3, msk8, rel8    is Prefix18=0 & op8=0x0E; indexed1_3; msk8; rel8
+-{
+-	result:1 = ~indexed1_3 & msk8;
++:BRSET indexed3, msk8, rel8    is Prefix18=0 & op8=0x0E; indexed3; msk8; rel8
++{
++	selected:1 = readMaskedByte(indexed3, msk8);
++	result:1 = ~selected & msk8;

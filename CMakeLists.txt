@@ -1639,6 +1639,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-hc12-cycle-test test/hc12_cycle_test.cpp)
   target_link_libraries(blofeld-hc12-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_cycles COMMAND blofeld-hc12-cycle-test)
+  add_executable(blofeld-hc12-masked-gpio-test test/hc12_masked_gpio_test.cpp)
+  target_link_libraries(blofeld-hc12-masked-gpio-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME hc12_masked_gpio COMMAND blofeld-hc12-masked-gpio-test)
+  set_tests_properties(hc12_masked_gpio PROPERTIES TIMEOUT 120)
   add_executable(blofeld-hc12-cycle-extended-test test/hc12_cycle_extended_test.cpp)
   target_link_libraries(blofeld-hc12-cycle-extended-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_cycle_extended COMMAND blofeld-hc12-cycle-extended-test)
@@ -3145,7 +3149,7 @@ add_custom_target(quality
     blofeld-mcu-dsp-fetch-wait-test blofeld-mcu-dsp-fetch-reset-test
     blofeld-mcu-dsp-fetch-checkpoint-test
     blofeld-mcu-dsp-wait-test
-    blofeld-hc12-cycle-test
+    blofeld-hc12-cycle-test blofeld-hc12-masked-gpio-test
     blofeld-hc12-cycle-extended-test
     blofeld-hc12-compare-stack-test
     blofeld-hc12-indexed-test

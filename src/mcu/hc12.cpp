@@ -3,6 +3,7 @@
 
 #include "address.hh"
 #include "common/bus.hpp"
+#include "common/masked_bus.hpp"
 #include "emulate.hh"
 #include "error.hh"
 #include "globalcontext.hh"
@@ -265,6 +266,11 @@ protected:
       throw Fault("Unknown HC12 p-code user operation");
     }
     const auto &name = user_operations_.at(static_cast<std::size_t>(identifier));
+    if (name == "readMaskedByte") {
+      execute_masked_read();
+      fallthruOp();
+      return;
+    }
     if (name == "WaitForInterrupt") {
       if (currentOp->numInput() != 1 || currentOp->getOutput() != nullptr) {
         throw Fault("Unexpected HC12 WaitForInterrupt semantics");
@@ -306,6 +312,25 @@ protected:
   }
 
 private:
+  void execute_masked_read() {
+    constexpr ghidra::int4 arguments = 3;
+    constexpr unsigned byte_mask = 0xff;
+    if (currentOp->numInput() != arguments || currentOp->getOutput() == nullptr ||
+        currentOp->getOutput()->size != 1 || currentOp->getInput(1)->size != 2 ||
+        currentOp->getInput(2)->size != 1) {
+      throw Fault("Unexpected HC12 masked-byte intrinsic shape");
+    }
+    const auto address = read_value(currentOp->getInput(1));
+    const auto mask = read_value(currentOp->getInput(2));
+    if (address > hc12::address_mask || mask > byte_mask) {
+      throw Fault("Unexpected HC12 masked-byte operand value");
+    }
+    write_value(currentOp->getOutput(),
+                observe_masked_byte(bus_,
+                                    {.address = static_cast<std::uint16_t>(address),
+                                     .mask = static_cast<std::uint8_t>(mask)}));
+  }
+
   void execute_decimal_adjust(const bool carry_result) {
     constexpr ghidra::int4 arguments = 4;
     constexpr unsigned byte_mask = 0xff;

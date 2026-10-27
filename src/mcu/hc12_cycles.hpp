@@ -2,6 +2,7 @@
 #pragma once
 
 #include "common/bus.hpp"
+#include "common/masked_bus.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -34,7 +35,7 @@ struct Hc12BusCycle {
 
 // The caller qualifies memory and advances one bus cycle per callback. Optional
 // read geometry expands a native word into two separately clocked/latched bytes.
-class Hc12CycleBus final : public Bus {
+class Hc12CycleBus final : public MaskedByteBus {
 public:
   using Clock = std::function<void(Hc12BusCycle)>;
   using ReadTiming = std::function<Hc12ReadTiming(MemoryRead)>;
@@ -42,6 +43,7 @@ public:
   std::uint8_t read(std::uint16_t address) override;
   void write(std::uint16_t address, std::uint8_t value) override;
   [[nodiscard]] std::uint64_t read_memory(MemoryRead transfer) override;
+  [[nodiscard]] std::uint8_t read_masked_byte(MaskedByteRead access) override;
   void write_memory(MemoryWrite transfer) override;
   [[nodiscard]] std::uint8_t peek(std::uint16_t address) const override;
   [[nodiscard]] std::uint64_t revision() const override;
@@ -73,6 +75,7 @@ private:
   [[nodiscard]] char access(MemoryRead transfer, bool write);
   [[nodiscard]] std::uint64_t read_byte(Hc12BusCycle cycle);
   [[nodiscard]] std::uint64_t read_word_bytes(MemoryRead transfer, char kind);
+  [[nodiscard]] std::uint64_t read_operand(MemoryRead transfer, std::optional<std::uint8_t> mask);
   void finish();
   [[noreturn]] void fail(std::string_view reason) const;
   Bus &bus_;
