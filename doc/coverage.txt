@@ -1113,6 +1113,16 @@ ROM wavetables and other assets   partial  Original basic oscillator table gener
                                           expectations (dsp-waveforms.txt). Additional
                                           wavetable/ROM/NAND dependencies, actual
                                           startup and hardware remain unresolved.
+Original wavetable FIR            partial  2448 unchanged original callback calls;
+                                          seven mip lengths,six stored coefficient
+                                          rows,both RM modes and morph/ring endpoints.
+                                          Independent integer outputs and literal
+                                          endpoint witnesses;ordered8+8+8 reads,
+                                          full56-bit phase/signed FM and guards
+                                          checked (dsp-wavetable.txt). Own cache
+                                          patterns;factory frames,startup mirror,
+                                          complete voices/MIDI/audio and physical
+                                          mapping/timing remain unqualified.
 Original sample interpolation     partial  144384 unchanged native callback calls;
                                           all32768 fractions/four coefficient banks,
                                           windows from136 logical official samples,

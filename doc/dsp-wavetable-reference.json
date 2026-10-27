@@ -1,0 +1,85 @@
+{
+  "midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "blocks": [
+    {
+      "record": 114,
+      "space": 0,
+      "address": 10008,
+      "words": 1086,
+      "sha256": "2faf9d21168e2566ed128f33ddffa3a0b6249bcdff644f86072746271e295fe2"
+    },
+    {
+      "record": 39,
+      "space": 1,
+      "address": 56982,
+      "words": 1032,
+      "sha256": "0e0e7b4b7b261286403fc7892e71c29b65b05afeadb4da65a6b88da256be7479"
+    }
+  ],
+  "counts": {
+    "calls": 2448,
+    "original-starts": 42
+  },
+  "inputs": {
+    "baseline": {
+      "rounding_modes": 2,
+      "lengths": [
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "stored_coefficient_rows": [
+        0,
+        1,
+        63,
+        64,
+        127,
+        128
+      ],
+      "morph_weights": [
+        0,
+        1,
+        1048576,
+        4194304,
+        8388607
+      ],
+      "own_cache_patterns": 2,
+      "sample_indices": "0 and L-1"
+    },
+    "nonzero_FM": {
+      "rounding_modes": 2,
+      "mip_lengths": [
+        2,
+        16,
+        128
+      ],
+      "stored_coefficient_rows": [
+        0,
+        128
+      ],
+      "morph_weights": [
+        0,
+        8388607
+      ],
+      "pattern": 0,
+      "phase_indices": "0 and L-1",
+      "FM_depth_words": [
+        2097152,
+        14680064,
+        8388607,
+        8388608
+      ],
+      "FM_source_words": [
+        2385920,
+        14391296,
+        8388607,
+        8388608
+      ]
+    }
+  },
+  "scope": "Conditional original FIR callback only.1680baseline and768nonzero-FM cases use own cache patterns,ordinary unscaled mode and supplied coefficient rows. Full phase accumulator/rawA1/signedFM expectations do not establish MIDI-reachable controls,factory assets,fullboot/voice/audio/storage or physical equivalence."
+}

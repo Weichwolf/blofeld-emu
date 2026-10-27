@@ -2307,6 +2307,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-waveforms.trace")
   set_tests_properties(original_dsp_waveforms PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-dsp-wavetable-test test/original_dsp_wavetable_test.cpp)
+  target_link_libraries(blofeld-original-dsp-wavetable-test PRIVATE
+    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_test(NAME original_dsp_wavetable COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_wavetable.py"
+    $<TARGET_FILE:blofeld-original-dsp-wavetable-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-wavetable.trace")
+  set_tests_properties(original_dsp_wavetable PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-original-dsp-envelopes-test test/original_dsp_envelopes_test.cpp)
   target_link_libraries(blofeld-original-dsp-envelopes-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME original_dsp_envelopes COMMAND ${Python3_EXECUTABLE}
@@ -3169,6 +3178,7 @@ add_custom_target(quality
     blofeld-original-dsp-sample-test
     blofeld-original-dsp-sample-receiver-test
     blofeld-original-dsp-waveforms-test
+    blofeld-original-dsp-wavetable-test
     blofeld-original-dsp-envelopes-test
     blofeld-original-dsp-voice-test
     blofeld-original-dsp-voice-master-test

@@ -1,0 +1,24 @@
+Original wavetable FIR callback
+
+  cmake --build --preset strict --target blofeld-original-dsp-wavetable-test
+  ctest --preset strict -j1 -R '^original_dsp_wavetable$' --output-on-failure
+
+An own native caller enters the unchanged original callback.2448 finite cases
+cover both RM settings,seven mip lengths,six supplied coefficient rows,five
+morph weights,two own high16-aligned cache patterns and both ring endpoints.
+Independent signed integer dot/round/limit/morph expectations check outputs;
+a literal near-unity witness distinguishes the original one-LSB endpoint.
+Actual native observations check eight ordered coefficient reads and eight
+circular reads per frame. Phase,exposed sample,FM word,stack,cursors,modifier
+restoration and cache/output guards are checked.768 nonzero-FM cases also
+check the full56-bit phase accumulator,rawA1 store,signed FM word and a literal
+positive-extension/fraction witness.42 original instruction starts
+execute;instruction counts are diagnostics,not elapsed/pipeline clocks.
+
+Inputs and original program/coefficient hashes:dsp-wavetable-reference.json.
+The callback uses declared own cache words and finite signed FM inputs. It does not load
+factory wavetables or execute their request/receiver/storage path. The startup
+coefficient mirror and remaining127 rows are outside this proof. No host
+waveform replaces original DSP instructions;no complete boot,live MIDI/audio,
+full voice chain,physical timing or hardware comparison is established.
+Manufacturer inputs remain local;missing original firmware explicitly skips77.
