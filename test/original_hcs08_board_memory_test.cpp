@@ -4,14 +4,21 @@
 #include "common/bus.hpp"
 #include "hcs08_fixture.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_adc.hpp"
+#include "keyboard/hcs08_cop.hpp"
 #include "keyboard/hcs08_flash.hpp"
 #include "keyboard/hcs08_gpio.hpp"
+#include "keyboard/hcs08_icg.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
+#include "keyboard/hcs08_spi.hpp"
+#include "keyboard/hcs08_tpm.hpp"
 
 #include <array>
 #include <cstdint>
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -26,6 +33,40 @@ constexpr unsigned final_retired = 6197, initial_hx = 0x12c, final_sp = 0x475;
 constexpr unsigned trim_read_pc = 0xe1a5, trim_read_retired = 6184;
 constexpr unsigned flags_known = 0xef, final_flags = 0x69, partial_a = 0xfe;
 constexpr std::array pages{0xe000U, 0xe200U, 0xe400U, 0xe600U, 0xe800U, 0xea00U, 0xfe00U};
+
+constexpr unsigned full_pads = 0xff, partial_pads = 8;
+constexpr unsigned after_input_pc = 0xe050, initial_sp = 0x47d, input_flags = 0x68,
+                   input_known = 0xcb;
+
+struct Endpoint {
+  Hcs08State cpu;
+  std::array<std::uint16_t, Hcs08BoardMemory::ram_bytes> ram;
+  Hcs08IcgState icg;
+  Hcs08AdcState adc;
+  Hcs08TpmState timer;
+  Hcs08CopState cop;
+  Hcs08SpiState spi;
+  Hcs08FlashState flash;
+  bool operator==(const Endpoint &) const = default;
+};
+
+Endpoint endpoint(const Hcs08BoardMemory &memory, const Hcs08 &cpu) {
+  Endpoint result{.cpu = cpu.state(),
+                  .ram = {},
+                  .icg = memory.icg_state(),
+                  .adc = memory.adc_state(),
+                  .timer = memory.timer_state(),
+                  .cop = memory.cop_state(),
+                  .spi = memory.spi_state(),
+                  .flash = memory.flash_state()};
+  for (unsigned offset = 0; offset < result.ram.size(); ++offset) {
+    const auto byte =
+        memory.inspect_ram(static_cast<std::uint16_t>(Hcs08BoardMemory::ram_first + offset));
+    result.ram[offset] =
+        static_cast<std::uint16_t>(byte.value | (static_cast<unsigned>(byte.known) << 8U));
+  }
+  return result;
+}
 
 Hcs08FlashImage image(const std::span<const std::uint8_t> records, const bool supplied_trim) {
   Hcs08FlashImage result;
@@ -48,14 +89,16 @@ Hcs08FlashImage image(const std::span<const std::uint8_t> records, const bool su
   return result;
 }
 
-void run(const std::span<const std::uint8_t> records,
-         const bool supplied_pads,
-         const bool supplied_trim) {
+std::optional<Endpoint> run(const std::span<const std::uint8_t> records,
+                            const bool supplied_pads,
+                            const bool supplied_trim,
+                            const unsigned observed = full_pads) {
   const auto supplied = image(records, supplied_trim);
   Hcs08BoardMemory memory(supplied, Hcs08BoardMemoryContract::candidate_gt8a_untimed);
   if (supplied_pads) {
-    memory.attach_pad_source(Hcs08GpioPort::e, [](const unsigned mask) {
-      return GpioPadSample{.known = mask, .levels = 8U & mask};
+    memory.attach_pad_source(Hcs08GpioPort::e, [observed](const unsigned mask) {
+      const unsigned known = mask & observed;
+      return GpioPadSample{.known = known, .levels = 8U & known};
     });
   }
   Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
@@ -72,7 +115,7 @@ void run(const std::span<const std::uint8_t> records,
     require(failure.contains("GPIO") && failure.contains("pc=0xe04e") && cpu.faulted() &&
                 memory.faulted() && memory.flash_image() == supplied,
             "Default board cannot invent input pads to enter a chosen original boot path");
-    return;
+    return std::nullopt;
   }
   while (retired < final_retired) {
     const auto before = cpu.state();
@@ -87,9 +130,19 @@ void run(const std::span<const std::uint8_t> records,
                   memory.flash_image() == supplied,
               "Missing factory calibration stays unknown and cannot be silently replaced");
       std::cout << "MISSING trim pc=" << before.pc << " retired=" << retired << '\n';
-      return;
+      return std::nullopt;
     }
     ++retired;
+    if (observed == partial_pads && retired == strap_retired + 1) {
+      require(cpu.state() == Hcs08State{.pc = after_input_pc,
+                                        .hx = initial_hx,
+                                        .sp = initial_sp,
+                                        .a = 0x0b,
+                                        .ccr_known = flags_known,
+                                        .ccr = input_flags,
+                                        .a_known = input_known},
+              "Original GPIO LDA retains three genuinely unresolved implemented input bits");
+    }
   }
   require(supplied_trim && cpu.state() == Hcs08State{.pc = timer_pc,
                                                      .hx = initial_hx,
@@ -99,12 +152,38 @@ void run(const std::span<const std::uint8_t> records,
                                                      .ccr = final_flags,
                                                      .a_known = partial_a},
           "Original native ICG/ADC setup retains independent exact CPU state and unknown bits");
+  const auto result = endpoint(memory, cpu);
   const auto failure = rejected([&] { cpu.step(); });
   require(failure.contains("live TPM requires elapsed bus periods") &&
               failure.contains("pc=0xe1ca") && cpu.faulted() && memory.faulted() &&
               memory.flash_image() == supplied && memory.adc_state().conversions == 0,
           "Production memory owner reaches the actual strict timer frontier without any NVM patch");
-  std::cout << "REFERENCE pc=" << cpu.state().pc << " retired=" << retired << '\n';
+  std::cout << (observed == full_pads ? "REFERENCE" : "PARTIAL") << " pc=" << cpu.state().pc
+            << " retired=" << retired << '\n';
+  return result;
+}
+
+void unknown_guard(const std::span<const std::uint8_t> records) {
+  const auto supplied = image(records, true);
+  Hcs08BoardMemory memory(supplied, Hcs08BoardMemoryContract::candidate_gt8a_untimed);
+  memory.attach_pad_source(Hcs08GpioPort::e,
+                           [](const unsigned /*mask*/) { return GpioPadSample{}; });
+  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+  cpu.reset(Hcs08ResetEntry::normal, Hcs08ResetCause::power_on);
+  for (unsigned retired = 0; retired < strap_retired + 2; ++retired) { cpu.step(); }
+  const Hcs08State expected{.pc = 0xe052,
+                            .hx = initial_hx,
+                            .sp = initial_sp,
+                            .a = 3,
+                            .ccr_known = 0xed,
+                            .ccr = input_flags,
+                            .a_known = 0xc3};
+  require(cpu.state() == expected, "The original LDA/BIT keep unknown deciding pins and Z unknown");
+  const auto failure = rejected([&] { cpu.step(); });
+  require(failure.contains("pc=0xe052") && failure.contains("unknown flags") && cpu.faulted() &&
+              !memory.faulted() && memory.flash_image() == supplied,
+          "The actual original BEQ refuses unknown Z before a fabricated startup choice");
+  std::cout << "UNKNOWN guard pc=" << expected.pc << " retired=" << strap_retired + 2 << '\n';
 }
 } // namespace
 
@@ -120,7 +199,11 @@ int main(const int count, char **arguments) {
             "Exact original record extent");
     run(records, false, false);
     run(records, true, false);
-    run(records, true, true);
+    const auto full = run(records, true, true);
+    const auto partial = run(records, true, true, partial_pads);
+    require(full && partial && *full == *partial,
+            "One observed high pin preserves all original native/RAM/peripheral endpoints");
+    unknown_guard(records);
     std::cout << "Verified original POR through independent production board memory.\n";
     return 0;
   } catch (const std::exception &error) {

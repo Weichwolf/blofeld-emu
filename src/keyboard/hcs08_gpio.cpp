@@ -3,6 +3,7 @@
 
 #include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
 
 #include <array>
 #include <cstdint>
@@ -85,6 +86,23 @@ std::uint8_t Hcs08Gpio::read(const std::uint16_t address, const ExecutionContext
 } catch (const Fault &error) {
 
   throw Fault("HCS08 GPIO read" + location(address, context) + ": " + error.what());
+}
+
+Hcs08KnownByte Hcs08Gpio::read_known_byte(const std::uint16_t address,
+                                          const ExecutionContext context) const try {
+  require_address(address);
+  if (address % registers_per_port != data) { return {.value = read(address, context)}; }
+  const auto n = address / registers_per_port;
+  const auto s = registers_[n];
+  const auto inputs = masks[n] & ~static_cast<unsigned>(s.direction);
+  const auto sample = pads_[n].sample(inputs);
+  if (sample.conflicts != 0) { require_known_gpio_pads(sample, inputs); }
+  const unsigned known = sample.known | (Hcs08KnownByte::all ^ inputs);
+  return {.value = static_cast<std::uint8_t>((s.latch & s.direction) | sample.levels),
+          .known = static_cast<std::uint8_t>(known)};
+} catch (const Fault &error) {
+
+  throw Fault("HCS08 GPIO masked read" + location(address, context) + ": " + error.what());
 }
 
 void Hcs08Gpio::write(const ByteWrite access, const ExecutionContext context) try {

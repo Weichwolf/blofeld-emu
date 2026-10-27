@@ -42,7 +42,7 @@ constexpr unsigned mov_immediate_direct = 0x6e;
 constexpr unsigned clr_direct = 0x3f;
 constexpr unsigned bra = 0x20;
 constexpr unsigned bcs = 0x25;
-constexpr unsigned beq = 0x27;
+constexpr unsigned beq = 0x27, bne = 0x26;
 constexpr unsigned jsr_extended = 0xcd;
 constexpr unsigned ais = 0xa7;
 constexpr unsigned nop = 0x9d;
@@ -174,8 +174,8 @@ RegisterKnowledge registers_after(const Bus &code, const Hcs08State &before, con
         unqualified(s, opcode);
       }
       break;
-    case bit_immediate: // BIT immediate
-    case cmp_immediate: // CMP immediate
+    case bit_immediate: break; // BIT preserves A; only tested bits determine V/N/Z knowledge.
+    case cmp_immediate:        // CMP immediate
     case cmp_extended:
     case cmp_direct:
     case and_immediate:
@@ -194,6 +194,7 @@ RegisterKnowledge registers_after(const Bus &code, const Hcs08State &before, con
     case bra:        // BRA
     case bcs:        // BCS
     case beq:        // BEQ
+    case bne:        // BNE
     case rts:
     case bsr:
     case jsr_direct:

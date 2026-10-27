@@ -985,6 +985,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-hcs08-clock-prefix.trace")
   set_tests_properties(original_hcs08_clock_prefix PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 960)
+  add_executable(blofeld-hcs08-bit-known-test test/hcs08_bit_known_test.cpp)
+  target_link_libraries(blofeld-hcs08-bit-known-test PRIVATE blofeld_hcs08_run_clock)
+  target_compile_definitions(blofeld-hcs08-bit-known-test PRIVATE
+    BLOFELD_HCS08_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla")
+  add_test(NAME hcs08_bit_known COMMAND blofeld-hcs08-bit-known-test)
+  set_tests_properties(hcs08_bit_known PROPERTIES TIMEOUT 180)
+  add_executable(blofeld-hcs08-gpio-known-test test/hcs08_gpio_known_test.cpp)
+  target_link_libraries(blofeld-hcs08-gpio-known-test PRIVATE blofeld_hcs08_gpio)
+  add_test(NAME hcs08_gpio_known COMMAND blofeld-hcs08-gpio-known-test)
   add_executable(blofeld-hcs08-known-load-test test/hcs08_known_load_test.cpp)
   target_link_libraries(blofeld-hcs08-known-load-test PRIVATE blofeld_hcs08 blofeld_hcs08_cop)
   target_compile_definitions(blofeld-hcs08-known-load-test PRIVATE
@@ -3048,7 +3057,8 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
+  DEPENDS blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
+    blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
     blofeld-hcs08-icg-clocks-test blofeld-hcs08-icg-status-test
     blofeld-hcs08-icg-history-test blofeld-hcs08-known-interrupts-test
     blofeld-original-hcs08-icg-history-test blofeld-original-hcs08-clock-prefix-test

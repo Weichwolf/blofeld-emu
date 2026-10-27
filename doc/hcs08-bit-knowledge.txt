@@ -1,0 +1,45 @@
+HCS08 BIT and GPIO input knowledge
+
+Native BIT immediate preserves A/HX/SP and executes its original SLEIGH effects.
+Only the tested bits determine V/N/Z knowledge. Bits outside the immediate mask
+are known zero in the temporary AND result; they do not become known in A.
+A known selected one establishes nonzero even if other selected bits are unknown.
+A dependent BEQ/BNE refuses if Z is still unknown. BNE, like BEQ, preserves
+partial A/HX rather than requiring unrelated register bits to be known.
+
+Hcs08Gpio::read_known_byte retains the resolved knowledge of implemented inputs.
+Outputs read their actual latches; documented non-pin fields read known zero.
+Each input set is sampled once. Detached sources, invalid observations and
+opposed drivers still fail with address/PC/context. Ordinary full-byte GPIO
+reads remain strict. Hcs08BoardMemory routes native masked LDA through this API;
+other consumers keep their existing permissions and knownness requirements.
+No voltage, board connection, frequency, ready status or success is supplied.
+
+The own native BIT regression enumerates all6561 canonical partial byte states
+and all256 immediates:1679616 complete states. Independent enumeration of every
+concrete candidate determines the expected flags. Directed LDA/BIT/BEQ/BNE paths,
+trusted replay, unknown deciding flags and the existing3/2/3-period retirement
+contract supplement this matrix; no physical bus phase is inferred.
+The GPIO gate checks15360 port/direction/knowledge/level cases against finite
+physical-byte candidates, plus strict reads, conflicts and detached copies.
+
+The original_hcs08_board_memory gate retains its prior three reset cases.
+A fourth original reset observes only PTED3 high; other input pins remain
+unknown. It must reach the identical6197-retirement timer boundary with the
+same complete native state, all1024 RAM bytes and masks, ICG/ADC/TPM/COP/SPI/
+FLASH state, and unchanged supplied NVM. A fifth executes original LDA/BIT with
+all input pins unresolved and requires the real BEQ atE052 to reject unknown Z
+after6178 instructions. Unchanged firmware still owns every decision.
+The declared high pin/calibration and untimed candidate part are laboratory
+inputs, not measured Blofeld wiring. Normal controller/full instrument startup,
+authentic clock domains, idle FSTAT launch, original DSP audio/MIDI, persistence,
+update/recovery/every power-loss phase and real hardware equivalence remain open.
+
+  cmake --build --preset strict --target blofeld-hcs08-bit-known-test \
+    blofeld-hcs08-gpio-known-test blofeld-original-hcs08-board-memory-test
+  ctest --preset strict -j1 --output-on-failure \
+    -R '^(hcs08_bit_known|hcs08_gpio_known|original_hcs08_board_memory)$'
+
+Primary ISA/GPIO facts: HCS08 Family RM BIT/BEQ/BNE instruction details and
+MC9S08GT16A/GT8A chapter6; URLs and hashes in hcs08-reference.json.
+Original pages and all run artifacts remain local. No fuzz or physical traffic.

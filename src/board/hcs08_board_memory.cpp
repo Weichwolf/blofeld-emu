@@ -147,6 +147,12 @@ std::uint8_t Hcs08BoardMemory::read_interrupt_vector_byte(const std::uint16_t ad
 Hcs08KnownByte Hcs08BoardMemory::read_known_byte(const std::uint16_t address) {
   data_access("masked read", address);
   if (ram_address(address)) { return ram_.at(address - ram_first); }
+  if (Hcs08Gpio::contains(address)) {
+    healthy_ = false;
+    const auto byte = gpio_.read_known_byte(address, context_);
+    healthy_ = true;
+    return byte;
+  }
   if (address == hcs08_icg::status1 || address == hcs08_icg::status2) {
     healthy_ = false;
     const auto byte = history_.read_known(address);

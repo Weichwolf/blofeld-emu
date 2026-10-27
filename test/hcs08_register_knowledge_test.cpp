@@ -54,7 +54,8 @@ constexpr unsigned mov_immediate_direct = 0x6e;
 constexpr unsigned clr_direct = 0x3f;
 constexpr unsigned bra = 0x20;
 constexpr unsigned bcs = 0x25;
-constexpr unsigned beq = 0x27;
+constexpr unsigned beq = 0x27, bne = 0x26;
+constexpr unsigned bit_unknown_zero_known = 0xfd;
 constexpr unsigned jsr_extended = 0xcd;
 constexpr unsigned ais = 0xa7;
 constexpr unsigned nop = 0x9d;
@@ -225,6 +226,8 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case bra:
     case bcs:
     case beq:
+    case bne:
+    case bit_immediate:
     case jsr_extended:
     case jmp_direct:
     case jmp_extended:
@@ -267,7 +270,6 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case cmp_extended:
     case sta_direct:
     case sta_extended:
-    case bit_immediate:
     case cmp_immediate:
     case tap: return s.a_known == byte_mask;
     default: return false;
@@ -380,6 +382,7 @@ unsigned instruction_length(const unsigned opcode) {
     case bra:
     case bcs:
     case beq:
+    case bne:
     case ais: return 2;
     default: return 1;
   }
@@ -519,10 +522,15 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
     case sthx_extended:
     case sta_direct:
     case sta_extended:
-    case bit_immediate:
     case mov_immediate_direct: s.ccr = initial_ccr; break;
     case clr_indexed:
     case clr_direct: s.ccr = clear_ccr; break;
+    case bit_immediate:
+      // This fixture tests literal mask40 against5A with masks00/55/FF.
+      // Unknown A gives possible result00/40 and therefore unknown Z only.
+      s.ccr = initial_ccr;
+      if ((s.a_known & operand) == 0) { s.ccr_known = bit_unknown_zero_known; }
+      break;
     case cmp_immediate: s.ccr = carry_clear_ccr; break; // A5A - immediate40 =1A, no borrow.
     case tap: s.ccr = tap_ccr; break;                   // A5A, fixed bits forced to one.
     case jsr_extended: s.sp = initial_sp - 2; break;
@@ -532,7 +540,7 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
     default: break;
   }
   s.pc = static_cast<std::uint16_t>(entry + instruction_length(opcode));
-  if (opcode == bra || opcode == bcs || opcode == brclr7) { s.pc += operand; }
+  if (opcode == bra || opcode == bcs || opcode == bne || opcode == brclr7) { s.pc += operand; }
   if (opcode == jsr_extended) { s.pc = extended_address; }
   if (opcode == jmp_direct) { s.pc = operand; }
   if (opcode == jmp_extended) { s.pc = extended_address; }

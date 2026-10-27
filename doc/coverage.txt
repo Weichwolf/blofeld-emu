@@ -2834,3 +2834,14 @@ Native CCR, direct register-indirect and OMR control:
   and between-period SPI stimulus do not establish authentic ROM identity,
   calibrated MCU scheduling or normal boot. No reserved write is discarded.
   See dsp-repeat-clock.txt for current support and open device requirements.
+
+HCS08 GPIO/BIT input knowledge (hcs08-bit-knowledge.txt): production masked GPIO
+loads retain unresolved input bits, actual output latches and documented zero
+fields. Native BIT immediate preserves A/HX and consumes only tested bits;
+BEQ/BNE require established Z. Detached/conflicting sources and ordinary unknown
+full-byte reads remain strict. The original production-memory reset gate adds
+one-observed-high-pin/full1024RAM-peripheral equivalence and actual unknown-Z
+BEQ refusal. These conditional component cases do not establish physical straps,
+ICG/FLL timing, complete controller or Desktop/Keyboard reset-to-instrument boot.
+All complete objective, original DSP audio/MIDI/storage/update/recovery/every
+power-loss phase, realtime/long-run and physical comparison requirements remain.

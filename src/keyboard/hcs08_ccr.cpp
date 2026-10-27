@@ -82,6 +82,21 @@ bool carry_or_zero_known(const Hcs08State &before) {
 }
 }
 
+namespace {
+std::uint8_t bit_known_after(const Bus &bus, const Hcs08State &before) {
+  const auto address = static_cast<std::uint16_t>(before.pc + 1U);
+  bus.check_execute({.address = before.pc, .length = 1});
+  bus.check_execute({.address = address, .length = 1});
+  const unsigned mask = bus.peek(address);
+  // BIT does not store its AND result. Zero mask bits make those result bits
+  // known zero even when the corresponding input bits remain unknown.
+  return byte_vnz_after(
+      before,
+      {.value = static_cast<std::uint8_t>(before.a & mask),
+       .known = static_cast<std::uint8_t>(before.a_known | (Hcs08KnownByte::all ^ mask))});
+}
+} // namespace
+
 std::uint8_t byte_vnz_after(const Hcs08State &before, const Hcs08KnownByte source) {
   constexpr unsigned negative = 4;
   constexpr unsigned source_sign = 0x80;
@@ -101,6 +116,7 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     bus.check_execute({.address = before.pc, .length = 1});
     return byte_vnz_after(before, {.value = before.a, .known = before.a_known});
   }
+  if (bus.peek(before.pc) == bit_immediate) { return bit_known_after(bus, before); }
   if (bus.peek(before.pc) == divide_opcode) {
     bus.check_execute({.address = before.pc, .length = 1});
     // Z depends on the quotient. C is defined even when A/H are indeterminate.

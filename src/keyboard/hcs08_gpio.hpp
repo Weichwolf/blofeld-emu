@@ -3,6 +3,7 @@
 
 #include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
+#include "keyboard/hcs08_known_memory.hpp"
 
 #include <array>
 #include <cstdint>
@@ -31,6 +32,10 @@ public:
   // peripheral drivers and KBI pull-down selection need their own owner.
   [[nodiscard]] GpioNetDriver driver(Hcs08GpioPort port, std::uint8_t gpio_owned) const;
   [[nodiscard]] std::uint8_t read(std::uint16_t address, ExecutionContext context) const;
+  // Resolved unknown input bits remain unknown; output latches and non-pin zero
+  // bits retain their architectural knowledge. Detached/conflicting nets refuse.
+  [[nodiscard]] Hcs08KnownByte read_known_byte(std::uint16_t address,
+                                               ExecutionContext context) const;
   void write(ByteWrite access, ExecutionContext context);
   [[nodiscard]] static bool contains(std::uint16_t address);
 
