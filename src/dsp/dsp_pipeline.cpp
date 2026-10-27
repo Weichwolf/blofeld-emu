@@ -36,7 +36,8 @@ void check_accumulator_context(const DspMachine &machine,
   const auto cpu = machine.cpu().state();
   if (execute &&
       ((register_transfer && accumulator_transfer_source(execute->value)) ||
-       full_accumulator_long_store(execute->value)) &&
+       full_accumulator_long_store(execute->value) ||
+       full_accumulator_scalar_store(execute->value)) &&
       (cpu.sr & scaling_mask) == scaling_mask) {
     throw Fault("Unqualified accumulator MOVE scaling read P:" + hex(execute->address, 6) +
                 " pc=" + hex(cpu.pc, 6) + " sr=" + hex(cpu.sr, 6) + " omr=" + hex(cpu.omr, 6));
@@ -134,9 +135,8 @@ void DspInstructionPipeline::select_words(const std::span<const DspFetchedWord> 
   selected = select_pipeline_words(fetched, samples, extension_samples, repeated);
   if (repeat_setup && repeated && repeat_setup->remaining != 0) { selected.next = repeated; }
   if (repeated) {
-    constexpr unsigned long_store = 0x485c00;
     const auto word = repeated->word;
-    if (word.value != 0 && word.value != long_store) {
+    if (!fetch_repeat_body(word.value)) {
       throw Fault("Unqualified repeated Decode read P:" + hex(word.address, 6) + " opcode=" +
                   hex(word.value, 6) + " pc=" + hex(word.address, 6) + " omr=" + hex(omr, 6));
     }

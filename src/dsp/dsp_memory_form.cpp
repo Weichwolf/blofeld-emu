@@ -101,7 +101,8 @@ std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode)
   const auto reg =
       dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
   const auto access = operation(type, dsp56k::Field_W, opcode);
-  if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read)) {
+  if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read) &&
+      !full_accumulator_scalar_store(opcode)) {
     return std::nullopt;
   }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
@@ -162,6 +163,14 @@ bool full_accumulator_long_store(const std::uint32_t opcode) {
   // FM13-127: 0100L0LL W1MMMRRR, with LLL=100/101 and W=0.
   constexpr unsigned source_mask = 0xfec000;
   constexpr unsigned full_accumulator_store = 0x484000;
+  return (opcode & source_mask) == full_accumulator_store;
+}
+
+bool full_accumulator_scalar_store(const std::uint32_t opcode) {
+  // FM13-118/122: 01ddSddd W1MMMRRR, ddddd=01110/01111, W=0.
+  // S selects X/Y; only standalone transfers (no parallel ALU) are qualified.
+  constexpr unsigned source_mask = 0xf6c0ff;
+  constexpr unsigned full_accumulator_store = 0x564000;
   return (opcode & source_mask) == full_accumulator_store;
 }
 

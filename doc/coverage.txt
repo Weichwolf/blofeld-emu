@@ -2897,16 +2897,30 @@ Native CCR, direct register-indirect and OMR control:
   The concurrent owner scope shares these literal oracles: 696 suffixes and
   24 scaling streams. These are component/model proofs, not physical timing
   or full original device acceptance. See dsp-accumulator-transfers.txt.
+- Standalone full A/B scalar stores to X/Y use actual AG2 address updates,
+  native E1 data and E2 flags. Independent signed56-to24 expectations cover
+  scaling, clipping, sticky S/L and unchanged sources/other state. Checks cover
+  8640 streams,84 snapshot cuts,48 producer windows/72 cuts and strict form/
+  reserved-scale refusals. These are
+  component checks,not original normal boot or physical acceptance.
+  See dsp-scalar-stores.txt.
 - Positive immediate/X0 automatic REP retains one genuine body F2 receipt,
   native LC/count ownership,nominal setup5/body1 and distinct AG1/AG2/data/E2
-  effects. Current bodies are NOP/full A->L:(R4)+;zero/other sources/bodies,
-  active DO/cache and automatic IRQ entry remain unqualified. Standalone full
+  effects. Bodies include NOP/full A->L:(R4)+ and standalone A/B->X/Y stores
+  with one-word modes0..4. Zero/other sources/bodies,active DO/cache and
+  automatic IRQ entry remain unqualified. Standalone full
   A/B signed48-bit long stores use native scaling/clipping and sticky S/L.
   Supporting checks cover16 streams,300 suffixes,16 F2-latch mutations,
   full131072 NOP bodies,1680 long-store vectors and reserved-scaling guards.
   Two cold concurrent owners share124 suffixes;actual AsmJit VM initialization
   uses once-only ownership,with a separate OS-derived cold-cache gate.
   These are component/model checks,not complete hardware acceptance.
+- Repeated scalar checks cover2160 streams,128 snapshot cuts with two replays,
+  eight F2-latch mutations and an own6848-word X:0936..23f5 workspace clear.
+  Ten body-form/four reserved-scale refusals retain RAM and complete native
+  state through restored continuations. This synthetic stream matches stored
+  workspace dimensions;it is not execution of original instrument startup.
+  See dsp-repeat-scalar-stores.txt.
 - The local original first-stage diagnostic receives all94 unchanged words
   through actual SPI/P stores and executes native PCTL/OMR setup and RAM clear
   to the visible unmapped Y:002000 write at PC:000072. Document-derived ROM

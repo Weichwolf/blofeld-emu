@@ -916,8 +916,7 @@ public:
          reference.execution() == DspReferenceExecution::staged_register_boundaries) &&
         (word(cpu.regs().sr) & 0x1a000U) == 0 &&
         fetch_repeat_count(*value, static_cast<std::uint32_t>(cpu.regs().x.var) & word_mask) != 0;
-    constexpr unsigned store_a_long_r4 = 0x485c00;
-    if (reference.fetch().repeating() && *value != 0 && *value != store_a_long_r4) {
+    if (reference.fetch().repeating() && !fetch_repeat_body(*value)) {
       throw Fault("Unqualified REP body read P:" + hex(request->target.address, 6) + " opcode=" +
                   hex(*value, 6) + " pc=" + hex(request->pc, 6) + " omr=" + hex(request->omr, 6));
     }

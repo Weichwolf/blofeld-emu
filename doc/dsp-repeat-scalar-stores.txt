@@ -1,0 +1,24 @@
+Repeated full-accumulator scalar stores
+
+  ctest --test-dir build/strict -R '^dsp_repeat_scalar(_guard)?$' --output-on-failure
+
+DSP56300FM Rev5 13-160/161 defines positive REP count ownership, one body
+fetch and saved LC restoration. Scalar source/flag rules: dsp-scalar-stores.txt.
+
+The fetch and Decode guards share the same qualified-body predicate: NOP,
+existing full A->L:(R4)+, and standalone full A/B->X/Y stores in modes0..4.
+Native execution owns all LC, address, data and retirement effects. The body
+retains its actual F2 receipt even if the own test program changes afterward.
+
+Independent checks cover 2160 streams: A/B, X/Y, immediate/X0 counts1/3/17,
+three signed56 values, three scales, R0/R7 and five linear address modes.
+They check every complete CPU state, nominal setup5/body1, exact stores,
+address updates, unchanged gaps/canaries and saved LC. Additional checks cover
+128 snapshot cuts with two replays, eight latch mutations, ten unsupported
+body forms and four reserved-scale cases with two refusal replays each.
+
+An own zero-source stream clears 6848 X words from0936 through23f5. These are
+stored workspace dimensions, not original reset/initializer execution. Other
+body forms, zero/other count sources, active DO/cache and automatic IRQ remain
+unqualified. Authentic ROM identity, reserved Y:002000 and normal original
+instrument operation remain open; no hardware timing/equivalence claim.

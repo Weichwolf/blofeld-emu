@@ -1,0 +1,21 @@
+Full-accumulator scalar memory stores
+
+  ctest --test-dir build/strict -R '^dsp_scalar_store(_window)?$' --output-on-failure
+
+DSP56300FM Rev5: X/Y moves13-118..119/13-122..123, source fields12-18,
+accumulator scaling/interlocks3.5 and growth/limit flags5-13.
+
+Standalone A/B -> X/Y:ea uses the existing one-word modes0..4 and native
+address/memory/retirement pipeline. Signed56 scaling precedes signed24 limiting;
+S/L remain sticky and other CCR bits/source accumulators remain unchanged.
+Same-source adjacent ALU/full/part writers insert one consumer period; disjoint
+writers and a one-NOP gap add none. No host-written memory result is supplied.
+
+Own literal words and independent integer expectations cover8640 streams
+(A/B,X/Y,18values,3scales,4initial CCRs,R0/R7,5modes),84 snapshot cuts with
+two replays,48producer windows/72cuts and unsupported forms/reserved scaling.
+Full loads,partial sources,parallel ALU and modes5..7 still refuse here.
+
+REP support: dsp-repeat-scalar-stores.txt. This component evidence does not resolve
+authentic ROM identity,reserved Y:002000,original reset-to-instrument runtime,
+physical timing,USB/MIDI/audio,persistence or update/recovery acceptance.
