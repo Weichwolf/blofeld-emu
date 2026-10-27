@@ -20,7 +20,10 @@ MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner
                                           checkpoints cover run/WAI/reset edges
                                           and fault recovery. External events,
                                           physical DSP reset wiring and normal
-                                          boot remain open.
+                                          boot remain open. The optional Board
+                                          pipeline executes POR and stages native
+                                          owners with MIDI/PCM/USB lifecycle
+                                          guards (reference-pipeline.txt).
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.
 Standalone runtime interface     pending  Keyboard must be the default; --desktop
@@ -2091,9 +2094,10 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           timeline and joint lifetime guards,
                                           interleaved suffixes, original event
                                           floor and RAM isolation are checked
-                                          (dsp-fetch-clone.txt). Normal Board
-                                          automatic pipeline/POR integration
-                                          remains open.
+                                          (dsp-fetch-clone.txt). Optional Board
+                                          POR/pipeline staging and host lifecycle
+                                          guards are in reference-pipeline.txt;
+                                          normal device profiles remain open.
                                           Standalone reference-board checkpoints
                                           now compose native owners/schedule,
                                           actual release epoch, SPI/return pads
@@ -2877,15 +2881,16 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   source identity, future append, actual reset/recovery time and trusted native
   suffix restore. Own MOVEP GPIO reads check real AG1 capture/E2 publication;
   literal cycle/event counts and causality/budget/source/reentry guards support
-  this primitive. Normal Board runtime integration, original reset-to-instrument
-  operation, MIDI/ESAI/audio and hardware timing remain open. See dsp-fetch-events.txt.
+  this primitive. Optional Board integration is in reference-pipeline.txt. Original
+  reset-to-instrument operation, MIDI/ESAI/audio and hardware timing remain open.
+  See dsp-fetch-events.txt.
 
 - The shared MCU/automatic-DSP owner now retains one peripheral-event timeline.
   All six shared-write/DSP-AG1/input orders, real GPIO capture/E2 publication,
   future-epoch input, timed WAI IRQ/RTI and held/recovery event boundaries have
   independent native checks and joint cursor-aware replay. Cyclic/unknown orders
-  and retroactive events refuse. Initial MCU constructor reset vectors, normal
-  Board pipeline integration, complete original instrument boot/audio/MIDI and
+  and retroactive events refuse. Optional reference Board POR/pipeline ownership
+  is in reference-pipeline.txt. Complete original instrument boot/audio/MIDI and
   physical timing remain open. See dsp-fetch-schedule.txt and dsp-fetch-events.txt.
 
 - Initial digital power-on ownership now has eight MCU phase profiles/18suffixes,
@@ -2895,7 +2900,7 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   or ROM; release with missing ROM fails at native F2. The pinned original MCU
   bootstrap reaches8200 twice with exact native counts, complete SRAM replay,
   unchanged NVM and one shared initial timeline. These laboratory timing/reset
-  inputs do not establish physical startup/wiring, normal Board integration,
+  inputs do not establish physical startup/wiring, normal device profiles,
   authentic complete DSP ROM or full instrument operation. See mcu-system-reset.txt,
   mcu-power-on-reference.json and dsp-fetch-schedule.txt.
 

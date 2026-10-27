@@ -81,9 +81,7 @@ void Board::update_return(const std::optional<ReturnRoute> &route,
   }
   if (execution_.trace != nullptr && (!previous || !same(*previous, output))) {
     constexpr std::string_view ports = "ABETMJPQRSU";
-    *execution_.trace << "SHI-RETURN end="
-                      << control_.return_boundary.value_or(
-                             native_->schedule ? native_->schedule->end_ticks() : ticks())
+    *execution_.trace << "SHI-RETURN end=" << control_.return_boundary.value_or(schedule_ticks())
                       << " signal=" << name << " driven=" << output.driven << " level=";
     if (output.level) {
       *execution_.trace << (*output.level ? 1 : 0);

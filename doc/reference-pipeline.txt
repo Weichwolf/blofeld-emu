@@ -1,0 +1,20 @@
+Reference Board pipeline
+
+Config::pipeline selects actual MCU digital POR and automatic MCU/DSP pipeline
+periods. Supply synchronization, RESET pad, DSP mode/PINIT/recovery, clock and
+ordering contracts explicitly. External IRQ/DMA requests stay unknown; supported
+internal DAX/ESAI requests derive from real peripheral state. Legacy completion
+experiments remain separate. No normal device profile or extra user CLI is added.
+
+Initial DSP pin observations follow reset assertion at time zero. Held MCU
+registers are unqualified until vector execution. Status counts actual DSP
+pipeline periods and architectural retirements separately. Restore prepares
+fresh native owners, then publishes owners/control together. MIDI queues and
+partial bits rewind; external PCM bindings retire and USB revisions advance.
+
+reference_pipeline checks literal POR/vector/NOP timing, held/recovering/run
+forks, strict missing inputs, MIDI partial-bit replay and PCM/USB lifecycle.
+original_board_power_on pins unchanged firmware and the independent MCU
+bootstrap ledger through Board POR, with explicit laboratory inputs and DSP
+held without ROM. These checks do not establish full stock boot, original DSP
+audio, USB-MIDI, physical reset timing, real-time operation or hardware equivalence.

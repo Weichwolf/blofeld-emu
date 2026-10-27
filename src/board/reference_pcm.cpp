@@ -109,7 +109,6 @@ void Board::save_audio() const {
   if (!control_.recording) { throw Fault("WAV output has no PCM recording"); }
   save_pcm_wave(execution_.audio->path,
                 control_.recording,
-                {.timebase_hz = native_->dsp.run_clock().timebase_hz(),
-                 .sample_rate = execution_.audio->sample_rate});
+                {.timebase_hz = common_hz(), .sample_rate = execution_.audio->sample_rate});
 }
 }

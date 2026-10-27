@@ -34,7 +34,8 @@ input refusal; and source destruction with exact native-address reuse.
 The nonzero event-floor case starts after the actual POR/vector sequence.
 ASan/UBSan and separate TSan exercise these single-threaded owners. They do
 not establish concurrent access safety, full instrument boot or real-time
-performance. Normal Board automatic pipeline integration remains open.
+performance. The optional reference Board pipeline uses staged transfer
+(reference-pipeline.txt); normal device profiles remain open.
 
   cmake --build --preset strict --target blofeld-dsp-fetch-clone-test blofeld-mcu-dsp-fetch-clone-test blofeld-fetch-clone-isolation-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^(dsp_fetch_clone|mcu_dsp_fetch_clone|fetch_clone_isolation)$'

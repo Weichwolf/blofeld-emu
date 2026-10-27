@@ -22,7 +22,8 @@ void validate_dsp_midi(const Config &config) {
     throw Fault(
         "DSP MIDI requires a valid timer, post-release start and explicit event order/budget");
   }
-  MidiWireTiming timing{.timebase_hz = config.dsp.clock.timebase_hz,
+  MidiWireTiming timing{.timebase_hz = config.pipeline ? config.pipeline->schedule.dsp.timebase_hz
+                                                       : config.dsp.clock.timebase_hz,
                         .start_ticks = route.after_ticks};
   if (config.midi_dsp_reference) {
     timing.reference_bit_ticks = config.midi_dsp_reference->bit_ticks;

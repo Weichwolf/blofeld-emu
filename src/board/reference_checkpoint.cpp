@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/mcu_dsp_fetch_schedule.hpp"
 #include "board/mcu_dsp_schedule.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
@@ -6,6 +7,7 @@
 #include "dsp/dsp_machine.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_reset.hpp"
 #include "storage/flash_image.hpp"
 #include "usb/usbip_runtime.hpp"
 #include "usb/usbip_tcp.hpp"
@@ -45,18 +47,21 @@ struct Checkpoint::Storage {
           Board::Control state,
           McuCheckpoint mcu_state,
           DspCheckpoint dsp_state,
-          std::optional<McuDspScheduleCheckpoint> schedule_state)
+          std::optional<McuDspScheduleCheckpoint> schedule_state,
+          std::optional<McuDspFetchCheckpoint> fetch_state)
       : identity(std::move(owner)),
         control(std::move(state)),
         mcu(std::move(mcu_state)),
         dsp(std::move(dsp_state)),
-        schedule(schedule_state) {}
+        schedule(schedule_state),
+        fetch(std::move(fetch_state)) {}
 
   const std::shared_ptr<const Board::Identity> identity;
   const Board::Control control;
   const McuCheckpoint mcu;
   const DspCheckpoint dsp;
   const std::optional<McuDspScheduleCheckpoint> schedule;
+  const std::optional<McuDspFetchCheckpoint> fetch;
 };
 
 Checkpoint::Checkpoint(std::shared_ptr<const Storage> storage) : storage_(std::move(storage)) {}
@@ -67,8 +72,7 @@ void Board::require_idle() const {
 
 void Board::require_healthy() const {
   require_idle();
-  if (control_.faulted || native_->mcu.timing_faulted() || native_->dsp.timing_faulted() ||
-      (native_->schedule && native_->schedule->faulted())) {
+  if (timing_faulted()) {
     throw Fault("Reference-board failure requires a trusted coordinated restore");
   }
 }
@@ -102,8 +106,14 @@ void Board::advance() {
     step();
     ++control_.operations;
     if (execution_.trace != nullptr) {
-      *execution_.trace << "MCU end=" << ticks() << " pc=" << hex(native_->mcu.cpu().state().pc)
-                        << " instructions=" << control_.instructions
+      *execution_.trace << "MCU end=" << ticks();
+      const auto reset = native_->mcu.system_reset_state();
+      if (reset && reset->phase != McuResetPhase::complete) {
+        *execution_.trace << " held-reset=1 reset-edges=" << reset->edges;
+      } else {
+        *execution_.trace << " pc=" << hex(native_->mcu.cpu().state().pc);
+      }
+      *execution_.trace << " instructions=" << control_.instructions
                         << " operations=" << control_.operations
                         << " idle=" << native_->mcu.idle_bus_cycles() << '\n';
     }
@@ -116,16 +126,25 @@ void Board::advance() {
 
 Checkpoint Board::checkpoint() const {
   require_healthy();
-  native_->mcu.validate_run_boundary();
+  if (native_->mcu.system_reset_active()) {
+    native_->mcu.validate_reset_boundary();
+  } else {
+    native_->mcu.validate_run_boundary();
+  }
   if (control_.return_boundary) { throw Fault("Reference-board output observation is active"); }
   const auto schedule =
       native_->schedule ? std::optional<McuDspScheduleCheckpoint>{native_->schedule->checkpoint()}
                         : std::nullopt;
-  if (static_cast<bool>(schedule) != control_.release_epoch.has_value()) {
+  if (!native_->fetch && static_cast<bool>(schedule) != control_.release_epoch.has_value()) {
     throw Fault("Reference-board checkpoint has an inconsistent DSP release epoch");
   }
   return Checkpoint(std::make_shared<const Checkpoint::Storage>(
-      identity_, control_, native_->mcu.checkpoint(), native_->dsp.checkpoint(), schedule));
+      identity_,
+      control_,
+      native_->mcu.checkpoint(),
+      native_->dsp.checkpoint(),
+      schedule,
+      native_->fetch ? std::optional{native_->fetch->checkpoint()} : std::nullopt));
 }
 
 void Board::restore(const Checkpoint &checkpoint) {
@@ -139,8 +158,13 @@ void Board::restore(const Checkpoint &checkpoint) {
   const Busy guard(*this);
   const auto &saved = *checkpoint.storage_;
   auto replacement = std::make_unique<Owners>(config_, execution_);
-  replacement->mcu.restore(saved.mcu);
-  replacement->dsp.restore(saved.dsp);
+  if (saved.fetch) {
+    replacement->fetch = std::make_unique<McuDspFetchSchedule>(
+        *saved.fetch, replacement->mcu, replacement->dsp, fetch_events());
+  } else {
+    replacement->mcu.restore(saved.mcu);
+    replacement->dsp.restore(saved.dsp);
+  }
   if (saved.schedule) {
     if (!saved.control.release_epoch) { throw Fault("Missing saved DSP release epoch"); }
     auto inputs = config_.schedule;
@@ -198,23 +222,27 @@ void Board::poll_usb(UsbipRuntime &runtime) {
 
 Status Board::status() const {
   require_idle();
-  return {.mcu = native_->mcu.cpu().state(),
+  const bool known = !native_->mcu.system_reset_active();
+  return {.mcu = known ? native_->mcu.cpu().state() : CpuState{},
           .dsp = native_->dsp.cpu().debug_state(),
+          .mcu_state_known = known,
+          .mcu_reset = native_->mcu.system_reset_state(),
           .cold_nvm = encode_flash_image(native_->mcu.bus().power_off_flash_image()),
           .common_ticks = ticks(),
           .mcu_cycles = native_->mcu.run_clock().bus_cycles(),
           .mcu_ticks = native_->mcu.run_clock().elapsed_ticks(),
           .oscillator_cycles = native_->mcu.run_clock().oscillator_cycles(),
           .idle_cycles = native_->mcu.idle_bus_cycles(),
-          .dsp_ticks = native_->dsp.run_clock().elapsed_ticks(),
-          .dsp_units = native_->dsp.run_clock().native_cycle_units(),
-          .dsp_steps = native_->schedule ? native_->schedule->completed_steps() : 0,
+          .dsp_ticks = dsp_ticks(),
+          .dsp_units = native_->fetch ? 0 : native_->dsp.run_clock().native_cycle_units(),
+          .dsp_steps = dsp_steps(),
+          .dsp_cycles = native_->fetch ? native_->fetch->run().completed_cycles() : 0,
           .instructions = control_.instructions,
           .operations = control_.operations,
           .interrupts = control_.interrupts,
           .writes = control_.writes,
           .frames = control_.frames,
-          .ties = native_->schedule ? native_->schedule->ties() : 0,
+          .ties = schedule_ties(),
           .ordered_pairs = control_.ordered_pairs,
           .next_event = control_.next_event,
           .next_dsp_event = control_.next_dsp_event,
@@ -230,21 +258,23 @@ Status Board::status() const {
           .midi_dsp_events = control_.midi_dsp ? control_.midi_dsp->observed_events() : 0,
           .midi_dsp_frames = control_.midi_dsp ? control_.midi_dsp->completed_frames() : 0,
           .started = control_.started,
-          .waiting = native_->mcu.cpu().waiting(),
-          .held_reset = native_->schedule == nullptr,
-          .faulted = control_.faulted || native_->mcu.timing_faulted() ||
-                     native_->dsp.timing_faulted() ||
-                     (native_->schedule && native_->schedule->faulted())};
+          .waiting = known && native_->mcu.cpu().waiting(),
+          .held_reset = dsp_reset_active(),
+          .faulted = timing_faulted()};
 }
 
 bool Status::operator==(const Status &other) const {
-  return std::tie(mcu.pc, mcu.d, mcu.x, mcu.y, mcu.sp, mcu.ccr) == std::tie(other.mcu.pc,
-                                                                            other.mcu.d,
-                                                                            other.mcu.x,
-                                                                            other.mcu.y,
-                                                                            other.mcu.sp,
-                                                                            other.mcu.ccr) &&
-         std::tie(dsp,
+  return (!mcu_state_known ||
+          std::tie(mcu.pc, mcu.d, mcu.x, mcu.y, mcu.sp, mcu.ccr) == std::tie(other.mcu.pc,
+                                                                             other.mcu.d,
+                                                                             other.mcu.x,
+                                                                             other.mcu.y,
+                                                                             other.mcu.sp,
+                                                                             other.mcu.ccr)) &&
+         std::tie(mcu_state_known,
+                  mcu_reset,
+                  dsp_cycles,
+                  dsp,
                   cold_nvm,
                   common_ticks,
                   mcu_cycles,
@@ -277,7 +307,10 @@ bool Status::operator==(const Status &other) const {
                   started,
                   waiting,
                   held_reset,
-                  faulted) == std::tie(other.dsp,
+                  faulted) == std::tie(other.mcu_state_known,
+                                       other.mcu_reset,
+                                       other.dsp_cycles,
+                                       other.dsp,
                                        other.cold_nvm,
                                        other.common_ticks,
                                        other.mcu_cycles,

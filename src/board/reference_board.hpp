@@ -4,6 +4,7 @@
 #include "audio/pcm_recording.hpp"
 #include "audio/pcm_sink.hpp"
 #include "audio/serial_pcm.hpp"
+#include "board/mcu_dsp_fetch_schedule.hpp"
 #include "board/mcu_dsp_schedule.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_esai.hpp"
@@ -108,10 +109,19 @@ struct DspMidiReference {
   unsigned idle_bits = 0;
 };
 
+// Explicit development timing, not a hardware-verified device profile.
+struct PipelineTiming {
+  McuPowerOnInputs power_on;
+  McuResetPad reset_pad = McuResetPad::unknown;
+  McuDspFetchInputs schedule;
+  DspDmaGrant dma_grant = DspDmaGrant::unknown;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunContract dsp;
   McuDspScheduleInputs schedule;
+  std::optional<PipelineTiming> pipeline;
   std::uint64_t release_ticks = 0;
   std::uint64_t operations = 0;
   bool pinit = false;
@@ -186,6 +196,8 @@ private:
 struct Status {
   CpuState mcu;
   DspDebugState dsp;
+  bool mcu_state_known = true;
+  std::optional<McuResetState> mcu_reset;
   std::vector<std::uint8_t> cold_nvm;
   std::uint64_t common_ticks = 0;
   std::uint64_t mcu_cycles = 0;
@@ -195,6 +207,7 @@ struct Status {
   std::uint64_t dsp_ticks = 0;
   std::uint64_t dsp_units = 0;
   std::uint64_t dsp_steps = 0;
+  std::uint64_t dsp_cycles = 0;
   std::uint64_t instructions = 0;
   std::uint64_t operations = 0;
   std::uint64_t interrupts = 0;
@@ -255,6 +268,7 @@ private:
     McuMachine mcu;
     DspMachine dsp;
     std::unique_ptr<McuDspSchedule> schedule;
+    std::unique_ptr<McuDspFetchSchedule> fetch;
   };
   class Busy;
 
@@ -271,6 +285,7 @@ private:
     std::uint64_t interrupts = 0;
     std::uint64_t writes = 0;
     std::uint64_t frames = 0;
+    std::uint64_t dsp_retirements = 0;
     std::uint64_t ordered_pairs = 0;
     std::size_t next_event = 0;
     std::size_t next_dsp_event = 0;
@@ -284,6 +299,7 @@ private:
     std::optional<MidiTimedInput> midi_dsp;
     std::uint64_t midi_bytes = 0;
     bool started = false;
+    bool dsp_initial_pending = false;
     bool faulted = false;
   };
 
@@ -296,6 +312,8 @@ private:
   void require_idle() const;
   void require_healthy() const;
   void attach(Owners &owners);
+  void prepare_dsp();
+  void connect_pipeline();
   [[nodiscard]] Outcome finish_branch(const std::function<void(Board &)> &input = {});
   [[nodiscard]] Outcome run_replays();
   void replay_marker(std::string_view phase, unsigned index);
@@ -334,6 +352,17 @@ private:
                  std::string_view source,
                  const std::optional<SerialPcmFrame> &frame) const;
   [[nodiscard]] DspExternalEvents dsp_inputs();
+  [[nodiscard]] DspFetchExternalEvents fetch_events();
+  [[nodiscard]] McuDspFetchSchedule::CycleInputs fetch_inputs() const;
+  [[nodiscard]] McuDspFetchSchedule::Observer fetch_observer();
+  [[nodiscard]] std::uint64_t common_hz() const;
+  [[nodiscard]] std::uint64_t dsp_ticks() const;
+  [[nodiscard]] std::uint64_t dsp_steps() const;
+  [[nodiscard]] std::uint64_t schedule_ticks() const;
+  [[nodiscard]] std::uint64_t schedule_ties() const;
+  [[nodiscard]] bool dsp_reset_active() const;
+  [[nodiscard]] bool timing_faulted() const;
+  void observe_spi_write(const BusEvent &event);
   void boundary();
   void start_midi();
   void observe_midi(ExecutionContext context);
@@ -351,6 +380,8 @@ private:
   const Config config_;
   const Execution execution_;
   std::shared_ptr<const Identity> identity_;
+  const std::shared_ptr<const DspFetchEventIdentity> input_identity_ =
+      std::make_shared<const DspFetchEventIdentity>();
   std::unique_ptr<Owners> native_;
   Control control_;
   // External transport epochs must not rewind with a modeled-state restore.

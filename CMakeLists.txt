@@ -282,7 +282,7 @@ add_library(blofeld_host_midi src/midi/host_midi.cpp)
 target_include_directories(blofeld_host_midi PUBLIC src)
 target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)
 add_library(blofeld_reference_board src/board/reference_config.cpp
-  src/board/reference_board.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
+  src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
   src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
@@ -3088,7 +3088,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3228,7 +3228,7 @@ add_custom_target(quality
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test
     blofeld-dax-test
-    blofeld-reference-checkpoint-test blofeld-reference-rom-fixture
+    blofeld-reference-checkpoint-test blofeld-reference-rom-fixture blofeld-reference-pipeline-test blofeld-original-board-power-on-test
     blofeld-reference-original-midi-rom
     blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test
     blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
@@ -3349,6 +3349,17 @@ add_custom_target(quality
     blofeld-st7565-parallel-test
     blofeld-flash-image-test blofeld-flash-file-worker
   USES_TERMINAL)
+  add_executable(blofeld-reference-pipeline-test test/reference_pipeline_test.cpp)
+  target_link_libraries(blofeld-reference-pipeline-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_pipeline COMMAND blofeld-reference-pipeline-test)
+  add_executable(blofeld-original-board-power-on-test test/original_board_power_on_test.cpp)
+  target_link_libraries(blofeld-original-board-power-on-test PRIVATE blofeld_reference_board)
+  add_test(NAME original_board_power_on COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_board_power_on.py"
+    $<TARGET_FILE:blofeld-original-board-power-on-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-board-power-on.json")
+  set_tests_properties(original_board_power_on PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
 endif()
 
 if(BLOFELD_FUZZING)
