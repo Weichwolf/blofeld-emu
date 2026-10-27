@@ -219,6 +219,12 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
   }
 }
 
+std::uint64_t DspFetchRun::next_cycle_ticks(const DspMachine &machine) const {
+  check_owner(machine);
+  impl_->state.verify(machine);
+  return impl_->state.period(machine);
+}
+
 std::uint64_t DspFetchRun::elapsed_ticks() const {
   return impl_->state.ticks;
 }

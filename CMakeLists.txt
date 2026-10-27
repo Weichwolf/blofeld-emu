@@ -272,7 +272,7 @@ target_include_directories(blofeld_core PUBLIC src)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh blofeld_hc12_cycles)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
-add_library(blofeld_mcu_dsp src/board/mcu_dsp_schedule.cpp)
+add_library(blofeld_mcu_dsp src/board/mcu_dsp_schedule.cpp src/board/mcu_dsp_fetch_schedule.cpp)
 target_include_directories(blofeld_mcu_dsp PUBLIC src)
 target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_library(blofeld_host_midi src/midi/host_midi.cpp)
@@ -1607,6 +1607,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-dsp-schedule-test test/mcu_dsp_schedule_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_schedule COMMAND blofeld-mcu-dsp-schedule-test)
+  add_executable(blofeld-mcu-dsp-fetch-schedule-test test/mcu_dsp_fetch_schedule_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-fetch-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME mcu_dsp_fetch_schedule COMMAND blofeld-mcu-dsp-fetch-schedule-test)
   add_executable(blofeld-mcu-dsp-wait-test test/mcu_dsp_wait_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-wait-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_wait COMMAND blofeld-mcu-dsp-wait-test)
@@ -3114,6 +3117,7 @@ add_custom_target(quality
     blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test
     blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test
+    blofeld-mcu-dsp-fetch-schedule-test
     blofeld-mcu-dsp-wait-test
     blofeld-hc12-cycle-test
     blofeld-hc12-cycle-extended-test

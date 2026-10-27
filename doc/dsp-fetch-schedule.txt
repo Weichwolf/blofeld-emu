@@ -1,0 +1,38 @@
+MCU-period / automatic DSP-pipeline ordering
+
+McuDspFetchSchedule orders DspFetchRun pipeline periods against actual native
+MCU period offers. It is separate from the instruction-completion reference
+contract in McuDspSchedule. It does not own MCU steps, observers, GPIO routes
+or a physical Blofeld profile. DspFetchRun::next_cycle_ticks validates its bound
+inactive native owner without consuming a pipeline, DMA or peripheral period.
+
+The caller supplies integral clocks, a common-time release epoch, an explicit
+per-MCU-period DSP budget and native DMA/cycle inputs. Shared one-byte writes
+must be identified before their native period and observed after consumption.
+DSP periods before the write are completed first; an exact tie requires an
+explicit MCU-before-DSP or DSP-before-MCU policy. No physical ordering is
+inferred. Missing observations, invalid geometry, changed/unconsumed native
+periods, reentry and execution errors reject and quarantine the owner.
+
+Current scope is automatic_memory execution during ordinary MCU instructions.
+WAI, COP deadline, reset, external-event arbitration and joint checkpoint
+contracts remain open. Existing instruction-completion support for those
+operations does not qualify this pipeline owner. No real-time guarantee is made.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_schedule$'
+
+Seven own native cases use literal HCS12 LDAB/STAB encodings and independent
+period expectations: 450 common reset ticks, a write at 720 and six 45-tick DSP
+periods. Both tie orders, an unqualified tie, dropped/wrong-address observations,
+missing cycle inputs and budget exhaustion are checked, including callback
+reentry refusal and fault quarantine. The thread-profile run exercises these
+single-threaded owners under TSan; it is not a concurrency qualification.
+
+Local original1.25 experiments additionally coupled actual native MCU PORTB
+stores to this pipeline under declared laboratory clocks/ready/skew and a
+document-derived main ROM. Both phases and tie orders loaded all94 original
+program words and retained the strict Y:002000 failure. Those controlled inputs
+are not default device behavior, authentic ROM or recovered physical wiring.
+Complete connected reset/startup, original audio/MIDI/storage and physical
+Desktop/Keyboard equivalence remain unverified; see objective.txt and coverage.txt.

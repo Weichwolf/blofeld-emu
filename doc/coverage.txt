@@ -5,6 +5,13 @@ Evidence categories: implemented / partial / pending. A passing check covers
 only its named behavior. No hardware equivalence or brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner,
+                                          tie policies and failure guards
+                                          (dsp-fetch-schedule.txt). Local original
+                                          PORTB loading retains Y:002000; lab
+                                          clocks/wiring and document ROM remain
+                                          hypotheses. Pipeline WAI/reset/joint
+                                          checkpoints and normal boot are open.
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.
 Standalone runtime interface     pending  Keyboard must be the default; --desktop
