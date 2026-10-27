@@ -46,6 +46,10 @@ void validate_inputs(const DspFetchRunInputs inputs) {
        inputs.execution != DspReferenceExecution::staged_register_boundaries)) {
     throw Fault("Automatic DSP stages require the explicit staged native result contract");
   }
+  if (inputs.resets != DspFetchResetTiming::unqualified &&
+      inputs.resets != DspFetchResetTiming::reference_cycle_boundary) {
+    throw Fault("Unsupported DSP fetch reset timing contract");
+  }
   if (inputs.timing != DspFetchTiming::reference_cycle_order || inputs.extal_hz < minimum_extal ||
       inputs.extal_hz > maximum_extal || inputs.timebase_hz < inputs.extal_hz ||
       inputs.timebase_hz > maximum_timebase || inputs.timebase_hz % inputs.extal_hz != 0 ||
@@ -105,14 +109,21 @@ void DspFetchRun::check_owner(const DspMachine &machine) const {
   }
 }
 
+void DspFetchRun::check_running(const DspMachine &machine) const {
+  check_owner(machine);
+  impl_->state.verify(machine);
+  if (hardware_reset_active()) {
+    throw Fault("DSP fetch native cycles are gated during reset assertion/recovery");
+  }
+}
+
 void DspFetchRun::fail(DspMachine &machine) noexcept {
   impl_->faulted = true;
   machine.fail_reference_clock();
 }
 
 DspReferenceProgress DspFetchRun::begin_instruction(DspMachine &machine) {
-  check_owner(machine);
-  impl_->state.verify(machine);
+  check_running(machine);
   if (impl_->state.pipeline) { throw Fault("Automatic DSP stages own native instruction issue"); }
   if (machine.reference_pending()) {
     throw Fault("DSP fetch run already has a pending instruction");
@@ -129,8 +140,7 @@ DspReferenceProgress DspFetchRun::begin_instruction(DspMachine &machine) {
 }
 
 DspReferenceProgress DspFetchRun::overlap_instruction(DspMachine &machine) {
-  check_owner(machine);
-  impl_->state.verify(machine);
+  check_running(machine);
   if (impl_->state.pipeline) { throw Fault("Automatic DSP stages own native instruction issue"); }
   const auto pending = machine.reference_pending();
   if (!pending) { throw Fault("DSP fetch overlap requires an actual held result"); }
@@ -151,7 +161,7 @@ void DspFetchRun::complete_cycle(DspMachine &machine,
                                  const bool switch_was_pending) {
   auto &state = impl_->state;
   machine.bus().advance_reference_cycle_delays(state.next_dma_cycle, switch_was_pending);
-  if ((state.cycles & 1U) != 0) {
+  if (((state.cycles - state.epoch_cycles) & 1U) != 0) {
     machine.bus().timers().advance_clk2(1);
     ++state.clk2_edges;
   }
@@ -162,8 +172,7 @@ void DspFetchRun::complete_cycle(DspMachine &machine,
 
 DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
                                                const DspFetchCycleInputs inputs) {
-  check_owner(machine);
-  impl_->state.verify(machine);
+  check_running(machine);
   if (impl_->state.pipeline && (inputs.admit_native || inputs.retire_previous)) {
     throw Fault("Automatic DSP stages reject caller-selected native phases");
   }
@@ -220,8 +229,7 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
 }
 
 std::uint64_t DspFetchRun::next_cycle_ticks(const DspMachine &machine) const {
-  check_owner(machine);
-  impl_->state.verify(machine);
+  check_running(machine);
   return impl_->state.period(machine);
 }
 

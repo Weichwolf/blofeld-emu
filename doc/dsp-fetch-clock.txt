@@ -55,6 +55,39 @@ cases alter the model command directly; they do not qualify native PCTL stage
 placement. Guard cases check unknown PINIT, invalid period/contract, foreign and
 duplicate owners, machine-only restore and unchanged nominal completion use.
 
+Explicit reset hold/recovery
+
+DspFetchRunInputs.resets defaults to unqualified. reference_cycle_boundary admits
+native mode5/PINIT-low reset at a completed fetch-cycle boundary. The caller
+supplies stable observed pins and at least2 bypass EXTAL recovery periods.
+Assertion performs the actual native reset,flushes frontend/backend continuation
+and resets peripherals;completed RAM writes remain. Pending stores are cancelled,
+without undoing completed writes. No firmware bytes or arbitrary PC are supplied.
+
+The native core checkpoint retains the reset gate;machine/clock state must agree.
+Direct atomic/reference/DMA admissions reject while that native gate is held.
+Held/recovery ticks advance lifetime elapsed/reset time only. They execute no
+native cycles,DMA phases or timer CLK2 edges. Two asserted EXTAL periods are
+required before release;recovery starts at release and clamps at its supplied
+endpoint. Fractional periods and trusted snapshots retain their exact phase.
+Native F1/F2 resumes after recovery with a fresh CLK2 divider phase and a new
+native epoch;completed-cycle/DMA-index/CLK2 totals remain lifetime ledgers.
+Early invalid requests reject before mutation;entered native reset failures
+quarantine the owner. External pins/wiring and transport cursors stay caller-owned.
+This is explicit reference ordering,not measured asynchronous/power-on behavior.
+
+  cmake --build --preset strict --target blofeld-fetch-reset-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_fetch_reset$'
+
+Twenty-eight native scenarios cover18pipeline cuts,held/recovery snapshot replay,
+second resets,pin/default-contract/phase/overflow guards and pending/completed
+long-store boundaries. Independent reset registers,retained X/Y values,full ADD
+results and exact EXTAL/native/CLK2/epoch ledgers accompany native suffix replay.
+A local original1.25 loader experiment adds91hold+135recovery ticks,then retains
+all94received words and the9777period strict Y002000 trace;only lifetime fault
+time increases by226ticks. It uses document ROM and between-period SPI input,
+not authentic full ROM,original MCU reset-net integration or successful boot.
+
 The explicit_effects profile still selects backend begin/admission explicitly.
 Separate automatic ALU and selected memory profiles own decode/AG1/AG2/E1/E2
 (dsp-automatic-alu-pipeline.txt, dsp-memory-pipeline.txt). General simultaneous

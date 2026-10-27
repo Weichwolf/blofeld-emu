@@ -286,7 +286,12 @@ bool DspMachine::clocked() const {
 
 bool DspMachine::hardware_reset_active() const {
   const auto &clock = state_->run.clock;
-  return clock && clock->hardware_reset_active();
+  return state_->cpu.reference_reset_active() || (clock && clock->hardware_reset_active());
+}
+
+void DspMachine::set_reference_reset(const bool held) {
+  if (clocked()) { throw Fault("Fetch reset cannot replace a completion-clock owner"); }
+  state_->cpu.set_reference_reset(held);
 }
 
 void DspMachine::require_running() const {
@@ -387,6 +392,7 @@ bool DspMachine::timing_faulted() const {
 }
 
 std::optional<DspDmaWord> DspMachine::advance_dma(const DspDmaInputs inputs) {
+  require_running();
   if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
     throw Fault("DSP DMA observation requires a healthy native boundary");
   }
@@ -400,6 +406,7 @@ std::optional<DspDmaWord> DspMachine::advance_dma(const DspDmaInputs inputs) {
 }
 
 void DspMachine::observe_dax(const DspDaxInputs inputs) {
+  require_running();
   if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
     throw Fault("DAX observation requires a healthy native boundary");
   }
@@ -413,6 +420,7 @@ void DspMachine::observe_dax(const DspDaxInputs inputs) {
 }
 
 DspDmaBusResult DspMachine::advance_dma(const DspDmaInputs inputs, const DspCoreBusUse core) {
+  require_running();
   if (state_->cpu.executing() || state_->cpu.faulted() || timing_faulted()) {
     throw Fault("DSP DMA arbitration requires a healthy native boundary");
   }
@@ -663,6 +671,7 @@ DspMachine::advance_reference_bus_cycle(const DspReferenceCycleInputs &inputs) {
 DspReferenceCycleResult
 DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs,
                                              const std::uint64_t capture_occurrence) {
+  require_running();
   if (clocked() || state_->cpu.executing()) {
     throw Fault("Composed native bus cycles require an unclocked healthy reference owner");
   }

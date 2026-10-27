@@ -7,6 +7,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_run_clock.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -15,12 +16,15 @@
 namespace blofeld {
 enum class DspFetchTiming : std::uint8_t { unqualified, reference_cycle_order };
 
+enum class DspFetchResetTiming : std::uint8_t { unqualified, reference_cycle_boundary };
+
 struct DspFetchRunInputs {
   std::uint32_t extal_hz = 0;
   std::uint64_t timebase_hz = 0;
   DspFetchTiming timing = DspFetchTiming::unqualified;
   DspReferenceExecution execution = DspReferenceExecution::access_boundaries;
   DspFetchPipeline pipeline = DspFetchPipeline::explicit_effects;
+  DspFetchResetTiming resets = DspFetchResetTiming::unqualified;
   bool operator==(const DspFetchRunInputs &) const = default;
 };
 
@@ -69,6 +73,15 @@ public:
   [[nodiscard]] DspReferenceProgress begin_instruction(DspMachine &machine);
   [[nodiscard]] DspReferenceProgress overlap_instruction(DspMachine &machine);
   [[nodiscard]] DspFetchCycleResult advance_cycle(DspMachine &machine, DspFetchCycleInputs inputs);
+  // Explicit nominal reset at a completed cycle; caller owns stable observed pins.
+  void begin_hardware_reset(DspMachine &machine, DspHardwareResetInputs inputs);
+  std::uint64_t advance_hardware_reset_ticks(DspMachine &machine, std::uint64_t maximum_ticks);
+  void release_hardware_reset(DspMachine &machine);
+  [[nodiscard]] bool hardware_reset_active() const;
+  [[nodiscard]] std::optional<DspHardwareResetState> hardware_reset_state() const;
+  [[nodiscard]] std::optional<std::uint64_t> hardware_reset_remaining_ticks() const;
+  [[nodiscard]] std::uint64_t hardware_reset_ticks() const;
+  [[nodiscard]] std::uint64_t native_epoch() const;
   [[nodiscard]] DspFetchCheckpoint checkpoint(const DspMachine &machine) const;
   void restore(const DspFetchCheckpoint &checkpoint, DspMachine &machine);
   // Pure boundary query: validates the bound owner and consumes no native work.
@@ -81,6 +94,7 @@ public:
 
 private:
   void check_owner(const DspMachine &machine) const;
+  void check_running(const DspMachine &machine) const;
   void fail(DspMachine &machine) noexcept;
   void complete_cycle(DspMachine &machine, std::uint64_t period, bool switch_was_pending);
   struct Impl;

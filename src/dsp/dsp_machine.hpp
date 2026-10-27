@@ -144,6 +144,7 @@ private:
   friend class DspScheduledRun;
   void require_running() const;
   friend class DspFetchRun;
+  void set_reference_reset(bool held);
   [[nodiscard]] DspReferenceCycleResult
   advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inputs,
                                    std::uint64_t capture_occurrence = 0);

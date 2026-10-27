@@ -335,13 +335,15 @@ struct DspCoreCheckpoint::Storage {
           const std::uint64_t serial,
           const DspNativeResultState &result,
           const DspAddressStages &address_stages,
-          DspPeripheralReadStages read_stages)
+          DspPeripheralReadStages read_stages,
+          const bool held)
       : cpu(std::move(state)),
         reference(std::move(reference_state)),
         generation(serial),
         results(result),
         stages(address_stages),
-        peripheral_reads(std::move(read_stages)) {}
+        peripheral_reads(std::move(read_stages)),
+        reset_held(held) {}
 
   const dsp56k::DSP::ReferenceState cpu;
   const DspReferenceState reference;
@@ -349,6 +351,7 @@ struct DspCoreCheckpoint::Storage {
   const DspNativeResultState results;
   const DspAddressStages stages;
   const DspPeripheralReadStages peripheral_reads;
+  const bool reset_held;
 };
 
 DspCoreCheckpoint::DspCoreCheckpoint(std::shared_ptr<const Storage> storage)
@@ -1125,6 +1128,7 @@ public:
   dsp56k::DSP cpu;
   const dsp56k::Opcodes opcodes;
   bool faulted = false;
+  bool reference_reset = false;
   bool active = false;
   RunHooks run;
   DspNativeResultState results;
@@ -1141,6 +1145,7 @@ DspCore::DspCore(DspBus &bus) : impl_(std::make_unique<Impl>(bus)) {
 DspCore::~DspCore() = default;
 
 void DspCore::reset_spi_boot() {
+  require_reset_released();
   const ExecutionGuard guard(impl_->active);
   if (impl_->run.reset) { impl_->run.reset(); }
   impl_->faulted = true;
@@ -1163,6 +1168,25 @@ void DspCore::set_run_hooks(RunHooks hooks) {
     throw Fault("Cannot configure an active DSP run");
   }
   impl_->run = std::move(hooks);
+}
+
+bool DspCore::reference_reset_active() const {
+  return impl_->reference_reset;
+}
+
+void DspCore::set_reference_reset(const bool held) {
+  if (impl_->active || held == impl_->reference_reset) {
+    throw Fault("Native reference reset requires an inactive gate transition");
+  }
+  impl_->reference_reset = held;
+}
+
+void DspCore::require_reset_released() const {
+  if (impl_->reference_reset) {
+    const auto context = state();
+    throw Fault("DSP operation during hardware reset pc=" + hex(context.pc, 6) +
+                " omr=" + hex(context.omr, 6));
+  }
 }
 
 bool DspCore::faulted() const {
@@ -1211,7 +1235,8 @@ DspCoreCheckpoint DspCore::checkpoint() const {
                                                          impl_->generation,
                                                          impl_->results,
                                                          impl_->stages,
-                                                         impl_->peripheral_reads));
+                                                         impl_->peripheral_reads,
+                                                         impl_->reference_reset));
 }
 
 void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
@@ -1228,6 +1253,7 @@ void DspCore::restore_checkpoint(const DspCoreCheckpoint &checkpoint) {
   impl_->stages = checkpoint.storage_->stages;
   impl_->peripheral_reads = checkpoint.storage_->peripheral_reads;
   impl_->generation = checkpoint.storage_->generation;
+  impl_->reference_reset = checkpoint.storage_->reset_held;
   if (checkpoint.storage_->reference.active && !impl_->results.base) {
     throw Fault("Native reference checkpoint lost its original computation base");
   }
@@ -1333,6 +1359,7 @@ DspReferenceProgress DspCore::begin_reference_interrupt(const DspReferenceExecut
 DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution contract,
                                                    const bool interrupt_entry,
                                                    const DspAddressRecord *const address) {
+  require_reset_released();
   if (impl_->active || impl_->faulted || impl_->native.reference().active() ||
       (contract != DspReferenceExecution::access_boundaries &&
        contract != DspReferenceExecution::access_and_retirement_boundaries &&
@@ -2020,6 +2047,7 @@ void DspCore::step_admitted(const std::optional<DspInterruptRequest> interrupt) 
 }
 
 void DspCore::step_impl(DspNativeAccessObserver observer, const Admission *admission) {
+  require_reset_released();
   if (impl_->faulted) { throw Fault("DSP requires reset after a rejected reference step"); }
   if (impl_->native.reference().active() || impl_->native.reference().fetch().active()) {
     throw Fault("Cannot execute an atomic DSP step while a reference access is pending");

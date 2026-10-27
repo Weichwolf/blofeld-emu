@@ -102,6 +102,9 @@ public:
 
 private:
   friend class DspMachine;
+  void set_reference_reset(bool held);
+  [[nodiscard]] bool reference_reset_active() const;
+  void require_reset_released() const;
 
   struct RunHooks {
     std::function<void()> ready;

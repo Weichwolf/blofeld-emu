@@ -8,6 +8,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_run_clock.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -21,6 +22,10 @@ struct DspFetchState {
   std::uint64_t ticks = 0;
   std::uint64_t clk2_edges = 0;
   std::uint64_t next_dma_cycle = 0;
+  std::uint64_t epoch = 1;
+  std::uint64_t epoch_cycles = 0;
+  std::uint64_t reset_ticks = 0;
+  std::optional<DspRunClock> reset_clock;
   DspDebugState expected_cpu;
   std::optional<DspReferenceTicket> expected_ticket;
   std::optional<DspReferenceTicket> expected_retirement;

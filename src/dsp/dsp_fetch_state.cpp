@@ -47,8 +47,10 @@ void DspFetchState::verify(const DspMachine &machine) const {
   const auto latch = pending ? pending->latched_program_word : std::nullopt;
   const auto previous = machine.reference_retirement();
   const auto retirement = previous ? std::optional{previous->ticket} : std::nullopt;
-  if (machine.clocked() || machine.cpu().debug_state() != expected_cpu ||
-      ticket != expected_ticket || retirement != expected_retirement || latch != expected_latch ||
+  if (machine.clocked() ||
+      machine.hardware_reset_active() != (reset_clock && reset_clock->hardware_reset_active()) ||
+      machine.cpu().debug_state() != expected_cpu || ticket != expected_ticket ||
+      retirement != expected_retirement || latch != expected_latch ||
       machine.reference_fetch() != expected_fetch ||
       machine.bus().last_dma_cycle() != expected_dma ||
       machine.reference_clock_owner() != expected_owner) {

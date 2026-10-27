@@ -1219,8 +1219,16 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           unused pins remaining unknown and held
                                           replay; pre-assert DSP history/routing
                                           remain outside that test's scope.
-                                          Asynchronous assertion and physical
-                                          routing remain unqualified.
+                                          Automatic fetch/pipeline reset now has
+                                          explicit completed-cycle mode5/PINIT-low
+                                          hold/recovery,retained committed stores,
+                                          native continuation/gate snapshots and
+                                          fresh CLK2 phase (dsp-fetch-clock.txt).
+                                          Direct CPU/reference/DMA admissions
+                                          honor the machine reset gate. Common-
+                                          MCU-clock reset-net integration remains
+                                          open,as do asynchronous assertion and
+                                          physical routing.
                                           Additional CPU-cycle adapter runs the
                                           same original 90314-instruction MCU
                                           bootloader with SCI/TIM clocks in
