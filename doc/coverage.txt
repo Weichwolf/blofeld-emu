@@ -989,6 +989,16 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           a synthetic byte retains the reserved
                                           Port F failure. Physical/default-board
                                           timing remains unqualified (nand-read.txt).
+                                          Read-ID90h/address00 uses explicit
+                                          immutable ID knowledge, never a default
+                                          chip or fifth byte. 1275 masks and255
+                                          invalid addresses, owner/file isolation,
+                                          both original packing tails/four joint
+                                          restores and eight unknown-byte cuts
+                                          pass. Original full ID setup retains
+                                          driven-data turnaround failure; physical
+                                          identity remains unverified
+                                          (nand-identification.txt).
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.

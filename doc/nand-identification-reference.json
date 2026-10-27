@@ -1,0 +1,25 @@
+{
+  "firmware_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "qualification": "Conditional isolated original updater identification: own legal command/address/input setup calls the unchanged packing tail, not the complete updater. CE held selected, separate low F8/F9 observations, explicit mode/BIU/clock preconditions; native JSR/RTS, all CPU debug state, ID/edge cursor and NVM replay. The full original ID prefix still fails at its driven-data RE edge. No preceding boot/initialization, physical identity/geometry/wiring/timing or completed update/recovery qualification.",
+  "helpers": [
+    {
+      "block": 3,
+      "bytes": 1164,
+      "sha256": "27cd8fb3ebe0ca4d51cc375836c15707438b65fbf3204400cb1ad81eaaa277fd",
+      "identify": 12140,
+      "packing": 12151,
+      "reader": 11979,
+      "identify_span_sha256": "b22e4f4dbfb8a31c3ea3bb33751fd4489f4ee5bca5ddeb394eab2e2b8edf8168"
+    },
+    {
+      "block": 5,
+      "bytes": 1200,
+      "sha256": "4d2b89b4332526bd6b34201b40dc9e2dd5cc188d022b06085fc61a14ace1eff1",
+      "identify": 12152,
+      "packing": 12163,
+      "reader": 11991,
+      "identify_span_sha256": "b22e4f4dbfb8a31c3ea3bb33751fd4489f4ee5bca5ddeb394eab2e2b8edf8168"
+    }
+  ],
+  "primary_reference": "K9F1208U0C Rev1.1 p33/Figure15; URL, size and SHA256 in hardware/sources.json. Four displayed bytes; the fifth named cycle remains unknown without an external observation."
+}

@@ -1,0 +1,48 @@
+NAND Read-ID protocol and conditional original updater paths
+
+  cmake --build --preset strict --target blofeld-nand-identification-test blofeld-original-nand-identification-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(nand_identification|nand_read|original_nand_identification)$'
+
+Samsung K9F1208U0C Rev1.1 p33/Figure15 defines command 90h, one address 00h
+and successive ID reads. The prose names five cycles but the figure supplies
+only four byte values. The PDF URL/size/hash is in hardware/sources.json.
+The candidate geometry does not supply any default manufacturer/device ID.
+
+NandIdentification holds five external byte/known-mask observations. Configure
+them only while cold. Consistent observations can refine unknown bits; conflicts
+and noncanonical bytes fail atomically. Reset/power loss retain those immutable
+facts. They remain separate from cells, block qualification and program history.
+
+An actual 90h/address00 selects an independent ID cursor without an array transfer,
+busy interval or fabricated completion. Missing address, extra/nonzero address,
+unknown requested bits and reads beyond the supplied five-byte window fail
+visibly. Failed reads do not consume bytes. Masked reads consume one actual
+cycle, copies retain the cursor, and a fresh 90h restarts it. Read-ID withdraws
+unqualified array-pointer knowledge. It cannot replace staged writes or run
+during active program/erase/reset. No chip detection proves geometry or wiring.
+
+NandOperationClock creates no ID completion event. NandStore forwards cold ID
+observations and traffic without cell-file publication. The version-one cell
+image format is unchanged; opening it supplies no ID. Reattach separately
+qualified device observations after reload. This is not a whole-unit state file.
+
+Independent tests cover 1275 selected-mask cases, 255 rejected addresses,
+unknown fifth-byte retention, atomic immutable observations, reset/power cuts,
+trusted copies and both owners. The existing array regression additionally
+checks that refused 90h preserves staged program/erase continuations and data.
+
+Both unchanged updater objects issue90h/address00. Their complete ID setup
+still asserts RE with DSP data outputs enabled and fails at the retained
+turnaround boundary. A separate own legal command/address/input setup calls
+each original packing tail: four actual GPIO reads produce independently
+expected A/B/X and return through native BSR/RTS. Four joint native/NAND/edge
+cursor restores preserve complete CPU debug state, event suffix and NVM.
+Eight missing-byte controls retain exact byte/PC/operation diagnostics.
+
+These are selected-chip laboratory fixtures: CE held active separately,
+F8/F9 observed low, declared BIU/OMR and explicit unclocked switch periods.
+F10 is not inferred to be CE. No firmware byte, PC or return frame is patched.
+The helper/reference hashes are in nand-identification-reference.json; original
+bytes and traces remain local. Earlier reset/clear/init, reserved Port-F modes,
+full original ID setup/update/recovery, actual part/contents/timing, normal
+Desktop/Keyboard boot, MIDI/audio and hardware equivalence remain unqualified.

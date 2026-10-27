@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "nand_persistence_fixture.hpp"
 #include "storage/nand.hpp"
 
 #include <array>
@@ -127,11 +128,49 @@ void test_unknown_bytes_and_reset() {
   require(device.read() == bytes[0], "Reset/read abort must preserve observed NAND cells");
 }
 
+void test_identification_staged_writes() {
+  constexpr unsigned target_row = blofeld::test::persisted_row;
+  constexpr unsigned target_column = 0;
+  constexpr std::uint8_t own_data = 0x42;
+  constexpr std::uint8_t identify = 0x90;
+  constexpr std::uint8_t program_confirm = 0x10;
+  constexpr std::uint8_t erase_command = 0x60;
+  constexpr std::uint8_t erase_confirm = 0xd0;
+  Nand program(blofeld::test::erased_nand_fixture());
+  blofeld::test::prepare_persistent_program(program);
+  reject([&] { program.command(identify); }, "replacement of a staged write sequence");
+  program.write(own_data);
+  program.command(program_confirm);
+  reject([&] { program.command(identify); }, "unqualified readiness");
+  program.observe_completion(blofeld::NandOutcome::pass);
+  require(program.cell({.page = target_row, .column = target_column}) ==
+                  blofeld::NandByte{.value = own_data, .known = byte_mask} &&
+              program.cell({.page = target_row, .column = target_column + 1}) ==
+                  blofeld::NandByte{.value = byte_mask, .known = byte_mask},
+          "Refused ID must retain the staged program address/data and neighboring cells");
+  Nand erase(blofeld::test::erased_nand_fixture());
+  erase.observe_power_ready();
+  erase.observe_wp(true);
+  erase.command(erase_command);
+  reject([&] { erase.command(identify); }, "replacement of a staged write sequence");
+  erase.address(static_cast<std::uint8_t>(target_row));
+  reject([&] { erase.command(identify); }, "replacement of a staged write sequence");
+  erase.address(0);
+  reject([&] { erase.command(identify); }, "replacement of a staged write sequence");
+  erase.address(0);
+  erase.command(erase_confirm);
+  reject([&] { erase.command(identify); }, "unqualified readiness");
+  erase.observe_completion(blofeld::NandOutcome::pass);
+  require(erase.cell({.page = target_row, .column = target_column}) ==
+              blofeld::NandByte{.value = byte_mask, .known = byte_mask},
+          "Refused ID must leave the actual staged erase executable");
+}
+
 void test_strict_rejections() {
   Nand device;
   device.command(reset_command); // Reset is the only qualified command before observed readiness.
   device.observe_completion();
-  constexpr std::array<std::uint8_t, 4> unsupported{0x41, 0x7a, 0x90, 0x30};
+  constexpr std::array<std::uint8_t, 4> unsupported{0x41, 0x7a, 0x91, 0x30};
   for (const auto command : unsupported) {
     reject([&] { device.command(command); }, "unsupported value");
   }
@@ -160,6 +199,7 @@ int main() {
     test_rows_and_pointer_areas();
     test_unknown_bytes_and_reset();
     test_strict_rejections();
+    test_identification_staged_writes();
     std::cout << "NAND single-page read: 42 row/area vectors and strict unknown/reset/boundary "
                  "checks passed\n";
     return 0;

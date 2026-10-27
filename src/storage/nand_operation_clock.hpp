@@ -36,6 +36,7 @@ public:
   [[nodiscard]] bool faulted() const { return !healthy_; }
 
   void observe_power_ready();
+  void observe_identification(NandIdentification identification);
   void observe_wp(std::optional<bool> high);
   void command(std::uint8_t value);
   void address(std::uint8_t value);

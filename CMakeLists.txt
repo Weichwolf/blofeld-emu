@@ -170,7 +170,7 @@ add_library(blofeld_device_identity src/storage/device_identity.cpp src/storage/
 target_include_directories(blofeld_device_identity PUBLIC src)
 target_link_libraries(blofeld_device_identity PUBLIC blofeld_storage)
 add_library(blofeld_nand src/storage/nand.cpp src/storage/nand_write.cpp src/storage/nand_array.cpp src/storage/nand_state.cpp
-  src/storage/nand_image.cpp src/storage/nand_image_codec.cpp)
+  src/storage/nand_image.cpp src/storage/nand_image_codec.cpp src/storage/nand_identification.cpp)
 target_include_directories(blofeld_nand PUBLIC src)
 target_link_libraries(blofeld_nand PUBLIC blofeld_firmware PRIVATE ZLIB::ZLIB)
 add_library(blofeld_nand_operation_clock src/storage/nand_operation_clock.cpp)
@@ -1773,6 +1773,17 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-read-test test/nand_read_test.cpp)
   target_link_libraries(blofeld-nand-read-test PRIVATE blofeld_nand)
   add_test(NAME nand_read COMMAND blofeld-nand-read-test)
+  add_executable(blofeld-nand-identification-test test/nand_identification_test.cpp)
+  target_link_libraries(blofeld-nand-identification-test PRIVATE blofeld_nand_store blofeld_nand_operation_clock)
+  add_test(NAME nand_identification COMMAND blofeld-nand-identification-test)
+  add_executable(blofeld-original-nand-identification-test test/original_nand_identification_test.cpp)
+  target_link_libraries(blofeld-original-nand-identification-test PRIVATE blofeld_dsp blofeld_dsp_native blofeld_nand)
+  add_test(NAME original_nand_identification COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_nand_identification.py"
+    $<TARGET_FILE:blofeld-original-nand-identification-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-identification.trace")
+  set_tests_properties(original_nand_identification PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-nand-operation-clock-test test/nand_operation_clock_test.cpp)
   target_link_libraries(blofeld-nand-operation-clock-test PRIVATE blofeld_nand_operation_clock)
   add_test(NAME nand_operation_clock COMMAND blofeld-nand-operation-clock-test)
@@ -3238,6 +3249,7 @@ add_custom_target(quality
     blofeld-nand-write-timing-test blofeld-original-nand-write-timing-test
     blofeld-nand-read-setup-test blofeld-original-nand-read-setup-test
     blofeld-nand-image-test
+    blofeld-nand-identification-test blofeld-original-nand-identification-test
     blofeld-nand-store-test
     blofeld-nand-gpio-write-test
     blofeld-original-nand-write-test

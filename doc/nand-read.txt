@@ -8,8 +8,9 @@ cycles. Pages 26/34 define Read1/Read2, completion and reset. The read checks co
 00/01/50 page reads and FF reset; program/erase/status extensions are described in
 nand-write.txt. Readiness requires explicit power/completion observations. Reset
 preserves cells when no write is active; interrupted writes remain unknown.
-No ID, ECC or successful write outcome is fabricated. Unobserved bytes are unknown, including spare
-and bad-block markers. A missing byte fails with row/column/command context and
+Read-ID uses separate immutable observations (nand-identification.txt); no
+identity, ECC or successful write outcome is inferred. Unobserved cells stay
+unknown, including spare and bad-block markers. A missing byte fails with row/column/command context and
 does not advance. Post-page sequential-row behavior remains unqualified; readiness
 becomes unknown. Nonzero upper spare-column bits fail conservatively because the
 address table and read prose describe them differently. This profile is not

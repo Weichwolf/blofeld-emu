@@ -15,6 +15,7 @@ constexpr std::uint8_t second_half = 1;
 constexpr std::uint8_t spare = 0x50;
 constexpr std::uint8_t reset_command = 0xff;
 constexpr std::uint8_t read_status = 0x70;
+constexpr std::uint8_t read_identification_command = 0x90;
 constexpr std::uint8_t program_command = 0x80;
 constexpr std::uint8_t program_confirm = 0x10;
 constexpr std::uint8_t erase_command = 0x60;
@@ -42,7 +43,9 @@ NandPending Nand::pending() const {
     case Phase::end:
     case Phase::program_address:
     case Phase::program_data:
-    case Phase::erase_address: return NandPending::none;
+    case Phase::erase_address:
+    case Phase::identification_address:
+    case Phase::identification_data: return NandPending::none;
     default: fail("pending observation", "invalid internal phase");
   }
 }
@@ -113,6 +116,7 @@ void Nand::command(const std::uint8_t value) {
     reset_status_ = false;
     pointer_.reset();
     program_ = {};
+    identification_index_ = 0;
     return;
   }
   if (value == read_status && phase_ != Phase::cold && phase_ != Phase::end &&
@@ -129,6 +133,7 @@ void Nand::command(const std::uint8_t value) {
     case 0:
     case second_half:
     case spare: begin_read(value); break;
+    case read_identification_command: begin_identification(); break;
     case program_command: begin_program(); break;
     case program_confirm: confirm_program(); break;
     case erase_command: begin_erase(); break;
@@ -168,6 +173,10 @@ void Nand::address_page(const std::uint8_t value) {
 }
 
 void Nand::address(const std::uint8_t value) {
+  if (phase_ == Phase::identification_address) {
+    address_identification(value);
+    return;
+  }
   if (!status_mode_ && address_cycles_ == address_bytes &&
       (phase_ == Phase::read_pending || (phase_ == Phase::program_data && program_.size == 0))) {
     return;
@@ -229,6 +238,7 @@ std::uint8_t Nand::read(const std::uint8_t mask) {
     }
     return static_cast<std::uint8_t>(sample.value & mask);
   }
+  if (phase_ == Phase::identification_data && ready_ == true) { return read_identification(mask); }
   if (phase_ != Phase::data || ready_ != true) { fail("read", "no completed page transfer"); }
   const auto sample = contents_.cell({.page = page_, .column = column_});
   if ((mask & ~sample.known) != 0) { fail("read", "unknown contents"); }

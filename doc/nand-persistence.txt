@@ -15,6 +15,9 @@ outcome is similarly persisted before live ready/status becomes visible. Reset,
 power loss and persistent cell/block observations use the same transaction path.
 Unconfirmed staging, reads, address cycles and volatile pin observations do not
 write files. Rejected device operations before IO preserve both file and model.
+Cold identification observations and ID traffic also cause no publication.
+ID knowledge is separate device input, retained across live reset/power loss;
+cell-file reload supplies none. Reattach it while cold (nand-identification.txt).
 
 Each publication uses an exclusive 0600 temporary, writes and fsyncs it, closes
 it, atomically renames it and fsyncs the parent directory. Host observations are

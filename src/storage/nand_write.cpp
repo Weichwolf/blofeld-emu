@@ -179,5 +179,6 @@ void Nand::power_loss() {
   column_ = 0;
   status_mode_ = false;
   reset_status_ = false;
+  identification_index_ = 0;
 }
 }

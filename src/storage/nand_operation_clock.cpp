@@ -85,6 +85,13 @@ unsigned NandOperationClock::reset_duration() const {
   }
 }
 
+void NandOperationClock::observe_identification(const NandIdentification identification) {
+  healthy();
+  healthy_ = false;
+  device_.observe_identification(identification);
+  healthy_ = true;
+}
+
 void NandOperationClock::observe_power_ready() {
   healthy();
   healthy_ = false;

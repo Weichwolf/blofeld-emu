@@ -15,6 +15,13 @@ namespace blofeld {
 enum class NandOutcome : std::uint8_t { pass, fail };
 enum class NandPending : std::uint8_t { none, read, reset, program, erase };
 
+// ID contents are external observations, separate from cells and geometry.
+// Rev1.1 p33 describes five cycles; Figure15 supplies only four ID byte values.
+struct NandIdentification {
+  std::array<NandByte, 5> bytes{};
+  bool operator==(const NandIdentification &) const = default;
+};
+
 // Explicit K9F1208U0C reference milestones. No erased image, physical wiring,
 // write permission, block condition, timing or successful outcome is presumed.
 class Nand {
@@ -31,6 +38,7 @@ public:
   [[nodiscard]] NandImage persistent_image() const;
 
   void observe_power_ready();
+  void observe_identification(NandIdentification identification);
   void observe_bytes(unsigned page, unsigned column, std::span<const std::uint8_t> bytes);
   void observe_cell(NandLocation location, NandByte cell);
   void observe_block(unsigned block, NandBlock state);
@@ -67,7 +75,9 @@ private:
     program_data,
     program_pending,
     erase_address,
-    erase_pending
+    erase_pending,
+    identification_address,
+    identification_data
   };
 
   struct Program {
@@ -89,6 +99,9 @@ private:
   void address_page(std::uint8_t value);
   void address_erase(std::uint8_t value);
   void begin_read(std::uint8_t value);
+  void begin_identification();
+  void address_identification(std::uint8_t value);
+  [[nodiscard]] std::uint8_t read_identification(std::uint8_t mask);
   NandArray contents_;
   Phase phase_ = Phase::cold;
   std::optional<bool> ready_;
@@ -102,5 +115,7 @@ private:
   std::uint8_t command_ = 0;
   bool status_mode_ = false;
   bool reset_status_ = false;
+  NandIdentification identification_;
+  unsigned identification_index_ = 0;
 };
 }

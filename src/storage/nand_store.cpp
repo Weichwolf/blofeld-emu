@@ -129,6 +129,11 @@ void NandStore::write(const std::uint8_t value) {
   impl_->model.write(value);
 }
 
+void NandStore::observe_identification(const NandIdentification identification) {
+  impl_->usable();
+  impl_->model.observe_identification(identification);
+}
+
 void NandStore::observe_power_ready() {
   impl_->usable();
   impl_->model.observe_power_ready();
