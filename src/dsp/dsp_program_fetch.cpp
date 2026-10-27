@@ -6,6 +6,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_loop_fetch.hpp"
 #include "dsp/dsp_program_fetch.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 
 #include <algorithm>
 #include <array>
@@ -54,6 +55,7 @@ void DspProgramFetch::clear_continuation() {
   predictions_ = {};
   boundaries_ = {};
   consumed_ = {};
+  repeat_.reset();
   loop_.reset();
   consumed_end_.reset();
   opening_.reset();
@@ -242,19 +244,109 @@ void DspProgramFetch::shift_queue() {
 std::uint32_t DspProgramFetch::consume(const std::uint32_t address) {
   check_consume(address);
   const auto word = state_.words.front();
+  if (repeat_) {
+    auto &repeat = *repeat_;
+    if (repeat.prefix_pending || repeat.consumed || address != repeat.current.body ||
+        (repeat.body && repeat.body != queued(0))) {
+      throw Fault("REP instruction latch ownership lost read P:" + hex(address, 6) +
+                  " pc=" + hex(state_.consume_address, 6) + " omr=" + hex(state_.omr, 6));
+    }
+    repeat.body = queued(0);
+    repeat.consumed = true;
+  }
   consumed_origins_[0] = consumed_origins_[1];
   consumed_origins_[1] = origins_.front();
   consumed_[0] = consumed_[1];
   consumed_[1] = {.word = word, .occurrence = occurrences_.front()};
+  if (repeat_) { return word.value; }
   consumed_end_ = boundaries_.front();
   state_.consume_address = consumed_end_ ? consumed_end_->expected.pc : ((address + 1) & word_mask);
   shift_queue();
   return word.value;
 }
 
+std::optional<DspRepeatControl> DspProgramFetch::repeat_control() const {
+  return repeat_ ? std::optional(repeat_->current) : std::nullopt;
+}
+
+std::optional<DspFetchedWord> DspProgramFetch::repeat_body() const {
+  const auto head = queued(0);
+  return repeat_ && head && head->word.address == repeat_->current.body ? head : std::nullopt;
+}
+
+void DspProgramFetch::verify_repeat(const DspRepeatControl native_state) const {
+  if (!repeat_ || repeat_->prefix_pending || native_state != repeat_->current || !repeat_body() ||
+      (native_state.loaded && (!repeat_->consumed || !repeat_->body))) {
+    throw Fault("Native REP continuation lost its owned instruction latch read P:" +
+                hex(native_state.body, 6) + " pc=" + hex(native_state.pc, 6) +
+                " omr=" + hex(native_state.omr, 6));
+  }
+}
+
+bool DspProgramFetch::owns_repeat_result(const DspFetchCommit completed,
+                                         const DspRepeatControl result) const {
+  if (!repeat_) { return false; }
+  auto candidate = *this;
+  return candidate.confirm_repeat(completed, result);
+}
+
+void DspProgramFetch::stage_repeat(const DspRepeatControl before, const DspRepeatControl after) {
+  const auto prefix = consumed_.back();
+  const auto body = (prefix.word.address + 1) & word_mask;
+  if (!state_.active || repeat_ || loop_ || opening_ || consumed_end_ || branch_ || context_ ||
+      prefix.occurrence == 0 || !fetch_repeat_prefix(prefix.word.value) ||
+      before.pc != prefix.word.address || before.omr != state_.omr || before.remaining != 0 ||
+      after.pc != body || after.body != body || after.omr != before.omr || after.remaining == 0 ||
+      after.remaining > word_mask || after.lc != after.remaining || after.saved_lc != before.lc ||
+      after.loaded || state_.consume_address != body) {
+    throw Fault("Unqualified native REP opening read P:" + hex(prefix.word.address, 6) +
+                " pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6));
+  }
+  repeat_ = Repeat{.prefix = prefix, .current = after, .body = std::nullopt};
+}
+
+bool DspProgramFetch::confirm_repeat(const DspFetchCommit completed,
+                                     const DspRepeatControl native_result) {
+  if (!repeat_) { return false; }
+  auto &repeat = *repeat_;
+  if (repeat.prefix_pending) {
+    if (completed.pc != repeat.prefix.word.address || completed.redirected ||
+        completed.next_pc != repeat.current.pc || completed.omr != repeat.current.omr ||
+        native_result != repeat.current) {
+      throw Fault("Native REP prefix differs from held result read P:" +
+                  hex(repeat.prefix.word.address, 6) + " pc=" + hex(completed.pc, 6) +
+                  " omr=" + hex(completed.omr, 6));
+    }
+    repeat.prefix_pending = false;
+    return true;
+  }
+  auto expected = repeat.current;
+  --expected.remaining;
+  expected.loaded = expected.remaining != 0;
+  expected.next = (expected.body + 1) & word_mask;
+  expected.pc = expected.loaded ? expected.body : expected.next;
+  expected.lc = expected.loaded ? expected.remaining : expected.saved_lc;
+  if (repeat.body) { expected.opcode = repeat.body->word.value; }
+  expected.extension = 0;
+  if (!repeat.consumed || !repeat.body || queued(0) != repeat.body ||
+      completed.pc != expected.body || completed.next_pc != expected.pc || completed.redirected ||
+      completed.omr != expected.omr || native_result != expected) {
+    throw Fault(
+        "Native REP body differs from owned instruction latch read P:" + hex(expected.body, 6) +
+        " pc=" + hex(completed.pc, 6) + " omr=" + hex(completed.omr, 6));
+  }
+  repeat.current = native_result;
+  if (expected.remaining == 0) {
+    state_.consume_address = expected.next;
+    shift_queue();
+    repeat_.reset();
+  }
+  return true;
+}
+
 void DspProgramFetch::redirect(const std::uint32_t pc, const std::uint32_t omr) {
   if (!state_.active || pc > word_mask || omr > word_mask || opening_ || consumed_end_ ||
-      (loop_ && (loop_->depth() != 0 || loop_->pending() != 0))) {
+      (loop_ && (loop_->depth() != 0 || loop_->pending() != 0)) || repeat_) {
     throw Fault("Unqualified native fetch redirect P:" + hex(pc, 6) + " omr=" + hex(omr, 6));
   }
   state_ = {.next_address = pc, .consume_address = pc, .omr = omr, .active = true};

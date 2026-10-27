@@ -24,6 +24,7 @@
 #include "dsp/dsp_peripheral_read_stages.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
@@ -74,6 +75,21 @@ bool qualified_fetch_loop(const std::uint32_t opcode) {
   return (opcode & immediate_mask) == immediate_do || opcode == forever_do ||
          ((opcode & register_mask) == register_do && source != source_sp && source != source_ssh &&
           source != source_ssl);
+}
+
+DspRepeatControl repeat_control(const dsp56k::DSP::ReferenceAttemptState &state) {
+  const auto value = [](const auto field) { return static_cast<std::uint32_t>(field) & word_mask; };
+  const auto &repeat = state.repeat;
+  return {.pc = value(state.registers.pc),
+          .omr = value(state.registers.omr),
+          .lc = value(state.registers.lc),
+          .remaining = repeat.remaining,
+          .body = repeat.body,
+          .opcode = repeat.opcode,
+          .extension = repeat.extension,
+          .next = repeat.next,
+          .saved_lc = value(repeat.savedLC),
+          .loaded = repeat.loaded};
 }
 
 DspLoopArchitecture loop_control(const dsp56k::DSP::ReferenceAttemptState &state) {
@@ -591,6 +607,20 @@ public:
     }
   }
 
+  DspRepeatControl repeat_entry(const DspReferenceExecution contract,
+                                const DspAddressRecord *const address) const {
+    const auto repeat = repeat_control(cpu.referenceAttemptState());
+    if (repeat.remaining != 0 && contract == DspReferenceExecution::staged_register_boundaries) {
+      native.reference().fetch().verify_repeat(repeat);
+      if (repeat.loaded && decode_memory_stage(repeat.opcode) && address == nullptr) {
+        throw Fault("Native repeated memory E1 requires its actual AG1 record read P:" +
+                    hex(repeat.body, 6) + " pc=" + hex(repeat.pc, 6) +
+                    " omr=" + hex(repeat.omr, 6));
+      }
+    }
+    return repeat;
+  }
+
   void bind_memory_address(const DspAddressRecord &record) {
     const auto visible = cpu.referenceAttemptState();
     results.visible = visible;
@@ -615,6 +645,34 @@ public:
       results.pipeline_addresses.at(reg) =
           static_cast<std::uint32_t>(visible.registers.r.at(reg)) & word_mask;
     }
+  }
+
+  DspReferenceProgress memory_entry(DspCore &core, const DspAddressRecord &record) {
+    const auto &view = record.view;
+    const auto repeat = repeat_control(cpu.referenceAttemptState());
+    const bool loaded = repeat.remaining != 0 && repeat.loaded;
+    auto pending = core.reference_pending();
+    if (!pending) {
+      pending = core.begin_reference_step(
+                        DspReferenceExecution::staged_register_boundaries, false, &record)
+                    .pending;
+    }
+    if (!pending) { throw Fault("Native memory E1 lost its actual boundary"); }
+    record.fetched.check_front(native.reference().fetch());
+    DspReferenceProgress progress{.pending = pending};
+    if (!loaded) {
+      const auto *opcode = std::get_if<DspNativeAccess>(&pending->effect);
+      if (opcode == nullptr || opcode->kind != DspNativeAccessKind::opcode ||
+          opcode->target.address != view.word.address ||
+          pending->latched_program_word != view.word.value) {
+        throw Fault("Native memory E1 does not match its captured F2 word");
+      }
+      bind_memory_address(record);
+      progress = core.advance_reference_access(pending->ticket);
+    } else if (native.reference().opcode() != view.word.value) {
+      throw Fault("Repeated memory E1 differs from its native-owned opcode latch");
+    }
+    return progress;
   }
 
   static DspNativeAccess commit_addressed_data(DspCore &core,
@@ -849,10 +907,22 @@ public:
     const auto value = reference.latched_program_word();
     if (!value) { return; }
     const auto [instruction, flags] = fetch_instruction(*value);
+    const bool repeat =
+        fetch_repeat_prefix(*value) &&
+        (reference.execution() == DspReferenceExecution::access_and_retirement_boundaries ||
+         reference.execution() == DspReferenceExecution::staged_register_boundaries) &&
+        (word(cpu.regs().sr) & 0x1a000U) == 0 &&
+        fetch_repeat_count(*value, static_cast<std::uint32_t>(cpu.regs().x.var) & word_mask) != 0;
+    constexpr unsigned store_a_long_r4 = 0x485c00;
+    if (reference.fetch().repeating() && *value != 0 && *value != store_a_long_r4) {
+      throw Fault("Unqualified REP body read P:" + hex(request->target.address, 6) + " opcode=" +
+                  hex(*value, 6) + " pc=" + hex(request->pc, 6) + " omr=" + hex(request->omr, 6));
+    }
     const bool loop = qualified_fetch_loop(*value) &&
                       reference.execution() != DspReferenceExecution::access_boundaries;
-    if (((flags & dsp56k::OpFlagLoop) != 0 && !loop) || (flags & dsp56k::OpFlagCacheMod) != 0 ||
-        instruction == dsp56k::Stop || instruction == dsp56k::Wait || instruction == dsp56k::Trap ||
+    if (((flags & dsp56k::OpFlagLoop) != 0 && !loop && !repeat) ||
+        (flags & dsp56k::OpFlagCacheMod) != 0 || instruction == dsp56k::Stop ||
+        instruction == dsp56k::Wait || instruction == dsp56k::Trap ||
         instruction == dsp56k::Trapcc || instruction == dsp56k::Debug ||
         instruction == dsp56k::Debugcc || instruction == dsp56k::Illegal ||
         instruction == dsp56k::Reset) {
@@ -860,6 +930,19 @@ public:
                   hex(request->target.address, 6) + " pc=" + hex(request->pc, 6) +
                   " omr=" + hex(request->omr, 6));
     }
+  }
+
+  void capture_repeat_opening() {
+    auto &reference = native.reference();
+    const auto opcode = reference.opcode();
+    if (!reference.fetch().active() || !opcode || !fetch_repeat_prefix(*opcode)) { return; }
+    if (!results.base || !results.retirement ||
+        (reference.execution() != DspReferenceExecution::access_and_retirement_boundaries &&
+         reference.execution() != DspReferenceExecution::staged_register_boundaries)) {
+      throw Fault("Native REP opening lost its actual held result");
+    }
+    reference.fetch().stage_repeat(repeat_control(*results.base),
+                                   repeat_control(results.retirement->cpu));
   }
 
   void capture_omr_context() {
@@ -890,6 +973,11 @@ public:
     const auto before = reference.snapshot().context;
     if (fetch.confirm_context(
             {.pc = before.pc, .next_pc = next, .omr = omr, .redirected = redirected}, bus)) {
+      return;
+    }
+    if (fetch.confirm_repeat(
+            {.pc = before.pc, .next_pc = next, .omr = omr, .redirected = redirected},
+            repeat_control(cpu.referenceAttemptState()))) {
       return;
     }
     const auto control = loop_control(cpu.referenceAttemptState());
@@ -1015,6 +1103,7 @@ public:
             .fields = fields, .opcode = *opcode, .pc = before.pc, .omr = before.omr};
       }
       try {
+        capture_repeat_opening();
         capture_omr_context();
         capture_loop_opening();
       } catch (...) {
@@ -1242,7 +1331,8 @@ DspReferenceProgress DspCore::begin_reference_interrupt(const DspReferenceExecut
 }
 
 DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution contract,
-                                                   const bool interrupt_entry) {
+                                                   const bool interrupt_entry,
+                                                   const DspAddressRecord *const address) {
   if (impl_->active || impl_->faulted || impl_->native.reference().active() ||
       (contract != DspReferenceExecution::access_boundaries &&
        contract != DspReferenceExecution::access_and_retirement_boundaries &&
@@ -1254,9 +1344,11 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
         "Native access suspension requires an explicit healthy unclocked instruction boundary");
   }
   const auto before = state();
+  const auto repeat = impl_->repeat_entry(contract, address);
   if ((contract == DspReferenceExecution::address_and_retirement_boundaries ||
        contract == DspReferenceExecution::staged_register_boundaries) &&
-      (interrupt_entry || impl_->cpu.referenceAttemptState().repeat.remaining != 0)) {
+      (interrupt_entry ||
+       (repeat.remaining != 0 && contract != DspReferenceExecution::staged_register_boundaries))) {
     throw Fault("Unqualified native address-phase interrupt/REP timeline pc=" + hex(before.pc, 6) +
                 " omr=" + hex(before.omr, 6));
   }
@@ -1295,6 +1387,12 @@ DspReferenceProgress DspCore::begin_reference_step(const DspReferenceExecution c
           DspReferenceInterrupt{.request = *interrupt, .address = before.vba + interrupt->vector};
     }
     impl_->native.reference().begin({.pc = before.pc, .omr = before.omr}, contract, entry);
+    if (address != nullptr) { impl_->bind_memory_address(*address); }
+    if (repeat.remaining != 0 && repeat.loaded && impl_->native.reference().fetch().active()) {
+      const auto captured = impl_->native.reference().fetch().repeat_body();
+      if (!captured) { throw Fault("Loaded REP lost its actual opcode receipt"); }
+      impl_->native.reference().bind_repeat_opcode(*captured);
+    }
     impl_->resume_reference();
     return reference_progress();
   } catch (const std::exception &error) {
@@ -1397,6 +1495,44 @@ DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage 
     throw Fault("Non-standard DSP program-fetch failure at P:" + hex(address, 6) +
                 " pc=" + hex(before.pc, 6) + " omr=" + hex(before.omr, 6));
   }
+}
+
+bool DspCore::pipeline_interrupt_deferred() const {
+  static_cast<void>(pipeline_fetched_word(0));
+  const auto native = repeat_control(impl_->cpu.referenceAttemptState());
+  const auto &fetch = impl_->native.reference().fetch();
+  if (native.remaining != 0) { fetch.verify_repeat(native); }
+  const auto opcode = fetch.peek(native.pc);
+  if (opcode && !impl_->cpu.referenceInterruptible(*opcode)) { return true; }
+  const auto held = pipeline_repeat_result();
+  return held && held->remaining != 0;
+}
+
+std::optional<DspRepeatControl> DspCore::pipeline_repeat_control() const {
+  static_cast<void>(pipeline_fetched_word(0));
+  return impl_->native.reference().fetch().repeat_control();
+}
+
+std::optional<DspFetchedWord> DspCore::pipeline_repeat_body() const {
+  static_cast<void>(pipeline_fetched_word(0));
+  return impl_->native.reference().fetch().repeat_body();
+}
+
+std::optional<DspRepeatControl> DspCore::pipeline_repeat_result() const {
+  static_cast<void>(pipeline_fetched_word(0));
+  const auto &reference = impl_->native.reference();
+  const auto &result = impl_->results.retirement;
+  const auto pending = reference.pending();
+  const auto *effect = pending ? std::get_if<DspInstructionRetire>(&*pending) : nullptr;
+  if (!result || effect == nullptr) { return std::nullopt; }
+  const auto projection = repeat_control(result->cpu);
+  return reference.fetch().owns_repeat_result({.pc = effect->pc,
+                                               .next_pc = effect->next_pc,
+                                               .omr = effect->next_omr,
+                                               .redirected = effect->redirected},
+                                              projection)
+             ? std::optional(projection)
+             : std::nullopt;
 }
 
 bool DspCore::pipeline_loop_control() const {
@@ -1784,22 +1920,8 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
   const auto &view = record.view;
   auto active_access = view.data_accesses[0];
   try {
-    auto pending = reference_pending();
-    if (!pending) {
-      pending =
-          begin_reference_instruction(DspReferenceExecution::staged_register_boundaries).pending;
-    }
-    if (!pending) { throw Fault("Native memory E1 lost its opcode boundary"); }
-    const auto *opcode = std::get_if<DspNativeAccess>(&pending->effect);
-    if (opcode == nullptr || opcode->kind != DspNativeAccessKind::opcode ||
-        opcode->target.address != view.word.address ||
-        pending->latched_program_word != view.word.value) {
-      throw Fault("Native memory E1 does not match its captured F2 word");
-    }
     DspMemoryStageResult result{.address = view, .inputs = state(), .data = {}, .progress = {}};
-    record.fetched.check_front(impl_->native.reference().fetch());
-    impl_->bind_memory_address(record);
-    auto progress = advance_reference_access(pending->ticket);
+    auto progress = impl_->memory_entry(*this, record);
     if (view.extension) {
       if (!progress.pending) { throw Fault("Native peripheral E1 lost its actual extension"); }
       const auto *actual = std::get_if<DspNativeAccess>(&progress.pending->effect);

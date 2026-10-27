@@ -6,6 +6,7 @@
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 
 #include <array>
 #include <cstddef>
@@ -16,6 +17,7 @@
 
 namespace blofeld {
 struct DspFetchedWord;
+struct DspAddressRecord;
 class DspAddressStageTicket;
 class DspPeripheralReadTicket;
 struct DspPeripheralReadPoint;
@@ -142,8 +144,10 @@ private:
   void validate_reference_retirement(const DspReferenceTicket &ticket) const;
   [[nodiscard]] DspInstructionRetire retire_reference_overlap(const DspReferenceTicket &ticket);
   [[nodiscard]] DspReferenceProgress begin_reference_interrupt(DspReferenceExecution contract);
-  [[nodiscard]] DspReferenceProgress begin_reference_step(DspReferenceExecution contract,
-                                                          bool interrupt_entry);
+  [[nodiscard]] DspReferenceProgress
+  begin_reference_step(DspReferenceExecution contract,
+                       bool interrupt_entry,
+                       const DspAddressRecord *address = nullptr);
   [[nodiscard]] DspReferenceProgress advance_reference_access(const DspReferenceTicket &ticket);
   [[nodiscard]] DspReferencePending latch_reference_program(const DspReferenceTicket &ticket);
   [[nodiscard]] DspProgramFetchView start_reference_fetch(const DspReferenceTicket &ticket);
@@ -153,6 +157,10 @@ private:
   // Read-only native-owned loop proofs and actual occurrence metadata.
   [[nodiscard]] bool pipeline_loop_control() const;
   [[nodiscard]] bool pipeline_loop_result() const;
+  [[nodiscard]] bool pipeline_interrupt_deferred() const;
+  [[nodiscard]] std::optional<DspRepeatControl> pipeline_repeat_control() const;
+  [[nodiscard]] std::optional<DspRepeatControl> pipeline_repeat_result() const;
+  [[nodiscard]] std::optional<DspFetchedWord> pipeline_repeat_body() const;
   [[nodiscard]] std::optional<std::uint32_t> pipeline_loop_last(DspFetchedWord word) const;
   [[nodiscard]] std::uint32_t pipeline_continuation(DspFetchedWord word, unsigned words) const;
   void hold_pipeline_loop(DspFetchedWord word);

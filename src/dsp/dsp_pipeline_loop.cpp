@@ -5,6 +5,7 @@
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 
 #include <cstddef>
 #include <optional>
@@ -79,4 +80,58 @@ void DspInstructionPipeline::capture_loop_f2(const DspReferenceCycleResult &bus)
     setup.decode_hold = 1;
   }
 }
+
+bool DspInstructionPipeline::hold_repeat_decode() {
+  if (!repeat_setup) { return false; }
+  auto &setup = *repeat_setup;
+  setup.held_decode = !setup.body || setup.setup_hold != 0;
+  return setup.held_decode;
+}
+
+void DspInstructionPipeline::accept_repeat_decode() {
+  const auto captured = samples.front();
+  if (!captured) { return; }
+  if (fetch_repeat_prefix(captured->word.value)) {
+    if (repeat_setup || loop_setup || branch) {
+      throw Fault("Unqualified overlapping automatic REP setup read P:" +
+                  hex(captured->word.address, 6));
+    }
+    repeat_setup = DspPipelineRepeat{.prefix = *captured, .body = std::nullopt};
+    return;
+  }
+  if (repeat_setup && repeat_setup->body == captured) {
+    auto &setup = *repeat_setup;
+    if (setup.remaining == 0 || setup.setup_hold != 0) {
+      throw Fault("Repeated Decode escaped its native count/setup owner");
+    }
+    --setup.remaining;
+    view.decode_address =
+        setup.remaining == 0 ? captured->word.address + 1 : captured->word.address;
+  }
+}
+
+void DspInstructionPipeline::capture_repeat_target(const DspMachine &machine) {
+  if (!repeat_setup || view.cycle.execute1 != repeat_setup->prefix.word) { return; }
+  const auto result = machine.pipeline_repeat_result();
+  const auto body = machine.pipeline_repeat_body();
+  if (!result || !body || result->remaining == 0 || result->loaded ||
+      result->body != body->word.address ||
+      body->word.address != repeat_setup->prefix.word.address + 1) {
+    throw Fault("REP E1 lost its actual native result/body F2 receipt");
+  }
+  repeat_setup->body = body;
+  repeat_setup->remaining = result->remaining;
+}
+
+void DspInstructionPipeline::retire_repeat(const DspMachine &machine) {
+  if (!repeat_setup || !repeat_setup->body || view.cycle.execute2 != repeat_setup->body->word ||
+      machine.pipeline_repeat_control()) {
+    return;
+  }
+  if (repeat_setup->remaining != 0) {
+    throw Fault("Native REP completed before all owned logical Decode iterations");
+  }
+  repeat_setup.reset();
+}
+
 }

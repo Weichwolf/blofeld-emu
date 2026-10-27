@@ -121,8 +121,14 @@ std::optional<DspMemoryForm> long_pair(const std::uint32_t opcode) {
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
   const auto access = operation(type, dsp56k::Field_W, opcode);
   const auto field = dsp56k::getFieldValue(type, dsp56k::Field_L, dsp56k::Field_LL, opcode);
-  // Full-accumulator store S/L phase placement remains unqualified.
-  if (mode > 4 || (access == DspMemoryOperation::write && field >= 4)) { return std::nullopt; }
+  // FM13-126/127: A/B use a single signed 48-bit transfer; AB/BA have two
+  // independent 24-bit limits and remain separately unqualified here.
+  const bool store = access == DspMemoryOperation::write;
+  const bool full_accumulator = store && (field == 4 || field == 5);
+  constexpr unsigned arithmetic_bits = 0xff;
+  if (mode > 4 || (store && field >= 6) || (full_accumulator && (opcode & arithmetic_bits) != 0)) {
+    return std::nullopt;
+  }
   DspMemoryForm result{.long_pair = true};
   result.lanes[0] = {.operation = access,
                      .mode = mode,
@@ -150,6 +156,13 @@ std::optional<DspMemoryForm> dual(const std::uint32_t opcode) {
                      .dual_encoding = true};
   return result;
 }
+}
+
+bool full_accumulator_long_store(const std::uint32_t opcode) {
+  // FM13-127: 0100L0LL W1MMMRRR, with LLL=100/101 and W=0.
+  constexpr unsigned source_mask = 0xfec000;
+  constexpr unsigned full_accumulator_store = 0x484000;
+  return (opcode & source_mask) == full_accumulator_store;
 }
 
 bool is_program_transfer(const DspMemoryForm &form) {

@@ -263,3 +263,14 @@ It changes only the hash-pinned generated language copy; upstream Apache-2.0
 notices and installed SDK/firmware bytes remain intact. Native execution owns
 stack/branch/SP effects; the memory owner resolves actual vector reads.
 See doc/hcs08-swi.txt for independent tests and timing limits.
+
+Native virtual-memory information initialization
+----------------------------------------------
+The retained cold-owner TSan regression exposed concurrent writers to AsmJit's
+shared VirtMem::info cache. An atomic ready flag did not give initialization
+exclusive ownership. Explicit std::call_once now publishes the complete native
+OS-derived information once, retaining -fno-threadsafe-statics and all sanitizer
+checks. Existing CPUInfo synchronization and original notices remain intact.
+The independent dsp_vm_info gate starts sixteen cold callers together and checks
+OS page size/alignment and 32768 immutable reads; dsp_repeat_clock_thread also
+runs actual concurrent DSP execution and trusted checkpoint continuations.

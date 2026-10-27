@@ -132,7 +132,7 @@ void peripheral_preflight(const bool fifo) {
 
 void unsupported_formats() {
   for (const auto *text : {"mpy y0,x0,a l:(r0)+,a",
-                           "move a,l:(r0)+",
+                           "move ab,l:(r0)+",
                            "move x:(r0)+,a y:(r4)+,b",
                            "move l:(r0+n0),x"}) {
     DspMachine machine;

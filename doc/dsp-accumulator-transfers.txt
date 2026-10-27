@@ -40,10 +40,10 @@ separately under TSan. Independent model windows establish numeric results
 and nominal interlocks; selected pipeline periods are not measured silicon
 sampling edges. Reference hashes and scope are in dsp-accumulator-reference.json.
 
-The local original frame still stops at REP Decode, before the older staged
-OMR and following accumulator transfer retire. REP/PLL timelines, complete
-authentic ROM, original reset-to-instrument operation, MIDI/audio, storage,
-update/recovery and physical Desktop/Keyboard equivalence remain open.
+The subsequent automatic REP increment executes original PCTL/OMR and RAM
+clearing to the strict Y:002000 write frontier;see dsp-repeat-clock.txt.
+Complete authentic ROM,original reset-to-instrument operation,MIDI/audio,
+storage,update/recovery and physical Desktop/Keyboard equivalence remain open.
 No manufacturer program bytes or private traces are distributed here.
 
   cmake --build --preset strict --target blofeld-accumulator-clock-test \

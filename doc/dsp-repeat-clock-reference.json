@@ -1,0 +1,32 @@
+{
+  "scope": "Automatic positive immediate/X0 REP and selected full-accumulator long stores;not complete boot or physical timing.",
+  "manual": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "bytes": 24396254,
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "section": "FM13-160/161 REP; FM13-126/127 signed48-bit long store; FM5-13 S-growth; appendix A nominal timing."
+  },
+  "independent_model": {
+    "status": "passed-scoped",
+    "complete_windows": 14,
+    "large_count_partial_windows": 2,
+    "large_count_iterations_observed": 3,
+    "large_count": 131072,
+    "literal_state_points": 302,
+    "register_and_memory_oracles": "Prefix LC loaded with full24-bit count; each observed body decrements it; final small body restores oldLC. NOP/fullA-to-L:(R4)+, both X/Y RAM writes and untouched successor canaries; complete selected-register snapshots every step.",
+    "nominal_cost": "REP5,body1; no extra tested X0 source penalty.",
+    "single_body_fetch": "Primary FM13-160 requirement; the debugger register/timing windows alone do not prove physical F1/F2 reads.",
+    "zero_count_not_observed_here": true,
+    "processor_libraries_unchanged": true,
+    "own_assembler_result": "assembler-result.json",
+    "result_sha256": "f3e43f1a04d63e655ab9b1f90e5540675dc6df692e29bc0f8c34a5be20479b09",
+    "windows_sha256": "a37a66303403583b35db3cde06726b923cc18e7e046f55c116579c685903e5e4",
+    "fuzz_execution": false,
+    "physical_timing_qualified": false,
+    "whole_goal_complete": false
+  },
+  "own_reference_bytes_embedded": false,
+  "manufacturer_bytes_embedded": false,
+  "full_original_firmware_boot_qualified": false
+}

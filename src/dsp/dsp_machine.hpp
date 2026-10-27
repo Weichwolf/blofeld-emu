@@ -9,6 +9,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
 
 #include <cstddef>
@@ -152,6 +153,10 @@ private:
   // Read-only native-owned loop proofs and actual occurrence metadata.
   [[nodiscard]] bool pipeline_loop_control() const;
   [[nodiscard]] bool pipeline_loop_result() const;
+  [[nodiscard]] bool pipeline_interrupt_deferred() const;
+  [[nodiscard]] std::optional<DspRepeatControl> pipeline_repeat_control() const;
+  [[nodiscard]] std::optional<DspRepeatControl> pipeline_repeat_result() const;
+  [[nodiscard]] std::optional<DspFetchedWord> pipeline_repeat_body() const;
   [[nodiscard]] std::optional<std::uint32_t> pipeline_loop_last(DspFetchedWord word) const;
   [[nodiscard]] std::uint32_t pipeline_continuation(DspFetchedWord word, unsigned words) const;
   void hold_pipeline_loop(DspFetchedWord word);

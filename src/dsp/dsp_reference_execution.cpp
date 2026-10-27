@@ -2,6 +2,7 @@
 #include "dsp/detail/dsp_reference_execution.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_reference_execution.hpp"
@@ -84,6 +85,17 @@ void DspReferenceTape::begin(const DspNativeAccess context,
   state_.active = true;
 }
 
+void DspReferenceTape::bind_repeat_opcode(const DspFetchedWord captured) {
+  const auto control = state_.fetch.repeat_control();
+  if (!state_.active || state_.pending || state_.used != 0 || !control || !control->loaded ||
+      state_.fetch.repeat_body() != captured || captured.word.address != state_.context.pc ||
+      control->opcode != captured.word.value || state_.repeated_opcode) {
+    throw Fault("Unavailable actual REP opcode latch read P:" + hex(captured.word.address, 6) +
+                " pc=" + hex(state_.context.pc, 6) + " omr=" + hex(state_.context.omr, 6));
+  }
+  state_.repeated_opcode = captured;
+}
+
 void DspReferenceTape::clear() {
   state_ = {};
   cursor_ = 0;
@@ -125,6 +137,16 @@ void DspReferenceTape::restore(const DspReferenceState &state) {
       (state.latched_program_word && (!state.pending || !program_read(*state.pending) ||
                                       *state.latched_program_word > word_mask))) {
     throw Fault("Invalid trusted native reference continuation");
+  }
+  if (state.repeated_opcode) {
+    const auto control = state.fetch.repeat_control();
+    if (!state.active || !control || !control->loaded ||
+        state.fetch.repeat_body() != state.repeated_opcode ||
+        state.context.pc != state.repeated_opcode->word.address ||
+        state.context.omr != control->omr || control->opcode != state.repeated_opcode->word.value) {
+      throw Fault("Invalid trusted REP instruction latch read P:" + hex(state.context.pc, 6) +
+                  " pc=" + hex(state.context.pc, 6) + " omr=" + hex(state.context.omr, 6));
+    }
   }
   state_ = state;
   cursor_ = 0;
@@ -179,6 +201,7 @@ void DspReferenceTape::stage_retirement(const DspInstructionRetire result) {
 }
 
 std::optional<std::uint32_t> DspReferenceTape::opcode() const {
+  if (state_.repeated_opcode) { return state_.repeated_opcode->word.value; }
   for (std::size_t index = 0; index < state_.used; ++index) {
     const auto *record = std::get_if<DspReferenceRecord>(&state_.entries.at(index));
     if (record != nullptr) {

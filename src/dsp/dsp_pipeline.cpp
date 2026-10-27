@@ -15,6 +15,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 
 #include <array>
 #include <cstddef>
@@ -29,23 +30,27 @@ constexpr unsigned word_mask = 0xffffff;
 constexpr auto execution = DspReferenceExecution::staged_register_boundaries;
 
 void check_accumulator_context(const DspMachine &machine,
-                               const std::optional<DspProgramWord> execute) {
+                               const std::optional<DspProgramWord> execute,
+                               const bool register_transfer = true) {
   constexpr unsigned scaling_mask = 0xc00;
   const auto cpu = machine.cpu().state();
-  if (execute && accumulator_transfer_source(execute->value) &&
+  if (execute &&
+      ((register_transfer && accumulator_transfer_source(execute->value)) ||
+       full_accumulator_long_store(execute->value)) &&
       (cpu.sr & scaling_mask) == scaling_mask) {
     throw Fault("Unqualified accumulator MOVE scaling read P:" + hex(execute->address, 6) +
                 " pc=" + hex(cpu.pc, 6) + " sr=" + hex(cpu.sr, 6) + " omr=" + hex(cpu.omr, 6));
   }
 }
 
-void check_context(const DspMachine &machine) {
+void check_context(const DspMachine &machine, const bool interrupt_deferred) {
   const auto cpu = machine.cpu().state();
   constexpr unsigned unsupported_status = 0xb2000; // CE, SA, FV, SC.
   constexpr unsigned mask_shift = 8;
   constexpr unsigned interrupt_mask = 3;
   if ((cpu.sr & unsupported_status) != 0 ||
-      machine.bus().interrupt_request((cpu.sr >> mask_shift) & interrupt_mask)) {
+      (machine.bus().interrupt_request((cpu.sr >> mask_shift) & interrupt_mask) &&
+       !interrupt_deferred)) {
     throw Fault("Unqualified automatic DSP mode/interrupt pc=" + hex(cpu.pc, 6) +
                 " sr=" + hex(cpu.sr, 6) + " omr=" + hex(cpu.omr, 6));
   }
@@ -65,15 +70,23 @@ void validate_stage_samples(const DspPipelineView &view,
   }
 }
 
-void validate_execute_word(const DspProgramFetchView &fetch, const DspPipelineCycle &cycle) {
+void validate_execute_word(const DspProgramFetchView &fetch,
+                           const DspPipelineCycle &cycle,
+                           const std::optional<DspRepeatControl> result) {
   if (!cycle.execute1) { return; }
   const auto word = *cycle.execute1;
   if (cycle.e1_extension.has_value() != (pipeline_word_count(word) == 2)) {
     throw Fault("Automatic DSP lost its captured extension-stage alignment");
   }
-  if (fetch.used == 0 || fetch.words.front() != word || fetch.consume_address != word.address) {
-    throw Fault("Automatic DSP E1 lost its actual previously decoded P word");
+  if (fetch.used != 0 && fetch.words.front() == word && fetch.consume_address == word.address) {
+    return;
   }
+  if (result && result->remaining == 0 && cycle.execute2 &&
+      cycle.execute2->address == result->body && word.address == result->next && fetch.used > 1 &&
+      fetch.words[1] == word && fetch.consume_address == result->body) {
+    return;
+  }
+  throw Fault("Automatic DSP E1 lost its actual previously decoded P word");
 }
 
 DspFetchedWord decode_receipt(const std::optional<DspFetchedWord> word) {
@@ -85,7 +98,10 @@ void prepare_decode(DspInstructionPipeline &pipeline,
                     const DspMachine &machine,
                     const DspProgramFetchView &fetch,
                     DspPipelineCycle &cycle) {
-  if (pipeline.held_program_memory || pipeline.hold_ccr_decode(machine)) { return; }
+  if (pipeline.held_program_memory || pipeline.hold_ccr_decode(machine) ||
+      pipeline.hold_repeat_decode()) {
+    return;
+  }
   if (pipeline.hold_loop_decode() || pipeline.deferred_omr_branch) { return; }
   pipeline.held_branch_decode =
       pipeline.branch && pipeline.branch_target_ready && pipeline.branch_decode_hold != 0;
@@ -112,8 +128,23 @@ void prepare_decode(DspInstructionPipeline &pipeline,
 }
 }
 
+void DspInstructionPipeline::select_words(const std::span<const DspFetchedWord> fetched,
+                                          const std::uint32_t omr) {
+  const auto repeated = repeat_setup ? repeat_setup->body : std::nullopt;
+  selected = select_pipeline_words(fetched, samples, extension_samples, repeated);
+  if (repeat_setup && repeated && repeat_setup->remaining != 0) { selected.next = repeated; }
+  if (repeated) {
+    constexpr unsigned long_store = 0x485c00;
+    const auto word = repeated->word;
+    if (word.value != 0 && word.value != long_store) {
+      throw Fault("Unqualified repeated Decode read P:" + hex(word.address, 6) + " opcode=" +
+                  hex(word.value, 6) + " pc=" + hex(word.address, 6) + " omr=" + hex(omr, 6));
+    }
+  }
+}
+
 void DspInstructionPipeline::prepare(const DspMachine &machine) {
-  check_context(machine);
+  check_context(machine, machine.pipeline_interrupt_deferred());
   check_accumulator_context(machine, view.stages[2]);
   constexpr unsigned loop_flag = 0x8000;
   if ((machine.cpu().state().sr & loop_flag) != 0 && !machine.pipeline_loop_control()) {
@@ -132,14 +163,14 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
     fetched.at(index) = *sample;
   }
   validate_stage_samples(view, samples);
-  selected =
-      select_pipeline_words(std::span(fetched).first(fetch.used), samples, extension_samples);
+  select_words(std::span(fetched).first(fetch.used), fetch.omr);
   prepare_program_memory(machine, cycle.execute1);
   prepare_decode(*this, machine, fetch, cycle);
+  check_accumulator_context(machine, cycle.decode, false);
   validate_program_decode(machine, cycle);
   if (selected.ag1_extension) { cycle.ag1_extension = selected.ag1_extension->word; }
   cycle.e1_extension = extensions[1];
-  validate_execute_word(fetch, cycle);
+  validate_execute_word(fetch, cycle, machine.pipeline_repeat_result());
   const std::array words{cycle.ag2, cycle.execute1};
   for (std::size_t index = 0; index < words.size(); ++index) {
     const auto word = words.at(index);
@@ -192,7 +223,7 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
   const auto port_read = decode_peripheral_read(view.awaiting_retirement->value);
   if (decode_branch_form(view.awaiting_retirement->value) || (port_read && port_read->bit)) {
     validate_branch(*effect);
-  } else if (!machine.pipeline_loop_result() &&
+  } else if (!machine.pipeline_loop_result() && !machine.pipeline_repeat_result() &&
              (effect->redirected ||
               effect->next_pc !=
                   ((effect->pc + pipeline_word_count(*view.awaiting_retirement)) & word_mask))) {
@@ -227,6 +258,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     follow_omr_retirement(bus);
     view.cycle.retirement_published = true;
     retire_branch();
+    retire_repeat(machine);
     view.awaiting_retirement.reset();
     view.awaiting_inputs.reset();
     view.awaiting_deferred_accumulators = 0;
@@ -250,6 +282,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   }
   complete_program_memory();
   capture_loop_target(machine);
+  capture_repeat_target(machine);
   view.cycle.ag2_address = bus.address_update;
   capture_branch(machine);
   capture_address(machine);
@@ -271,6 +304,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
         machine.pipeline_continuation(decode_receipt(selected.next), view.cycle.decode_words);
     view.cycle.decode_accepted = true;
     accept_loop_decode(machine);
+    accept_repeat_decode();
     accept_ccr_decode();
     accept_branch_decode();
   }
@@ -378,6 +412,9 @@ void DspInstructionPipeline::finish_cycle() {
   if (ccr_sync && ccr_sync->held_decode && ccr_sync->decode_hold != 0) { --ccr_sync->decode_hold; }
   if (loop_setup && loop_setup->held_decode && loop_setup->decode_hold != 0) {
     --loop_setup->decode_hold;
+  }
+  if (repeat_setup && repeat_setup->held_decode && repeat_setup->setup_hold != 0) {
+    --repeat_setup->setup_hold;
   }
   if (branch_fetch_hold != 0) { --branch_fetch_hold; }
   if (held_branch_decode && branch_decode_hold != 0) { --branch_decode_hold; }

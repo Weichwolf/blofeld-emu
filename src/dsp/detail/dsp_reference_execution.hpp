@@ -43,6 +43,7 @@ struct DspReferenceState {
   bool active = false;
   DspReferenceExecution execution = DspReferenceExecution::unqualified;
   DspProgramFetch fetch;
+  std::optional<DspFetchedWord> repeated_opcode;
 };
 
 enum class DspReferenceMode : std::uint8_t { ordinary, attempt, restoring };
@@ -56,6 +57,7 @@ public:
   void begin(DspNativeAccess context,
              DspReferenceExecution execution,
              std::optional<DspReferenceInterrupt> interrupt = std::nullopt);
+  void bind_repeat_opcode(DspFetchedWord captured);
   void clear();
   void finish();
   void rewind();

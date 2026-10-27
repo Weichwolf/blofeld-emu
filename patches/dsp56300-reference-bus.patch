@@ -1658,3 +1658,21 @@
 -    cpuInfoInitialized = 1;
 -  }
 +  });
+--- a/source/asmjit/src/asmjit/core/virtmem.cpp
++++ b/source/asmjit/src/asmjit/core/virtmem.cpp
+@@ -69,0 +70 @@
++#include <mutex>
+@@ -781 +782 @@
+-  static std::atomic<uint32_t> vmInfoInitialized;
++  static std::once_flag vmInfoOnce;
+@@ -784,7 +785,3 @@
+-  if (!vmInfoInitialized.load()) {
+-    Info localMemInfo;
+-    getVMInfo(localMemInfo);
+-
+-    vmInfo = localMemInfo;
+-    vmInfoInitialized.store(1u);
+-  }
++  std::call_once(vmInfoOnce, []() noexcept {
++    getVMInfo(vmInfo);
++  });

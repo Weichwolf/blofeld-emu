@@ -28,6 +28,21 @@ extension(DspMachine &machine, const DspReferenceProgress &progress, const DspPr
 }
 }
 
+DspReferenceProgress DspInstructionPipeline::admit_opcode(DspMachine &machine,
+                                                          const DspReferencePending &pending,
+                                                          const DspProgramWord word) {
+  const auto *access = std::get_if<DspNativeAccess>(&pending.effect);
+  DspReferenceProgress progress{.pending = pending};
+  if (access != nullptr && access->kind == DspNativeAccessKind::opcode &&
+      access->target.address == word.address && pending.latched_program_word == word.value) {
+    progress = machine.advance_reference_access(pending.ticket);
+  } else if (!machine.pipeline_repeat_result() || machine.pipeline_repeat_body() != samples[2] ||
+             !std::holds_alternative<DspInstructionRetire>(pending.effect)) {
+    throw Fault("Automatic DSP E1 opcode does not match its actual native/F2 latch");
+  }
+  return progress;
+}
+
 void DspInstructionPipeline::execute(DspMachine &machine) {
   if (!view.cycle.execute1) { throw Fault("Automatic DSP E1 lost its phase word"); }
   const auto word = *view.cycle.execute1;
@@ -38,12 +53,7 @@ void DspInstructionPipeline::execute(DspMachine &machine) {
     pending = progress.pending;
   }
   if (!pending) { throw Fault("Automatic DSP E1 lost its actual opcode boundary"); }
-  const auto *access = std::get_if<DspNativeAccess>(&pending->effect);
-  if (access == nullptr || access->kind != DspNativeAccessKind::opcode ||
-      access->target.address != word.address || pending->latched_program_word != word.value) {
-    throw Fault("Automatic DSP E1 opcode does not match the real decoded F2 word");
-  }
-  auto progress = machine.advance_reference_access(pending->ticket);
+  auto progress = admit_opcode(machine, *pending, word);
   if (view.cycle.e1_extension) {
     progress = extension(machine, progress, *view.cycle.e1_extension);
   }

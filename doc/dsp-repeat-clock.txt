@@ -1,0 +1,48 @@
+Automatic REP and full-accumulator long stores
+=============================================
+
+The automatic memory pipeline executes positive immediate12-bit and full X0
+REP counts through the native interpreter. It retains the genuine single body
+F2 receipt across logical iterations; loaded native continuations do not invent
+opcode fetches. Four actual Decode holds give nominal REP setup5,body1 timing.
+Actual native count/LC results authenticate completion and the final-body E2 /
+successor E1 overlap. Each memory iteration owns a distinct AG1 address record,
+AG2 publication and native data operation. Joint checkpoints retain that state.
+
+Current automatic repeated bodies are NOP and full A -> L:(R4)+. Zero counts,
+other sources/bodies, active DO/cache/overlapping setup and automatic interrupt
+entry remain unqualified visible refusals. Native REP interrupt inhibition is
+projected; pending-interrupt automatic execution is not qualified by these tests.
+No physical sampling-edge or complete DSP56371 timing claim follows.
+
+Standalone full A/B long stores support the five direct/postupdate address
+modes through actual native effects. Scaling treats the source as a signed
+48-bit quantity and clips to signed48-bit limits, with genuine sticky S/L.
+AB/BA two-register fields and parallel full-accumulator ALU stores still refuse.
+Reserved scaling refuses before AGU or X/Y stores; existing register-transfer
+refusal timing remains separate.
+
+Own independent checks cover16 REP streams,300 joint fresh-owner suffixes,
+16 backing-program mutations after actual F2 capture,and full131072 NOP bodies.
+The long-store oracle uses integer division and literal limits,not the native
+shift/alignment implementation:1680 full-state scaling/A/B/flag/address vectors,
+four reserved-scaling refusals and six valid controls. Two barrier-synchronized
+cold owners share the REP oracle:eight streams and124 restored suffixes under
+separate TSan. Reference pins and model scope are in dsp-repeat-clock-reference.json.
+
+The local original first DSP frame now executes its PCTL/OMR setup and real
+RAM-clear stores until the visible unmapped Y:002000 write at PC:000072.
+All94 downloaded payload words remain unchanged. This diagnostic uses a
+192-word document-derived ROM and between-period SPI stimulus;authentic ROM,
+calibrated MCU scheduling,normal instrument boot,MIDI/audio,storage,update,
+recovery,realtime and physical Desktop/Keyboard acceptance remain open.
+No reserved store is discarded and no memory region is invented to pass it.
+
+  cmake --build --preset strict --target blofeld-repeat-clock-test \
+    blofeld-repeat-latch-test blofeld-repeat-clock-state-test \
+    blofeld-repeat-long-count-test blofeld-long-store-test \
+    blofeld-long-store-guard-test blofeld-repeat-clock-thread-test blofeld-vm-info-test
+  ctest --preset strict -j1 --output-on-failure -R \
+    '^dsp_(repeat_(clock|latch|clock_state|long_count|clock_thread)|long_store(_guard)?|vm_info)$'
+  cmake --build --preset thread --target blofeld-repeat-clock-thread-test blofeld-vm-info-test
+  ctest --preset thread -j1 --output-on-failure -R '^dsp_(repeat_clock_thread|vm_info)$'

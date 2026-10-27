@@ -17,6 +17,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
 
 #include <cstddef>
@@ -541,6 +542,22 @@ DspProgramFetchView DspMachine::advance_reference_fetch(const DspProgramFetchSta
 
 std::optional<DspFetchedWord> DspMachine::pipeline_fetched_word(const std::size_t index) const {
   return state_->cpu.pipeline_fetched_word(index);
+}
+
+bool DspMachine::pipeline_interrupt_deferred() const {
+  return state_->cpu.pipeline_interrupt_deferred();
+}
+
+std::optional<DspRepeatControl> DspMachine::pipeline_repeat_control() const {
+  return state_->cpu.pipeline_repeat_control();
+}
+
+std::optional<DspRepeatControl> DspMachine::pipeline_repeat_result() const {
+  return state_->cpu.pipeline_repeat_result();
+}
+
+std::optional<DspFetchedWord> DspMachine::pipeline_repeat_body() const {
+  return state_->cpu.pipeline_repeat_body();
 }
 
 bool DspMachine::pipeline_loop_control() const {

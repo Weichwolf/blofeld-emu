@@ -18,5 +18,6 @@ struct DspPipelineWords {
 [[nodiscard]] DspPipelineWords
 select_pipeline_words(std::span<const DspFetchedWord> fetched,
                       const std::array<std::optional<DspFetchedWord>, 3> &stages,
-                      const std::array<std::optional<DspFetchedWord>, 2> &extensions);
+                      const std::array<std::optional<DspFetchedWord>, 2> &extensions,
+                      std::optional<DspFetchedWord> repeat = std::nullopt);
 }

@@ -5,6 +5,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_loop_fetch.hpp"
 #include "dsp/dsp_program_fetch.hpp"
+#include "dsp/dsp_repeat_fetch.hpp"
 
 #include <array>
 #include <atomic>
@@ -68,6 +69,16 @@ public:
   void stage_context(const DspInstructionRetire &result, const DspBus &bus);
   [[nodiscard]] bool confirm_context(DspFetchCommit completed, const DspBus &bus);
 
+  [[nodiscard]] bool repeating() const { return repeat_.has_value(); }
+
+  [[nodiscard]] std::optional<DspRepeatControl> repeat_control() const;
+  [[nodiscard]] std::optional<DspFetchedWord> repeat_body() const;
+  void verify_repeat(DspRepeatControl native_state) const;
+  [[nodiscard]] bool owns_repeat_result(DspFetchCommit completed, DspRepeatControl result) const;
+
+  void stage_repeat(DspRepeatControl before, DspRepeatControl after);
+  [[nodiscard]] bool confirm_repeat(DspFetchCommit completed, DspRepeatControl native_result);
+
   void start(std::uint32_t pc, std::uint32_t omr);
   void check_stage(DspProgramFetchStage stage) const;
   void issue();
@@ -99,6 +110,14 @@ public:
   [[nodiscard]] bool confirm_opening(DspLoopArchitecture native_result, bool redirected);
 
 private:
+  struct Repeat {
+    DspFetchedWord prefix;
+    DspRepeatControl current;
+    std::optional<DspFetchedWord> body;
+    bool prefix_pending = true;
+    bool consumed = false;
+  };
+
   struct Sequence {
     std::atomic<std::uint64_t> serial{0};
   };
@@ -111,6 +130,7 @@ private:
   void clear_continuation();
   void validate_context_storage(const DspBus &bus, std::uint32_t omr) const;
   DspProgramFetchView state_;
+  std::optional<Repeat> repeat_;
   std::array<std::uint64_t, dsp_program_fetch_capacity> occurrences_{};
   std::array<std::optional<DspLoopFetch::Prediction>, dsp_program_fetch_capacity> predictions_{};
   std::array<std::optional<DspLoopBoundary>, dsp_program_fetch_capacity> boundaries_{};

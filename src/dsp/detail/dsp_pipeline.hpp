@@ -12,6 +12,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 
 namespace blofeld {
 struct DspPipelineFormat {
@@ -51,6 +52,14 @@ struct DspPipelineLoopSetup {
   bool held_decode = false;
 };
 
+struct DspPipelineRepeat {
+  DspFetchedWord prefix;
+  std::optional<DspFetchedWord> body;
+  std::uint32_t remaining = 0;
+  unsigned setup_hold = 4;
+  bool held_decode = false;
+};
+
 struct DspPipelineProgramMemory {
   DspFetchedWord captured;
   unsigned remaining = 5;
@@ -79,12 +88,14 @@ struct DspInstructionPipeline {
   bool branch_retired = false;
   bool held_branch_decode = false;
   std::optional<DspPipelineLoopSetup> loop_setup = std::nullopt;
+  std::optional<DspPipelineRepeat> repeat_setup = std::nullopt;
   std::optional<DspPipelineProgramMemory> program_memory = std::nullopt;
   bool held_program_memory = false;
   std::optional<DspPipelineCcrSync> ccr_sync = std::nullopt;
   std::optional<DspFetchedWord> deferred_omr_branch = std::nullopt;
 
   void prepare(const DspMachine &machine);
+  void select_words(std::span<const DspFetchedWord> fetched, std::uint32_t omr);
   void rebind(const DspMachine &machine);
   void capture_address(DspMachine &machine);
 
@@ -93,6 +104,10 @@ struct DspInstructionPipeline {
            (loop_setup && (!loop_setup->target || loop_setup->held_decode));
   }
 
+  [[nodiscard]] bool hold_repeat_decode();
+  void accept_repeat_decode();
+  void capture_repeat_target(const DspMachine &machine);
+  void retire_repeat(const DspMachine &machine);
   [[nodiscard]] bool hold_loop_decode();
   void accept_loop_decode(DspMachine &machine);
   void capture_loop_target(DspMachine &machine);
@@ -110,6 +125,8 @@ struct DspInstructionPipeline {
 
 private:
   void execute(DspMachine &machine);
+  [[nodiscard]] DspReferenceProgress
+  admit_opcode(DspMachine &machine, const DspReferencePending &pending, DspProgramWord word);
   void capture_branch(DspMachine &machine);
   void validate_branch(const DspInstructionRetire &retirement) const;
   void release_branch();
