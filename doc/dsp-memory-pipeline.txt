@@ -49,7 +49,7 @@ quarantines execution and completes no elapsed clock; trusted restore is require
   ctest --test-dir build/strict -j1 --output-on-failure \
     -R '^dsp_automatic_memory_pipeline$'
 
-The own fixed cases check 160 modulo addressing forms, all four data-register
+The own fixed cases check 800 modulo addressing forms across five Mn upper bytes, all four data-register
 fields, sustained loads, load-to-store live data, load-to-MPY/ADD, captured/future
 opcode replacement, joint snapshots before/after each phase, zero updates,
 unknown-data recovery, unavailable capabilities and MMIO/FIFO preservation.

@@ -2018,9 +2018,13 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           access, retaining the original private
                                           computation base through snapshots,
                                           DMA waits and later held retirement.
-                                          A fixed224-case X/Y/mode/R matrix and
-                                          joint clock cases qualify this ordering,
-                                          not physical AG2 clocks or full staged
+                                          A fixed1120-case X/Y/mode/R/Mn matrix and
+                                          joint clock cases qualify this ordering.
+                                          Raw24 Mn data survives low16 modulo
+                                          decoding,60 literal cases and120 native
+                                          snapshot forks. Reserved modes/JIT stay
+                                          unqualified. This is not physical AG2
+                                          clocks or full staged
                                           execution (dsp-address-phase.txt).
                                           Optional native move-result publication
                                           now separates actual destination fields
@@ -2050,7 +2054,7 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           actual R in AG2 and commits real X/Y
                                           data/load fields in E1, retaining younger
                                           pointers through older E2 and snapshots.
-                                          160 fixed modulo forms and independent
+                                          800 fixed modulo forms and independent
                                           overlap/load-store/field/recovery guards
                                           cover selected pure single-word moves
                                           (dsp-memory-pipeline.txt). Long and dual

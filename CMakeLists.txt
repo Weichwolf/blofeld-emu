@@ -3113,7 +3113,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3507,4 +3507,13 @@ endif()
 if(BUILD_TESTING)
   add_test(NAME hardware_usb_capture
     COMMAND ${Python3_EXECUTABLE} -B "${CMAKE_CURRENT_SOURCE_DIR}/test/hardware_usb_capture_test.py" -v)
+endif()
+
+# Mn retains raw24 data while documented modulo arithmetic decodes only low16.
+if(BUILD_TESTING)
+  add_executable(blofeld-modifier-agu-test test/dsp_modifier_agu_test.cpp)
+  target_link_libraries(blofeld-modifier-agu-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_modifier_agu COMMAND blofeld-modifier-agu-test)
+  set_tests_properties(dsp_modifier_agu PROPERTIES TIMEOUT 120)
+  add_dependencies(quality blofeld-modifier-agu-test)
 endif()

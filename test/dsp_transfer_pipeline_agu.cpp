@@ -24,6 +24,7 @@ struct Case {
   char kind = 'r';
   unsigned index = 0;
   unsigned gap = 0;
+  unsigned upper = 0;
   Producer producer = Producer::registers;
 };
 
@@ -36,7 +37,7 @@ unsigned expected_pointer(const char kind) {
 
 std::string producer(const Case sample) {
   const auto reg = std::string(1, sample.kind) + std::to_string(sample.index);
-  const auto value = sample.kind == 'm' ? 15U : 1U;
+  const auto value = sample.kind == 'm' ? ((sample.upper << 16U) | 15U) : 1U;
   switch (sample.producer) {
     case Producer::registers: return "move x1," + reg;
     case Producer::short_literal: return "move #<" + number(value) + ',' + reg;
@@ -49,7 +50,7 @@ std::string producer(const Case sample) {
 
 void one_dependency(const Case sample) {
   const auto reg = std::to_string(sample.index);
-  const auto value = sample.kind == 'm' ? 15U : 1U;
+  const auto value = sample.kind == 'm' ? ((sample.upper << 16U) | 15U) : 1U;
   const auto words = sample.producer == Producer::long_literal ? 2U : 1U;
   const auto ea = sample.kind == 'r' ? 1U : 7U;
   const auto pointer = expected_pointer(sample.kind);
@@ -170,6 +171,18 @@ void dependency_checks() {
       for (unsigned index = 0; index < 8; ++index) {
         for (unsigned gap = 0; gap < 4; ++gap) {
           one_dependency({.kind = kind, .index = index, .gap = gap, .producer = form});
+        }
+      }
+    }
+  }
+  constexpr std::array additional_upper_bytes{1U, 0x7fU, 0x80U, 0xffU};
+  for (const auto form :
+       {Producer::registers, Producer::long_literal, Producer::memory_x, Producer::memory_y}) {
+    for (const auto upper : additional_upper_bytes) {
+      for (unsigned index = 0; index < 8; ++index) {
+        for (unsigned gap = 0; gap < 4; ++gap) {
+          one_dependency(
+              {.kind = 'm', .index = index, .gap = gap, .upper = upper, .producer = form});
         }
       }
     }

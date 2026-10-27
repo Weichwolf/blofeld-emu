@@ -842,17 +842,23 @@
 -		sr_toggle(CCR_V, value == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, value == minimum);
-@@ -1484,2 +1911 @@
+@@ -1382,2 +1809,3 @@
+-			reg.mMask[which] = AGU::calcModuloMask(val);
+-			reg.mModulo[which] = val + 1;
++			// FM4-9 Table4-2: upper XX is raw register data, not modulo arithmetic.
++			reg.mMask[which] = AGU::calcModuloMask(moduloTest);
++			reg.mModulo[which] = moduloTest + 1;
+@@ -1484,2 +1912 @@
 -		m_opcodeCache.clear();
 -		m_opcodeCache.resize(mem.sizeP(), {&DSP::op_ResolveCache});
 +		m_opcodeCache.reset(mem.sizeP(), {&DSP::op_ResolveCache});
-@@ -1487 +1913 @@
+@@ -1487 +1914 @@
 -			m_opcodeCycleCache.assign(mem.sizeP(), 0);
 +			m_opcodeCycleCache.reset(mem.sizeP());
-@@ -1570,0 +1997,2 @@
+@@ -1570,0 +1998,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2111,2 @@
+@@ -1682,0 +2112,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl
@@ -1676,3 +1682,9 @@
 +  std::call_once(vmInfoOnce, []() noexcept {
 +    getVMInfo(vmInfo);
 +  });
+--- a/source/dsp56kEmu/agu.h
++++ b/source/dsp56kEmu/agu.h
+@@ -49 +49,2 @@
+-				const auto upperBound = lowerBound + m;
++				// FM4-9 Table4-2 permits any upper byte in Mn.
++				const auto upperBound = lowerBound + (m & 0xffff);

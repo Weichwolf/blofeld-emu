@@ -45,7 +45,8 @@ quarantine the owner and require joint restore before repaired native execution.
 
 The directed cases include17 own NXP encoding pins, all R/N/M short/long
 destinations, literal full/partial data fields, parallel ALU/register movement,
-480 producer/register/gap combinations over both X/Y memory spaces, same-R load
+992 producer/register/gap combinations over X/Y memory spaces and high Mn bytes,
+same-R load
 precedence, actual modifier caches, dual/two-producer holds, multiword gaps,
 snapshots, unknown-extension recovery and explicit unsupported-source guards.
 Sixteen independent encoding inputs have zero NXP errors/warnings. A separate

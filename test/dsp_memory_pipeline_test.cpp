@@ -26,6 +26,9 @@ struct Mode {
   bool updates;
 };
 
+constexpr std::array modifier_upper_bytes{0U, 1U, 0x7fU, 0x80U, 0xffU};
+constexpr unsigned modifier_upper_shift = 16;
+
 constexpr std::array modes{Mode{.pattern = "(r)-n", .result = 4, .updates = true},
                            Mode{.pattern = "(r)+n", .result = 2, .updates = true},
                            Mode{.pattern = "(r)-", .result = 6, .updates = true},
@@ -42,12 +45,16 @@ std::string operand(const Mode mode, const unsigned index) {
   return result;
 }
 
-void one_form(const unsigned index, const Mode mode, const DspSpace space, const bool store) {
+void one_form(const unsigned index,
+              const Mode mode,
+              const DspSpace space,
+              const bool store,
+              const unsigned upper) {
   DspMachine machine;
   const std::string name = space == DspSpace::x ? "x" : "y";
   const auto memory = name + ':' + operand(mode, index);
   const std::array code{"move " + (store ? std::string("x0,") + memory : memory + ",x0")};
-  prepare(machine, code, {.index = index});
+  prepare(machine, code, {.index = index, .modifier = (upper << modifier_upper_shift) | 7U});
   machine.bus().write({.space = space, .address = 7, .value = second});
   const auto before = machine.cpu().debug_state();
   DspFetchRun run(contract(), machine);
@@ -102,22 +109,28 @@ void zero_offset() {
               machine.cpu().state().pc == body + 1,
           "A zero-offset event reaches actual load and retirement once");
 }
+
+void high_byte_modes() {
+  for (const auto upper : modifier_upper_bytes) {
+    for (unsigned index = 0; index < 8; ++index) {
+      for (const auto mode : modes) {
+        for (const auto space : {DspSpace::x, DspSpace::y}) {
+          for (const bool store : {false, true}) { one_form(index, mode, space, store, upper); }
+        }
+      }
+    }
+  }
+}
 }
 
 int main() {
   try {
-    for (unsigned index = 0; index < 8; ++index) {
-      for (const auto mode : modes) {
-        for (const auto space : {DspSpace::x, DspSpace::y}) {
-          for (const bool store : {false, true}) { one_form(index, mode, space, store); }
-        }
-      }
-    }
+    high_byte_modes();
     zero_offset();
     stream_checks();
     guard_checks();
     std::cout
-        << "Automatic native memory pipeline:160 modulo forms and overlap/restore guards passed\n";
+        << "Automatic native memory pipeline:800 modulo forms and overlap/restore guards passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

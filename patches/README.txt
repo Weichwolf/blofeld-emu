@@ -124,6 +124,11 @@ body cache for later normal execution. Undefined decoded instructions fail in
 reference mode. The normal upstream interpreter remains separately callable;
 this integration forces the reference interpreter, not the JIT.
 
+Regular-modulo cache and bounds decode only Mn low16, preserving raw24 register
+data (DSP56300FM Table4-2: upper XX is arbitrary). Literal loads, native snapshot
+forks, staged X/Y forms and automatic producer/AGU consumers cover this correction.
+JIT and reserved modifier arithmetic remain unqualified.
+
 The same build-local patch converts asmjit's ARM vector element mask explicitly
 to uint32_t before combining it with BaseReg's enum mask. Numeric register
 signatures are preserved under C++23, without suppressing mixed-enum diagnostics.

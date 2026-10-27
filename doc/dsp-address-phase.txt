@@ -40,16 +40,20 @@ real effects and completed result. Restore/fork refreshes ownership. Unknown
 data after a published R preserves that accepted prefix and quarantines CPU/
 clock; trusted joint recovery resumes from the original computation base.
 Matching rebuilt headers/archives are required; snapshots are trusted local
-objects. No native dependency source changes or new cycle estimates are used.
+objects. No new cycle estimates are used.
 
-  cmake --build --preset strict --target blofeld-address-phase-test
-  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_address_phase$'
+  cmake --build --preset strict --target blofeld-address-phase-test blofeld-modifier-agu-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_(address_phase|modifier_agu)$'
 
-The fixed224-case matrix covers all8 R registers,7 independently expected modes,
-X/Y and load/store directions with literal modulo addresses/results and exact
+The fixed1120-case matrix covers all8 R registers,7 independently expected modes,
+X/Y, load/store directions and five Mn upper bytes with literal modulo addresses/results and exact
 visible-state comparisons. Further own cases cover unchanged post-update,
 parallel ADD/CCR/load, fresh-machine forks, long X/Y reads with one update,
 control-load overwrite, short/extended absolute modes and unread FIFO rejection.
+Native regular-modulo caches and bounds use Mn low16; raw24 register data is
+preserved (FM Table4-2). Sixty literal post-inc/dec cases cover six buffer sizes,
+five upper bytes and120 fresh-machine snapshot replays against independent full
+CPU/counter expectations. Reserved modifier arithmetic and JIT remain unqualified.
 Clock cases check unknown-data failure after publication, prefix/joint recovery,
 F2 plus real X access, immutable later load result, actual DMA code overwrite
 and waits while the already published address remains stable.

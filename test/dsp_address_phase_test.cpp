@@ -31,6 +31,9 @@ struct Mode {
   bool updates;
 };
 
+constexpr std::array modifier_upper_bytes{0U, 1U, 0x7fU, 0x80U, 0xffU};
+constexpr unsigned modifier_upper_shift = 16;
+
 constexpr std::array modes{
     Mode{.pattern = "(r)-n", .address = initial_r, .result = 4, .updates = true},
     Mode{.pattern = "(r)+n", .address = initial_r, .result = 2, .updates = true},
@@ -50,13 +53,17 @@ std::string operand(const Mode mode, const unsigned index) {
   return text;
 }
 
-void one_mode(const unsigned index, const Mode mode, const DspSpace space, const bool store) {
+void one_mode(const unsigned index,
+              const Mode mode,
+              const DspSpace space,
+              const bool store,
+              const unsigned upper) {
   DspMachine machine;
   DspProgram code;
   const auto reg = std::to_string(index);
   code.immediate("r" + reg, initial_r);
   code.immediate("n" + reg, offset);
-  code.immediate("m" + reg, initial_r);
+  code.immediate("m" + reg, (upper << modifier_upper_shift) | initial_r);
   code.immediate("x0", access::first);
   code.immediate("y0", access::first);
   const auto body = code.pc();
@@ -265,17 +272,23 @@ void absolute_forms_have_no_update() {
             "The actual absolute load completes without an unrelated R update");
   }
 }
+
+void high_byte_modes() {
+  for (const auto upper : modifier_upper_bytes) {
+    for (unsigned index = 0; index < 8; ++index) {
+      for (const auto mode : modes) {
+        for (const auto space : {DspSpace::x, DspSpace::y}) {
+          for (const bool store : {false, true}) { one_mode(index, mode, space, store, upper); }
+        }
+      }
+    }
+  }
+}
 }
 
 int main() {
   try {
-    for (unsigned index = 0; index < 8; ++index) {
-      for (const auto mode : modes) {
-        for (const auto space : {DspSpace::x, DspSpace::y}) {
-          for (const bool store : {false, true}) { one_mode(index, mode, space, store); }
-        }
-      }
-    }
+    high_byte_modes();
     no_change_is_still_an_update();
     parallel_result_and_fork();
     long_pair_updates_once();
@@ -283,7 +296,7 @@ int main() {
     control_load_overwrites_its_address_later();
     absolute_forms_have_no_update();
     clock_checks();
-    std::cout << "Native DSP address publication:224 fixed cases and joint phase checks passed\n";
+    std::cout << "Native DSP address publication:1120 fixed cases and joint phase checks passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
