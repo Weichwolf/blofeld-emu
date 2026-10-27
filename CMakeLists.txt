@@ -3503,3 +3503,8 @@ if(BUILD_TESTING)
   add_test(NAME usb_endpoint_status_native COMMAND blofeld-usb-endpoint-status-native-test)
   add_dependencies(quality blofeld-usb-endpoint-status-test blofeld-usb-endpoint-status-native-test)
 endif()
+
+if(BUILD_TESTING)
+  add_test(NAME hardware_usb_capture
+    COMMAND ${Python3_EXECUTABLE} -B "${CMAKE_CURRENT_SOURCE_DIR}/test/hardware_usb_capture_test.py" -v)
+endif()

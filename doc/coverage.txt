@@ -2298,11 +2298,15 @@ Keyboard reset/SYNC              partial  Original HC12 GPIO reset/SYNC with nat
                                           Cold A/X architectural knowledge is
                                           covered below; physical cold start is not.
 
-Stock hardware validation         pending  No stock Desktop/Keyboard currently
-                                          available, as reported by the user.
-                                          No Blofeld detected on USB; DIN wiring
-                                          unverified. No stock hardware comparison;
-                                          detection alone is not validation.
+Stock hardware validation         pending  No qualified stock Desktop/Keyboard
+                                          comparison. A passive Linux kernel-cache
+                                          observer records repeated descriptor,
+                                          endpoint and driver-binding observations
+                                          locally (hardware-usb-observation.txt).
+                                          Acquisition/detection is not validation;
+                                          internal USB/DSP behavior, physical DIN
+                                          and normal instrument comparison remain
+                                          unqualified.
 
 Performance plan
 Use a deterministic CPU/interpreter reference path and compare a DSP JIT against

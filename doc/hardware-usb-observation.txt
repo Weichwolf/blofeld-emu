@@ -1,0 +1,44 @@
+Passive Linux USB observations
+
+Run as an ordinary user. List cached product names containing Blofeld:
+
+  python3 -B tools/capture_usb_sysfs.py --list
+
+Select the actual USB device port from that list or the host's sysfs tree:
+
+  python3 -B tools/capture_usb_sysfs.py --device 1-3 \
+    --profile desktop --firmware-version 1.25 \
+    --output doc/local/hardware-usb/desktop-observation
+
+Profile and displayed firmware version are operator declarations, not values
+verified by USB descriptors. A missing cached product name does not prevent
+explicit port selection. The tool reads cached sysfs attributes/descriptors and
+driver symlinks only; it does not open usbfs, send USB/MIDI requests, detach a
+driver, reset a device or program firmware. No extra packages or root access are
+needed. Other operating systems need a separate observation backend.
+
+Two identical descriptor/attribute/interface reads and an unchanged device inode
+are required. This detects observed re-enumeration and binding changes; it is
+not an atomic hardware snapshot. Reads accept short chunks and do not rely on
+sysfs file sizes. Optional missing or unreadable attributes remain explicit;
+missing required identity, oversized input and unstable observations fail.
+
+The selected new output directory must be Git-ignored under doc/local/.
+descriptors.bin retains the exact cached bytes; capture.json records their
+size/SHA-256, kernel, UID, read interval, endpoint/binding observations and limits.
+Existing captures are never overwritten. Raw device data, including cached
+serial strings, remain local reference assets. A write failure may leave an
+incomplete directory; only a valid matching manifest is usable evidence.
+
+Kernel detection/cache acquisition does not establish UF32 internal register
+effects, DSP memory behavior, normal emulator operation or hardware equivalence.
+Those require separately qualified observations and comparisons. In particular,
+this capture alone does not resolve the original USTB/NISOF conflicts or
+SET/CLEAR_HALT register effects. Keep observed facts and inferred behavior separate.
+
+Offline acquisition checks use own synthetic files and descriptors:
+
+  python3 -B test/hardware_usb_capture_test.py -v
+
+No physical USB device, manufacturer asset, native emulator or fuzz traffic is
+used by those checks.
