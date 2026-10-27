@@ -10,7 +10,9 @@ MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner
                                           (dsp-fetch-schedule.txt). Local original
                                           PORTB loading retains Y:002000; lab
                                           clocks/wiring and document ROM remain
-                                          hypotheses. Pipeline WAI/reset/joint
+                                          hypotheses. Native WAI clocking/wake
+                                          and fail-stop are tested under explicit
+                                          ordering; pipeline COP/reset/joint
                                           checkpoints and normal boot are open.
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.

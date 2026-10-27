@@ -56,7 +56,9 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
       inputs.maximum_dsp_cycles_per_period == 0 || inputs.epoch_ticks < end_ticks_ ||
       (inputs.shared_write_order != McuDspTieOrder::unqualified &&
        inputs.shared_write_order != McuDspTieOrder::dsp_before_mcu &&
-       inputs.shared_write_order != McuDspTieOrder::mcu_before_dsp)) {
+       inputs.shared_write_order != McuDspTieOrder::mcu_before_dsp) ||
+      (inputs.wait_order != McuDspWaitOrder::unqualified &&
+       inputs.wait_order != McuDspWaitOrder::dsp_before_mcu)) {
     throw Fault("MCU/DSP fetch schedule requires an automatic pipeline, future epoch, explicit "
                 "budget and known tie contract");
   }
@@ -120,11 +122,33 @@ void McuDspFetchSchedule::advance(const bool through,
       if (after_dsp) { after_dsp(result); }
     }
   } catch (const Fault &error) {
+    if (wait_context_) {
+      throw Fault("Scheduled pipeline idle peer mcu-pc=" + hex(wait_context_->pc) +
+                  " dsp-pc=" + hex(dsp_.cpu().state().pc, 6) +
+                  " mcu-idle-period=" + std::to_string(expected_idle_) +
+                  " mcu-end=" + std::to_string(end_ticks_) + ": " + error.what());
+    }
     throw Fault("Scheduled pipeline peer mcu-pc=" + hex(cycle_.context.pc) + " dsp-pc=" +
                 hex(dsp_.cpu().state().pc, 6) + " mcu-kind=" + std::string(1, cycle_.kind) +
                 " mcu-address=" + (cycle_.address ? hex(*cycle_.address) : "none") +
                 " mcu-end=" + std::to_string(end_ticks_) + ": " + error.what());
   }
+}
+
+void McuDspFetchSchedule::offer_period(const bool waiting) {
+  const auto period = mcu_.run_clock().next_period(mcu_.bus(), waiting);
+  if (period.cop_deadline) {
+    const auto context = wait_context_.value_or(cycle_.context);
+    throw Fault("Unqualified MCU/DSP fetch COP deadline mcu-pc=" + hex(context.pc));
+  }
+  const auto factor = inputs_.dsp.timebase_hz / mcu_.run_clock().timebase_hz();
+  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+  if (expected_cycles_ == maximum || period.duration_ticks > (maximum - end_ticks_) / factor) {
+    throw Fault("MCU/DSP fetch next native MCU period exhausted common time");
+  }
+  end_ticks_ += period.duration_ticks * factor;
+  ++expected_cycles_;
+  period_cycles_ = 0;
 }
 
 void McuDspFetchSchedule::begin_cycle(const Hc12BusCycle cycle,
@@ -134,26 +158,17 @@ void McuDspFetchSchedule::begin_cycle(const Hc12BusCycle cycle,
   healthy();
   const Guard guard(*this);
   consumed();
+  if (waiting_) { throw Fault("MCU/DSP fetch wait slice requires a completed idle boundary"); }
   if (shared_write_) { throw Fault("MCU/DSP fetch shared write observation was not delivered"); }
   const bool write = cycle.kind == 'w' || cycle.kind == 'W';
   if (shared_write && (!write || !cycle.address || cycle.size != 1)) {
     throw Fault("Unqualified MCU/DSP fetch shared write cycle geometry");
   }
-  const auto period = mcu_.run_clock().next_period(mcu_.bus());
-  if (period.cop_deadline) {
-    throw Fault("Unqualified MCU/DSP fetch COP deadline mcu-pc=" + hex(cycle.context.pc));
-  }
-  const auto factor = inputs_.dsp.timebase_hz / mcu_.run_clock().timebase_hz();
   constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
-  if (expected_cycles_ == maximum || period.duration_ticks > (maximum - end_ticks_) / factor) {
-    throw Fault("MCU/DSP fetch next native MCU period exhausted common time");
-  }
   cycle_ = cycle;
-  end_ticks_ += period.duration_ticks * factor;
-  ++expected_cycles_;
+  offer_period();
   offered_ = true;
   shared_write_ = shared_write;
-  period_cycles_ = 0;
   advance(!shared_write, inputs, after_dsp);
   if (!shared_write || deadline() != end_ticks_) { return; }
   if (ties_ == maximum) { throw Fault("MCU/DSP fetch shared write tie counter exhausted"); }
@@ -188,10 +203,54 @@ void McuDspFetchSchedule::observe_write(const BusEvent &event,
 void McuDspFetchSchedule::end_instruction() {
   healthy();
   const Guard guard(*this);
+  if (waiting_) { throw Fault("MCU/DSP fetch wait slice requires an explicit idle completion"); }
+  if (mcu_.cpu().waiting() && inputs_.wait_order != McuDspWaitOrder::dsp_before_mcu) {
+    throw Fault("Unqualified MCU/DSP fetch WAI boundary");
+  }
+  finish_boundary();
+}
+
+void McuDspFetchSchedule::finish_boundary() {
   mcu_.validate_run_boundary();
   consumed();
   if (shared_write_) { throw Fault("MCU/DSP fetch shared write observation was not delivered"); }
-  if (mcu_.cpu().waiting()) { throw Fault("Unqualified MCU/DSP fetch WAI boundary"); }
+  if (deadline() <= end_ticks_) {
+    throw Fault("MCU/DSP fetch completed boundary lost its pending DSP deadline");
+  }
   offered_ = false;
+}
+
+void McuDspFetchSchedule::begin_wait_period(const McuWaitPeriod period,
+                                            const CycleInputs &inputs,
+                                            const Observer &after_dsp) {
+  healthy();
+  const Guard guard(*this);
+  consumed();
+  const auto state = mcu_.cpu().state();
+  if (inputs_.wait_order != McuDspWaitOrder::dsp_before_mcu || !mcu_.cpu().waiting() || offered_ ||
+      shared_write_ || state.pc != period.context.pc || state.ccr != period.context.ccr) {
+    throw Fault(
+        "MCU/DSP fetch idle period requires native WAI and an explicit DSP-before-MCU contract");
+  }
+  if (expected_idle_ == std::numeric_limits<std::uint64_t>::max()) {
+    throw Fault("MCU/DSP fetch idle period counter exhausted");
+  }
+  waiting_ = true;
+  wait_context_ = period.context;
+  offer_period(true);
+  ++expected_idle_;
+  advance(true, inputs, after_dsp);
+  wait_context_.reset();
+}
+
+void McuDspFetchSchedule::end_wait() {
+  healthy();
+  const Guard guard(*this);
+  if (inputs_.wait_order != McuDspWaitOrder::dsp_before_mcu || !mcu_.cpu().waiting() || offered_) {
+    throw Fault(
+        "MCU/DSP fetch idle completion requires native WAI and its explicit observation contract");
+  }
+  finish_boundary();
+  waiting_ = false;
 }
 }

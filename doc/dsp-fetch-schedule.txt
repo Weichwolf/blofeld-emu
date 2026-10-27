@@ -14,10 +14,18 @@ explicit MCU-before-DSP or DSP-before-MCU policy. No physical ordering is
 inferred. Missing observations, invalid geometry, changed/unconsumed native
 periods, reentry and execution errors reject and quarantine the owner.
 
-Current scope is automatic_memory execution during ordinary MCU instructions.
-WAI, COP deadline, reset, external-event arbitration and joint checkpoint
-contracts remain open. Existing instruction-completion support for those
-operations does not qualify this pipeline owner. No real-time guarantee is made.
+Current scope is automatic_memory execution during ordinary MCU instructions
+and native WAI periods. WAI requires wait_order=dsp_before_mcu; the default
+unqualified contract still refuses entry. The caller attaches begin_wait_period
+to the committed native idle hook and calls end_wait after each bounded slice.
+Cancelled pre-commit IRQ/input offers consume no DSP period. A pin IRQ supplied
+inside a committed DSP period takes effect before the next native MCU boundary
+without cancelling the already committed interval. This is explicit reference
+ordering, not measured silicon latency.
+
+COP deadline, reset, external-event arbitration and joint checkpoint contracts
+remain open. Existing instruction-completion support for those operations does
+not qualify this pipeline owner. No real-time guarantee is made.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_schedule$'
@@ -28,6 +36,20 @@ periods. Both tie orders, an unqualified tie, dropped/wrong-address observations
 missing cycle inputs and budget exhaustion are checked, including callback
 reentry refusal and fault quarantine. The thread-profile run exercises these
 single-threaded owners under TSan; it is not a concurrency qualification.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-wait-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_wait$'
+
+Thirteen further native cases check literal WAI stack bytes and RTI register
+restoration, OSC/PHY clock routes and TIM gates, cancelled/pending/input IRQs,
+a pin IRQ raised inside a committed DSP period, malformed idle contexts and
+unqualified entry. At the declared 12MHz OSC, the 1024-edge RTI endpoint is
+47970 common ticks after 512 OSC or 2560 PHY idle periods. Actual DSP ADD/BRA
+retirements and full accumulator results continue throughout those intervals.
+A native reserved-Y store during WAI preserves only consumed peer periods;
+faulted native execution and MCU/DSP capture reject. This is not joint recovery.
+Long absolute JMP automatic decode remains outside the currently qualified
+forms; this fixture uses the independently checked short BRA loop.
 
 Local original1.25 experiments additionally coupled actual native MCU PORTB
 stores to this pipeline under declared laboratory clocks/ready/skew and a

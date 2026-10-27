@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 
 namespace blofeld {
 struct McuDspFetchInputs {
@@ -17,10 +18,11 @@ struct McuDspFetchInputs {
   std::uint64_t epoch_ticks = 0;
   McuDspTieOrder shared_write_order = McuDspTieOrder::unqualified;
   unsigned maximum_dsp_cycles_per_period = 0;
+  McuDspWaitOrder wait_order = McuDspWaitOrder::unqualified;
 };
 
 // Owns nominal MCU-period/DSP-pipeline ordering, with no board wiring or host
-// instruction stepping. Idle, COP deadlines and reset require further contracts.
+// instruction stepping. COP deadlines and reset require further contracts.
 class McuDspFetchSchedule {
 public:
   using CycleInputs = std::function<DspFetchCycleInputs()>;
@@ -37,6 +39,10 @@ public:
                      const CycleInputs &inputs,
                      const Observer &after_dsp = {});
   void end_instruction();
+  void begin_wait_period(McuWaitPeriod period,
+                         const CycleInputs &inputs,
+                         const Observer &after_dsp = {});
+  void end_wait();
   [[nodiscard]] bool faulted() const;
 
   [[nodiscard]] std::uint64_t end_ticks() const { return end_ticks_; }
@@ -49,6 +55,8 @@ private:
   class Guard;
   void healthy() const;
   void consumed() const;
+  void offer_period(bool waiting = false);
+  void finish_boundary();
   [[nodiscard]] std::uint64_t mcu_ticks() const;
   [[nodiscard]] std::uint64_t deadline() const;
   void advance(bool through, const CycleInputs &inputs, const Observer &after_dsp);
@@ -63,8 +71,10 @@ private:
   std::uint64_t ties_ = 0;
   unsigned period_cycles_ = 0;
   Hc12BusCycle cycle_;
+  std::optional<ExecutionContext> wait_context_;
   bool offered_ = false;
   bool shared_write_ = false;
+  bool waiting_ = false;
   bool active_ = false;
   bool faulted_ = false;
 };
