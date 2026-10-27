@@ -65,6 +65,12 @@ public:
                       McuMachine &mcu,
                       DspMachine &dsp,
                       DspFetchExternalEvents external = {});
+  // Stage fresh native targets from trusted state; no callbacks are invoked.
+  // Targets may change on failure, so publish them only after successful construction.
+  McuDspFetchSchedule(const McuDspFetchCheckpoint &checkpoint,
+                      McuMachine &mcu,
+                      DspMachine &dsp,
+                      const DspFetchExternalEvents &external = {});
   McuDspFetchSchedule(const McuDspFetchSchedule &) = delete;
   McuDspFetchSchedule &operator=(const McuDspFetchSchedule &) = delete;
   void begin_cycle(Hc12BusCycle cycle,
@@ -104,6 +110,15 @@ public:
 
 private:
   class Guard;
+  static const McuDspFetchCheckpoint::Storage &clone_source(const McuDspFetchCheckpoint &checkpoint,
+                                                            McuMachine &mcu,
+                                                            const DspMachine &dsp,
+                                                            const DspFetchExternalEvents &external);
+  static McuMachine &clone_mcu(const McuDspFetchCheckpoint::Storage &source, McuMachine &target);
+  McuDspFetchSchedule(const McuDspFetchCheckpoint::Storage &source,
+                      McuMachine &mcu,
+                      DspMachine &dsp,
+                      DspFetchExternalEvents external);
   void healthy() const;
   void consumed() const;
   void validate_dsp_reset_observation() const;
@@ -117,6 +132,7 @@ private:
   [[nodiscard]] std::uint64_t mcu_ticks() const;
   [[nodiscard]] std::uint64_t deadline() const;
   void advance(bool through, const CycleInputs &inputs, const Observer &after_dsp);
+  const std::shared_ptr<const bool> lifetime_ = std::make_shared<const bool>(true);
   McuDspFetchInputs inputs_;
   McuMachine &mcu_;
   DspMachine &dsp_;

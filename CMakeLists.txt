@@ -1651,6 +1651,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-power-on.json")
   set_tests_properties(original_power_on PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-dsp-fetch-clone-test test/dsp_fetch_clone_test.cpp)
+  target_link_libraries(blofeld-dsp-fetch-clone-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME dsp_fetch_clone COMMAND blofeld-dsp-fetch-clone-test)
+  add_executable(blofeld-mcu-dsp-fetch-clone-test test/mcu_dsp_fetch_clone_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-fetch-clone-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME mcu_dsp_fetch_clone COMMAND blofeld-mcu-dsp-fetch-clone-test)
+  add_executable(blofeld-fetch-clone-isolation-test test/fetch_clone_isolation_test.cpp)
+  target_link_libraries(blofeld-fetch-clone-isolation-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME fetch_clone_isolation COMMAND blofeld-fetch-clone-isolation-test)
   add_executable(blofeld-mcu-dsp-fetch-schedule-test test/mcu_dsp_fetch_schedule_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-fetch-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_fetch_schedule COMMAND blofeld-mcu-dsp-fetch-schedule-test)
@@ -3226,6 +3235,7 @@ add_custom_target(quality
     blofeld-mcu-dsp-schedule-test
     blofeld-mcu-dsp-fetch-schedule-test
     blofeld-mcu-power-on-test blofeld-mcu-dsp-fetch-power-on-test blofeld-original-power-on-test
+    blofeld-dsp-fetch-clone-test blofeld-mcu-dsp-fetch-clone-test blofeld-fetch-clone-isolation-test
     blofeld-mcu-dsp-fetch-events-test blofeld-mcu-dsp-fetch-external-wait-test
     blofeld-mcu-dsp-fetch-external-reset-test
     blofeld-mcu-dsp-fetch-wait-test blofeld-mcu-dsp-fetch-reset-test

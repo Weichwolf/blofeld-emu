@@ -71,6 +71,9 @@ public:
   DspFetchRun(DspFetchRunInputs inputs,
               DspMachine &machine,
               std::optional<DspHardwareResetInputs> initial_reset);
+  // Trusted transfer into a pristine isolated backend, without input callbacks.
+  // A failed construction may change the target; publish it only after success.
+  DspFetchRun(const DspFetchCheckpoint &checkpoint, DspMachine &target);
   ~DspFetchRun();
   DspFetchRun(const DspFetchRun &) = delete;
   DspFetchRun &operator=(const DspFetchRun &) = delete;

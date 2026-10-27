@@ -21,6 +21,7 @@ struct DspFetchScheduleCheckpoint::Storage {
   DspFetchScheduleState state;
   DspFetchCheckpoint native;
   const DspMachine *owner;
+  std::weak_ptr<const bool> lifetime;
 };
 
 DspFetchScheduleCheckpoint::DspFetchScheduleCheckpoint(std::shared_ptr<const Storage> storage)
@@ -60,6 +61,27 @@ DspFetchScheduledRun::DspFetchScheduledRun(
   if (state_.horizon.ticks > inputs.epoch_ticks) {
     throw Fault("DSP pipeline initial horizon cannot skip native work before its epoch");
   }
+  static_cast<void>(native_deadline());
+}
+
+const DspFetchScheduleCheckpoint::Storage &
+DspFetchScheduledRun::clone_source(const DspFetchScheduleCheckpoint &checkpoint,
+                                   const DspMachine &target) {
+  if (!checkpoint.storage_ ||
+      (checkpoint.storage_->lifetime.lock() && checkpoint.storage_->owner == &target)) {
+    throw Fault("DSP timeline clone requires a trusted checkpoint and distinct isolated target");
+  }
+  return *checkpoint.storage_;
+}
+
+DspFetchScheduledRun::DspFetchScheduledRun(const DspFetchScheduleCheckpoint &checkpoint,
+                                           DspMachine &target)
+    : DspFetchScheduledRun(clone_source(checkpoint, target), target) {}
+
+DspFetchScheduledRun::DspFetchScheduledRun(const DspFetchScheduleCheckpoint::Storage &source,
+                                           DspMachine &target)
+    : inputs_(source.inputs), machine_(target), run_(source.native, target), state_(source.state) {
+  run_.validate_boundary(machine_);
   static_cast<void>(native_deadline());
 }
 
@@ -242,12 +264,13 @@ DspFetchScheduleCheckpoint DspFetchScheduledRun::checkpoint() const {
       DspFetchScheduleCheckpoint::Storage{.inputs = inputs_,
                                           .state = state_,
                                           .native = run_.checkpoint(machine_),
-                                          .owner = &machine_}));
+                                          .owner = &machine_,
+                                          .lifetime = lifetime_}));
 }
 
 void DspFetchScheduledRun::restore(const DspFetchScheduleCheckpoint &checkpoint) {
   if (active_ || !checkpoint.storage_ || checkpoint.storage_->owner != &machine_ ||
-      checkpoint.storage_->inputs != inputs_) {
+      checkpoint.storage_->lifetime.lock() != lifetime_ || checkpoint.storage_->inputs != inputs_) {
     throw Fault("DSP pipeline restore requires its matching inactive owner and contract");
   }
   const Guard guard(*this);

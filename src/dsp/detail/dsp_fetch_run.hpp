@@ -42,6 +42,7 @@ struct DspFetchState {
 };
 
 struct DspFetchRun::Impl {
+  const std::shared_ptr<const bool> lifetime = std::make_shared<const bool>(true);
   DspFetchState state;
   const DspMachine *owner = nullptr;
   bool active = false;
@@ -52,5 +53,6 @@ struct DspFetchCheckpoint::Storage {
   DspCheckpoint machine;
   DspFetchState clock;
   const DspMachine *owner;
+  std::weak_ptr<const bool> lifetime;
 };
 }

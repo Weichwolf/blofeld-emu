@@ -36,7 +36,9 @@ struct McuDspFetchCheckpoint::Storage {
   McuDspFetchInputs inputs;
   const McuMachine *mcu_owner;
   const DspMachine *dsp_owner;
-  std::uint64_t end_ticks, cycles, epoch, idle, reset_edges, ties;
+  std::uint64_t initial_mcu_ticks, end_ticks, cycles, epoch, idle, reset_edges, ties;
+  unsigned external_budget;
+  std::weak_ptr<const bool> lifetime;
   bool resetting;
   std::shared_ptr<const DspFetchEventIdentity> external;
   DspExternalOrder external_order;
@@ -130,6 +132,74 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
       {},
       checked_events()));
   static_cast<void>(deadline());
+}
+
+const McuDspFetchCheckpoint::Storage &
+McuDspFetchSchedule::clone_source(const McuDspFetchCheckpoint &checkpoint,
+                                  McuMachine &mcu,
+                                  const DspMachine &dsp,
+                                  const DspFetchExternalEvents &external) {
+  if (!checkpoint.storage_) { throw Fault("Joint clone requires a trusted checkpoint"); }
+  const auto &saved = *checkpoint.storage_;
+  if (saved.lifetime.lock() && (saved.mcu_owner == &mcu || saved.dsp_owner == &dsp)) {
+    throw Fault("Joint clone requires distinct isolated native targets");
+  }
+  if (external.identity != saved.external || external.order != saved.external_order ||
+      external.maximum_events != saved.external_budget ||
+      static_cast<bool>(external.next_ticks) != static_cast<bool>(saved.external) ||
+      static_cast<bool>(external.observe) != static_cast<bool>(saved.external)) {
+    throw Fault("Joint clone requires the retained external identity, order, budget and callbacks");
+  }
+  dsp.validate_fetch_clone_target();
+  mcu.validate_reset_boundary();
+  const auto &clock = mcu.run_clock();
+  if (clock.elapsed_ticks() != 0 || clock.bus_cycles() != 0 || clock.native_epoch() != 1 ||
+      clock.reset_sysclk_edges() != 0 || mcu.idle_bus_cycles() != 0) {
+    throw Fault("Joint clone requires fresh held MCU and pristine DSP targets");
+  }
+  return saved;
+}
+
+McuMachine &McuDspFetchSchedule::clone_mcu(const McuDspFetchCheckpoint::Storage &source,
+                                           McuMachine &target) {
+  target.restore(source.mcu);
+  return target;
+}
+
+McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchCheckpoint &checkpoint,
+                                         McuMachine &mcu,
+                                         DspMachine &dsp,
+                                         const DspFetchExternalEvents &external)
+    : McuDspFetchSchedule(clone_source(checkpoint, mcu, dsp, external), mcu, dsp, external) {}
+
+McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchCheckpoint::Storage &source,
+                                         McuMachine &mcu,
+                                         DspMachine &dsp,
+                                         DspFetchExternalEvents external)
+    : inputs_(source.inputs),
+      mcu_(clone_mcu(source, mcu)),
+      dsp_(dsp),
+      dsp_schedule_(source.dsp, dsp),
+      external_(std::move(external)),
+      initial_mcu_ticks_(source.initial_mcu_ticks),
+      end_ticks_(source.end_ticks),
+      expected_cycles_(source.cycles),
+      expected_epoch_(source.epoch),
+      expected_idle_(source.idle),
+      expected_reset_edges_(source.reset_edges),
+      ties_(source.ties),
+      resetting_(source.resetting) {
+  if (mcu_.system_reset_active() != resetting_) {
+    throw Fault("Joint clone lost its native reset boundary");
+  }
+  if (resetting_) {
+    mcu_.validate_reset_boundary();
+  } else {
+    mcu_.validate_run_boundary();
+  }
+  consumed();
+  if (deadline() <= end_ticks_) { throw Fault("Joint clone lost its peer deadline"); }
+  verify_external_boundary();
 }
 
 bool McuDspFetchSchedule::faulted() const {
@@ -421,12 +491,15 @@ McuDspFetchCheckpoint McuDspFetchSchedule::checkpoint() const {
                                      .inputs = inputs_,
                                      .mcu_owner = &mcu_,
                                      .dsp_owner = &dsp_,
+                                     .initial_mcu_ticks = initial_mcu_ticks_,
                                      .end_ticks = end_ticks_,
                                      .cycles = expected_cycles_,
                                      .epoch = expected_epoch_,
                                      .idle = expected_idle_,
                                      .reset_edges = expected_reset_edges_,
                                      .ties = ties_,
+                                     .external_budget = external_.maximum_events,
+                                     .lifetime = lifetime_,
                                      .resetting = resetting_,
                                      .external = external_.identity,
                                      .external_order = external_.order}));
@@ -434,9 +507,12 @@ McuDspFetchCheckpoint McuDspFetchSchedule::checkpoint() const {
 
 void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
   if (active_ || !checkpoint.storage_ || checkpoint.storage_->mcu_owner != &mcu_ ||
-      checkpoint.storage_->dsp_owner != &dsp_ || checkpoint.storage_->inputs != inputs_ ||
+      checkpoint.storage_->dsp_owner != &dsp_ ||
+      checkpoint.storage_->lifetime.lock() != lifetime_ || checkpoint.storage_->inputs != inputs_ ||
       checkpoint.storage_->external != external_.identity ||
-      checkpoint.storage_->external_order != external_.order) {
+      checkpoint.storage_->external_order != external_.order ||
+      checkpoint.storage_->external_budget != external_.maximum_events ||
+      checkpoint.storage_->initial_mcu_ticks != initial_mcu_ticks_) {
     throw Fault("MCU/DSP fetch restore requires matching inactive owners and input contracts");
   }
   const Guard guard(*this);

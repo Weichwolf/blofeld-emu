@@ -1,0 +1,40 @@
+Trusted pipeline snapshot transfer
+
+DspFetchRun, DspFetchScheduledRun and McuDspFetchSchedule provide explicit
+checkpoint constructors for fresh isolated native targets. They copy trusted
+in-process native, frontend, operand, clock and timeline state. They do not
+query or consume external input, execute instructions or alter source owners.
+Callbacks and external event cursors are not part of the snapshot.
+
+The DSP target must be unclocked, inactive and free of pending native work,
+reset, faults and prior DMA cycles. The joint MCU target must additionally be
+held at its fresh power-on boundary. The joint external binding must retain
+its original identity, order, budget and callback presence. The original
+nonzero MCU event floor is preserved. Input cursor consistency is checked on
+subsequent execution, after the caller has restored its own control state.
+
+Existing restore operations still require their original inactive owners and
+contracts. Lifetime fences also distinguish a new producer occupying a retired
+producer's address. Explicit transfer remains possible after the source owner
+has been destroyed. A copied producer receives its own restore identity.
+
+Construction may modify the disposable targets before a later failure. An
+outer board must allocate and prepare the complete replacement, attach its
+observers without invoking them, and publish native owners and control state
+only after successful preparation. This API does not provide atomic rollback
+of arbitrary existing targets or external I/O. MCU restore drops observers;
+reattach them before execution. Host PCM and USB sessions require their own
+existing lifecycle handling.
+
+Directed native tests cover ten early fetch/decode/AG/E1/E2 cuts, independent
+MOVE/CLR/ADD results and interleaved original/copy execution; joint held/running
+MCU and DSP recovery states; initial oscillator phases; full native suffix
+traces; distinct RAM writes; foreign and nonfresh admission; deferred stale
+input refusal; and source destruction with exact native-address reuse.
+The nonzero event-floor case starts after the actual POR/vector sequence.
+ASan/UBSan and separate TSan exercise these single-threaded owners. They do
+not establish concurrent access safety, full instrument boot or real-time
+performance. Normal Board automatic pipeline integration remains open.
+
+  cmake --build --preset strict --target blofeld-dsp-fetch-clone-test blofeld-mcu-dsp-fetch-clone-test blofeld-fetch-clone-isolation-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(dsp_fetch_clone|mcu_dsp_fetch_clone|fetch_clone_isolation)$'

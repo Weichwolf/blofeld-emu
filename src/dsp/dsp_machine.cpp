@@ -294,6 +294,14 @@ void DspMachine::set_reference_reset(const bool held) {
   state_->cpu.set_reference_reset(held);
 }
 
+void DspMachine::validate_fetch_clone_target() const {
+  if (clocked() || state_->cpu.executing() || timing_faulted() || hardware_reset_active() ||
+      reference_pending() || reference_retirement() || reference_fetch() != DspProgramFetchView{} ||
+      state_->bus.last_dma_cycle()) {
+    throw Fault("DSP fetch state transfer requires a pristine isolated inactive target");
+  }
+}
+
 void DspMachine::require_running() const {
   if (hardware_reset_active()) {
     const auto context = state_->cpu.state();

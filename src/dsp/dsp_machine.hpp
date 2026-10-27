@@ -88,6 +88,8 @@ public:
   [[nodiscard]] const DspBus &bus() const;
   [[nodiscard]] const DspCore &cpu() const;
   [[nodiscard]] bool clocked() const;
+  // Pure admission check for an isolated backend before trusted state transfer.
+  void validate_fetch_clone_target() const;
   [[nodiscard]] const DspRunClock &run_clock() const;
   [[nodiscard]] bool timing_faulted() const;
   // All mode/PINIT pins stay stable through assertion and the supplied recovery.

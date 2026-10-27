@@ -13,17 +13,36 @@ DspFetchCheckpoint::DspFetchCheckpoint(std::shared_ptr<const Storage> storage)
 
 DspFetchCheckpoint::~DspFetchCheckpoint() = default;
 
+DspFetchRun::DspFetchRun(const DspFetchCheckpoint &checkpoint, DspMachine &target)
+    : impl_(std::make_unique<Impl>()) {
+  if (!checkpoint.storage_) { throw Fault("DSP fetch clone requires a trusted checkpoint"); }
+  const auto &saved = *checkpoint.storage_;
+  if (saved.lifetime.lock() && saved.owner == &target) {
+    throw Fault("DSP fetch clone requires a distinct isolated target");
+  }
+  target.validate_fetch_clone_target();
+  auto state = saved.clock;
+  target.restore(saved.machine);
+  state.bind(target);
+  impl_->state = std::move(state);
+  impl_->owner = &target;
+  validate_boundary(target);
+}
+
 DspFetchCheckpoint DspFetchRun::checkpoint(const DspMachine &machine) const {
   check_owner(machine);
   impl_->state.verify(machine);
-  return DspFetchCheckpoint(
-      std::make_shared<const DspFetchCheckpoint::Storage>(DspFetchCheckpoint::Storage{
-          .machine = machine.checkpoint(), .clock = impl_->state, .owner = impl_->owner}));
+  return DspFetchCheckpoint(std::make_shared<const DspFetchCheckpoint::Storage>(
+      DspFetchCheckpoint::Storage{.machine = machine.checkpoint(),
+                                  .clock = impl_->state,
+                                  .owner = impl_->owner,
+                                  .lifetime = impl_->lifetime}));
 }
 
 void DspFetchRun::restore(const DspFetchCheckpoint &checkpoint, DspMachine &machine) {
   if (impl_->active || impl_->owner != &machine || !checkpoint.storage_ ||
       checkpoint.storage_->owner != &machine ||
+      checkpoint.storage_->lifetime.lock() != impl_->lifetime ||
       checkpoint.storage_->clock.inputs != impl_->state.inputs) {
     throw Fault("DSP fetch checkpoint requires its matching inactive owner and clock contract");
   }

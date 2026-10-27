@@ -2085,6 +2085,15 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           mid-frame restore now checks every
                                           remaining timestamped event under four
                                           declared experiments.
+                                          Explicit pipeline snapshot transfer
+                                          stages fresh isolated native owners
+                                          without live input callbacks. Native,
+                                          timeline and joint lifetime guards,
+                                          interleaved suffixes, original event
+                                          floor and RAM isolation are checked
+                                          (dsp-fetch-clone.txt). Normal Board
+                                          automatic pipeline/POR integration
+                                          remains open.
                                           Standalone reference-board checkpoints
                                           now compose native owners/schedule,
                                           actual release epoch, SPI/return pads

@@ -74,6 +74,8 @@ public:
   DspFetchScheduledRun(DspFetchScheduleInputs inputs,
                        DspMachine &machine,
                        std::optional<DspHardwareResetInputs> initial_reset);
+  // Explicit snapshot transfer; caller stages the target and external cursor.
+  DspFetchScheduledRun(const DspFetchScheduleCheckpoint &checkpoint, DspMachine &target);
   DspFetchScheduledRun(const DspFetchScheduledRun &) = delete;
   DspFetchScheduledRun &operator=(const DspFetchScheduledRun &) = delete;
   unsigned advance_to(DspFetchAdvance advance,
@@ -90,6 +92,9 @@ public:
 
 private:
   class Guard;
+  static const DspFetchScheduleCheckpoint::Storage &
+  clone_source(const DspFetchScheduleCheckpoint &checkpoint, const DspMachine &target);
+  DspFetchScheduledRun(const DspFetchScheduleCheckpoint::Storage &source, DspMachine &target);
   enum class Step : std::uint8_t { none, native, external };
   void healthy() const;
   void check_horizon(DspFetchHorizon horizon) const;
@@ -109,6 +114,7 @@ private:
   void reset_until(std::uint64_t ticks, bool include_recovery);
   void complete_external(const DspFetchExternalEvents &external);
   void require_reset_boundary() const;
+  const std::shared_ptr<const bool> lifetime_ = std::make_shared<const bool>(true);
   DspFetchScheduleInputs inputs_;
   DspMachine &machine_;
   DspFetchRun run_;
