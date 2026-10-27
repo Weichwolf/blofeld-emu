@@ -12,7 +12,11 @@ MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner
                                           clocks/wiring and document ROM remain
                                           hypotheses. Native WAI clocking/wake
                                           and fail-stop are tested under explicit
-                                          ordering; pipeline COP/reset/joint
+                                          ordering. Native COP/reset time has
+                                          explicit-order tests across run/WAI,
+                                          OSC/PHY and all5phases;distinct vectors,
+                                          RAM and continuous DSP work are checked.
+                                          Physical DSP reset wiring,joint
                                           checkpoints and normal boot are open.
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.

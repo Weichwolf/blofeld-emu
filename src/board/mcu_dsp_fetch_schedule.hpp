@@ -19,10 +19,11 @@ struct McuDspFetchInputs {
   McuDspTieOrder shared_write_order = McuDspTieOrder::unqualified;
   unsigned maximum_dsp_cycles_per_period = 0;
   McuDspWaitOrder wait_order = McuDspWaitOrder::unqualified;
+  McuDspResetOrder reset_order = McuDspResetOrder::unqualified;
 };
 
 // Owns nominal MCU-period/DSP-pipeline ordering, with no board wiring or host
-// instruction stepping. COP deadlines and reset require further contracts.
+// instruction stepping. Reset/COP order is explicit; DSP reset wiring is external.
 class McuDspFetchSchedule {
 public:
   using CycleInputs = std::function<DspFetchCycleInputs()>;
@@ -43,6 +44,12 @@ public:
                          const CycleInputs &inputs,
                          const Observer &after_dsp = {});
   void end_wait();
+  // Owns MCU reset time only; no DSP reset pad or board route is inferred.
+  void begin_system_reset(McuResetSource source, unsigned synchronization_cycles);
+  void begin_reset_period(McuResetPeriod period,
+                          const CycleInputs &inputs,
+                          const Observer &after_dsp = {});
+  void end_system_reset();
   [[nodiscard]] bool faulted() const;
 
   [[nodiscard]] std::uint64_t end_ticks() const { return end_ticks_; }
@@ -68,13 +75,17 @@ private:
   std::uint64_t expected_cycles_;
   std::uint64_t expected_epoch_;
   std::uint64_t expected_idle_;
+  std::uint64_t expected_reset_edges_;
   std::uint64_t ties_ = 0;
   unsigned period_cycles_ = 0;
   Hc12BusCycle cycle_;
   std::optional<ExecutionContext> wait_context_;
+  std::optional<ExecutionContext> reset_context_;
   bool offered_ = false;
   bool shared_write_ = false;
   bool waiting_ = false;
+  bool resetting_ = false;
+  bool cop_deadline_ = false;
   bool active_ = false;
   bool faulted_ = false;
 };

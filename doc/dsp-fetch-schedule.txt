@@ -23,9 +23,16 @@ inside a committed DSP period takes effect before the next native MCU boundary
 without cancelling the already committed interval. This is explicit reference
 ordering, not measured silicon latency.
 
-COP deadline, reset, external-event arbitration and joint checkpoint contracts
-remain open. Existing instruction-completion support for those operations does
-not qualify this pipeline owner. No real-time guarantee is made.
+COP/reset time requires reset_order=dsp_before_mcu;the default unqualified
+contract refuses. A native COP deadline shortens its IPBus offer and completes
+DSP periods through that time before the MCU latches the actual timeout.
+The incomplete MCU bus/idle period is not counted. begin_system_reset enters
+actual MCU drive/synchronization/settling edges;reattach native observers after
+MCU owner replacement. Supply observed RESET-pad inputs and explicit3..6 SYSCLK
+synchronization. Native vector fetch chooses FFFA(COP) or FFFE(external).
+DSP execution/time continue;physical DSP-reset wiring remains separate.
+External-event arbitration and joint checkpoint/recovery remain open.
+No real-time guarantee or measured physical timing is established.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_schedule$'
@@ -50,6 +57,17 @@ A native reserved-Y store during WAI preserves only consumed peer periods;
 faulted native execution and MCU/DSP capture reject. This is not joint recovery.
 Long absolute JMP automatic decode remains outside the currently qualified
 forms; this fixture uses the independently checked short BRA loop.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-reset-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_reset$'
+
+Thirty-one native cases cover all5OSC phases across OSC/PHY and run/WAI,
+20whole COP timeouts/recoveries,four external synchronization variants and
+seven strict failures. Independent period counts,distinct native reset vectors,
+SRAM retention and full DSP ADD/BRA results are checked. Unknown source pads,
+unconsumed/wrong reset offers,default unqualified contracts and an actual
+reserved-Y failure preserve their visible context and quarantine. No DSP PC,
+firmware state or physical reset-pad result is supplied by the scheduler.
 
 Local original1.25 experiments additionally coupled actual native MCU PORTB
 stores to this pipeline under declared laboratory clocks/ready/skew and a
