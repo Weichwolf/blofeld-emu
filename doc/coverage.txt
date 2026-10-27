@@ -497,6 +497,21 @@ USB device/transport              partial  PHY control and register/data-side en
                                           Wire decoding, automatic standard requests,
                                           IQUE, module/PHY reset, remote resume
                                           and host ports pending.
+Host MIDI sequencer port         partial  Separate unprivileged Linux MIDI-1 port;
+                                          genuine virtual clients exchange literal
+                                          channel/system messages and long SysEx.
+                                          Actual negotiated pool grants, running
+                                          status, realtime order, directed FIFO
+                                          overflow, retirement and ordinary
+                                          aconnect routing have scoped ASan/UBSan
+                                          and separate TSan checks. Smaller,
+                                          ignored/clamped/fixed grant controls
+                                          qualify host adaptation only. Normal
+                                          firmware/profile binding, physical port
+                                          routing and original USB-MIDI remain
+                                          open (host-midi-port.txt). Host audio
+                                          format/buffer readback and device-change
+                                          qualification remain open (runtime.txt).
 Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           solely a virtual ALSA endpoint. No
                                           kernel attachment, complete original enumeration,

@@ -15,6 +15,16 @@ exclusive access to an ALSA hardware device or replacement of the user's audio
 service. Host audio buffering/device negotiation stays outside MCU/DSP/board
 behavior. No host synthesizer substitutes for the firmware's audio generation.
 
+Host portability is a requirement for both audio and MIDI. Query capabilities,
+read back actual negotiated settings and keep preferences distinct from grants.
+Adapt host buffering/packetization to those grants; report unsupported formats,
+lost events and service failures visibly. Never change emulated clocks, PLLs or
+MIDI baud to accommodate the host. Test smaller/different grants and refusal
+paths. Kernel/service behavior on this development host is not a universal
+limit. Audio stream format/rate, channel layout, buffer dimensions and device
+changes require their own readback and qualification; host-midi-port.txt records
+the separate sequencer-port evidence.
+
 USB remains MIDI-only. Do not add USB Audio descriptors, endpoints or a virtual
 USB sound card. Host audio playback is independent of the emulated USB link.
 Waldorf confirms that Blofeld USB carries MIDI and cannot stream live audio:

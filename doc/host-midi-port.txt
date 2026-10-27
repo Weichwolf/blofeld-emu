@@ -1,0 +1,69 @@
+Linux host MIDI-1 sequencer transport
+
+HostMidiPort is a separate ordinary-thread host adapter. It opens /dev/snd/seq
+as the current user and publishes a bidirectional software/application port.
+It does not subscribe to any endpoint automatically. External controllers may
+be connected by an ordinary MIDI router. Handles and pending host bytes remain
+outside emulated snapshots; retirement closes the client and removes its port.
+
+This transport has no firmware replies, voice generation or physical-port map.
+It is not the required original USB-MIDI device. Blofeld Desktop specifications
+list DIN MIDI-In and USB MIDI In/Out; MCU SCI observation alone does not establish
+a DIN transmit connector. Normal standalone/profile binding remains pending.
+
+The kernel UAPI is used directly; no new linked native dependency is introduced.
+MIDI-1 channel messages, supported system-common/realtime events, running status,
+14-bit controls/RPN/NRPN and fragmented SysEx preserve wire order. Host event types
+without a supported wire interpretation refuse visibly. Variable event payloads
+are copied; native pointers are never trusted. Transfers are bounded to4096 bytes,
+input parsing to16 new records per call and output SysEx fragments to256 bytes.
+Incomplete channel messages/SysEx may remain pending across ordinary calls.
+
+Capabilities and actual grants
+Linux reports protocol version, port capabilities and current client pools; it
+does not expose a maximum-pool query. A successful pool request may leave the
+previous grant unchanged. On a fresh unused client, request bounded preferences,
+read back each actual grant and probe smaller requests when necessary. Clamped
+and fixed grants are accepted only if usable. Public limits() reports the actual
+protocol/input/output dimensions; address()/limits() become empty on retirement.
+The observed2000/256 input/output grant is not hardcoded as a host requirement.
+Output payload bounds reserve an event cell and conservatively allow no more
+than one byte per remaining cell. Unknown kernel-internal payload packing is not
+used as a production capacity constant. Setup publishes the port only after the
+final pool/capability checks. Emulated clocks and MIDI baud are unaffected.
+
+Backpressure and failure
+FIFO overflow, loss reports, unknown events and native I/O failures retire the
+session with a diagnostic. A failed direct multicast write may follow delivery
+to other subscribers; retrying it blindly could duplicate messages. The caller
+must not reconnect/replay a failed output prefix or reuse a host session across
+an emulated restore. This adapter provides failure visibility, not recovery or
+host/board scheduling. Kernel FIFO loss and client delivery-loss reports are
+separate checks. Controller disconnect/reconnect and firmware lifecycle binding
+still need runtime qualification.
+
+Scoped evidence and reproduction
+  cmake --preset strict -DBLOFELD_FUZZING=OFF
+  cmake --build --preset strict --target blofeld-sequence-codec-test blofeld-host-midi-port-test
+  ctest --test-dir build/strict -R '^(sequence_codec|host_midi_port|host_midi_port_discovery)$' --output-on-failure
+Use the separate thread preset for TSan. These tests never route to physical
+ports. The native endpoint cases explicitly skip with77 if the sequencer is
+absent/inaccessible; a skip is not kernel qualification. aconnect is needed for
+the ordinary discovery/routing test. Actual development-host proof uses UID1000,
+Linux6.12.113+deb13-amd64 and real virtual clients, with no skipped cases.
+
+Independent literal event fields/bytes cover channel messages, system statuses,
+pitch endpoints, realtime between partial messages, long SysEx and retirement.
+A8195-byte logical SysEx uses one kernel event where the measured pools permit;
+smaller hosts split it according to actual capacities and retain every byte.
+Directed valid NOTEON traffic fills only an owned virtual receiver, checks sender
+backpressure and actual receiver ENOSPC/retirement. Unsupported valid user events
+and undefined output statuses also retire sessions. Pure capability controls
+cover ignored/clamped/fixed grants, smaller limits, invalid grants/errors and
+one-byte SysEx fragments. These are directed tests, not fuzzing or hardware tests.
+
+Primary references
+  https://raw.githubusercontent.com/torvalds/linux/v6.12/include/uapi/sound/asequencer.h
+  https://raw.githubusercontent.com/torvalds/linux/v6.12/sound/core/seq/seq_clientmgr.c
+  https://raw.githubusercontent.com/torvalds/linux/v6.12/sound/core/seq/seq_memory.c
+  https://waldorfmusic.com/blofeld-en/

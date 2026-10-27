@@ -281,6 +281,11 @@ target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_library(blofeld_host_midi src/midi/host_midi.cpp)
 target_include_directories(blofeld_host_midi PUBLIC src)
 target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)
+add_library(blofeld_host_midi_port src/midi/host_midi_port.cpp
+  src/midi/host_midi_port_setup.cpp src/midi/host_midi_port_io.cpp
+  src/midi/sequence_encode.cpp src/midi/sequence_decode.cpp src/midi/sequence_pool.cpp)
+target_include_directories(blofeld_host_midi_port PUBLIC src)
+target_link_libraries(blofeld_host_midi_port PUBLIC blofeld_quality)
 add_library(blofeld_reference_board src/board/reference_config.cpp
   src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
@@ -1347,6 +1352,18 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-dsp-host-midi")
   set_tests_properties(reference_dsp_host_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  add_executable(blofeld-sequence-codec-test test/sequence_codec_test.cpp)
+  target_link_libraries(blofeld-sequence-codec-test PRIVATE blofeld_host_midi_port)
+  add_test(NAME sequence_codec COMMAND blofeld-sequence-codec-test)
+  add_executable(blofeld-host-midi-port-test test/host_midi_port_test.cpp)
+  target_link_libraries(blofeld-host-midi-port-test PRIVATE blofeld_host_midi_port)
+  add_test(NAME host_midi_port COMMAND blofeld-host-midi-port-test)
+  set_tests_properties(host_midi_port PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
+  add_test(NAME host_midi_port_discovery COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_midi_port_discovery.py"
+    $<TARGET_FILE:blofeld-host-midi-port-test>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-midi-port-discovery.json")
+  set_tests_properties(host_midi_port_discovery PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
   add_executable(blofeld-host-midi-test test/host_midi_test.cpp)
   target_link_libraries(blofeld-host-midi-test PRIVATE blofeld_host_midi blofeld_firmware)
   add_test(NAME host_midi COMMAND blofeld-host-midi-test
@@ -3203,6 +3220,7 @@ add_custom_target(quality
     blofeld-usbip-session-boundaries-test
     blofeld-serial-pcm-test
     blofeld-host-midi-test
+    blofeld-sequence-codec-test blofeld-host-midi-port-test
     blofeld-midi-timed-test
     blofeld-original-host-midi-test
     blofeld-pcm-transport-test
