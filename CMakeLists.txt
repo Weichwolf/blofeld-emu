@@ -1512,6 +1512,15 @@ if(BUILD_TESTING)
   add_test(NAME dsp_indirect_control COMMAND blofeld-indirect-control-test)
   add_test(NAME dsp_control_composition COMMAND blofeld-control-composition-test)
   add_test(NAME dsp_control_guards COMMAND blofeld-control-guard-test)
+  add_executable(blofeld-original-clocked-frontier-test test/dsp_original_clocked_frontier_test.cpp)
+  target_link_libraries(blofeld-original-clocked-frontier-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME original_dsp_clocked_frontier COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_clocked_frontier.py"
+    $<TARGET_FILE:blofeld-original-clocked-frontier-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-clocked-frontier.trace")
+  set_tests_properties(original_dsp_clocked_frontier PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_test(NAME dsp_document_loader_entry COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_document_loader_entry.py"
     $<TARGET_FILE:blofeld-document-loader-entry-test>

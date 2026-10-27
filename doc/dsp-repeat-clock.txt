@@ -30,7 +30,7 @@ four reserved-scaling refusals and six valid controls. Two barrier-synchronized
 cold owners share the REP oracle:eight streams and124 restored suffixes under
 separate TSan. Reference pins and model scope are in dsp-repeat-clock-reference.json.
 
-The local original first DSP frame now executes its PCTL/OMR setup and real
+The original_dsp_clocked_frontier regression executes the original PCTL/OMR setup and real
 RAM-clear stores until the visible unmapped Y:002000 write at PC:000072.
 All94 downloaded payload words remain unchanged. This diagnostic uses a
 192-word document-derived ROM and between-period SPI stimulus;authentic ROM,
@@ -46,3 +46,14 @@ No reserved store is discarded and no memory region is invented to pass it.
     '^dsp_(repeat_(clock|latch|clock_state|long_count|clock_thread)|long_store(_guard)?|vm_info)$'
   cmake --build --preset thread --target blofeld-repeat-clock-thread-test blofeld-vm-info-test
   ctest --preset thread -j1 --output-on-failure -R '^dsp_(repeat_clock_thread|vm_info)$'
+
+The original-frame wrapper checks local firmware/document-ROM identities before
+execution. It requires all94 genuine payload words,the native loader JMP and
+complete ordered reference periods,then the explicit current unresolved-memory
+failure. Unexpected diagnostics,including sanitizer reports,fail. Missing local
+inputs skip before native execution. A skipped component test proves no boot.
+Unique failed traces remain available for inspection. This is a regression of
+the implemented loading/frontier behavior,not successful full-device acceptance.
+
+  cmake --build --preset strict --target blofeld-original-clocked-frontier-test
+  ctest --preset strict -j1 --output-on-failure -R '^original_dsp_clocked_frontier$'
