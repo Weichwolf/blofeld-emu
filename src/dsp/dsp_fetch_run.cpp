@@ -228,6 +228,11 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
   }
 }
 
+void DspFetchRun::validate_boundary(const DspMachine &machine) const {
+  check_owner(machine);
+  impl_->state.verify(machine);
+}
+
 std::uint64_t DspFetchRun::next_cycle_ticks(const DspMachine &machine) const {
   check_running(machine);
   return impl_->state.period(machine);

@@ -2848,3 +2848,11 @@ BEQ refusal. These conditional component cases do not establish physical straps,
 ICG/FLL timing, complete controller or Desktop/Keyboard reset-to-instrument boot.
 All complete objective, original DSP audio/MIDI/storage/update/recovery/every
 power-loss phase, realtime/long-run and physical comparison requirements remain.
+
+- Automatic DSP periods now have a timestamped external-event timeline with
+  explicit tie policy, separate native/external horizon boundaries, persistent
+  source identity, future append, actual reset/recovery time and trusted native
+  suffix restore. Own MOVEP GPIO reads check real AG1 capture/E2 publication;
+  literal cycle/event counts and causality/budget/source/reentry guards support
+  this primitive. Connected MCU/external arbitration, original reset-to-instrument
+  operation, MIDI/ESAI/audio and hardware timing remain open. See dsp-fetch-events.txt.

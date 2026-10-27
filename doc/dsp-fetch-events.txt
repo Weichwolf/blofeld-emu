@@ -1,0 +1,51 @@
+Automatic DSP pipeline and external event timeline
+
+DspFetchScheduledRun orders actual DspFetchRun periods and timestamped peripheral
+observations in one explicit integer timebase. Native periods are not replaced
+with atomic instruction estimates. epoch_ticks offsets absolute event time;
+DspFetchCycleResult and the native clock retain relative elapsed ticks.
+
+This is a single-threaded reference ordering contract. It neither establishes
+physical input timing nor connects the complete device runtime. MCU/external
+arbitration, normal MIDI/ESAI transport and automatic IRQ entry remain open.
+
+Bind an event source on the first advance, with a retained shared identity,
+pure next_ticks query, observation callback, positive per-advance event budget
+and explicit external-before-DSP, DSP-before-external or reject-tie policy.
+Observations may change peripheral inputs, never the native CPU/front end/DMA
+clock owner. Queries must be pure; boundary checks detect changes to the native
+owner, not every possible side effect in arbitrary user callbacks.
+
+Keep the identity and policy even after exhaustion. A pending deadline is pinned
+until observed. An exhausted source may append future events. A completion may
+cause a same-tick event only with DSP-before-external order; retroactive events
+and changes to pinned deadlines refuse. Same-timestamp bursts retain source order
+and are bounded by the explicit event budget. No physical phase is inferred.
+
+Each horizon separately includes or excludes native and external work at its
+exact tick. Inconsistent mixed boundaries refuse. Advancing cannot rewind time
+or an already consumed boundary. Reset hold advances exact fractional EXTAL time;
+recovery completion participates in the same event arbitration. External events
+can precede an excluded recovery edge without silently releasing native work.
+Reset assertion/release require an inactive, exactly consumed common boundary.
+They cannot be requested recursively from an active callback.
+
+A trusted in-process snapshot captures the same native owner, pipeline, clocks,
+peripherals and timeline state. Restore the caller-owned event cursor separately.
+Callbacks are not serialized. Foreign-owner or changed-contract restore refuses;
+execution/callback errors quarantine the timeline until trusted restore. Failed
+advances retain their actually executed native/event prefix and contextual error.
+No rollback of external effects or general serialized device state is promised.
+
+  cmake --build --preset strict --target blofeld-fetch-schedule-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_fetch_external_events$'
+
+Own instruction checks use literal 45-tick bypass periods, sequential NOP
+retirements, both event orders, mixed-boundary and held-reset suffix replays,
+nonzero epochs and explicit failure controls. Two real MOVEP GPIO reads sample
+at AG1 and publish captured values at E2: an exact-tick change affects the first
+read only in its declared order; a later change cannot rewrite either capture.
+Complete native debug state, timer edges and event counts are checked. Fixed
+malformed contracts, callback reentry/mutation, pinned/decreasing/newborn-past
+inputs and finite budgets refuse. These are supporting component checks, not
+full original firmware boot, physical equivalence or real-time qualification.

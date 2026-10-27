@@ -255,7 +255,8 @@ add_library(blofeld_dsp
   src/dsp/dsp_omr_move.cpp src/dsp/dsp_fetch_context.cpp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
-  src/dsp/dsp_fetch_reset.cpp
+  src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
+  src/dsp/dsp_fetch_schedule_events.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
   src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
   src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
@@ -1406,6 +1407,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-fetch-reset-test test/dsp_fetch_reset_test.cpp)
   target_link_libraries(blofeld-fetch-reset-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_fetch_reset COMMAND blofeld-fetch-reset-test)
+  add_executable(blofeld-fetch-schedule-test test/dsp_fetch_schedule_test.cpp
+    test/dsp_fetch_schedule_guards.cpp test/dsp_fetch_schedule_pins.cpp)
+  target_link_libraries(blofeld-fetch-schedule-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_fetch_external_events COMMAND blofeld-fetch-schedule-test)
   add_executable(blofeld-retirement-test test/dsp_retirement_test.cpp test/dsp_retirement_fetch.cpp)
   target_link_libraries(blofeld-retirement-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_reference_retirement COMMAND blofeld-retirement-test)
@@ -3164,7 +3169,7 @@ add_custom_target(quality
     blofeld-omr-peripheral-test blofeld-omr-memory-test blofeld-omr-thread-test
     blofeld-accumulator-clock-test blofeld-accumulator-hazard-test
     blofeld-accumulator-thread-test blofeld-postloop-context-test
-    blofeld-fetch-run-test blofeld-fetch-reset-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
+    blofeld-fetch-run-test blofeld-fetch-reset-test blofeld-fetch-schedule-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test
     blofeld-dax-test

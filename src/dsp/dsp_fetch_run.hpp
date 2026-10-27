@@ -86,6 +86,8 @@ public:
   void restore(const DspFetchCheckpoint &checkpoint, DspMachine &machine);
   // Pure boundary query: validates the bound owner and consumes no native work.
   [[nodiscard]] std::uint64_t next_cycle_ticks(const DspMachine &machine) const;
+  // Pure ownership/native-state validation, including held reset boundaries.
+  void validate_boundary(const DspMachine &machine) const;
   [[nodiscard]] std::uint64_t elapsed_ticks() const;
   [[nodiscard]] std::uint64_t completed_cycles() const;
   [[nodiscard]] std::uint64_t timer_clk2_edges() const;
