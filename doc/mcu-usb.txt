@@ -12,7 +12,7 @@ state fails on live status/interrupt queries instead of inventing an idle bus.
 MEN enables this modeled data path. UMCR protects MCE and disabled-only options
 while MEN is set; packet callbacks require MCE, an active PHY, DISCON clear,
 known decoder state, enumeration complete and no reset/suspend. High-speed
-transactions, automatic standard requests such as SET_ADDRESS, wire timing,
+transactions, other automatic standard requests, wire timing,
 module/PHY reset and remote-resume commands, IQUE transfers and host ports remain
 unsupported. Endpoint reset EPRST is described in usb-endpoint-reset.txt. The
 model does not automatically assert ENUMD or report enumeration success.
@@ -43,6 +43,12 @@ Registers and interrupts
   These are document-derived rules; physical status/ACK timing is unverified.
   Replacing an unresolved configuration request, or a pending firmware SETUP/
   SETOVR, also remains unqualified. Rejected overlap preserves USTB and UCCSR.
+- Automatic SET_ADDRESS1..127 commits its address only after DATA1/ZLP status
+  ACK. GET_CONFIGURATION returns the actual addressed/configured selection;
+  GET_INTERFACE returns the retained alternate or Request Error. Data/ACK/
+  status ownership, general endpoint flags and native IRQ composition are
+  covered separately in usb-standard-control.txt. Physical effects, address
+  token filtering/recovery delay and USB/IP reconciliation remain unqualified.
 - Status, application SETUP, configuration update and SOF use vectors 0xffd4,
   0xffd2, 0xffd0 and 0xffbe. Local endpoint completions use 0xffce, 0xffcc,
   0xffca, 0xffc8. Flags and their enables feed the real MCU priority controller;

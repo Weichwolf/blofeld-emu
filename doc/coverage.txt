@@ -2889,3 +2889,11 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   inputs do not establish physical startup/wiring, normal Board integration,
   authentic complete DSP ROM or full instrument operation. See mcu-system-reset.txt,
   mcu-power-on-reference.json and dsp-fetch-schedule.txt.
+
+- Decoded USB automatic SET_ADDRESS1..127 commits only on real status ACK.
+  GET_CONFIGURATION/GET_INTERFACE use retained device selections and exact
+  DATA1/data/status ownership; invalid interfaces produce Request Error.
+  Directed model cases and native own IN/OUT IRQ/RTI composition support this
+  command layer (usb-standard-control.txt). Normal original enumeration,
+  USTB/NISOF conflicts, address filtering/recovery delay, USB/IP reconciliation
+  and physical automatic-transfer effects remain open.

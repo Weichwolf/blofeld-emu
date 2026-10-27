@@ -81,6 +81,9 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
       setup_stall_ = false;
       control_phase_known_ = true;
       configuration_control_ = false;
+      automatic_read_.reset();
+      pending_address_.reset();
+      device_address_ = 0;
       status_ = static_cast<std::uint16_t>(status_ & ~(usb::sof | usb::setup_overrun | usb::setup));
     }
   }

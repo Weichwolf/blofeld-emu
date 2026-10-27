@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -74,9 +75,11 @@ UsbResponse McuUsb::receive_setup(const std::array<std::uint8_t, 8> &data, const
   constexpr unsigned synch_frame = 12;
   if (type == 3) { throw Fault("Reserved USB SETUP request type"); }
   const auto configuration = decode_configuration_setup(data);
+  const auto read = decode_read_setup(data);
+  const auto address = decode_address_setup(data);
   const bool descriptor = type == 0 && data[1] == get_descriptor;
   const bool optional = type == 0 && (data[1] == set_descriptor || data[1] == synch_frame);
-  if (type == 0 && !descriptor && !optional && !configuration) {
+  if (type == 0 && !descriptor && !optional && !configuration && !read && !address) {
     throw Fault("Unimplemented USB automatic standard request " + hex(data[1], 2));
   }
   static_cast<void>(maximum_packet(0));
@@ -92,11 +95,16 @@ UsbResponse McuUsb::receive_setup(const std::array<std::uint8_t, 8> &data, const
     buffer.transmitted.reset();
   }
   setup_stall_ =
-      optional && (module_control_ & (data[1] == set_descriptor ? usb::descriptor_support
-                                                                : usb::synch_frame_support)) == 0;
+      (read && read->error) ||
+      (optional && (module_control_ & (data[1] == set_descriptor ? usb::descriptor_support
+                                                                 : usb::synch_frame_support)) == 0);
   control_phase_known_ = true;
   configuration_control_ = configuration.has_value();
-  if (setup_stall_ || configuration_control_) { return UsbResponse::ack; }
+  automatic_read_ = setup_stall_ ? std::nullopt : read;
+  pending_address_ = address;
+  if (setup_stall_ || configuration_control_ || automatic_read_ || pending_address_) {
+    return UsbResponse::ack;
+  }
   if ((status_ & usb::setup) != 0) { status_ |= usb::setup_overrun; }
   setup_ = data;
   status_ |= usb::setup;
@@ -110,9 +118,12 @@ UsbResponse McuUsb::receive_out(const UsbOutPacket packet) {
   pending_in_.reset();
   if (!packet.crc_valid) { return UsbResponse::none; }
   const auto maximum = maximum_packet(index);
-  if (index == 1 && configuration_control_) {
+  if (index == 1 && (configuration_control_ || pending_address_)) {
     require_control_phase();
-    throw Fault("USB OUT during automatic configuration status-IN phase");
+    throw Fault("USB OUT during automatic no-data status-IN phase");
+  }
+  if (index == 1 && automatic_read_ && (!automatic_read_->status || !packet.data.empty())) {
+    throw Fault("Unqualified automatic USB read status before data ACK or with nonzero payload");
   }
   if (packet.data.size() > maximum) {
     throw Fault("USB OUT packet exceeds the programmed endpoint size");
@@ -139,6 +150,7 @@ UsbResponse McuUsb::receive_out(const UsbOutPacket packet) {
                                               usb::data_valid | usb::transfer_complete |
                                               static_cast<unsigned>(packet.data.size()));
   buffer.data1 = !buffer.data1;
+  if (index == 1) { automatic_read_.reset(); }
   return UsbResponse::ack;
 }
 
@@ -152,19 +164,43 @@ UsbInPacket McuUsb::request_in(const UsbBuffer endpoint) {
     require_control_phase();
     return {.response = UsbResponse::stall};
   }
-  if (index == 0 && configuration_control_) {
-    require_control_phase();
-    if ((configuration_status_ & usb::configuration_request) != 0) {
-      return {.response = UsbResponse::nak};
+  if (index == 0 && (configuration_control_ || pending_address_ || automatic_read_)) {
+    return request_automatic_in();
+  }
+  return request_local_in(endpoint, maximum);
+}
+
+UsbInPacket McuUsb::request_automatic_in() {
+  require_control_phase();
+  if (configuration_control_ && (configuration_status_ & usb::configuration_request) != 0) {
+    return {.response = UsbResponse::nak};
+  }
+  constexpr unsigned index = 0;
+  auto &buffer = buffers_data_[index];
+  if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }
+  if (automatic_read_) {
+    if (automatic_read_->status) { return {.response = UsbResponse::nak}; }
+    if (pending_in_) { return pending_in_->packet; }
+    if (buffer.transmitted) {
+      pending_in_ = PendingIn{.buffer = index, .packet = *buffer.transmitted};
+      return *buffer.transmitted;
     }
-    auto &buffer = buffers_data_[index];
-    if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }
-    if (pending_in_ && pending_in_->buffer == index) { return pending_in_->packet; }
-    // UCCSR gates the automatic no-data status; USB2.0 requires DATA1/ZLP.
-    const UsbInPacket packet{.response = UsbResponse::data, .size = 0, .data1 = true};
+    // Hardware command decode (USB20D6E2F 4.2.5.1), not local FIFO contents.
+    UsbInPacket packet{.response = UsbResponse::data, .size = 1, .data1 = true};
+    packet.data[0] = automatic_read_->value;
     pending_in_ = PendingIn{.buffer = index, .packet = packet};
+    buffer.transmitted = packet;
     return packet;
   }
+  if (pending_in_ && pending_in_->buffer == index) { return pending_in_->packet; }
+  // Automatic no-data status is DATA1/ZLP. Address commits only on its ACK.
+  const UsbInPacket packet{.response = UsbResponse::data, .size = 0, .data1 = true};
+  pending_in_ = PendingIn{.buffer = index, .packet = packet};
+  return packet;
+}
+
+UsbInPacket McuUsb::request_local_in(const UsbBuffer endpoint, const unsigned maximum) {
+  const auto index = buffer_index(endpoint);
   auto &buffer = buffers_data_[index];
   if ((buffer.control & usb::stall) != 0) { return {.response = stall_response(index)}; }
   if ((buffer.control & usb::data_valid) == 0) { return {.response = UsbResponse::nak}; }
@@ -193,6 +229,11 @@ void McuUsb::finish_in(const bool acknowledged) {
   if (!pending_in_) { throw Fault("USB IN handshake without an outstanding data packet"); }
   require_packet();
   if (acknowledged) {
+    if (pending_in_->buffer == 0 && pending_address_) {
+      device_address_ = *pending_address_;
+      pending_address_.reset();
+    }
+    if (pending_in_->buffer == 0 && automatic_read_) { automatic_read_->status = true; }
     if (pending_in_->buffer == 0 && configuration_control_) { configuration_control_ = false; }
     auto &buffer = buffers_data_.at(pending_in_->buffer);
     buffer.control =

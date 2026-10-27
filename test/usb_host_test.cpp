@@ -182,8 +182,8 @@ void test_invalid_admission_and_context() {
   require(queue.pending() == maximum_usb_pending,
           "Bounded pending admission cannot partially enqueue the extra request");
   queue.reset();
-  r = request(2, control_input, 1);
-  r.setup = {0x80, 8, 0, 0, 0, 0, 1, 0};
+  r = request(2, control_input, 2);
+  r.setup = {0x80, 0, 0, 0, 0, 0, 2, 0};
   queue.submit(r);
   try {
     static_cast<void>(queue.poll(bus, context));
@@ -198,6 +198,33 @@ void test_invalid_admission_and_context() {
     return;
   }
   throw Fault("Unsupported standard request reported host success");
+}
+
+void test_automatic_selection_transfers() {
+  McuBus bus(own_flash);
+  prepare(bus);
+  UsbHostQueue queue;
+  constexpr std::array<std::array<std::uint8_t, 8>, 2> selections{
+      {{0x80, 8, 0, 0, 0, 0, 1, 0}, {0x81, 10, 0, 0, 0, 0, 1, 0}}};
+  for (unsigned index = 0; index < selections.size(); ++index) {
+    auto transfer = request(index + 1, control_input, 1);
+    transfer.setup = selections[index];
+    queue.submit(transfer);
+    require(queue.poll(bus, context).empty() && queue.pending() == 1,
+            "Automatic selection SETUP alone does not complete a control URB");
+    require(queue.poll(bus, context).empty() && queue.pending() == 1,
+            "Actual one-byte DATA1/ACK still requires its opposite-direction status");
+    const auto completed = queue.poll(bus, context);
+    const auto value = static_cast<std::uint8_t>(index == 0 ? 1 : 0);
+    const UsbTransferCompletion expected{.sequence = index + 1,
+                                         .status = UsbTransferStatus::success,
+                                         .transferred = 1,
+                                         .input = {value},
+                                         .input_direction = true};
+    require(completed.size() == 1 && completed.front() == expected && queue.pending() == 0 &&
+                !queue.faulted(),
+            "Only actual selection data and DATA1/ZLP status complete this exact host transfer");
+  }
 }
 
 void test_no_data_control_and_reset_unknownness() {
@@ -241,6 +268,7 @@ int main() {
     test_control_both_directions();
     test_cancel_snapshot_and_unknowns();
     test_invalid_admission_and_context();
+    test_automatic_selection_transfers();
     test_no_data_control_and_reset_unknownness();
     std::cout << "Verified MCU-backed host control/bulk packet ownership, NAK/ACK/status, FIFO, "
                  "cancellation and replay; no host attachment claim.\n";

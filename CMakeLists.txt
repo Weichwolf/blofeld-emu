@@ -3039,6 +3039,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-usb-configuration-status-test test/usb_configuration_status_test.cpp)
   target_link_libraries(blofeld-usb-configuration-status-test PRIVATE blofeld_core)
   add_test(NAME usb_configuration_status COMMAND blofeld-usb-configuration-status-test)
+  add_executable(blofeld-usb-standard-read-test test/usb_standard_read_test.cpp)
+  target_link_libraries(blofeld-usb-standard-read-test PRIVATE blofeld_mcu)
+  add_test(NAME usb_standard_read COMMAND blofeld-usb-standard-read-test)
   add_executable(blofeld-usb-isr-test test/usb_isr_test.cpp)
   target_link_libraries(blofeld-usb-isr-test PRIVATE blofeld_core)
   add_test(NAME usb_cpu_isr COMMAND blofeld-usb-isr-test)
@@ -3313,7 +3316,7 @@ add_custom_target(quality
     blofeld-clock-test blofeld-sci-test blofeld-sci-reference-test
     blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
-    blofeld-usb-configuration-status-test
+    blofeld-usb-configuration-status-test blofeld-usb-standard-read-test
     blofeld-mcu-sender-test
     blofeld-flash-config-test blofeld-original-flash-config-test
     blofeld-flash-test blofeld-flash-stop-test blofeld-original-flash-stop-test

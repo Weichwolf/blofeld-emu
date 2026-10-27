@@ -15,6 +15,8 @@ void McuUsb::reset_endpoints() {
   }
   ique_controls_.fill(0);
   pending_in_.reset();
+  automatic_read_.reset();
+  pending_address_.reset();
   control_phase_known_ = false;
   constexpr unsigned reset_flags =
       usb::suspend_change | usb::reset_change | usb::setup_overrun | usb::setup;

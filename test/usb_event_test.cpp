@@ -217,9 +217,9 @@ void test_setup_buffers_overrun_and_explicit_limits() {
          "Cleared SETUP invalidates buffer reads despite retained bytes");
   usb.write({.address = status + 1, .value = overrun_flag});
   require(usb.interrupt_sources() == 0, "SETOVR W1C clears its independent sticky event");
-  constexpr std::array<std::uint8_t, 8> automatic_address{0, 5, 7, 0, 0, 0, 0, 0};
-  reject([&usb, &automatic_address] { static_cast<void>(usb.receive_setup(automatic_address)); },
-         "Automatic standard requests remain explicit failures until their protocol engine exists");
+  constexpr std::array<std::uint8_t, 8> automatic_status{0x80, 0, 0, 0, 0, 0, 2, 0};
+  reject([&usb, &automatic_status] { static_cast<void>(usb.receive_setup(automatic_status)); },
+         "Unimplemented automatic GET_STATUS remains a visible failure");
   constexpr std::array<std::uint8_t, 8> optional_descriptor{0, 7, 0, 1, 0, 0, 2, 0};
   require(usb.receive_setup(optional_descriptor) == blofeld::UsbResponse::ack &&
               usb.interrupt_sources() == 0,

@@ -165,6 +165,56 @@ void test_setup_cpu_response_and_completion_irq() {
   require(!cpu.pending_interrupt(), "The OUT completion ISR clears TFRC and releases DVALID");
 }
 
+void complete_automatic_irq(blofeld::Hc12 &cpu, const unsigned vector) {
+  const auto accepted = cpu.step();
+  require(!accepted.instruction_executed && accepted.interrupt_vector == vector,
+          "Automatic control completion enters its literal native UF32 vector");
+  for (unsigned index = 0; index < 3; ++index) { cpu.step(); }
+  verify_restored(cpu);
+  require(!cpu.pending_interrupt(), "Native W1C/RTI clears exactly this completed transaction");
+}
+
+void test_automatic_control_irqs() {
+  const auto flash = firmware();
+  blofeld::McuBus bus(flash);
+  prepare(bus);
+  bus.write(interrupt_mask + 1, 1);
+  constexpr unsigned out_control = 0x316;
+  constexpr unsigned enabled = 0x10;
+  bus.write(endpoint_control, enabled);
+  bus.write(out_control, enabled);
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  cpu.set_state(initial);
+  constexpr unsigned decoded_address = 37;
+  constexpr std::array<std::uint8_t, 8> set_address{0, 5, decoded_address, 0, 0, 0, 0, 0};
+  require(bus.receive_usb_setup(set_address) == blofeld::UsbResponse::ack &&
+              !cpu.pending_interrupt(),
+          "Hardware SET_ADDRESS does not enter the enabled firmware SETUP ISR");
+  auto response = bus.request_usb_in(blofeld::UsbBuffer::control_in);
+  require(response.response == blofeld::UsbResponse::data && response.size == 0 && response.data1,
+          "Address status uses actual DATA1/ZLP without firmware payload");
+  bus.finish_usb_in(false);
+  require(!cpu.pending_interrupt(), "Lost status ACK produces no native completion");
+  response = bus.request_usb_in(blofeld::UsbBuffer::control_in);
+  require(response.response == blofeld::UsbResponse::data && response.size == 0 && response.data1,
+          "Unacknowledged status retries retain their packet");
+  bus.finish_usb_in(true);
+  complete_automatic_irq(cpu, input_vector);
+  constexpr std::array<std::uint8_t, 8> get_configuration{0x80, 8, 0, 0, 0, 0, 1, 0};
+  require(bus.receive_usb_setup(get_configuration) == blofeld::UsbResponse::ack &&
+              !cpu.pending_interrupt(),
+          "GET_CONFIGURATION uses addressed hardware state without a firmware SETUP IRQ");
+  response = bus.request_usb_in(blofeld::UsbBuffer::control_in);
+  require(response.response == blofeld::UsbResponse::data && response.size == 1 && response.data1 &&
+              response.data[0] == 0,
+          "Addressed unconfigured device returns literal configuration zero");
+  bus.finish_usb_in(true);
+  complete_automatic_irq(cpu, input_vector);
+  require(bus.receive_usb_out({.data = {}, .data1 = true}) == blofeld::UsbResponse::ack,
+          "Hardware read status completes through the actual OUT endpoint");
+  complete_automatic_irq(cpu, output_vector);
+}
+
 void test_priority_and_quittances_across_usb_sources() {
   auto flash = firmware();
   constexpr std::array<unsigned, 4> vectors{0xffd4, 0xffd2, 0xffd0, 0xffbe};
@@ -234,6 +284,7 @@ void test_priority_and_quittances_across_usb_sources() {
 int main() {
   try {
     test_setup_cpu_response_and_completion_irq();
+    test_automatic_control_irqs();
     test_priority_and_quittances_across_usb_sources();
     std::cout << "USB events through HC12 setup/completion ISRs, priority and RTI checks passed\n";
     return 0;

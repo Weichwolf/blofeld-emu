@@ -66,7 +66,7 @@ struct UsbEndpointInfo {
   std::optional<bool> data1; // Unknown after an unqualified endpoint reset.
 };
 
-// USB20D6E2F register/buffer side, including decoded configuration status/ACK.
+// USB20D6E2F register/buffer side, including decoded address/configuration/interface control.
 // Wire decoding, other automatic standard requests,
 // high-speed packets and IQUE data remain unsupported.
 class McuUsb {
@@ -90,6 +90,7 @@ public:
   [[nodiscard]] UsbEndpointInfo host_endpoint(std::uint8_t address) const;
   [[nodiscard]] UsbConfigurationInfo host_configuration() const;
   [[nodiscard]] bool host_suspended() const;
+  [[nodiscard]] std::uint8_t host_address() const;
 
   [[nodiscard]] UsbHostEvidence host_evidence() const { return host_evidence_; }
 
@@ -112,6 +113,12 @@ private:
     UsbInPacket packet;
   };
 
+  struct AutomaticRead {
+    std::uint8_t value = 0;
+    bool status = false;
+    bool error = false;
+  };
+
   [[nodiscard]] unsigned selected_register() const;
   [[nodiscard]] static unsigned buffer_index(UsbBuffer buffer);
   [[nodiscard]] unsigned window_buffer(std::uint16_t offset) const;
@@ -131,6 +138,12 @@ private:
   [[nodiscard]] unsigned maximum_packet(unsigned index) const;
   [[nodiscard]] std::optional<UsbConfigurationRequest>
   decode_configuration_setup(const std::array<std::uint8_t, 8> &data) const;
+  [[nodiscard]] std::optional<AutomaticRead>
+  decode_read_setup(const std::array<std::uint8_t, 8> &data) const;
+  [[nodiscard]] std::optional<std::uint8_t>
+  decode_address_setup(const std::array<std::uint8_t, 8> &data) const;
+  [[nodiscard]] UsbInPacket request_automatic_in();
+  [[nodiscard]] UsbInPacket request_local_in(UsbBuffer endpoint, unsigned maximum);
   UsbResponse stall_response(unsigned index);
   std::array<std::uint32_t, 7> configuration_{};
   UsbHostEvidence host_evidence_;
@@ -153,6 +166,9 @@ private:
   bool setup_stall_ = false;
   bool control_phase_known_ = true;
   bool configuration_control_ = false;
+  std::optional<AutomaticRead> automatic_read_;
+  std::optional<std::uint8_t> pending_address_;
+  std::uint8_t device_address_ = 0;
   std::array<std::uint8_t, 4> alternate_{};
 };
 

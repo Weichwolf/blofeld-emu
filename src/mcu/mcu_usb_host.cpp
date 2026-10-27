@@ -7,6 +7,11 @@
 #include <optional>
 
 namespace blofeld {
+std::uint8_t McuUsb::host_address() const {
+  require_link();
+  return device_address_;
+}
+
 UsbEndpointInfo McuUsb::host_endpoint(const std::uint8_t address) const {
   constexpr unsigned number_mask = 15;
   constexpr unsigned input_bit = 0x80;

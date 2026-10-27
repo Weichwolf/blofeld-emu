@@ -1,0 +1,42 @@
+Decoded USB automatic address and selection requests
+
+  cmake --build --preset strict --target blofeld-usb-standard-read-test blofeld-usb-isr-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(usb_standard_read|usb_events|usb_configuration_status|usb_cpu_isr)$'
+
+USB20D6E2F 4.2.5.1 assigns standard command decoding to hardware, excluding
+GET_DESCRIPTOR and class/vendor requests. USB2.0 9.4.2/9.4.4/9.4.6 define the
+returned selection bytes and delayed address commit. Both primary archives
+are pinned in hardware/sources.json; manufacturer assets remain local.
+
+SET_ADDRESS1..127 supplies actual DATA1/ZLP status and commits only on host
+ACK. host_address() is read-only transport metadata. Zero/out-of-range,
+malformed or configured-state address requests fail visibly at unspecified
+boundaries. Functional/external reset cancels pending transfers and resets
+the device address; endpoint-only reset cancels its phase, retaining address.
+
+GET_CONFIGURATION requires addressed/configured state and returns the retained
+selection. GET_INTERFACE returns the selected alternate; missing/unconfigured
+interfaces ACK SETUP then STALL data/status as Request Error. Malformed fields,
+unresolved interface-count boundaries and pending firmware SETUP/configuration
+overlap fail. Class/vendor numbers still reach firmware unchanged.
+
+Read responses use one DATA1 byte independently of FIFO bytes/DVALID/TXSIZ.
+Lost ACKs and other tokens retain the response. Only ACK advances to status
+OUT; its actual DATA1/ZLP and duplicate suppression use general endpoint
+rules. New SETUP and reset cancel ownership. DVALID/TFRC/TCIE effects follow
+the general 3.1.9/3.1.10 register contract; physical automatic-transaction
+effects and timing remain unverified.
+
+Independent model cases cover648 read combinations,2550 malformed fields,
+254 address cases,760 request errors and1404 address refusals with trusted
+copies. Forty count cases retain the unresolved interface-count boundary;
+23 address cuts distinguish reset domains, new SETUP and suspend/resume.
+Eight class/vendor cases retain firmware ownership of request numbers8/10.
+The native own fixture composes address status, configuration read
+and status OUT through actual FFCE/FFCC/W1C/RTI, preserving every interrupted
+register. Existing original reset/configuration/USTB/NISOF checks remain strict.
+
+This decoded command layer does not qualify token address filtering, the
+SET_ADDRESS recovery interval, wire timing, USB/IP/kernel address reconciliation,
+original normal enumeration, host USB-MIDI, full MCU/DSP boot or real hardware.
+GET_STATUS and other automatic commands remain visible unsupported operations.
