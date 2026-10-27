@@ -1,0 +1,40 @@
+Native long absolute JMP in the automatic pipeline
+
+The automatic_memory profile accepts JMP with absolute EA110000, opcode0af080
+and its actual second program word. DSP56300FM Rev5 sections4.4,12.5.1 and13-83
+define the encoding/address; tableA-1 gives normal3 plus long-absolute1 periods.
+The existing F1/F2/Decode/AG1/AG2/E1/E2 reference contract uses one refill hold.
+This is declared nominal timing,not measured silicon stage/sample placement.
+
+AG1 reads its owned F2 opcode/extension pair and predicts program fetch only.
+Genuine native E1 consumes those same captured words; native E2 must confirm
+the full target,redirect and OMR context. No host supplies architectural PC,
+register effects or a program-word response. Absolute control reads no Rn tuple
+or OMR condition. Older genuine OMR writes still update its execution context.
+
+Wrong word width/value/adjacency/identity,target mismatch or false taken flags
+reject before forecast mutation. Other JMP EA modes remain unsupported except
+the previously qualified direct Rn mode. Unknown target reads remain strict
+contextual failures. Active DO overlap explicitly refuses while its timing
+remains unqualified; cache/IRQ modes retain their existing strict gates.
+
+  cmake --build --preset strict --target blofeld-absolute-jump-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_absolute_jump$'
+
+Own programs check literal full native state and 4-period jump/1-period NOP
+counts for cold/filled,ROM/RAM,self and sequential targets. Trusted continuations
+cover opcode/extension capture,AG1,target reads and retirement. Altered current
+RAM cannot replace a previously captured extension; a later real target F2 does
+observe new contents. A legal ANDI opcode at the branch's own extension address
+requires a fresh target F2 and retains independent JMP/ANDI/NOP effects.
+
+Seven invalid-pair cases,an unfetched extension and an unmapped target verify
+failure paths. Two independent cold native owners run concurrently. Existing
+OMR branches additionally cover absolute control after genuine OMR publication.
+A local coupled WAI variant exercises the long form through actual MCU idle,
+IRQ wake and RTI; the standard public WAI fixture retains its short BRA loop.
+
+Reference identity/scope: dsp-control-reference.json. Manufacturer assets and
+detailed analysis remain local. This supporting instruction coverage does not
+establish authentic ROM,physical board timing,complete original startup or
+normal MIDI/audio/storage/update/recovery/real-device acceptance.

@@ -1516,6 +1516,11 @@ if(BUILD_TESTING)
   set_tests_properties(dsp_vm_info PROPERTIES TIMEOUT 120)
   add_test(NAME dsp_ccr_control COMMAND blofeld-ccr-control-test)
   add_test(NAME dsp_indirect_control COMMAND blofeld-indirect-control-test)
+  add_executable(blofeld-absolute-jump-test test/dsp_absolute_jump_test.cpp)
+  target_link_libraries(blofeld-absolute-jump-test PRIVATE blofeld_dsp blofeld_dsp_native Threads::Threads)
+  add_test(NAME dsp_absolute_jump COMMAND blofeld-absolute-jump-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/dsp-absolute-jump.trace")
+  set_tests_properties(dsp_absolute_jump PROPERTIES TIMEOUT 120)
   add_test(NAME dsp_control_composition COMMAND blofeld-control-composition-test)
   add_test(NAME dsp_control_guards COMMAND blofeld-control-guard-test)
   add_executable(blofeld-original-clocked-frontier-test test/dsp_original_clocked_frontier_test.cpp)
@@ -3116,6 +3121,7 @@ add_custom_target(quality
     blofeld-program-memory-test blofeld-program-memory-clock-test blofeld-program-memory-guard-test
     blofeld-relative-branch-test blofeld-relative-branch-guard-test
     blofeld-ccr-control-test blofeld-indirect-control-test blofeld-control-composition-test
+    blofeld-absolute-jump-test
     blofeld-control-guard-test blofeld-document-loader-entry-test
     blofeld-omr-native-test blofeld-omr-clock-test blofeld-omr-branch-test
     blofeld-omr-peripheral-test blofeld-omr-memory-test blofeld-omr-thread-test

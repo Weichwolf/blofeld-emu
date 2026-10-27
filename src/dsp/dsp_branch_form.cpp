@@ -18,8 +18,11 @@ std::optional<DspBranchForm> decode_branch_form(const std::uint32_t opcode) {
   }
   if (first == dsp56k::Jmp_ea) {
     constexpr unsigned direct = 4;
-    if (dsp56k::getFieldValue(first, dsp56k::Field_MMM, opcode) != direct) { return std::nullopt; }
+    constexpr unsigned extended = 6;
+    const auto mode = dsp56k::getFieldValue(first, dsp56k::Field_MMM, opcode);
     const auto reg = dsp56k::getFieldValue(first, dsp56k::Field_RRR, opcode);
+    if (mode == extended && reg == 0) { return DspBranchForm{.absolute_extension = true}; }
+    if (mode != direct) { return std::nullopt; }
     return DspBranchForm{.address_register = static_cast<std::uint8_t>(reg)};
   }
   if (first == dsp56k::Bra_xxx) {

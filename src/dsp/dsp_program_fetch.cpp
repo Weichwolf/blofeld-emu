@@ -438,9 +438,15 @@ void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
   const auto form = decode_branch_form(decision.word.value);
   const bool one_word = form && (form->displacement || form->address_register);
+  if (form && form->absolute_extension && loop_ && (loop_->depth() != 0 || loop_->pending() != 0)) {
+    throw Fault("Unqualified absolute JMP/active DO read P:" + hex(decision.word.address, 6) +
+                " pc=" + hex(decision.word.address, 6) + " omr=" + hex(decision.omr, 6));
+  }
   if (!state_.active || branch_ || opening_ ||
       decision.omr != execution_omr(select(decision.word.address, identity)) ||
       decision.next_pc > word_mask || decision.extension.has_value() == one_word ||
+      (form && form->absolute_extension &&
+       (!decision.taken || !decision.extension || decision.next_pc != decision.extension->value)) ||
       (decision.extension &&
        decision.extension->address != ((decision.word.address + 1) & word_mask))) {
     throw Fault("Unavailable native branch AG1 read P:" + hex(decision.word.address, 6) +

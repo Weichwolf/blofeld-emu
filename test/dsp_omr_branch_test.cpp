@@ -23,6 +23,7 @@ constexpr unsigned sr_move = 0x05f439;
 constexpr unsigned seed_x1 = 0x45f400;
 constexpr unsigned seed_r0 = 0x60f400;
 constexpr unsigned direct = 0x0ae080;
+constexpr unsigned absolute = 0x0af080;
 constexpr unsigned switched_omr = 0x389;
 constexpr unsigned body = boot + 6;
 constexpr unsigned writer = body + 1;
@@ -159,17 +160,18 @@ int main() {
       const bool set = (value & 0x80U) != 0;
       for (const auto input : {Case{.opcode = direct, .words = 1, .taken = true, .omr = value},
                                Case{.opcode = relative, .words = 1, .taken = true, .omr = value},
+                               Case{.opcode = absolute, .words = 2, .taken = true, .omr = value},
                                Case{.opcode = jset, .words = 2, .taken = set, .omr = value},
                                Case{.opcode = jclr, .words = 2, .taken = !set, .omr = value}}) {
         one_case(input);
       }
     }
-    for (const auto opcode : {jset, jclr}) {
+    for (const auto opcode : {jset, jclr, absolute}) {
       for (unsigned cut = 4; cut <= 9; ++cut) {
-        one_case({.opcode = opcode, .words = 2, .taken = opcode == jset, .omr = switched_omr}, cut);
+        one_case({.opcode = opcode, .words = 2, .taken = opcode != jclr, .omr = switched_omr}, cut);
       }
     }
-    std::cout << "12 OMR-to-branch streams and 24 trusted suffixes passed\n";
+    std::cout << "15 OMR-to-branch streams and 36 trusted suffixes passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

@@ -2762,6 +2762,11 @@ Native CCR, direct register-indirect and OMR control:
   native architectural effects and three nominal units. Direct control keeps
   its descriptor through both target Decode and native E2. Other control
   selectors/addressing modes and invalid ownership remain visible refusals.
+- Long absolute JMP owns a genuine F2 opcode/extension pair and native
+  architectural result. Full24-bit,self,sequential,own-extension targets,
+  mutable RAM,invalid pairs,unknown targets and two cold owners are checked
+  (dsp-absolute-control.txt). This does not qualify other addressing modes,
+  active loop/cache/IRQ timing,authenticROM or full original boot.
 - Directed private proof covers528CCR masks,144indirect/RNM hazard cases,
   28trusted suffixes,five compositions and field/refusal checks.41unchanged
   vendor-model windows/403literal register states qualify nominal costs and

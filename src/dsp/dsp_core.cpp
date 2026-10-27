@@ -1578,7 +1578,7 @@ void DspCore::hold_pipeline_loop(const DspFetchedWord word) {
 void DspCore::hold_pipeline_branch(const DspFetchedWord word) {
   static_cast<void>(pipeline_fetched_word(0));
   const auto form = decode_branch_form(word.word.value);
-  if (!form || form->displacement || form->address_register) {
+  if (!form || form->displacement || form->address_register || form->absolute_extension) {
     throw Fault("OMR branch barrier requires its actual two-word F2 instruction");
   }
   auto &fetch = impl_->native.reference().fetch();
@@ -1842,7 +1842,7 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
   } else {
     if (!captured.extension) { throw Fault("Native branch lost its actual F2 extension"); }
     const auto extension = captured.extension->word;
-    const bool taken = (((omr >> form->bit) & 1U) != 0) == form->set;
+    const bool taken = form->absolute_extension || ((((omr >> form->bit) & 1U) != 0) == form->set);
     decision.extension = extension;
     decision.next_pc = taken ? extension.value : ((extension.address + 1) & word_mask);
     decision.taken = taken;

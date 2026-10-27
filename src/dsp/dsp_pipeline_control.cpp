@@ -82,7 +82,7 @@ bool DspInstructionPipeline::capture_omr_branch(DspMachine &machine) {
   const auto ag1 = view.cycle.ag1;
   const auto form = ag1 ? decode_branch_form(ag1->value) : std::nullopt;
   const auto older = view.cycle.ag2;
-  if (!form || form->displacement || form->address_register || !older ||
+  if (!form || form->displacement || form->address_register || form->absolute_extension || !older ||
       !decode_omr_move(older->value)) {
     return false;
   }
@@ -104,7 +104,8 @@ void DspInstructionPipeline::follow_omr_retirement(const DspReferenceCycleResult
     return;
   }
   const auto form = decode_branch_form(branch->word.value);
-  if (branch->omr != effect->omr || !form || (!form->displacement && !form->address_register)) {
+  if (branch->omr != effect->omr || !form ||
+      (!form->displacement && !form->address_register && !form->absolute_extension)) {
     throw Fault("Pending branch lacks its actual older OMR execution context");
   }
   branch->omr = effect->next_omr;

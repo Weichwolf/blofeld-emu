@@ -3,8 +3,8 @@ CCR and direct register-indirect control
 
 The automatic reference frontend executes native ANDI #imm,CCR and JMP (Rn).
 ANDI accepts only the documented CCR selector; other control selectors remain
-unsupported. All eight direct Rn fields are one-word instructions. Other JMP
-addressing modes remain unsupported. Native execution owns architectural
+unsupported. All eight direct Rn fields are one-word instructions. Long absolute JMP with its actual second word is also supported
+(dsp-absolute-control.txt); other JMP addressing modes remain unsupported. Native execution owns architectural
 PC, SR, register and stack effects. Frontend forecasts control only actual
 instruction fetch and must agree with genuine native retirement.
 
@@ -40,8 +40,8 @@ Blofeld firmware startup or complete instrument acceptance.
 
 A separate local diagnostic transfers the unchanged 94-word first-stage frame
 from firmware 1.25 through actual SPI/P stores, verifies every word and retires
-the genuine loader JMP and first received instruction. It now stops at REP
-Decode, before the older staged OMR and following accumulator MOVE retire.
+the genuine loader JMP and first received instruction. The retained original
+stage has a strict unresolved Y:002000 memory-write boundary.
 Valid SPI words are supplied between completed DSP periods; calibrated MCU
 scheduling and physical pin timing are not established. Reserved/ROM writes
 are never discarded. See dsp-omr.txt and dsp-accumulator-transfers.txt.

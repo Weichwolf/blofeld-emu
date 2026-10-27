@@ -46,5 +46,28 @@
     "compositions": 5,
     "document_loader_to_received_program_continuations": 2
   },
-  "full_original_firmware_boot_qualified": false
+  "full_original_firmware_boot_qualified": false,
+  "absolute_jump": {
+    "opcode": "0x0af080",
+    "EA_field": "110000",
+    "words": 2,
+    "source": "DSP56300FM Rev5 sections4.4/12.5.1/13-83 and tableA-1",
+    "nominal_periods": 4,
+    "timing_basis": "T3+long_absolute1,internal-memory/no-interlock reference contract;not measured silicon stages",
+    "native_scope": {
+      "literal_paths": 16,
+      "trusted_suffixes": 22,
+      "mutable_RAM_cases": 2,
+      "invalid_pair_cases": 7,
+      "missing_extension": 1,
+      "unmapped_target": 1,
+      "cold_owners": 2,
+      "own_extension_target": 1,
+      "OMR_streams": 15,
+      "OMR_suffixes": 36,
+      "private_absolute_WAI_cases": 13
+    },
+    "native_processor_libraries_modified": false,
+    "full_original_firmware_boot_qualified": false
+  }
 }

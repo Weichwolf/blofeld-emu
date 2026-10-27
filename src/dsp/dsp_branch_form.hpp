@@ -13,6 +13,7 @@ struct DspBranchForm {
   // A signed short displacement is retained as a sign-extended 24-bit word.
   std::optional<std::uint32_t> displacement = std::nullopt;
   std::optional<std::uint8_t> address_register = std::nullopt;
+  bool absolute_extension = false;
 };
 
 // An early frontend decision, never an architectural CPU result or bus response.

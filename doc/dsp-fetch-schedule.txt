@@ -55,8 +55,9 @@ unqualified entry. At the declared 12MHz OSC, the 1024-edge RTI endpoint is
 retirements and full accumulator results continue throughout those intervals.
 A native reserved-Y store during WAI preserves only consumed peer periods;
 faulted native execution and MCU/DSP capture reject. This is not joint recovery.
-Long absolute JMP automatic decode remains outside the currently qualified
-forms; this fixture uses the independently checked short BRA loop.
+The standard WAI fixture uses the independently checked short BRA loop.
+Long absolute JMP now has separate native/ownership coverage
+(dsp-absolute-control.txt); its coupled WAI precursor is retained locally.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-reset-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_reset$'

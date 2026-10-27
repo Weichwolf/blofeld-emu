@@ -30,6 +30,11 @@ void fields() {
         require(form && form->address_register == reg && !form->displacement &&
                     pipeline_word_count({.address = base, .value = opcode}) == 1,
                 "Direct mode admits every literal R field as one actual word");
+      } else if (mode == 6 && reg == 0) {
+        require(form && form->absolute_extension && !form->address_register &&
+                    !form->displacement &&
+                    pipeline_word_count({.address = base, .value = opcode}) == 2,
+                "Absolute EA110000 requires its genuine second instruction word");
       } else {
         require(!form, "Other JMP addressing modes retain visible unsupported status");
       }
@@ -113,9 +118,9 @@ int main() {
   try {
     fields();
     for (const unsigned selector : {0U, 2U, 3U}) { refuse_decode(and_immediate | selector); }
-    for (const unsigned mode : {0U, 1U, 2U, 3U, 5U, 6U, 7U}) {
-      refuse_decode(jump_ea | (mode << 11U));
-    }
+    for (const unsigned mode : {0U, 1U, 2U, 3U, 5U, 7U}) { refuse_decode(jump_ea | (mode << 11U)); }
+    constexpr unsigned immediate = 0x0af480;
+    refuse_decode(immediate);
     for (unsigned variant = 0; variant < 3; ++variant) { ownership(variant); }
     one_word();
     std::cout << "64 control fields,ten Decode refusals,three ownership refusals and one-F2 R0 "
