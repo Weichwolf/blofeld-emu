@@ -1,0 +1,57 @@
+{
+  "description": "External private-service reference tools; not emulator linked dependencies or system installation. Base PipeWire/SPA libraries on the observed Debian host are 1.4.2-1.",
+  "references": [
+    "https://docs.pipewire.org/page_module_protocol_pulse.html",
+    "https://pipewire.pages.freedesktop.org/wireplumber/daemon/configuration/features.html"
+  ],
+  "packages": [
+    {
+      "filename": "libpipewire-0.3-common_1.4.2-1_all.deb",
+      "size": 84032,
+      "sha256": "d8c9e3d1b462d591bc71e6369079b9eb14a14a45cb3212cb5d70d8016e722b7c",
+      "url": "http://deb.debian.org/debian/pool/main/p/pipewire/libpipewire-0.3-common_1.4.2-1_all.deb"
+    },
+    {
+      "filename": "libpipewire-0.3-modules_1.4.2-1_amd64.deb",
+      "size": 809764,
+      "sha256": "ee9a07d97d80369a7377b83bdfbc5178d80dd76a49b3df5bff294b878b9afa53",
+      "url": "http://deb.debian.org/debian/pool/main/p/pipewire/libpipewire-0.3-modules_1.4.2-1_amd64.deb"
+    },
+    {
+      "filename": "pipewire-bin_1.4.2-1_amd64.deb",
+      "size": 600352,
+      "sha256": "ac30a24f7efc42afff5269b02c5a65068eb7ebba65f1d7749bd7737986de0d17",
+      "url": "http://deb.debian.org/debian/pool/main/p/pipewire/pipewire-bin_1.4.2-1_amd64.deb"
+    },
+    {
+      "filename": "pipewire-pulse_1.4.2-1_amd64.deb",
+      "size": 24696,
+      "sha256": "aa2a09bffa060f9624ffdaf06cde07431a232f19d39802a9636ae941b343a3fc",
+      "url": "http://deb.debian.org/debian/pool/main/p/pipewire/pipewire-pulse_1.4.2-1_amd64.deb"
+    },
+    {
+      "filename": "pipewire_1.4.2-1_amd64.deb",
+      "size": 117876,
+      "sha256": "36b7421700912553db2acda062d7a171de097302be28dfc858a82e5f2f77dbda",
+      "url": "http://deb.debian.org/debian/pool/main/p/pipewire/pipewire_1.4.2-1_amd64.deb"
+    },
+    {
+      "filename": "wireplumber_0.5.8-2_amd64.deb",
+      "size": 106952,
+      "sha256": "51ccbcec6479c292b10295136ede4f4514de019271c463fd89f66ab9ee428106",
+      "url": "http://deb.debian.org/debian/pool/main/w/wireplumber/wireplumber_0.5.8-2_amd64.deb"
+    },
+    {
+      "filename": "libwireplumber-0.5-0_0.5.8-2_amd64.deb",
+      "size": 277024,
+      "sha256": "5c310aeeaaac058fead3f4db155a72acc77879da4eb0555b2a5424b34bd46fff",
+      "url": "http://deb.debian.org/debian/pool/main/w/wireplumber/libwireplumber-0.5-0_0.5.8-2_amd64.deb"
+    },
+    {
+      "filename": "liblua5.4-0_5.4.7-1+b2_amd64.deb",
+      "size": 146640,
+      "sha256": "3456e23667f21a5bea4f2182ec878621bf4c47fbc9819fdaad8835d6d1ee6247",
+      "url": "http://deb.debian.org/debian/pool/main/l/lua5.4/liblua5.4-0_5.4.7-1%2bb2_amd64.deb"
+    }
+  ]
+}

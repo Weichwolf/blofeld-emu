@@ -3517,3 +3517,12 @@ if(BUILD_TESTING)
   set_tests_properties(dsp_modifier_agu PROPERTIES TIMEOUT 120)
   add_dependencies(quality blofeld-modifier-agu-test)
 endif()
+
+# The alternate host service is isolated from all user and physical audio devices.
+if(BUILD_TESTING)
+  add_test(NAME host_audio_pipewire COMMAND ${Python3_EXECUTABLE} -B
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio_pipewire.py"
+    $<TARGET_FILE:blofeld-host-audio-test> $<TARGET_FILE:blofeld-audio-runtime-test>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio-pipewire")
+  set_tests_properties(host_audio_pipewire PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+endif()

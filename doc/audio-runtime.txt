@@ -114,8 +114,11 @@ Remaining acceptance
 The normal Keyboard/Desktop entry point has no qualified complete board profile,
 and does not yet instantiate this bridge automatically. Actual original1.25
 boot, MIDI voice audio, sustained performance, physical clock/pin mapping,
-PipeWire, ordinary sink rewind/device moves and real-device equivalence remain
-unqualified. Transport success never substitutes for those requirements.
+PipeWire suspension, ordinary sink rewind/active device moves and real-device
+equivalence remain unqualified. The separate host_audio_pipewire case covers
+an8192-frame paced worker stream against a private PipeWire1.4.2 null sink
+(host-audio.txt). Transport success never substitutes for normal instrument
+or realtime qualification.
 
 TSan supervision allows90 seconds for each board subprocess and300 seconds for
 its complete integration test. This accounts for instrumented native owner

@@ -99,14 +99,19 @@ Host audio output                partial  Native client plus bounded SPSC handof
                                           private monitor: all 4096 frames match
                                           independent equations, in 32 complete
                                           streams (dsp-voice-audio.txt). Normal
-                                          startup/live production, PipeWire,
+                                          startup/live production,
                                           in-flight device moves/rewinds and
                                           sustained realtime behavior remain
                                           unqualified. Client format/rate/layout
                                           and actual buffer readback, automatic
                                           minimum requests and actual-target
                                           worker readiness have scoped native
-                                          checks. Coalesced source wake and
+                                          checks. Private PipeWire1.4.2 checks
+                                          cover actual request grants, corked
+                                          routes, exact native PCM, an8192-frame
+                                          worker and bounded service failures.
+                                          PipeWire suspension remains open
+                                          (host-audio.txt). Coalesced source wake and
                                           immediate backlog transfer retain the
                                           full paced8192-frame stream without
                                           underrun; deliberate faults still fail. Private corked-stream moves

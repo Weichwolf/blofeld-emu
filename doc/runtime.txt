@@ -24,8 +24,10 @@ paths. Kernel/service behavior on this development host is not a universal
 limit. The native session adapter now validates client PCM/rate/layout and actual
 buffer grants, observes device/suspend state and starts its worker from actual
 target dimensions (host-audio.txt). Private corked-stream route/suspend controls
-are qualified; active device moves, rewinds, PipeWire and normal profile/status
-binding remain open. host-midi-port.txt records the separate sequencer evidence.
+are qualified under Pulse17; PipeWire1.4.2 has separate corked-route, actual-grant
+and finite-worker checks (host-audio.txt). PipeWire suspension, active device
+moves, rewinds and normal profile/status binding remain open.
+host-midi-port.txt records the separate sequencer evidence.
 
 USB remains MIDI-only. Do not add USB Audio descriptors, endpoints or a virtual
 USB sound card. Host audio playback is independent of the emulated USB link.
@@ -58,7 +60,8 @@ remain unqualified. The separate session adapter and bounded AudioRuntime worker
 have native DSP/ESAI-to-private-service tests (host-audio.txt, audio-runtime.txt).
 The reference board can bind that worker without changing native state/ticks;
 restore retires the external stream. Normal startup/profile wiring, sustained
-original firmware audio and PipeWire playback remain pending. Conditional
+original firmware audio remain pending. Directed private PipeWire playback
+does not establish that runtime. Conditional
 original MCU/DSP MIDI/F4 fixtures and serial PCM/WAV gates are component evidence.
 The reference API also admits owned ALSA sequencer input through a common-time
 SCI wire during POR/WAI; restore retires its host session (host-midi-session.txt).

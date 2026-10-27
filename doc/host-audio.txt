@@ -4,8 +4,8 @@ HostAudioOutput is a separate ordinary-host-thread adapter. Empty server selects
 the normal session server and default output using the native PulseAudio client
 API. PipeWire's pulse protocol service supports this API. No exclusive hardware
 device, USB Audio function, daemon autospawn or host synthesizer is involved.
-The current integration test uses PulseAudio 17; PipeWire playback is not yet
-tested. Normal standalone firmware/runtime wiring remains pending.
+Directed private-service tests cover PulseAudio17 and PipeWire1.4.2, with
+different qualifications below. Normal standalone firmware/runtime wiring remains pending.
 
 Original voice/copy/mix/master plus DMA/ESAI now feeds a separate offline worker
 integration with an exact private monitor (dsp-voice-audio.txt). Its declared
@@ -102,8 +102,39 @@ matches all256 frames exactly once in the private monitor for each preference.
 Artifacts retain actual snapshots, captures and failures below build/Testing.
 Separate ASan/UBSan and TSan qualify the affected service/worker consumers.
 This does not qualify in-flight audio moves, resampler output, rewinds, timing
-accuracy or PipeWire. The adapter's snapshots remain confined to its worker;
+accuracy or PipeWire suspension. The adapter's snapshots remain confined to its worker;
 forwarding that metadata through normal standalone/profile status is pending.
+
+Alternate-service qualification
+  cmake --build --preset strict --target blofeld-host-audio-test blofeld-audio-runtime-test
+  ctest --test-dir build/strict -R '^host_audio_pipewire$' --output-on-failure
+Use the separate thread preset for TSan. The test needs PipeWire, WirePlumber0.5
+with its policy profile, pactl and parec; absent tools skip explicitly with77.
+It starts its own Pulse-protocol daemon, policy-only session manager and null
+sinks below a private runtime/config/state directory. No hardware discovery,
+system installation, user-service routing or physical playback is involved.
+An optional BLOFELD_PIPEWIRE_TOOL_PREFIX selects an already extracted Debian
+reference-tool usr prefix; host-pipewire-reference.json pins URLs/sizes/hashes.
+For example, apt-get download followed by dpkg-deb --extract does not execute
+package installation scripts or activate user services. The reference daemons
+are external test oracles, not linked emulator dependencies.
+
+PipeWire1.4.2/WirePlumber0.5.8 qualifies three corked route snapshots for each
+256/513/4093-frame preference and a4093-frame case with a1024-frame minimum
+request floor. The default4093 case grants minreq960/prebuffer3134; the explicit
+floor grants1024/3070. Each post-route monitor contains all256 native DSP/ESAI
+frames exactly once. The configured source maximum/target stays granted in
+these cases; different target/maximum grants remain unqualified. A separately
+paced8192-frame worker stream and actual stopped/terminated-service failures
+exercise this backend without altering emulated clocks or source PCM.
+
+PipeWire suspend notification remains open: the unchanged Pulse17 negotiation
+test times out waiting for its expected client-suspended flag after the private
+PipeWire suspend-sink command. Successful command submission does not establish
+equivalent server state or notification semantics. That failure is retained
+locally; the original Pulse17 checks remain intact. The new route/payload tests
+do not qualify suspension, active playback moves, physical sinks, realtime
+performance or original firmware audio.
 
 Sources and sanitizers
 doc/dependencies.json pins all three inputs. CMake verifies archives offline;
