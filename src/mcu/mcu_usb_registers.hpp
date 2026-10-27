@@ -19,6 +19,9 @@ inline constexpr unsigned phy_suspend = 0x800;
 inline constexpr unsigned disconnect = 0x20;
 inline constexpr unsigned descriptor_support = 0x10;
 inline constexpr unsigned synch_frame_support = 1;
+// USB20D6E2F UMCR3.1.1: capability and power-source selection, not host enable.
+inline constexpr unsigned remote_wakeup_capable = 4;
+inline constexpr unsigned self_powered = 2;
 inline constexpr unsigned suspend_change = 0x1000;
 inline constexpr unsigned reset_change = 0x800;
 inline constexpr unsigned enumerated = 0x400;

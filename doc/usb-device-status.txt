@@ -1,0 +1,34 @@
+Decoded USB device/interface status and remote-wakeup enable
+
+  cmake --build --preset strict --target blofeld-usb-device-status-test blofeld-usb-isr-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(usb_device_status|usb_standard_read|usb_configuration_status|usb_events|usb_cpu_isr)$'
+
+USB20D6E2F 3.1.1 defines SPWR (UMCR bit1) and RWUC (bit2 capability);
+4.2.5.1 assigns standard decoding to hardware. USB2.0 9.4.1/9.4.5/9.4.9
+define device/interface GET_STATUS and DEVICE_REMOTE_WAKEUP feature state.
+Both original reference archives are pinned in hardware/sources.json.
+
+Device GET_STATUS returns two little-endian DATA1 bytes: SPWR selects bit0,
+actual host-enabled wakeup selects bit1, reserved bits are zero. Capability
+alone never enables wakeup. Interface status is zero even with a nonzero
+alternate; invalid interfaces produce Request Error, ambiguous counts refuse.
+Default-state, malformed and overlapping firmware requests fail visibly.
+Class/vendor request numbers0/1/3 still reach unchanged firmware USTB bytes.
+
+SET/CLEAR_FEATURE acts before no-data status, unlike delayed SET_ADDRESS.
+Lost/aborted status does not undo the feature. Unsupported RWUC produces
+Request Error. Bus and external module resets disable it; endpoint reset, suspend/resume
+and replacement SETUP retain it. Changing RWUC while enabled refuses because
+the internal feature lifetime under that reconfiguration is unqualified.
+
+Read data stays separate from FIFO bytes/DVALID/TXSIZ. Actual ACK/status and
+general TFRC/TCIE rules retain their document-derived qualification. Directed
+checks cover 480 read combinations,24 feature cases,5865 malformed fields,
+18 reset/replacement/suspend cases and16 admission/class/vendor guards.
+Native own SET/CLEAR/status composes real FFCE/FFCC/W1C/RTI with independent
+register/vector/data expectations. Existing original USB frontiers stay strict.
+
+No physical remote-resume waveform is generated. Endpoint GET_STATUS/halt,
+TEST_MODE, wire/PHY timing, original normal enumeration, host USB-MIDI and
+complete MCU/DSP instrument boot remain unqualified. A feature bit is not
+evidence of remote-wakeup signaling or hardware equivalence.

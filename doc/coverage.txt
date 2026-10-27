@@ -2897,3 +2897,9 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   command layer (usb-standard-control.txt). Normal original enumeration,
   USTB/NISOF conflicts, address filtering/recovery delay, USB/IP reconciliation
   and physical automatic-transfer effects remain open.
+
+- USB device/interface GET_STATUS and host remote-wakeup enable have directed
+  state/data/status/reset/Request Error checks and actual own HC12 IN/OUT
+  IRQ/W1C/RTI composition (usb-device-status.txt). Capability and host enable
+  remain distinct. Endpoint halt/status, physical resume, timing and complete
+  original enumeration/instrument/host-MIDI acceptance remain open.

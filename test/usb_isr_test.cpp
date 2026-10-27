@@ -215,6 +215,61 @@ void test_automatic_control_irqs() {
   complete_automatic_irq(cpu, output_vector);
 }
 
+void test_remote_wakeup_control_irqs() {
+  const auto flash = firmware();
+  blofeld::McuBus bus(flash);
+  prepare(bus);
+  constexpr unsigned module = 0x300;
+  constexpr unsigned clock = 0x40;
+  constexpr unsigned active = 0xc0;
+  constexpr unsigned wake_capable_full_speed = 0x0c;
+  bus.write(module, clock);
+  bus.write(module + 1, wake_capable_full_speed);
+  bus.write(module, active);
+  bus.write(interrupt_mask + 1, 1);
+  constexpr unsigned out_control = 0x316;
+  constexpr unsigned enabled = 0x10;
+  bus.write(endpoint_control, enabled);
+  bus.write(out_control, enabled);
+  blofeld::Hc12 cpu(bus, BLOFELD_DEFAULT_SLA);
+  cpu.set_state(initial);
+  constexpr unsigned decoded_address = 37;
+  constexpr std::array<std::uint8_t, 8> set_address{0, 5, decoded_address, 0, 0, 0, 0, 0};
+  require(bus.receive_usb_setup(set_address) == blofeld::UsbResponse::ack,
+          "Actual address command before device-status requests");
+  auto response = bus.request_usb_in(blofeld::UsbBuffer::control_in);
+  require(response.response == blofeld::UsbResponse::data && response.size == 0 && response.data1,
+          "Actual address status precedes address commit");
+  bus.finish_usb_in(true);
+  complete_automatic_irq(cpu, input_vector);
+  constexpr std::array<std::array<std::uint8_t, 8>, 2> features{
+      {{0, 3, 1, 0, 0, 0, 0, 0}, {0, 1, 1, 0, 0, 0, 0, 0}}};
+  constexpr std::array<std::uint8_t, 8> get_status{0x80, 0, 0, 0, 0, 0, 2, 0};
+  for (unsigned index = 0; index < features.size(); ++index) {
+    require(bus.receive_usb_setup(features[index]) == blofeld::UsbResponse::ack &&
+                !cpu.pending_interrupt(),
+            "Wake feature uses hardware decoding without a firmware SETUP IRQ");
+    response = bus.request_usb_in(blofeld::UsbBuffer::control_in);
+    require(response.response == blofeld::UsbResponse::data && response.size == 0 && response.data1,
+            "Feature status is actual DATA1/ZLP");
+    bus.finish_usb_in(true);
+    complete_automatic_irq(cpu, input_vector);
+    require(bus.receive_usb_setup(get_status) == blofeld::UsbResponse::ack &&
+                !cpu.pending_interrupt(),
+            "GET_STATUS remains hardware-owned");
+    response = bus.request_usb_in(blofeld::UsbBuffer::control_in);
+    const auto expected = index == 0 ? 2U : 0U;
+    require(response.response == blofeld::UsbResponse::data && response.size == 2 &&
+                response.data1 && response.data[0] == expected && response.data[1] == 0,
+            "Literal enabled/disabled wake status differs from permanent capability");
+    bus.finish_usb_in(true);
+    complete_automatic_irq(cpu, input_vector);
+    require(bus.receive_usb_out({.data = {}, .data1 = true}) == blofeld::UsbResponse::ack,
+            "Actual opposite-direction status OUT completes the device-status transfer");
+    complete_automatic_irq(cpu, output_vector);
+  }
+}
+
 void test_priority_and_quittances_across_usb_sources() {
   auto flash = firmware();
   constexpr std::array<unsigned, 4> vectors{0xffd4, 0xffd2, 0xffd0, 0xffbe};
@@ -285,6 +340,7 @@ int main() {
   try {
     test_setup_cpu_response_and_completion_irq();
     test_automatic_control_irqs();
+    test_remote_wakeup_control_irqs();
     test_priority_and_quittances_across_usb_sources();
     std::cout << "USB events through HC12 setup/completion ISRs, priority and RTI checks passed\n";
     return 0;

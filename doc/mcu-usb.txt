@@ -49,6 +49,11 @@ Registers and interrupts
   status ownership, general endpoint flags and native IRQ composition are
   covered separately in usb-standard-control.txt. Physical effects, address
   token filtering/recovery delay and USB/IP reconciliation remain unqualified.
+- Device/interface GET_STATUS returns two actual state bytes. UMCR SPWR
+  selects power status; RWUC capability remains separate from host-enabled
+  remote wakeup. SET/CLEAR_FEATURE changes the latter before status ACK.
+  Reset domains, suspend, native IN/OUT IRQs and explicit endpoint-status
+  refusals are covered in usb-device-status.txt. Physical resume is absent.
 - Status, application SETUP, configuration update and SOF use vectors 0xffd4,
   0xffd2, 0xffd0 and 0xffbe. Local endpoint completions use 0xffce, 0xffcc,
   0xffca, 0xffc8. Flags and their enables feed the real MCU priority controller;

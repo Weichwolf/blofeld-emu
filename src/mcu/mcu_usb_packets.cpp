@@ -75,11 +75,12 @@ UsbResponse McuUsb::receive_setup(const std::array<std::uint8_t, 8> &data, const
   constexpr unsigned synch_frame = 12;
   if (type == 3) { throw Fault("Reserved USB SETUP request type"); }
   const auto configuration = decode_configuration_setup(data);
-  const auto read = decode_read_setup(data);
+  const auto read = decode_read_setup(data).or_else([&] { return decode_status_setup(data); });
+  const auto feature = decode_feature_setup(data);
   const auto address = decode_address_setup(data);
   const bool descriptor = type == 0 && data[1] == get_descriptor;
   const bool optional = type == 0 && (data[1] == set_descriptor || data[1] == synch_frame);
-  if (type == 0 && !descriptor && !optional && !configuration && !read && !address) {
+  if (type == 0 && !descriptor && !optional && !configuration && !read && !address && !feature) {
     throw Fault("Unimplemented USB automatic standard request " + hex(data[1], 2));
   }
   static_cast<void>(maximum_packet(0));
@@ -95,14 +96,17 @@ UsbResponse McuUsb::receive_setup(const std::array<std::uint8_t, 8> &data, const
     buffer.transmitted.reset();
   }
   setup_stall_ =
-      (read && read->error) ||
+      (read && read->error) || (feature && feature->error) ||
       (optional && (module_control_ & (data[1] == set_descriptor ? usb::descriptor_support
                                                                  : usb::synch_frame_support)) == 0);
   control_phase_known_ = true;
   configuration_control_ = configuration.has_value();
   automatic_read_ = setup_stall_ ? std::nullopt : read;
   pending_address_ = address;
-  if (setup_stall_ || configuration_control_ || automatic_read_ || pending_address_) {
+  feature_control_ = feature && !feature->error;
+  if (feature && !feature->error) { remote_wakeup_enabled_ = feature->enabled; }
+  if (setup_stall_ || configuration_control_ || automatic_read_ || pending_address_ ||
+      feature_control_) {
     return UsbResponse::ack;
   }
   if ((status_ & usb::setup) != 0) { status_ |= usb::setup_overrun; }
@@ -118,7 +122,7 @@ UsbResponse McuUsb::receive_out(const UsbOutPacket packet) {
   pending_in_.reset();
   if (!packet.crc_valid) { return UsbResponse::none; }
   const auto maximum = maximum_packet(index);
-  if (index == 1 && (configuration_control_ || pending_address_)) {
+  if (index == 1 && (configuration_control_ || pending_address_ || feature_control_)) {
     require_control_phase();
     throw Fault("USB OUT during automatic no-data status-IN phase");
   }
@@ -164,7 +168,8 @@ UsbInPacket McuUsb::request_in(const UsbBuffer endpoint) {
     require_control_phase();
     return {.response = UsbResponse::stall};
   }
-  if (index == 0 && (configuration_control_ || pending_address_ || automatic_read_)) {
+  if (index == 0 &&
+      (configuration_control_ || pending_address_ || automatic_read_ || feature_control_)) {
     return request_automatic_in();
   }
   return request_local_in(endpoint, maximum);
@@ -186,8 +191,10 @@ UsbInPacket McuUsb::request_automatic_in() {
       return *buffer.transmitted;
     }
     // Hardware command decode (USB20D6E2F 4.2.5.1), not local FIFO contents.
-    UsbInPacket packet{.response = UsbResponse::data, .size = 1, .data1 = true};
-    packet.data[0] = automatic_read_->value;
+    UsbInPacket packet{.response = UsbResponse::data, .size = automatic_read_->size, .data1 = true};
+    for (unsigned byte = 0; byte < packet.size; ++byte) {
+      packet.data[byte] = automatic_read_->value.at(byte);
+    }
     pending_in_ = PendingIn{.buffer = index, .packet = packet};
     buffer.transmitted = packet;
     return packet;
@@ -229,6 +236,7 @@ void McuUsb::finish_in(const bool acknowledged) {
   if (!pending_in_) { throw Fault("USB IN handshake without an outstanding data packet"); }
   require_packet();
   if (acknowledged) {
+    if (pending_in_->buffer == 0) { feature_control_ = false; }
     if (pending_in_->buffer == 0 && pending_address_) {
       device_address_ = *pending_address_;
       pending_address_.reset();

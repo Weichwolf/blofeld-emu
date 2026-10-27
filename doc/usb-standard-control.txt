@@ -39,4 +39,6 @@ register. Existing original reset/configuration/USTB/NISOF checks remain strict.
 This decoded command layer does not qualify token address filtering, the
 SET_ADDRESS recovery interval, wire timing, USB/IP/kernel address reconciliation,
 original normal enumeration, host USB-MIDI, full MCU/DSP boot or real hardware.
-GET_STATUS and other automatic commands remain visible unsupported operations.
+Device/interface GET_STATUS and remote-wakeup feature state are described in
+usb-device-status.txt. Endpoint GET_STATUS/halt and other automatic commands
+remain visible unsupported operations.

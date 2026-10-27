@@ -18,6 +18,9 @@ void McuUsb::require_control_phase() const {
 }
 
 void McuUsb::set_control(const std::uint16_t value) {
+  if (remote_wakeup_enabled_ && ((module_control_ ^ value) & usb::remote_wakeup_capable) != 0) {
+    throw Fault("Unqualified USB capability change with enabled remote wakeup");
+  }
   if (module_control_ != value) { host_evidence_.link = next_host_revision(host_evidence_.link); }
   module_control_ = value;
 }
@@ -84,6 +87,8 @@ void McuUsb::observe_decoder(const UsbDecoderState state) {
       automatic_read_.reset();
       pending_address_.reset();
       device_address_ = 0;
+      remote_wakeup_enabled_ = false;
+      feature_control_ = false;
       status_ = static_cast<std::uint16_t>(status_ & ~(usb::sof | usb::setup_overrun | usb::setup));
     }
   }

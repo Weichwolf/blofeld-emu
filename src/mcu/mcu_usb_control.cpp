@@ -6,6 +6,8 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <string_view>
 
 namespace blofeld {
 
@@ -50,31 +52,38 @@ McuUsb::decode_read_setup(const std::array<std::uint8_t, 8> &data) const {
     if (data[0] != device_input || data[4] != 0) {
       throw Fault("Unqualified USB GET_CONFIGURATION direction/recipient/index");
     }
-    const auto configuration = (configuration_status_ >> 8U) & usb::nibble_mask;
-    if (configuration > 2 ||
-        (configuration != 0 && (configuration_status_ & usb::configuration_valid) == 0)) {
-      throw Fault("Unqualified USB GET_CONFIGURATION current selection");
-    }
-    if (configuration == 0 && device_address_ == 0) {
-      throw Fault("Unqualified USB GET_CONFIGURATION in default/unaddressed state");
-    }
-    return AutomaticRead{.value = static_cast<std::uint8_t>(configuration)};
+    return AutomaticRead{.value = {current_configuration("GET_CONFIGURATION"), 0}};
   }
   if (data[0] != interface_input) {
     throw Fault("Unqualified USB GET_INTERFACE direction/recipient");
   }
+  return interface_selection(data[4], "GET_INTERFACE");
+}
+
+std::uint8_t McuUsb::current_configuration(const std::string_view operation) const {
+  const auto configuration = (configuration_status_ >> 8U) & usb::nibble_mask;
+  if (configuration > 2 ||
+      (configuration != 0 && (configuration_status_ & usb::configuration_valid) == 0)) {
+    throw Fault("Unqualified USB " + std::string(operation) + " current selection");
+  }
+  if (configuration == 0 && device_address_ == 0) {
+    throw Fault("Unqualified USB " + std::string(operation) + " in default/unaddressed state");
+  }
+  return static_cast<std::uint8_t>(configuration);
+}
+
+McuUsb::AutomaticRead McuUsb::interface_selection(const std::uint8_t index,
+                                                  const std::string_view operation) const {
+  static_cast<void>(current_configuration(operation));
   const auto configuration = host_configuration();
-  if (configuration.configuration == 0 && device_address_ == 0) {
-    throw Fault("Unqualified USB GET_INTERFACE in default/unaddressed state");
-  }
-  if (configuration.configuration != 0 && data[4] == configuration.interfaces &&
+  if (configuration.configuration != 0 && index == configuration.interfaces &&
       configuration.interfaces < configuration.alternatives.size()) {
-    throw Fault("Unqualified USB GET_INTERFACE interface-count boundary");
+    throw Fault("Unqualified USB " + std::string(operation) + " interface-count boundary");
   }
-  if (configuration.configuration == 0 || data[4] >= configuration.interfaces) {
+  if (configuration.configuration == 0 || index >= configuration.interfaces) {
     return AutomaticRead{.error = true};
   }
-  return AutomaticRead{.value = configuration.alternatives.at(data[4])};
+  return AutomaticRead{.value = {configuration.alternatives.at(index), 0}};
 }
 
 std::optional<UsbConfigurationRequest>

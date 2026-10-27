@@ -183,7 +183,8 @@ void test_invalid_admission_and_context() {
           "Bounded pending admission cannot partially enqueue the extra request");
   queue.reset();
   r = request(2, control_input, 2);
-  r.setup = {0x80, 0, 0, 0, 0, 0, 2, 0};
+  constexpr unsigned endpoint_recipient = 0x82;
+  r.setup = {endpoint_recipient, 0, 0, 0, 0, 0, 2, 0};
   queue.submit(r);
   try {
     static_cast<void>(queue.poll(bus, context));

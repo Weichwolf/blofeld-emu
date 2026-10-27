@@ -192,7 +192,7 @@ add_library(blofeld_mcu src/mcu/mcu_bus.cpp src/mcu/mcu_bus_clone.cpp src/mcu/mc
   src/mcu/mcu_flash_config.cpp src/mcu/mcu_flash.cpp src/mcu/mcu_flash_backdoor.cpp src/mcu/mcu_flash_memory.cpp src/mcu/mcu_bus_flash.cpp
   src/mcu/mcu_clock.cpp src/mcu/mcu_cop.cpp src/mcu/mcu_reset.cpp src/mcu/mcu_run_clock.cpp src/mcu/mcu_sci.cpp src/mcu/mcu_timer.cpp src/mcu/mcu_interrupts.cpp
   src/mcu/mcu_usb.cpp src/mcu/mcu_usb_io.cpp src/mcu/mcu_usb_status.cpp src/mcu/mcu_usb_packets.cpp
-  src/mcu/mcu_usb_control.cpp
+  src/mcu/mcu_usb_control.cpp src/mcu/mcu_usb_standard_status.cpp
   src/mcu/mcu_usb_ique_control.cpp src/mcu/mcu_usb_reset.cpp src/mcu/mcu_usb_host.cpp)
 target_include_directories(blofeld_mcu PUBLIC src)
 target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage blofeld_gpio_pads)
@@ -3042,6 +3042,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-usb-standard-read-test test/usb_standard_read_test.cpp)
   target_link_libraries(blofeld-usb-standard-read-test PRIVATE blofeld_mcu)
   add_test(NAME usb_standard_read COMMAND blofeld-usb-standard-read-test)
+  add_executable(blofeld-usb-device-status-test test/usb_device_status_test.cpp)
+  target_link_libraries(blofeld-usb-device-status-test PRIVATE blofeld_mcu)
+  add_test(NAME usb_device_status COMMAND blofeld-usb-device-status-test)
   add_executable(blofeld-usb-isr-test test/usb_isr_test.cpp)
   target_link_libraries(blofeld-usb-isr-test PRIVATE blofeld_core)
   add_test(NAME usb_cpu_isr COMMAND blofeld-usb-isr-test)
@@ -3317,6 +3320,7 @@ add_custom_target(quality
     blofeld-timer-test blofeld-interrupt-test blofeld-rti-test
     blofeld-memory-usb-test blofeld-usb-event-test blofeld-usb-isr-test blofeld-boot-test
     blofeld-usb-configuration-status-test blofeld-usb-standard-read-test
+    blofeld-usb-device-status-test
     blofeld-mcu-sender-test
     blofeld-flash-config-test blofeld-original-flash-config-test
     blofeld-flash-test blofeld-flash-stop-test blofeld-original-flash-stop-test

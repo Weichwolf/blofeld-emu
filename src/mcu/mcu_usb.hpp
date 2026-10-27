@@ -114,8 +114,14 @@ private:
   };
 
   struct AutomaticRead {
-    std::uint8_t value = 0;
+    std::array<std::uint8_t, 2> value{};
+    unsigned size = 1;
     bool status = false;
+    bool error = false;
+  };
+
+  struct AutomaticFeature {
+    bool enabled = false;
     bool error = false;
   };
 
@@ -140,6 +146,13 @@ private:
   decode_configuration_setup(const std::array<std::uint8_t, 8> &data) const;
   [[nodiscard]] std::optional<AutomaticRead>
   decode_read_setup(const std::array<std::uint8_t, 8> &data) const;
+  [[nodiscard]] std::optional<AutomaticRead>
+  decode_status_setup(const std::array<std::uint8_t, 8> &data) const;
+  [[nodiscard]] std::optional<AutomaticFeature>
+  decode_feature_setup(const std::array<std::uint8_t, 8> &data) const;
+  [[nodiscard]] std::uint8_t current_configuration(std::string_view operation) const;
+  [[nodiscard]] AutomaticRead interface_selection(std::uint8_t index,
+                                                  std::string_view operation) const;
   [[nodiscard]] std::optional<std::uint8_t>
   decode_address_setup(const std::array<std::uint8_t, 8> &data) const;
   [[nodiscard]] UsbInPacket request_automatic_in();
@@ -169,6 +182,8 @@ private:
   std::optional<AutomaticRead> automatic_read_;
   std::optional<std::uint8_t> pending_address_;
   std::uint8_t device_address_ = 0;
+  bool remote_wakeup_enabled_ = false;
+  bool feature_control_ = false;
   std::array<std::uint8_t, 4> alternate_{};
 };
 
