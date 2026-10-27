@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_decimal.hpp"
 #include "keyboard/hcs08_division.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
 
@@ -105,6 +106,11 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     // Z depends on the quotient. C is defined even when A/H are indeterminate.
     const unsigned known = before.ccr_known | carry;
     return static_cast<std::uint8_t>(division_defined(before) ? known | zero : known & ~zero);
+  }
+  if (bus.peek(before.pc) == decimal_opcode) {
+    constexpr unsigned overflow = 0x80;
+    constexpr unsigned nzc = 7;
+    return static_cast<std::uint8_t>((before.ccr_known | nzc) & ~overflow);
   }
   if (before.ccr_known == all) { return all; }
   bus.check_execute({.address = before.pc, .length = 1});

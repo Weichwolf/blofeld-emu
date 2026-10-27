@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-3.0-only
+--- a/HCS_HC.sinc
++++ b/HCS_HC.sinc
+@@ -1073,2 +1073,11 @@
+-	A = decimalAdjustAccumulator(A, $(C), $(H));
+-	$(C) = decimalAdjustCarry(A, $(C), $(H));
++	# Table A-2: derive both corrections from the original A/H/C.
++	low_correction:1 = 0;
++	if (((A & 0xf) <= 9) && ($(H) == 0)) goto <decimal_high>;
++	low_correction = 6;
++<decimal_high>
++	high_correction:1 = 0;
++	if ((A <= 0x99) && ($(C) == 0)) goto <decimal_apply>;
++	high_correction = 0x60;
++<decimal_apply>
++	$(C) = (high_correction != 0);
++	A = A + low_correction + high_correction;

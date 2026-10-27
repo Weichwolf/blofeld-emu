@@ -389,6 +389,14 @@ void controller_registers(const Hcs08State &state,
           "Literal native semantic data effects and descending call/high-low return order");
 }
 
+const char *partial_failure_category(const unsigned opcode) {
+  constexpr unsigned decimal_adjust = 0x72;
+  constexpr unsigned software_interrupt = 0x83;
+  if (opcode == decimal_adjust) { return "HCS08 DAA input"; }
+  if (opcode == software_interrupt) { return "HCS08 SWI admission"; }
+  return "partial-CCR";
+}
+
 void partial_flags() {
   Memory memory;
   memory.writable.set();
@@ -446,10 +454,13 @@ void partial_flags() {
       partial_registers(memory, cpu.state(), opcode);
       controller_registers(cpu.state(), opcode, std::span(memory.accesses).subspan(first_access));
     } else {
-      require(rejected([&] { cpu.step(); }).contains("partial-CCR") && cpu.faulted() &&
-                  cpu.state() == before && memory.retired == retired,
+      const auto *const category = partial_failure_category(opcode);
+      const auto failure = rejected([&] { cpu.step(); });
+      require(failure.contains(category) && cpu.faulted() && cpu.state() == before &&
+                  memory.retired == retired,
               "Every unqualified partial-CCR form rejects before architectural effects; no branch "
-              "or TPA can consume fabricated flags");
+              "or TPA can consume fabricated flags:opcode=" +
+                  hex(opcode) + " failure=" + failure);
     }
   }
   require(accepted == effects.size(),

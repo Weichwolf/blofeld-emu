@@ -1,0 +1,23 @@
+HCS08 native decimal adjustment
+
+  cmake --build --preset strict --target blofeld-hcs08-decimal-test
+  ctest --preset strict -j1 -R '^hcs08_decimal$' --output-on-failure
+
+Family RM Rev2 pp246-247/Table A-2 specifies384 A/H/C combinations. Native
+SLEIGH p-code calculates both correction factors from original A/H/C,then
+updates A/C/N/Z. H/I are preserved;undefined V becomes unknown. No host
+arithmetic supplies architectural results. Missing A/H/C bits and640
+unspecified combinations refuse visibly before native effects. Installed
+Ghidra/firmware remain unchanged;only the pinned generated language is patched.
+
+6144 literal-table cases cover16 other-flag seeds;10240 negative cases cover
+all unspecified inputs. Independent decimal integer addition checks10000ADD
+and20000ADC pairs followed by actual DAA. These additions reach380 distinct
+A/H/C inputs;four extra manual-defined inputs(A00..03,H1,C0) remain explicit
+in the table matrix. Missing operands,V consumption and unrelated register/
+flag knowledge are checked. Eight fresh CPU/memory continuations before/after
+DAA preserve actual two-byte BCD carry,stores and undefined-V knowledge.
+
+Scope:instruction retirement. This does not qualify physical bus timing,
+original controller startup,full MIDI/audio/update/recovery or hardware
+identity/equivalence. Primary URL/size/hash:hcs08-reference.json.

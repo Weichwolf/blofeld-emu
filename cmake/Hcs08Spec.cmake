@@ -29,6 +29,13 @@ execute_process(
     --directory "${CMAKE_CURRENT_BINARY_DIR}/generated/hcs08"
     --input "${BLOFELD_HCS08_SWI_PATCH}"
   COMMAND_ERROR_IS_FATAL ANY)
+set(BLOFELD_HCS08_DECIMAL_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/ghidra-hcs08-decimal.patch")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${BLOFELD_HCS08_DECIMAL_PATCH}")
+execute_process(
+  COMMAND "${BLOFELD_PATCH}" --batch --silent --fuzz=0 -p1
+    --directory "${CMAKE_CURRENT_BINARY_DIR}/generated/hcs08"
+    --input "${BLOFELD_HCS08_DECIMAL_PATCH}"
+  COMMAND_ERROR_IS_FATAL ANY)
 add_custom_command(
   OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/share/HCS08.sla"
   COMMAND "${BLOFELD_SLEIGH_COMPILER}"

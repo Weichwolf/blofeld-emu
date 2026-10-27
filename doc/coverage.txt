@@ -2113,6 +2113,8 @@ Initial Keyboard update return    partial  Original blocks0/1, sender, XIRQ/copy
                                           whole update/controller/board pending.
 Keyboard HCS08 instruction core   partial  Native SLEIGH plus independent byte/word
                                           flags, stack and strict failure cases.
+                                          Native DAA:384 legal inputs,undefined V,
+                                          BCD arithmetic/restore(hcs08-decimal.txt).
                                           Original supplied application RAM clear
                                           and programmer entries reach actual
                                           unknown PTED/FCDIV writes (hcs08-core.txt).

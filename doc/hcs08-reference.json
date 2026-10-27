@@ -105,5 +105,10 @@
     "primary": "family_reset_reference",
     "sections": "SWI detail printed285;RTI detail printed275;GT vector redirection as above",
     "scope": "Native instruction-retirement SWI pushes PCL/PCH/X/A/CCR,sets I and dereferences actual memory-owned FFFC/FFFD. Raw frame masks and native RTI preserve unknown bits;H is not stacked. No host PC/SP effects. Eleven-period SWI/prefetch,physical timing and full device boot remain unqualified."
+  },
+  "architectural_decimal": {
+    "primary": "family_reset_reference",
+    "sections": "DAA printed246-247,Table A-2",
+    "scope": "384 specified A/H/C inputs;native A/C/N/Z adjustment,H/I preserved,V undefined. Unspecified inputs refuse before native effects. Component instruction retirement only;no physical or full startup claim."
   }
 }

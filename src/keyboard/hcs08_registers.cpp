@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "keyboard/hcs08.hpp"
+#include "keyboard/hcs08_decimal.hpp"
 #include "keyboard/hcs08_division.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
 
@@ -103,6 +104,11 @@ RegisterKnowledge division(const Bus &bus, const Hcs08State &state) {
 RegisterKnowledge registers_after(const Bus &code, const Hcs08State &before, const Bus &data) {
   const auto &s = before;
   RegisterKnowledge result{.a = s.a_known, .hx = s.hx_known};
+  if (code.peek(s.pc) == decimal_opcode) {
+    code.check_execute({.address = s.pc, .length = 1});
+    require_decimal_input(s);
+    return result;
+  }
   if (code.peek(s.pc) == divide_opcode) { return division(code, s); }
   if (s.a_known == byte_mask && s.hx_known == word_mask) { return result; }
   code.check_execute({.address = s.pc, .length = 1});

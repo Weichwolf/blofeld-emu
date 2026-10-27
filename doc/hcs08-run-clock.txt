@@ -22,9 +22,10 @@ The previous50 first-opcode/eight secondary timing tuples remain explicit checks
 No opcode-only cost can hide an unknown operand or perform an architectural read.
 
 Timing metadata does not establish native semantic support: BIH/BIL still need
-a qualified IRQ-pin intrinsic, DAA needs qualified decimal adjustment, and
-STOP/WAIT remain unsupported. Native errors remain visible. No fixed-period
-entry claims hardware bus/prefetch, queue consumption or board-clock fidelity.
+a qualified IRQ-pin intrinsic, and STOP/WAIT remain unsupported. Native DAA
+is qualified separately in hcs08-decimal.txt; this is not bus-phase evidence.
+Native errors remain visible. No fixed-period entry claims hardware bus/prefetch,
+queue consumption or board-clock fidelity.
 Shared CPU/ADC reference-clock evidence: hcs08-adc.txt. Original calibrated
 pitch/IRQ/SPI/SHI evidence remains instruction-driven: hcs08-pitch-event.txt.
 Shared-clock calibrated producer/overlapping ADC evidence: hcs08-pitch-clock.txt.

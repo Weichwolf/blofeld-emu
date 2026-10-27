@@ -22,7 +22,8 @@ values, native BGND requests, modified RAM-code invalidation, unknown operands
 and quarantined failures. CCR bits6/5 are permanently one (S08CPUV2 chapter8).
 
 DIV quotient/remainder/error knowledge, native zero guard and independent
-operand/flag/clock qualification: hcs08-divide.txt.
+operand/flag/clock qualification: hcs08-divide.txt. Native DAA and undefined
+overflow knowledge: hcs08-decimal.txt.
 
 No power-on register values are invented. The engine requires explicit debug
 state or a qualified power_on reset before execution or inspection. BGND surfaces a CPU request and blocks

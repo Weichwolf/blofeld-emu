@@ -11,6 +11,7 @@
 #include <iostream>
 #include <optional>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace {
@@ -21,6 +22,8 @@ constexpr unsigned initial_ccr = 0x79, initial_sp = 0x240, loaded_hx = 0x5aa5;
 constexpr auto normal = Hcs08ResetEntry::normal, active = Hcs08ResetEntry::active_background;
 constexpr auto power_on = Hcs08ResetCause::power_on;
 
+constexpr unsigned decimal_adjust = 0x72;
+constexpr unsigned software_interrupt = 0x83, swi_vector = 0xfffc, swi_target = 0x5a5a;
 constexpr unsigned lda_immediate = 0xa6;
 constexpr unsigned shift_x = 0x58, pull_x = 0x88, push_x = 0x89;
 constexpr unsigned jmp_direct = 0xbc, jmp_extended = 0xcc;
@@ -195,6 +198,7 @@ void masks_and_checkpoint() {
 // Independent literal ISA classification; no production decoder/table reuse.
 bool admitted(const unsigned opcode, const Hcs08State s) {
   switch (opcode) {
+    case software_interrupt: return s.a_known == byte_mask && (s.hx_known & byte_mask) == byte_mask;
     case lda_immediate:
     case lda_direct:
     case lda_extended:
@@ -390,6 +394,11 @@ Hcs08State controller_effect(const unsigned opcode, Hcs08State s) {
   // Family Rev2 printed237/254/276: calls/RTS preserve A/HX/CCR knowledge.
   if (call_opcode(opcode)) { s.sp = initial_sp - 2; }
   switch (opcode) {
+    case software_interrupt:
+      s.pc = swi_target;
+      s.sp = initial_sp - 5;
+      s.ccr |= flag_i;
+      break;
     case bsr: s.pc = entry + 2 + operand; break;
     case jsr_direct: s.pc = operand; break;
     case jsr_indexed16: s.pc = initial_hx + extended_address; break;
@@ -413,6 +422,15 @@ std::optional<std::vector<Access>> controller_accesses(const unsigned opcode,
     return std::vector<Access>{
         {.address = initial_sp, .value = instruction_length(opcode), .write = true},
         {.address = initial_sp - 1, .value = sign_bit, .write = true}};
+  }
+  if (opcode == software_interrupt) {
+    return std::vector<Access>{{.address = initial_sp, .value = 1, .write = true},
+                               {.address = initial_sp - 1, .value = sign_bit, .write = true},
+                               {.address = initial_sp - 2, .value = index_low, .write = true},
+                               {.address = initial_sp - 3, .value = data_byte, .write = true},
+                               {.address = initial_sp - 4, .value = initial_ccr, .write = true},
+                               {.address = swi_vector, .value = data_byte, .write = false},
+                               {.address = swi_vector + 1, .value = data_byte, .write = false}};
   }
   if (opcode == rts) {
     return std::vector<Access>{{.address = initial_sp + 1, .value = data_byte, .write = false},
@@ -526,6 +544,18 @@ Hcs08State effect(const unsigned opcode, Hcs08State s) {
   return controller_effect(opcode, s);
 }
 
+bool refusal_context(const std::string &failure, const unsigned opcode) {
+  if (opcode == software_interrupt) {
+    return failure.contains("HCS08 SWI admission") && failure.contains("pc=0x8000") &&
+           failure.contains("ccr-known=") && failure.contains("masked RAM capability") &&
+           failure.contains("agent=CPU");
+  }
+  const auto *const category = opcode == decimal_adjust ? "HCS08 DAA input" : "partial-register";
+  const auto *const knowledge = opcode == decimal_adjust ? "ccr-known=" : "hx-known=";
+  return failure.contains(category) && failure.contains("pc=0x8000") &&
+         failure.contains("a-known=") && failure.contains(knowledge);
+}
+
 void opcode_case(Memory &memory, Hcs08 &cpu, const unsigned opcode, const Hcs08State initial) {
   memory.bytes.fill(data_byte);
   const std::array<std::uint8_t, 3> code{static_cast<std::uint8_t>(opcode), operand, operand};
@@ -541,11 +571,10 @@ void opcode_case(Memory &memory, Hcs08 &cpu, const unsigned opcode, const Hcs08S
   const auto bytes = memory.bytes;
   if (!admitted(opcode, before)) {
     const auto failure = rejected([&] { cpu.step(); });
-    require(failure.contains("partial-register") && failure.contains("pc=0x8000") &&
-                failure.contains("a-known=") && failure.contains("hx-known=") && cpu.faulted() &&
-                cpu.state() == before && memory.retired == retired && memory.accesses.empty() &&
-                memory.bytes == bytes,
-            "Every unsupported or unknown-consuming opcode rejects before data effects");
+    require(refusal_context(failure, opcode) && cpu.faulted() && cpu.state() == before &&
+                memory.retired == retired && memory.accesses.empty() && memory.bytes == bytes,
+            "Every unsupported or unknown-consuming opcode rejects before data effects:opcode=" +
+                hex(opcode) + " failure=" + failure);
   } else {
     cpu.step();
     require(cpu.state() == effect(opcode, before) && memory.retired == retired + 1 &&

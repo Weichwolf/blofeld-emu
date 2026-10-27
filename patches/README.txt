@@ -274,3 +274,9 @@ checks. Existing CPUInfo synchronization and original notices remain intact.
 The independent dsp_vm_info gate starts sixteen cold callers together and checks
 OS page size/alignment and 32768 immutable reads; dsp_repeat_clock_thread also
 runs actual concurrent DSP execution and trusted checkpoint continuations.
+
+ghidra-hcs08-decimal.patch replaces unresolved DAA intrinsics with native
+p-code for Family Rev2 Table A-2. Both corrections use original A/H/C;the
+owner rejects unspecified inputs and tracks undefined V. The pinned build
+copy retains Ghidra Apache-2.0 terms;installed SDK/firmware stay unchanged.
+Independent decimal/table/snapshot tests:doc/hcs08-decimal.txt.
