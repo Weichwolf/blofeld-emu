@@ -2944,3 +2944,11 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   IRQ/W1C/RTI composition (usb-device-status.txt). Capability and host enable
   remain distinct. Endpoint halt/status, physical resume, timing and complete
   original enumeration/instrument/host-MIDI acceptance remain open.
+
+- Common-time SCI input runs across held POR/WAI independently of MCU rates;
+  native reads, partial-frame restore and event-budget failures are tested.
+  Owned ALSA/aseqsend input covers notes/CC/program/realtime/SysEx, backpressure
+  and session retirement after restore or failure (host-midi-session.txt).
+  Positive receives declare an SCI transfer hypothesis; its absence still fails
+  visibly. Normal profiles, original firmware MIDI/USB/audio and calibrated
+  timing remain open.

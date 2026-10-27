@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_midi.hpp"
 #include "mcu/mcu_sci.hpp"
 #include "midi/midi_serial.hpp"
+#include "midi/midi_timed.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -31,15 +33,27 @@ Pad pad(const SciReceivePin pin) {
 void validate_midi(const Config &config) {
   validate_dsp_midi(config);
   if (config.midi_reference) {
-    if (!config.midi) { throw Fault("MIDI transfer reference requires midi-sci"); }
+    if (!config.midi && !config.midi_sci_timed) {
+      throw Fault("MIDI transfer reference requires an SCI route");
+    }
     McuSci validator;
     validator.set_receive_reference(config.midi_reference);
   }
-  if (!config.midi) { return; }
-  if (config.midi->bus_hz < MidiSerialInput::baud) {
+  if (config.midi_sci_timed) {
+    if (!config.pipeline || config.midi ||
+        config.dsp_input_order == DspExternalOrder::unqualified ||
+        config.maximum_dsp_inputs_per_advance == 0) {
+      throw Fault(
+          "Timed SCI MIDI requires pipeline ownership, exclusive route and event order/budget");
+    }
+    static_cast<void>(MidiTimedInput({.timebase_hz = config.pipeline->schedule.dsp.timebase_hz,
+                                      .start_ticks = config.midi_sci_timed->after_ticks}));
+  }
+  if (!config.midi && !config.midi_sci_timed) { return; }
+  if (config.midi && config.midi->bus_hz < MidiSerialInput::baud) {
     throw Fault("Reference MIDI requires at least one bus period per wire bit");
   }
-  const auto receive = pad(config.midi->pin);
+  const auto receive = pad(config.midi ? config.midi->pin : config.midi_sci_timed->pin);
   const auto overlaps = [&](const auto &route) {
     return route && route->destination == receive.port && (route->mask & receive.mask) != 0;
   };
@@ -93,33 +107,35 @@ void Board::synchronize_midi() {
 
 MidiInputWindow Board::midi_window() const {
   require_healthy();
-  if (control_.midi_dsp) {
-    return {.ticks = ticks(),
-            .available = control_.started
-                             ? MidiSerialInput::capacity - control_.midi_dsp->queued_bytes()
-                             : 0,
-            .started = control_.started};
-  }
-  return {.ticks = ticks(),
-          .available =
-              control_.midi ? MidiSerialInput::capacity - control_.midi->queued_bytes() : 0,
-          .started = control_.midi.has_value()};
+  MidiInputWindow result{.ticks = ticks(),
+                         .configured = config_.midi.has_value() ||
+                                       config_.midi_sci_timed.has_value() ||
+                                       config_.midi_dsp.has_value(),
+                         .owner = identity_,
+                         .restore_revision = usb_restore_revision_};
+  result.started =
+      control_.midi.has_value() || ((control_.midi_sci || control_.midi_dsp) && control_.started);
+  if (result.started) { result.available = MidiSerialInput::capacity - midi_queue_size(); }
+  return result;
 }
 
 std::size_t Board::midi_queue_size() const {
+  if (control_.midi_sci) { return control_.midi_sci->queued_bytes(); }
   if (control_.midi_dsp) { return control_.midi_dsp->queued_bytes(); }
   return control_.midi ? control_.midi->queued_bytes() : 0;
 }
 
 void Board::enqueue_midi(const std::span<const std::uint8_t> bytes) {
   require_healthy();
-  if (!control_.midi && (!control_.midi_dsp || !control_.started)) {
+  if (!control_.midi && ((!control_.midi_dsp && !control_.midi_sci) || !control_.started)) {
     throw Fault("Reference MIDI input precedes its configured start boundary");
   }
   if (bytes.size() > std::numeric_limits<std::uint64_t>::max() - control_.midi_bytes) {
     throw Fault("Reference MIDI byte counter exhausted");
   }
-  if (control_.midi_dsp) {
+  if (control_.midi_sci) {
+    control_.midi_sci->enqueue(bytes);
+  } else if (control_.midi_dsp) {
     control_.midi_dsp->enqueue(bytes);
   } else {
     control_.midi->enqueue(bytes);

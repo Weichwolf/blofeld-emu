@@ -1,0 +1,41 @@
+Common-time SCI input and host sessions
+
+Config::midi_sci_timed selects an explicit PR2/PS4 input and absolute common-time
+start. It requires PipelineTiming and external event order/budget. It is exclusive
+with fixed-IPBus and DSP-TIO MIDI sources; their existing contracts remain.
+This is a C++ reference API, not calibrated Desktop/Keyboard wiring or a new CLI.
+If SCI samples before a later configured start, supply an explicit initial
+idle-high pad observation; the API does not invent pre-start pad knowledge.
+
+The existing pipeline scheduler applies rational 31250-baud 8N1 pad events during
+held POR, native execution and WAI. The MCU alone clocks SCI/TIM/OSC. Enqueue
+preserves the pinned free-running bit grid. Snapshots retain queue, partial frame
+and deadline. Source collisions and exhausted event budgets fail visibly.
+
+HostMidiSession owns an ordinary Linux sequencer port outside checkpoints. Polls
+admit at most 256 bytes within remaining wire capacity and check kernel loss even
+when that capacity is zero. Every call checks board identity, monotonic external
+restore revision and time before its poll deadline. Restore, owner changes,
+transport/native faults and failed admission retire the port; consumed prefixes
+must never be retried. A fresh session starts with a fresh kernel queue. It does
+not emit firmware replies, establish physical MIDI-Out wiring or replace USB.
+
+Reproduce with separate strict and thread sanitizer presets:
+  cmake --build --preset strict --target blofeld-sci-midi-timeline-test blofeld-host-midi-session-test
+  ctest --test-dir build/strict -R '^(sci_midi_timeline|host_midi_session|host_midi_session_tools)$' --output-on-failure
+
+Directed checks cover literal bits during held reset without IPBus periods,
+WAI, native divider setup, partial-frame restore, event-budget failures and
+256 native byte reads on each route. Actual owned ALSA endpoints and aseqsend
+exercise notes, controllers, program changes, realtime and SysEx through native
+SCI register reads. Backpressure retains a three-byte message across successive
+single-byte admissions. Same-time restore discards unread host backlog; foreign
+owners, absent routes, exhausted execution budgets, trace failures and unsupported
+kernel events reject. Only owned virtual ports receive traffic. Unavailable ALSA
+or tools skip explicitly; a skip is not transport qualification.
+
+SCI stop-majority-to-RDRF timing remains unresolved. Positive receive experiments
+explicitly select SciReceiveReference(SBR12/6, zero transfer delay). Without that
+hypothesis, native polling still faults at 0x00cc; the host never repairs it.
+Normal profiles, complete original firmware reception/USB-MIDI, wall-clock pacing,
+calibrated timing, sustained original DSP audio and hardware equivalence remain open.

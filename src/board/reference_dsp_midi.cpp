@@ -15,7 +15,9 @@ void validate_dsp_midi(const Config &config) {
   }
   if (!config.midi_dsp) { return; }
   const auto route = *config.midi_dsp;
-  if (config.midi || config.midi_reference) { throw Fault("Host MIDI routes must be exclusive"); }
+  if (config.midi || config.midi_reference || config.midi_sci_timed) {
+    throw Fault("Host MIDI routes must be exclusive");
+  }
   if (route.index > 1 || route.after_ticks < config.release_ticks ||
       config.dsp_input_order == DspExternalOrder::unqualified ||
       config.maximum_dsp_inputs_per_advance == 0) {

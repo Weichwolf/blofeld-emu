@@ -98,6 +98,12 @@ struct MidiRoute {
   std::uint64_t after_ticks = 0;
 };
 
+// Free-running external wire in the common timebase; independent of MCU clocks.
+struct SciMidiRoute {
+  SciReceivePin pin = SciReceivePin::pr2;
+  std::uint64_t after_ticks = 0;
+};
+
 struct DspMidiRoute {
   std::uint64_t after_ticks = 0;
   unsigned index = 0;
@@ -142,6 +148,7 @@ struct Config {
   std::vector<DspEsaiClock> dsp_clocks;
   std::optional<PcmRoute> pcm;
   std::optional<MidiRoute> midi;
+  std::optional<SciMidiRoute> midi_sci_timed;
   std::optional<SciReceiveReference> midi_reference;
   std::optional<DspMidiRoute> midi_dsp;
   std::optional<DspMidiReference> midi_dsp_reference;
@@ -164,6 +171,10 @@ struct MidiInputWindow {
   std::uint64_t ticks = 0;
   std::size_t available = 0;
   bool started = false;
+  bool configured = false;
+  // External lifetime evidence, never part of modeled checkpoint control.
+  std::shared_ptr<const void> owner;
+  std::uint64_t restore_revision = 0;
 };
 
 struct Execution {
@@ -226,6 +237,8 @@ struct Status {
   std::size_t midi_queued = 0;
   std::uint64_t midi_bytes = 0;
   bool midi_started = false;
+  std::uint64_t midi_sci_events = 0;
+  std::uint64_t midi_sci_frames = 0;
   std::uint64_t midi_dsp_events = 0;
   std::uint64_t midi_dsp_frames = 0;
   bool started = false;
@@ -297,6 +310,7 @@ private:
     PcmRecording recording;
     std::optional<McuClockedMidiInput> midi;
     std::optional<MidiTimedInput> midi_dsp;
+    std::optional<MidiTimedInput> midi_sci;
     std::uint64_t midi_bytes = 0;
     bool started = false;
     bool dsp_initial_pending = false;
@@ -335,6 +349,7 @@ private:
     std::optional<unsigned> clock_index = std::nullopt;
     bool collision = false;
     bool midi = false;
+    bool sci_midi = false;
   };
 
   [[nodiscard]] std::optional<DspOffer> next_dsp_input() const;
@@ -342,6 +357,7 @@ private:
   void apply_dsp(const DspInput &input);
   void trace_dsp_input(const DspInput &input, std::uint64_t at);
   void trace_dsp_midi(std::uint64_t at);
+  void observe_sci_midi(std::uint64_t at);
   void observe_pcm(std::uint64_t at, std::string_view source);
   void check_pcm_output() const;
   void retire_pcm_output() noexcept;

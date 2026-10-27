@@ -3420,3 +3420,24 @@ if(BLOFELD_FUZZING)
   target_link_libraries(dsp-model-fuzz PRIVATE blofeld_dsp_peripherals)
   target_link_options(dsp-model-fuzz PRIVATE -fsanitize=fuzzer)
 endif()
+
+# Common-time SCI input and ordinary host sessions share no modeled OS state.
+target_sources(blofeld_reference_board PRIVATE src/board/reference_sci_midi.cpp)
+add_library(blofeld_host_midi_session src/app/host_midi_session.cpp)
+target_include_directories(blofeld_host_midi_session PUBLIC src)
+target_link_libraries(blofeld_host_midi_session PUBLIC blofeld_reference_board blofeld_host_midi_port)
+if(BUILD_TESTING)
+  add_executable(blofeld-sci-midi-timeline-test test/sci_midi_timeline_test.cpp)
+  target_link_libraries(blofeld-sci-midi-timeline-test PRIVATE blofeld_reference_board)
+  add_test(NAME sci_midi_timeline COMMAND blofeld-sci-midi-timeline-test)
+  set_tests_properties(sci_midi_timeline PROPERTIES TIMEOUT 900)
+  add_executable(blofeld-host-midi-session-test test/host_midi_session_test.cpp)
+  target_link_libraries(blofeld-host-midi-session-test PRIVATE blofeld_host_midi_session)
+  add_test(NAME host_midi_session COMMAND blofeld-host-midi-session-test)
+  set_tests_properties(host_midi_session PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_test(NAME host_midi_session_tools COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_midi_session_tools.py"
+    $<TARGET_FILE:blofeld-host-midi-session-test>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-midi-session-tools.json")
+  set_tests_properties(host_midi_session_tools PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 150)
+endif()

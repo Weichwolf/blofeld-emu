@@ -49,6 +49,11 @@ Board::Board(const Config &config, const Execution &execution)
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
   control_.scale = common / local;
+  if (config_.midi_sci_timed) {
+    if (config_.midi_reference) { native_->mcu.set_sci_receive_reference(config_.midi_reference); }
+    control_.midi_sci.emplace(
+        MidiWireTiming{.timebase_hz = common, .start_ticks = config_.midi_sci_timed->after_ticks});
+  }
   if (config_.midi_dsp) {
     MidiWireTiming timing{.timebase_hz = common, .start_ticks = config_.midi_dsp->after_ticks};
     if (config_.midi_dsp_reference) {

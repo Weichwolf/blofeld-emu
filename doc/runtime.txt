@@ -60,5 +60,8 @@ The reference board can bind that worker without changing native state/ticks;
 restore retires the external stream. Normal startup/profile wiring, sustained
 original firmware audio and PipeWire playback remain pending. Conditional
 original MCU/DSP MIDI/F4 fixtures and serial PCM/WAV gates are component evidence.
+The reference API also admits owned ALSA sequencer input through a common-time
+SCI wire during POR/WAI; restore retires its host session (host-midi-session.txt).
+Its explicit SCI transfer hypothesis does not establish normal firmware reception.
 Real hardware equivalence, update/recovery and realtime behavior still require
 their own complete validation.

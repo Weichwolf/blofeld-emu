@@ -44,6 +44,14 @@ std::optional<Board::DspOffer> Board::next_dsp_input() const {
                         .midi = true};
     }
   }
+  if (control_.midi_sci) {
+    const auto event = control_.midi_sci->next_event();
+    if (result && event.ticks == result->input.ticks) {
+      result->collision = true;
+    } else if (!result || event.ticks < result->input.ticks) {
+      result = DspOffer{.input = {.ticks = event.ticks}, .sci_midi = true};
+    }
+  }
   return result;
 }
 
@@ -54,6 +62,10 @@ void Board::observe_dsp_input(const std::uint64_t at) {
     throw Fault("Simultaneous reference DSP input sources at=" + std::to_string(at) +
                 " mcu-pc=" + hex(native_->mcu.cpu().state().pc) +
                 " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+  }
+  if (next->sci_midi) {
+    observe_sci_midi(at);
+    return;
   }
   apply_dsp(next->input);
   if (next->midi) {
