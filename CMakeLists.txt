@@ -3113,7 +3113,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3451,4 +3451,23 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-sci-overlap-test PRIVATE blofeld_mcu)
   add_test(NAME mcu_sci_overlap COMMAND blofeld-sci-overlap-test)
   add_dependencies(quality blofeld-sci-fast-test blofeld-sci-overlap-test blofeld-sci-midi-timeline-test blofeld-host-midi-session-test)
+endif()
+
+# Explicit multi-driver GPIO voltage and original PU0 release/readback controls.
+if(BUILD_TESTING)
+  add_executable(blofeld-gpio-multiple-drivers-test test/gpio_multiple_drivers_test.cpp)
+  target_link_libraries(blofeld-gpio-multiple-drivers-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME gpio_multiple_drivers COMMAND blofeld-gpio-multiple-drivers-test
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
+  set_tests_properties(gpio_multiple_drivers PROPERTIES TIMEOUT 60)
+  add_executable(blofeld-original-gpio-reset-test test/original_gpio_reset_test.cpp)
+  target_link_libraries(blofeld-original-gpio-reset-test PRIVATE blofeld_core blofeld_hc12_cycles)
+  add_test(NAME original_gpio_reset COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_gpio_reset.py"
+    $<TARGET_FILE:blofeld-original-gpio-reset-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-gpio-reset.json")
+  set_tests_properties(original_gpio_reset PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+  add_dependencies(quality blofeld-gpio-multiple-drivers-test blofeld-original-gpio-reset-test)
 endif()

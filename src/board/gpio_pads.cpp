@@ -3,7 +3,9 @@
 
 #include "common/bus.hpp"
 
+#include <array>
 #include <cstdint>
+#include <span>
 #include <utility>
 
 namespace blofeld {
@@ -63,22 +65,36 @@ GpioPadSample GpioPadBinding::sample(const std::uint32_t mask) const {
   return result;
 }
 
+GpioPadSample resolve_gpio_net(const std::uint32_t mask,
+                               const std::span<const GpioNetDriver> drivers) {
+  std::uint32_t active = 0;
+  std::uint32_t unknown = 0;
+  std::uint32_t high = 0;
+  std::uint32_t low = 0;
+  std::uint32_t up = 0;
+  std::uint32_t down = 0;
+  for (const auto driver : drivers) {
+    validate_driver(driver, mask);
+    active |= driver.active;
+    unknown |= driver.active & ~driver.known;
+    high |= driver.levels;
+    low |= driver.known & ~driver.levels;
+    up |= driver.pull_up;
+    down |= driver.pull_down;
+  }
+  const auto opposed = high & low;
+  const auto idle = mask & ~active;
+  const auto bias_conflict = idle & up & down;
+  const auto known =
+      (((high | low) & ~unknown & ~opposed) | (idle & (up | down) & ~bias_conflict)) & mask;
+  return {
+      .known = known, .levels = (high | (idle & up)) & known, .conflicts = opposed | bias_conflict};
+}
+
 GpioPadSample
 resolve_gpio_net(const std::uint32_t mask, const GpioNetDriver first, const GpioNetDriver second) {
-  validate_driver(first, mask);
-  validate_driver(second, mask);
-  const auto unknown = (first.active & ~first.known) | (second.active & ~second.known);
-  const auto opposed = first.known & second.known & (first.levels ^ second.levels);
-  const auto idle = mask & ~(first.active | second.active);
-  const auto up = first.pull_up | second.pull_up;
-  const auto down = first.pull_down | second.pull_down;
-  const auto bias_conflict = idle & up & down;
-  const auto known = (((first.known | second.known) & ~unknown & ~opposed) |
-                      (idle & (up | down) & ~bias_conflict)) &
-                     mask;
-  return {.known = known,
-          .levels = (first.levels | second.levels | (idle & up)) & known,
-          .conflicts = opposed | bias_conflict};
+  const std::array drivers{first, second};
+  return resolve_gpio_net(mask, drivers);
 }
 
 void require_known_gpio_pads(const GpioPadSample sample, const std::uint32_t mask) {

@@ -6,8 +6,9 @@ allows an explicitly declared board experiment to provide that separate pad
 observation. Its source is exclusive with legacy external peer observations.
 There is no automatic attachment or change to the normal runtime.
 
-resolve_gpio_net combines two declared drivers and passive input pulls. Unknown
-active latches defeat pull knowledge. Opposing known active outputs remain
+resolve_gpio_net combines an explicit span of drivers and passive input pulls;
+the two-driver overload retains its interface. Unknown active latches defeat
+pull knowledge. Opposing known active outputs remain
 unknown with an explicit conflict mask, including full/reduced output pairs.
 An approximate current ratio does not select a voltage winner. Opposing passive
 pulls are also unresolved. Unconnected, unbiased pins remain unknown.
@@ -56,3 +57,16 @@ unknown enabled XIRQ levels still fail. Existing ECLK/package limits remain.
 The gpio_pad_sources regression checks the initial baseline, XIRQ release/mask,
 masked IRQ pulse retention, clone isolation/fresh attachment and unknown input.
 Physical synchronizer delay and omitted board events remain unqualified.
+
+gpio_multiple_drivers checks literal pair/triple tables, all 32 bit positions,
+64 drivers, validation, actual MCU direction/PTU/PTIU reads and own native BRCLR.
+original_gpio_reset pins unchanged 1.25 preparation and release/poll routines.
+A declared PU0/passive pull/supervisor net holds low under an MCU output, rises
+after original CLR DDRU, and stays low while the supervisor asserts it. Missing
+bias or an unknown active driver still fails at original PC B98D/address 0278;
+other U bits remain unknown. Original CLR/BRCLR registers, NZVC and 3/5-cycle costs
+have literal expectations. This isolates those routines; it does not execute the
+intervening waits or establish a physical PU0/DSP-reset wire, synchronizer delay,
+DSP execution, asynchronous reset timing or complete original startup.
+
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(gpio_multiple_drivers|original_gpio_reset)$'

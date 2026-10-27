@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <span>
 
 namespace blofeld {
 
@@ -45,6 +46,8 @@ private:
 
 // Full/reduced outputs both dominate passive pulls. Known opposing active levels
 // remain unknown; an approximate current ratio never selects a voltage winner.
+[[nodiscard]] GpioPadSample resolve_gpio_net(std::uint32_t mask,
+                                             std::span<const GpioNetDriver> drivers);
 [[nodiscard]] GpioPadSample
 resolve_gpio_net(std::uint32_t mask, GpioNetDriver first, GpioNetDriver second);
 void require_known_gpio_pads(GpioPadSample sample, std::uint32_t mask);

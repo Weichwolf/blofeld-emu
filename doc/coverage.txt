@@ -54,6 +54,14 @@ Original request direction       partial  Eight native MCU request prefixes cove
                                           active-output strength metadata are
                                           retained; pad-voltage/current resolution
                                           remains unqualified (gpio-drivers.txt).
+                                          Explicit multi-driver pad resolution adds
+                                          literal pair/triple/64-driver and native
+                                          MCU branch controls. Isolated unchanged
+                                          1.25 PU0 prepare/release/poll routines
+                                          distinguish passive high, external low
+                                          and unknown input. Physical reset wiring,
+                                          synchronizers, asynchronous DSP reset
+                                          and complete boot stay open (gpio-pads.txt).
 LCD screenshots/live export      partial  Read-only controller capture, digital
                                           modes, unknownness and 1-bit PBM/text/
                                           saved PNG encoders tested. Atomic host
