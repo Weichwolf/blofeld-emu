@@ -1,0 +1,10 @@
+{
+  "mcu_sha256": "a530c788593bc9ab2427f9d8104aefe2ede8eb91a1be34d779731491f96ed4f8",
+  "routines": [],
+  "retired": 90312,
+  "bus_cycles": 233747,
+  "mcu_ticks": 469069,
+  "shared_ticks": 4221621,
+  "qualification": "Conditional original 1.25 MCU bootstrap from held digital POR to native PC8200. Explicit 12MHz qualified oscillator, three synchronization cycles, observed RESET high, E2/E3 loopback, Q floating inputs, PR2 idle and PHY window. DSP is independently held under declared mode5/PINIT-low reference inputs without installed ROM. Native vector and all bootstrap instructions execute, full5120 SRAM and NVM knowledge/erase history replay. No analog power/clock qualification, measured board reset route, authentic complete DSP ROM or full instrument boot is established.",
+  "primary_reference": "Pinned S12CRGUV1/D V01.01 sections5.2/5.2.2 and figures5-1..3; 9S12UF32DGV1 POR/vector documentation. URL, size and SHA256 in hardware/sources.json. Original archive hash in downloads.json."
+}

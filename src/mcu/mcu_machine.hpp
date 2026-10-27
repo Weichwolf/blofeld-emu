@@ -26,6 +26,12 @@ struct McuRunContract {
   bool operator==(const McuRunContract &) const = default;
 };
 
+// Digital POR sequence after externally qualified power/oscillator startup.
+// Analog rail thresholds, clock-quality duration and board RESET wiring are not inferred.
+struct McuPowerOnInputs {
+  unsigned synchronization_cycles = 0;
+};
+
 // Before an idle IPBus period; this is not an executing CPU bus-cycle slot.
 struct McuWaitCycle {
   ExecutionContext context;
@@ -68,6 +74,12 @@ public:
   McuMachine(const McuFlashImage &image,
              const std::filesystem::path &specification,
              std::optional<McuRunContract> run);
+  // Fresh volatile state and held POR at time zero; no CPU vector access occurs
+  // until observers are attached and advance_system_reset qualifies the pad.
+  McuMachine(const McuFlashImage &image,
+             const std::filesystem::path &specification,
+             McuRunContract run,
+             McuPowerOnInputs power_on);
   ~McuMachine();
   McuMachine(const McuMachine &) = delete;
   McuMachine &operator=(const McuMachine &) = delete;

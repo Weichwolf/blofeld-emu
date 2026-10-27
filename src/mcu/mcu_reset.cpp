@@ -19,7 +19,8 @@ McuResetSequence::McuResetSequence(const McuResetSource source,
     : state_{.requested = source,
              .selected = source,
              .synchronization_cycles = synchronization_cycles} {
-  if ((source != McuResetSource::external && source != McuResetSource::cop) ||
+  if ((source != McuResetSource::external && source != McuResetSource::cop &&
+       source != McuResetSource::power_on) ||
       synchronization_cycles < minimum_sync || synchronization_cycles > maximum_sync) {
     throw Fault("MCU reset requires a known source and explicit3..6 SYSCLK synchronization cycles");
   }

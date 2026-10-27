@@ -4,7 +4,7 @@
 #include <cstdint>
 
 namespace blofeld {
-enum class McuResetSource : std::uint8_t { external, cop };
+enum class McuResetSource : std::uint8_t { external, cop, power_on };
 enum class McuResetPad : std::uint8_t { unknown, low, high };
 enum class McuResetPhase : std::uint8_t { driving, settling, external_hold, ready, complete };
 

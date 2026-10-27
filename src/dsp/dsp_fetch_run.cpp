@@ -68,9 +68,30 @@ std::string context(const DspMachine &machine) {
 }
 
 DspFetchRun::DspFetchRun(const DspFetchRunInputs inputs, DspMachine &machine)
+    : DspFetchRun(inputs, machine, std::nullopt) {}
+
+DspFetchRun::DspFetchRun(const DspFetchRunInputs inputs,
+                         DspMachine &machine,
+                         const std::optional<DspHardwareResetInputs> initial_reset)
     : impl_(std::make_unique<Impl>()) {
   validate_inputs(inputs);
   if (machine.clocked()) { throw Fault("DSP fetch run cannot replace a completion-clock owner"); }
+  if (initial_reset) {
+    auto &state = impl_->state;
+    state.inputs = inputs;
+    const auto last = machine.bus().last_dma_cycle();
+    if (last && *last == std::numeric_limits<std::uint64_t>::max()) {
+      throw Fault("DSP fetch reset cannot follow an exhausted DMA cycle index");
+    }
+    state.next_dma_cycle = last ? *last + 1 : 0;
+    if (inputs.pipeline != DspFetchPipeline::explicit_effects) {
+      state.pipeline = DspInstructionPipeline{.profile = inputs.pipeline, .view = {}};
+    }
+    impl_->owner = &machine;
+    state.bind(machine);
+    begin_hardware_reset(machine, *initial_reset);
+    return;
+  }
   const auto pending = machine.reference_pending();
   if (!pending) { throw Fault("DSP fetch run requires a pending opcode" + context(machine)); }
   if (pending->execution != inputs.execution) {

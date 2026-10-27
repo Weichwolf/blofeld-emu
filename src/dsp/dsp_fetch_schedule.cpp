@@ -49,7 +49,13 @@ private:
 };
 
 DspFetchScheduledRun::DspFetchScheduledRun(const DspFetchScheduleInputs inputs, DspMachine &machine)
-    : inputs_(inputs), machine_(machine), run_(inputs.dsp, machine) {
+    : DspFetchScheduledRun(inputs, machine, std::nullopt) {}
+
+DspFetchScheduledRun::DspFetchScheduledRun(
+    const DspFetchScheduleInputs inputs,
+    DspMachine &machine,
+    const std::optional<DspHardwareResetInputs> initial_reset)
+    : inputs_(inputs), machine_(machine), run_(inputs.dsp, machine, initial_reset) {
   state_.horizon.ticks = inputs.initial_horizon_ticks.value_or(inputs.epoch_ticks);
   if (state_.horizon.ticks > inputs.epoch_ticks) {
     throw Fault("DSP pipeline initial horizon cannot skip native work before its epoch");

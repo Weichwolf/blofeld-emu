@@ -1637,6 +1637,20 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-dsp-schedule-test test/mcu_dsp_schedule_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_schedule COMMAND blofeld-mcu-dsp-schedule-test)
+  add_executable(blofeld-mcu-power-on-test test/mcu_power_on_test.cpp)
+  target_link_libraries(blofeld-mcu-power-on-test PRIVATE blofeld_core)
+  add_test(NAME mcu_power_on COMMAND blofeld-mcu-power-on-test)
+  add_executable(blofeld-mcu-dsp-fetch-power-on-test test/mcu_dsp_fetch_power_on_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-fetch-power-on-test PRIVATE blofeld_mcu_dsp)
+  add_test(NAME mcu_dsp_fetch_power_on COMMAND blofeld-mcu-dsp-fetch-power-on-test)
+  add_executable(blofeld-original-power-on-test test/original_power_on_test.cpp)
+  target_link_libraries(blofeld-original-power-on-test PRIVATE blofeld_mcu_dsp)
+  add_test(NAME original_power_on COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_power_on.py"
+    $<TARGET_FILE:blofeld-original-power-on-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-power-on.json")
+  set_tests_properties(original_power_on PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-mcu-dsp-fetch-schedule-test test/mcu_dsp_fetch_schedule_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-fetch-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_fetch_schedule COMMAND blofeld-mcu-dsp-fetch-schedule-test)
@@ -3205,6 +3219,7 @@ add_custom_target(quality
     blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
     blofeld-mcu-dsp-schedule-test
     blofeld-mcu-dsp-fetch-schedule-test
+    blofeld-mcu-power-on-test blofeld-mcu-dsp-fetch-power-on-test blofeld-original-power-on-test
     blofeld-mcu-dsp-fetch-events-test blofeld-mcu-dsp-fetch-external-wait-test
     blofeld-mcu-dsp-fetch-external-reset-test
     blofeld-mcu-dsp-fetch-wait-test blofeld-mcu-dsp-fetch-reset-test

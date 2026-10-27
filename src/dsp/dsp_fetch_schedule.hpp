@@ -71,6 +71,9 @@ public:
   using CycleInputs = std::function<DspFetchCycleInputs()>;
   using Observer = std::function<void(const DspFetchCycleResult &)>;
   DspFetchScheduledRun(DspFetchScheduleInputs inputs, DspMachine &machine);
+  DspFetchScheduledRun(DspFetchScheduleInputs inputs,
+                       DspMachine &machine,
+                       std::optional<DspHardwareResetInputs> initial_reset);
   DspFetchScheduledRun(const DspFetchScheduledRun &) = delete;
   DspFetchScheduledRun &operator=(const DspFetchScheduledRun &) = delete;
   unsigned advance_to(DspFetchAdvance advance,

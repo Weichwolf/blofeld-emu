@@ -40,9 +40,11 @@ permutations are supported. Cyclic/unqualified orders and retroactive newborn
 events refuse; callbacks cannot mutate either CPU or its clocks.
 
 Future DSP epochs retain early input at the current MCU boundary. Input before
-the initial MCU owner boundary refuses; the five constructor-time MCU reset
-vector periods still predate this joint owner. Full power-on construction and
-normal reference::Board pipeline/event integration remain open. Joint snapshots
+the initial MCU owner boundary refuses; the legacy post-vector MCU fixture boundary still excludes its initial five
+vector periods. A fresh MCU created with McuPowerOnInputs can instead join while
+held at zero, with explicit reset_order=dsp_before_mcu. Every initial SYSCLK and
+native vector period then belongs to this owner. Normal reference::Board
+pipeline/event integration remains open. Joint snapshots
 capture native/timeline state and source identity; restore the caller's event
 cursor and reattach native observers separately.
 No real-time guarantee or measured physical timing is established.
@@ -145,3 +147,16 @@ Two timed WAI IRQ orders retain four native stack/IRQ/RTI suffixes with independ
 release/recovery-event combinations retain eight held suffixes and literal
 60-tick MCU, 45-tick DSP and 90-tick recovery accounting. These are declared
 reference connections and timing contracts, not measured physical board routes.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-power-on-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_power_on$'
+
+Initial DSP reset construction no longer requires a prepared opcode or installed
+ROM. DspFetchRun/DspFetchScheduledRun accept an explicit initial-reset input;
+existing running constructors retain their pending-opcode contract. Eight joint
+initial profiles retain32suffixes and actual external input at zero. A declared
+running DSP retires genuine NOPs through MCU startup; a declared held DSP advances
+only its reset ledger. Actual release with missing ROM fails at native F2 read
+P:ff0000 with MCU/DSP/clock context. No placeholder opcode, physical reset route
+or successful ROM response is supplied. Analog startup and full instrument boot
+remain unqualified.

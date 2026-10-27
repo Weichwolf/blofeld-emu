@@ -67,6 +67,10 @@ private:
 class DspFetchRun {
 public:
   DspFetchRun(DspFetchRunInputs inputs, DspMachine &machine);
+  // Initial asserted reset needs no pre-reset opcode or ROM fetch.
+  DspFetchRun(DspFetchRunInputs inputs,
+              DspMachine &machine,
+              std::optional<DspHardwareResetInputs> initial_reset);
   ~DspFetchRun();
   DspFetchRun(const DspFetchRun &) = delete;
   DspFetchRun &operator=(const DspFetchRun &) = delete;

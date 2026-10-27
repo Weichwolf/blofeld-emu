@@ -208,6 +208,22 @@ McuMachine::McuMachine(const McuFlashImage &image,
   state_->cpu.reset();
 }
 
+McuMachine::McuMachine(const McuFlashImage &image,
+                       const std::filesystem::path &specification,
+                       const McuRunContract run,
+                       const McuPowerOnInputs power_on)
+    : specification_(specification),
+      specification_bytes_(read_specification(specification)),
+      state_(std::make_unique<State>(
+          std::make_unique<McuBus>(image), specification, initial_run(run))) {
+  check_specification();
+  state_->run.reset.emplace(McuResetSource::power_on, power_on.synchronization_cycles);
+  auto &clock = state_->run.clock;
+  if (!clock) { throw Fault("MCU power-on requires its reference clock"); }
+  clock->begin_power_on_reset();
+  state_->bus->reset_asserted_ = true;
+}
+
 McuMachine::~McuMachine() = default;
 
 McuBus &McuMachine::bus() {
@@ -387,6 +403,9 @@ void McuMachine::begin_system_reset(const McuResetSource source,
                                     const unsigned synchronization_cycles) {
   state_->check_inactive();
   if (system_reset_active()) { throw Fault("MCU system reset is already active"); }
+  if (source == McuResetSource::power_on) {
+    throw Fault("MCU power-on requires a fresh machine with explicit power-on inputs");
+  }
   const McuResetSequence sequence(source, synchronization_cycles);
   if (source == McuResetSource::cop && state_->bus->cop_state().reset == McuCopReset::none) {
     throw Fault("MCU COP system reset requires an actual pending watchdog request");

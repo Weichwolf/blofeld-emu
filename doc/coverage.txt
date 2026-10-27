@@ -2878,3 +2878,14 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   and retroactive events refuse. Initial MCU constructor reset vectors, normal
   Board pipeline integration, complete original instrument boot/audio/MIDI and
   physical timing remain open. See dsp-fetch-schedule.txt and dsp-fetch-events.txt.
+
+- Initial digital power-on ownership now has eight MCU phase profiles/18suffixes,
+  eight joint MCU/DSP profiles/32suffixes and actual input at zero. Native FFFE
+  vector cycles follow explicit128+n+64SYSCLK edges; fresh SRAM/PORF and warm
+  retention are distinct. A held DSP starts without a fabricated pending opcode
+  or ROM; release with missing ROM fails at native F2. The pinned original MCU
+  bootstrap reaches8200 twice with exact native counts, complete SRAM replay,
+  unchanged NVM and one shared initial timeline. These laboratory timing/reset
+  inputs do not establish physical startup/wiring, normal Board integration,
+  authentic complete DSP ROM or full instrument operation. See mcu-system-reset.txt,
+  mcu-power-on-reference.json and dsp-fetch-schedule.txt.

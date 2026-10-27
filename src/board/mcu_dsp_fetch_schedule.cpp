@@ -24,6 +24,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -66,6 +67,17 @@ private:
   int exceptions_;
 };
 
+namespace {
+std::optional<DspHardwareResetInputs> initial_dsp_reset(const McuDspFetchInputs &inputs) {
+  if (!inputs.initial_reset) { return std::nullopt; }
+  const auto reset = inputs.initial_reset.value();
+  return DspHardwareResetInputs{.mode_known = reset.mode_known,
+                                .mode_levels = reset.mode_levels,
+                                .pinit = reset.pinit,
+                                .recovery_cycles = reset.recovery_cycles};
+}
+}
+
 McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
                                          McuMachine &mcu,
                                          DspMachine &dsp,
@@ -76,7 +88,8 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
       dsp_schedule_({.dsp = inputs.dsp,
                      .epoch_ticks = inputs.epoch_ticks,
                      .initial_horizon_ticks = std::min(inputs.epoch_ticks, mcu_ticks())},
-                    dsp),
+                    dsp,
+                    initial_dsp_reset(inputs)),
       external_(std::move(external)),
       initial_mcu_ticks_(mcu_ticks()),
       end_ticks_(mcu_ticks()),
@@ -84,7 +97,15 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
       expected_epoch_(mcu.run_clock().native_epoch()),
       expected_idle_(mcu.idle_bus_cycles()),
       expected_reset_edges_(mcu.run_clock().reset_sysclk_edges()) {
-  mcu_.validate_run_boundary();
+  if (mcu_.system_reset_active()) {
+    if (inputs.reset_order != McuDspResetOrder::dsp_before_mcu) {
+      throw Fault("MCU/DSP initial held reset requires an explicit reset order");
+    }
+    mcu_.validate_reset_boundary();
+    resetting_ = true;
+  } else {
+    mcu_.validate_run_boundary();
+  }
   if (inputs.dsp.pipeline != DspFetchPipeline::automatic_memory ||
       inputs.maximum_dsp_cycles_per_period == 0 ||
       (!inputs.initial_reset && inputs.epoch_ticks < end_ticks_) ||
@@ -101,13 +122,6 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
        inputs.reset_order != McuDspResetOrder::dsp_before_mcu)) {
     throw Fault("MCU/DSP fetch schedule requires an automatic pipeline, future epoch, explicit "
                 "budget and known tie contract");
-  }
-  if (inputs.initial_reset) {
-    const auto initial = inputs.initial_reset.value();
-    dsp_schedule_.begin_hardware_reset({.mode_known = initial.mode_known,
-                                        .mode_levels = initial.mode_levels,
-                                        .pinit = initial.pinit,
-                                        .recovery_cycles = initial.recovery_cycles});
   }
   const Guard guard(*this);
   static_cast<void>(dsp_schedule_.advance_to(

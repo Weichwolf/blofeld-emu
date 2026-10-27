@@ -64,6 +64,7 @@ public:
 
 private:
   friend class McuMachine;
+  void begin_power_on_reset();
   void begin_reset_epoch();
   void advance_reset_edge();
   void finish_reset();

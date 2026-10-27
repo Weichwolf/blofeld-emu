@@ -11,6 +11,15 @@ GPIO readers must be reattached. Existing resolved-pad obligations remain strict
 a detached input is never replaced by a guessed voltage. SCI/TIM clocking and
 native execution stay held. No implicit board reset policy is selected.
 
+Fresh McuMachine(image,sla,run,McuPowerOnInputs{sync}) starts held at digital
+time zero, with unknown volatile SRAM, reset-default modules/PORF and unchanged
+NVM. No CPU vector cycle occurs before observers attach. Power_on is an explicit
+cause; warm begin_system_reset refuses it because power loss requires fresh
+volatile state. Initial native epoch is one. The oscillator phase and3..6-cycle
+synchronization remain explicit inputs. The origin follows externally qualified
+power/oscillator startup; analog rail thresholds and clock-quality time are not
+synthesized. The existing constructors retain their post-vector fixture contract.
+
 advance_system_reset(maximum_sysclk_edges,pad) advances actual OSC/SYSCLK edges:
 - RESET is driven low for128+n edges, then released for64 settling edges.
 - High at the final sample selects COPfffa or externalfffe. External low overrides
@@ -49,3 +58,15 @@ DSP/board reset propagation remain unqualified.
 
 Reference: pinned S12CRGUV1/D V01.01 sections5.2/5.2.1, figure5-1, table5-2;
 9S12UF32DGV1 device vector table, doc/hardware/sources.json.
+
+  cmake --build --preset strict --target blofeld-mcu-power-on-test blofeld-original-power-on-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(mcu_power_on|original_power_on)$'
+
+Eight initial phase profiles retain18suffixes, literal128+n+64SYSCLK and five
+native vector periods, external hold/missing-pad faults, fresh unknown SRAM,
+PORF/cold-versus-warm identity, NVM preservation and direct-entry refusal.
+The pinned original MCU bootstrap executes90312instructions/233747bus periods
+twice from held zero, with full5120SRAM replay and independent clock accounting.
+The common owner includes every initial reset/vector period while DSP stays
+explicitly held without installed ROM. This stops at8200, not instrument operation.
+See mcu-power-on-reference.json and dsp-fetch-schedule.txt.

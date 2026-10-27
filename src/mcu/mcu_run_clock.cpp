@@ -108,6 +108,14 @@ void McuRunClock::advance_to_cop_deadline(McuBus &bus, const unsigned edges) {
   throw Fault("MCU COP deadline failed to request reset");
 }
 
+void McuRunClock::begin_power_on_reset() {
+  if (resetting_ || faulted_ || elapsed_ticks_ != 0 || bus_cycles_ != 0 ||
+      oscillator_cycles_ != 0 || reset_edges_ != 0 || epoch_ != 1) {
+    throw Fault("MCU power-on clock requires its fresh time-zero boundary");
+  }
+  resetting_ = true;
+}
+
 void McuRunClock::begin_reset_epoch() {
   if (resetting_ || epoch_ == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("MCU reset epoch requires an inactive representable boundary");
