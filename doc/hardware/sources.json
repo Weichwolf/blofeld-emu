@@ -160,5 +160,11 @@
     "source": "https://www.nxp.com/docs/en/user-guide/DSPSTUDIOUG.pdf",
     "bytes": 5444616,
     "sha256": "45c1dba6205862ac2944f92104f0bf8bec348f58f4cf33c2cb311ac0d5915efe"
+  },
+  {
+    "file": "56KCCUM.pdf",
+    "source": "https://www.nxp.com/docs/en/user-guide/56KCCUM.pdf",
+    "bytes": 3623656,
+    "sha256": "d6797dfd42245810dbcc2aa084f07dca432d2cda3928c125e0598291a14d6947"
   }
 ]
