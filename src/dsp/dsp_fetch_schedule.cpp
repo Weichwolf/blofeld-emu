@@ -50,7 +50,10 @@ private:
 
 DspFetchScheduledRun::DspFetchScheduledRun(const DspFetchScheduleInputs inputs, DspMachine &machine)
     : inputs_(inputs), machine_(machine), run_(inputs.dsp, machine) {
-  state_.horizon.ticks = inputs.epoch_ticks;
+  state_.horizon.ticks = inputs.initial_horizon_ticks.value_or(inputs.epoch_ticks);
+  if (state_.horizon.ticks > inputs.epoch_ticks) {
+    throw Fault("DSP pipeline initial horizon cannot skip native work before its epoch");
+  }
   static_cast<void>(native_deadline());
 }
 
@@ -208,9 +211,9 @@ unsigned DspFetchScheduledRun::advance_to(const DspFetchAdvance advance,
 void DspFetchScheduledRun::require_reset_boundary() const {
   healthy();
   if (absolute(run_.elapsed_ticks()) != state_.horizon.ticks ||
-      (state_.advanced && (state_.horizon.native != DspScheduleBoundary::through ||
-                           state_.horizon.external != DspScheduleBoundary::through)) ||
-      (state_.next_external && *state_.next_external <= state_.horizon.ticks)) {
+      (state_.next_external && (*state_.next_external < state_.horizon.ticks ||
+                                (*state_.next_external == state_.horizon.ticks &&
+                                 state_.horizon.external != DspScheduleBoundary::before)))) {
     throw Fault("DSP pipeline reset requires an exactly consumed timeline boundary");
   }
 }

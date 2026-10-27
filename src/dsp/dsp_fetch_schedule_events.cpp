@@ -12,12 +12,13 @@ std::optional<std::uint64_t>
 DspFetchScheduledRun::query_external(const DspFetchExternalEvents &external) const {
   const auto next = external.next_ticks();
   run_.validate_boundary(machine_);
-  if (next && (*next < absolute(run_.elapsed_ticks()) || *next < state_.horizon.ticks ||
-               (state_.last_external && *next < *state_.last_external) ||
-               (state_.last_native && *next == *state_.last_native &&
-                state_.order != DspExternalOrder::dsp_before_external) ||
-               (!state_.next_external && state_.advanced && *next == state_.horizon.ticks &&
-                state_.horizon.external == DspScheduleBoundary::through))) {
+  if (next &&
+      (*next < state_.horizon.ticks || (state_.last_native && *next < *state_.last_native) ||
+       (state_.last_external && *next < *state_.last_external) ||
+       (state_.last_native && *next == *state_.last_native &&
+        state_.order != DspExternalOrder::dsp_before_external) ||
+       (!state_.next_external && state_.advanced && *next == state_.horizon.ticks &&
+        state_.horizon.external == DspScheduleBoundary::through))) {
     throw Fault("DSP pipeline external timestamp precedes its consumed timeline");
   }
   return next;

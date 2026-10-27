@@ -5,8 +5,10 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_fetch_run.hpp"
+#include "dsp/dsp_fetch_schedule.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_pipeline.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/hc12_registers.hpp"
@@ -16,6 +18,7 @@
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -28,12 +31,14 @@
 namespace blofeld {
 struct McuDspFetchCheckpoint::Storage {
   McuCheckpoint mcu;
-  DspFetchCheckpoint dsp;
+  DspFetchScheduleCheckpoint dsp;
   McuDspFetchInputs inputs;
   const McuMachine *mcu_owner;
   const DspMachine *dsp_owner;
   std::uint64_t end_ticks, cycles, epoch, idle, reset_edges, ties;
   bool resetting;
+  std::shared_ptr<const DspFetchEventIdentity> external;
+  DspExternalOrder external_order;
 };
 
 McuDspFetchCheckpoint::McuDspFetchCheckpoint(std::shared_ptr<const Storage> storage)
@@ -63,11 +68,17 @@ private:
 
 McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
                                          McuMachine &mcu,
-                                         DspMachine &dsp)
+                                         DspMachine &dsp,
+                                         DspFetchExternalEvents external)
     : inputs_(inputs),
       mcu_(mcu),
       dsp_(dsp),
-      run_(inputs.dsp, dsp),
+      dsp_schedule_({.dsp = inputs.dsp,
+                     .epoch_ticks = inputs.epoch_ticks,
+                     .initial_horizon_ticks = std::min(inputs.epoch_ticks, mcu_ticks())},
+                    dsp),
+      external_(std::move(external)),
+      initial_mcu_ticks_(mcu_ticks()),
       end_ticks_(mcu_ticks()),
       expected_cycles_(mcu.run_clock().bus_cycles()),
       expected_epoch_(mcu.run_clock().native_epoch()),
@@ -81,6 +92,9 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
       (inputs.shared_write_order != McuDspTieOrder::unqualified &&
        inputs.shared_write_order != McuDspTieOrder::dsp_before_mcu &&
        inputs.shared_write_order != McuDspTieOrder::mcu_before_dsp) ||
+      (inputs.external_write_order != McuExternalWriteOrder::unqualified &&
+       inputs.external_write_order != McuExternalWriteOrder::external_before_mcu &&
+       inputs.external_write_order != McuExternalWriteOrder::mcu_before_external) ||
       (inputs.wait_order != McuDspWaitOrder::unqualified &&
        inputs.wait_order != McuDspWaitOrder::dsp_before_mcu) ||
       (inputs.reset_order != McuDspResetOrder::unqualified &&
@@ -90,19 +104,22 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
   }
   if (inputs.initial_reset) {
     const auto initial = inputs.initial_reset.value();
-    run_.begin_hardware_reset(dsp_,
-                              {.mode_known = initial.mode_known,
-                               .mode_levels = initial.mode_levels,
-                               .pinit = initial.pinit,
-                               .recovery_cycles = initial.recovery_cycles});
-    const auto held = end_ticks_ - inputs.epoch_ticks;
-    if (held != 0) { run_.advance_hardware_reset_ticks(dsp_, held); }
+    dsp_schedule_.begin_hardware_reset({.mode_known = initial.mode_known,
+                                        .mode_levels = initial.mode_levels,
+                                        .pinit = initial.pinit,
+                                        .recovery_cycles = initial.recovery_cycles});
   }
+  const Guard guard(*this);
+  static_cast<void>(dsp_schedule_.advance_to(
+      {.horizon = {.ticks = inputs.initial_reset ? end_ticks_ : initial_mcu_ticks_}},
+      {},
+      {},
+      checked_events()));
   static_cast<void>(deadline());
 }
 
 bool McuDspFetchSchedule::faulted() const {
-  return faulted_ || run_.faulted() || mcu_.timing_faulted() || dsp_.timing_faulted() ||
+  return faulted_ || dsp_schedule_.faulted() || mcu_.timing_faulted() || dsp_.timing_faulted() ||
          mcu_.run_clock().native_epoch() != expected_epoch_;
 }
 
@@ -134,18 +151,18 @@ void McuDspFetchSchedule::consumed() const {
 }
 
 std::uint64_t McuDspFetchSchedule::deadline() const {
-  if (run_.hardware_reset_active()) {
-    const auto remaining = run_.hardware_reset_remaining_ticks();
+  if (run().hardware_reset_active()) {
+    const auto remaining = run().hardware_reset_remaining_ticks();
     if (!remaining) { return std::numeric_limits<std::uint64_t>::max(); }
-    const auto elapsed = run_.elapsed_ticks();
+    const auto elapsed = run().elapsed_ticks();
     constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
     if (elapsed > maximum - *remaining || inputs_.epoch_ticks > maximum - elapsed - *remaining) {
       throw Fault("MCU/DSP fetch reset recovery exhausted common time");
     }
     return inputs_.epoch_ticks + elapsed + *remaining;
   }
-  const auto period = run_.next_cycle_ticks(dsp_);
-  const auto elapsed = run_.elapsed_ticks();
+  const auto period = run().next_cycle_ticks(dsp_);
+  const auto elapsed = run().elapsed_ticks();
   constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
   if (elapsed > maximum - period || inputs_.epoch_ticks > maximum - elapsed - period) {
     throw Fault("MCU/DSP fetch absolute next-cycle deadline exhausted");
@@ -157,21 +174,12 @@ void McuDspFetchSchedule::advance(const bool through,
                                   const CycleInputs &inputs,
                                   const Observer &after_dsp) {
   try {
-    while (true) {
-      if (run_.hardware_reset_active()) {
-        advance_dsp_reset(through);
-        if (run_.hardware_reset_active()) { return; }
-      }
-      const auto next = deadline();
-      if (next > end_ticks_ || (next == end_ticks_ && !through)) { return; }
-      if (period_cycles_ == inputs_.maximum_dsp_cycles_per_period) {
-        throw Fault("MCU/DSP fetch per-period cycle budget exhausted");
-      }
-      if (!inputs) { throw Fault("MCU/DSP fetch requires explicit native cycle inputs"); }
-      const auto result = run_.advance_cycle(dsp_, inputs());
-      ++period_cycles_;
-      if (after_dsp) { after_dsp(result); }
-    }
+    advance_horizon(
+        {.ticks = end_ticks_,
+         .native = through ? DspScheduleBoundary::through : DspScheduleBoundary::before,
+         .external = through ? DspScheduleBoundary::through : DspScheduleBoundary::before},
+        inputs,
+        after_dsp);
   } catch (const Fault &error) {
     if (reset_context_) {
       throw Fault("Scheduled pipeline reset peer mcu-request-pc=" + hex(reset_context_->pc) +
@@ -230,23 +238,13 @@ void McuDspFetchSchedule::begin_cycle(const Hc12BusCycle cycle,
   if (shared_write && (!write || !cycle.address || cycle.size != 1)) {
     throw Fault("Unqualified MCU/DSP fetch shared write cycle geometry");
   }
-  constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
   cycle_ = cycle;
   offer_period();
   offered_ = true;
   shared_write_ = shared_write && !cop_deadline_;
+  shared_write_observed_ = false;
   advance(!shared_write_, inputs, after_dsp);
-  if (!shared_write_ || deadline() != end_ticks_) { return; }
-  if (ties_ == maximum) { throw Fault("MCU/DSP fetch shared write tie counter exhausted"); }
-  ++ties_;
-  if (inputs_.shared_write_order == McuDspTieOrder::unqualified) {
-    throw Fault("Unqualified simultaneous DSP pipeline cycle and MCU shared write at " +
-                hex(*cycle.address) + " mcu-pc=" + hex(cycle.context.pc) +
-                " dsp-pc=" + hex(dsp_.cpu().state().pc, 6));
-  }
-  if (inputs_.shared_write_order == McuDspTieOrder::dsp_before_mcu) {
-    advance(true, inputs, after_dsp);
-  }
+  if (shared_write_) { prepare_shared_write(inputs, after_dsp); }
 }
 
 void McuDspFetchSchedule::observe_write(const BusEvent &event,
@@ -268,6 +266,7 @@ void McuDspFetchSchedule::observe_write(const BusEvent &event,
     throw;
   }
   observing_signals_ = false;
+  shared_write_observed_ = true;
   consumed();
   advance(true, inputs, after_dsp);
   shared_write_ = false;
@@ -291,6 +290,7 @@ void McuDspFetchSchedule::finish_boundary() {
   if (deadline() <= end_ticks_) {
     throw Fault("MCU/DSP fetch completed boundary lost its pending DSP deadline");
   }
+  verify_external_boundary();
   offered_ = false;
 }
 
@@ -331,7 +331,7 @@ void McuDspFetchSchedule::end_wait() {
 
 void McuDspFetchSchedule::begin_system_reset(const McuResetSource source,
                                              const unsigned synchronization_cycles) {
-  if (active_ || faulted_ || resetting_ || run_.faulted() || dsp_.timing_faulted() ||
+  if (active_ || faulted_ || resetting_ || dsp_schedule_.faulted() || dsp_.timing_faulted() ||
       mcu_.run_clock().native_epoch() != expected_epoch_ ||
       inputs_.reset_order != McuDspResetOrder::dsp_before_mcu) {
     throw Fault("MCU/DSP fetch reset requires an inactive coordinated epoch and explicit order");
@@ -400,9 +400,10 @@ McuDspFetchCheckpoint McuDspFetchSchedule::checkpoint() const {
     throw Fault("MCU/DSP fetch capture requires completed native observations");
   }
   if (deadline() <= end_ticks_) { throw Fault("MCU/DSP fetch capture lost its peer deadline"); }
+  verify_external_boundary();
   return McuDspFetchCheckpoint(std::make_shared<const McuDspFetchCheckpoint::Storage>(
       McuDspFetchCheckpoint::Storage{.mcu = mcu_.checkpoint(),
-                                     .dsp = run_.checkpoint(dsp_),
+                                     .dsp = dsp_schedule_.checkpoint(),
                                      .inputs = inputs_,
                                      .mcu_owner = &mcu_,
                                      .dsp_owner = &dsp_,
@@ -412,19 +413,23 @@ McuDspFetchCheckpoint McuDspFetchSchedule::checkpoint() const {
                                      .idle = expected_idle_,
                                      .reset_edges = expected_reset_edges_,
                                      .ties = ties_,
-                                     .resetting = resetting_}));
+                                     .resetting = resetting_,
+                                     .external = external_.identity,
+                                     .external_order = external_.order}));
 }
 
 void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
   if (active_ || !checkpoint.storage_ || checkpoint.storage_->mcu_owner != &mcu_ ||
-      checkpoint.storage_->dsp_owner != &dsp_ || checkpoint.storage_->inputs != inputs_) {
+      checkpoint.storage_->dsp_owner != &dsp_ || checkpoint.storage_->inputs != inputs_ ||
+      checkpoint.storage_->external != external_.identity ||
+      checkpoint.storage_->external_order != external_.order) {
     throw Fault("MCU/DSP fetch restore requires matching inactive owners and input contracts");
   }
   const Guard guard(*this);
   faulted_ = true; // A partial native restore can never become a healthy schedule.
   const auto &saved = *checkpoint.storage_;
   mcu_.restore(saved.mcu);
-  run_.restore(saved.dsp, dsp_);
+  dsp_schedule_.restore(saved.dsp);
   end_ticks_ = saved.end_ticks;
   expected_cycles_ = saved.cycles;
   expected_epoch_ = saved.epoch;
@@ -441,6 +446,7 @@ void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
   period_cycles_ = 0;
   cycle_ = {};
   observing_signals_ = false;
+  shared_write_observed_ = false;
   if (mcu_.system_reset_active() != resetting_) {
     throw Fault("MCU/DSP fetch restore lost its native reset boundary");
   }
@@ -451,18 +457,8 @@ void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
   }
   consumed();
   if (deadline() <= end_ticks_) { throw Fault("MCU/DSP fetch restore lost its peer deadline"); }
+  verify_external_boundary();
   faulted_ = false;
-}
-
-void McuDspFetchSchedule::advance_dsp_reset(const bool through) {
-  const auto elapsed = run_.elapsed_ticks();
-  if (inputs_.epoch_ticks > end_ticks_) { return; }
-  const auto target = end_ticks_ - inputs_.epoch_ticks;
-  if (elapsed > target) { throw Fault("DSP reset clock advanced beyond its native MCU offer"); }
-  auto ticks = target - elapsed;
-  const auto remaining = run_.hardware_reset_remaining_ticks();
-  if (!through && remaining && *remaining == ticks && ticks != 0) { --ticks; }
-  if (ticks != 0) { run_.advance_hardware_reset_ticks(dsp_, ticks); }
 }
 
 void McuDspFetchSchedule::validate_dsp_reset_observation() const {
@@ -480,19 +476,19 @@ void McuDspFetchSchedule::validate_dsp_reset_observation() const {
   if (((offered_ || shared_write_ || waiting_ || wait_context_ || reset_context_) &&
        !observing_signals_) ||
       cop_deadline_ || inputs_.epoch_ticks > end_ticks_ ||
-      run_.elapsed_ticks() != end_ticks_ - inputs_.epoch_ticks) {
+      run().elapsed_ticks() != end_ticks_ - inputs_.epoch_ticks) {
     throw Fault("DSP fetch reset cannot discard unconsumed native peer time");
   }
 }
 
 void McuDspFetchSchedule::begin_dsp_reset(const DspHardwareResetInputs inputs) {
   validate_dsp_reset_observation();
-  run_.begin_hardware_reset(dsp_, inputs);
+  dsp_schedule_.begin_hardware_reset(inputs);
 }
 
 void McuDspFetchSchedule::release_dsp_reset() {
   validate_dsp_reset_observation();
-  run_.release_hardware_reset(dsp_);
+  dsp_schedule_.release_hardware_reset();
 }
 
 }

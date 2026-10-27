@@ -3,11 +3,13 @@ Automatic DSP pipeline and external event timeline
 DspFetchScheduledRun orders actual DspFetchRun periods and timestamped peripheral
 observations in one explicit integer timebase. Native periods are not replaced
 with atomic instruction estimates. epoch_ticks offsets absolute event time;
-DspFetchCycleResult and the native clock retain relative elapsed ticks.
+DspFetchCycleResult and the native clock retain relative elapsed ticks. An
+explicit initial_horizon_ticks may precede epoch_ticks, retaining genuine early
+peripheral input without advancing native periods. It cannot skip native work.
 
 This is a single-threaded reference ordering contract. It neither establishes
-physical input timing nor connects the complete device runtime. MCU/external
-arbitration, normal MIDI/ESAI transport and automatic IRQ entry remain open.
+physical input timing nor connects the complete device runtime. Normal Board
+runtime integration, MIDI/ESAI transport and automatic IRQ entry remain open.
 
 Bind an event source on the first advance, with a retained shared identity,
 pure next_ticks query, observation callback, positive per-advance event budget
@@ -27,8 +29,10 @@ exact tick. Inconsistent mixed boundaries refuse. Advancing cannot rewind time
 or an already consumed boundary. Reset hold advances exact fractional EXTAL time;
 recovery completion participates in the same event arbitration. External events
 can precede an excluded recovery edge without silently releasing native work.
-Reset assertion/release require an inactive, exactly consumed common boundary.
-They cannot be requested recursively from an active callback.
+Reset assertion/release require an inactive, exactly consumed native-clock
+boundary. An explicitly excluded same-time external event remains pending and
+must still be delivered in its declared order; reset never consumes that event.
+Recursive reset requests from an active callback refuse.
 
 A trusted in-process snapshot captures the same native owner, pipeline, clocks,
 peripherals and timeline state. Restore the caller-owned event cursor separately.

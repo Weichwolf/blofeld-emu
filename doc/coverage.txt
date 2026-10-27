@@ -2858,5 +2858,13 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   source identity, future append, actual reset/recovery time and trusted native
   suffix restore. Own MOVEP GPIO reads check real AG1 capture/E2 publication;
   literal cycle/event counts and causality/budget/source/reentry guards support
-  this primitive. Connected MCU/external arbitration, original reset-to-instrument
+  this primitive. Normal Board runtime integration, original reset-to-instrument
   operation, MIDI/ESAI/audio and hardware timing remain open. See dsp-fetch-events.txt.
+
+- The shared MCU/automatic-DSP owner now retains one peripheral-event timeline.
+  All six shared-write/DSP-AG1/input orders, real GPIO capture/E2 publication,
+  future-epoch input, timed WAI IRQ/RTI and held/recovery event boundaries have
+  independent native checks and joint cursor-aware replay. Cyclic/unknown orders
+  and retroactive events refuse. Initial MCU constructor reset vectors, normal
+  Board pipeline integration, complete original instrument boot/audio/MIDI and
+  physical timing remain open. See dsp-fetch-schedule.txt and dsp-fetch-events.txt.

@@ -31,7 +31,20 @@ actual MCU drive/synchronization/settling edges;reattach native observers after
 MCU owner replacement. Supply observed RESET-pad inputs and explicit3..6 SYSCLK
 synchronization. Native vector fetch chooses FFFA(COP) or FFFE(external).
 DSP execution/time continue;physical DSP-reset wiring remains separate.
-External-event arbitration remains open.
+External input now uses one DspFetchScheduledRun owner for both native periods
+and peripheral events. Bind its retained source at construction. Non-shared
+native offers deliver due external observations before MCU completion; shared
+writes require an explicit external_write_order at actual collisions. Together
+with shared_write_order and the source's DSP/external order, all six causal
+permutations are supported. Cyclic/unqualified orders and retroactive newborn
+events refuse; callbacks cannot mutate either CPU or its clocks.
+
+Future DSP epochs retain early input at the current MCU boundary. Input before
+the initial MCU owner boundary refuses; the five constructor-time MCU reset
+vector periods still predate this joint owner. Full power-on construction and
+normal reference::Board pipeline/event integration remain open. Joint snapshots
+capture native/timeline state and source identity; restore the caller's event
+cursor and reattach native observers separately.
 No real-time guarantee or measured physical timing is established.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test
@@ -120,3 +133,15 @@ program words and retained the strict Y:002000 failure. Those controlled inputs
 are not default device behavior, authentic ROM or recovered physical wiring.
 Complete connected reset/startup, original audio/MIDI/storage and physical
 Desktop/Keyboard equivalence remain unverified; see objective.txt and coverage.txt.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-events-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_external_'
+
+Twenty directed joint cases include six real LDAB/STAB/MOVEP causal orders,
+complete CPU/capture endpoints, twelve positive and ten refusal suffix replays,
+cyclic/unknown policy, newborn-event causality, callback and future-epoch controls.
+Two timed WAI IRQ orders retain four native stack/IRQ/RTI suffixes with independent
+2+1+7 setup, six-period wake and eight-period return expectations. Four reset
+release/recovery-event combinations retain eight held suffixes and literal
+60-tick MCU, 45-tick DSP and 90-tick recovery accounting. These are declared
+reference connections and timing contracts, not measured physical board routes.

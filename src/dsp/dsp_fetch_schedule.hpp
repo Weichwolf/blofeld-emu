@@ -25,6 +25,7 @@ struct DspFetchExternalEvents {
 struct DspFetchScheduleInputs {
   DspFetchRunInputs dsp;
   std::uint64_t epoch_ticks = 0;
+  std::optional<std::uint64_t> initial_horizon_ticks = std::nullopt;
   bool operator==(const DspFetchScheduleInputs &) const = default;
 };
 
