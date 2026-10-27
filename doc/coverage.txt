@@ -1412,6 +1412,13 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
 SCI serial hardware               partial  Bus-clocked TX/RX, 8/9-bit and parity,
                                           sampled noise/framing, overrun, flag-clear
                                           sequences and pin routing tested.
+                                          Fast following starts survive the old
+                                          stop boundary. Six independent two-byte
+                                          waveforms and 10752 eight/nine-bit
+                                          overlap patterns check exact flags,
+                                          R8, partial copies and cancellation.
+                                          The uncertain flag edge stays strict;
+                                          mismatch/electrical calibration is open.
                                           Explicit receive-timing hypotheses
                                           exercise all 361 IPBus delays at SBR60,
                                           error/overrun/ack races, native own WAI

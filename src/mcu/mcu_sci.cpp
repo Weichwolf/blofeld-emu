@@ -171,6 +171,7 @@ void McuSci::write_control2(const std::uint8_t value) {
   }
   if (!receiver_enabled()) {
     receiver_ = Receiver{};
+    next_start_.reset();
     receive_transfer_.reset();
   }
 }
@@ -296,21 +297,53 @@ void McuSci::track_idle(const bool level) {
   }
 }
 
+void McuSci::qualify_start() {
+  if (receiver_.start_samples >= 2) {
+    receiver_.stage = RxStage::idle;
+  } else if (receiver_.start_samples != 0) {
+    receiver_.errors |= noise;
+  }
+}
+
+void McuSci::begin_receive(const StartCandidate start) {
+  auto &receiver = receiver_;
+  receiver.stage = RxStage::start;
+  receiver.phase = start.phase;
+  receiver.bit = 0;
+  receiver.samples = 0;
+  receiver.start_samples = start.samples;
+  receiver.word = 0;
+  receiver.errors = 0;
+  receiver.sampled = false;
+  receiver.active = true;
+  receiver.previous_bit = false;
+  if (start.phase == 7) { qualify_start(); }
+}
+
 void McuSci::receive_start(const bool level) {
   auto &receiver = receiver_;
   if (receiver.phase == 3 || receiver.phase == 5 || receiver.phase == 7) {
     receiver.start_samples += level ? 1U : 0U;
   }
-  if (receiver.phase == 7) {
-    if (receiver.start_samples >= 2) {
-      receiver.stage = RxStage::idle;
-      return;
-    }
-    if (receiver.start_samples != 0) { receiver.errors |= noise; }
-  }
+  if (receiver.phase == 7) { qualify_start(); }
   if (receiver.phase >= sample_first && receiver.phase <= sample_last && level) {
     receiver.errors |= noise;
   }
+}
+
+void McuSci::receive_next_start(const bool level, const unsigned preceding_ones) {
+  // S12SCIV4 Figure4-13 permits the next frame after the stop majority,
+  // before RT16. Preserve its start qualification while the old frame's
+  // data/flag transfer remains separately pending or explicitly unknown.
+  if (!receiver_.sampled || (receiver_.errors & framing_error) != 0) { return; }
+  if (!next_start_) {
+    if (level || receiver_.falling_age != 0 || preceding_ones < 3) { return; }
+    next_start_ = StartCandidate{.phase = 1, .samples = 0};
+  } else {
+    ++next_start_->phase;
+  }
+  const auto phase = next_start_->phase;
+  if (phase == 3 || phase == 5 || phase == 7) { next_start_->samples += level ? 1U : 0U; }
 }
 
 void McuSci::receive_data(const bool level) {
@@ -386,18 +419,7 @@ void McuSci::receive_tick(const bool level) {
   track_idle(level);
   if ((status_ & framing_error) != 0 && receiver.stage != RxStage::stop) { return; }
   if (receiver.stage == RxStage::idle) {
-    if (!level && preceding >= 3) {
-      receiver.stage = RxStage::start;
-      receiver.phase = 1;
-      receiver.bit = 0;
-      receiver.samples = 0;
-      receiver.start_samples = 0;
-      receiver.word = 0;
-      receiver.errors = 0;
-      receiver.sampled = false;
-      receiver.active = true;
-      receiver.previous_bit = false;
-    }
+    if (!level && preceding >= 3) { begin_receive({.phase = 1, .samples = 0}); }
     return;
   }
   ++receiver.phase;
@@ -406,6 +428,7 @@ void McuSci::receive_tick(const bool level) {
   } else {
     receive_data(level);
   }
+  if (receiver.stage == RxStage::stop) { receive_next_start(level, preceding); }
   if (receiver.phase != oversampling) { return; }
   receiver.phase = 0;
   receiver.samples = 0;
@@ -419,6 +442,11 @@ void McuSci::receive_tick(const bool level) {
     case RxStage::stop:
       if (!receive_reference_) { receive_complete(); }
       receiver.stage = RxStage::idle;
+      if (next_start_) {
+        const auto next = *next_start_;
+        next_start_.reset();
+        begin_receive(next);
+      }
       break;
     case RxStage::idle: break;
     default: throw Fault("Invalid SCI receiver stage");

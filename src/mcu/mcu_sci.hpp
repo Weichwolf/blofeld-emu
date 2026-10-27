@@ -72,6 +72,11 @@ private:
     unsigned remaining_bus_cycles = 0;
   };
 
+  struct StartCandidate {
+    unsigned phase = 0;
+    unsigned samples = 0;
+  };
+
   [[nodiscard]] unsigned character_bits() const;
   [[nodiscard]] bool busy() const;
   [[nodiscard]] TxFrame data_frame() const;
@@ -80,6 +85,9 @@ private:
   void transmit_tick();
   void receive_tick(bool level);
   void receive_start(bool level);
+  void begin_receive(StartCandidate start);
+  void qualify_start();
+  void receive_next_start(bool level, unsigned preceding_ones);
   void receive_data(bool level);
   void receive_complete();
   [[nodiscard]] ReceiveTransfer receive_frame() const;
@@ -108,6 +116,7 @@ private:
   std::optional<TxFrame> transmitting_;
   std::optional<TxFrame> prepared_;
   Receiver receiver_;
+  std::optional<StartCandidate> next_start_;
   std::optional<SciReceiveReference> receive_reference_;
   std::optional<ReceiveTransfer> receive_transfer_;
 };

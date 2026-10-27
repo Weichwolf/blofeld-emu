@@ -40,6 +40,21 @@ Transmit and receive
   Valid falling data transitions rephase the receiver. Clean matched-baud frames,
   all data bytes, sample-table vectors and selected error sequences are tested.
   Complete mismatch, edge-phase, synchronizer and electrical behavior is unproven.
+- The next qualified falling edge may arrive during the previous stop bit,
+  after its majority decision. Its RT3/5/7 samples survive the old frame's
+  completion; reset or RE disable cancels both. S12SCIV4 section 4.6.5.2,
+  Figure 4-13 (page 41), permits IDLE OR NEXT FRAME after RT10 and derives a 3.90%
+  fast tolerance using 154 receiver cycles. No earlier SCIDR/RDRF transfer edge
+  is inferred.
+- mcu_sci_fast independently constructs two-byte external waveforms at periods
+  1600, 1585 and 1550 IPBus cycles with SBR100. Both 00/ff bytes must survive,
+  with polling after the old full stop boundary and no transfer hypothesis.
+  mcu_sci_overlap checks 10752 literal eight/nine-bit patterns, stop lengths 9..15,
+  clean/noisy next starts, partial-start copies, R8, exact flags and cancellation.
+  The original unknown-transfer refusal remains required inside the old stop.
+  Reproduce with:
+    cmake --build --preset strict --target blofeld-sci-fast-test blofeld-sci-overlap-test
+    ctest --test-dir build/strict -R '^mcu_sci_(fast|overlap)$' --output-on-failure
 - The guide specifies stop sampling but does not unambiguously locate every
   SCIDR/status transfer edge. Register reads between the stop decision and the
   end of the bit fail explicitly. After that interval the received frame is
