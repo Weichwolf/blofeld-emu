@@ -1,0 +1,58 @@
+{
+  "scope": "Additional startup references;reserved DSP write/alias behavior remains unqualified.",
+  "primary_device_manual": {
+    "source": "https://www.nxp.com/docs/en/user-guide/DSP56371UM.pdf",
+    "bytes": 5941916,
+    "sha256": "3303088730c14b47816d6058040d0e8bd18f4c256b9febddb79e02fc3842e8ce",
+    "sections": "3.1.1 and tables3-1..3-6;low Y RAM endpoint0x002000 in every layout."
+  },
+  "additional_manufacturer_documents": [
+    {
+      "source": "https://cache.nxp.com/docs/en/user-guide/SNDBASMTMPL.pdf",
+      "file": "SNDBASMTMPL.pdf",
+      "bytes": 236131,
+      "sha256": "299f7cbde0c8345e585943994b953eb644577a1ef1e45cd71f1a9ea65c4f5229"
+    },
+    {
+      "source": "https://cache.nxp.com/docs/en/user-guide/SNDBDMOUG.pdf",
+      "file": "SNDBDMOUG.pdf",
+      "bytes": 207375,
+      "sha256": "6f478f38bce2114d1ba9effd42fcf6f0d0b9b36b844949c55161d4fd3261c3a1"
+    }
+  ],
+  "vendor_demo_copy": {
+    "source": "https://app.box.com/s/nk0tq0d9y18mac5wigpz4n8lvcoyzwwg",
+    "discovery": "https://community.nxp.com/t5/Other-NXP-Products/Looking-for-demo-code-for-Symphony-Soundbite/td-p/1034052",
+    "file": "PRODTEST_DEMOAPPSRC.zip",
+    "bytes": 1291176,
+    "sha256": "b775b6c0b2a5f82589ab3a4726f825f5e5304303ca8215aac1947f5848b17f6a",
+    "provenance": "Community mirror claiming Freescale production/demo origin;source notices/file organization agree with the official demo guide. Manufacturer distribution identity is not authenticated.",
+    "notices": "2007 Freescale,Inc.;all rights reserved;reference copy remains local.",
+    "nested_archives": [
+      {
+        "file": "PRODTEST_DEMOAPPSRC/SB_DEMOAPP.zip",
+        "bytes": 40694,
+        "sha256": "818cde69be7efaabab8211650fb724d71bb642cb60874469767518a86e10de90"
+      },
+      {
+        "file": "PRODTEST_DEMOAPPSRC/SNDB-PRDN-TEST.zip",
+        "bytes": 1250164,
+        "sha256": "fb69c15dedd8eccfbdded3d5626942a61e76753b7973d80c77a62076ed4cbb6e"
+      }
+    ],
+    "selected_source_sha256": {
+      "SB_DEMOAPP.zip/SoundBite_demo_app/boardtest.asm": "653cdf2764f428a261426b87662f22d848a137c76e6511e84640435e5def06a5",
+      "SB_DEMOAPP.zip/SoundBite_demo_app/sb_isr_esais.asm": "a249a70c6afc498ac0a7890194ac9ff567cd96e764a538355ad9928195519493",
+      "SB_DEMOAPP.zip/SoundBite_demo_app/sb_boardtest_lnk.ctl": "6be38eb560df38265c29ca171e03ea2bc9a0ff43f590daace1d7be688b135989",
+      "SB_DEMOAPP.zip/SoundBite_demo_app/00_README_PROJ.txt": "5064781a2743f41b08dad71089c1bf990a72ca2c0d4dd4a62af569f9ab2c14ab"
+    }
+  },
+  "observations": [
+    "Candidate demo startup configures DSP/peripherals and uses bounded X/Y buffers and a software stack;it supplies no reserved-memory clear or alias observation.",
+    "The packaged SoundBite configuration uses a dsp56374 debug backend although the manufacturer guide identifies a DSPB56371 board;backend names do not validate memory behavior."
+  ],
+  "reserved_write_policy_changed": false,
+  "reference_assets_redistributed": false,
+  "physical_validation": false,
+  "full_boot_qualified": false
+}

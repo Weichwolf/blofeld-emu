@@ -50,3 +50,10 @@ Original 1.25 requests MS/MSW=111. Its reserved Y:002000 clear remains unresolve
 and unchanged, as do matching stock ROM, later Port-F setup, NAND, full boot,
 host MIDI/audio and Desktop/Keyboard hardware comparisons. See dsp-core.txt
 and startup-dsp.txt. No write-discard policy, firmware patch or loop skip is added.
+
+Additional startup references are pinned in dsp-startup-reference.json.
+A community copy of the Freescale SoundBite demo uses bounded X/Y buffers
+and a software stack; its startup supplies no reserved-area clear observation.
+Its packaged debug configuration names a 56374 debug backend for a documented 56371 board.
+Debugger names therefore remain separate from chip/memory validation. Source
+and factory binaries remain local; reserved-write/alias behavior stays unqualified.

@@ -17,6 +17,12 @@
           "bytes": 479232,
           "sha256": "8e60b2e0d7c9f8251c01335543bcec966884670e2f37d4a63afe6d1169425abd",
           "usage": "Independent encoding of the published forced-short-branch SPI prefix; no qualification of the optional processor simulator follows."
+        },
+        {
+          "file": "dsp56720-devtools/dist/dsp56720/libdsp56300.dll",
+          "bytes": 1697465,
+          "sha256": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23",
+          "usage": "Unchanged optional processor reference;static configuration/table checks corroborate the retained switched-memory contradictions. It is not a DSP56371 memory-map or reserved-write oracle."
         }
       ]
     }

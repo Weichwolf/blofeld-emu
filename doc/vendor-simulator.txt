@@ -50,8 +50,11 @@ The tested 56371 model is still not qualified as a memory-map oracle. Native
 MOVEC plus three subsequent NOPs and 140 fixed endpoint cases expose 20 RAM
 disagreements with DSP56371UM tables 3-1..3-6. A fresh model with the original
 first-stage OMR operand independently retains writable X:010000 and loses
-previously written Y:000000, contrary to table 3-2. The cause/configuration
-remains unresolved; these observations do not override the chip manual.
+previously written Y:000000, contrary to table 3-2. Static checks of the unchanged
+processor library now identify incompatible
+switch-configuration constants and its supplied 56371 memory descriptors. Their
+lookup fallback predicts the retained lost-Y/unchanged-X counterexample. Detailed
+analysis remains local; these observations do not override the chip manual.
 The explicit -fastmode option produces identical native instruction/register
 observations in that fresh counterexample and does not resolve the disagreement.
 
@@ -84,4 +87,5 @@ forced-short BRA forms, producing 55 words; see dsp-core.txt. This does not
 qualify processor memory semantics or turn the prefix into a hardware ROM dump.
 
 Archive/payload inventories, installed-tool hashes, registry backup and exact
-session logs remain under ignored doc/local/dsp-vendor-simulator/.
+session logs are retained in the local worktree archive. Current static review
+and the archive locator remain under ignored doc/local/dsp-reserved-primary/.
