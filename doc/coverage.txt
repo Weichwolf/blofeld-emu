@@ -2034,6 +2034,13 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           Optional native move-result publication
                                           now separates actual destination fields
                                           from later ALU/CCR/PC/count retirement.
+                                          Raw M0..M7 sources also publish M/full
+                                          A/B fields and native caches in E1.
+                                          7680 value/CCR streams and180 dependency
+                                          windows cover scaling bypass, CLR flags,
+                                          stores and changed/identical AGU writers;
+                                          snapshot/unsupported-operand guards
+                                          remain (dsp-transfer-pipeline.txt).
                                           Literal load/transfer and parallel ADD/
                                           MPY cases retain original operands,
                                           snapshots and real DMA/F2 prefixes;

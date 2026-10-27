@@ -39,6 +39,19 @@ bool transfer(const Type type, const unsigned opcode) {
   return type == dsp56k::Mover || type == dsp56k::Movec_S1D2 || immediate(type, opcode);
 }
 
+bool modifier_source(const Type first, const Type second, const std::uint32_t opcode) {
+  if (first != dsp56k::Movec_S1D2 || second != dsp56k::Invalid) { return false; }
+  // FM13-131/12-20: raw M0..M7 -> M0..M7, or M0..M7 -> full A/B.
+  // Fixed bit6=0 excludes the SDK's undocumented alias; no other control
+  // sources/destinations or partial accumulators are admitted here.
+  constexpr unsigned modifier_mask = 0xfff8f8;
+  constexpr unsigned modifier_to_modifier = 0x04e0a0;
+  constexpr unsigned accumulator_mask = 0xfffef8;
+  constexpr unsigned modifier_to_accumulator = 0x044ea0;
+  return (opcode & modifier_mask) == modifier_to_modifier ||
+         (opcode & accumulator_mask) == modifier_to_accumulator;
+}
+
 bool accumulator_source(const Type first, const Type second, const std::uint32_t opcode) {
   if (first != dsp56k::Mover || second != dsp56k::Invalid) { return false; }
   const auto source = dsp56k::getRegister(first, dsp56k::Field_eeeee, opcode);
@@ -91,7 +104,9 @@ DspMoveFields pipeline_transfer_fields(const std::uint32_t opcode) {
     Mask read = Mask::None;
     dsp56k::getRegisters(written, read, move, opcode);
     const auto accumulator = accumulator_source(first, second, opcode) ? Mask::AB : Mask::None;
+    const auto modifier = modifier_source(first, second, opcode) ? Mask::M : Mask::None;
     const auto allowed = static_cast<std::uint64_t>(accumulator) |
+                         static_cast<std::uint64_t>(modifier) |
                          static_cast<std::uint64_t>(Mask::X) | static_cast<std::uint64_t>(Mask::Y) |
                          static_cast<std::uint64_t>(Mask::R);
     if ((static_cast<std::uint64_t>(read) & ~allowed) != 0) {

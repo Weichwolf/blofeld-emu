@@ -3,10 +3,12 @@ Automatic native transfers and decoded address dependencies
 The automatic_memory profile accepts selected register/short-immediate and
 two-word long-immediate transfers, alongside its native memory/ALU forms.
 Sources are literal data or X0/X1/Y0/Y1; destinations are those data registers,
-full/partial A/B and R0..R7/N0..N7/M0..M7. Native conversion, arithmetic and
-modifier-cache updates remain in the interpreter. Control/status/SSH sources
-and destinations, accumulator-source transfers, extended data addresses and
-unqualified forms still fail contextually before actual I/O.
+full/partial A/B and R0..R7/N0..N7/M0..M7. Standalone MOVEC M0..M7 sources also
+admit M0..M7 and full A/B destinations (FM13-131/Table12-20). Raw24 transfers
+preserve CCR and bypass scaling/limiting; full A/B receives sign extension and
+zero low24. Native conversion, arithmetic and modifier-cache updates remain in
+the interpreter. Other control/status/SSH operands, unqualified accumulator
+sources and extended data addresses still fail contextually before actual I/O.
 
 Decode derives instruction length from the captured opcode and skips an actual
 extension as a separate instruction. AG1 retains that extension from the prior
@@ -14,6 +16,16 @@ real F2 buffer. E1 validates and consumes the native opcode/extension requests
 from those captured words, publishes actual move destination fields and holds
 the remaining native result. E2 publishes its true PC/native counters/ALU/CCR.
 No host-injected literal, extra program read or replacement evaluator is used.
+Modifier-source E1 publishes actual raw destination/cache fields; E2 retires
+native counters/PC without replacing later fields or an older ALU's CCR. Own
+cases cover all8 M sources,10 destinations,8 values,3 scales and4 CCR seeds;
+84 snapshot cuts and14 explicit control/operand guards retain strict refusals.
+An additional180 stream windows/1080 snapshot cuts check M chains, CLR flags,
+full-accumulator stores, changed/identical M writers, disjoint register sets and
+five upper bytes. AGU Decode holds follow the existing3/2/1/0 reference policy;
+adjacent same-accumulator E1 stores retain their one source hold. Actual native
+AGU consumes the newly published modifier caches; no host address evaluator is
+introduced. REP body admission remains separately restricted.
 The frontend bandwidth naturally leaves a slot between two-word instruction
 starts; native instruction-cycle counters remain distinct from elapsed clocks.
 
@@ -57,6 +69,8 @@ manufacturer program bytes or tool binaries are redistributed.
   cmake --build --preset strict --target blofeld-transfer-pipeline-test
   ctest --test-dir build/strict -j1 --output-on-failure \
     -R '^dsp_pipeline_(transfers|agu_dependencies|transfer_state)$'
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_modifier_(moves|windows)$'
 
 General data-address extensions, full accumulator S/L phases, control/status,
 active physical DMA/arbitration, branch/loop/REP/cache/IRQ/reset fill, authentic

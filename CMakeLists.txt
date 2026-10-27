@@ -3113,7 +3113,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3525,4 +3525,18 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-host-audio-test> $<TARGET_FILE:blofeld-audio-runtime-test>
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio-pipewire")
   set_tests_properties(host_audio_pipewire PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+endif()
+
+# Raw modifier sources retain native register/cache phases and strict operand guards.
+if(BUILD_TESTING)
+  add_executable(blofeld-modifier-move-test test/dsp_modifier_move_test.cpp)
+  target_link_libraries(blofeld-modifier-move-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_modifier_moves COMMAND blofeld-modifier-move-test)
+  set_tests_properties(dsp_modifier_moves PROPERTIES TIMEOUT 300)
+  add_executable(blofeld-modifier-window-test test/dsp_modifier_window_model.cpp
+    test/dsp_modifier_window_test.cpp)
+  target_link_libraries(blofeld-modifier-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_modifier_windows COMMAND blofeld-modifier-window-test)
+  set_tests_properties(dsp_modifier_windows PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-modifier-move-test blofeld-modifier-window-test)
 endif()
