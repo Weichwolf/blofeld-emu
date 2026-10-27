@@ -11,6 +11,7 @@
 namespace blofeld::detail::hcs08 {
 namespace {
 constexpr unsigned lda_immediate = 0xa6;
+constexpr unsigned swi = 0x83;
 constexpr unsigned lda_direct = 0xb6;
 constexpr unsigned lda_extended = 0xc6;
 constexpr unsigned clra = 0x4f;
@@ -197,6 +198,7 @@ RegisterKnowledge registers_after(const Bus &code, const Hcs08State &before, con
     case nop:        // NOP
     case bgnd:       // BGND
     case cli:        // CLI
+    case swi:        // SWI raw frame preserves A/HX knowledge.
     case sei:        // SEI
     case clc:        // CLC
     case sec: break; // SEC

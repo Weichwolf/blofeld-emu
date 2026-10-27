@@ -7,6 +7,7 @@
 #include "globalcontext.hh"
 #include "keyboard/hcs08.hpp"
 #include "keyboard/hcs08_known_memory.hpp"
+#include "keyboard/hcs08_software_interrupt.hpp"
 #include "keyboard/hcs08_write_state.hpp"
 #include "loadimage.hh"
 #include "memstate.hh"
@@ -268,6 +269,19 @@ public:
 
   void captured_return(std::array<Hcs08StackRead, 5> *reads) { return_reads_ = reads; }
 
+  void prepare_software_interrupt(const Hcs08State &before, const unsigned opcode) {
+    constexpr unsigned swi = 0x83;
+    software_frame_.reset();
+    if (opcode == swi) { software_frame_.emplace(bus_, before); }
+  }
+
+  void finish_software_interrupt() {
+    if (software_frame_) {
+      software_frame_->finish({.pc = address_.getOffset(), .sp = memstate->getValue(&layout_.sp)});
+      software_frame_.reset();
+    }
+  }
+
   void prepare_return_frame(const std::optional<std::uint16_t> stack) {
     return_frame_.reset();
     if (stack) { return_frame_ = ReturnFrame{.stack = *stack, .pending = std::nullopt}; }
@@ -316,6 +330,7 @@ public:
     stack_call_ = subroutine_call(opcode);
     stack_return_ = opcode == rts;
     const auto &decoded = translation();
+    check_software_decoder(decoded, word_write, byte_move);
     code.check_execute({.address = static_cast<std::uint16_t>(address_.getOffset()),
                         .length = static_cast<unsigned>(decoded.length)});
     bus_.begin_execution({.address = static_cast<std::uint16_t>(address_.getOffset()),
@@ -332,6 +347,32 @@ public:
   }
 
 private:
+  void check_software_decoder(const DecodedInstruction &decoded,
+                              const bool word_write,
+                              const bool byte_move) const {
+    if (!software_frame_) { return; }
+    unsigned stores = 0;
+    unsigned loads = 0;
+    unsigned calls = 0;
+    bool valid = !word_write && !byte_move;
+    for (const auto *op : decoded.operations) {
+      if (op->getOpcode() == ghidra::CPUI_STORE) {
+        const unsigned expected = stores == 0 ? 2U : 1U;
+        valid = valid && loads == 0 && op->numInput() == 3 && op->getInput(2)->size == expected;
+        ++stores;
+      } else if (op->getOpcode() == ghidra::CPUI_LOAD) {
+        valid = valid && stores == 4 && op->numInput() == 2 && op->getOutput() != nullptr &&
+                op->getOutput()->size == 2 &&
+                op->getInput(1)->space == translator_.getConstantSpace() &&
+                op->getInput(1)->offset == SoftwareInterruptFrame::vector;
+        ++loads;
+      } else if (op->getOpcode() == ghidra::CPUI_CALLIND) {
+        ++calls;
+      }
+    }
+    software_frame_->require_decoder(valid && stores == 4 && loads == 1 && calls == 1);
+  }
+
   [[nodiscard]] static bool subroutine_call(const unsigned opcode) {
     constexpr unsigned bsr = 0xad;
     constexpr unsigned first_jsr = 0xbd;
@@ -513,6 +554,7 @@ private:
   }
 
   [[nodiscard]] ghidra::uintb read_operand(const MemoryRead access) const {
+    if (software_frame_) { return software_frame_->read(access); }
     if (operand_ != nullptr) { return read_captured_operand(access); }
     if (return_frame_ && access.size == 1) {
       for (unsigned index = 0; index < return_frame_->masks.size(); ++index) {
@@ -612,6 +654,10 @@ private:
   }
 
   void write_operand(const MemoryWrite access) {
+    if (software_frame_) {
+      software_frame_->store(access);
+      return;
+    }
     if (operand_ != nullptr || return_reads_ != nullptr) {
       throw Fault("HCS08 captured operand unexpected write address=" + hex(access.address));
     }
@@ -727,6 +773,7 @@ private:
   std::optional<PendingNativeWrite> pending_write_;
   bool word_write_ = false, byte_move_ = false;
   bool stack_call_ = false, stack_return_ = false;
+  mutable std::optional<SoftwareInterruptFrame> software_frame_;
   bool raw_load_ = false, raw_store_ = false;
   bool finished_ = true;
   bool executing_ = false;

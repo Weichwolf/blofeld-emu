@@ -24,10 +24,10 @@ NVM match. Four missing-byte failures and two unused-original-byte controls
 remain strict. The one-shot test bus owns real FLASH/SPI/SOPT and raw SRAM;
 it supplies no ICG/COP timing and refuses all other accesses.
 
-The pinned decoder's SWI uses the vector address as its target without reading
-its contents. Native SWI therefore refuses before CPU/frame/device effects,
-with PC/CCR context;fully known and partial callers are tested. This is an
-explicit unsupported instruction,not completed software-interrupt support.
+Native SWI now uses the same memory-owned vector-byte capability after its
+actual native frame writes;ordinary data/reset reads remain separate. The
+uncorrected constant-target decoder refuses before effects. SWI bus-period
+execution remains unqualified;see hcs08-swi.txt.
 
 Exact physical part/mask,IRQ/bus phases,original reset-to-instrument,MIDI/audio,
 persistence,all-phase update/recovery and hardware equivalence remain open.

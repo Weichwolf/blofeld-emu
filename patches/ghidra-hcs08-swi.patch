@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+--- a/HCS_HC.sinc
++++ b/HCS_HC.sinc
+@@ -1995 +1995 @@
+-	addr:2 = $(VECTOR_SWI);
++	addr:2 = *:2 $(VECTOR_SWI):2;

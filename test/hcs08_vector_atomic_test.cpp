@@ -216,57 +216,47 @@ void run(const Configuration config) {
 }
 
 void swi_controls() {
-  constexpr unsigned known_pc = 0xe007;
-  constexpr unsigned partial_pc = 0xe004;
-  constexpr std::array<std::uint8_t, 10> known{
+  constexpr std::array<std::uint8_t, 10> full{
       0x45, 4, 0x80, 0x94, 0xa6, 0x68, 0x84, 0x83, 0x9d, 0x9d};
   constexpr std::array<std::uint8_t, 7> partial{0x45, 4, 0x80, 0x94, 0x83, 0x9d, 0x9d};
-  for (const bool full : {true, false}) {
+  constexpr unsigned swi_high = 0xfdfc;
+  constexpr unsigned swi_low = 0xfdfd;
+  constexpr unsigned rti = 0x80;
+  constexpr unsigned logical_high = 0xfffc;
+  constexpr unsigned logical_low = 0xfffd;
+  for (const bool known : {true, false}) {
     auto image = own_image(cases.front());
     const std::span<const std::uint8_t> code =
-        full ? std::span<const std::uint8_t>(known) : std::span<const std::uint8_t>(partial);
+        known ? std::span<const std::uint8_t>(full) : std::span<const std::uint8_t>(partial);
     for (unsigned i = 0; i < code.size(); ++i) {
-      const auto offset = fixture::entry - hcs08_flash::first + i;
-      image.data.at(offset) = code[i];
-      image.fresh.reset(offset);
+      image.data.at(fixture::entry - hcs08_flash::first + i) = code[i];
+      image.fresh.reset(fixture::entry - hcs08_flash::first + i);
+    }
+    image.data.at(swi_high - hcs08_flash::first) = moved_handler >> 8U;
+    image.data.at(swi_low - hcs08_flash::first) = 0;
+    image.data.at(moved_handler - hcs08_flash::first) = rti;
+    for (const unsigned address : {swi_high, swi_low, moved_handler}) {
+      image.fresh.reset(address - hcs08_flash::first);
     }
     Unit unit(image);
-    const unsigned setup = full ? 4U : 2U;
+    const unsigned setup = known ? 4U : 2U;
     for (unsigned i = 0; i < setup; ++i) { unit.cpu.step(); }
-    const auto before_cpu = unit.cpu.state();
-    const auto before_memory = unit.memory;
-    require(before_cpu.pc == (full ? known_pc : partial_pc) &&
-                (before_cpu.ccr_known == Hcs08State::all_ccr) == full,
-            "Actual LDHX/TXS and optional LDA/TAP establish the SWI caller knowledge");
-    bool refused = false;
-    std::string error;
-    try {
-      unit.cpu.step();
-    } catch (const Fault &failure) {
-      refused = true;
-      error = failure.what();
-    }
-    require(refused,
-            "SWI was silently accepted: actual PC=" + hex(unit.cpu.state().pc) +
-                " SP=" + hex(unit.cpu.state().sp));
-    require(error.contains("SWI") && error.contains("address=0xfffc") &&
-                error.contains("pc=" + hex(before_cpu.pc)) && error.contains("agent=CPU") &&
-                unit.cpu.state() == before_cpu &&
-                unit.memory.generation == before_memory.generation &&
-                unit.memory.flash.image() == image &&
-                unit.memory.spi.state() == before_memory.spi.state(),
-            "Unqualified SWI refuses before CPU/frame/device/NVM effects,with actual context");
-    for (unsigned i = 0; i < unit.memory.ram.size(); ++i) {
-      require(unit.memory.ram[i].value == before_memory.ram[i].value &&
-                  unit.memory.ram[i].known == before_memory.ram[i].known,
-              "Refused SWI preserves every SRAM byte and knowledge mask");
-    }
-    require(blofeld::test::hcs08::rejected([&] {
-              static_cast<void>(unit.cpu.checkpoint());
-            }).contains("healthy"),
-            "Refused SWI cannot checkpoint a successful CPU boundary");
+    auto expected = unit.cpu.state();
+    unit.cpu.step();
+    auto entered = expected;
+    entered.pc = moved_handler;
+    entered.sp -= 5;
+    entered.ccr |= 8U;
+    require(unit.cpu.state() == entered &&
+                unit.memory.vector_reads == std::vector<std::uint16_t>{logical_high, logical_low},
+            "Known/partial SWI uses real relocated FLASH vector and native frame");
+    unit.cpu.step();
+    ++expected.pc;
+    require(unit.cpu.state() == expected && unit.memory.flash.image() == image,
+            "Actual RTI restores every caller register and known mask without NVM effects");
   }
 }
+
 } // namespace
 
 int main() {

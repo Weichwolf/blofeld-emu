@@ -11,7 +11,7 @@
 #include "keyboard/hcs08_native.hpp"
 #include "keyboard/hcs08_prefetch.hpp"
 #include "keyboard/hcs08_registers.hpp"
-#include "keyboard/hcs08_vector_memory.hpp"
+#include "keyboard/hcs08_vector_read.hpp"
 #include "keyboard/hcs08_write_state.hpp"
 #include "memstate.hh"
 #include "pcoderaw.hh"
@@ -169,15 +169,6 @@ public:
     }
   }
 
-  std::uint8_t read_interrupt_vector_byte(const std::uint16_t address) {
-    if (auto *const owner = dynamic_cast<Hcs08VectorMemory *>(&bus); owner != nullptr) {
-      return owner->read_interrupt_vector_byte(address);
-    }
-    // Flat CPU test buses retain their declared vector cells. Hardware owners
-    // implement the capability; ordinary data/program reads never use it.
-    return static_cast<std::uint8_t>(bus.read_memory({.address = address}));
-  }
-
   void enter_interrupt(const Hcs08State &before, const std::uint16_t vector) {
     constexpr unsigned byte_mask = 0xff;
     constexpr unsigned shift = 8;
@@ -192,8 +183,8 @@ public:
     push_irq_byte({.value = before.ccr, .known = before.ccr_known});
     ccr_known = static_cast<std::uint8_t>(before.ccr_known | interrupt);
     memory.setValue(&layout.ccr, before.ccr | interrupt);
-    const auto high = read_interrupt_vector_byte(vector);
-    const auto low = read_interrupt_vector_byte(static_cast<std::uint16_t>(vector + 1U));
+    const auto high = native::vector_byte(bus, vector);
+    const auto low = native::vector_byte(bus, static_cast<std::uint16_t>(vector + 1U));
     const auto target = static_cast<std::uint16_t>((static_cast<unsigned>(high) << shift) | low);
     memory.setValue(&layout.pc, target);
     executor->setExecuteAddress(ghidra::Address(translator.getDefaultCodeSpace(), target));
@@ -239,7 +230,7 @@ public:
     }
     const auto index = phase - high_cycle;
     const auto address = static_cast<std::uint16_t>(sequence.vector + index);
-    sequence.vector_bytes.at(index) = read_interrupt_vector_byte(address);
+    sequence.vector_bytes.at(index) = native::vector_byte(bus, address);
     ++sequence.vector_reads;
     if (index == 1) {
       bus.acknowledge_interrupt(sequence.vector);
@@ -1192,18 +1183,14 @@ bool Hcs08::execute_native(const Hcs08State &before,
   const auto &code = program != nullptr ? *program : impl_->bus;
   constexpr unsigned rti = 0x80;
   const auto opcode = code.peek(before.pc);
-  constexpr unsigned swi = 0x83;
-  if (opcode == swi) {
-    throw Fault("HCS08 SWI vector read address=0xfffc pc=" + hex(before.pc) +
-                " ccr=" + hex(before.ccr) + " ccr-known=" + hex(before.ccr_known) +
-                " agent=CPU: native vector dereference/owned routing is unqualified");
-  }
   const bool returning = opcode == rti;
   auto registers = returning ? native::RegisterKnowledge{.a = before.a_known, .hx = before.hx_known}
                              : native::registers_after(code, before, impl_->bus);
   auto known = returning ? before.ccr_known : native::ccr_after(code, before);
   impl_->executor->prepare_return_frame(returning ? std::optional(before.sp) : std::nullopt);
+  impl_->executor->prepare_software_interrupt(before, opcode);
   if (!impl_->run_native(program, operand, word_write, byte_move)) { return false; }
+  impl_->executor->finish_software_interrupt();
   if (const auto loaded = impl_->executor->loaded_operand()) {
     registers.a = loaded->known;
     known = native::byte_vnz_after(before, *loaded);

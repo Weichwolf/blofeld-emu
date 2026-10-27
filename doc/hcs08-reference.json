@@ -99,6 +99,11 @@
   "architectural_vector_routing": {
     "primary": "primary_reference",
     "sections": "4.4.6/4.4.7,4.6.2/4.6.4",
-    "scope": "Candidate GT8A partial-protection vector pages;fixed reset and ordinary data/program reads remain direct. CPU hardware IRQ byte reads use an explicit memory-owned capability;physical part/phases remain unverified. Pinned Ghidra SWI currently branches to the vector address without a dereference;native SWI refuses before effects pending complete qualification."
+    "scope": "Candidate GT8A partial-protection vector pages;fixed reset and ordinary data/program reads remain direct. Hardware IRQ and native instruction-retirement SWI byte reads use an explicit memory-owned capability;physical part/phases remain unverified."
+  },
+  "architectural_swi": {
+    "primary": "family_reset_reference",
+    "sections": "SWI detail printed285;RTI detail printed275;GT vector redirection as above",
+    "scope": "Native instruction-retirement SWI pushes PCL/PCH/X/A/CCR,sets I and dereferences actual memory-owned FFFC/FFFD. Raw frame masks and native RTI preserve unknown bits;H is not stacked. No host PC/SP effects. Eleven-period SWI/prefetch,physical timing and full device boot remain unqualified."
   }
 }

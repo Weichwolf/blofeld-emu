@@ -255,3 +255,11 @@ the older own transfer oracle is corrected from the same primary equations.
 The patch uses one zero-context diff per affected upstream file and produces
 the qualified native source bytes. No JIT/physical timing claim is implied.
 See doc/dsp-accumulator-transfers.txt and its reference manifest.
+
+HCS08 software interrupt
+------------------------
+ghidra-hcs08-swi.patch dereferences FFFC/FFFD instead of branching to FFFC.
+It changes only the hash-pinned generated language copy; upstream Apache-2.0
+notices and installed SDK/firmware bytes remain intact. Native execution owns
+stack/branch/SP effects; the memory owner resolves actual vector reads.
+See doc/hcs08-swi.txt for independent tests and timing limits.

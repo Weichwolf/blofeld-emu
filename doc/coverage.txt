@@ -2668,15 +2668,27 @@ Production candidate HCS08 owned-vector routing (hcs08-vector-routing.txt):
 - Actual CPU vector-byte reads use the memory owner's FNORED/FPROT policy;
   logical IRQ selection/priority/acknowledgement and fixed reset remain intact.
   Ordinary data/program reads stay direct;missing relevant latches/data and
-  active NVM fail. Native SWI refuses before effects because the pinned decoder
-  uses the address instead of dereferencing its vector;complete SWI stays open.
+  active NVM fail. Native instruction-retirement SWI uses the same owned
+  vector-byte capability;its bus-period execution remains open.
 - Per sanitizer profile:4096option/protection combinations x62vector bytes,
   12main configuration/order cases,432destroyed-owner period suffixes,six
   untimed one-shot cases/192fresh CPU-memory suffixes,four missing-byte failures,
-  two unused-original-byte controls and two SWI refusals. Independent literal
+  two unused-original-byte controls and two native SWI/RTI controls. Independent literal
   18+11+26=55periods,ISR markers,ordinary LDA and RTI caller/NVM state match.
   Exact physical part/phases,original reset-to-instrument,MIDI/audio,persistence,
   all-phase update/recovery and hardware equivalence remain open.
+
+HCS08 native software interrupt (hcs08-swi.txt):
+- Actual p-code supplies return PC,stack stores,SP and indirect branch;owned
+  FLASH supplies both vector bytes. Raw CCR/A/X masks survive native RTI and
+  fresh CPU/memory checkpoints;H remains unstacked. No firmware/SDK edit.
+- Per sanitizer profile:256CCR inputs,six relocated/direct/cold configurations,
+  108destroyed-owner suffixes,modified-H return,real vector/stack aliasing and
+  wrapping RTI. Missing actual vector bytes/masked-storage capability and the
+  old constant-target decoder fail visibly. Existing native IRQ/bus/priority
+  and432period/192one-shot suffixes remain separate supporting regressions.
+- Eleven-period SWI/prefetch/full original boot,MIDI/audio,storage,all-phase
+  update/recovery,realtime load and physical equivalence remain unqualified.
 
 Automatic native peripheral-to-P memory transfers:
 - Actual captured one-word MOVEP uses native AGU/port/P effects and five extra

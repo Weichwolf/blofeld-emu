@@ -13,7 +13,8 @@ automatically saved. Acknowledgement does not clear a peripheral source flag.
 No instruction retires and no cycle count, prefetch or bus phase is supplied.
 All even architecture vector slots FFC0..FFFA are accepted; actual derivative
 source/reserved-slot priority remains the board owner's responsibility. Reset,
-SWI, odd/out-of-range vectors, foreign IRQ kinds and unknown I/stacked PC fail.
+SWI-as-hardware-request,odd/out-of-range vectors,foreign IRQ kinds and unknown
+I/stacked PC fail. The separate SWI instruction is described in hcs08-swi.txt.
 
 Hcs08KnownMemory is an optional board capability, independent of generic Bus.
 It must retain actual RAM bit masks with ordinary access/effect checks. IRQ

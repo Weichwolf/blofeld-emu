@@ -19,6 +19,7 @@ constexpr unsigned sthx_direct = 0x35, sta_direct = 0xb7, stack_prefix = 0x9e;
 constexpr unsigned sthx_extended = 0x96;
 constexpr unsigned ldhx_stack = 0xfe, sthx_stack = 0xff, ldhx_direct = 0x55;
 constexpr unsigned clra = 0x4f;
+constexpr unsigned swi = 0x83;
 constexpr unsigned shift_x = 0x58, pull_x = 0x88;
 constexpr unsigned sta_stack = 0xe7, stx_stack = 0xef;
 constexpr unsigned lda_direct = 0xb6, lda_extended = 0xc6, clr_direct = 0x3f;
@@ -194,6 +195,7 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     case nop:                             // NOP
     case bgnd: break;                     // BGND
     case tap: defined = all; break;       // TAP
+    case swi:                             // SWI native frame preserves flags and sets I.
     case cli:                             // CLI
     case sei: defined = interrupt; break; // SEI
     case clc:                             // CLC

@@ -1,0 +1,24 @@
+HCS08 native software interrupt
+
+  cmake --build --preset strict --target blofeld-hcs08-swi-test blofeld-hcs08-swi-boundary-test
+  ctest --preset strict -j1 -R '^hcs08_swi(_boundary)?$' --output-on-failure
+
+Family RM Rev2 p285:SWI pushes next-PC PCL/PCH/X/A/CCR,sets I even when I
+was already set,then reads FFFC/FFFD. H is not stacked. The generated pinned
+Ghidra language is patched to dereference the vector;installed SDK and firmware
+remain unchanged. Actual native operations supply all stack/SP/branch effects.
+Memory-owned vector-byte reads retain candidate GT8A FNORED/FPROT routing.
+Unknown frame bits remain owned RAM masks;RTI restores their actual knownness.
+An obsolete constant-target decoder refuses before CPU/frame/vector effects.
+
+Own reset-derived tests use literal frame/state expectations:256CCR inputs,
+six routing/cold configurations,108destroyed-owner checkpoint suffixes,handler
+changes to unstacked H,and missing vector/masked-memory refusals. Flat CPU
+memory tests SP=0:real stack writes overwrite FFFC/FFFD before the vector is
+read;native RTI wraps PCH/PCL reads across FFFF/0000. This is not GT8A RAM.
+Optional prior-decoder argument on blofeld-hcs08-swi-test checks refusal.
+
+Scope is native instruction retirement. Eleven-period SWI/prefetch and physical
+bus timing remain unqualified;nominal cycle metadata alone does not prove them.
+Full original boot,MIDI/audio,storage/update/recovery and hardware equivalence
+remain open. References:hcs08-reference.json,hcs08-vector-routing.txt.
