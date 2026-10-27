@@ -18,6 +18,24 @@ frame duration and continuity must match that explicit clock. Unknown/incomplete
 samples, jitter and a guessed rate cannot become silence. Signed source samples
 are left-aligned in32-bit native-endian PCM containers without resampling.
 
+The requested client format is explicit signed32-native stereo, ordered front-left
+then front-right. After ready and each ordinary poll, the adapter reads back the
+actual client sample specification, channel map and playback buffer attributes.
+Unexpected client PCM changes, unknown/unusable dimensions and non-frame-aligned
+buffers fault the session visibly. HostAudioStreamInfo exposes the last validated
+actual maximum/target/prebuffer/minimum-request dimensions in complete frames,
+stream identity and optional device/suspend metadata. Unsupported optional server
+metadata stays unknown. This is a client stream snapshot, not the physical sink's
+format, measured latency or speaker position. The service owns sink conversion.
+
+Minimum-request granularity is requested as automatic, following the pinned
+native API recommendation; the server chooses its actual value. Requested buffer
+capacity remains bounded. The worker uses the reported target for initial
+readiness, with actual write backpressure and finite-source closure, rather than
+assuming the preference was granted. Moves and suspend/resume update snapshots
+through the existing ordinary mainloop; no allocation/throwing callback is added.
+Emulated clocks, PCM continuity checks and source precision remain independent.
+
 The service buffer is bounded, initially corked, and returns backpressure; callers
 retain every unaccepted frame. start requires queued data; drain requires a
 running stream and waits for an actual service acknowledgement. Writes after
@@ -68,6 +86,24 @@ controls preserve the accepted prefix. Full corked-buffer backpressure, illegal
 start/drain/write order, service termination, SIGSTOP while starting, nonexistent
 and connected-but-unresponsive servers test actual failure paths and cleanup.
 No fuzzing, physical playback, original assets or device programming occurs.
+
+Host portability qualification
+  ctest --test-dir build/strict -R '^host_audio_negotiation$' --output-on-failure
+The additional private-service test requests256/513/4093 frames. On the qualified
+Pulse17 service the actual prebuffers are193/386/3134 frames and automatic minimum
+requests64/128/960 frames; these observations are not universal host limits. This service preserves the
+requested target/maximum; different target grants on an independent service
+remain unqualified.
+Independent pactl introspection verifies client PCM and stream/sink identities.
+Each client is moved while corked from48kHz s32 stereo to a44.1kHz s16 sink with
+reversed channel positions, suspended/resumed, and returned to its original sink.
+All15 snapshots retain the source client PCM. Subsequent native DSP/ESAI playback
+matches all256 frames exactly once in the private monitor for each preference.
+Artifacts retain actual snapshots, captures and failures below build/Testing.
+Separate ASan/UBSan and TSan qualify the affected service/worker consumers.
+This does not qualify in-flight audio moves, resampler output, rewinds, timing
+accuracy or PipeWire. The adapter's snapshots remain confined to its worker;
+forwarding that metadata through normal standalone/profile status is pending.
 
 Sources and sanitizers
 doc/dependencies.json pins all three inputs. CMake verifies archives offline;

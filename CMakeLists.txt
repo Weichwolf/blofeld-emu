@@ -229,13 +229,15 @@ target_link_libraries(blofeld_serial_pcm PUBLIC blofeld_firmware)
 add_library(blofeld_pcm_transport src/audio/pcm_recording.cpp src/audio/pcm_wave.cpp src/audio/pcm_wave_file.cpp)
 target_include_directories(blofeld_pcm_transport PUBLIC src)
 target_link_libraries(blofeld_pcm_transport PUBLIC blofeld_serial_pcm PRIVATE blofeld_private_files)
-add_library(blofeld_host_audio src/audio/host_audio.cpp src/audio/host_audio_pcm.cpp)
+add_library(blofeld_host_audio src/audio/host_audio.cpp src/audio/host_audio_pcm.cpp
+  src/audio/host_audio_stream.cpp)
 target_include_directories(blofeld_host_audio PUBLIC src)
 target_link_libraries(blofeld_host_audio PUBLIC blofeld_serial_pcm PRIVATE blofeld_pulse)
 add_library(blofeld_pcm_queue src/audio/pcm_queue.cpp)
 target_include_directories(blofeld_pcm_queue PUBLIC src)
 target_link_libraries(blofeld_pcm_queue PUBLIC blofeld_serial_pcm)
-add_library(blofeld_audio_runtime src/audio/audio_runtime.cpp src/audio/audio_worker.cpp)
+add_library(blofeld_audio_runtime src/audio/audio_runtime.cpp src/audio/audio_worker.cpp
+  src/audio/audio_wake.cpp)
 target_include_directories(blofeld_audio_runtime PUBLIC src)
 target_link_libraries(blofeld_audio_runtime PUBLIC blofeld_host_audio blofeld_pcm_queue PRIVATE Threads::Threads)
 add_library(blofeld_mcu_midi src/mcu/mcu_midi.cpp src/mcu/mcu_clocked_midi.cpp)
@@ -1227,11 +1229,17 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-pcm-queue-test PRIVATE blofeld_pcm_queue Threads::Threads)
   add_test(NAME pcm_queue COMMAND blofeld-pcm-queue-test)
   set_tests_properties(pcm_queue PROPERTIES TIMEOUT 40)
-  add_executable(blofeld-host-audio-test test/host_audio_test.cpp test/host_audio_native.cpp)
+  add_executable(blofeld-host-audio-test test/host_audio_test.cpp test/host_audio_native.cpp
+    test/host_audio_negotiation.cpp)
   target_link_libraries(blofeld-host-audio-test PRIVATE blofeld_host_audio blofeld_dsp blofeld_dsp_native)
   add_test(NAME host_audio COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio.py" $<TARGET_FILE:blofeld-host-audio-test>)
   set_tests_properties(host_audio PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 90)
+  add_test(NAME host_audio_negotiation COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/host_audio_negotiation.py"
+    $<TARGET_FILE:blofeld-host-audio-test>
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/host-audio-negotiation")
+  set_tests_properties(host_audio_negotiation PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 40)
   add_executable(blofeld-hc12-ccr-test test/hc12_ccr_test.cpp)
   target_link_libraries(blofeld-hc12-ccr-test PRIVATE blofeld_core)
   add_test(NAME hc12_ccr COMMAND blofeld-hc12-ccr-test)

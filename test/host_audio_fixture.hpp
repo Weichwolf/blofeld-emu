@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace blofeld::test::audio {
@@ -14,4 +15,5 @@ inline constexpr std::size_t frame_count = 256;
 inline constexpr std::int32_t first_word = -5913697;
 inline constexpr std::int32_t next_word = 1193046;
 [[nodiscard]] std::vector<SerialPcmFrame> native_frames(bool secondary);
+void negotiation(const std::string &server);
 }

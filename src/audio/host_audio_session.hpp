@@ -27,6 +27,7 @@ struct HostAudioOutput::Session {
   Session &operator=(Session &&) = delete;
 
   void connect();
+  void refresh_stream();
   void poll();
   void check();
   void operation(pa_operation *pending, int &result, std::string_view name);
@@ -34,11 +35,13 @@ struct HostAudioOutput::Session {
   [[nodiscard]] std::size_t write(std::span<const SerialPcmFrame> frames);
   [[noreturn]] void fail(std::string_view name);
   [[noreturn]] void timeout(std::string_view name);
+  [[noreturn]] void incompatible(std::string_view reason);
   static void completed(pa_stream *stream, int success, void *data) noexcept;
   static void underflow(pa_stream *stream, void *data) noexcept;
 
   HostAudioConfig config;
   HostAudioStatus status{};
+  HostAudioStreamInfo observed_stream;
   pa_mainloop *loop = nullptr;
   pa_context *context = nullptr;
   pa_stream *stream = nullptr;

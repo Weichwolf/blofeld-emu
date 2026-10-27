@@ -136,6 +136,8 @@ int main(const int count, char **values) {
     if (mode == "primary" || mode == "secondary" || mode == "default") {
       invalid_configuration(server);
       positive(mode == "default" ? "" : server, mode == "secondary");
+    } else if (mode == "negotiation") {
+      negotiation(server);
     } else if (mode == "missing" || mode == "timeout") {
       connection_failure(server, mode);
     } else if (mode == "death" || mode == "stopped") {

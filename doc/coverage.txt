@@ -92,9 +92,20 @@ Host audio output                partial  Native client plus bounded SPSC handof
                                           independent equations, in 32 complete
                                           streams (dsp-voice-audio.txt). Normal
                                           startup/live production, PipeWire,
-                                          ordinary device moves/rewinds
-                                          and sustained realtime behavior remain
-                                          unqualified. No USB Audio function.
+                                          in-flight device moves/rewinds and
+                                          sustained realtime behavior remain
+                                          unqualified. Client format/rate/layout
+                                          and actual buffer readback, automatic
+                                          minimum requests and actual-target
+                                          worker readiness have scoped native
+                                          checks. Coalesced source wake and
+                                          immediate backlog transfer retain the
+                                          full paced8192-frame stream without
+                                          underrun; deliberate faults still fail. Private corked-stream moves
+                                          across different sink formats/rates/maps
+                                          and suspend/resume retain snapshots
+                                          and subsequent native PCM exactly
+                                          (host-audio.txt). No USB Audio function.
 Optional Spectre sample tools     partial  samples subcommand edits XML 0.5 program
                                           collections and sample metadata.
                                           WAV decoding/import, declared root/loops
@@ -510,8 +521,9 @@ Host MIDI sequencer port         partial  Separate unprivileged Linux MIDI-1 por
                                           firmware/profile binding, physical port
                                           routing and original USB-MIDI remain
                                           open (host-midi-port.txt). Host audio
-                                          format/buffer readback and device-change
-                                          qualification remain open (runtime.txt).
+                                          grant/readback and private route tests
+                                          are separate evidence (host-audio.txt);
+                                          normal runtime remains open (runtime.txt).
 Host-visible USB-MIDI device      missing  Required as an actual USB device, not
                                           solely a virtual ALSA endpoint. No
                                           kernel attachment, complete original enumeration,

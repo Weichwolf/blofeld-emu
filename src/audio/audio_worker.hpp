@@ -2,6 +2,7 @@
 #pragma once
 
 #include "audio/audio_runtime.hpp"
+#include "audio/audio_wake.hpp"
 #include "audio/host_audio.hpp"
 #include "audio/pcm_queue.hpp"
 #include "audio/serial_pcm.hpp"
@@ -29,6 +30,8 @@ struct AudioRuntime::Worker {
   void run(const std::stop_token &stop) noexcept;
   void transfer(HostAudioOutput &output, const std::stop_token &stop);
   void refill();
+  void idle();
+  void notify() noexcept;
   void check_progress(std::size_t admitted);
   void start_if_ready(HostAudioOutput &output, bool blocked, bool closing);
   [[nodiscard]] bool finish_if_ready(HostAudioOutput &output, bool closing);
@@ -40,6 +43,7 @@ struct AudioRuntime::Worker {
 
   const HostAudioConfig config;
   PcmQueue queue;
+  AudioWake wake_event;
   std::array<SerialPcmFrame, batch_frames> batch{};
   std::size_t count = 0;
   std::size_t cursor = 0;
@@ -50,6 +54,8 @@ struct AudioRuntime::Worker {
   std::atomic<std::uint64_t> accepted{0};
   std::atomic<std::uint64_t> written{0};
   std::atomic<std::uint64_t> underflows{0};
+  std::atomic<bool> waiting_for_source{false};
+  std::atomic<int> wake_error{0};
   // Written once by the worker, published with failed/release, read with acquire.
   std::exception_ptr failure;
   // Destroy/join this last-created member before any state it can access.

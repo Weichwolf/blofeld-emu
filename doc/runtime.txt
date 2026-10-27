@@ -21,9 +21,11 @@ Adapt host buffering/packetization to those grants; report unsupported formats,
 lost events and service failures visibly. Never change emulated clocks, PLLs or
 MIDI baud to accommodate the host. Test smaller/different grants and refusal
 paths. Kernel/service behavior on this development host is not a universal
-limit. Audio stream format/rate, channel layout, buffer dimensions and device
-changes require their own readback and qualification; host-midi-port.txt records
-the separate sequencer-port evidence.
+limit. The native session adapter now validates client PCM/rate/layout and actual
+buffer grants, observes device/suspend state and starts its worker from actual
+target dimensions (host-audio.txt). Private corked-stream route/suspend controls
+are qualified; active device moves, rewinds, PipeWire and normal profile/status
+binding remain open. host-midi-port.txt records the separate sequencer evidence.
 
 USB remains MIDI-only. Do not add USB Audio descriptors, endpoints or a virtual
 USB sound card. Host audio playback is independent of the emulated USB link.

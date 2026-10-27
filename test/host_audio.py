@@ -42,7 +42,7 @@ def until(predicate, child, description):
 
 
 @contextlib.contextmanager
-def service(directory):
+def service(directory, extra_config=""):
     runtime = directory / "runtime"
     state = directory / "state"
     runtime.mkdir(mode=0o700)
@@ -58,7 +58,7 @@ def service(directory):
         f"load-module module-native-protocol-unix socket={endpoint} auth-anonymous=1\n"
         "load-module module-null-sink sink_name=fixture format=s32le rate=48000 channels=2 "
         "channel_map=front-left,front-right norewinds=1\n"
-        "set-default-sink fixture\n")
+        "set-default-sink fixture\n" + extra_config)
     with (directory / "server.log").open("w") as log:
         child = subprocess.Popen(["pulseaudio", "--daemonize=no", "--use-pid-file=no",
                                   "--high-priority=no", "--realtime=no", "--exit-idle-time=-1",

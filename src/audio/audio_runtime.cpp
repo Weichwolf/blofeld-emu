@@ -19,6 +19,7 @@ AudioRuntime::Worker::Worker(AudioRuntimeOptions options)
     : config(std::move(options.output)), queue(options.queue_frames) {
   static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
   static_assert(std::atomic<bool>::is_always_lock_free);
+  static_assert(std::atomic<int>::is_always_lock_free);
   static_assert(std::atomic<AudioRuntimeState>::is_always_lock_free);
   thread = std::jthread([this](const std::stop_token &stop) { run(stop); });
   while (state.load(std::memory_order_acquire) == AudioRuntimeState::connecting) {
@@ -29,9 +30,11 @@ AudioRuntime::Worker::Worker(AudioRuntimeOptions options)
 
 AudioRuntime::Worker::~Worker() {
   thread.request_stop();
+  notify();
 }
 
 void AudioRuntime::Worker::publish(const AudioRuntimeState value) noexcept {
+  waiting_for_source.store(false, std::memory_order_release);
   state.store(value, std::memory_order_release);
   state.notify_all();
 }
@@ -57,7 +60,16 @@ PcmSubmission AudioRuntime::Worker::submit(const SerialPcmFrame &frame) noexcept
   if (total == std::numeric_limits<std::uint64_t>::max()) { return PcmSubmission::exhausted; }
   if (!queue.try_push(frame)) { return PcmSubmission::full; }
   accepted.store(total + 1, std::memory_order_release);
+  if (waiting_for_source.exchange(false, std::memory_order_acq_rel)) { notify(); }
   return PcmSubmission::accepted;
+}
+
+void AudioRuntime::Worker::notify() noexcept {
+  const auto error = wake_event.signal();
+  if (error != 0) {
+    int empty = 0;
+    wake_error.compare_exchange_strong(empty, error, std::memory_order_release);
+  }
 }
 
 AudioRuntime::AudioRuntime(AudioRuntimeOptions options)
@@ -91,10 +103,12 @@ void AudioRuntime::check() const {
 
 void AudioRuntime::invalidate() noexcept {
   worker_->retired.store(true, std::memory_order_release);
+  worker_->notify();
 }
 
 void AudioRuntime::finish() {
   worker_->closed.store(true, std::memory_order_release);
+  worker_->notify();
   if (worker_->thread.joinable()) { worker_->thread.join(); }
   worker_->check();
   if (worker_->state.load(std::memory_order_acquire) != AudioRuntimeState::finished) {
@@ -106,6 +120,7 @@ AudioRuntimeStatus AudioRuntime::status() const noexcept {
   return {.state = worker_->state.load(std::memory_order_acquire),
           .accepted = worker_->accepted.load(std::memory_order_acquire),
           .written = worker_->written.load(std::memory_order_relaxed),
-          .underflows = worker_->underflows.load(std::memory_order_relaxed)};
+          .underflows = worker_->underflows.load(std::memory_order_relaxed),
+          .waiting_for_source = worker_->waiting_for_source.load(std::memory_order_acquire)};
 }
 }

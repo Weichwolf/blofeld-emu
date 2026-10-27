@@ -10,6 +10,17 @@ Release/acquire publication protects both frame visibility and slot reuse.
 check, accept, construction and finish are ordinary control-thread operations;
 they can wait/allocate/throw and must not be used as real-time audio callbacks.
 
+The ordinary worker reads actual host buffer grants and uses the reported target
+for startup. Successful writes immediately continue draining queued data instead
+of sleeping after each batch. When the queue is empty it arms a source wait and
+rechecks the queue before waiting, preventing a lost wake at that boundary.
+The producer signals a worker-owned nonblocking eventfd only for an armed source
+wait. The signal coalesces further arrivals; it never allocates, throws or waits.
+Close, retirement and cancellation also wake the worker. Native I/O retains a
+bounded ordinary poll interval. Wake failures are recorded atomically and become
+visible worker faults. The descriptor outlives the native session and is closed
+after the worker joins. These host waits never change emulated clocks or samples.
+
 The worker fills the service's corked buffer before starting; a closed short
 prefix can start and drain without being padded. Backpressure retains the
 unwritten suffix in a fixed256-frame batch. Closure is acquired before the final
@@ -27,7 +38,8 @@ The final drain retains its own client deadline. Valid queued audio can require
 its playback duration; cancellation and lack of progress are separate outcomes.
 No resampling, duplicate frames, invented silence or hardware time is supplied.
 Status fields are independent transport observations, not an atomic device
-snapshot. finish joins and proves successful delivery of the accepted prefix;
+snapshot. waiting_for_source is a separate transport observation, not a kernel
+sleep-state inference. finish joins and proves successful delivery of the accepted prefix;
 destruction requests cancellation instead of claiming successful drain.
 
 reference::Board::attach_pcm_output binds a generic PcmFrameSink to its decoded

@@ -7,7 +7,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <memory>
+#include <pulse/channelmap.h>
 #include <pulse/context.h>
 #include <pulse/def.h>
 #include <pulse/error.h>
@@ -82,6 +84,7 @@ void HostAudioOutput::Session::poll() {
   check();
   if (pa_mainloop_iterate(loop, 0, nullptr) < 0) { fail("mainloop"); }
   check();
+  if (stream != nullptr && pa_stream_get_state(stream) == PA_STREAM_READY) { refresh_stream(); }
 }
 
 void HostAudioOutput::Session::connect() {
@@ -100,14 +103,16 @@ void HostAudioOutput::Session::connect() {
   const pa_sample_spec spec{
       .format = PA_SAMPLE_S32NE, .rate = config.sample_rate, .channels = channels};
   if (pa_sample_spec_valid(&spec) == 0) { throw Fault("Unsupported host audio sample rate"); }
-  stream = pa_stream_new(context, "Blofeld DSP output", &spec, nullptr);
+  pa_channel_map mapping{};
+  pa_channel_map_init_stereo(&mapping);
+  stream = pa_stream_new(context, "Blofeld DSP output", &spec, &mapping);
   if (stream == nullptr) { fail("stream allocation"); }
   pa_stream_set_underflow_callback(stream, underflow, this);
   const auto bytes = config.buffer_frames * frame_bytes;
   const pa_buffer_attr buffer{.maxlength = bytes,
                               .tlength = bytes,
                               .prebuf = bytes,
-                              .minreq = frame_bytes,
+                              .minreq = std::numeric_limits<std::uint32_t>::max(),
                               .fragsize = frame_bytes};
   if (pa_stream_connect_playback(
           stream, nullptr, &buffer, PA_STREAM_START_CORKED, nullptr, nullptr) < 0) {
@@ -168,6 +173,10 @@ void HostAudioOutput::poll() {
 
 HostAudioStatus HostAudioOutput::status() const {
   return session_->status;
+}
+
+HostAudioStreamInfo HostAudioOutput::stream_info() const {
+  return session_->observed_stream;
 }
 
 void HostAudioOutput::start() {

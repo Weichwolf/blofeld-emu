@@ -15,7 +15,7 @@
 #include <span>
 #include <stop_token>
 #include <string>
-#include <thread>
+#include <system_error>
 
 namespace blofeld {
 void AudioRuntime::Worker::observe(const HostAudioStatus &value) noexcept {
@@ -46,6 +46,22 @@ void AudioRuntime::Worker::refill() {
   while (count < batch.size() && queue.try_pop(batch[count])) { ++count; }
 }
 
+void AudioRuntime::Worker::idle() {
+  if (cursor == count) {
+    waiting_for_source.store(true, std::memory_order_release);
+    // Arm before rechecking the queue, so a producer cannot lose the transition
+    // between the last empty observation and the actual wait.
+    refill();
+    if (cursor != count || closed.load(std::memory_order_acquire) ||
+        retired.load(std::memory_order_acquire)) {
+      waiting_for_source.store(false, std::memory_order_release);
+      return;
+    }
+  }
+  wake_event.wait();
+  waiting_for_source.store(false, std::memory_order_release);
+}
+
 void AudioRuntime::Worker::check_progress(const std::size_t admitted) {
   if (admitted != 0 || cursor == count) {
     stalled_since.reset();
@@ -63,7 +79,8 @@ void AudioRuntime::Worker::start_if_ready(HostAudioOutput &output,
                                           const bool closing) {
   const auto status = output.status();
   if (status.started || status.frames_written == 0) { return; }
-  if (status.frames_written >= config.buffer_frames || blocked || (closing && cursor == count)) {
+  if (status.frames_written >= output.stream_info().target_frames || blocked ||
+      (closing && cursor == count)) {
     output.start();
     publish(AudioRuntimeState::playing);
   }
@@ -89,6 +106,11 @@ bool AudioRuntime::Worker::finish_if_ready(HostAudioOutput &output, const bool c
 
 void AudioRuntime::Worker::transfer(HostAudioOutput &output, const std::stop_token &stop) {
   while (!stop.stop_requested() && !retired.load(std::memory_order_acquire)) {
+    const auto wake_failure = wake_error.load(std::memory_order_acquire);
+    if (wake_failure != 0) {
+      throw Fault("Audio wake signal: " +
+                  std::error_code(wake_failure, std::generic_category()).message());
+    }
     const auto closing = closed.load(std::memory_order_acquire);
     refill();
     if (retired.load(std::memory_order_acquire)) { break; }
@@ -104,7 +126,7 @@ void AudioRuntime::Worker::transfer(HostAudioOutput &output, const std::stop_tok
     if (finish_if_ready(output, closing)) { return; }
     output.poll();
     check_underflow(output.status());
-    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    if (admitted == 0) { idle(); }
   }
   publish(retired.load(std::memory_order_acquire) ? AudioRuntimeState::retired
                                                   : AudioRuntimeState::cancelled);

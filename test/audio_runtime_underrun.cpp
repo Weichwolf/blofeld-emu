@@ -125,7 +125,7 @@ ThreadId sleeping_worker(AudioRuntime &output) {
                  "Audio worker must reach its idle wait");
     for (const auto &task : std::filesystem::directory_iterator(tasks)) {
       if (read_line(task.path() / "comm") != "blofeld-audio") { continue; }
-      if (read_line(task.path() / "wchan") != "hrtimer_nanosleep") { continue; }
+      if (!output.status().waiting_for_source) { continue; }
       const auto name = task.path().filename().string();
       ThreadId result = 0;
       const auto converted = std::from_chars(name.data(), name.data() + name.size(), result);
@@ -146,6 +146,7 @@ void closed_underrun(const std::string &server) {
   constexpr unsigned initial = 4096;
   for (unsigned index = 0; index < initial; ++index) { output.accept(frame_at(index)); }
   wait_for([&] { return output.status().state == AudioRuntimeState::playing; }, output);
+  wait_for([&] { return output.status().written == initial; }, output);
   parker.park(sleeping_worker(output));
   // The server drains independently while the actual worker cannot dispatch
   // the notification. Publish the last frame and closure before releasing it.

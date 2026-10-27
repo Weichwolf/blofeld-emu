@@ -32,6 +32,7 @@ struct AudioRuntimeStatus {
   std::uint64_t accepted = 0;
   std::uint64_t written = 0;
   std::uint64_t underflows = 0;
+  bool waiting_for_source = false;
 };
 
 // One ordinary audio worker owns every native client call. One producer submits
