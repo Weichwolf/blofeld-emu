@@ -16,8 +16,11 @@ MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner
                                           explicit-order tests across run/WAI,
                                           OSC/PHY and all5phases;distinct vectors,
                                           RAM and continuous DSP work are checked.
-                                          Physical DSP reset wiring,joint
-                                          checkpoints and normal boot are open.
+                                          Trusted same-owner MCU/DSP/pipeline
+                                          checkpoints cover run/WAI/reset edges
+                                          and fault recovery. External events,
+                                          physical DSP reset wiring and normal
+                                          boot remain open.
 Official 1.25 and reference docs   partial  Downloads, hashes, firmware-layout.txt.
                                           Actual device chip markings unverified.
 Standalone runtime interface     pending  Keyboard must be the default; --desktop

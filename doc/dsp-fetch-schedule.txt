@@ -31,7 +31,7 @@ actual MCU drive/synchronization/settling edges;reattach native observers after
 MCU owner replacement. Supply observed RESET-pad inputs and explicit3..6 SYSCLK
 synchronization. Native vector fetch chooses FFFA(COP) or FFFE(external).
 DSP execution/time continue;physical DSP-reset wiring remains separate.
-External-event arbitration and joint checkpoint/recovery remain open.
+External-event arbitration remains open.
 No real-time guarantee or measured physical timing is established.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test
@@ -54,7 +54,7 @@ unqualified entry. At the declared 12MHz OSC, the 1024-edge RTI endpoint is
 47970 common ticks after 512 OSC or 2560 PHY idle periods. Actual DSP ADD/BRA
 retirements and full accumulator results continue throughout those intervals.
 A native reserved-Y store during WAI preserves only consumed peer periods;
-faulted native execution and MCU/DSP capture reject. This is not joint recovery.
+faulted native execution and new capture reject;trusted joint recovery is below.
 The standard WAI fixture uses the independently checked short BRA loop.
 Long absolute JMP now has separate native/ownership coverage
 (dsp-absolute-control.txt); its coupled WAI precursor is retained locally.
@@ -69,6 +69,26 @@ SRAM retention and full DSP ADD/BRA results are checked. Unknown source pads,
 unconsumed/wrong reset offers,default unqualified contracts and an actual
 reserved-Y failure preserve their visible context and quarantine. No DSP PC,
 firmware state or physical reset-pad result is supplied by the scheduler.
+
+Trusted joint checkpoints capture both native machines and pipeline/clock ledgers
+at completed instruction,WAI-slice or active reset-edge boundaries. Restore
+requires the same native owners and exact input contracts. Reattach MCU observers
+and restore caller-owned wiring/transport/audio event cursors before advancing.
+Snapshots are immutable in-process objects,not a serialized state format.
+Early owner/contract/reentry rejection preserves state;an admitted native restore
+failure quarantines the schedule. No joint atomic rollback is promised.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-checkpoint-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_checkpoint$'
+
+Forty-four native scenarios cover6instruction cuts,4WAI cuts with independent
+future IRQ schedules,25reset cuts/phases/pad holds,and9failure controls. Literal
+MCU frame/register/period expectations and full DSP ADD results accompany exact
+native F1/F2/pipeline suffix comparisons. Deep RAM,reset epochs,unknown RESET-pad
+recovery,real reserved-Y failure/recovery,active/foreign/incompatible owners,
+unclosed/unobserved offers and changed-backend quarantine are checked. External
+I/O,physical timing,whole-board persistence and complete instrument boot remain
+unqualified.
 
 Local original1.25 experiments additionally coupled actual native MCU PORTB
 stores to this pipeline under declared laboratory clocks/ready/skew and a

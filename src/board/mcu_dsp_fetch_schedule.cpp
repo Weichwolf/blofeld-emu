@@ -20,10 +20,27 @@
 #include <exception>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace blofeld {
+struct McuDspFetchCheckpoint::Storage {
+  McuCheckpoint mcu;
+  DspFetchCheckpoint dsp;
+  McuDspFetchInputs inputs;
+  const McuMachine *mcu_owner;
+  const DspMachine *dsp_owner;
+  std::uint64_t end_ticks, cycles, epoch, idle, reset_edges, ties;
+  bool resetting;
+};
+
+McuDspFetchCheckpoint::McuDspFetchCheckpoint(std::shared_ptr<const Storage> storage)
+    : storage_(std::move(storage)) {}
+
+McuDspFetchCheckpoint::~McuDspFetchCheckpoint() = default;
+
 class McuDspFetchSchedule::Guard {
 public:
   explicit Guard(McuDspFetchSchedule &schedule)
@@ -336,5 +353,70 @@ void McuDspFetchSchedule::end_system_reset() {
   }
   finish_boundary();
   resetting_ = false;
+}
+
+McuDspFetchCheckpoint McuDspFetchSchedule::checkpoint() const {
+  healthy();
+  if (resetting_) {
+    mcu_.validate_reset_boundary();
+  } else {
+    mcu_.validate_run_boundary();
+  }
+  consumed();
+  if (offered_ || shared_write_ || waiting_ || cop_deadline_ || wait_context_ || reset_context_) {
+    throw Fault("MCU/DSP fetch capture requires completed native observations");
+  }
+  if (deadline() <= end_ticks_) { throw Fault("MCU/DSP fetch capture lost its peer deadline"); }
+  return McuDspFetchCheckpoint(std::make_shared<const McuDspFetchCheckpoint::Storage>(
+      McuDspFetchCheckpoint::Storage{.mcu = mcu_.checkpoint(),
+                                     .dsp = run_.checkpoint(dsp_),
+                                     .inputs = inputs_,
+                                     .mcu_owner = &mcu_,
+                                     .dsp_owner = &dsp_,
+                                     .end_ticks = end_ticks_,
+                                     .cycles = expected_cycles_,
+                                     .epoch = expected_epoch_,
+                                     .idle = expected_idle_,
+                                     .reset_edges = expected_reset_edges_,
+                                     .ties = ties_,
+                                     .resetting = resetting_}));
+}
+
+void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
+  if (active_ || !checkpoint.storage_ || checkpoint.storage_->mcu_owner != &mcu_ ||
+      checkpoint.storage_->dsp_owner != &dsp_ || checkpoint.storage_->inputs != inputs_) {
+    throw Fault("MCU/DSP fetch restore requires matching inactive owners and input contracts");
+  }
+  const Guard guard(*this);
+  faulted_ = true; // A partial native restore can never become a healthy schedule.
+  const auto &saved = *checkpoint.storage_;
+  mcu_.restore(saved.mcu);
+  run_.restore(saved.dsp, dsp_);
+  end_ticks_ = saved.end_ticks;
+  expected_cycles_ = saved.cycles;
+  expected_epoch_ = saved.epoch;
+  expected_idle_ = saved.idle;
+  expected_reset_edges_ = saved.reset_edges;
+  ties_ = saved.ties;
+  resetting_ = saved.resetting;
+  offered_ = false;
+  shared_write_ = false;
+  waiting_ = false;
+  cop_deadline_ = false;
+  wait_context_.reset();
+  reset_context_.reset();
+  period_cycles_ = 0;
+  cycle_ = {};
+  if (mcu_.system_reset_active() != resetting_) {
+    throw Fault("MCU/DSP fetch restore lost its native reset boundary");
+  }
+  if (resetting_) {
+    mcu_.validate_reset_boundary();
+  } else {
+    mcu_.validate_run_boundary();
+  }
+  consumed();
+  if (deadline() <= end_ticks_) { throw Fault("MCU/DSP fetch restore lost its peer deadline"); }
+  faulted_ = false;
 }
 }

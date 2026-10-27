@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace blofeld {
@@ -20,6 +21,21 @@ struct McuDspFetchInputs {
   unsigned maximum_dsp_cycles_per_period = 0;
   McuDspWaitOrder wait_order = McuDspWaitOrder::unqualified;
   McuDspResetOrder reset_order = McuDspResetOrder::unqualified;
+  bool operator==(const McuDspFetchInputs &) const = default;
+};
+
+// Trusted in-process native snapshot;not a file format or external-I/O rewind.
+class McuDspFetchCheckpoint {
+public:
+  McuDspFetchCheckpoint(const McuDspFetchCheckpoint &) = default;
+  McuDspFetchCheckpoint &operator=(const McuDspFetchCheckpoint &) = default;
+  ~McuDspFetchCheckpoint();
+
+private:
+  friend class McuDspFetchSchedule;
+  struct Storage;
+  explicit McuDspFetchCheckpoint(std::shared_ptr<const Storage> storage);
+  std::shared_ptr<const Storage> storage_;
 };
 
 // Owns nominal MCU-period/DSP-pipeline ordering, with no board wiring or host
@@ -50,6 +66,9 @@ public:
                           const CycleInputs &inputs,
                           const Observer &after_dsp = {});
   void end_system_reset();
+  // Capture only completed native offers;restore drops MCU observers.
+  [[nodiscard]] McuDspFetchCheckpoint checkpoint() const;
+  void restore(const McuDspFetchCheckpoint &checkpoint);
   [[nodiscard]] bool faulted() const;
 
   [[nodiscard]] std::uint64_t end_ticks() const { return end_ticks_; }
