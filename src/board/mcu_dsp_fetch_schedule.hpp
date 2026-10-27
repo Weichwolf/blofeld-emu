@@ -14,6 +14,14 @@
 #include <optional>
 
 namespace blofeld {
+struct McuDspFetchInitialReset {
+  std::uint8_t mode_known = 0;
+  std::uint8_t mode_levels = 0;
+  std::optional<bool> pinit;
+  std::uint32_t recovery_cycles = 0;
+  bool operator==(const McuDspFetchInitialReset &) const = default;
+};
+
 struct McuDspFetchInputs {
   DspFetchRunInputs dsp;
   std::uint64_t epoch_ticks = 0;
@@ -21,6 +29,7 @@ struct McuDspFetchInputs {
   unsigned maximum_dsp_cycles_per_period = 0;
   McuDspWaitOrder wait_order = McuDspWaitOrder::unqualified;
   McuDspResetOrder reset_order = McuDspResetOrder::unqualified;
+  std::optional<McuDspFetchInitialReset> initial_reset = std::nullopt;
   bool operator==(const McuDspFetchInputs &) const = default;
 };
 
@@ -66,6 +75,9 @@ public:
                           const CycleInputs &inputs,
                           const Observer &after_dsp = {});
   void end_system_reset();
+  // Exact consumed DSP-cycle or held boundaries;no asynchronous phase is inferred.
+  void begin_dsp_reset(DspHardwareResetInputs inputs);
+  void release_dsp_reset();
   // Capture only completed native offers;restore drops MCU observers.
   [[nodiscard]] McuDspFetchCheckpoint checkpoint() const;
   void restore(const McuDspFetchCheckpoint &checkpoint);
@@ -81,6 +93,8 @@ private:
   class Guard;
   void healthy() const;
   void consumed() const;
+  void validate_dsp_reset_observation() const;
+  void advance_dsp_reset(bool through);
   void offer_period(bool waiting = false);
   void finish_boundary();
   [[nodiscard]] std::uint64_t mcu_ticks() const;
@@ -107,5 +121,6 @@ private:
   bool cop_deadline_ = false;
   bool active_ = false;
   bool faulted_ = false;
+  bool observing_signals_ = false;
 };
 }

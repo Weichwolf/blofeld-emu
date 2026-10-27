@@ -1641,6 +1641,9 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-mcu-dsp-fetch-reset-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_fetch_reset COMMAND blofeld-mcu-dsp-fetch-reset-test)
   set_tests_properties(mcu_dsp_fetch_reset PROPERTIES TIMEOUT 180)
+  add_executable(blofeld-mcu-dsp-fetch-dsp-reset-test test/mcu_dsp_fetch_dsp_reset_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-fetch-dsp-reset-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  add_test(NAME mcu_dsp_fetch_dsp_reset COMMAND blofeld-mcu-dsp-fetch-dsp-reset-test)
   add_executable(blofeld-mcu-dsp-fetch-checkpoint-test test/mcu_dsp_fetch_checkpoint_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-fetch-checkpoint-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_fetch_checkpoint COMMAND ${Python3_EXECUTABLE}
@@ -2793,6 +2796,17 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-reset-start.trace")
   set_tests_properties(original_reset_start PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-fetch-reset-start-test test/original_fetch_reset_start_test.cpp
+    test/scheduled_coupling_fixture.cpp test/original_owned_clock_fixture.cpp)
+  target_link_libraries(blofeld-original-fetch-reset-start-test PRIVATE blofeld_core blofeld_dsp
+    blofeld_mcu_dsp blofeld_dsp_native blofeld_lcd_fixture)
+  add_test(NAME original_fetch_reset_start COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_reset_start.py"
+    $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-reset-start.json")
+  set_tests_properties(original_fetch_reset_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_test(NAME original_shi_routes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_shi_routes.py"
     $<TARGET_FILE:blofeld-headless>
@@ -3162,6 +3176,7 @@ add_custom_target(quality
     blofeld-mcu-dsp-fetch-schedule-test
     blofeld-mcu-dsp-fetch-wait-test blofeld-mcu-dsp-fetch-reset-test
     blofeld-mcu-dsp-fetch-checkpoint-test
+    blofeld-mcu-dsp-fetch-dsp-reset-test blofeld-original-fetch-reset-start-test
     blofeld-mcu-dsp-wait-test
     blofeld-hc12-cycle-test blofeld-hc12-masked-gpio-test
     blofeld-hc12-cycle-extended-test

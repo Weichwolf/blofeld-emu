@@ -1225,10 +1225,13 @@ Cold boot and reset               partial  Untimed MCU reset-to-application fixt
                                           native continuation/gate snapshots and
                                           fresh CLK2 phase (dsp-fetch-clock.txt).
                                           Direct CPU/reference/DMA admissions
-                                          honor the machine reset gate. Common-
-                                          MCU-clock reset-net integration remains
-                                          open,as do asynchronous assertion and
-                                          physical routing.
+                                          honor the machine reset gate. Common
+                                          MCU-clock hold/recovery and original U0
+                                          release/PORTB SPI now have conditional
+                                          pipeline and held-snapshot regressions
+                                          (dsp-fetch-schedule.txt). Pre-assert DSP
+                                          power-on,asynchronous assertion and
+                                          physical routing remain unqualified.
                                           Additional CPU-cycle adapter runs the
                                           same original 90314-instruction MCU
                                           bootloader with SCI/TIM clocks in

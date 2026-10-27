@@ -70,6 +70,29 @@ unconsumed/wrong reset offers,default unqualified contracts and an actual
 reserved-Y failure preserve their visible context and quarantine. No DSP PC,
 firmware state or physical reset-pad result is supplied by the scheduler.
 
+DSP reset hold/recovery uses dsp.resets=reference_cycle_boundary and explicit
+observed mode5/PINIT-low inputs. initial_reset starts held at epoch_ticks,including
+an already consumed MCU instruction tail. begin_dsp_reset/release_dsp_reset admit
+only exact consumed peer-time boundaries;no asynchronous assertion is inferred.
+Held and recovery time consumes native MCU offers without DSP execution/DMA/CLK2.
+Release may be observed inside the owning native shared-write callback. Recovery
+clamps before the first genuine pipeline period;the new divider phase is retained
+in joint checkpoints. Restore drops external GPIO callbacks;reattach them after
+the joint restore,along with observers and caller-owned transport cursors.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-dsp-reset-test blofeld-original-fetch-reset-start-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(mcu_dsp_fetch_dsp_reset|original_fetch_reset_start)$'
+
+Nine own native cases cover fractional initial tails,held joint replay,actual
+PORTU STAB release before its trailing slot,and simultaneous held MCU reset.
+The optional original1.25 regression observes actual U0 assertion/release and
+PORTB SPI stores. All94program words match unchanged firmware;three held-snapshot
+suffixes preserve native MCU/DSP state,5120byte MCU SRAM and every recorded event,
+including unknown unused U pins. Manual MCU costs/SPI timestamps and all212313
+pipeline periods are checked independently. Execution still fails atY002000,
+PC72/OMR600389. Explicit laboratory GPIO/clocks/pad order and document-derived
+ROM do not qualify pre-assert DSP power-on,physical wiring or complete boot.
+
 Trusted joint checkpoints capture both native machines and pipeline/clock ledgers
 at completed instruction,WAI-slice or active reset-edge boundaries. Restore
 requires the same native owners and exact input contracts. Reattach MCU observers
