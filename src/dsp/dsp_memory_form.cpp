@@ -96,13 +96,21 @@ operation(const Type type, const dsp56k::Field field, const std::uint32_t opcode
                                                          : DspMemoryOperation::write;
 }
 
+bool accumulator_scalar_load(const std::uint32_t opcode) {
+  // FM13-118/122, Table12-14: standalone W=1,EA=1,all eight accumulator fields.
+  constexpr unsigned encoding_mask = 0xf0c0ff;
+  constexpr unsigned accumulator_load = 0x50c000;
+  return (opcode & encoding_mask) == accumulator_load;
+}
+
 std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode) {
   const bool control = type == dsp56k::Movec_ea;
   const auto reg =
       dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
   const auto access = operation(type, dsp56k::Field_W, opcode);
   if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read) &&
-      !full_accumulator_scalar_store(opcode) && !partial_accumulator_scalar_store(opcode)) {
+      !full_accumulator_scalar_store(opcode) && !partial_accumulator_scalar_store(opcode) &&
+      !accumulator_scalar_load(opcode)) {
     return std::nullopt;
   }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);

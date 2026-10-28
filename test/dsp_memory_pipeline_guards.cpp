@@ -25,7 +25,7 @@ void unqualified_forms() {
                            "move x:>$7,x0",
                            "move x:<$7,x0",
                            "move r0,x:(r0)+",
-                           "move x:(r0)+,a",
+                           "move x:(r0+n0),a",
                            "add x1,a x:(r0)+,a",
                            "move x:(r0)+,a y:(r4)+,b"}) {
     DspMachine machine;

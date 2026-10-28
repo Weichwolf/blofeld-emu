@@ -23,8 +23,8 @@ including disjoint parts (FM3.5.1/3.5.2.1).
 Partial checks:576 native plus576 staged value/CCR cases;960 address cases,
 420 cuts/840 suffixes;192 producer windows,288 cuts/576 suffixes;42 strict
 guards/two refusal suffixes each. Producer cases include CLR,full/part literal
-and genuine raw M1->A/B. Full/partial loads,parallel ALU,modes5..7 and reserved
-scaling contexts remain explicit refusals.
+and genuine raw M1->A/B. Parallel ALU,modes5..7 and reserved scaling contexts
+remain explicit refusals. Standalone loads: dsp-accumulator-loads.txt.
 
   ctest --test-dir build/strict -R '^dsp_partial_scalar_' --output-on-failure
 

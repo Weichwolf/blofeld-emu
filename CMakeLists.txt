@@ -3113,7 +3113,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3562,4 +3562,24 @@ if(BUILD_TESTING)
     dsp_repeat_partial_guard PROPERTIES TIMEOUT 300)
   add_dependencies(quality blofeld-partial-scalar-test blofeld-partial-scalar-window-test
     blofeld-repeat-partial-test blofeld-repeat-partial-guard-test)
+endif()
+
+# Standalone accumulator loads retain native values, phases and transfer interlocks.
+if(BUILD_TESTING)
+  add_executable(blofeld-accumulator-load-test test/dsp_accumulator_load_test.cpp)
+  target_link_libraries(blofeld-accumulator-load-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_accumulator_load_native COMMAND blofeld-accumulator-load-test --native)
+  add_test(NAME dsp_accumulator_load_pipeline COMMAND blofeld-accumulator-load-test --candidate)
+  add_test(NAME dsp_accumulator_load_addresses COMMAND blofeld-accumulator-load-test --expanded)
+  add_executable(blofeld-accumulator-load-window-test test/dsp_accumulator_load_window_test.cpp)
+  target_link_libraries(blofeld-accumulator-load-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_accumulator_load_windows COMMAND blofeld-accumulator-load-window-test)
+  add_executable(blofeld-accumulator-load-incoming-test test/dsp_accumulator_load_incoming_test.cpp)
+  target_link_libraries(blofeld-accumulator-load-incoming-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_accumulator_load_incoming COMMAND blofeld-accumulator-load-incoming-test)
+  set_tests_properties(dsp_accumulator_load_native dsp_accumulator_load_pipeline
+    dsp_accumulator_load_addresses dsp_accumulator_load_windows dsp_accumulator_load_incoming
+    PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-accumulator-load-test blofeld-accumulator-load-window-test
+    blofeld-accumulator-load-incoming-test)
 endif()

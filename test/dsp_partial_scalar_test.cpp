@@ -260,7 +260,8 @@ void guard(const Case sample, const unsigned word, const bool scaling) {
 
 unsigned guards() {
   constexpr unsigned reserved_scale = 0xc00;
-  constexpr std::array suffixes{0x9800U, 0x1813U, 0x2800U, 0x3000U, 0x3800U};
+  // Pure loads have positive coverage; parallel load+CLR remains outside this profile.
+  constexpr std::array suffixes{0x9813U, 0x1813U, 0x2800U, 0x3000U, 0x3800U};
   unsigned count = 0;
   for (unsigned source = 0; source < source_words.size(); ++source) {
     const Case sample{.source = source, .value = values[2], .ccr = flags[3]};

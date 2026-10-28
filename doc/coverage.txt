@@ -2947,6 +2947,15 @@ Native CCR, direct register-indirect and OMR control:
   eight own77-word M1->A/B prefix fills and25 invalid body/context controls.
   These remain synthetic component proofs;normal original boot/audio and
   complete hardware acceptance are open (dsp-scalar-stores.txt).
+- Standalone X/Y accumulator loads retain raw partial fields or full bit23
+  sign extension/low24 clearing,CCR and source memory. Checks cover1536 native/
+  staged cases,1280 addresses/560 cuts,80 form/64 mode guards,16 unknown-source
+  recoveries and384 dependent load/store windows/576 cuts. Same-accumulator
+  any-part holds follow FM3.5.2.1. Separate768 incoming-writer windows/1920 cuts
+  retain older CLR CCR/parts and younger load/AG2 fields. REP loads and wider
+  scalar forms stay excluded;
+  these are component checks,not original full initialization or physical proof
+  (dsp-accumulator-loads.txt).
 - Positive immediate/X0 automatic REP retains one genuine body F2 receipt,
   native LC/count ownership,nominal setup5/body1 and distinct AG1/AG2/data/E2
   effects. Bodies include NOP/full A->L:(R4)+ and standalone full/partial A/B->X/Y stores

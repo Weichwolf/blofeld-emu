@@ -1,0 +1,37 @@
+Accumulator scalar memory loads
+
+  ctest --test-dir build/strict -R '^dsp_accumulator_load_' --output-on-failure
+
+DSP56300FM Rev5 3.1.3,12.2.1,Table12-14 and13-118/122 define standalone
+X/Y:(Rn) loads into A0/A1/A2/B0/B1/B2/A/B. Existing one-word modes0..4 and
+all R0..R7 use native AG1 calculation,AG2 update,E1 data/writeback and E2
+retirement. Full destinations sign-extend source bit23 and clear low24;
+partial destinations preserve other parts,A2/B2 accept only low8. CCR and
+source memory stay unchanged. No host numeric/address result is supplied.
+
+Independent checks/profile:1536 native/1536 staged value/CCR cases;1280
+address cases,560 cuts/1120 suffixes;80 form/64 mode guards,two restored
+suffixes each;16 unknown-E1-source cases,two failures and one repaired
+suffix each. SC/FV already refuse frontend ownership;CE/SA refuse before
+the first cycle. Unknown data retains earlier AG2,quarantines native execution
+and requires trusted restore. Supplied fixture RAM then permits the real read.
+
+FM3.5.2.1/Figure3-13 requires one adjacent move-to-move hold for any parts
+of the same accumulator,including load A1 then store A2. Independent checks
+cover384 windows,576 cuts/1152 suffixes,full/partial load producers,all three
+partial-store consumers,both accumulators,all X/Y pairs,same/disjoint sources
+and zero/one-NOP gaps. Every complete CPU/CCR,address,data and retirement
+phase is checked,including a younger store AG2 surviving older publication.
+
+Separate incoming-writer checks cover768 CLR/full/A0/A1/A2/M1 -> full/partial
+load windows and1920 cuts/3840 suffixes,both accumulators,X/Y,gaps0/1 and
+initial CCR0/C1. Older CLR CCR and untouched parts survive the younger load;
+younger AG2/loaded fields survive older E2. A load destination adds no source
+hold. These tests are separate from the load-to-part-store windows above.
+
+Indexed/predecrement/extended/short-address and parallel/dual scalar loads
+remain excluded. REP-load bodies remain excluded by the unchanged shared
+whitelist. This is native component/pipeline evidence,not physical timing
+or complete original initialization. Authentic ROM/reserved Y:002000,normal
+original boot/MIDI/audio,persistence/update/recovery and hardware acceptance
+remain open. Full objective and coverage:coverage.txt.
