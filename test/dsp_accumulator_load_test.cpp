@@ -353,7 +353,7 @@ void guards() {
                        (mode == 6 ? 0U : parallel_clear));
       }
       form_guard(sample, opcode(sample) | parallel_clear);
-      form_guard(sample, opcode(sample) & ~effective_address_bit);
+      form_guard(sample, (opcode(sample) & ~effective_address_bit) | parallel_clear);
       for (const auto status : unqualified_modes) {
         auto mode_sample = sample;
         mode_sample.scale = status;

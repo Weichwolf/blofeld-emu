@@ -215,12 +215,12 @@ inline void restores() {
 }
 
 inline void guards() {
-  // Parallel accumulator forms, extended/short addressing and reserved contexts stay unqualified.
+  // Parallel accumulator forms, extended addressing and reserved contexts stay unqualified.
   constexpr std::array refused{0x56e813U,
                                0x5ff000U,
                                0x50f813U,
                                0x52e813U,
-                               0x549800U,
+                               0x549813U,
                                0x565840U,
                                0x566813U,
                                0x567000U,

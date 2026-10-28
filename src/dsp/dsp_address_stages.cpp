@@ -121,7 +121,19 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruct
     const auto source = cpu.referenceAttemptState();
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
     DspAddressStageView view;
-    if (form->peripheral && !is_program_transfer(*form)) {
+    if (form->absolute_short) {
+      if (extension) { throw Fault("Unexpected extension for native absolute-short AG1"); }
+      const auto target = *form->absolute_short;
+      view = {.word = word,
+              .update = {.space = target.space,
+                         .address = target.address,
+                         .operation = DspMemoryOperation::read,
+                         .pc = word.address,
+                         .omr = omr},
+              .data_accesses = {DspMemoryAccess{.target = target}},
+              .data_access_count = 1,
+              .kind = DspAddressStageKind::absolute_short};
+    } else if (form->peripheral && !is_program_transfer(*form)) {
       if (extension.has_value() == form->peripheral_register) {
         throw Fault("Native peripheral AG1 has a mismatched F2 extension form");
       }

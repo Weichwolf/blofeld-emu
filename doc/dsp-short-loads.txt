@@ -1,0 +1,54 @@
+Standalone absolute-short DSP loads
+
+  cmake --build --preset strict --target \
+    blofeld-short-load-native-test blofeld-short-load-stage-test \
+    blofeld-short-load-guard-test blofeld-short-load-agu-test \
+    blofeld-short-load-accumulator-test blofeld-short-load-loop-test \
+    blofeld-short-load-scaling-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_short_load_'
+  # Build and check the same targets separately with the thread preset.
+
+The automatic_memory profile admits standalone one-word X/Y:aa reads to
+X0/X1/Y0/Y1,all eight accumulator destinations,R0..7,N0..7 and M0..7.
+Regular MOVE requires an empty parallel ALU field; MOVEC admits only Mn.
+Short stores,parallel ALU,other control destinations and REP bodies retain
+their strict exclusions. Short-store timing remains independently unresolved.
+
+The six-bit literal owns AG1 without sampling R/N/M or an extension. AG2
+publishes the address without a pointer update. Actual native E1 reads live
+RAM and publishes its real move result; E2 retires the same occurrence.
+The fixed operand explicitly bypasses indexed/predecrement delay and AGU
+source dependencies. It does not freeze an unrelated older R/N/M writer.
+Reserved Mn can retain raw data without authorizing reserved arithmetic.
+
+Independent literal expectations cover complete CPU/CCR/accumulator parts,
+all other AGUs,nominal/CLK2/DMA periods and guarded X/Y cells at every phase.
+The matrices contain 6,912 native/staged cases,1,008 cuts/2,016 suffixes,
+7,680 additional data-destination cases across the remaining60 literals,
+and18 exact positives for migrated ordinary negative rows. Separate guards
+exercise missing-source quarantine/trusted repair,captured instruction versus
+live RAM,short stores,parallel ALU,reserved selectors and non-M MOVEC controls.
+
+The downstream tests contain 3,072 R/N/M-to-AGU windows and3,072 accumulator
+load-to-partial-store windows. Same/disjoint sources,gaps0..3,raw Mn upper
+bytes,defined four/eight-word modulo buffers,sign extension,source interlocks
+and early AG2 publication have independent expectations and restored suffixes.
+Genuine DO tests cover all36 destinations,zero-count annulment with unknown
+source RAM,single/first/last bodies,backedges and exit. AA6 REP body rejection
+is checked separately with two restored failure suffixes.
+
+Actual native SR writes,settling NOPs and a real return jump establish both
+supported scaling modes without assigning CPU state from the host. Separate
+native/staged matrices check3,456 loads each and56 cuts/112 suffixes:memory
+inputs retain their raw/part/full destination rules and incoming CCR.
+
+The tests use original native interpreter behavior with own diagnostic programs.
+Literal encodings have288 independent vendor-assembler agreements; identities
+and exact scope are in dsp-short-load-reference.json. Proprietary tools/assets
+remain local and are not required by CTest. Reference phases and native cycle
+diagnostics do not establish measured silicon bus edges.
+
+The common DspMemoryForm layout changes; rebuild its containing consumers.
+The unchanged original reset/SPI frontier,authentic mask ROM,reserved Y:002000
+semantics,normal original Desktop/Keyboard operation,MIDI/audio,persistent
+storage,update/recovery and physical acceptance remain separate requirements.

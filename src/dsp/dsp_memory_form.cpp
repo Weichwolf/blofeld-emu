@@ -103,6 +103,33 @@ bool accumulator_scalar_load(const std::uint32_t opcode) {
   return (opcode & encoding_mask) == accumulator_load;
 }
 
+bool accumulator_register(const Reg reg) {
+  return reg == Reg::A0 || reg == Reg::A1 || reg == Reg::A2 || reg == Reg::B0 || reg == Reg::B1 ||
+         reg == Reg::B2 || reg == Reg::A || reg == Reg::B;
+}
+
+std::optional<DspMemoryForm> absolute_short_load(const Type type, const unsigned opcode) {
+  const bool control = type == dsp56k::Movec_aa;
+  if (type != dsp56k::Movex_aa && type != dsp56k::Movey_aa && !control) { return std::nullopt; }
+  if (operation(type, dsp56k::Field_W, opcode) != DspMemoryOperation::read) { return std::nullopt; }
+  const auto reg =
+      dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
+  constexpr unsigned arithmetic_bits = 0xff;
+  if (control) {
+    // MOVEC13-131:only ordinary modifier destinations;SR/OMR/stack/loop controls stay excluded.
+    if (reg < Reg::M0 || reg > Reg::M7) { return std::nullopt; }
+  } else if ((opcode & arithmetic_bits) != 0 ||
+             (!data_register(reg) && !address_register(reg) && !accumulator_register(reg))) {
+    return std::nullopt;
+  }
+  const bool y = type == dsp56k::Movey_aa ||
+                 (control && dsp56k::getFieldValue(type, dsp56k::Field_S, opcode) != 0);
+  // Literal AA6 owns the address;no R/N/M source is sampled or updated by AG2.
+  return DspMemoryForm{.absolute_short = DspAddress{
+                           .space = y ? DspSpace::y : DspSpace::x,
+                           .address = dsp56k::getFieldValue(type, dsp56k::Field_aaaaaa, opcode)}};
+}
+
 std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode) {
   const bool control = type == dsp56k::Movec_ea;
   const auto reg =
@@ -206,6 +233,8 @@ std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
   if (const auto peripheral = peripheral_immediate(first, opcode)) { return peripheral; }
   if (const auto peripheral = peripheral_register(first, opcode)) { return peripheral; }
   if (dsp56k::Opcodes::getOpcodeLength(opcode, first, second) != 1) { return std::nullopt; }
+  if (const auto direct = absolute_short_load(first, opcode)) { return direct; }
+  if (const auto direct = absolute_short_load(second, opcode)) { return direct; }
   const auto type = memory(first) ? first : second;
   if (type == dsp56k::Movex_ea || type == dsp56k::Movey_ea || type == dsp56k::Movec_ea) {
     return single(type, opcode);

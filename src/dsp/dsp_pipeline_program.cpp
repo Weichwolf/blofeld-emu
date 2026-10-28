@@ -21,7 +21,10 @@ bool program_word(const std::optional<DspProgramWord> word) {
 unsigned memory_delay(const std::optional<DspProgramWord> word) {
   if (program_word(word)) { return 5; }
   const auto form = word ? decode_memory_stage(word->value) : std::nullopt;
-  if (!form || form->peripheral || form->long_pair || form->lane_count != 1) { return 0; }
+  if (!form || form->absolute_short || form->peripheral || form->long_pair ||
+      form->lane_count != 1) {
+    return 0;
+  }
   const auto mode = form->lanes[0].mode;
   return mode == 5 || mode == 7 ? 1U : 0U;
 }

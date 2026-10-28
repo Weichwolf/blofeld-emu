@@ -80,6 +80,7 @@ void append(DspReferenceCycleResult &result, const DspMemoryAccess access) {
 
 std::optional<DspMemoryAccess> peripheral_data(const std::optional<DspAddressStageView> &memory) {
   if (!memory) { return std::nullopt; }
+  if (memory->kind == DspAddressStageKind::absolute_short) { return std::nullopt; }
   if (memory->kind == DspAddressStageKind::register_agu) {
     const auto form = decode_memory_stage(memory->word.value);
     if (!form || !is_program_transfer(*form)) { return std::nullopt; }

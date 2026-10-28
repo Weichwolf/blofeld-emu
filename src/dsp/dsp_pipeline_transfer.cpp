@@ -125,7 +125,10 @@ pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &pr
   if (branch && branch->address_register) {
     read = 1U << *branch->address_register;
   } else {
-    if (!memory || (memory->peripheral && !is_program_transfer(*memory))) { return 0; }
+    if (!memory || memory->absolute_short ||
+        (memory->peripheral && !is_program_transfer(*memory))) {
+      return 0;
+    }
     for (unsigned lane = 0; lane < memory->lane_count; ++lane) {
       read |= 1U << memory->lanes.at(lane).reg;
     }

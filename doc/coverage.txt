@@ -2963,6 +2963,15 @@ Native CCR, direct register-indirect and OMR control:
   Reserved Mn arithmetic refuses visibly while arbitrary raw Mn storage and
   unused-Mn accesses remain valid. See dsp-preupdate-memory.txt. This does
   not establish measured silicon phases or complete original boot/audio.
+- Standalone X/Y:aa loads add literal-address ownership for all36 data,
+  accumulator and R/N/M destinations without extensions or phantom AGU use.
+  Native/staged,missing-source,captured-word,consumer and genuine DO/REP
+  assertions are in dsp-short-loads.txt;288 independent encoding agreements
+  are pinned in dsp-short-load-reference.json. The9 feature groups,including
+  native/staged SR-scaling controls,and47 affected predecessor groups pass both
+  sanitizer profiles without skips. Containing consumers and the standalone
+  executable are rebuilt and qualified. Complete original startup and physical
+  timing remain open.
 - Positive immediate/X0 automatic REP retains one genuine body F2 receipt,
   native LC/count ownership,nominal setup5/body1 and distinct AG1/AG2/data/E2
   effects. Bodies include NOP/full A->L:(R4)+ and standalone full/partial A/B->X/Y stores

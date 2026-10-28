@@ -33,7 +33,8 @@ struct DspAddressStageLane {
 enum class DspAddressStageKind : std::uint8_t {
   register_agu,
   peripheral_immediate,
-  peripheral_register
+  peripheral_register,
+  absolute_short
 };
 
 struct DspAddressStageView {

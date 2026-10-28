@@ -1,0 +1,51 @@
+{
+  "manual": {
+    "url": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "manifest": "doc/hardware/sources.json",
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "12.2.1/Table12-14",
+      "13-118/122",
+      "13-131",
+      "3.5.1/3.5.2.1",
+      "A1"
+    ]
+  },
+  "assembler": {
+    "file": "asm56300.exe",
+    "package_manifest": "doc/reference-tools.json",
+    "sha256": "8e60b2e0d7c9f8251c01335543bcec966884670e2f37d4a63afe6d1169425abd"
+  },
+  "independent_encoding_agreements": {
+    "additional_accumulator_R_N_M_loads": 256,
+    "data_register_loads": 32,
+    "total_loads": 288,
+    "addresses": [
+      0,
+      1,
+      31,
+      63
+    ],
+    "spaces": [
+      "X",
+      "Y"
+    ]
+  },
+  "receipts": [
+    {
+      "scope": "32 additional destinations",
+      "own_source_sha256": "b63e7805410b984f7ce309f70b23e5275c857d1899149b23be0a86325775691f",
+      "vendor_listing_sha256": "49445e1fabccdd3c6d0e5ee87cd61f673ca0889383dff5dc5dd3e5a10627def5",
+      "encodings_sha256": "5a8d8108e01547572696baaba1c8653fb9cc42808d707b1d3170807ee8dbcdbf"
+    },
+    {
+      "scope": "4 data destinations;load subset of64 load/store forms",
+      "own_source_sha256": "b7d5ae2dd5b307a9dc2a460c4a9e6abf809c4fa2b7e9de45a09d426a0e2e6df3",
+      "vendor_listing_sha256": "057d9383ff4c45333e72d6e5d21902f9f97f79ce0e782cab6ec4ca2f48e52581",
+      "encodings_sha256": "b0572c05713c5f308eca623c08448ab0ae846a9953774bfbd8d93727256a996a"
+    }
+  ],
+  "scope": "Own literal encodings compared with the independent vendor assembler;no manufacturer program or vendor assets are included.",
+  "timing": "Reference periods/native diagnostic counts do not establish silicon sampling edges.Short-store timing remains unqualified and short stores stay excluded.",
+  "silicon_validation": false
+}
