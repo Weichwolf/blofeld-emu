@@ -57,21 +57,32 @@ bool accumulator_source(const Type first,
                         const Type second,
                         const std::uint32_t opcode,
                         const AccumulatorSource kind = AccumulatorSource::full) {
-  if (first != dsp56k::Mover || second != dsp56k::Invalid) { return false; }
-  const auto source = dsp56k::getRegister(first, dsp56k::Field_eeeee, opcode);
+  const bool standalone = first == dsp56k::Mover && second == dsp56k::Invalid;
+  // FM13-7/178,Tables12-13/16: ADD opposite accumulator or TFR Y0,A/B.
+  // Ignore only the destination-accumulator bit in the literal ALU byte.
+  constexpr unsigned alu_without_destination = 0xf7;
+  constexpr unsigned add_opposite = 0x10;
+  constexpr unsigned transfer_y0 = 0x51;
+  const auto alu = opcode & alu_without_destination;
+  const bool parallel = kind == AccumulatorSource::middle && second == dsp56k::Mover &&
+                        ((first == dsp56k::Add_SD && alu == add_opposite) ||
+                         (first == dsp56k::Tfr && alu == transfer_y0));
+  if (!standalone && !parallel) { return false; }
+  const auto move = standalone ? first : second;
+  const auto source = dsp56k::getRegister(move, dsp56k::Field_eeeee, opcode);
   const bool full = source == dsp56k::Register::A || source == dsp56k::Register::B;
   const bool middle = source == dsp56k::Register::A1 || source == dsp56k::Register::B1;
   if (!(kind == AccumulatorSource::full ? full : middle)) { return false; }
   auto written = Mask::None;
   auto read = Mask::None;
-  dsp56k::getRegisters(written, read, first, opcode);
+  dsp56k::getRegisters(written, read, move, opcode);
   constexpr auto destinations = static_cast<std::uint64_t>(Mask::X) |
                                 static_cast<std::uint64_t>(Mask::Y) |
                                 static_cast<std::uint64_t>(Mask::R);
   return written != Mask::None && (static_cast<std::uint64_t>(written) & ~destinations) == 0;
 }
 
-bool standalone_accumulator_source(const std::uint32_t opcode, const AccumulatorSource kind) {
+bool decoded_accumulator_source(const std::uint32_t opcode, const AccumulatorSource kind) {
   if (opcode > word_mask) { return false; }
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
@@ -82,11 +93,11 @@ bool standalone_accumulator_source(const std::uint32_t opcode, const Accumulator
 }
 
 bool accumulator_transfer_source(const std::uint32_t opcode) {
-  return standalone_accumulator_source(opcode, AccumulatorSource::full);
+  return decoded_accumulator_source(opcode, AccumulatorSource::full);
 }
 
 bool middle_accumulator_transfer_source(const std::uint32_t opcode) {
-  return standalone_accumulator_source(opcode, AccumulatorSource::middle);
+  return decoded_accumulator_source(opcode, AccumulatorSource::middle);
 }
 
 unsigned pipeline_word_count(const DspProgramWord word) {

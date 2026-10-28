@@ -1,0 +1,48 @@
+{
+  "scope": "Independent own programs on unchanged NXP software model,OMR300;software ISA/timing evidence,not silicon or complete instrument acceptance.",
+  "manual": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "bytes": 24396254,
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "5.4.3.3",
+      "Table5-1",
+      "3.5.2.1",
+      "A.2.3",
+      "13-7",
+      "13-178",
+      "Table12-13",
+      "Table12-16"
+    ]
+  },
+  "qualifications": {
+    "main_156": "d0f41060011b4e846f1ecdde3c0ab6e4dbdb3fe2ed03b0d3786e45ae52e8260b",
+    "ADD_producers_24": "d2c8c5708dc82fc4e10c3500fda70f50a38a3668ff81891a256e5d4d907a37a9",
+    "explicit_SZ_precondition": "09ef8864e8b654e249d90baadb5a99e5ccf03f0897418a068be031bfae71f926"
+  },
+  "cases": 180,
+  "observations": {
+    "full_46_instruction_points": 6218,
+    "normalized_clock_points": 2618,
+    "parallel_operations": 182,
+    "source_producers": 48,
+    "source_interlocks": 12,
+    "explicit_SZ_precondition_points": 8
+  },
+  "admitted_forms": "Parallel raw A1/B1 -> X0/X1/Y0/Y1/R0..7 accompanying TFR Y0,A/B or ADD B,A/A,B. The raw move uses the old middle word without full-accumulator scaling/limiting. ALU results use old operands and retain their independent status effects.",
+  "interlock_rule": "Only a preceding one-word writer to the raw bus source accumulator adds a period. Other accumulator ALU inputs retain ordinary forwarding.",
+  "reference_cases": "All12 destinations and two raw sources/four ALU forms;carry/overflow/zero/normalization,prior sticky flags,scaling,48 own/foreign partial writers with0/1/2 gaps,and two consecutive loader-shaped old-value captures.",
+  "assembler_diagnostics": {
+    "retained_interlock_warnings": 12,
+    "unexpected_Wine_page_faults": 3,
+    "unexpected_Wine_object_dumps": 4,
+    "resolution": "Original diagnostics and failed qualifier retained. One isolated clean assembler-only pass per affected input produced identical complete words/starts;no CPU replay. Wine root cause remains unknown.",
+    "reassembly_receipt_sha256": "6810351c4fdd68fa46bae430d3bd3e5fa98dc997b0c19f397a2f187538442745"
+  },
+  "automatic_scope": "180 own native reset-preamble/RAM streams;3710 complete per-period CPU/table-counter/all16-stack checks. Exact E1 raw destinations and E2 ALU/status/PC.532 cuts across24 selected cases restore twice per sanitizer profile;736 unsupported forms retain strict Decode context. SZ is initialized by actual own MOVEC;explicit own NOP memory supplies bounded prefetch.",
+  "limits": "Other ALU/raw forms,arithmetic/memory producers,SR-read timing,original near-end calls,IRQ/cache/extended stack,authentic ROM/reserved memory,full original reset-to-instrument and complete MIDI/audio/storage/update/recovery/realtime acceptance remain unqualified.",
+  "manufacturer_program_bytes_embedded": false,
+  "physical_timing_qualified": false,
+  "complete_original_startup_qualified": false
+}

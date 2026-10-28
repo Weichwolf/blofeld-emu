@@ -206,9 +206,9 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
       cycle.e1_deferred_accumulators = deferred_alu_accumulators(*cycle.execute2, *cycle.execute1);
       const DspInstructionDependency inputs{.producer = *cycle.execute2,
                                             .consumer = *cycle.execute1};
-      cycle.memory_source_stall =
-          memory_source_dependency(inputs) != 0 || pipeline_loop_source_dependency(inputs) ||
-          accumulator_transfer_dependency(inputs.producer.value, inputs.consumer.value) != 0;
+      cycle.memory_source_stall = memory_source_dependency(inputs) != 0 ||
+                                  pipeline_loop_source_dependency(inputs) ||
+                                  accumulator_transfer_dependency(inputs) != 0;
     }
   }
   if (cycle.execute2) {

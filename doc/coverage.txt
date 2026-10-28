@@ -3095,5 +3095,14 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   the Y1 count path through actual BSR/inner-DOR/RTS have independent model
   evidence.118 automatic streams,692 joint cuts/two suffixes and full native
   E1/E2/CPU/counters/all16 stack cells pass per sanitizer profile. See
-  dsp-raw-middle-transfers.txt. Other partial/parallel sources,SR-read timing,
-  original near-end calls and full original hardware acceptance remain open.
+  dsp-raw-middle-transfers.txt. Other partial sources,unqualified parallel forms,
+  SR-read timing,original near-end calls and full original hardware acceptance remain open.
+
+- Parallel raw A1/B1 -> X0/X1/Y0/Y1/R0..7 accompanying TFR Y0,A/B or
+  ADD B,A/A,B retains old bus/ALU operands and source-only interlocks.
+  Independent180-window evidence and3710 native periods cover exact E1 lanes,
+  E2 ALU/status/PC,counters and all16 stack cells.532 cuts across24 cases restore
+  twice;736 unsupported forms retain contextual Decode failures per sanitizer
+  profile. See dsp-parallel-middle-transfers.txt. Other ALU/raw forms,SR-read
+  timing,original near-end calls and complete original instrument acceptance
+  remain unqualified;reserved Y:002000 and authentic ROM requirements persist.

@@ -1,0 +1,29 @@
+Parallel DSP middle-word transfers
+
+  cmake --build --preset strict --target blofeld-parallel-middle-test
+  ctest --test-dir build/strict -j1 --output-on-failure -L '^dsp_parallel_middle_runtime$'
+
+TFR Y0,A/B and ADD B,A/A,B may accompany raw A1/B1 -> X0/X1/Y0/Y1/R0..7.
+The move captures the old24-bit middle word;the ALU uses its old operands.
+Raw lanes bypass full-accumulator scaling/limiting. ADD retains its genuine
+56-bit result and CCR effects;TFR bypasses the shifter/limiter. E1 publishes
+only the move lane;E2 publishes the ALU result,status,PC and table counters.
+
+FM3.5.2.1/A.2.3:an adjacent writer to any part of the raw source accumulator
+adds one period. Other accumulator ALU inputs retain ordinary forwarding.
+The typed producer/consumer pair prevents interchange of dependency inputs.
+Other ALU forms,raw parts and accumulator destinations remain excluded.
+
+180 independently qualified own programs cover all destinations,old-value
+aliases,carry/overflow/zero/normalization,sticky flags,scaling,48 partial
+producers and consecutive loader-shaped transfers. Every one of3710 periods
+checks complete native CPU,counters and all16 stack cells.532 cuts across24
+cases restore twice,including held-source and E1-before-E2 states.736 negative
+forms retain actual Decode address/PC/OMR. See dsp-parallel-middle-reference.json
+for exact model inputs,retained vendor/Wine diagnostics and limits.
+
+Own ROM setup executes MOVEC SZ0:FM5.4.3.3 leaves SZ undefined after reset.
+Explicit own RAM NOPs supply bounded F2 prefetch;unknown memory remains strict.
+These fixtures do not establish authentic ROM,reserved-memory behavior,
+near-end loop calls or full original instrument operation. Subsequent SR-read
+timing remains separate in dsp-status-pipeline.txt.

@@ -73,14 +73,22 @@ std::uint8_t deferred_alu_accumulators(const DspProgramWord producer,
   return dependency(operands(producer, true).written, operands(consumer, true).read);
 }
 
-std::uint8_t accumulator_transfer_dependency(const std::uint32_t producer,
-                                             const std::uint32_t consumer) {
+std::uint8_t accumulator_transfer_dependency(const DspInstructionDependency instructions) {
+  const auto consumer = instructions.consumer.value;
   if (!accumulator_transfer_source(consumer) && !middle_accumulator_transfer_source(consumer)) {
     return 0;
   }
-  // FM3.5.1/3.5.2.1: ALU and move writers interlock only on the same accumulator.
-  return dependency(operands({.value = producer}, false).written,
-                    operands({.value = consumer}, false).read);
+  static const dsp56k::Opcodes opcodes;
+  auto first = dsp56k::Invalid;
+  auto second = dsp56k::Invalid;
+  static_cast<void>(opcodes.getInstructionTypes(consumer, first, second));
+  const auto move = first == dsp56k::Mover ? first : second;
+  auto written = Mask::None;
+  auto read = Mask::None;
+  dsp56k::getRegisters(written, read, move, consumer);
+  // FM3.5.1/3.5.2.1: only the bus source interlocks; ordinary ALU operands
+  // retain their existing forwarding,including the other accumulator.
+  return dependency(operands(instructions.producer, false).written, read);
 }
 
 std::uint8_t memory_source_dependency(const DspInstructionDependency instructions) {

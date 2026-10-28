@@ -47,7 +47,7 @@
     "reassembly_receipt_sha256": "9cdf065fea2e91806677c82abe2d522b72b4ac84eed2bf269e7d9ad15a4f7ebb"
   },
   "automatic_scope": "118 streams;literal native initial seeds and full CPU/table counters/all16 stack cells every period. Destination fields publish at real E1;PC/counters at E2.692 selected joint cuts across18 raw/interlocked/multiword/count/call cases restore twice(1384 suffixes) per sanitizer profile.",
-  "limits": "Raw A0/A2/B0/B2 consumers,parallel raw moves,arithmetic/memory producer windows and subsequent SR-read timing are separate. Original near-end calls,negative/wrapped loops,IRQ/cache/extended stack,authentic ROM,reservedY/reset-to-instrument,MIDI/audio/storage/update/recovery/realtime/physical acceptance remain open.",
+  "limits": "Raw A0/A2/B0/B2 consumers,parallel forms outside dsp-parallel-middle-transfers.txt,arithmetic/memory producer windows and subsequent SR-read timing are separate. Original near-end calls,negative/wrapped loops,IRQ/cache/extended stack,authentic ROM,reservedY/reset-to-instrument,MIDI/audio/storage/update/recovery/realtime/physical acceptance remain open.",
   "manufacturer_program_bytes_embedded": false,
   "physical_timing_qualified": false,
   "complete_original_startup_qualified": false
