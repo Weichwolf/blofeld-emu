@@ -437,10 +437,14 @@ void DspProgramFetch::hold_after(const DspFetchedInstruction &captured) {
 void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
   const auto form = decode_branch_form(decision.word.value);
-  const bool one_word = form && (form->displacement || form->address_register);
-  if (form && form->absolute_extension && loop_ && (loop_->depth() != 0 || loop_->pending() != 0)) {
-    throw Fault("Unqualified absolute JMP/active DO read P:" + hex(decision.word.address, 6) +
-                " pc=" + hex(decision.word.address, 6) + " omr=" + hex(decision.omr, 6));
+  const bool one_word = form && form->words() == 1;
+  if (form && (form->absolute_extension || form->subroutine_call || form->subroutine_return) &&
+      loop_ && (loop_->depth() != 0 || loop_->pending() != 0)) {
+    const auto *const operation = form->absolute_extension
+                                      ? "Unqualified absolute JMP/active DO read P:"
+                                      : "Unqualified subroutine/active DO read P:";
+    throw Fault(operation + hex(decision.word.address, 6) + " pc=" + hex(decision.word.address, 6) +
+                " omr=" + hex(decision.omr, 6));
   }
   if (!state_.active || branch_ || opening_ ||
       decision.omr != execution_omr(select(decision.word.address, identity)) ||

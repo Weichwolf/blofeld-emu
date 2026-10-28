@@ -25,12 +25,17 @@ std::optional<DspBranchForm> decode_branch_form(const std::uint32_t opcode) {
     if (mode != direct) { return std::nullopt; }
     return DspBranchForm{.address_register = static_cast<std::uint8_t>(reg)};
   }
-  if (first == dsp56k::Bra_xxx) {
+  if (first == dsp56k::Rts) { return DspBranchForm{.subroutine_return = true}; }
+  if (first == dsp56k::Bsr_xxxx) {
+    return DspBranchForm{.relative_extension = true, .subroutine_call = true};
+  }
+  if (first == dsp56k::Bra_xxx || first == dsp56k::Bsr_xxx) {
     constexpr unsigned sign = 0x100;
     constexpr unsigned high = 0xfffe00;
     const auto value =
         dsp56k::getFieldValue(first, dsp56k::Field_aaaa, dsp56k::Field_aaaaa, opcode);
-    return DspBranchForm{.displacement = value < sign ? value : (value | high)};
+    return DspBranchForm{.displacement = value < sign ? value : (value | high),
+                         .subroutine_call = first == dsp56k::Bsr_xxx};
   }
   if ((first != dsp56k::Jset_S && first != dsp56k::Jclr_S) ||
       dsp56k::getRegister(first, dsp56k::Field_DDDDDD, opcode) != dsp56k::Register::OMR) {

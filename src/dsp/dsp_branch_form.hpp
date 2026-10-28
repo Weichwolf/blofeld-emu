@@ -14,6 +14,13 @@ struct DspBranchForm {
   std::optional<std::uint32_t> displacement = std::nullopt;
   std::optional<std::uint8_t> address_register = std::nullopt;
   bool absolute_extension = false;
+  bool relative_extension = false;
+  bool subroutine_call = false;
+  bool subroutine_return = false;
+
+  [[nodiscard]] unsigned words() const {
+    return displacement || address_register || subroutine_return ? 1U : 2U;
+  }
 };
 
 // An early frontend decision, never an architectural CPU result or bus response.

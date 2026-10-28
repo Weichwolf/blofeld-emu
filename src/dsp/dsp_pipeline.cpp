@@ -29,6 +29,13 @@ namespace {
 constexpr unsigned word_mask = 0xffffff;
 constexpr auto execution = DspReferenceExecution::staged_register_boundaries;
 
+unsigned branch_fetch_delay(const std::optional<DspBranchForm> &form) {
+  if (!form) { throw Fault("Native branch lost its qualified fetch form"); }
+  // Selected F1 placement preserves nominal RTS/JMP3,short BSR/BRA4,long BSR5.
+  if (form->address_register || form->subroutine_return) { return 0; }
+  return form->relative_extension ? 2U : 1U;
+}
+
 void check_accumulator_context(const DspMachine &machine,
                                const std::optional<DspProgramWord> execute,
                                const bool register_transfer = true) {
@@ -359,8 +366,7 @@ void DspInstructionPipeline::capture_branch(DspMachine &machine) {
       throw Fault("Branch AG1 lost its actual F2 occurrence");
     }
     decision = machine.capture_reference_branch(ag1->address, captured->occurrence);
-    const auto form = decode_branch_form(ag1->value);
-    branch_fetch_hold = form && form->address_register ? 0U : 1U;
+    branch_fetch_hold = branch_fetch_delay(decode_branch_form(ag1->value));
   }
   branch = decision;
   branch_target_decoded = false;

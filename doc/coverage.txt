@@ -3062,3 +3062,12 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   Positive receives declare an SCI transfer hypothesis; its absence still fails
   visibly. Normal profiles, original firmware MIDI/USB/audio and calibrated
   timing remain open.
+
+- Automatic DSP BSR(short/long relative) and RTS execute genuine native frames;
+  nominal3/4/5 periods, full CPU/all16 stack slots and joint checkpoint suffixes
+  have independent normal-software reference/literal checks. Directed ownership,
+  stack and active-DO refusals retain exact native context; existing BRA/JMP/OMR
+  contracts remain checked. See dsp-subroutines.txt. Register-relative calls,
+  extended-stack/IRQ/active-DO composition, authentic ROM and full original
+  reset-to-instrument/MIDI/audio/storage/update/recovery/physical acceptance
+  remain open; the original reserved Y:002000 frontier is unchanged.

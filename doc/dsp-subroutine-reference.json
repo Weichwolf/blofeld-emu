@@ -1,0 +1,61 @@
+{
+  "scope": "Independent unchanged normal NXP software-model windows and literal vendor assembler agreements; supporting reference,not DSP56371 silicon timing or complete device validation.",
+  "manual": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "bytes": 24396254,
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "5.4.3 System Stack",
+      "13-37 BSR",
+      "13-168 RTS",
+      "Table A-1",
+      "A.3.5 return restrictions"
+    ]
+  },
+  "references": {
+    "guarded": {
+      "qualification_sha256": "02f56ecf6a277f6f71cb131452bac737320d5171ea4b6f746ff9cf647978cd61",
+      "result_sha256": "64625711891504f98a202efec24e8d942266440e031c93aef13330c277a96a73",
+      "probe_sha256": "684af4da9a958091c8cdf43628b6e9e84a1802311b0eb50f99fd2b1c832e3fb2",
+      "qualifier_sha256": "603324011591a7552a57fc4f02668ffa11b7a7a8fa74e5f264138c9ce1342339",
+      "streams": 8,
+      "checked_full_46_register_transitions": 378,
+      "checked_joint_window_points": 266,
+      "BSR_executions": 10,
+      "RTS_executions": 10,
+      "nominal_costs": {
+        "BSR_short": 4,
+        "BSR_long": 5,
+        "RTS": 3,
+        "ORI_CCR": 3
+      },
+      "scope": "Own programs on unchanged normal NXP software model,OMR300; short forward/backward calls,nested short calls,forward two-word long controls,two distinct initial CCRs,changed callee CCR retained by RTS,maximum depth2. Complete46-register transitions,17 literal assembler agreements,unchanged P images and exact complete bounded clock vectors. No forced emulator PC or firmware patch.",
+      "limits": "Not canonical emulator admission, physical sampling edges, register-relative/long-backward/boundary/overflow/extended-stack/interrupt/DO-call composition, authentic ROM or original reset-to-instrument acceptance."
+    },
+    "adjacent": {
+      "qualification_sha256": "695d1ae9b9c15c526bf0a6cd2e7c4b9d6065f93aa0b8c01eaafb2982cda8370e",
+      "result_sha256": "1a17fd0b43f95b68de191acbb3d6b214d3c0b975df16c268d1cfcb506f422357",
+      "probe_sha256": "35aba634186b7091d63a3467d3aea7e1482fd22691828797495f203d89646c02",
+      "qualifier_sha256": "17dea63a27d2e6293d8bf3ba476f6dbcbf82ea563f6128439b9b8fa31fb4c88d",
+      "streams": 12,
+      "checked_full_46_register_transitions": 358,
+      "checked_joint_window_points": 190,
+      "BSR_executions": 16,
+      "RTS_executions": 16,
+      "nominal_costs": {
+        "BSR_short": 4,
+        "BSR_long": 5,
+        "RTS": 3,
+        "ANDI_CCR": 3
+      },
+      "scope": "Own programs,unchanged normal NXP software model,OMR300,depth<=2; adjacent BSR/BSR and RTS/RTS,RTS/next-BSR,short signed endpoints -256/+255,long backward empty callee,and legal ANDI CCR directly before RTS. Two CCRs,complete46-register transitions incl non-destructive stack observations,literal assembler agreements,unchanged P images and whole-window clocks. Frozen guarded base was not replayed.",
+      "limits": "No canonical automatic-pipeline admission,silicon timing,register-relative calls,stack overflow/extended-stack/interrupt/DO-call composition,authentic ROM or complete original boot."
+    }
+  },
+  "automatic_scope": "Own OMR300 reset preamble/JMP to declared RAM code; twelve adjacent windows with two CCRs,full CPU/counters/all16 retained stack slots every selected period,and360 joint snapshot cuts/720 suffixes per sanitizer profile. Guarded ORI streams are supporting references; ORI is not automatically admitted.",
+  "manufacturer_program_bytes_embedded": false,
+  "physical_timing_qualified": false,
+  "complete_original_startup_qualified": false,
+  "directed_guard_scope": "All512 short BSR fields,ten unadmitted Decode forms,nine genuine-F2 width/value/owner refusals,and24 restored full-state underflow/full-internal-stack/active-DO fault suffixes. These are emulator refusal contracts,not hardware stack-overflow or active-DO semantics."
+}
