@@ -110,5 +110,17 @@
     "primary": "family_reset_reference",
     "sections": "DAA printed246-247,Table A-2",
     "scope": "384 specified A/H/C inputs;native A/C/N/Z adjustment,H/I preserved,V undefined. Unspecified inputs refuse before native effects. Component instruction retirement only;no physical or full startup claim."
+  },
+  "flash_error_acknowledgement_reference": {
+    "publisher": "Freescale Semiconductor",
+    "title": "HCS08 Quick Reference User Guide",
+    "revision": "Rev.1,2/2006",
+    "source": "https://www.nxp.com/assets/documents/data/en/user-guides/HCS08QRUG.pdf",
+    "bytes": 2024378,
+    "sha256": "b0ab3d93318ad3bf47dc182b95910a0e14d18917f3d7ce59311c6d5a042aa1e1",
+    "sections": "Programming and Erasing Flash Memory, printed93: conditional FACCERR read-modify-write before staging array data. GT16A4.4.5/4.6.5 defines W1C access-error acknowledgement.",
+    "scope": "Idle existing-FACCERR acknowledgement only; not idle-no-error FCBEF, active/queued launches, physical NVM timing or fitted-part validation.",
+    "native_oracle": "Own reset-vector LDA immediate/extended, ORA immediate and STA extended/direct: ten instructions,32 reference periods; full native state, literal D0/C0 RAM writes and two fresh joint continuations.",
+    "native_cpu_prerequisite": "HCS08 Family Rev2 printed265: immediate ORA AA, two periods, native A OR immediate, V=0 and N/Z from result; H/I/C and HX unchanged. Known A permits unknown unused HX;1504 independent value/flag/knowledge cases augment the complete opcode matrix. Partial unknown A remains a strict refusal."
   }
 }

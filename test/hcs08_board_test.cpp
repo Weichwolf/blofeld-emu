@@ -26,6 +26,64 @@ constexpr std::uint8_t write_byte = 0xc0, read_byte = 0xe0, write_control = 0xc4
 // Own LDA #$5A;STA $80;NOP;BRA *. GT instruction table:2,3,1,3 periods.
 constexpr std::array<std::uint8_t, 7> code{0xa6, data, 0xb7, ram, 0x9d, 0x20, 0xfe};
 
+void native_flash_error_recovery() {
+  constexpr unsigned fault_status = 0xd0;
+  constexpr unsigned recovered_status = 0xc0;
+  constexpr unsigned negative_flags = 0x6c;
+  constexpr unsigned error_period = 12;
+  constexpr unsigned final_period = 32;
+  constexpr unsigned final_offset = 25;
+  constexpr unsigned retired = 10;
+  // Own LDA/STA/ORA program; Family Rev2 table6-13 gives2/4/2/4/4/2/4/3/4/3 periods.
+  // It creates an invalid-command error, acknowledges it by actual native RMW,
+  // then stores the source A and a new FSTAT read to two otherwise unknown RAM bytes.
+  constexpr std::array<std::uint8_t, 27> program{
+      0xa6, 30,   0xc7, 0x18, 0x20, 0xa6, 0x26, 0xc7, 0x18, 0x26, 0xc6, 0x18, 0x25, 0xaa,
+      0x10, 0xc7, 0x18, 0x25, 0xb7, 0x80, 0xc6, 0x18, 0x25, 0xb7, 0x81, 0x20, 0xfe};
+  const auto image = own_image(program);
+  Hcs08Board board(image, BLOFELD_HCS08_SLA, reference, {});
+  to(board, error_period);
+  const auto flash = board.memory().flash_state();
+  require(
+      flash.errors == hcs08_flash::access_error && flash.buffer == Hcs08FlashBuffer::empty &&
+          !flash.active && board.cpu_state().pc == entry + 10 &&
+          board.run_state().retired_instructions == 4 &&
+          board.memory().inspect_ram(ram).known == 0 &&
+          board.memory().inspect_ram(ram + 1).known == 0,
+      "Four actual reset instructions establish the error before any acknowledgement or RAM seed");
+  const auto saved = board.checkpoint();
+  to(board, final_period);
+  auto expected_flash = flash;
+  expected_flash.errors = 0;
+  require(board.cpu_state() == Hcs08State{.pc = entry + final_offset,
+                                          .sp = byte_mask,
+                                          .a = recovered_status,
+                                          .ccr_known = known_after_load,
+                                          .ccr = negative_flags,
+                                          .hx_known = known_high_h} &&
+              board.run_state().retired_instructions == retired &&
+              board.run_state().remaining_periods == 0 &&
+              board.memory().flash_state() == expected_flash &&
+              board.memory().flash_image() == image,
+          "Native LDA/ORA/STA acknowledges only FACCERR, preserving PC/flags/NVM and idle command "
+          "state");
+  require(
+      board.memory().inspect_ram(ram).value == fault_status &&
+          board.memory().inspect_ram(ram).known == byte_mask &&
+          board.memory().inspect_ram(ram + 1).value == recovered_status &&
+          board.memory().inspect_ram(ram + 1).known == byte_mask,
+      "Only actual native stores publish the original A and subsequent hardware status readback");
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    Hcs08Board restored(saved, BLOFELD_HCS08_SLA);
+    to(restored, final_period);
+    require(
+        restored.cpu_state() == board.cpu_state() && restored.state() == board.state() &&
+            restored.run_state() == board.run_state(),
+        "Fresh native owners replay the same error acknowledgement and independent period budget");
+    same_memory(restored.memory(), board.memory());
+  }
+}
+
 void native_costs_and_copy() {
   const auto image = own_image(code);
   Hcs08Board board(image, BLOFELD_HCS08_SLA, reference, {});
@@ -192,6 +250,7 @@ void bgnd_and_resume() {
 
 int main() {
   try {
+    native_flash_error_recovery();
     native_costs_and_copy();
     copied_pad_obligation();
     cop_quarantine();

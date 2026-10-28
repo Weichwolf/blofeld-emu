@@ -28,6 +28,27 @@ MC9S08GT16A/GT8A Rev.1 chapter4 does not independently establish that case;
 the model rejects it. The named reference_ignore_empty contract permits only
 an empty, non-executing reference buffer. It is never a default board response.
 
+Idle access-error acknowledgement is separately defined. HCS08QRUG Rev.1
+printed93 uses a conditional FACCERR read-modify-write before staging array
+data. Reading idle FSTAT with that error returnsD0; writing it OR10 necessarily
+carries FCBEF/FCCF as well. The candidate now clears the existing error without
+creating a command or changing NVM. GT16A4.4.5/4.6.5 defines error acknowledgement;
+the family example supplies the combined-write sequence:
+  https://www.nxp.com/assets/documents/data/en/user-guides/HCS08QRUG.pdf
+Twelve CPU/BDC cases cover six independently established errors and24 fresh
+copy continuations. Four no-error/unacknowledged/active/occupied controls still
+reject without mutation. A separate own native program starts at its actual
+reset vector, executes ten LDA/ORA/STA instructions in32 reference periods and
+storesD0/C0 readbacks; two fresh joint board continuations preserve complete
+CPU/RAM/peripheral/NVM state. These are candidate/reference-model checks,
+not physical FLASH timing or exact Keyboard-chip validation. The original
+idle-no-error FF startup/programmer boundary remains strict and unresolved.
+The cold-reset check also requires immediate ORA AA with known A but unknown X.
+Its native ALU result defines V/N/Z while preserving H/I/C knowledge and HX;
+Family Rev.2 printed265 supplies the instruction contract. An additional1504
+independent ORA cases and the complete prior opcode/knowledge controls cover it.
+No host ALU or reset-register seed replaces native execution.
+
 The original132-byte RAM algorithm runs under that explicit hypothesis and
 instruction-boundary reference event schedules. Two declared debug-entry/RAM
 contexts each execute all seven supplied512-byte pages. Each performs seven

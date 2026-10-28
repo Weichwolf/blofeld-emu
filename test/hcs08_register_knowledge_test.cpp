@@ -65,6 +65,7 @@ constexpr unsigned sei = 0x9b;
 constexpr unsigned clc = 0x98;
 constexpr unsigned sec = 0x99;
 constexpr unsigned ldx_direct = 0xbe, and_immediate = 0xa4, inc_a = 0x4c, inc_x = 0x5c;
+constexpr unsigned ora_immediate = 0xaa;
 constexpr unsigned mov_direct = 0x4e, cmp_direct = 0xb1;
 constexpr unsigned lda_indexed16 = 0xd6, cmp_extended = 0xc1;
 constexpr unsigned push_h = 0x8b, pull_h = 0x8a, tax = 0x97, txa = 0x9f, brclr7 = 0x0f, rti = 0x80;
@@ -100,6 +101,73 @@ constexpr unsigned dec_a = 0x4a, test_x = 0x5d, rts = 0x81, bsr = 0xad;
 constexpr unsigned jsr_direct = 0xbd, jsr_indexed16 = 0xdd, jsr_indexed8 = 0xed, jsr_indexed = 0xfd;
 constexpr unsigned incremented_data = 0x5b, decremented_data = 0x59;
 constexpr unsigned return_destination = 0x5a5a;
+
+void ora_immediate_case(Memory &memory,
+                        Hcs08 &cpu,
+                        Hcs08State before,
+                        const std::uint8_t immediate) {
+  before.hx &= before.hx_known;
+  before.ccr = static_cast<std::uint8_t>((before.ccr | flags_fixed) & before.ccr_known);
+  cpu.set_state(before);
+  auto expected = before;
+  expected.pc = entry + 2;
+  expected.a = static_cast<std::uint8_t>(before.a | immediate);
+  constexpr unsigned defined = flag_v | flag_n | flag_z;
+  expected.ccr = static_cast<std::uint8_t>((before.ccr & ~defined) |
+                                           ((expected.a & sign_bit) != 0 ? flag_n : 0U) |
+                                           (expected.a == 0 ? flag_z : 0U));
+  expected.ccr_known = static_cast<std::uint8_t>(before.ccr_known | defined);
+  const auto retired = memory.retired;
+  memory.accesses.clear();
+  cpu.step();
+  require(
+      cpu.state() == expected && memory.retired == retired + 1 && memory.accesses.empty(),
+      "Independent ORA AA result/VNZ preserve H/I/C knowledge and unrelated HX without data I/O");
+}
+
+void ora_immediate_knowledge() {
+  Memory memory;
+  Hcs08 cpu(memory, BLOFELD_HCS08_SLA);
+  constexpr std::array<std::uint8_t, 4> immediates{0, 0x10, sign_bit, byte_mask};
+  constexpr std::array<std::uint8_t, 5> values{0, 0x7f, sign_bit, 0xd0, byte_mask};
+  constexpr std::array<std::uint16_t, 2> hx_masks{reset_hx_known, word_mask};
+  constexpr std::array<std::uint8_t, 3> ccr_masks{reset_ccr, load_ccr_known, byte_mask};
+  constexpr std::array<std::uint8_t, 4> flag_seeds{flags_fixed, initial_ccr, 0x86, byte_mask};
+  for (const auto immediate : immediates) {
+    const std::array<std::uint8_t, 2> code{ora_immediate, immediate};
+    memory.install(entry, code);
+    for (unsigned value = 0; value < byte_values; ++value) {
+      ora_immediate_case(memory,
+                         cpu,
+                         {.pc = entry,
+                          .hx = initial_hx,
+                          .sp = initial_sp,
+                          .a = static_cast<std::uint8_t>(value),
+                          .ccr_known = reset_ccr,
+                          .ccr = reset_ccr,
+                          .hx_known = reset_hx_known},
+                         immediate);
+    }
+    for (const auto value : values) {
+      for (const auto hx : hx_masks) {
+        for (const auto ccr : ccr_masks) {
+          for (const auto flags : flag_seeds) {
+            ora_immediate_case(memory,
+                               cpu,
+                               {.pc = entry,
+                                .hx = initial_hx,
+                                .sp = initial_sp,
+                                .a = value,
+                                .ccr_known = ccr,
+                                .ccr = flags,
+                                .hx_known = hx},
+                               immediate);
+          }
+        }
+      }
+    }
+  }
+}
 
 void cold_reset() {
   Memory memory;
@@ -266,6 +334,7 @@ bool admitted(const unsigned opcode, const Hcs08State s) {
     case dec_a:
     case inc_a:
     case and_immediate:
+    case ora_immediate:
     case cmp_direct:
     case cmp_extended:
     case sta_direct:
@@ -326,6 +395,10 @@ Hcs08State irq_body_effect(const unsigned opcode, Hcs08State s) {
       s.a = operand;
       s.ccr = initial_ccr;
       break;
+    case ora_immediate:
+      s.a = data_byte; // The fixed5A input already contains literal immediate40.
+      s.ccr = initial_ccr;
+      break;
     case cmp_extended:
     case cmp_direct: s.ccr = tap_ccr; break;
     case mov_direct: s.ccr = initial_ccr; break;
@@ -364,6 +437,7 @@ unsigned instruction_length(const unsigned opcode) {
     case ldx_immediate:
     case ldx_direct:
     case and_immediate:
+    case ora_immediate:
     case cmp_direct:
     case aix:
     case sthx_direct:
@@ -935,6 +1009,7 @@ void bdc_unknown_resume() {
 
 int main() {
   try {
+    ora_immediate_knowledge();
     cold_reset();
     masks_and_checkpoint();
     opcodes();

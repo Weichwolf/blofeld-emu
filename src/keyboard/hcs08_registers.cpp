@@ -54,6 +54,7 @@ constexpr unsigned sec = 0x99;
 constexpr unsigned ldhx_stack = 0xfe;
 constexpr unsigned sthx_stack = 0xff;
 constexpr unsigned ldx_direct = 0xbe, and_immediate = 0xa4, inc_a = 0x4c, inc_x = 0x5c;
+constexpr unsigned ora_immediate = 0xaa;
 constexpr unsigned mov_direct = 0x4e, cmp_direct = 0xb1;
 constexpr unsigned lda_indexed16 = 0xd6, cmp_extended = 0xc1;
 constexpr unsigned push_h = 0x8b, pull_h = 0x8a, tax = 0x97, txa = 0x9f, brclr7 = 0x0f;
@@ -179,6 +180,7 @@ RegisterKnowledge registers_after(const Bus &code, const Hcs08State &before, con
     case cmp_extended:
     case cmp_direct:
     case and_immediate:
+    case ora_immediate:
     case decrement_a:
     case inc_a:
     case tap: // TAP

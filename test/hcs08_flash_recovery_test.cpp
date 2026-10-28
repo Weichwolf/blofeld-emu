@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "common/bus.hpp"
 #include "hcs08_flash_fixture.hpp"
 #include "keyboard/hcs08_flash.hpp"
 
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -14,6 +16,95 @@ constexpr unsigned idle_status = 0xc0, error_status = 0xd0;
 constexpr unsigned secure_option = 0xfd, option_secure = 0xc1, option_unsecured = 0xc2;
 constexpr unsigned program_result = 0x5a, erase_begin = 0xe000;
 constexpr auto reference_abort = Hcs08FlashAbort::reference_command_range;
+constexpr unsigned bad_command = 0x26;
+
+void induce_access_error(Hcs08Flash &flash, const unsigned cause) {
+  flash.stage({.address = example, .value = example_data});
+  switch (cause) {
+    case 0: flash.stage({.address = second, .value = example_data}); break;
+    case 1: flash.write({.address = hf::command, .value = bad_command}); break;
+    case 2: flash.write({.address = hf::protection, .value = 0}); break;
+    case 3: flash.write({.address = hf::status, .value = 0}); break;
+    case 4:
+      flash.write({.address = hf::command, .value = hf::erase_page});
+      flash.write({.address = hf::command, .value = hf::erase_page});
+      break;
+    case 5:
+      flash.write({.address = hf::command, .value = hf::erase_page});
+      static_cast<void>(flash.read(hf::status));
+      break;
+    default: throw Fault("Unknown fixed access-error cause");
+  }
+}
+
+void read_modify_write_case(const Hcs08FlashAgent agent, const unsigned cause) {
+  Hcs08Flash flash(initial(), contract);
+  setup(flash);
+  flash.context({.pc = ram_pc, .ccr = flags}, agent);
+  induce_access_error(flash, cause);
+  require(flash.read(hf::status) == error_status &&
+              flash.state().buffer == Hcs08FlashBuffer::empty && !flash.state().active,
+          "The independent command violation must establish idle FACCERR before recovery");
+  const auto saved = flash;
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    auto restored = saved;
+    const auto before = restored.state();
+    const auto image = restored.image();
+    const auto value = static_cast<std::uint8_t>(restored.read(hf::status) | hf::access_error);
+    require(value == error_status, "The vendor read-modify-write carries FCBEF/FCCF/FACCERR");
+    restored.write({.address = hf::status, .value = value});
+    auto expected = before;
+    expected.errors = 0;
+    require(restored.read(hf::status) == idle_status && restored.state() == expected &&
+                restored.image() == image && restored.power_off_image() == image,
+            "Error acknowledgement must preserve the complete idle state and all NVM knowledge");
+    execute(restored, {});
+    require(restored.state().buffer == Hcs08FlashBuffer::empty && !restored.state().active &&
+                restored.state().errors == 0 && restored.image().fresh.count() == hf::page_bytes,
+            "A new independently staged erase follows recovery, not the flag write itself");
+    for (unsigned index = 0; index < hf::bytes; ++index) {
+      const auto wanted = index < hf::page_bytes ? hf::erased : image.data[index];
+      require(restored.image().known[index] && restored.image().data[index] == wanted,
+              "Only the separately completed erase may modify its exact page");
+    }
+  }
+  require(flash.read(hf::status) == error_status && flash.image() == initial(),
+          "Recovery copies cannot alter the source error boundary");
+}
+
+void read_modify_write_recovery() {
+  for (const auto agent : std::array{cpu, bdc}) {
+    for (unsigned cause = 0; cause < 6; ++cause) { read_modify_write_case(agent, cause); }
+  }
+}
+
+void read_modify_write_guards() {
+  const auto refusal = [](Hcs08Flash &flash, const std::uint8_t value, const char *reason) {
+    const auto state = flash.state();
+    const auto image = flash.image();
+    require(
+        rejected([&] { flash.write({.address = hf::status, .value = value}); }).contains(reason) &&
+            flash.state() == state && flash.image() == image,
+        "An unqualified empty/active/occupied launch must preserve its complete boundary");
+  };
+  Hcs08Flash idle(initial(), contract);
+  setup(idle);
+  refusal(idle, error_status, "idle FCBEF");
+  idle.write({.address = hf::command, .value = bad_command});
+  refusal(idle, idle_status, "idle FCBEF");
+  idle.write({.address = hf::status, .value = hf::access_error});
+  execute(idle, {});
+  launch(idle, {.opcode = hf::burst});
+  idle.advance(transfer);
+  idle.write({.address = hf::command, .value = bad_command});
+  constexpr unsigned active_error = 0x90;
+  refusal(idle, active_error, "empty-buffer launch during an executing command");
+  Hcs08Flash pending(initial(), contract);
+  setup(pending);
+  launch(pending, {});
+  pending.write({.address = hf::command, .value = bad_command});
+  refusal(pending, active_error, "duplicate launch");
+}
 
 void security_recovery() {
   auto image = initial();
@@ -147,6 +238,8 @@ void power_loss_phases() {
 
 int main() {
   try {
+    read_modify_write_recovery();
+    read_modify_write_guards();
     security_recovery();
     erase_history_and_clocks();
     power_loss_phases();

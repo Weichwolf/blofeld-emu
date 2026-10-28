@@ -2259,7 +2259,10 @@ Keyboard candidate FLASH         partial  Native original seven-page algorithm,
                                           byte-exact final images, protected BGND,
                                           pending final vector and joint replays
                                           under explicit reference contracts
-                                          (hcs08-flash.txt). Strict idle FF launch
+                                          (hcs08-flash.txt). Documented idle
+                                          FACCERR acknowledgement has12 directed
+                                          recoveries and native reset/32-period
+                                          RMW checks. Strict idle-no-error FF launch
                                           still rejects. Physical chip/timing,
                                           physical clock/part and whole recovery
                                           remain open.

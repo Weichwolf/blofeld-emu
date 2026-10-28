@@ -27,6 +27,7 @@ constexpr unsigned lda_direct = 0xb6, lda_extended = 0xc6, clr_direct = 0x3f;
 constexpr unsigned mov_immediate_direct = 0x6e, bit_immediate = 0xa5, beq = 0x27;
 constexpr unsigned cmp_immediate = 0xa1, jsr_extended = 0xcd, ais = 0xa7;
 constexpr unsigned ldx_direct = 0xbe, and_immediate = 0xa4, inc_a = 0x4c, inc_x = 0x5c;
+constexpr unsigned ora_immediate = 0xaa;
 constexpr unsigned ldx_extended = 0xce;
 constexpr unsigned mov_direct = 0x4e, sta_indexed16 = 0xd7, cmp_direct = 0xb1;
 constexpr unsigned inc_direct = 0x3c, dec_direct = 0x3a;
@@ -153,6 +154,7 @@ std::uint8_t ccr_after(const Bus &bus, const Hcs08State &before) {
     case ldx_direct:
     case ldx_extended:
     case and_immediate:
+    case ora_immediate:
     case decrement_a:
     case test_x:
     case inc_a:

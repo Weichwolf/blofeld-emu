@@ -92,7 +92,8 @@ void Hcs08Flash::write_status(const std::uint8_t value) {
          hf::status,
          "unqualified empty-buffer launch during an executing command");
   }
-  if (launch && state_.buffer == Hcs08FlashBuffer::empty &&
+  const bool acknowledge_error = (state_.errors & value & hf::access_error) != 0;
+  if (launch && state_.buffer == Hcs08FlashBuffer::empty && !acknowledge_error &&
       idle_ != Hcs08IdleLaunch::reference_ignore_empty) {
     fail("register write", hf::status, "unqualified idle FCBEF launch without a staged command");
   }
