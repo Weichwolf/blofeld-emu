@@ -75,10 +75,9 @@ DspGpioSample DspGpio::resolve_local(const std::uint32_t mask) const {
                 " mask=" + hex(conflict, 6));
   }
   const auto external_mask = mask & external_.mask & ~output.mask & ~output.peripheral;
-  // DSP56371UM Rev. 2.1 table 2-8 specifies internal pull-downs on PC0..11.
+  // DSP56371UM Rev. 2.1 tables2-8..2-11 specify internal GPIO pull-downs.
   // Only an explicitly floating input/disconnected pad can use this bias.
-  const auto weak =
-      port_ == DspPort::c ? external_.floating & ~output.mask & ~output.peripheral : 0U;
+  const auto weak = external_.floating & ~output.mask & ~output.peripheral;
   const auto known = (output.known | external_mask | weak) & ~external_.unknown & mask;
   return {.known = known, .levels = (output.levels | (external_.levels & external_mask)) & known};
 }

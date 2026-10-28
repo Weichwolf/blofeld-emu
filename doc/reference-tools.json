@@ -25,6 +25,44 @@
           "usage": "Unchanged optional processor reference;static configuration/table checks corroborate the retained switched-memory contradictions. It is not a DSP56371 memory-map or reserved-write oracle."
         }
       ]
+    },
+    {
+      "file": "up03112003.zip",
+      "source_page": "https://www.tasking.com/support/dsp56xxx/",
+      "source": "https://data.tasking.com/url/up03112003zip",
+      "bytes": 511690,
+      "sha256": "c9a8a597e2d78856c87d005500bff890368100db78790563087825f7eb38af28",
+      "license": "Vendor reference; retain archive, binaries, sources and notices locally. Not redistributed.",
+      "usage": "DSP56371 CPU/linker maps and unchanged GDI simulator reference. Native MOVEC control exposes lost low-Y RAM and masked MSW bits; not a reserved-write or physical memory oracle.",
+      "tools": [
+        {
+          "file": "bin/sim563.dll",
+          "bytes": 1437696,
+          "sha256": "2b0eb4712275527a5af9775eee2fe541b6463ea9eb21e63f49b7f9bf9f22b36a",
+          "usage": "Local public-GDI reference consumer only; vendor DLL unmodified."
+        }
+      ]
+    },
+    {
+      "file": "v36r1p1.zip",
+      "source": "https://data.tasking.com/url/taskingdsp563xxv36r1p1zip",
+      "bytes": 4797083,
+      "sha256": "001b112024b155059a3a74a1c8606010079e9d63be338e6ad8a457801d0335d7",
+      "usage": "Release-note review only; no simulator replacement listed. Not installed or redistributed."
+    },
+    {
+      "file": "v35r3p2.zip",
+      "source": "https://data.tasking.com/url/dsp563xxv35r3p2zip",
+      "bytes": 3986615,
+      "sha256": "35162833633b681ece2819ba15587a7cac360aafb3d1a8f5cbafa7cf18412327",
+      "usage": "Release-note review only; no simulator replacement listed. Not installed or redistributed."
+    },
+    {
+      "file": "m_xvw56.pdf",
+      "source": "https://www.tasking.com/support/dsp56xxx/m_xvw56.pdf",
+      "bytes": 3629101,
+      "sha256": "8329d6223202c2cc03a45071de341c3b6c401b96c6fd52549eb8ea39a306517d",
+      "usage": "CrossView Pro3.6 GDI/configuration reference; local vendor documentation only."
     }
   ]
 }

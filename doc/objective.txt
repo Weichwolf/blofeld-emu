@@ -9,9 +9,13 @@ reset, loading and initialization lead to normal instrument operation with
 original DSP audio, bidirectional MIDI and complete persistent device state.
 No firmware patches, skipped routines, fabricated success responses, host
 synthesizer or silently successful peripheral stubs satisfy this objective.
-Reconstruct missing hardware properties from primary documentation, actual
-firmware accesses, PCB photographs and available hardware observations; retain
-explicit hypotheses and visible failures where behavior remains unresolved.
+Reconstruct missing hardware properties independently from primary documentation,
+actual firmware accesses, available PCB photographs and reproducible offline
+experiments. Physical disassembly and measurement are unavailable and must not
+be prerequisites. Investigate explicit hypotheses without a preset experiment
+limit; retain their evidence, contradictions and visible unresolved accesses.
+Missing hardware information is a research task, not a reason to abandon the
+complete instrument objective.
 Alternative-firmware development is a secondary future use, not the primary
 deliverable. Component fixtures support full-device acceptance and cannot replace
 it.
@@ -47,10 +51,14 @@ Acceptance requirements (current evidence and gaps: coverage.txt):
    diagnosing failures and replaying firmware behavior. Document coverage,
    deviations, unresolved inputs and remaining uncertainty requirement by
    requirement; a passing subset does not complete the objective.
-7. Validate incrementally against real Desktop/Keyboard devices running stock
-   firmware. Detection is not validation. Establish a separate recovery procedure
-   before physical update/programming experiments; never transmit malformed
-   fuzz inputs to hardware or flash experimental firmware as a routine test.
+7. Establish expected behavior through independent ISA/peripheral models,
+   primary specifications and constraints from the unchanged known-working
+   firmware. Test hypotheses against connected reset-to-instrument execution
+   and every documented function on both modeled profiles. Physical comparisons
+   are additional evidence if available, not an acceptance prerequisite. Do not
+   claim measured hardware equivalence or physical flash safety from simulation.
+   Physical programming would still require a separately established recovery
+   procedure; no experimental flashing or malformed hardware traffic is allowed.
 8. Expose the emulator as an actual host-visible USB-MIDI device, with original
    firmware descriptors/control behavior and bidirectional endpoint traffic.
    A standalone virtual ALSA port is not a substitute. Qualify host USB/MIDI
@@ -96,6 +104,7 @@ isolated helper execution does not establish a complete instrument function.
 
 Completion requires evidence for the whole emulator and both profiles, original
 MIDI/audio, full update/recovery behavior, reproducible failure/performance tests
-and hardware comparisons. The current component/reference fixtures remain
+and every documented function on both modeled profiles. Physical access is not
+a prerequisite for completion. The current component/reference fixtures remain
 partial; coverage.txt names the missing requirements without treating them as
 successful boot, real-time operation or device equivalence.

@@ -177,10 +177,10 @@ void test_floating_does_not_qualify_unmodeled_functions() {
     blofeld::DspGpio other(port);
     other.write({.reg = Register::control, .value = 1});
     other.set_drive({.floating = 1});
-    require(other.observe_pads(1).known == 0,
-            "This Port C qualification does not invent weak bias for other ports");
-    reject([&other] { static_cast<void>(other.read(Register::data, 1)); },
-           "Unqualified other-port floating input reads remain visible failures");
+    require(other.observe_pads(1).known == 1 && other.observe_pads(1).levels == 0,
+            "NXP tables2-9..2-11 define the other GPIO pad pull-downs");
+    require(other.read(Register::data, 1) == 0,
+            "NXP tables2-9..2-11 define the other GPIO input pull-downs");
   }
 }
 

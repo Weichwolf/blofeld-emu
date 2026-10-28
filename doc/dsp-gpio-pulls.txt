@@ -1,0 +1,24 @@
+Documented passive DSP GPIO bias
+
+DSP56371UM Rev.2.1 tables2-8..2-11 specify internal pull-downs on PC0..11,
+PE0..11, PD0..1 and PF0..10. The primary download identity is in
+hardware/sources.json. Local GPIO resolution applies that bias only to pins
+explicitly declared floating and not owned by output/peripheral drivers.
+An unobserved board connection or active unknown driver remains unknown.
+The bias does not initialize an unknown output latch or qualify a peripheral.
+Externally resolved pad networks retain their own explicit driver contracts.
+
+  cmake --build --preset strict --target blofeld-dsp-gpio-test blofeld-dsp-gpio-pull-test
+  ctest --test-dir build/strict -R '^dsp_gpio(_pull)?$' --output-on-failure
+
+The independent all-pin regression checks seven observations on every one of
+the37 implemented pins: unknown connection, floating input low, driven high,
+active unknown, unknown output provenance, and known high/low outputs. The
+unchanged test object reports25 floating-input failures against the former
+C-only implementation. Directed controls retain their stricter expectations.
+The older other-port floating-input refusals contradicted the documented bias;
+their pad/input expectations now require the specified low level.
+
+This fixes a local GPIO property. Actual board routing, Port-F BIU timing,
+reserved-one writes, the original broad memory clear and normal instrument
+startup retain their separate unresolved contracts.

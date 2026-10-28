@@ -89,3 +89,15 @@ qualify processor memory semantics or turn the prefix into a hardware ROM dump.
 Archive/payload inventories, installed-tool hashes, registry backup and exact
 session logs are retained in the local worktree archive. Current static review
 and the archive locator remain under ignored doc/local/dsp-reserved-primary/.
+
+Additional TASKING reference
+The official DSP56371 update archive and CrossView manual are pinned in
+reference-tools.json. A local strict C++23 GDI consumer loads the unchanged
+sim563.dll through its public interface, configures56371 and reads back own
+program words and nonzero X/Y canaries. A native MOVEC plus three NOPs changes
+OMR600389 to389, loses the unchanged low-Y canary and retains upper X RAM that
+should be switched away. This reference therefore also fails the documented
+map contract. Its API success responses do not establish harmless reserved writes.
+The3.6r1p1 and3.5r3p2 release notes list no simulator replacement; they were
+reviewed without installing their patches. DLLs, extracted source, detailed
+observations and the initial consumer import failure remain local-only.

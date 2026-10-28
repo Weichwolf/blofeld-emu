@@ -3,7 +3,9 @@ Documented instrument function acceptance
 function-acceptance.tsv is the function-level coverage inventory. Each row is
 an acceptance contract, not a passing test or an implemented feature. Its two
 status columns refer separately to normal emulator operation and stock hardware
-comparison. All currently remain pending. coverage.txt retains the wider boot,
+comparison. Physical comparison is optional supporting evidence, not a
+completion prerequisite; its pending status does not prevent emulator acceptance.
+All emulator rows currently remain pending. coverage.txt retains the wider boot,
 ISA, peripheral, update/recovery, performance and failure-test requirements.
 
 Sources

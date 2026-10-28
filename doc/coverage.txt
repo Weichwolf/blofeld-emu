@@ -2,9 +2,19 @@ Acceptance coverage for the headless Blofeld emulator
 
 The complete acceptance objective is in objective.txt.
 Evidence categories: implemented / partial / pending. A passing check covers
-only its named behavior. No hardware equivalence or brick-safety claim is made.
+only its named behavior. Physical disassembly/measurement is unavailable; its
+absence does not block acceptance. Reconstruct unresolved behavior through
+independent offline evidence and whole-firmware experiments. Hardware comparison
+statuses are informative, not acceptance gates. No measured hardware equivalence
+or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Documented GPIO passive bias      partial  Explicitly floating PC/PD/PE/PF inputs
+                                          resolve through internal pull-downs
+                                          (dsp-gpio-pulls.txt). Unknown connections,
+                                          active drivers and output latches
+                                          remain explicit; board routing and
+                                          the BIU entry contract remain open.
 MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner,
                                           tie policies and failure guards
                                           (dsp-fetch-schedule.txt). Local original
