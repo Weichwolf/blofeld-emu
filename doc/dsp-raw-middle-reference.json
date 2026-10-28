@@ -1,0 +1,54 @@
+{
+  "scope": "Independent own programs on unchanged normal NXP software model,OMR300;reference evidence,not DSP56371 silicon timing or complete instrument validation.",
+  "manual": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "bytes": 24396254,
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "3.5.1",
+      "3.5.2.1",
+      "A.2.3",
+      "Table A-1",
+      "13-120..124 MOVE"
+    ]
+  },
+  "qualification_sha256": "7e1f9685500a54de7782686a7cd4a78b61fe7c43e8caccd16472ef28cd965220",
+  "result_sha256": "aa78eb7b1b3c42b9e02a163bed493f5551629bd0ef6884b5f9b466c1cca7962e",
+  "probe_sha256": "12ee5c84da037561e7fb4f8d77bdbeafeff4b05726a5f71a72745801eceff1f8",
+  "qualifier_sha256": "741d7ea78cbd50894a387bc5b0420ae1e8db0b1d5f7f4b9d444a10a9f46a689e",
+  "cases": 118,
+  "observations": {
+    "instruction_points": 5073,
+    "window_points": 2713,
+    "raw_transfers": 118,
+    "source_producers": 36,
+    "transfer_interlocks": 8,
+    "calls": 4,
+    "returns": 4,
+    "loop_setups": 68,
+    "annulled_loops": 7,
+    "completed_positive_loops": 61,
+    "nonfinal_backedges": 202
+  },
+  "vendor_assembled_tuples": 68,
+  "admitted_forms": "Standalone raw A1/B1 -> X0/X1/Y0/Y1/R0..7;all24 bits and SR preserved,without full-accumulator scaling/limiting.",
+  "interlock_rule": "One preceding one-word writer to any part of the same accumulator adds one transfer-stall period. Foreign accumulators and nonzero gaps do not. Two-word writers already provide separation through their ordinary fetch period.",
+  "reference_cases": "Positive/high-bit words and overflowing full accumulators;all scaling modes on Y1;counts0/1/3/17,gaps0/1/2;36 own/foreign partial and short/long immediate producers. Four genuine BSR/inner-DOR/RTS paths overwrite A1 after Y1 captures the count.",
+  "assembler_interlock_diagnostics": {
+    "retained_messages": 12,
+    "actual_one_period_interlocks": 8,
+    "long_writer_notices": 2,
+    "interpretation": "All vendor hazard diagnostics retained and matched to complete clocks. No project compiler/tidy warning suppression."
+  },
+  "assembler_transport_exception": {
+    "original_case": "count-a1-y1-11-scale0-seed-gap1",
+    "resolution": "Original unexpected Wine page-fault log retained. Isolated assembler-only execution completed clean0 with identical source,words and starts;existing complete CPU trace reused by exact P-input/readback identity. Wine root cause unknown.",
+    "reassembly_receipt_sha256": "9cdf065fea2e91806677c82abe2d522b72b4ac84eed2bf269e7d9ad15a4f7ebb"
+  },
+  "automatic_scope": "118 streams;literal native initial seeds and full CPU/table counters/all16 stack cells every period. Destination fields publish at real E1;PC/counters at E2.692 selected joint cuts across18 raw/interlocked/multiword/count/call cases restore twice(1384 suffixes) per sanitizer profile.",
+  "limits": "Raw A0/A2/B0/B2 consumers,parallel raw moves,arithmetic/memory producer windows and subsequent SR-read timing are separate. Original near-end calls,negative/wrapped loops,IRQ/cache/extended stack,authentic ROM,reservedY/reset-to-instrument,MIDI/audio/storage/update/recovery/realtime/physical acceptance remain open.",
+  "manufacturer_program_bytes_embedded": false,
+  "physical_timing_qualified": false,
+  "complete_original_startup_qualified": false
+}

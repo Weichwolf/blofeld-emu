@@ -24,9 +24,10 @@ body instructions; they do not establish full completion. The two new compound
 cases exercise SP depths0/2/3/5/6/7 and386 joint checkpoint cuts,each restored
 twice per sanitizer profile. The NXP reference observes46 registers including
 current SSH/SSL; all retained stack cells use separate literal expectations.
-See dsp-relative-loop-reference.json.
+See dsp-relative-loop-reference.json. Raw A1/B1 count producers and call
+preservation are qualified separately in dsp-raw-middle-transfers.txt.
 
-Original near-end call positions,adjacent Y1 count producers,negative/wrapped
+Original near-end call positions,other count producers,negative/wrapped
 endpoints,IRQ/cache/compatibility/extended-stack cases and physical timing remain
 unqualified. This does not establish authentic ROM or original reset/MIDI/audio/
 storage/update/recovery acceptance. The reserved Y:002000 startup fault remains.

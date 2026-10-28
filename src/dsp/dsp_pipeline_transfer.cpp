@@ -22,6 +22,7 @@ namespace {
 using Type = dsp56k::Instruction;
 using Mask = dsp56k::RegisterMask;
 constexpr unsigned word_mask = 0xffffff;
+enum class AccumulatorSource : std::uint8_t { full, middle };
 
 bool immediate(const Type type, const unsigned opcode) {
   if (type == dsp56k::Move_xx || type == dsp56k::Movec_xx) { return true; }
@@ -52,10 +53,15 @@ bool modifier_source(const Type first, const Type second, const std::uint32_t op
          (opcode & accumulator_mask) == modifier_to_accumulator;
 }
 
-bool accumulator_source(const Type first, const Type second, const std::uint32_t opcode) {
+bool accumulator_source(const Type first,
+                        const Type second,
+                        const std::uint32_t opcode,
+                        const AccumulatorSource kind = AccumulatorSource::full) {
   if (first != dsp56k::Mover || second != dsp56k::Invalid) { return false; }
   const auto source = dsp56k::getRegister(first, dsp56k::Field_eeeee, opcode);
-  if (source != dsp56k::Register::A && source != dsp56k::Register::B) { return false; }
+  const bool full = source == dsp56k::Register::A || source == dsp56k::Register::B;
+  const bool middle = source == dsp56k::Register::A1 || source == dsp56k::Register::B1;
+  if (!(kind == AccumulatorSource::full ? full : middle)) { return false; }
   auto written = Mask::None;
   auto read = Mask::None;
   dsp56k::getRegisters(written, read, first, opcode);
@@ -65,16 +71,22 @@ bool accumulator_source(const Type first, const Type second, const std::uint32_t
   return written != Mask::None && (static_cast<std::uint64_t>(written) & ~destinations) == 0;
 }
 
-}
-
-bool accumulator_transfer_source(const std::uint32_t opcode) {
-  constexpr unsigned mask = 0xffffff;
-  if (opcode > mask) { return false; }
+bool standalone_accumulator_source(const std::uint32_t opcode, const AccumulatorSource kind) {
+  if (opcode > word_mask) { return false; }
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
   auto second = dsp56k::Invalid;
   return opcodes.getInstructionTypes(opcode, first, second) != 0 &&
-         accumulator_source(first, second, opcode);
+         accumulator_source(first, second, opcode, kind);
+}
+}
+
+bool accumulator_transfer_source(const std::uint32_t opcode) {
+  return standalone_accumulator_source(opcode, AccumulatorSource::full);
+}
+
+bool middle_accumulator_transfer_source(const std::uint32_t opcode) {
+  return standalone_accumulator_source(opcode, AccumulatorSource::middle);
 }
 
 unsigned pipeline_word_count(const DspProgramWord word) {
@@ -103,7 +115,11 @@ DspMoveFields pipeline_transfer_fields(const std::uint32_t opcode) {
     Mask written = Mask::None;
     Mask read = Mask::None;
     dsp56k::getRegisters(written, read, move, opcode);
-    const auto accumulator = accumulator_source(first, second, opcode) ? Mask::AB : Mask::None;
+    const auto accumulator =
+        accumulator_source(first, second, opcode) ||
+                accumulator_source(first, second, opcode, AccumulatorSource::middle)
+            ? Mask::AB
+            : Mask::None;
     const auto modifier = modifier_source(first, second, opcode) ? Mask::M : Mask::None;
     const auto allowed = static_cast<std::uint64_t>(accumulator) |
                          static_cast<std::uint64_t>(modifier) |

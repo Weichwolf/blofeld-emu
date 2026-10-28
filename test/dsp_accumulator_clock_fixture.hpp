@@ -230,7 +230,7 @@ inline void reserved_scaling() {
 
 inline void guards() {
   constexpr std::array unqualified{
-      move_prefix | (12U << 13U) | (4U << 8U),  // A1 source is a separate unqualified form.
+      move_prefix | (8U << 13U) | (4U << 8U),   // A0 source remains separately unqualified.
       move_prefix | (14U << 13U) | (24U << 8U), // N0 destination needs separate AGU qualification.
       move_prefix | (14U << 13U) | (20U << 8U) | 0x40U}; // Parallel source is not yet qualified.
   for (const auto word : unqualified) {

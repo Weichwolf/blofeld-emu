@@ -75,7 +75,9 @@ std::uint8_t deferred_alu_accumulators(const DspProgramWord producer,
 
 std::uint8_t accumulator_transfer_dependency(const std::uint32_t producer,
                                              const std::uint32_t consumer) {
-  if (!accumulator_transfer_source(consumer)) { return 0; }
+  if (!accumulator_transfer_source(consumer) && !middle_accumulator_transfer_source(consumer)) {
+    return 0;
+  }
   // FM3.5.1/3.5.2.1: ALU and move writers interlock only on the same accumulator.
   return dependency(operands({.value = producer}, false).written,
                     operands({.value = consumer}, false).read);

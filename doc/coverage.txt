@@ -3076,6 +3076,14 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   safe loop/call/inner-loop combinations retain owned forecast/checkpoint state.
   Twenty independent-reference streams check full CPU/counters/all16 stack slots
   every period;386 compound snapshot cuts restore twice per sanitizer profile.
-  See dsp-relative-loops.txt. Original near-end calls, adjacent Y1 producers,
+  See dsp-relative-loops.txt. Original near-end calls, other count producers,
   negative/wrapped endpoints and physical/full original startup remain open;
   the reserved Y:002000 frontier is unchanged.
+
+- Standalone raw A1/B1 -> X0/X1/Y0/Y1/R0..7 preserve all24 bits without
+  full-accumulator limiting/scaling. Same-accumulator producer interlocks and
+  the Y1 count path through actual BSR/inner-DOR/RTS have independent model
+  evidence.118 automatic streams,692 joint cuts/two suffixes and full native
+  E1/E2/CPU/counters/all16 stack cells pass per sanitizer profile. See
+  dsp-raw-middle-transfers.txt. Other partial/parallel sources,SR-read timing,
+  original near-end calls and full original hardware acceptance remain open.

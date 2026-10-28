@@ -39,8 +39,9 @@
     "annulled_loop_clocks": 8
   },
   "automatic_scope": "Twenty own reset-preamble/RAM windows: immediate/Y1 DOR,absolute DO Y1 controls,counts0/1/3/17/176,two partial24-bit count prefixes,safe calls/nested calls and callee-owned inner loops. Full CPU,native table counters and all16 retained stack slots checked every period.386 joint checkpoint cuts for the two new compound cases,twice each(772 suffixes),per sanitizer profile. Native table counters and elapsed pipeline setup holds are distinct.",
-  "limits": "Not original near-end call positions,Y1 adjacent-producer timing,negative/overflow relative endpoints,full high-count completion,IRQ/cache/compatibility/extended stack,authentic ROM,original reset-to-instrument or physical MIDI/audio/storage/update/recovery acceptance.",
+  "limits": "Not original near-end call positions,other count-producer timing,negative/overflow relative endpoints,full high-count completion,IRQ/cache/compatibility/extended stack,authentic ROM,original reset-to-instrument or physical MIDI/audio/storage/update/recovery acceptance.",
   "manufacturer_program_bytes_embedded": false,
   "physical_timing_qualified": false,
-  "complete_original_startup_qualified": false
+  "complete_original_startup_qualified": false,
+  "additional_qualified_count_path": "dsp-raw-middle-reference.json"
 }
