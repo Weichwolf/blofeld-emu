@@ -215,12 +215,12 @@ inline void restores() {
 }
 
 inline void guards() {
-  // Full loads, partial sources, parallel ALU, and modes5..7 stay unqualified.
+  // Full loads, partial loads, parallel ALU, and modes5..7 stay unqualified.
   constexpr std::array refused{0x56d800U,
                                0x5fd800U,
-                               0x505800U,
-                               0x525800U,
-                               0x545800U,
+                               0x50d800U,
+                               0x52d800U,
+                               0x54d800U,
                                0x565840U,
                                0x566800U,
                                0x567000U,

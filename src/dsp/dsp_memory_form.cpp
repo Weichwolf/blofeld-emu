@@ -102,7 +102,7 @@ std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode)
       dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
   const auto access = operation(type, dsp56k::Field_W, opcode);
   if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read) &&
-      !full_accumulator_scalar_store(opcode)) {
+      !full_accumulator_scalar_store(opcode) && !partial_accumulator_scalar_store(opcode)) {
     return std::nullopt;
   }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
@@ -172,6 +172,17 @@ bool full_accumulator_scalar_store(const std::uint32_t opcode) {
   constexpr unsigned source_mask = 0xf6c0ff;
   constexpr unsigned full_accumulator_store = 0x564000;
   return (opcode & source_mask) == full_accumulator_store;
+}
+
+bool partial_accumulator_scalar_store(const std::uint32_t opcode) {
+  // FM13-118/122, Table12-14: 01ddSddd,W=0,EA=1,standalone 001DDD parts0..5.
+  constexpr unsigned source_mask = 0xf0c0ff;
+  constexpr unsigned accumulator_store = 0x504000;
+  constexpr unsigned source_shift = 16;
+  constexpr unsigned source_bits = 7;
+  constexpr unsigned full_accumulator_begin = 6;
+  return (opcode & source_mask) == accumulator_store &&
+         ((opcode >> source_shift) & source_bits) < full_accumulator_begin;
 }
 
 bool is_program_transfer(const DspMemoryForm &form) {

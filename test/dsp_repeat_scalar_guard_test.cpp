@@ -64,12 +64,12 @@ void refused(const Case sample, const unsigned word, const std::string &reason) 
 
 int main() {
   try {
-    // Full scalar loads,partial sources,parallel ALU,modes5..7,full B-long.
+    // Full scalar loads,partial loads,parallel ALU,modes5..7,full B-long.
     constexpr std::array words{0x56d800U,
                                0x5fd800U,
-                               0x505800U,
-                               0x525800U,
-                               0x545800U,
+                               0x50d800U,
+                               0x52d800U,
+                               0x54d800U,
                                0x565840U,
                                0x566800U,
                                0x567000U,

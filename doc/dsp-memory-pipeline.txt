@@ -5,6 +5,8 @@ with pure single-word X/Y loads and stores through R0..R7, using (Rn), (Rn)+,
 (Rn)-, (Rn)+Nn or (Rn)-Nn and X0/X1/Y0/Y1 data operands. It requires the same
 staged_register_boundaries execution contract. Selected long/dual moves, parallel
 ALU and accumulator-source stalls extend this scope in dsp-parallel-memory.txt.
+Standalone full/partial accumulator stores and their source holds are scoped
+in dsp-scalar-stores.txt; their REP extension is in dsp-repeat-scalar-stores.txt.
 Selected immediate/register transfers, their actual extension words, one-word
 R/N/M memory loads and decoded AGU dependencies extend this scope in
 dsp-transfer-pipeline.txt. Data-address extensions, pre-offset/pre-decrement,

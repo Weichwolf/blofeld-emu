@@ -17,10 +17,11 @@ struct DspRepeatControl {
 inline bool fetch_repeat_body(const std::uint32_t opcode) {
   constexpr unsigned store_a_long_r4 = 0x485c00;
   if (opcode == 0 || opcode == store_a_long_r4) { return true; }
-  // FM13-118/122: standalone full A/B scalar stores with one-word modes0..4.
+  // FM13-118/122,Table12-14: standalone full/partial accumulator stores,modes0..4.
   constexpr unsigned mode_shift = 11;
   constexpr unsigned mode_mask = 7;
-  return full_accumulator_scalar_store(opcode) && ((opcode >> mode_shift) & mode_mask) <= 4;
+  return (full_accumulator_scalar_store(opcode) || partial_accumulator_scalar_store(opcode)) &&
+         ((opcode >> mode_shift) & mode_mask) <= 4;
 }
 
 // FM13-160: immediate twelve-bit integer or the complete X0 register.

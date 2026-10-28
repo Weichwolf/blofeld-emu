@@ -84,7 +84,8 @@ std::uint8_t accumulator_transfer_dependency(const std::uint32_t producer,
 std::uint8_t memory_source_dependency(const DspInstructionDependency instructions) {
   const auto producer = instructions.producer;
   const auto consumer = instructions.consumer;
-  if (full_accumulator_scalar_store(consumer.value)) {
+  if (full_accumulator_scalar_store(consumer.value) ||
+      partial_accumulator_scalar_store(consumer.value)) {
     // FM3.5.1: the native E1 memory source must observe the preceding E2 writer.
     return dependency(operands(producer, false).written, operands(consumer, false).read);
   }

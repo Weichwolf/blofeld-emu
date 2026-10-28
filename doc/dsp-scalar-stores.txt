@@ -1,4 +1,4 @@
-Full-accumulator scalar memory stores
+Accumulator scalar memory stores
 
   ctest --test-dir build/strict -R '^dsp_scalar_store(_window)?$' --output-on-failure
 
@@ -14,7 +14,19 @@ writers and a one-NOP gap add none. No host-written memory result is supplied.
 Own literal words and independent integer expectations cover8640 streams
 (A/B,X/Y,18values,3scales,4initial CCRs,R0/R7,5modes),84 snapshot cuts with
 two replays,48producer windows/72cuts and unsupported forms/reserved scaling.
-Full loads,partial sources,parallel ALU and modes5..7 still refuse here.
+Standalone A0/A1/A2/B0/B1/B2 sources also use modes0..4/R0..R7 (FM3-3,
+Table12-14). Individual parts bypass scaling/limiting and retain all CCR bits;
+A2/B2 sign-extend bit7 into a full24-bit word. Native E1 owns the actual value.
+Arithmetic/transfer holds apply to any combination of parts of one accumulator,
+including disjoint parts (FM3.5.1/3.5.2.1).
+
+Partial checks:576 native plus576 staged value/CCR cases;960 address cases,
+420 cuts/840 suffixes;192 producer windows,288 cuts/576 suffixes;42 strict
+guards/two refusal suffixes each. Producer cases include CLR,full/part literal
+and genuine raw M1->A/B. Full/partial loads,parallel ALU,modes5..7 and reserved
+scaling contexts remain explicit refusals.
+
+  ctest --test-dir build/strict -R '^dsp_partial_scalar_' --output-on-failure
 
 REP support: dsp-repeat-scalar-stores.txt. This component evidence does not resolve
 authentic ROM identity,reserved Y:002000,original reset-to-instrument runtime,

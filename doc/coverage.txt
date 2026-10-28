@@ -2939,9 +2939,17 @@ Native CCR, direct register-indirect and OMR control:
   reserved-scale refusals. These are
   component checks,not original normal boot or physical acceptance.
   See dsp-scalar-stores.txt.
+- Individual A0/A1/A2/B0/B1/B2 scalar stores preserve native raw data/CCR;
+  A2/B2 sign-extend from bit7. The same AG2/E1/E2 phases and any-part arithmetic/
+  transfer holds apply. Supporting checks:576 native/576 staged cases,960
+  addresses/420 cuts,192 producer windows/288 cuts and42 strict guards.
+  Repeated partial checks cover6480 streams/384 cuts,24 latch mutations,
+  eight own77-word M1->A/B prefix fills and25 invalid body/context controls.
+  These remain synthetic component proofs;normal original boot/audio and
+  complete hardware acceptance are open (dsp-scalar-stores.txt).
 - Positive immediate/X0 automatic REP retains one genuine body F2 receipt,
   native LC/count ownership,nominal setup5/body1 and distinct AG1/AG2/data/E2
-  effects. Bodies include NOP/full A->L:(R4)+ and standalone A/B->X/Y stores
+  effects. Bodies include NOP/full A->L:(R4)+ and standalone full/partial A/B->X/Y stores
   with one-word modes0..4. Zero/other sources/bodies,active DO/cache and
   automatic IRQ entry remain unqualified. Standalone full
   A/B signed48-bit long stores use native scaling/clipping and sticky S/L.

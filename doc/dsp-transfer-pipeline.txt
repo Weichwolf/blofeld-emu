@@ -4,7 +4,7 @@ The automatic_memory profile accepts selected register/short-immediate and
 two-word long-immediate transfers, alongside its native memory/ALU forms.
 Sources are literal data or X0/X1/Y0/Y1; destinations are those data registers,
 full/partial A/B and R0..R7/N0..N7/M0..M7. Standalone MOVEC M0..M7 sources also
-admit M0..M7 and full A/B destinations (FM13-131/Table12-20). Raw24 transfers
+admit M0..M7 and full A/B destinations (FM13-131/Table12-14). Raw24 transfers
 preserve CCR and bypass scaling/limiting; full A/B receives sign extension and
 zero low24. Native conversion, arithmetic and modifier-cache updates remain in
 the interpreter. Other control/status/SSH operands, unqualified accumulator
