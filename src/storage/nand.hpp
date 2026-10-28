@@ -14,6 +14,8 @@ namespace blofeld {
 
 enum class NandOutcome : std::uint8_t { pass, fail };
 enum class NandPending : std::uint8_t { none, read, reset, program, erase };
+enum class NandReadContinuation : std::uint8_t { unqualified, k9f1208_p };
+enum class NandReadEnd : std::uint8_t { re_high, ce_high };
 
 // ID contents are external observations, separate from cells and geometry.
 // Rev1.1 p33 describes five cycles; Figure15 supplies only four ID byte values.
@@ -34,7 +36,9 @@ public:
   static constexpr std::uint8_t byte_mask = 0xff;
 
   Nand() = default;
+  explicit Nand(NandReadContinuation continuation);
   explicit Nand(const NandImage &image);
+  Nand(const NandImage &image, NandReadContinuation continuation);
   [[nodiscard]] NandImage persistent_image() const;
 
   void observe_power_ready();
@@ -48,6 +52,9 @@ public:
   void write(std::uint8_t value);
   void observe_completion();
   void observe_completion(NandOutcome outcome);
+  // Qualified selected RE rising or CE deassertion, after pin-timing checks.
+  // P-package continuation is explicit; unspecified parts retain their guard.
+  void observe_read_end(NandReadEnd edge);
   void power_loss();
   [[nodiscard]] std::uint8_t read(std::uint8_t mask = byte_mask);
   [[nodiscard]] NandByte status() const;
@@ -68,9 +75,11 @@ private:
     idle,
     read_address,
     read_pending,
+    read_abort_pending,
     reset_pending,
     data,
     end,
+    block_end,
     program_address,
     program_data,
     program_pending,
@@ -103,6 +112,7 @@ private:
   void address_identification(std::uint8_t value);
   [[nodiscard]] std::uint8_t read_identification(std::uint8_t mask);
   NandArray contents_;
+  NandReadContinuation continuation_ = NandReadContinuation::unqualified;
   Phase phase_ = Phase::cold;
   std::optional<bool> ready_;
   std::optional<bool> wp_high_;

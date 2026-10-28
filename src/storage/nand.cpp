@@ -32,7 +32,8 @@ constexpr unsigned byte_bits = 8;
 
 NandPending Nand::pending() const {
   switch (phase_) {
-    case Phase::read_pending: return NandPending::read;
+    case Phase::read_pending:
+    case Phase::read_abort_pending: return NandPending::read;
     case Phase::reset_pending: return NandPending::reset;
     case Phase::program_pending: return NandPending::program;
     case Phase::erase_pending: return NandPending::erase;
@@ -41,6 +42,7 @@ NandPending Nand::pending() const {
     case Phase::read_address:
     case Phase::data:
     case Phase::end:
+    case Phase::block_end:
     case Phase::program_address:
     case Phase::program_data:
     case Phase::erase_address:
@@ -126,6 +128,9 @@ void Nand::command(const std::uint8_t value) {
     command_ = value;
     return;
   }
+  if (phase_ == Phase::block_end) {
+    fail("command", "sequential block boundary requires CE-high termination");
+  }
   if (ready_ != true || phase_ == Phase::end) {
     fail("command", "unqualified readiness/post-page state; value=" + hex(value, 2));
   }
@@ -202,6 +207,8 @@ void Nand::observe_completion() {
     if (reset_status_) { outcome_ = NandOutcome::pass; }
   } else if (phase_ == Phase::read_pending) {
     phase_ = Phase::data;
+  } else if (phase_ == Phase::read_abort_pending) {
+    phase_ = Phase::idle;
   } else {
     fail("completion observation", "no pending reset/read; writes require an observed outcome");
   }
@@ -246,7 +253,7 @@ std::uint8_t Nand::read(const std::uint8_t mask) {
   ++column_;
   if (column_ == page_bytes) {
     phase_ = Phase::end;
-    ready_.reset();
+    if (continuation_ == NandReadContinuation::unqualified) { ready_.reset(); }
   }
   return value;
 }

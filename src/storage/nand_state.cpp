@@ -18,6 +18,10 @@ NandImage NandArray::image() const {
 
 Nand::Nand(const NandImage &image) : contents_(image) {}
 
+Nand::Nand(const NandImage &image, const NandReadContinuation continuation) : Nand(continuation) {
+  contents_ = NandArray(image);
+}
+
 NandImage Nand::persistent_image() const {
   if (phase_ != Phase::cold) {
     fail("persistent export", "explicit power-off projection required");

@@ -1,0 +1,51 @@
+Explicit P-package NAND read continuation
+
+The K9F1208U0C Rev1.1 reference is pinned in hardware/sources.json. Printed
+pp2/26/29 distinguish TSOP P-package sequential row reading from the FBGA
+J-package. This is not identification of the part fitted to either Blofeld.
+NandReadContinuation::k9f1208_p must be selected explicitly, including when
+constructing a device from persistent cells. Default construction and the
+original image constructor keep the unspecified post-page guard. Image bytes
+and Read-ID observations do not select a continuation profile.
+
+For this profile, consuming column527 leaves the last output byte pending and
+Ready high. A qualified selected rising RE ends that output. Within a block,
+the device selects the next row and becomes busy. Read1/01 resumes at column0;
+Read2/50 resumes at column512. After row31 within each block, no transfer or
+row wrap is invented: the device requires CE-high termination before another
+command/address sequence. A final-byte CE deassertion instead terminates the
+sequence without starting another transfer. Cells remain independent knowledge.
+
+observe_read_end() accepts qualified read-end edges; the board must first apply
+the separate output/setup timing checks and actual selection/edge ordering.
+It is not a complete CE pin model. Partial-page CE deassertion outside an active
+array transfer remains visibly unqualified. Status output and ordinary byte
+release do not start or restart a transfer. Repeated RE observations during busy
+cannot move its deadline. An unspecified part cannot use this interface to
+convert its unknown post-page state into a successful response.
+
+NandOperationClock owns protocol and events. Its explicit reference_maximum
+contract uses the p13 maximum tR=15us for a sequential read and tCRY=5us for
+CE-aborted pending reads. Busy recognition at final RE high uses zero tRB,
+within the table's100ns maximum, as an explicit reference choice. This is not
+a silicon timing measurement. CE abort replaces the previous event; Ready
+remains low until the abort deadline. Abort completion provides no valid data
+buffer. Reset/power loss cancel stale events and preserve read-only cells.
+Events precede same-tick inputs; durations round up to reference ticks.
+Counter exhaustion faults the owner instead of wrapping into a successful event.
+
+Checks
+  cmake --build --preset strict --target blofeld-nand-sequential-read-test
+  ctest --test-dir build/strict -R '^nand_sequential_read$' --output-on-failure
+
+The own-data test has seven independent page/area/block vectors, five literal
+clock/abort conversion vectors, final-byte and busy-event value checkpoints,
+fine/coarse completion, status polling, read-only reset/power loss, persistent
+cells with explicit profile, unknown next-page data, stale timer cancellation,
+exact/exhausted counters, invalid fixed-underlying enum representations and
+default/partial-CE/block-boundary refusals. It does not execute manufacturer
+firmware, establish board wiring or supply an installed flash image.
+
+The normal board still needs actual NAND attachment, power/reset/CE routing,
+ROM/memory and transient GPIO qualification, complete original loading and
+instrument operation. This component does not relax those requirements.

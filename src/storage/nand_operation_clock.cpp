@@ -13,6 +13,7 @@
 namespace blofeld {
 namespace {
 constexpr unsigned read_microseconds = 15;
+constexpr unsigned read_abort_microseconds = 5;
 constexpr unsigned reset_microseconds = 5;
 constexpr unsigned program_reset_microseconds = 10;
 constexpr unsigned erase_reset_microseconds = 500;
@@ -139,6 +140,21 @@ std::uint8_t NandOperationClock::read(const std::uint8_t mask) {
   const auto result = device_.read(mask);
   healthy_ = true;
   return result;
+}
+
+void NandOperationClock::observe_read_end(const NandReadEnd edge) {
+  healthy();
+  healthy_ = false;
+  const auto before = device_.pending();
+  device_.observe_read_end(edge);
+  if (device_.pending() == NandPending::read) {
+    if (edge == NandReadEnd::ce_high) {
+      schedule(NandPending::read, read_abort_microseconds);
+    } else if (before != NandPending::read) {
+      schedule(NandPending::read, read_microseconds);
+    }
+  }
+  healthy_ = true;
 }
 
 void NandOperationClock::observe_completion(const NandOutcome outcome) {

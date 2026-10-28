@@ -42,6 +42,9 @@ public:
   void address(std::uint8_t value);
   void write(std::uint8_t value);
   [[nodiscard]] std::uint8_t read(std::uint8_t mask = Nand::byte_mask);
+  // Only qualified selected RE rising / read-end CE-high observations.
+  // Zero tRB (within its 100ns maximum); sequential tR / abort tCRY use maxima.
+  void observe_read_end(NandReadEnd edge);
   // Program/erase duration and success remain external observations.
   void observe_completion(NandOutcome outcome);
   void power_loss();
