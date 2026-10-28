@@ -13,7 +13,7 @@ Safe calls may leave an active loop body,open another loop in the callee,and
 make deeper calls. Forecast-only metadata tracks call depth at each loop entry,
 restores it with owned F2 checkpoints,and validates actual native E2 control.
 The native interpreter owns all PC/LA/LC/SR/SP/SC and stack writes. Calls into
-active bodies,unowned RTS frames and generic restricted LA-2..LA positions fail
+active bodies,unowned RTS frames and unqualified restricted LA-2..LA forms fail
 with address,PC and OMR context. Rejected forecasts retain the preceding queue.
 
 Twenty own OMR300 reset-preamble/RAM streams check complete CPU,counters and
@@ -27,7 +27,8 @@ current SSH/SSL; all retained stack cells use separate literal expectations.
 See dsp-relative-loop-reference.json. Raw A1/B1 count producers and call
 preservation are qualified separately in dsp-raw-middle-transfers.txt.
 
-Original near-end call positions,other count producers,negative/wrapped
+Finite short near-end calls have separate evidence in dsp-near-end-calls.txt.
+Other near-end forms/count producers,negative/wrapped
 endpoints,IRQ/cache/compatibility/extended-stack cases and physical timing remain
 unqualified. This does not establish authentic ROM or original reset/MIDI/audio/
 storage/update/recovery acceptance. The reserved Y:002000 startup fault remains.

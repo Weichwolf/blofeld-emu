@@ -393,6 +393,28 @@ std::optional<std::uint32_t> DspProgramFetch::loop_last(const DspFetchedWord cap
   return prediction ? prediction->loop_last() : std::nullopt;
 }
 
+DspLoopArchitecture DspProgramFetch::subroutine_source(const DspFetchedWord captured,
+                                                       DspLoopArchitecture observed) const {
+  const auto index = position(captured);
+  const auto form = decode_branch_form(captured.word.value);
+  if (!form || (!form->subroutine_call && !form->subroutine_return)) {
+    throw Fault("Unavailable owned subroutine projection read P:" + hex(captured.word.address, 6) +
+                " pc=" + hex(observed.pc, 6) + " omr=" + hex(observed.omr, 6));
+  }
+  if (loop_) {
+    const auto &prediction = predictions_.at(index);
+    if (!accepts_loop_control(observed) || !prediction || boundaries_.at(index)) {
+      throw Fault("Unqualified owned subroutine context read P:" + hex(captured.word.address, 6) +
+                  " pc=" + hex(observed.pc, 6) + " omr=" + hex(observed.omr, 6));
+    }
+    // F2 already owns these older implicit loop boundaries. This metadata
+    // controls fetch only; genuine native E1/E2 must independently confirm it.
+    observed = prediction->control();
+  }
+  observed.pc = captured.word.address;
+  return observed;
+}
+
 std::uint32_t DspProgramFetch::continuation_after(const DspFetchedInstruction &captured) const {
   const auto words = captured.extension ? 2U : 1U;
   if (instruction(captured.opcode, words) != captured) {

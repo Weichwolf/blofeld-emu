@@ -1,0 +1,28 @@
+DSP calls near active loop ends
+
+  cmake --build --preset strict --target blofeld-near-end-clock-test blofeld-near-end-guard-test
+  ctest --test-dir build/strict -j1 --output-on-failure -L '^dsp_near_end_runtime$'
+
+Finite short unconditional BSR at LA-1/-2 executes genuine native stack/loop
+behavior. Exact F2 occurrences supply speculative control and select retained
+native return-stack cells before older implicit loop ends retire. Native E1/E2
+independently confirms every result;no PC/LC/SP/SR/stack value is host-written.
+The accepted target is published before opening its own DO/REP Decode barrier.
+
+Unchanged NXP software windows observe one extra period on an instruction at
+active LA immediately after RTS returns there. Its following Decode slot waits;
+its own E1/E2 result is unchanged. This selected placement is a reference timing
+contract,not a measured silicon sample edge. FM A.3.1 restricts near-end BSR;
+unmodified official1.25 and independent own-code observations require this
+bounded compatibility choice. Calls at LA,long/conditional/forever forms and
+calls into active bodies retain refusals. See dsp-near-end-reference.json.
+
+17 own streams cover counts1/3,two OMRs,called loops,RTS immediately after an
+inner end,and two-level three-call refill bodies with176 inner iterations.
+Every one of21166 periods checks full CPU,table counters and all16 stack cells.
+1916 joint cuts across10 compositions restore twice. Directed metadata tests
+retain178 extent/control and12 occurrence/context refusals. They supplement
+the actual native streams;they do not establish hardware overflow behavior.
+
+Authentic ROM/reserved memory,full original reset-to-instrument,MIDI/audio,
+persistence/update/recovery/realtime and physical equivalence remain open.

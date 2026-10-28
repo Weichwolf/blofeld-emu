@@ -32,7 +32,8 @@ stack, calls into the loop body and RTS without an owned call frame retain
 literal full CPU/counters/all stack slots; only older instructions actually due at the rejected period may retire.
 These refusals do not implement physical stack-overflow handling.
 
-Register-relative calls,extended-stack/overflow/interrupt contexts and original
-near-loop-end calls remain unqualified. This component does not establish
+Finite short near-loop-end calls and implicit loop-end control previews are
+qualified separately in dsp-near-end-calls.txt. Register-relative calls and
+extended-stack/overflow/interrupt contexts remain unqualified. This component does not establish
 original boot,authentic ROM,normal MIDI/audio,update/recovery or physical equivalence.
 The original first-stage reserved Y:002000 boundary remains unresolved.

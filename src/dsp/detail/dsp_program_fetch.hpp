@@ -98,6 +98,8 @@ public:
 
   [[nodiscard]] std::array<DspFetchedWord, 2> consumed_pair() const { return consumed_; }
 
+  [[nodiscard]] DspLoopArchitecture subroutine_source(DspFetchedWord captured,
+                                                      DspLoopArchitecture observed) const;
   [[nodiscard]] bool accepts_loop_control(DspLoopArchitecture native_result) const;
   void check_consume(std::uint32_t address) const;
   [[nodiscard]] std::uint32_t consume(std::uint32_t address);

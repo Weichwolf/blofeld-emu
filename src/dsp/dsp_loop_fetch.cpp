@@ -233,11 +233,17 @@ void DspLoopFetch::predict_subroutine(const DspProgramWord word,
   expected.sc = (call ? expected.sc + 1 : expected.sc + max_stack_count) & max_stack_count;
   bool unsafe = control.after != expected || (call && control.before.sp >= last_stack_frame) ||
                 (call ? calls_ >= last_stack_frame : calls_ == 0);
+  // Original1.25 requires finite short BSR at LA-1/-2;independent software
+  // windows qualify only this bounded exception to FM A.3.1 (see reference manifest).
+  constexpr unsigned short_mask = 0xfffc20;
+  constexpr unsigned short_bsr = 0x050800;
+  const bool short_call = call && word.value <= word_mask && (word.value & short_mask) == short_bsr;
   for (std::size_t index = 0; index < depth_; ++index) {
     const auto &frame = frames_.at(index);
     unsafe = unsafe ||
              (word.address >= frame.body && word.address <= frame.last &&
-              frame.last - word.address <= restricted_end_words) ||
+              frame.last - word.address <= restricted_end_words &&
+              (!short_call || frame.forever || word.address == frame.last)) ||
              (call && next_ >= frame.body && next_ <= frame.last);
   }
   if (!call && depth_ != 0) {

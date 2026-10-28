@@ -54,8 +54,20 @@ void DspInstructionPipeline::retire_branch() {
   release_branch();
 }
 
-void DspInstructionPipeline::accept_branch_decode() {
-  if (!branch || !branch_target_ready) { return; }
+void DspInstructionPipeline::accept_branch_decode(DspMachine &machine) {
+  if (!branch || !branch_target_ready || branch_target_decoded) { return; }
+  const auto captured = samples.front();
+  if (!captured || captured->word.address != branch->next_pc) {
+    throw Fault("Branch target Decode lost its owned F2 occurrence");
+  }
+  const auto form = decode_branch_form(branch->word.value);
+  if (form && form->subroutine_return &&
+      machine.pipeline_loop_last(*captured) == captured->word.address) {
+    // The unchanged software model adds one period after an RTS target at LA.
+    // Serialize the following Decode; do not delay this target's E1/E2 result.
+    // This reference placement is not a measured silicon sampling edge.
+    branch_decode_hold = 1;
+  }
   branch_target_decoded = true;
   release_branch();
 }

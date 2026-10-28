@@ -311,10 +311,11 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     view.decode_address =
         machine.pipeline_continuation(decode_receipt(selected.next), view.cycle.decode_words);
     view.cycle.decode_accepted = true;
+    // Confirm this target before it opens its own loop/repeat barrier.
+    accept_branch_decode(machine);
     accept_loop_decode(machine);
     accept_repeat_decode();
     accept_ccr_decode();
-    accept_branch_decode();
   }
   view.cycle.advanced = true;
 }
@@ -390,7 +391,7 @@ void DspInstructionPipeline::validate_branch(const DspInstructionRetire &retirem
 }
 
 void DspInstructionPipeline::release_branch() {
-  if (!branch || !branch_target_decoded || !branch_retired) { return; }
+  if (!branch || !branch_target_decoded || !branch_retired || branch_decode_hold != 0) { return; }
   branch.reset();
   branch_decode_hold = 0;
   branch_target_ready = false;
@@ -430,5 +431,6 @@ void DspInstructionPipeline::finish_cycle() {
   }
   if (branch_fetch_hold != 0) { --branch_fetch_hold; }
   if (held_branch_decode && branch_decode_hold != 0) { --branch_decode_hold; }
+  release_branch();
 }
 }

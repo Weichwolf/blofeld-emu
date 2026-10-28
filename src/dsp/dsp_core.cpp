@@ -1879,7 +1879,11 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
   // The admitted forms cannot write OMR. The actual native E1/E2 must confirm
   // this occurrence-bound fetch decision without supplying architectural state.
   DspBranchDecision decision{.word = opcode, .omr = omr};
-  const auto cpu = state();
+  const auto source = impl_->cpu.referenceAttemptState();
+  auto cpu = loop_control(source);
+  if (form->subroutine_call || form->subroutine_return) {
+    cpu = fetch.subroutine_source(sample, cpu);
+  }
   constexpr unsigned last_internal_frame = 15;
   if ((form->subroutine_call && cpu.sp >= last_internal_frame) ||
       (form->subroutine_return && (cpu.sp == 0 || cpu.sp > last_internal_frame))) {
@@ -1889,7 +1893,11 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
   if (form->subroutine_return) {
     // Non-destructive observation only. Genuine native RTS must pop the frame
     // and independently confirm this occurrence-bound target in E1/E2.
-    decision.next_pc = cpu.stack_pc;
+    constexpr unsigned stack_index_mask = 15;
+    const auto index = cpu.sp & stack_index_mask;
+    constexpr unsigned stack_word_bits = 24;
+    decision.next_pc = static_cast<std::uint32_t>(
+        (static_cast<std::uint64_t>(source.registers.ss[index]) >> stack_word_bits) & word_mask);
     decision.taken = true;
   } else if (form->displacement) {
     decision.next_pc = (opcode.address + *form->displacement) & word_mask;
@@ -1909,8 +1917,7 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
     decision.taken = taken;
   }
   if (form->subroutine_call || form->subroutine_return) {
-    decision.subroutine = forecast_subroutine(
-        loop_control(impl_->cpu.referenceAttemptState()), form->subroutine_call, decision.next_pc);
+    decision.subroutine = forecast_subroutine(cpu, form->subroutine_call, decision.next_pc);
   }
   fetch.predict_branch(decision, captured.opcode.occurrence);
   return decision;

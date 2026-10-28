@@ -1,0 +1,54 @@
+{
+  "scope": "Own unchanged-NXP-software-model programs;supporting ISA/timing evidence,not measured chip sampling edges or complete instrument acceptance.",
+  "manual": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "bytes": 24396254,
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "13-63 DOR restrictions",
+      "A.3.1",
+      "A.2.6.1/.2",
+      "5.4.3.3 SZ reset"
+    ]
+  },
+  "reference_batches": {
+    "near-end-and-controls": {
+      "cases": 23,
+      "qualification_sha256": "0c748734880945801b67be3e95f11bb48a6ae9c236f3ea77e94de760fe84b51f"
+    },
+    "ANDI-controls": {
+      "cases": 5,
+      "qualification_sha256": "e67f33253008d3ee84acbf957a2446c39bac803e0325112ea3884c6049eab05a"
+    },
+    "adjacent-loop-return": {
+      "cases": 8,
+      "qualification_sha256": "74e9fbb8924c47c6c0abff4f3b57829b62c9d3d70d8a4a70d4c8dd052885120a"
+    },
+    "joined-refill": {
+      "cases": 4,
+      "qualification_sha256": "f01d93b4ec3eca38b3911b4f4be9f8a041076917b0adb76ea9b41c68ca4cd5a6"
+    }
+  },
+  "observations": {
+    "cases": 40,
+    "full_46_instruction_points": 19932,
+    "normalized_clock_points": 19292,
+    "return_to_active_LA_extra_periods": 36
+  },
+  "admission": "Finite short unconditional BSR at LA-1/-2 only. Calls at LA,long/conditional/forever cases and calls into active bodies retain refusals. RTS reads the retained native stack cell selected by the exact owned F2 forecast;native execution independently confirms control.",
+  "timing": "The instruction at active LA immediately after RTS has one extra observed period. The selected reference pipeline holds the following Decode slot;target E1/E2 remains unchanged. BRA-to-LA,return-to-LA-1 and raw-move controls distinguish the effect.",
+  "manual_conflict": "FM A.3.1 restricts near-end BSR. Unchanged official1.25 requires LA-1/-2 short calls;independent software windows support this bounded compatibility choice. DSP56371E and FMAD do not establish a silicon exception. No blanket relaxation or physical timing claim.",
+  "official_first_stage": {
+    "words": 94,
+    "bytes": 282,
+    "sha256": "c95f2b7f711b2feef6dee314f04dc849bf0f2a5669610665685f7364647717ae",
+    "local_source_review_sha256": "c93828ec9970e3c403f442398b1bcfa1382f09e0543b9c65bd7fb42c5621026f"
+  },
+  "automatic_scope": "17 own reset-preamble/RAM streams;21166 periods check full CPU,table counters and all16 retained stack cells.10 compositions/1916 cuts restore twice(3832 suffixes) per sanitizer profile. Literal ROM MOVEC initializes SZ;no host PC/control writes or firmware patches.",
+  "guard_scope": "Two positive metadata controls,178 loop/call extent/control refusals and12 occurrence/control projection refusals. Equal-PC occurrences retain distinct forecasts;missing,changed,consumed,nonbranch and endpoint receipts fail visibly. Existing native call/stack guards remain separate.",
+  "limits": "Other near-end forms/count producers,wrapped ends,IRQ/cache/extended stack,silicon timing,authentic ROM/reserved memory and full connected original reset/instrument/MIDI/audio/storage/update/recovery/realtime acceptance remain open. ORI reference windows remain unadmitted automatically.",
+  "manufacturer_program_bytes_embedded": false,
+  "physical_timing_qualified": false,
+  "complete_original_startup_qualified": false
+}

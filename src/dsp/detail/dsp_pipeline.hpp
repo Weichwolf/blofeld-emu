@@ -131,7 +131,7 @@ private:
   void validate_branch(const DspInstructionRetire &retirement) const;
   void release_branch();
   void retire_branch();
-  void accept_branch_decode();
+  void accept_branch_decode(DspMachine &machine);
   [[nodiscard]] bool capture_omr_branch(DspMachine &machine);
   void follow_omr_retirement(const DspReferenceCycleResult &bus);
 };

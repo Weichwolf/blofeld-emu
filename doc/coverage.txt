@@ -3096,7 +3096,7 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   safe loop/call/inner-loop combinations retain owned forecast/checkpoint state.
   Twenty independent-reference streams check full CPU/counters/all16 stack slots
   every period;386 compound snapshot cuts restore twice per sanitizer profile.
-  See dsp-relative-loops.txt. Original near-end calls, other count producers,
+  See dsp-relative-loops.txt. Other loop/call forms and count producers,
   negative/wrapped endpoints and physical/full original startup remain open;
   the reserved Y:002000 frontier is unchanged.
 
@@ -3116,3 +3116,11 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   profile. See dsp-parallel-middle-transfers.txt. Other ALU/raw forms,SR-read
   timing,original near-end calls and complete original instrument acceptance
   remain unqualified;reserved Y:002000 and authentic ROM requirements persist.
+
+- Finite short BSR at LA-1/-2 and RTS across pending implicit loop ends retain
+  exact occurrence-bound forecasts;the native interpreter owns all state writes.
+  17 own windows/21166 full CPU-counter-stack periods and1916 checkpoint cuts
+  (3832 suffixes) cover adjacent called-loop returns and nested176-count refills.
+  178 extent/control plus12 projection refusals remain visible. The manual
+  restriction/software compatibility distinction and reference timing limits
+  are explicit in dsp-near-end-calls.txt;no full original boot/MIDI/audio claim.
