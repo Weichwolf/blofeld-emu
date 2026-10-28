@@ -145,13 +145,21 @@ void active_dma_refuses_port() {
               !machine.bus().once_latch(),
           "Explicit peripheral occupancy with actual enabled DMA refuses before sampling or I/O");
   DspFetchRun run(contract(), machine);
+  // Enabled does not mean a request was fabricated. Reach the actual port E1.
+  for (unsigned cycle = 0; cycle < 5; ++cycle) {
+    const auto point = run.advance_cycle(machine, fetch_clock::input());
+    require(!point.bus.dma.phase && !point.bus.dma.word && machine.cpu().debug_state() == before &&
+                !machine.bus().once_latch(),
+            "Known-low requests permit genuine F1/F2/AG1/AG2 without a DMA transfer");
+  }
+  const auto dma_cycle = machine.bus().last_dma_cycle();
   const auto automatic =
       fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-  require(automatic.contains("X:0xfffff4") && automatic.contains("pc=") &&
-              automatic.contains("omr=") && run.faulted() && run.completed_cycles() == 0 &&
-              machine.cpu().debug_state() == before && machine.bus().last_dma_cycle() == 0 &&
-              !machine.bus().once_latch(),
-          "Automatic immediate MOVEP also refuses active DMA before F2 or any native effect");
+  require(automatic.contains("write at X:0xfffffc") && automatic.contains("active DMA") &&
+              automatic.contains("pc=") && automatic.contains("omr=") && run.faulted() &&
+              run.completed_cycles() == 5 && machine.cpu().debug_state() == before &&
+              machine.bus().last_dma_cycle() == dma_cycle && !machine.bus().once_latch(),
+          "Unqualified concurrent port E1 refuses before request sampling or native port effects");
 }
 
 void reference_port(DspMachine &machine, const char *instruction, const bool dma) {

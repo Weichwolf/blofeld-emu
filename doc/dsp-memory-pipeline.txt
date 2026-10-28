@@ -33,11 +33,14 @@ Younger accepted R values survive older native whole-result restoration. The
 per-instruction overlay contains actual published register values and ends at
 retirement; it is neither a replacement register file nor guessed AGU state.
 
-Each reference cycle admits idle DMA, actual F2, older E2, AG2, then E1. AG1 is
-calculated after E1 using the updated live address registers; this order commutes
-for the declared forms, whose E1 only changes data registers. Active DMA remains
-an explicit refusal. Actual F2 plus the frozen E1 access derive resource use;
-existing bank/ROM/MMIO refusals remain enforced before any cycle side effects.
+Each reference cycle admits the actual DMA phase, F2, older E2, AG2, then E1.
+AG1 follows E1 using the updated live address registers. Actual F2 and the frozen
+E1 operand derive core occupancy. Source conflicts delay DMA reads; captured
+DMA destination conflicts retain the CPU stages and nominal control holds while
+reference time advances. Writable controller words use their separate register
+port; unsupported ports and read-only status writes remain visibly refused.
+The coupled active-DMA contract and its limits are in dsp-automatic-dma.txt.
+Existing bank/ROM/MMIO and unknown request/data checks remain in force.
 Selected immediate short-I/O MOVEP writes now have the separate scope in
 dsp-peripheral-pipeline.txt. General peripheral access remains unqualified. The
 bus order is an explicit reference order, not a hardware-measured sampling order.

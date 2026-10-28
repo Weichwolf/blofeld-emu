@@ -5,6 +5,7 @@
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_dma_registers.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_program_fetch.hpp"
@@ -31,9 +32,10 @@ std::string describe(const DspMemoryAccess access) {
          spaces.at(static_cast<unsigned>(access.target.space)) + hex(access.target.address, 6);
 }
 
-bool controller_read(const DspMemoryAccess access) {
-  return access.target.space == DspSpace::x && access.operation == DspMemoryOperation::read &&
-         DspDma::handles(access.target.address);
+bool controller_access(const DspMemoryAccess access) {
+  return access.target.space == DspSpace::x && DspDma::handles(access.target.address) &&
+         (access.operation == DspMemoryOperation::read ||
+          (access.operation == DspMemoryOperation::write && access.target.address != dma::status));
 }
 
 std::optional<DspMemoryAccess> native_access(const DspReferencePending &pending) {
@@ -63,7 +65,7 @@ std::optional<DspMemoryAccess> native_access(const DspReferencePending &pending)
   }
   const DspMemoryAccess test{.target = access->target};
   if (access->kind == DspNativeAccessKind::bit && access->bit &&
-      access->bit->operation == DspBitOperation::test && controller_read(test)) {
+      access->bit->operation == DspBitOperation::test && controller_access(test)) {
     return test;
   }
   constexpr std::array spaces{"P:", "X:", "Y:"};
@@ -141,7 +143,7 @@ void check_resources(const DspBus &bus,
     if (access.target.space != DspSpace::p) { ++data_accesses; }
     const bool port = peripheral && same_access(access, *peripheral);
     const bool sample = early && same_access(access, *early);
-    if (!controller_read(access) && !port && !sample) {
+    if (!controller_access(access) && !port && !sample) {
       resources.at(index) = bus.memory_resource(access);
     }
   }

@@ -207,7 +207,8 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
     result.start_ticks = state.ticks;
     result.period_ticks = state.period(machine);
     if (state.pipeline) {
-      if (machine.bus().dma_.active()) {
+      if (machine.bus().dma_.active() &&
+          state.pipeline->profile != DspFetchPipeline::automatic_memory) {
         throw Fault("Unqualified automatic ALU/DMA arbitration at X:0xfffff4" + context(machine));
       }
       state.pipeline->prepare(machine);
@@ -230,7 +231,7 @@ DspFetchCycleResult DspFetchRun::advance_cycle(DspMachine &machine,
       const auto issued = machine.advance_reference_fetch(DspProgramFetchStage::address);
       result.issued_address = issued.pending_address;
     }
-    if (state.pipeline) { state.pipeline->finish_cycle(); }
+    if (state.pipeline && !result.bus.dma.core_stall) { state.pipeline->finish_cycle(); }
     complete_cycle(machine, result.period_ticks, switch_was_pending);
     state.bind(machine);
     result.completed_cycles = state.cycles;

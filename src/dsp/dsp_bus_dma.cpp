@@ -3,6 +3,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_dma_registers.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 
@@ -16,9 +17,10 @@ constexpr unsigned io_base = 0xffff80;
 constexpr unsigned shi_status = 0xffff91;
 constexpr unsigned shi_receive = 0xffff94;
 
-bool controller_read(const DspMemoryAccess access) {
-  return access.operation == DspMemoryOperation::read && access.target.space == DspSpace::x &&
-         DspDma::handles(access.target.address);
+bool controller_access(const DspMemoryAccess access) {
+  return access.target.space == DspSpace::x && DspDma::handles(access.target.address) &&
+         (access.operation == DspMemoryOperation::read ||
+          (access.operation == DspMemoryOperation::write && access.target.address != dma::status));
 }
 
 DspSpace space(const DspDmaSpace value) {
@@ -59,8 +61,8 @@ bool program_store_pair(const DspCoreBusUse core) {
 
 std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreBusUse core) {
   // Short-I/O occupancy is separate from RAM. This never dispatches a core transaction;
-  // native E1 still owns register validation and the actual read/write. DMA-controller writes
-  // can change the arbitration owner and remain unqualified even with inactive channels.
+  // native E1 still owns register validation and the actual read/write. Writable DMA
+  // controller words use their register port after this cycle's actual DMA phase.
   std::optional<DspMemoryAccess> peripheral;
   unsigned data_accesses = 0;
   bool early = false;
@@ -88,7 +90,7 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
     } else if (io && access.operation == DspMemoryOperation::read && program_pair) {
       program_read = true;
       peripheral = access;
-    } else if (!controller_read(access)) {
+    } else if (!controller_access(access)) {
       static_cast<void>(bus.memory_resource(access));
     }
   }
@@ -105,7 +107,7 @@ bool core_conflict(const DspBus &bus, const DspCoreBusUse core, const DspMemoryA
   bool conflict = false;
   for (const auto access : core.accesses) {
     // Controller inspection does not use the DMA source/destination data path.
-    if (controller_read(access)) { continue; }
+    if (controller_access(access)) { continue; }
     const auto relation = bus.memory_conflict({.core = access, .dma = target});
     if (relation == DspMemoryConflict::unqualified) {
       const bool write = target.operation == DspMemoryOperation::write;

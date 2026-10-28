@@ -1,0 +1,40 @@
+Automatic CPU and DMA reference cycles
+
+The automatic_memory profile couples native controller word writes and active
+DMA to the existing explicit DMA/F2/E1 cycle order. Writable controller registers
+use their register port rather than RAM partition occupancy. Read-only status
+writes, unknown requests/grants/data, busy address/counter changes, unsupported
+resources and other concurrent peripheral accesses remain visible refusals.
+
+A native E1 enable write takes effect after that cycle's prior DMA phase. The
+next admitted cycle may capture a source word; a distinct following cycle writes
+the captured value. A fresh source-partition conflict delays the DMA read while
+native CPU work proceeds. A captured destination conflict holds actual F2,
+AG2, E1 and E2 owners and nominal branch/repeat/program-memory holds while time and
+peripheral clocks advance. DE clear finishes the current captured word before
+stopping. Joint restore retains both native owners and the actual captured word.
+
+This ordering is an explicit reference contract derived from the documented core
+stages and DMA source/destination phases. It does not establish physical bus
+sampling edges. The ALU-only profile and scalar completion clock keep their
+separate active-DMA refusals. No scalar timing fallback is used.
+
+Own native diagnostics cover activation, source/destination conflicts, captured
+source overwrite, DE clear, request knowledge, invalid controller writes and
+checkpoint recovery. Timed branch, REP/NOP and MOVEM compositions retain literal CPU/data
+results and original nominal instruction costs with added actual DMA hold periods.
+Four control cases compare 310 complete CPU/stack/counter positions against a
+quiet run, with independent literal data, repeat counts, instruction costs and
+hold-period checks. 96 held periods and 24 restored suffixes retain those bounds.
+REP with arbitrary ALU bodies remains visibly unsupported; the REP/NOP settling
+form is used here. These checks do not establish original-firmware boot acceptance.
+
+  cmake --build --preset strict --target blofeld-dma-pipeline-activation-test \
+    blofeld-dma-pipeline-controls-test blofeld-dma-pipeline-timing-test
+  ctest --test-dir build/strict --output-on-failure \
+    -R '^dsp_automatic_dma_(activation|controls|timing)$'
+
+Exact oscillator-driven HCKT/DAX ACI, complete connected original reset/startup,
+normal DSP audio/MIDI/storage and all Desktop/Keyboard instrument acceptance
+remain open. Native exceptions and test allocations remain outside a future
+real-time audio callback. Fuzzing is never part of this routine test command.

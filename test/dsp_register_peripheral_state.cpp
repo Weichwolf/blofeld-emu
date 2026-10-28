@@ -198,13 +198,21 @@ void active_dma() {
                         .execution = DspReferenceExecution::staged_register_boundaries});
   const auto before = machine.cpu().debug_state();
   DspFetchRun run(contract(), machine);
+  for (unsigned cycle = 0; cycle < 5; ++cycle) {
+    const auto point = run.advance_cycle(machine, fetch_clock::input());
+    require(!point.bus.dma.phase && !point.bus.dma.word && machine.cpu().debug_state() == before &&
+                !machine.bus().once_latch(),
+            "Known-low requests permit the real register-MOVEP address prefix without transfers");
+  }
+  const auto dma_cycle = machine.bus().last_dma_cycle();
   const auto error =
       fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-  require(error.contains("DMA arbitration") && error.contains("pc=") && error.contains("omr=") &&
-              run.faulted() && run.completed_cycles() == 0 &&
-              machine.cpu().debug_state() == before && machine.bus().last_dma_cycle() == 0 &&
-              !machine.bus().once_latch(),
-          "Register MOVEP never invents a successful active-DMA peripheral sharing contract");
+  require(
+      error.contains("DMA arbitration") && error.contains("write at X:0xfffffc") &&
+          error.contains("pc=") && error.contains("omr=") && run.faulted() &&
+          run.completed_cycles() == 5 && machine.cpu().debug_state() == before &&
+          machine.bus().last_dma_cycle() == dma_cycle && !machine.bus().once_latch(),
+      "Unqualified concurrent register-MOVEP E1 refuses before sampling or native port effects");
 }
 
 void reset_pending() {

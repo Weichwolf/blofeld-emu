@@ -49,17 +49,43 @@ void controller_reads() {
   }
 }
 
+void controller_writes() {
+  for (const unsigned address : {transfer::source0, transfer::counter0, transfer::control0}) {
+    DspBus bus;
+    const std::array core{DspMemoryAccess{.target = {.address = p_rom_begin}},
+                          DspMemoryAccess{.target = {.space = DspSpace::x, .address = address},
+                                          .operation = DspMemoryOperation::write}};
+    static_cast<void>(bus.advance_dma(inputs({.index = 0}), use(core)));
+    bus.write({.space = DspSpace::x, .address = transfer::ring_start, .value = first});
+    configure(bus, {.control = transfer::software_copy});
+    const auto before = bus.read({.space = DspSpace::x, .address = address});
+    const auto source = bus.advance_dma(inputs({.index = 1}), use(core));
+    require(
+        source.phase && source.phase->kind == read_phase && !source.word && !source.core_stall &&
+            bus.read({.space = DspSpace::x, .address = address}) == before,
+        "Writable register occupancy admits the real source phase without dispatching a CPU store");
+    const auto wait = bus.advance_dma(inputs({.index = 2, .grant = DspDmaGrant::wait}), use(core));
+    require(
+        wait.phase && wait.phase->value == first && !wait.word && !wait.core_stall &&
+            bus.read({.space = DspSpace::x, .address = address}) == before,
+        "The separate controller port neither spends a destination wait nor fabricates a write");
+    const auto destination = bus.advance_dma(inputs({.index = 3}), use(core));
+    require(
+        destination.word && destination.word->value == first && !destination.core_stall &&
+            bus.read({.space = DspSpace::y, .address = transfer::destination}) == first &&
+            bus.read({.space = DspSpace::x, .address = transfer::source0}) ==
+                transfer::ring_start + 1 &&
+            bus.read({.space = DspSpace::x, .address = transfer::control0}) ==
+                (transfer::software_copy & ~transfer::enable),
+        "The actual destination phase retains literal DMA data, endpoints and one-shot completion");
+  }
+}
+
 void unsupported_controller_use() {
   constexpr std::array cases{
       DspMemoryAccess{.target = {.space = DspSpace::y, .address = 0xffffef}},
       DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0xffffd7}},
       DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0xfffff5}},
-      DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::source0},
-                      .operation = DspMemoryOperation::write},
-      DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::counter0},
-                      .operation = DspMemoryOperation::write},
-      DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::control0},
-                      .operation = DspMemoryOperation::write},
       DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::status},
                       .operation = DspMemoryOperation::write}};
   for (const auto access : cases) {
@@ -67,9 +93,10 @@ void unsupported_controller_use() {
     const std::array core{access};
     const auto error =
         rejects([&] { static_cast<void>(bus.advance_dma(inputs({.index = 0}), use(core))); });
-    require(error.contains("Unqualified DSP peripheral memory resource") &&
-                error.contains(hex(access.target.address, 6)),
-            "Wrong-bank, adjacent and controller-write occupancy fail before request sampling");
+    require(
+        error.contains("Unqualified DSP peripheral memory resource") &&
+            error.contains(hex(access.target.address, 6)),
+        "Wrong-bank, adjacent and read-only status-write occupancy fail before request sampling");
     static_cast<void>(bus.advance_dma(inputs({.index = 0}), use()));
   }
 }
@@ -379,6 +406,7 @@ int main() {
     program_partitions();
     switched_alias();
     controller_reads();
+    controller_writes();
     unsupported_controller_use();
     peripheral_destinations();
     forbidden_peripheral_phases();
