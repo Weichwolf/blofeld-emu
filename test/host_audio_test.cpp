@@ -24,7 +24,7 @@ HostAudioConfig config(const std::string &server) {
 }
 
 void invalid_configuration(const std::string &server) {
-  for (unsigned variant = 0; variant < 8; ++variant) {
+  for (unsigned variant = 0; variant < 9; ++variant) {
     auto setup = config(server);
     switch (variant) {
       case 0: setup.pcm.channels = 1; break;
@@ -35,6 +35,7 @@ void invalid_configuration(const std::string &server) {
       case 5: setup.timeout = std::chrono::milliseconds{0}; break;
       case 6: setup.server.push_back('\0'); break;
       case 7: ++setup.timebase_hz; break;
+      case 8: setup.target_frames = setup.buffer_frames + 1; break;
       default: throw Fault("Unknown fixed audio configuration control");
     }
     (void)pcm::rejects([&] { const HostAudioOutput invalid(setup); });

@@ -63,6 +63,35 @@ void paced(const std::string &server) {
   pcm::require(output.status().underflows == 0,
                "Continuous accepted transport must complete without a hidden service underrun");
 }
+
+void negotiated_target(const std::string &server) {
+  auto setup = options(server);
+  constexpr unsigned capacity = 4093;
+  constexpr unsigned preference = 256;
+  constexpr unsigned queue_frames = 1021;
+  setup.output.buffer_frames = capacity;
+  setup.output.target_frames = preference;
+  setup.queue_frames = queue_frames;
+  AudioRuntime output(setup);
+  std::cout << "{\"ready\":true}\n" << std::flush;
+  unsigned granted = 0;
+  pcm::require(static_cast<bool>(std::cin >> granted) && granted > preference &&
+                   granted <= capacity,
+               "The parent supplies the actual independent server target readback");
+  for (unsigned index = 0; index + 1 < granted; ++index) { accepted(output, index); }
+  wait_for([&] { return output.status().written == granted - 1; }, output);
+  pcm::require(output.status().state == AudioRuntimeState::ready,
+               "A preferred target cannot start playback before the actual grant is filled");
+  std::cout << "{\"written\":" << output.status().written << ",\"ready\":true}\n" << std::flush;
+  std::string control;
+  pcm::require(static_cast<bool>(std::cin >> control) && control == "continue",
+               "The parent inspects the actual corked service before releasing the final frame");
+  accepted(output, granted - 1);
+  wait_for([&] { return output.status().state == AudioRuntimeState::playing; }, output);
+  for (unsigned index = granted; index < paced_frames; ++index) { accepted(output, index); }
+  output.finish();
+  finished(output, paced_frames);
+}
 }
 }
 
@@ -83,6 +112,8 @@ int main(const int count, char **values) {
       short_or_tail(server, mode == "short");
     } else if (mode == "paced") {
       paced(server);
+    } else if (mode == "grant") {
+      negotiated_target(server);
     } else {
       failure_cases(server, mode);
     }

@@ -17,6 +17,8 @@ struct HostAudioConfig {
   std::uint64_t timebase_hz = 0;
   std::uint32_t sample_rate = 0;
   std::uint32_t buffer_frames = 4096;
+  // Preferred server target within buffer_frames; zero requests that capacity.
+  std::uint32_t target_frames = 0;
   std::chrono::milliseconds timeout = std::chrono::seconds{2};
   std::string server;
 };

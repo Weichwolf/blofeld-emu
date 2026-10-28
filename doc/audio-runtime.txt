@@ -11,7 +11,9 @@ check, accept, construction and finish are ordinary control-thread operations;
 they can wait/allocate/throw and must not be used as real-time audio callbacks.
 
 The ordinary worker reads actual host buffer grants and uses the reported target
-for startup. Successful writes immediately continue draining queued data instead
+for startup. A separate requested filling target may differ from the configured
+capacity; the worker still waits for the actual grant, not that preference.
+Successful writes immediately continue draining queued data instead
 of sleeping after each batch. When the queue is empty it arms a source wait and
 rechecks the queue before waiting, preventing a lost wake at that boundary.
 The producer signals a worker-owned nonblocking eventfd only for an armed source
@@ -116,7 +118,8 @@ and does not yet instantiate this bridge automatically. Actual original1.25
 boot, MIDI voice audio, sustained performance, physical clock/pin mapping,
 PipeWire suspension, ordinary sink rewind/active device moves and real-device
 equivalence remain unqualified. The separate host_audio_pipewire case covers
-an8192-frame paced worker stream against a private PipeWire1.4.2 null sink
+an8192-frame paced worker stream and a separate8192-frame actual-target startup
+check against a private PipeWire1.4.2 null sink
 (host-audio.txt). Transport success never substitutes for normal instrument
 or realtime qualification.
 

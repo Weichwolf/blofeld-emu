@@ -33,7 +33,7 @@ HostAudioOutput::Session::Session(HostAudioConfig setup) : config(std::move(setu
   const SerialPcmReceiver validated(config.pcm);
   if (config.pcm.channels != channels || config.sample_rate == 0 || config.timeout.count() <= 0 ||
       config.timeout > maximum_timeout || config.buffer_frames < batch_frames ||
-      config.buffer_frames > maximum_buffer_frames ||
+      config.buffer_frames > maximum_buffer_frames || config.target_frames > config.buffer_frames ||
       config.server.find('\0') != std::string::npos) {
     throw Fault("Invalid host audio channels, rate, timeout, buffer or server");
   }
@@ -109,9 +109,11 @@ void HostAudioOutput::Session::connect() {
   if (stream == nullptr) { fail("stream allocation"); }
   pa_stream_set_underflow_callback(stream, underflow, this);
   const auto bytes = config.buffer_frames * frame_bytes;
+  const auto target =
+      (config.target_frames == 0 ? config.buffer_frames : config.target_frames) * frame_bytes;
   const pa_buffer_attr buffer{.maxlength = bytes,
-                              .tlength = bytes,
-                              .prebuf = bytes,
+                              .tlength = target,
+                              .prebuf = target,
                               .minreq = std::numeric_limits<std::uint32_t>::max(),
                               .fragsize = frame_bytes};
   if (pa_stream_connect_playback(

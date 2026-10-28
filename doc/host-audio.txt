@@ -30,7 +30,11 @@ format, measured latency or speaker position. The service owns sink conversion.
 
 Minimum-request granularity is requested as automatic, following the pinned
 native API recommendation; the server chooses its actual value. Requested buffer
-capacity remains bounded. The worker uses the reported target for initial
+capacity remains bounded. HostAudioConfig.target_frames optionally requests a
+separate preferred filling target within buffer_frames; zero retains the capacity
+as the preference. The server may enlarge that target within its buffer grant.
+An out-of-capacity preference rejects before connecting. These are client buffer
+dimensions, not an end-to-end latency promise. The worker uses the reported target for initial
 readiness, with actual write backpressure and finite-source closure, rather than
 assuming the preference was granted. Moves and suspend/resume update snapshots
 through the existing ordinary mainloop; no allocation/throwing callback is added.
@@ -128,6 +132,15 @@ these cases; different target/maximum grants remain unqualified. A separately
 paced8192-frame worker stream and actual stopped/terminated-service failures
 exercise this backend without altering emulated clocks or source PCM.
 
+A separate4093-capacity/256-target case with the1024-frame request floor actually
+grants a3072-frame target. Three corked route snapshots retain both preferences
+and all256 native DSP/ESAI frames reach the monitor once. The matching worker
+case obtains its target from independent pactl stream properties, queues exactly
+target-minus-one frames and proves both worker-ready and server-corked state.
+The final target frame starts playback; all8192 source frames then reach the
+monitor once. This qualifies an enlarged target, not an independently reduced
+maximum or arbitrary service grants. Existing default preferences remain unchanged.
+
 PipeWire suspend notification remains open: the unchanged Pulse17 negotiation
 test times out waiting for its expected client-suspended flag after the private
 PipeWire suspend-sink command. Successful command submission does not establish
@@ -155,7 +168,9 @@ parsing are not thereby qualified. Upstream source notices remain intact.
 
 Primary API references
   https://www.freedesktop.org/software/pulseaudio/doxygen/async.html
+  https://www.freedesktop.org/software/pulseaudio/doxygen/structpa__buffer__attr.html
   https://docs.pipewire.org/page_module_protocol_pulse.html
+  https://raw.githubusercontent.com/PipeWire/pipewire/1.4.2/src/modules/module-protocol-pulse/pulse-server.c
 
 Underflow index API (also checked against pinned17.0 source):
   https://www.freedesktop.org/software/pulseaudio/doxygen/stream_8h.html

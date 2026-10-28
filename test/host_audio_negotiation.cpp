@@ -13,7 +13,7 @@
 
 namespace blofeld::test::audio {
 namespace {
-void report_stream(const HostAudioOutput &output, const unsigned preferred) {
+void report_stream(const HostAudioOutput &output, const unsigned preferred, const unsigned target) {
   const auto info = output.stream_info();
   pcm::require(info.format == HostAudioPcmFormat::stereo_signed32_native &&
                    info.sample_rate == rate && info.channels == 2 && info.maximum_frames != 0 &&
@@ -21,10 +21,10 @@ void report_stream(const HostAudioOutput &output, const unsigned preferred) {
                    info.prebuffer_frames <= info.target_frames &&
                    info.minimum_request_frames <= info.target_frames,
                "The negotiated client stream retains the independent source PCM contract");
-  std::cout << "{\"requested_frames\":" << preferred << ",\"rate\":" << info.sample_rate
-            << ",\"channels\":" << info.channels << R"(,"format":"s32ne","maximum":)"
-            << info.maximum_frames << ",\"target\":" << info.target_frames
-            << ",\"prebuffer\":" << info.prebuffer_frames
+  std::cout << "{\"requested_frames\":" << preferred << ",\"requested_target_frames\":" << target
+            << ",\"rate\":" << info.sample_rate << ",\"channels\":" << info.channels
+            << R"(,"format":"s32ne","maximum":)" << info.maximum_frames
+            << ",\"target\":" << info.target_frames << ",\"prebuffer\":" << info.prebuffer_frames
             << ",\"minimum_request\":" << info.minimum_request_frames
             << ",\"index\":" << info.stream_index << ",\"device\":";
   if (info.device_index) {
@@ -60,12 +60,21 @@ void observe_control(HostAudioOutput &output, std::istringstream &command) {
 
 void negotiation(const std::string &server) {
   unsigned preferred = 0;
-  pcm::require(static_cast<bool>(std::cin >> preferred), "The owner supplies a buffer preference");
+  unsigned target = 0;
   std::string line;
   std::getline(std::cin, line);
-  HostAudioOutput output(
-      {.timebase_hz = timebase, .sample_rate = rate, .buffer_frames = preferred, .server = server});
-  report_stream(output, preferred);
+  std::istringstream preferences(line);
+  pcm::require(static_cast<bool>(preferences >> preferred),
+               "The owner supplies a buffer preference");
+  if (!preferences.eof()) {
+    pcm::require(static_cast<bool>(preferences >> target), "Invalid separate target preference");
+  }
+  HostAudioOutput output({.timebase_hz = timebase,
+                          .sample_rate = rate,
+                          .buffer_frames = preferred,
+                          .target_frames = target,
+                          .server = server});
+  report_stream(output, preferred, target);
   while (std::getline(std::cin, line)) {
     std::istringstream command(line);
     std::string operation;
@@ -74,7 +83,7 @@ void negotiation(const std::string &server) {
       observe_control(output, command);
       pcm::require(output.status().frames_written == 0,
                    "Host routing controls cannot manufacture source audio");
-      report_stream(output, preferred);
+      report_stream(output, preferred, target);
     } else {
       pcm::require(operation == "complete", "Unknown directed host stream control");
       const auto frames = native_frames(false);

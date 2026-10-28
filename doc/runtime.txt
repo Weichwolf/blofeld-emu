@@ -25,7 +25,8 @@ limit. The native session adapter now validates client PCM/rate/layout and actua
 buffer grants, observes device/suspend state and starts its worker from actual
 target dimensions (host-audio.txt). Private corked-stream route/suspend controls
 are qualified under Pulse17; PipeWire1.4.2 has separate corked-route, actual-grant
-and finite-worker checks (host-audio.txt). PipeWire suspension, active device
+and finite-worker checks, including a server-enlarged target distinct from the
+capacity preference (host-audio.txt). PipeWire suspension, active device
 moves, rewinds and normal profile/status binding remain open.
 host-midi-port.txt records the separate sequencer evidence.
 
