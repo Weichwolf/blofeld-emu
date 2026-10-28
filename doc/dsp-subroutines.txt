@@ -10,7 +10,8 @@ actual return PC. RTS preserves the callee's current CCR. Return-target
 prediction observes the stack without an SSH read/pop; native E1/E2 independently
 executes and confirms each occurrence. A long extension is a signed relative
 displacement,not an absolute address. Stack underflow/unsupported internal-stack
-contexts and active-DO/call composition fail visibly.
+contexts and unowned/restricted active-loop calls fail visibly. Qualified
+loop/call combinations are described in dsp-relative-loops.txt.
 
 Independent normal NXP software-model windows qualify nominal short BSR4,
 long BSR5 and RTS3 clocks. The selected F1/F2/AG1/E1/E2 placements are reference
@@ -27,11 +28,11 @@ no host PC rewrite or manufacturer firmware modification supplies execution.
 
 Directed guards check all512 short-call fields,ten excluded Decode forms,nine
 F2 width/value/owner refusals,and24 restored fault suffixes. Empty/full internal
-stack and active-DO refusals retain literal full CPU/counters/all stack slots;
-only older instructions actually due at the rejected period may retire.
-These refusals do not implement physical stack-overflow handling or DO/calls.
+stack, calls into the loop body and RTS without an owned call frame retain
+literal full CPU/counters/all stack slots; only older instructions actually due at the rejected period may retire.
+These refusals do not implement physical stack-overflow handling.
 
-Register-relative calls,extended-stack/overflow/interrupt/active-DO composition
-and DOR Y1 remain unqualified. This component does not establish original boot,
-authentic ROM contents,normal MIDI/audio,update/recovery or physical equivalence.
+Register-relative calls,extended-stack/overflow/interrupt contexts and original
+near-loop-end calls remain unqualified. This component does not establish
+original boot,authentic ROM,normal MIDI/audio,update/recovery or physical equivalence.
 The original first-stage reserved Y:002000 boundary remains unresolved.

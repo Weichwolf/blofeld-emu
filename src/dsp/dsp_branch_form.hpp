@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "dsp/dsp_loop_fetch.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 
 #include <cstdint>
@@ -30,6 +31,7 @@ struct DspBranchDecision {
   std::uint32_t omr = 0;
   std::uint32_t next_pc = 0;
   bool taken = false;
+  std::optional<DspSubroutineControl> subroutine = std::nullopt;
   bool operator==(const DspBranchDecision &) const = default;
 };
 

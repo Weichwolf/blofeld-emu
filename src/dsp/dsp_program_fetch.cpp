@@ -438,7 +438,9 @@ void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
   const auto form = decode_branch_form(decision.word.value);
   const bool one_word = form && form->words() == 1;
-  if (form && (form->absolute_extension || form->subroutine_call || form->subroutine_return) &&
+  if (form &&
+      (form->absolute_extension ||
+       ((form->subroutine_call || form->subroutine_return) && !decision.subroutine)) &&
       loop_ && (loop_->depth() != 0 || loop_->pending() != 0)) {
     const auto *const operation = form->absolute_extension
                                       ? "Unqualified absolute JMP/active DO read P:"
@@ -458,13 +460,7 @@ void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
   }
   const auto pair = branch_position(decision, identity);
   const auto keep = pair + (decision.extension ? 2U : 1U);
-  if (loop_) {
-    const auto &prediction = predictions_.at(keep - 1);
-    if (!prediction || boundaries_.at(pair) || boundaries_.at(keep - 1)) {
-      throw Fault("Unqualified branch at DSP loop end read P:" + hex(decision.word.address, 6));
-    }
-    loop_->discard_after(*prediction, decision.next_pc);
-  }
+  predict_loop_branch(decision, pair, keep);
   branch_occurrence_ = occurrences_.at(pair);
   for (std::size_t index = keep; index < state_.used; ++index) {
     state_.words.at(index) = {};
@@ -478,6 +474,27 @@ void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
   state_.next_address = decision.next_pc;
   branch_ = decision;
   branch_target_captured_ = false;
+}
+
+void DspProgramFetch::predict_loop_branch(const DspBranchDecision &decision,
+                                          const std::size_t pair,
+                                          const std::size_t keep) {
+  if (!loop_) { return; }
+  const auto &prediction = predictions_.at(keep - 1);
+  if (!prediction || boundaries_.at(pair) || boundaries_.at(keep - 1)) {
+    throw Fault("Unqualified branch at DSP loop end read P:" + hex(decision.word.address, 6));
+  }
+  auto candidate = *loop_;
+  candidate.discard_after(*prediction, decision.next_pc);
+  const auto form = decode_branch_form(decision.word.value);
+  if (form && (form->subroutine_call || form->subroutine_return)) {
+    if (!decision.subroutine) {
+      throw Fault("Missing DSP subroutine forecast read P:" + hex(decision.word.address, 6) +
+                  " pc=" + hex(decision.word.address, 6) + " omr=" + hex(decision.omr, 6));
+    }
+    candidate.predict_subroutine(decision.word, *decision.subroutine, form->subroutine_call);
+  }
+  loop_ = std::move(candidate);
 }
 
 bool DspProgramFetch::confirm_branch(const std::uint32_t pc,
@@ -499,6 +516,24 @@ bool DspProgramFetch::confirm_branch(const std::uint32_t pc,
   branch_.reset();
   branch_occurrence_ = 0;
   branch_target_captured_ = false;
+  return true;
+}
+
+bool DspProgramFetch::confirm_subroutine(const DspFetchCommit completed,
+                                         const DspLoopArchitecture native_result) {
+  if (!branch_ || !branch_->subroutine || branch_->word.address != completed.pc) { return false; }
+  const auto &control = *branch_->subroutine;
+  const auto form = decode_branch_form(branch_->word.value);
+  if (!form || (!form->subroutine_call && !form->subroutine_return) ||
+      control.after != native_result || (observed_loop_ && !accepts_loop_control(control.before))) {
+    throw Fault("Native subroutine control differs from owned F2 pc=" + hex(completed.pc, 6) +
+                " omr=" + hex(completed.omr, 6));
+  }
+  if (!confirm_branch(completed.pc, completed.next_pc, completed.omr, completed.redirected)) {
+    throw Fault("Native subroutine lost branch ownership pc=" + hex(completed.pc, 6) +
+                " omr=" + hex(completed.omr, 6));
+  }
+  if (observed_loop_) { observed_loop_ = native_result; }
   return true;
 }
 

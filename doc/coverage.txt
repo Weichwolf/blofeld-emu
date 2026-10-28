@@ -3068,6 +3068,14 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   have independent normal-software reference/literal checks. Directed ownership,
   stack and active-DO refusals retain exact native context; existing BRA/JMP/OMR
   contracts remain checked. See dsp-subroutines.txt. Register-relative calls,
-  extended-stack/IRQ/active-DO composition, authentic ROM and full original
+  extended-stack/IRQ/unqualified active-loop contexts, authentic ROM and full original
   reset-to-instrument/MIDI/audio/storage/update/recovery/physical acceptance
   remain open; the original reserved Y:002000 frontier is unchanged.
+
+- Automatic DSP DOR immediate/Y1 and DO Y1 resolve genuine native loop ends;
+  safe loop/call/inner-loop combinations retain owned forecast/checkpoint state.
+  Twenty independent-reference streams check full CPU/counters/all16 stack slots
+  every period;386 compound snapshot cuts restore twice per sanitizer profile.
+  See dsp-relative-loops.txt. Original near-end calls, adjacent Y1 producers,
+  negative/wrapped endpoints and physical/full original startup remain open;
+  the reserved Y:002000 frontier is unchanged.

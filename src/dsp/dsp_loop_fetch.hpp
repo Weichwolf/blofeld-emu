@@ -30,6 +30,12 @@ struct DspLoopOpening {
   DspLoopArchitecture after;
 };
 
+struct DspSubroutineControl {
+  DspLoopArchitecture before;
+  DspLoopArchitecture after;
+  bool operator==(const DspSubroutineControl &) const = default;
+};
+
 struct DspLoopBoundary {
   DspProgramWord last;
   std::uint64_t occurrence = 0;
@@ -45,6 +51,7 @@ class DspLoopFetch {
     std::uint32_t body = 0;
     std::uint32_t last = 0;
     bool forever = false;
+    std::size_t calls_at_entry = 0;
   };
 
   struct Sequence {
@@ -67,6 +74,7 @@ public:
     std::uint64_t cut_ = 0;
     std::uint64_t revision_ = 0;
     std::size_t depth_ = 0;
+    std::size_t calls_ = 0;
   };
 
   explicit DspLoopFetch(DspLoopArchitecture initial);
@@ -76,6 +84,7 @@ public:
   void confirm(const DspLoopBoundary &boundary, DspLoopArchitecture native_result);
   [[nodiscard]] Prediction prediction() const;
   void discard_after(const Prediction &prediction, std::uint32_t next_pc);
+  void predict_subroutine(DspProgramWord word, const DspSubroutineControl &control, bool call);
 
   [[nodiscard]] std::uint32_t next_address() const { return next_; }
 
@@ -98,5 +107,6 @@ private:
   std::uint64_t revision_ = 0;
   std::size_t depth_ = 0;
   std::size_t pending_ = 0;
+  std::size_t calls_ = 0;
 };
 }

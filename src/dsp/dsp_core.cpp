@@ -72,7 +72,8 @@ bool qualified_fetch_loop(const std::uint32_t opcode) {
   constexpr unsigned source_ssh = 0x3c;
   constexpr unsigned source_ssl = 0x3d;
   const auto source = (opcode >> 8) & source_mask;
-  return (opcode & immediate_mask) == immediate_do || opcode == forever_do ||
+  return relative_loop(opcode) || (opcode & immediate_mask) == immediate_do ||
+         opcode == forever_do ||
          ((opcode & register_mask) == register_do && source != source_sp && source != source_ssh &&
           source != source_ssl);
 }
@@ -102,6 +103,17 @@ DspLoopArchitecture loop_control(const dsp56k::DSP::ReferenceAttemptState &state
           .sp = value(cpu.sp),
           .sc = value(cpu.sc),
           .status = value(cpu.sr) & ~ccr_mask};
+}
+
+DspSubroutineControl forecast_subroutine(const DspLoopArchitecture before,
+                                         const bool call,
+                                         const std::uint32_t next_pc) {
+  constexpr unsigned stack_count_mask = 31;
+  auto after = before;
+  after.pc = next_pc;
+  after.sp = call ? before.sp + 1 : before.sp - 1;
+  after.sc = (call ? before.sc + 1 : before.sc + stack_count_mask) & stack_count_mask;
+  return {.before = before, .after = after};
 }
 
 struct StepContext {
@@ -989,6 +1001,10 @@ public:
     }
     const auto control = loop_control(cpu.referenceAttemptState());
     if (fetch.confirm_opening(control, redirected) || fetch.confirm_loop(control, redirected)) {
+      return;
+    }
+    if (fetch.confirm_subroutine(
+            {.pc = before.pc, .next_pc = next, .omr = omr, .redirected = redirected}, control)) {
       return;
     }
     constexpr unsigned loop_cache_or_compatibility = 0x1a000;
@@ -1891,6 +1907,10 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
         form->relative_extension ? (opcode.address + extension.value) & word_mask : extension.value;
     decision.next_pc = taken ? target : ((extension.address + 1) & word_mask);
     decision.taken = taken;
+  }
+  if (form->subroutine_call || form->subroutine_return) {
+    decision.subroutine = forecast_subroutine(
+        loop_control(impl_->cpu.referenceAttemptState()), form->subroutine_call, decision.next_pc);
   }
   fetch.predict_branch(decision, captured.opcode.occurrence);
   return decision;

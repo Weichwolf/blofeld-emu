@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
+#include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
@@ -75,8 +76,13 @@ void DspInstructionPipeline::capture_loop_f2(const DspReferenceCycleResult &bus)
   // FM A2.6.5: positive one-instruction bodies add one Decode period. Derive
   // size from the actual first F2 opcode; zero-count annulment adds three.
   const auto target = fetch.words.at(fetch.used - 1);
-  if (setup.decode_hold == 0 &&
-      target.address + pipeline_word_count(target) - 1 == setup.captured.extension->word.value) {
+  // This consumed pair already passed native opening/result validation in E1.
+  constexpr unsigned word_mask = 0xffffff;
+  const auto last =
+      relative_loop(setup.captured.opcode.word.value)
+          ? (setup.captured.opcode.word.address + setup.captured.extension->word.value) & word_mask
+          : setup.captured.extension->word.value;
+  if (setup.decode_hold == 0 && target.address + pipeline_word_count(target) - 1 == last) {
     setup.decode_hold = 1;
   }
 }

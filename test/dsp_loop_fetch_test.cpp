@@ -236,7 +236,9 @@ void invalid_openings() {
       case 3: invalid.after.status ^= loop_flags; break;
       case 4: invalid.after.omr ^= 1U; break;
       case 5: ++invalid.extension.address; break;
-      case 6: invalid.word.value = relative_do; break; // DOR is not yet admitted.
+      case 6:
+        invalid.word.value = relative_do;
+        break; // Absolute extension/result do not match DOR.
       default: throw blofeld::Fault("Unknown invalid DO vector");
     }
     const auto diagnostic = checkpoint::rejects([&] { fetch.opened(invalid); },

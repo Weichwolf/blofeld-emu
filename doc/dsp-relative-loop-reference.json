@@ -1,0 +1,46 @@
+{
+  "scope": "Own programs on unchanged normal NXP software model,OMR300; supporting reference,not DSP56371 silicon timing or full device validation.",
+  "manual": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "bytes": 24396254,
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "13-61..64 DOR",
+      "Table A-1",
+      "A.2.6.5/.6",
+      "A.3.1"
+    ]
+  },
+  "references": {
+    "relative-counts-and-calls": {
+      "qualification_sha256": "c4439f62fd42a6368ccceb00640773cecbbbb826ff507d64eac8129e6c34ce01",
+      "result_sha256": "447d6eee7ca4b8895988889b48c81b92a7f8e4cbd7f03afa51fd6b2031e59003",
+      "probe_sha256": "0be8ba19304847d3f22921223d9fd247b5d78d1462856047a9f6a878fec6b341",
+      "qualifier_sha256": "0e2f24d329195ae166151798b1a106eb58df99b5cdc80948d415acfa3b72f386",
+      "cases": 18
+    },
+    "called-loops": {
+      "qualification_sha256": "ab2a872277137c604d238918cb0954c0c0b603fd19204824c57e911811ceb1cf",
+      "result_sha256": "daf24306e078a6c0f2a1abf0187d27bf9ac6fff1e8e52c7260af478a680cd6b5",
+      "probe_sha256": "a834e86f107fe9523beaebcf24128c6bdce929d34b63bc8975907ae755773c00",
+      "qualifier_sha256": "cad30e31ddee96189c5e760c48ba018e7b1d64055c2c4add711525018d515b6f",
+      "cases": 2
+    }
+  },
+  "reference_observations": {
+    "full_46_register_instruction_points": 1594,
+    "joint_clock_points": 1314,
+    "BSR_executions": 21,
+    "RTS_executions": 21,
+    "maximum_stack_depth": 7,
+    "ordinary_loop_clocks": 5,
+    "positive_single_instruction_clocks": 6,
+    "annulled_loop_clocks": 8
+  },
+  "automatic_scope": "Twenty own reset-preamble/RAM windows: immediate/Y1 DOR,absolute DO Y1 controls,counts0/1/3/17/176,two partial24-bit count prefixes,safe calls/nested calls and callee-owned inner loops. Full CPU,native table counters and all16 retained stack slots checked every period.386 joint checkpoint cuts for the two new compound cases,twice each(772 suffixes),per sanitizer profile. Native table counters and elapsed pipeline setup holds are distinct.",
+  "limits": "Not original near-end call positions,Y1 adjacent-producer timing,negative/overflow relative endpoints,full high-count completion,IRQ/cache/compatibility/extended stack,authentic ROM,original reset-to-instrument or physical MIDI/audio/storage/update/recovery acceptance.",
+  "manufacturer_program_bytes_embedded": false,
+  "physical_timing_qualified": false,
+  "complete_original_startup_qualified": false
+}

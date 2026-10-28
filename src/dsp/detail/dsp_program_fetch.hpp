@@ -105,6 +105,8 @@ public:
   void predict_branch(const DspBranchDecision &decision, std::uint64_t identity = 0);
   [[nodiscard]] bool
   confirm_branch(std::uint32_t pc, std::uint32_t next_pc, std::uint32_t omr, bool redirected);
+  [[nodiscard]] bool confirm_subroutine(DspFetchCommit completed,
+                                        DspLoopArchitecture native_result);
   void open_loop(const DspLoopOpening &opening, DspFetchedWord opcode, DspFetchedWord extension);
   [[nodiscard]] bool confirm_loop(DspLoopArchitecture native_result, bool redirected);
   [[nodiscard]] bool confirm_opening(DspLoopArchitecture native_result, bool redirected);
@@ -128,6 +130,7 @@ private:
                                             std::uint64_t identity) const;
   void shift_queue();
   void clear_continuation();
+  void predict_loop_branch(const DspBranchDecision &decision, std::size_t pair, std::size_t keep);
   void validate_context_storage(const DspBus &bus, std::uint32_t omr) const;
   DspProgramFetchView state_;
   std::optional<Repeat> repeat_;

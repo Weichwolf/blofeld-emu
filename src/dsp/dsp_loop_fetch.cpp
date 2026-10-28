@@ -2,6 +2,7 @@
 #include "dsp/dsp_loop_fetch.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 
 #include <algorithm>
@@ -36,7 +37,8 @@ bool qualified(const unsigned opcode) {
   constexpr unsigned forbidden_ssh = 0x3c;
   constexpr unsigned source_mask = 0x3f;
   return opcode <= word_mask &&
-         ((opcode & immediate_mask) == immediate_do || opcode == do_forever ||
+         (relative_loop(opcode) || (opcode & immediate_mask) == immediate_do ||
+          opcode == do_forever ||
           ((opcode & register_mask) == register_do &&
            ((opcode >> 8) & source_mask) != forbidden_ssh));
 }
@@ -62,18 +64,27 @@ void DspLoopFetch::opened(const DspLoopOpening &opening) {
   const auto after = opening.after;
   const auto word = opening.word;
   const auto body = (word.address + 2) & word_mask;
-  const auto last = opening.extension.value;
+  const bool relative = relative_loop(word.value);
+  const auto last =
+      relative ? (word.address + opening.extension.value) & word_mask : opening.extension.value;
   const auto end = (last + 1) & word_mask;
   const bool forever = word.value == do_forever;
   if (!qualified(word.value) || word.address != before.pc ||
       opening.extension.address != ((word.address + 1) & word_mask) || last > word_mask ||
-      body > last || pending_ != 0 || next_ != body || !same_control(before, forecast_) ||
+      body > last ||
+      (relative &&
+       (word.address > word_mask - 2 || opening.extension.value > word_mask - word.address)) ||
+      pending_ != 0 || next_ != body || !same_control(before, forecast_) ||
       revision_ == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Unqualified actual DSP DO opening " + context(word, before));
   }
   if (depth_ != 0) {
     const auto &parent = frames_.at(depth_ - 1);
-    if (word.address < parent.body || word.address + 2 >= parent.last || last >= parent.last) {
+    const bool lexical =
+        word.address >= parent.body && word.address + 2 < parent.last && last < parent.last;
+    const bool called =
+        calls_ > parent.calls_at_entry && (last < parent.body || word.address > parent.last);
+    if (!lexical && !called) {
       throw Fault("Unqualified nested DSP loop extent " + context(word, before));
     }
   }
@@ -98,7 +109,8 @@ void DspLoopFetch::opened(const DspLoopOpening &opening) {
       depth_ == frames_.size()) {
     throw Fault("Unqualified native DSP loop frame " + context(word, before));
   }
-  frames_.at(depth_++) = {.restore = before, .body = body, .last = last, .forever = forever};
+  frames_.at(depth_++) = {
+      .restore = before, .body = body, .last = last, .forever = forever, .calls_at_entry = calls_};
   forecast_ = after;
   ++revision_;
 }
@@ -119,7 +131,8 @@ std::uint64_t DspLoopFetch::next_occurrence() {
 
 void DspLoopFetch::check_fetch(const std::uint32_t address) const {
   const bool end = depth_ != 0 && address == frames_.at(depth_ - 1).last;
-  if (address != next_ || (end && pending_ == boundaries_.size())) {
+  if (address != next_ || (end && (pending_ == boundaries_.size() ||
+                                   calls_ != frames_.at(depth_ - 1).calls_at_entry))) {
     throw Fault("Unavailable DSP loop F2 " + context({.address = address}, forecast_));
   }
 }
@@ -177,6 +190,7 @@ DspLoopFetch::Prediction DspLoopFetch::prediction() const {
   result.cut_ = occurrence_;
   result.revision_ = revision_;
   result.depth_ = depth_;
+  result.calls_ = calls_;
   return result;
 }
 
@@ -197,8 +211,48 @@ void DspLoopFetch::discard_after(const Prediction &prediction, const std::uint32
   frames_ = prediction.frames_;
   forecast_ = prediction.forecast_;
   depth_ = prediction.depth_;
+  calls_ = prediction.calls_;
   occurrence_ = prediction.cut_;
   next_ = next_pc;
   ++revision_;
+}
+
+void DspLoopFetch::predict_subroutine(const DspProgramWord word,
+                                      const DspSubroutineControl &control,
+                                      const bool call) {
+  constexpr unsigned last_stack_frame = 15;
+  constexpr unsigned restricted_end_words = 2; // FM A.3.1: LA-2,LA-1,LA.
+  if (!same_control(control.before, forecast_) || control.before.sp > last_stack_frame ||
+      (!call && control.before.sp == 0)) {
+    throw Fault("Unqualified subroutine/active DO read P:" + hex(word.address, 6) +
+                " pc=" + hex(control.before.pc, 6) + " omr=" + hex(control.before.omr, 6));
+  }
+  auto expected = control.before;
+  expected.pc = next_;
+  expected.sp = call ? expected.sp + 1 : expected.sp - 1;
+  expected.sc = (call ? expected.sc + 1 : expected.sc + max_stack_count) & max_stack_count;
+  bool unsafe = control.after != expected || (call && control.before.sp >= last_stack_frame) ||
+                (call ? calls_ >= last_stack_frame : calls_ == 0);
+  for (std::size_t index = 0; index < depth_; ++index) {
+    const auto &frame = frames_.at(index);
+    unsafe = unsafe ||
+             (word.address >= frame.body && word.address <= frame.last &&
+              frame.last - word.address <= restricted_end_words) ||
+             (call && next_ >= frame.body && next_ <= frame.last);
+  }
+  if (!call && depth_ != 0) {
+    const auto &frame = frames_.at(depth_ - 1);
+    unsafe = unsafe || calls_ <= frame.calls_at_entry || control.before.sp <= frame.restore.sp + 2;
+  }
+  if (unsafe) {
+    throw Fault("Unqualified subroutine/active DO read P:" + hex(word.address, 6) +
+                " pc=" + hex(control.before.pc, 6) + " omr=" + hex(control.before.omr, 6));
+  }
+  forecast_ = control.after;
+  if (call) {
+    ++calls_;
+  } else {
+    --calls_;
+  }
 }
 }

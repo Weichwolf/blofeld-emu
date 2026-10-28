@@ -1,0 +1,32 @@
+Automatic DSP relative loops and subroutine composition
+
+  cmake --build --preset strict --target blofeld-dor-clock-test
+  ctest --test-dir build/strict -j1 --output-on-failure -L '^dsp_dor_runtime$'
+
+DOR immediate/Y1 and DO Y1 use genuine native loop setup/end execution.
+DOR resolves LA as opcode PC plus its signed extension; the admitted windows
+have nonwrapping forward ends. Positive setup costs5 periods,one-instruction
+bodies6,and zero counts8. Native instruction-table counters exclude the extra
+Decode setup holds; both domains are checked separately.
+
+Safe calls may leave an active loop body,open another loop in the callee,and
+make deeper calls. Forecast-only metadata tracks call depth at each loop entry,
+restores it with owned F2 checkpoints,and validates actual native E2 control.
+The native interpreter owns all PC/LA/LC/SR/SP/SC and stack writes. Calls into
+active bodies,unowned RTS frames and generic restricted LA-2..LA positions fail
+with address,PC and OMR context. Rejected forecasts retain the preceding queue.
+
+Twenty own OMR300 reset-preamble/RAM streams check complete CPU,counters and
+all16 retained stack slots every period. Counts0/1/3/17,one-/three-word bodies,
+actual refill count176,safe calls,nested calls and called loops have independent
+normal NXP model/assembler evidence. Two24-bit high-count prefixes stop after8
+body instructions; they do not establish full completion. The two new compound
+cases exercise SP depths0/2/3/5/6/7 and386 joint checkpoint cuts,each restored
+twice per sanitizer profile. The NXP reference observes46 registers including
+current SSH/SSL; all retained stack cells use separate literal expectations.
+See dsp-relative-loop-reference.json.
+
+Original near-end call positions,adjacent Y1 count producers,negative/wrapped
+endpoints,IRQ/cache/compatibility/extended-stack cases and physical timing remain
+unqualified. This does not establish authentic ROM or original reset/MIDI/audio/
+storage/update/recovery acceptance. The reserved Y:002000 startup fault remains.
