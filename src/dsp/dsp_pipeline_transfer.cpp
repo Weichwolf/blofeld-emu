@@ -153,6 +153,7 @@ pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &pr
     read = 1U << *branch->address_register;
   } else {
     if (!memory || memory->absolute_short ||
+        (is_program_memory(*memory) && memory->lanes[0].mode == 6) ||
         (memory->peripheral && !is_program_transfer(*memory))) {
       return 0;
     }

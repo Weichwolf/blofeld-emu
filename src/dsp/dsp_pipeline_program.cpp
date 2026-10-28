@@ -15,7 +15,7 @@ namespace blofeld {
 namespace {
 bool program_word(const std::optional<DspProgramWord> word) {
   const auto form = word ? decode_memory_stage(word->value) : std::nullopt;
-  return form && is_program_transfer(*form);
+  return form && is_program_memory(*form);
 }
 
 unsigned memory_delay(const std::optional<DspProgramWord> word) {
@@ -31,6 +31,15 @@ unsigned memory_delay(const std::optional<DspProgramWord> word) {
 
 bool expected_delayed_access(const DspMemoryStageResult &memory) {
   if (program_word(memory.address.word)) {
+    const auto form = decode_memory_stage(memory.address.word.value);
+    if (form && !is_program_transfer(*form)) {
+      const auto &update = memory.address.update;
+      const auto kind = update.operation == DspMemoryOperation::read ? DspNativeAccessKind::read
+                                                                     : DspNativeAccessKind::write;
+      return memory.address.data_access_count == 1 && !memory.additional_data &&
+             memory.data.kind == kind && memory.data.target.space == DspSpace::p &&
+             memory.data.target.address == update.address;
+    }
     return memory.data.kind == DspNativeAccessKind::read && memory.additional_data &&
            memory.additional_data->kind == DspNativeAccessKind::write &&
            memory.additional_data->target.space == DspSpace::p;
@@ -46,7 +55,8 @@ bool expected_delayed_access(const DspMemoryStageResult &memory) {
 
 void DspInstructionPipeline::validate_program_decode(const DspMachine &machine,
                                                      const DspPipelineCycle &cycle) const {
-  if (!program_word(cycle.decode)) { return; }
+  const auto form = cycle.decode ? decode_memory_stage(cycle.decode->value) : std::nullopt;
+  if (!form || !is_program_transfer(*form)) { return; }
   const auto captured = selected.next;
   if (!captured || captured->word != cycle.decode) {
     throw Fault("Program-memory Decode lost its actual F2 receipt");

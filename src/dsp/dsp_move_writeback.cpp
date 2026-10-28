@@ -22,7 +22,7 @@ bool memory(const Type type) {
   return peripheral(type) || type == dsp56k::Movex_ea || type == dsp56k::Movex_aa ||
          type == dsp56k::Movey_ea || type == dsp56k::Movey_aa || type == dsp56k::Movec_ea ||
          type == dsp56k::Movec_aa || type == dsp56k::Movel_ea || type == dsp56k::Movel_aa ||
-         type == dsp56k::Movexy;
+         type == dsp56k::Movexy || type == dsp56k::Movem_ea || type == dsp56k::Movem_aa;
 }
 
 bool transfer(const Type type) {
@@ -51,6 +51,12 @@ Mask operand(const Type type, const dsp56k::Field field, const std::uint32_t opc
   return dsp56k::convert(reg);
 }
 
+dsp56k::Field memory_register_field(const Type type) {
+  if (type == dsp56k::Movem_ea || type == dsp56k::Movem_aa) { return dsp56k::Field_dddddd; }
+  const bool control = type == dsp56k::Movec_ea || type == dsp56k::Movec_aa;
+  return control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd;
+}
+
 Mask destination(const Type type, const std::uint32_t opcode) {
   if (peripheral(type)) {
     if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0) { return Mask::None; }
@@ -75,8 +81,7 @@ Mask destination(const Type type, const std::uint32_t opcode) {
     if (type == dsp56k::Movel_ea || type == dsp56k::Movel_aa) {
       return operand(type, dsp56k::Field_LL, opcode);
     }
-    const bool control = type == dsp56k::Movec_ea || type == dsp56k::Movec_aa;
-    return operand(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
+    return operand(type, memory_register_field(type), opcode);
   }
   if (type == dsp56k::Move_xx || type == dsp56k::Mover) {
     return operand(type, dsp56k::Field_ddddd, opcode);
@@ -107,8 +112,7 @@ Mask source(const Type type, const std::uint32_t opcode) {
     if (type == dsp56k::Movel_ea || type == dsp56k::Movel_aa) {
       return operand(type, dsp56k::Field_LL, opcode);
     }
-    const bool control = type == dsp56k::Movec_ea || type == dsp56k::Movec_aa;
-    return operand(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
+    return operand(type, memory_register_field(type), opcode);
   }
   if (type == dsp56k::Mover) { return operand(type, dsp56k::Field_eeeee, opcode); }
   if (type == dsp56k::Movec_S1D2) {

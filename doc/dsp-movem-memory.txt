@@ -1,0 +1,48 @@
+Raw program-memory moves
+
+  cmake --build --preset strict --target blofeld-movem-clock-test \
+    blofeld-preupdate-source-window-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R \
+    '^(dsp_movem_(streams|snapshots|guards)|dsp_preupdate_source_windows)$'
+  # Repeat separately with the thread preset.
+
+FM13-132/133 defines MOVEM EA/AA,W and six-bit register fields. The automatic
+memory profile admits raw X0/X1 loads and X0/X1/A1/B1 stores,indirect and
+postincrement addressing,absolute-short and actual F2 absolute-long extensions.
+Control/stack/full-accumulator and other address/source forms remain refused.
+This single P-data operand is distinct from paired peripheral-to-P MOVEP.
+
+The real native AGU owns pointer results;load destinations publish at E1.
+P-memory retains five extra reference E1 periods,then performs one real native
+data access and retires at E2. Ordinary/AA instructions cost6,absolute-long7.
+A preceding accumulator writer contributes a separate source-readiness period.
+Indexed/predecrement X/Y latency instead overlaps that wait;the existing384
+source windows/672 cuts retain that independently observed contract.
+
+All P writes reject already captured/issued code before data effects. A write
+to genuinely future code may patch an instruction which the interpreter later
+executes. Fetch/data ownership,bank occupancy,unknown accesses and active-DMA
+policies retain their visible failures. Native firmware/SDK code is unchanged.
+
+Independent unchanged-software-model windows and primary literal expectations
+cover35 own streams,596 instructions,51 data operands and two executed future
+code patches. Compact C++ generators reproduce9912 own words and every frozen
+expected register/stack/memory field. Automatic tests check all46 register views,
+16 retained stack cells,nominal counters,actual AG2/E1 operands and all own P/X
+cells/code every reference period.1169 completed periods retain independent
+whole-window clock totals. Ten cases checkpoint at all500 cuts and complete
+two suffixes each.8704 literal format/writeback controls and three actual writes
+to captured opcode/extension/following code retain refusals and quarantine.
+
+This is a selected reference-phase projection:stage ownership selects when to
+apply independent literal effects;whole-window software clocks constrain the
+schedule. It does not establish physical per-clock sampling edges. FM A.3.1 and
+DSP56371E ED4 restrict MOVEM near owned loop ends;unchanged1.25 needs a patched
+store there. The finite-loop software-compatible path has directed short-call,
+return-to-LA and patched-store evidence;no chip exception is established.
+Paired MOVEP retains its separate loop-end guard.
+
+Reference identities/scope:dsp-movem-reference.json. Raw manufacturer assets
+and analysis remain local. Authentic ROM,reserved memory,automatic original
+reset-to-instrument execution,original DSP audio/MIDI,complete persistent
+storage/update/recovery,power-loss and realtime acceptance remain open.

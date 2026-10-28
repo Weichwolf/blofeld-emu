@@ -29,6 +29,12 @@ namespace {
 constexpr unsigned word_mask = 0xffffff;
 constexpr auto execution = DspReferenceExecution::staged_register_boundaries;
 
+bool program_memory_operand(const DspProgramWord word) {
+  const auto form = decode_memory_stage(word.value);
+  if (!form) { throw Fault("Held memory latency lost its decoded operand"); }
+  return is_program_memory(*form);
+}
+
 unsigned branch_fetch_delay(const std::optional<DspBranchForm> &form) {
   if (!form) { throw Fault("Native branch lost its qualified fetch form"); }
   // Selected F1 placement preserves nominal RTS/JMP3,short BSR/BRA4,long BSR5.
@@ -413,6 +419,11 @@ void DspInstructionPipeline::finish_cycle() {
   if (held_program_memory) {
     if (!program_memory || program_memory->remaining == 0) {
       throw Fault("Held program-memory execution lost its actual latency owner");
+    }
+    // Independent windows distinguish the waits: indexed/predecrement AGU
+    // latency overlaps source readiness; P-memory latency follows readiness.
+    if (view.cycle.memory_source_stall && program_memory_operand(program_memory->captured.word)) {
+      return;
     }
     --program_memory->remaining;
     return;

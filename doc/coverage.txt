@@ -3124,3 +3124,13 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   178 extent/control plus12 projection refusals remain visible. The manual
   restriction/software compatibility distinction and reference timing limits
   are explicit in dsp-near-end-calls.txt;no full original boot/MIDI/audio claim.
+
+- Automatic raw MOVEM uses genuine native P-data reads/writes and actual AGU,
+  F2 extensions and load writeback.35 own windows/596 instructions check1169
+  complete projected CPU-counter-stack reference periods and51 data operands;
+  two future-code patches execute.500 joint cuts resume twice.8704 literal
+  format/writeback checks and three captured-code write refusals retain context.
+  P-memory source waits add to nominal latency;indexed/predecrement source and
+  address waits retain their independently observed overlap. See
+  dsp-movem-memory.txt for reference-phase/manual restrictions and coverage;
+  original full boot/MIDI/audio/storage/update/recovery acceptance remains open.

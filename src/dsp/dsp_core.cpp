@@ -1934,7 +1934,8 @@ DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t add
   const auto form = decode_memory_stage(opcode.word.value);
   const bool immediate_port =
       form && form->peripheral && !form->peripheral_register && !is_program_transfer(*form);
-  const auto words = immediate_port ? 2U : 1U;
+  const bool absolute_program = form && is_program_memory(*form) && form->lanes[0].mode == 6;
+  const auto words = immediate_port || absolute_program ? 2U : 1U;
   const auto captured = fetch.instruction(opcode, words);
   const ExecutionGuard guard(impl_->active);
   const auto slot = impl_->stages.capture(impl_->cpu, captured);
@@ -2032,7 +2033,7 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
     throw Fault(
         "Native memory E1 " +
         std::string(active_access.operation == DspMemoryOperation::read ? "read " : "write ") +
-        (active_access.target.space == DspSpace::x ? "X:" : "Y:") +
+        std::array{"P:", "X:", "Y:"}.at(static_cast<unsigned>(active_access.target.space)) +
         hex(active_access.target.address, 6) + " pc=" + hex(view.word.address, 6) +
         " omr=" + hex(view.update.omr, 6) + ": " + error.what());
   }

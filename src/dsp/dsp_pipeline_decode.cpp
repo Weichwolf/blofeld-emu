@@ -3,6 +3,7 @@
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/dsp_accumulator_transfer.hpp"
 #include "dsp/dsp_branch_form.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
@@ -94,7 +95,10 @@ std::uint8_t accumulator_transfer_dependency(const DspInstructionDependency inst
 std::uint8_t memory_source_dependency(const DspInstructionDependency instructions) {
   const auto producer = instructions.producer;
   const auto consumer = instructions.consumer;
-  if (full_accumulator_scalar_store(consumer.value) ||
+  const auto memory = decode_memory_stage(consumer.value);
+  const bool program_store = memory && is_program_memory(*memory) &&
+                             memory->lanes[0].operation == DspMemoryOperation::write;
+  if (program_store || full_accumulator_scalar_store(consumer.value) ||
       partial_accumulator_scalar_store(consumer.value)) {
     // FM3.5.1: the native E1 memory source must observe the preceding E2 writer.
     return dependency(operands(producer, false).written, operands(consumer, false).read);
@@ -161,8 +165,10 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
     const auto words = pipeline_word_count(word);
     if ((!arithmetic && !standalone_move && !branch && !loop && !repeat) ||
         (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
-        words >
-            ((transfer || branch || loop || control || (memory && form->peripheral)) ? 2U : 1U)) {
+        words > ((transfer || branch || loop || control ||
+                  (memory && (form->peripheral || is_program_memory(*form))))
+                     ? 2U
+                     : 1U)) {
       throw Fault("Unqualified native instruction form");
     }
     if (memory || transfer || port_read) { static_cast<void>(decode_move_writeback(word.value)); }

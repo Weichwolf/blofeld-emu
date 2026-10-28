@@ -27,6 +27,7 @@ struct DspMemoryForm {
 };
 
 [[nodiscard]] bool is_program_transfer(const DspMemoryForm &form);
+[[nodiscard]] bool is_program_memory(const DspMemoryForm &form);
 [[nodiscard]] bool full_accumulator_long_store(std::uint32_t opcode);
 [[nodiscard]] bool full_accumulator_scalar_store(std::uint32_t opcode);
 [[nodiscard]] bool partial_accumulator_scalar_store(std::uint32_t opcode);

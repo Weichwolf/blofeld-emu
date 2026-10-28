@@ -1,0 +1,39 @@
+{
+  "scope": "Own unchanged-NXP-software-model windows and independent literal ISA expectations;not physical sampling/chip or complete original instrument qualification.",
+  "primary": {
+    "manual": "DSP56300FM Rev5 13-132/133,3.5.1,A.1,A.3.1",
+    "manual_sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "errata": "DSP56371E ED4,mask1L41N,documentation restriction at LA",
+    "errata_sha256": "9485646b1421f75d43c7551f48db80c5fe6fe04ba24f65f521087180989a2d4a"
+  },
+  "independent_reference": {
+    "qualification_sha256": "79c38c581c981bf79a7bf1d1ca2c33b5939849236328f314f83d7fb60d16dfa8",
+    "cases": 35,
+    "full_instruction_state_points": 1646,
+    "window_instruction_points": 596,
+    "P_loads": 13,
+    "P_stores": 38,
+    "calls": 12,
+    "returns": 12,
+    "executed_future_code_patches": 2
+  },
+  "timing": "Ordinary/AA6,absolute-long7. Adjacent ALU source adds1. R-source gaps0/1 add2/1. Return to active LA adds1. Source/P-memory waits add;indexed/predecrement readiness overlaps instead(dsp-preupdate-reference.json). Explicit reference phases are not measured silicon bus edges.",
+  "automatic_scope": {
+    "own_program_words": 9912,
+    "instruction_points": 596,
+    "projected_full_register_counter_stack_periods": 1169,
+    "data_operands": 51,
+    "snapshot_cases": 10,
+    "cuts": 500,
+    "suffixes": 1000,
+    "literal_decode_writeback_controls": 8704,
+    "captured_code_write_refusals": 3
+  },
+  "independent_generator_identity_sha256": "fef1c759051caf8b38813fc956965475ef9f7a6ff8fc77925cb17a3ce6e217fa",
+  "admission": "Raw X0/X1 P loads and X0/X1/A1/B1 P stores;EA modes3/4,absolute-long mode6/RRR0 and AA6. Real native operands/AGU/writeback;other forms fail contextually. Already captured/issued P writes refuse before effects. Paired MOVEP remains separate.",
+  "manual_conflict": "FM A.3.1 and56371ED4 restrict loop-end MOVEM. Unchanged official1.25 requires a patched last-store path. Directed own finite-loop/call/software windows support this compatibility choice;no silicon exception or blanket control-register admission is claimed.",
+  "limits": "No current complete original reset/ROM/reserved-memory/instrument/MIDI/audio/storage/update/recovery/realtime or physical acceptance claim.",
+  "manufacturer_program_bytes_embedded": false,
+  "physical_timing_qualified": false,
+  "complete_original_startup_qualified": false
+}

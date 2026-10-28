@@ -37,7 +37,8 @@ std::optional<unsigned> address_register(const std::uint32_t opcode) {
     throw Fault("Undefined native address-phase opcode=" + hex(opcode, 6));
   }
   const auto form = decode_memory_stage(opcode);
-  if (form && is_program_transfer(*form)) {
+  if (form && is_program_memory(*form)) {
+    if (form->absolute_short || form->lanes[0].mode == 6) { return std::nullopt; }
     const auto lane = form->lanes[0];
     return lane.mode == 4 ? std::nullopt : std::optional(lane.reg);
   }

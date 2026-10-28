@@ -80,7 +80,10 @@ void append(DspReferenceCycleResult &result, const DspMemoryAccess access) {
 
 std::optional<DspMemoryAccess> peripheral_data(const std::optional<DspAddressStageView> &memory) {
   if (!memory) { return std::nullopt; }
-  if (memory->kind == DspAddressStageKind::absolute_short) { return std::nullopt; }
+  if (memory->kind == DspAddressStageKind::absolute_short ||
+      memory->kind == DspAddressStageKind::absolute_long) {
+    return std::nullopt;
+  }
   if (memory->kind == DspAddressStageKind::register_agu) {
     const auto form = decode_memory_stage(memory->word.value);
     if (!form || !is_program_transfer(*form)) { return std::nullopt; }
@@ -173,7 +176,9 @@ void reject_sampled_program_write(const std::optional<DspAddressStageView> &memo
                                   const DspProgramFetchView &fetch) {
   if (!memory) { return; }
   const auto form = decode_memory_stage(memory->word.value);
-  if (!form || !is_program_transfer(*form)) { return; }
+  if (!form || !is_program_memory(*form) || memory->update.operation != DspMemoryOperation::write) {
+    return;
+  }
   const auto address = memory->update.address;
   bool sampled = fetch.pending_address == address;
   for (std::size_t index = 0; index < fetch.used; ++index) {

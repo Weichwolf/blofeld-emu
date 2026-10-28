@@ -6,6 +6,8 @@ peripheral/P-memory effects. High/low short I/O, X/Y sources,R0..R7 and five
 non-extension addressing modes are decoded. Reverse/extension forms remain
 unsupported. Actual R/N/M hazards precede the separate program-transfer latency.
 No host copy supplies the stored word or acknowledges a missing FIFO input.
+MOVEM uses a separate single-operand path;see dsp-movem-memory.txt. The loop-end
+refusal below applies to this paired peripheral-to-P MOVEP path.
 
 The automatic owner retains the real F2 occurrence through five extra E1 hold
 periods. Older retirement and an already issued F2 may finish;younger AGU,I/O

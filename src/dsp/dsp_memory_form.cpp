@@ -96,6 +96,30 @@ operation(const Type type, const dsp56k::Field field, const std::uint32_t opcode
                                                          : DspMemoryOperation::write;
 }
 
+std::optional<DspMemoryForm> program_move(const Type type, const unsigned opcode) {
+  if (type != dsp56k::Movem_ea && type != dsp56k::Movem_aa) { return std::nullopt; }
+  const auto reg = dsp56k::getRegister(type, dsp56k::Field_dddddd, opcode);
+  const auto access = operation(type, dsp56k::Field_W, opcode);
+  const bool data = reg == Reg::X0 || reg == Reg::X1;
+  const bool middle = reg == Reg::A1 || reg == Reg::B1;
+  // FM13-132/133: raw sources only; control/stack and full-accumulator
+  // side effects are outside these independently retained MOVEM windows.
+  if (!data && (!middle || access != DspMemoryOperation::write)) { return std::nullopt; }
+  DspMemoryForm result;
+  result.lanes[0] = {.space = DspSpace::p, .operation = access};
+  if (type == dsp56k::Movem_aa) {
+    result.absolute_short = DspAddress{
+        .space = DspSpace::p, .address = dsp56k::getFieldValue(type, dsp56k::Field_aaaaaa, opcode)};
+    return result;
+  }
+  const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
+  const auto index = dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode);
+  if (mode != 3 && mode != 4 && (mode != 6 || index != 0)) { return std::nullopt; }
+  result.lanes[0].mode = mode;
+  result.lanes[0].reg = index;
+  return result;
+}
+
 bool accumulator_scalar_load(const std::uint32_t opcode) {
   // FM13-118/122, Table12-14: standalone W=1,EA=1,all eight accumulator fields.
   constexpr unsigned encoding_mask = 0xf0c0ff;
@@ -234,11 +258,16 @@ bool is_program_transfer(const DspMemoryForm &form) {
   return form.peripheral.has_value() && form.lanes[0].space == DspSpace::p;
 }
 
+bool is_program_memory(const DspMemoryForm &form) {
+  return form.lanes[0].space == DspSpace::p;
+}
+
 std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
   auto second = dsp56k::Invalid;
   if (opcodes.getInstructionTypes(opcode, first, second) == 0) { return std::nullopt; }
+  if (const auto program = program_move(first, opcode)) { return program; }
   if (const auto program = program_transfer(first, opcode)) { return program; }
   if (const auto peripheral = peripheral_immediate(first, opcode)) { return peripheral; }
   if (const auto peripheral = peripheral_register(first, opcode)) { return peripheral; }

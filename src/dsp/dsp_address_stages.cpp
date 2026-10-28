@@ -107,6 +107,35 @@ DspAddressStageView prepare(dsp56k::DSP &cpu,
   }
   return result;
 }
+
+DspAddressStageView absolute(const DspMemoryForm &form,
+                             const DspProgramWord word,
+                             const std::optional<DspProgramWord> extension,
+                             const unsigned omr) {
+  const bool long_address = is_program_memory(form) && form.lanes[0].mode == 6;
+  DspAddress target;
+  if (long_address) {
+    if (!extension) { throw Fault("Native absolute-long AG1 lost its actual F2 extension"); }
+    target = {.space = DspSpace::p, .address = extension->value};
+  } else {
+    if (extension || !form.absolute_short) {
+      throw Fault("Native absolute-short AG1 has a mismatched literal/F2 form");
+    }
+    target = *form.absolute_short;
+  }
+  const auto operation = form.lanes[0].operation;
+  return {.word = word,
+          .update = {.space = target.space,
+                     .address = target.address,
+                     .operation = operation,
+                     .pc = word.address,
+                     .omr = omr},
+          .data_accesses = {DspMemoryAccess{.target = target, .operation = operation}},
+          .data_access_count = 1,
+          .kind = long_address ? DspAddressStageKind::absolute_long
+                               : DspAddressStageKind::absolute_short,
+          .extension = extension};
+}
 }
 
 std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruction &fetched) {
@@ -121,18 +150,9 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruct
     const auto source = cpu.referenceAttemptState();
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
     DspAddressStageView view;
-    if (form->absolute_short) {
-      if (extension) { throw Fault("Unexpected extension for native absolute-short AG1"); }
-      const auto target = *form->absolute_short;
-      view = {.word = word,
-              .update = {.space = target.space,
-                         .address = target.address,
-                         .operation = DspMemoryOperation::read,
-                         .pc = word.address,
-                         .omr = omr},
-              .data_accesses = {DspMemoryAccess{.target = target}},
-              .data_access_count = 1,
-              .kind = DspAddressStageKind::absolute_short};
+    const bool absolute_long = is_program_memory(*form) && form->lanes[0].mode == 6;
+    if (form->absolute_short || absolute_long) {
+      view = absolute(*form, word, extension, omr);
     } else if (form->peripheral && !is_program_transfer(*form)) {
       if (extension.has_value() == form->peripheral_register) {
         throw Fault("Native peripheral AG1 has a mismatched F2 extension form");
