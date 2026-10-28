@@ -3113,7 +3113,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n$<TARGET_FILE:blofeld-preupdate-native-test>\n$<TARGET_FILE:blofeld-preupdate-clock-test>\n$<TARGET_FILE:blofeld-preupdate-window-test>\n$<TARGET_FILE:blofeld-preupdate-guard-test>\n$<TARGET_FILE:blofeld-preupdate-load-test>\n$<TARGET_FILE:blofeld-preupdate-producer-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-guard-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-test>\n$<TARGET_FILE:blofeld-preupdate-store-test>\n$<TARGET_FILE:blofeld-preupdate-alu-test>\n$<TARGET_FILE:blofeld-preupdate-alu-window-test>\n$<TARGET_FILE:blofeld-preupdate-loop-test>\n$<TARGET_FILE:blofeld-preupdate-source-window-test>\n$<TARGET_FILE:blofeld-short-load-native-test>\n$<TARGET_FILE:blofeld-short-load-stage-test>\n$<TARGET_FILE:blofeld-short-load-guard-test>\n$<TARGET_FILE:blofeld-short-load-agu-test>\n$<TARGET_FILE:blofeld-short-load-accumulator-test>\n$<TARGET_FILE:blofeld-short-load-loop-test>\n$<TARGET_FILE:blofeld-short-load-scaling-test>\n")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n$<TARGET_FILE:blofeld-preupdate-native-test>\n$<TARGET_FILE:blofeld-preupdate-clock-test>\n$<TARGET_FILE:blofeld-preupdate-window-test>\n$<TARGET_FILE:blofeld-preupdate-guard-test>\n$<TARGET_FILE:blofeld-preupdate-load-test>\n$<TARGET_FILE:blofeld-preupdate-producer-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-guard-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-test>\n$<TARGET_FILE:blofeld-preupdate-store-test>\n$<TARGET_FILE:blofeld-preupdate-alu-test>\n$<TARGET_FILE:blofeld-preupdate-alu-window-test>\n$<TARGET_FILE:blofeld-preupdate-loop-test>\n$<TARGET_FILE:blofeld-preupdate-source-window-test>\n$<TARGET_FILE:blofeld-short-load-native-test>\n$<TARGET_FILE:blofeld-short-load-stage-test>\n$<TARGET_FILE:blofeld-short-load-guard-test>\n$<TARGET_FILE:blofeld-short-load-agu-test>\n$<TARGET_FILE:blofeld-short-load-accumulator-test>\n$<TARGET_FILE:blofeld-short-load-loop-test>\n$<TARGET_FILE:blofeld-short-load-scaling-test>\n$<TARGET_FILE:blofeld-repeat-register-test>\n$<TARGET_FILE:blofeld-repeat-register-producer-test>\n$<TARGET_FILE:blofeld-repeat-register-guard-test>\n$<TARGET_FILE:blofeld-offset-store-test>\n$<TARGET_FILE:blofeld-repeat-accumulator-preupdate-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3707,4 +3707,31 @@ if(BUILD_TESTING)
   set_tests_properties(dsp_short_load_scaling_native dsp_short_load_scaling_pipeline
     PROPERTIES TIMEOUT 300)
   add_dependencies(quality blofeld-short-load-scaling-test)
+endif()
+
+# Native REP counts and raw data/N bodies retain fixed reference-stage contracts.
+if(BUILD_TESTING)
+  foreach(kind IN ITEMS repeat-register repeat-register-producer repeat-register-guard
+      offset-store repeat-accumulator-preupdate)
+    string(REPLACE "-" "_" source_kind "${kind}")
+    add_executable(blofeld-${kind}-test test/dsp_${source_kind}_test.cpp)
+    target_link_libraries(blofeld-${kind}-test PRIVATE blofeld_dsp blofeld_dsp_native)
+    add_dependencies(quality blofeld-${kind}-test)
+  endforeach()
+  add_test(NAME dsp_repeat_register_streams COMMAND blofeld-repeat-register-test --streams)
+  add_test(NAME dsp_repeat_register_address_modes COMMAND blofeld-repeat-register-test --address-modes)
+  add_test(NAME dsp_repeat_register_snapshots COMMAND blofeld-repeat-register-test --snapshots)
+  add_test(NAME dsp_repeat_register_producers COMMAND blofeld-repeat-register-producer-test --streams)
+  add_test(NAME dsp_repeat_register_producer_snapshots COMMAND blofeld-repeat-register-producer-test --snapshots)
+  add_test(NAME dsp_repeat_register_guards COMMAND blofeld-repeat-register-guard-test)
+  add_test(NAME dsp_offset_store COMMAND blofeld-offset-store-test)
+  add_test(NAME dsp_repeat_accumulator_preupdate COMMAND blofeld-repeat-accumulator-preupdate-test --streams)
+  add_test(NAME dsp_repeat_accumulator_preupdate_snapshots COMMAND blofeld-repeat-accumulator-preupdate-test --snapshots)
+  set(blofeld_repeat_runtime_tests dsp_repeat_register_streams dsp_repeat_register_address_modes
+    dsp_repeat_register_snapshots dsp_repeat_register_producers dsp_repeat_register_producer_snapshots
+    dsp_repeat_register_guards dsp_offset_store dsp_repeat_accumulator_preupdate
+    dsp_repeat_accumulator_preupdate_snapshots)
+  set_tests_properties(${blofeld_repeat_runtime_tests} PROPERTIES LABELS dsp_repeat_runtime TIMEOUT 300)
+  set_tests_properties(dsp_repeat_register_snapshots dsp_repeat_register_producer_snapshots
+    dsp_repeat_accumulator_preupdate_snapshots PROPERTIES TIMEOUT 900)
 endif()

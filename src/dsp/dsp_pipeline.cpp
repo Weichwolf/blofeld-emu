@@ -414,7 +414,12 @@ void DspInstructionPipeline::finish_cycle() {
   if (loop_setup && loop_setup->held_decode && loop_setup->decode_hold != 0) {
     --loop_setup->decode_hold;
   }
-  if (repeat_setup && repeat_setup->held_decode && repeat_setup->setup_hold != 0) {
+  // A native REP count-source wait extends setup; its held E1 cannot spend
+  // one of the nominal Decode-to-body setup periods (retained NXP windows).
+  const bool count_source_held = repeat_setup && view.cycle.memory_source_stall &&
+                                 view.cycle.execute1 == repeat_setup->prefix.word;
+  if (repeat_setup && repeat_setup->held_decode && repeat_setup->setup_hold != 0 &&
+      !count_source_held) {
     --repeat_setup->setup_hold;
   }
   if (branch_fetch_hold != 0) { --branch_fetch_hold; }

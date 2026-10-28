@@ -30,6 +30,8 @@ struct DspMemoryForm {
 [[nodiscard]] bool full_accumulator_long_store(std::uint32_t opcode);
 [[nodiscard]] bool full_accumulator_scalar_store(std::uint32_t opcode);
 [[nodiscard]] bool partial_accumulator_scalar_store(std::uint32_t opcode);
+// Ordinary raw X0/X1/Y0/Y1 and N0..N7 sources; no parallel ALU or control register.
+[[nodiscard]] bool data_offset_scalar_store(std::uint32_t opcode);
 
 [[nodiscard]] std::optional<DspMemoryForm> decode_memory_stage(std::uint32_t opcode);
 }

@@ -1,0 +1,80 @@
+{
+  "scope": "Independent normal unchanged NXP software-model instruction windows; no DSP56371 silicon timing or complete device claim.",
+  "manual": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "source": "https://www.nxp.com/docs/en/reference-manual/DSP56300FM.pdf",
+    "bytes": 24396254,
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "section": "FM13-160/161 REP; FM13-126/127 signed48-bit long store; FM5-13 S-growth; appendix A nominal timing."
+  },
+  "references": {
+    "stable_raw_counts": {
+      "status": "passed",
+      "streams": 24,
+      "repeated_body_operations": 168,
+      "native_PC_transitions": 840,
+      "full_body_register_states": 168,
+      "paired_immediate_A1_vectors": 12,
+      "independent_vendor_encoding_agreements": 26,
+      "RAM_cells_checked_after_each_body": 70,
+      "result_sha256": "71da4e72a49b34f0c057f505f673059d4d9cb714df1cc3ca54738ee14c5bbf6c",
+      "encodings_sha256": "0d40112aaa4e74345facd40a36c63978930c1545e6fe4909028e0f8ab1e557de",
+      "script_sha256": "998b108515d85ec57db345fb16f6f6a6b63c1c8ede9bdb4fc2dbd07995c0380e",
+      "scope": "Normal unchanged NXP software model; initial OMR300, linear AGU only. No silicon stages, original reset or complete device qualification.",
+      "physical_timing_qualified": false,
+      "qualification_sha256": "a4b80cdd7a0402794969c72c4ad9bcb17f9ac8e51285c2005edc3dfdf4ca27ee",
+      "reference_cost": {
+        "REP_setup": 5,
+        "mode3_body": 1
+      }
+    },
+    "register_count_writers": {
+      "status": "qualified-normal-model-aggregate-A-source-interlock",
+      "streams": 104,
+      "repeated_bodies": 312,
+      "checked_native_PC_transitions": 3484,
+      "paired_complete_vectors": 52,
+      "extra_hold_windows": 6,
+      "literal_assembler_agreements": 27,
+      "assembler_generated_register_moves": 2,
+      "rule": "REP A1 immediately following an admitted one-word A/A0/A1/A2 writer adds one period; B writers, nonzero gaps and two-word producers do not.",
+      "scope": "Normal unchanged NXP software model; initial OMR300, linear AGU only. No silicon stages, original reset or complete device qualification.",
+      "qualifier_sha256": "4c81017e0908c700c069e9f0ddd243ccb22c080f9bfa75b6b1d715c3908370b6",
+      "physical_timing_qualified": false,
+      "qualification_sha256": "dd36bb47fa5c9fa534cb721d6f6987a8ff842dfd8d2ebd75e37550967b7a0e79"
+    },
+    "memory_arithmetic_count_writers": {
+      "status": "qualified-normal-model-aggregate-A-source-interlock",
+      "streams": 56,
+      "repeated_bodies": 168,
+      "checked_native_PC_transitions": 1876,
+      "paired_complete_vectors": 28,
+      "extra_hold_windows": 5,
+      "literal_assembler_agreements": 31,
+      "assembler_generated_forms": 6,
+      "rule": "REP A1 immediately following an admitted one-word A/A0/A1/A2 writer adds one period; B writers and nonzero gaps do not; covers native memory-load and arithmetic writers independently of the move-producer matrix.",
+      "anchor_attribution": "Normal software step logs charge an adjacent ASR/REP hold at the ASR anchor and move/REP holds at REP; this is not a silicon stage assertion.",
+      "scope": "Normal unchanged NXP software model; initial OMR300, linear AGU only. No silicon stages, original reset or complete device qualification.",
+      "qualifier_sha256": "736190e8616b2f8a315d372b23f18a49a179b9adab735ca739e06b3ba066769b",
+      "physical_timing_qualified": false,
+      "qualification_sha256": "44858b7f045eb08810bdc8493c908d4f9817bac0c6de967374ad7ff836574591"
+    },
+    "standalone_N4_writers": {
+      "status": "qualified-normal-model-standalone-N4-source-readiness",
+      "streams": 32,
+      "standalone_stores": 32,
+      "checked_native_PC_transitions": 976,
+      "old_source_control_pairs": 16,
+      "literal_assembler_agreements": 26,
+      "rule": "Short/long immediate, X1 register and X-memory writers to N4 are observed by the next standalone N4 store; zero through three NOP gaps add only their nominal periods. No extra source hold is observed.",
+      "scope": "Normal unchanged NXP software model; initial OMR300, linear AGU only. No silicon stages, original reset or complete device qualification.",
+      "qualifier_sha256": "e27c2ac442004fdbf8d675e2e97929cfe984cdc52f244ae3253aee3d272057d0",
+      "native_REP_execution": false,
+      "physical_timing_qualified": false,
+      "qualification_sha256": "d540651f79af6f3c9eb636b3d59583aa434e64e50d9d262febbf108719a9d83b"
+    }
+  },
+  "manufacturer_program_bytes_embedded": false,
+  "physical_timing_qualified": false,
+  "complete_original_startup_qualified": false
+}

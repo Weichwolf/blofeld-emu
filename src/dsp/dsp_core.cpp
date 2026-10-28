@@ -915,7 +915,12 @@ public:
         (reference.execution() == DspReferenceExecution::access_and_retirement_boundaries ||
          reference.execution() == DspReferenceExecution::staged_register_boundaries) &&
         (word(cpu.regs().sr) & 0x1a000U) == 0 &&
-        fetch_repeat_count(*value, static_cast<std::uint32_t>(cpu.regs().x.var) & word_mask) != 0;
+        fetch_repeat_count(
+            {.opcode = *value,
+             .register_count =
+                 *value == dsp_repeat_from_a1
+                     ? static_cast<std::uint32_t>(register_value(cpu, dsp56k::Reg_A1)) & word_mask
+                     : static_cast<std::uint32_t>(cpu.regs().x.var) & word_mask}) != 0;
     if (reference.fetch().repeating() && !fetch_repeat_body(*value)) {
       throw Fault("Unqualified REP body read P:" + hex(request->target.address, 6) + " opcode=" +
                   hex(*value, 6) + " pc=" + hex(request->pc, 6) + " omr=" + hex(request->omr, 6));

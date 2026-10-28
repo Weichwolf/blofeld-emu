@@ -2972,10 +2972,10 @@ Native CCR, direct register-indirect and OMR control:
   sanitizer profiles without skips. Containing consumers and the standalone
   executable are rebuilt and qualified. Complete original startup and physical
   timing remain open.
-- Positive immediate/X0 automatic REP retains one genuine body F2 receipt,
+- Positive immediate/X0/A1 automatic REP retains one genuine body F2 receipt,
   native LC/count ownership,nominal setup5/body1 and distinct AG1/AG2/data/E2
   effects. Bodies include NOP/full A->L:(R4)+ and standalone full/partial A/B->X/Y stores
-  with one-word modes0..4. Zero/other sources/bodies,active DO/cache and
+  with one-word modes0..5/7,plus raw data/N stores. Zero/unsupported sources/bodies,active DO/cache and
   automatic IRQ entry remain unqualified. Standalone full
   A/B signed48-bit long stores use native scaling/clipping and sticky S/L.
   Supporting checks cover16 streams,300 suffixes,16 F2-latch mutations,
@@ -2989,6 +2989,12 @@ Native CCR, direct register-indirect and OMR control:
   state through restored continuations. This synthetic stream matches stored
   workspace dimensions;it is not execution of original instrument startup.
   See dsp-repeat-scalar-stores.txt.
+- Raw REP source/count readiness and indexed/predecrement accumulator bodies
+  have independent full-state,partial-RAM and fixed-stage checks,including
+  restored continuations and exact contextual refusals. An adjacent A-part
+  writer before REP A1 retains its extra source-wait period. Standalone N
+  stores retain actual native data/AGU ownership. See dsp-repeat-registers.txt;
+  these checks do not resolve reserved memory or establish normal startup.
 - The local original first-stage diagnostic receives all94 unchanged words
   through actual SPI/P stores and executes native PCTL/OMR setup and RAM clear
   to the visible unmapped Y:002000 write at PC:000072. Document-derived ROM

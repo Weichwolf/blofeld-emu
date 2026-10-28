@@ -110,10 +110,12 @@ bool pipeline_counted_loop(const DspProgramWord word) {
 
 bool pipeline_loop_source_dependency(const DspInstructionDependency instructions) {
   const auto source = automatic_loop_source(instructions.consumer.value);
-  if (source != DspLoopCountSource::a && source != DspLoopCountSource::a0) { return false; }
-  // FM A2.3 and retained NXP windows: an adjacent single-word arithmetic or
-  // transfer writer needs one period. A two-word immediate already separates
-  // Decode by two periods and is no longer the E2 producer at DO E1.
+  const bool repeat = instructions.consumer.value == dsp_repeat_from_a1;
+  if (!repeat && source != DspLoopCountSource::a && source != DspLoopCountSource::a0) {
+    return false;
+  }
+  // Retained NXP windows: DO A/A0 and REP A1 interlock on any preceding A part.
+  // Two-word writers already separate Decode and are no longer E2 producers.
   return dsp56k::any(operands(instructions.producer, false).written, Mask::A);
 }
 

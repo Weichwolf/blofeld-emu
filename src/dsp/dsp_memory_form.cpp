@@ -136,8 +136,8 @@ std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode)
       dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
   const auto access = operation(type, dsp56k::Field_W, opcode);
   if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read) &&
-      !full_accumulator_scalar_store(opcode) && !partial_accumulator_scalar_store(opcode) &&
-      !accumulator_scalar_load(opcode)) {
+      !data_offset_scalar_store(opcode) && !full_accumulator_scalar_store(opcode) &&
+      !partial_accumulator_scalar_store(opcode) && !accumulator_scalar_load(opcode)) {
     return std::nullopt;
   }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
@@ -218,6 +218,16 @@ bool partial_accumulator_scalar_store(const std::uint32_t opcode) {
   constexpr unsigned full_accumulator_begin = 6;
   return (opcode & source_mask) == accumulator_store &&
          ((opcode >> source_shift) & source_bits) < full_accumulator_begin;
+}
+
+bool data_offset_scalar_store(const std::uint32_t opcode) {
+  // FM13-118/122,Table12-14: raw data fields4..7 and offset fields24..31.
+  // W=0,EA=1 and an empty parallel ALU field; spaces/AGU mode/register vary.
+  constexpr unsigned data_mask = 0xf4c0ff;
+  constexpr unsigned data_store = 0x444000;
+  constexpr unsigned offset_mask = 0xf0c0ff;
+  constexpr unsigned offset_store = 0x704000;
+  return (opcode & data_mask) == data_store || (opcode & offset_mask) == offset_store;
 }
 
 bool is_program_transfer(const DspMemoryForm &form) {

@@ -1,0 +1,46 @@
+Automatic REP register counts and scalar register stores
+
+  cmake --build --preset strict --target blofeld-repeat-register-test \
+    blofeld-repeat-register-producer-test blofeld-repeat-register-guard-test \
+    blofeld-offset-store-test blofeld-repeat-accumulator-preupdate-test
+  ctest --test-dir build/strict -j1 --output-on-failure -L '^dsp_repeat_runtime$'
+
+The automatic memory pipeline accepts positive immediate, raw X0 and raw A1
+counts. It samples the selected native register at E1; native interpretation
+owns LC, saved-LC restoration and each body operation. Count zero, other count
+registers and unsupported control contexts still fail visibly.
+
+Repeated bodies include NOP, full A->L:(R4)+ and standalone full/partial A/B,
+X0/X1/Y0/Y1 or N0..N7 stores to X/Y through linear AGU modes0..5/7. Extended
+mode6, loads, parallel ALU and control-register stores remain excluded. Raw N
+stores are also available outside REP. These admissions do not qualify modulo
+or reverse-carry addressing or arbitrary interrupt/cache/DO combinations.
+
+The retained NXP software-model windows distinguish the nominal REP setup from
+an adjacent count-source wait. An admitted one-word writer of any A part before
+REP A1 adds one period. B writers, separated writers and two-word immediate
+writers do not add that period in the tested windows. A held prefix E1 must
+not consume a Decode-to-body setup period. The normal software model is an
+independent instruction/timing reference, not a DSP56371 silicon-edge oracle.
+Reference identities and bounded evidence are in dsp-repeat-register-reference.json.
+
+Own fixtures specify fixed F1/F2, Decode, AG1/AG2, E1/E2 and complete CPU-state
+expectations, including native counters, CCR, LC and stack. They check partial
+RAM effects and opposite-space canaries each period. Mutating an own body after
+its actual F2 receipt checks retained-word ownership; checkpoints at every
+selected period restore twice against the same independent expectations.
+Separate fixtures retain the previous accumulator modes0..4 coverage.
+Full-B stores additionally preserve their independently expected sticky S flag.
+
+The register-body cases cover all twelve raw source fields, X/Y, R1/R3,
+immediate/X0/A1 counts1/3/17 and all admitted linear address modes. Producer
+cases cover immediate, register, memory and arithmetic writers of A/B parts.
+Standalone N-store cases cover all eight N fields and source readiness.
+The accumulator extension covers all eight full/partial source fields in
+indexed and predecrement modes with immediate/X0 counts. Refusal cases retain
+exact fault context and permit only the older instructions due to retire.
+
+This is execution support required by the original firmware, not complete
+instrument operation. The original first-stage Y:002000 reserved write,
+authentic ROM identity, reset/wiring, NAND loading and normal MIDI/audio remain
+open. No firmware patch, ignored reserved write or fabricated DSP reply is used.

@@ -6,7 +6,8 @@ DSP56300FM Rev5 13-160/161 defines positive REP count ownership, one body
 fetch and saved LC restoration. Scalar source/flag rules: dsp-scalar-stores.txt.
 
 The fetch and Decode guards share the same qualified-body predicate: NOP,
-existing full A->L:(R4)+, and standalone full/partial A/B->X/Y stores in modes0..4.
+existing full A->L:(R4)+, and standalone scalar stores described in
+dsp-repeat-registers.txt. The original accumulator fixtures retain modes0..4.
 Native execution owns all LC, address, data and retirement effects. The body
 retains its actual F2 receipt even if the own test program changes afterward.
 
@@ -27,6 +28,6 @@ A1/B1 stores. These are synthetic prefix fills,not original boot/table assets.
 
 An own zero-source stream clears 6848 X words from0936 through23f5. These are
 stored workspace dimensions, not original reset/initializer execution. Other
-body forms, zero/other count sources, active DO/cache and automatic IRQ remain
+body forms, zero/unsupported count sources, active DO/cache and automatic IRQ remain
 unqualified. Authentic ROM identity, reserved Y:002000 and normal original
 instrument operation remain open; no hardware timing/equivalence claim.

@@ -1,7 +1,7 @@
 Automatic REP and full-accumulator long stores
 =============================================
 
-The automatic memory pipeline executes positive immediate12-bit and full X0
+The automatic memory pipeline executes positive immediate12-bit, raw X0 and A1
 REP counts through the native interpreter. It retains the genuine single body
 F2 receipt across logical iterations; loaded native continuations do not invent
 opcode fetches. Four actual Decode holds give nominal REP setup5,body1 timing.
@@ -9,8 +9,9 @@ Actual native count/LC results authenticate completion and the final-body E2 /
 successor E1 overlap. Each memory iteration owns a distinct AG1 address record,
 AG2 publication and native data operation. Joint checkpoints retain that state.
 
-Current automatic repeated bodies are NOP and full A -> L:(R4)+. Zero counts,
-other sources/bodies, active DO/cache/overlapping setup and automatic interrupt
+Current automatic repeated bodies include NOP, full A -> L:(R4)+ and the scalar
+stores described in dsp-repeat-registers.txt. Zero counts, unsupported count
+sources/bodies, active DO/cache/overlapping setup and automatic interrupt
 entry remain unqualified visible refusals. Native REP interrupt inhibition is
 projected; pending-interrupt automatic execution is not qualified by these tests.
 No physical sampling-edge or complete DSP56371 timing claim follows.

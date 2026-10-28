@@ -65,7 +65,7 @@ void refused(const Case sample, const unsigned word, const std::string &reason) 
 
 int main() {
   try {
-    // Full/partial loads,parallel ALU,modes5..7 and full B-long stay unqualified.
+    // Full/partial loads,parallel ALU,extended mode6 and full B-long stay unqualified.
     constexpr std::array words{0x56d800U,
                                0x5fd800U,
                                0x50d800U,
@@ -75,9 +75,9 @@ int main() {
                                0x53d800U,
                                0x55d800U,
                                0x545813U,
-                               0x546800U,
+                               0x546813U,
                                0x547000U,
-                               0x547800U,
+                               0x547813U,
                                0x495c00U};
     for (const auto word : words) { refused({}, word, "repeated body"); }
     constexpr unsigned reserved_scaling = 0xc00;
