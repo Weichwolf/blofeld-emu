@@ -2956,6 +2956,13 @@ Native CCR, direct register-indirect and OMR control:
   scalar forms stay excluded;
   these are component checks,not original full initialization or physical proof
   (dsp-accumulator-loads.txt).
+- Indexed/predecrement single X/Y scalar moves extend ordinary modes with
+  native AG1/AG2 and one explicit E1 reference hold. All 36 load destinations,
+  12 store sources,data/R/N parallel ALU,producer hazards and genuine counted
+  DO bodies retain independent CPU/CCR/address/value/stack expectations.
+  Reserved Mn arithmetic refuses visibly while arbitrary raw Mn storage and
+  unused-Mn accesses remain valid. See dsp-preupdate-memory.txt. This does
+  not establish measured silicon phases or complete original boot/audio.
 - Positive immediate/X0 automatic REP retains one genuine body F2 receipt,
   native LC/count ownership,nominal setup5/body1 and distinct AG1/AG2/data/E2
   effects. Bodies include NOP/full A->L:(R4)+ and standalone full/partial A/B->X/Y stores

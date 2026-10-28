@@ -215,16 +215,16 @@ inline void restores() {
 }
 
 inline void guards() {
-  // Indexed/extended/predecrement/short loads, parallel ALU and modes5..7 stay unqualified.
-  constexpr std::array refused{0x56e800U,
+  // Parallel accumulator forms, extended/short addressing and reserved contexts stay unqualified.
+  constexpr std::array refused{0x56e813U,
                                0x5ff000U,
-                               0x50f800U,
-                               0x52e800U,
+                               0x50f813U,
+                               0x52e813U,
                                0x549800U,
                                0x565840U,
-                               0x566800U,
+                               0x566813U,
                                0x567000U,
-                               0x567800U};
+                               0x567813U};
   constexpr unsigned reserved_scale = 0xc00;
   for (const auto word : refused) {
     DspMachine machine;

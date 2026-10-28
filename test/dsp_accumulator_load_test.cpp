@@ -348,7 +348,9 @@ void guards() {
     for (const bool y : {false, true}) {
       const Case sample{.destination = destination, .value = values[6], .ccr = flags[3], .y = y};
       for (unsigned mode = 5; mode <= 7; ++mode) {
-        form_guard(sample, words[destination] | (y ? y_bit : 0U) | (mode << mode_shift));
+        form_guard(sample,
+                   words[destination] | (y ? y_bit : 0U) | (mode << mode_shift) |
+                       (mode == 6 ? 0U : parallel_clear));
       }
       form_guard(sample, opcode(sample) | parallel_clear);
       form_guard(sample, opcode(sample) & ~effective_address_bit);

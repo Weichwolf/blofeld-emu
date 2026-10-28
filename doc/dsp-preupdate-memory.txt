@@ -1,0 +1,77 @@
+Indexed and predecrement scalar memory moves
+
+  cmake --build --preset strict --target \
+    blofeld-preupdate-native-test \
+    blofeld-preupdate-clock-test \
+    blofeld-preupdate-window-test \
+    blofeld-preupdate-guard-test \
+    blofeld-preupdate-load-test \
+    blofeld-preupdate-producer-test \
+    blofeld-preupdate-modifier-guard-test \
+    blofeld-preupdate-modifier-test \
+    blofeld-preupdate-store-test \
+    blofeld-preupdate-alu-test \
+    blofeld-preupdate-alu-window-test \
+    blofeld-preupdate-loop-test \
+    blofeld-preupdate-source-window-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_preupdate_'
+  # Build and check the same targets separately with the thread preset.
+
+DSP56300FM Rev5 4.3.4/Table 4-2,12.2.1/Table12-14,13-118/122 and A1 define
+one-word X/Y:(Rn+Nn) and X/Y:-(Rn) moves. The ordinary automatic_memory
+profile admits the previously supported scalar operands with these modes:
+36 load destinations (data,full/partial A/B,R/N/M) and 12 store sources
+(data,full/partial A/B). Data-register and R/N parallel ALU forms retain
+their existing admission; parallel accumulator forms remain excluded.
+
+The native templated AGU calculates the effective address and R result.
+Indexed mode does not update R; predecrement publishes the native result
+at AG2. The instruction adds one explicit E1 reference hold before the live
+native memory access and E2 retirement. Its placement is a reference model,
+not a measured silicon sampling edge. Existing five-period P-transfer delay,
+fetch occurrence ownership and complete snapshots remain separate facts.
+
+A preceding accumulator writer can impose a source dependency during the
+same period as the preupdate hold. The two readiness constraints overlap;
+adding the waits would insert an unnecessary period. The unchanged normal
+NXP initial-map model confirms 72 quiet windows / 1,980 own instructions,including
+12 adjacent cases that distinguish overlap from addition. All PC/register/SR/
+data expectations and complete code readbacks agree. This does not locate
+physical E1 bus edges or validate the model's switched-memory behavior.
+Reference identity and exact scope: dsp-preupdate-reference.json.
+The additional own source-window test checks all 8 full/partial accumulator
+sources,CLR/full/partial writers,both spaces/modes,same/disjoint sources and
+zero/one-NOP gaps:384 windows, 672 cuts and 1,344 restored suffixes per sanitizer.
+
+Mn accepts arbitrary raw storage. Arithmetic checks its low 16 bits before
+native AG1 calculation: reverse carry0,modulo1..7fff,linearffff,and defined
+multiple-wrap sizes 2..16384. UpperXX bits are ignored. Reserved encodings
+fail with operation,space,R/N/M,opcode,PC and OMR; no-update mode ignores Mn.
+This visible emulator refusal does not assert that silicon traps reserved Mn.
+
+Independent literal expectations check full CPU/CCR,addresses,values,
+signed partial/full accumulator behavior,scaling/limiting,aliases and each
+reference phase. The containing tests cover all 8 AGUs,raw Mn upper bits,
+producer stalls,old-operand parallel MPY/MAC/ADD/CLR and a following MAC
+using new data and the older accumulator result. Genuine counted DO setup,
+single/multiple-instruction bodies,backedges,zero-count annulment and exit
+are executed without replacing native loop behavior. Unknown-source failure
+retains earlier AG2,quarantines execution and requires trusted restoration.
+
+The new fixed component matrices include 1,152 load addresses / 3,456 value cases,
+384 store addresses / 4,608 value cases, 1,984 AGU producer windows, 6,144 parallel ALU
+cases, 256 MPY-to-MAC windows and 192 DO memory cases per sanitizer. Separate
+720 reserved-Mn refusals, 120 unused-Mn controls and 768 defined modifier cases
+retain the distinction between raw register storage and arithmetic use.
+Snapshots resume inside the actual delay,AGU,ALU and loop continuations.
+
+Ordinary mode 5/7 negatives now select still-unsupported parallel accumulator
+forms; positive tests establish the new behavior. REP mode 5/7 bodies,long/P
+pre-update transfers,extensions,short addressing and wider control forms
+retain their separate strict exclusions. Native exceptions and allocation
+remain unsuitable for a future real-time audio callback.
+
+These are emulator component/reference-model checks. Authentic mask ROM,
+reserved Y:002000 semantics,normal original Desktop/Keyboard boot,original
+DSP host audio/MIDI,complete storage/update/recovery and physical device
+acceptance remain open. The strict original reset frontier is not bypassed.

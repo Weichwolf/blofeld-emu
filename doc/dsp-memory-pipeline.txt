@@ -10,8 +10,9 @@ Standalone full/partial accumulator stores and their source holds are scoped
 in dsp-scalar-stores.txt; their REP extension is in dsp-repeat-scalar-stores.txt.
 Selected immediate/register transfers, their actual extension words, one-word
 R/N/M memory loads and decoded AGU dependencies extend this scope in
-dsp-transfer-pipeline.txt. Data-address extensions, pre-offset/pre-decrement,
-absolute and general control forms still refuse.
+dsp-transfer-pipeline.txt. Indexed/predecrement scalar moves and their explicit
+reference E1 delay extend this scope in dsp-preupdate-memory.txt. Data-address
+extensions, absolute and general control forms still refuse.
 Selected two-word OMR bit branches and their strict fetch/retirement boundaries
 are scoped separately in dsp-branch-pipeline.txt.
 

@@ -386,7 +386,7 @@
 @@ -264 +280 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +341,354 @@
+@@ -324,0 +341,356 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceAttempt || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -446,7 +446,7 @@
 +	DSP::ReferenceAddressCalculation DSP::calculateReferenceAddress(const TWord mode, const TWord index, const bool dual)
 +	{
 +		verifyReferenceCheckpoint();
-+		if(mode > (dual ? 3u : 4u) || index >= reg.r.size())
++		if((dual ? mode > 3u : (mode > 7u || mode == 6u)) || index >= reg.r.size())
 +			throw std::runtime_error("Unqualified native reference address-generation form");
 +		const auto saved = reg.r[index];
 +		TWord address = 0;
@@ -458,6 +458,8 @@
 +			case 2: address = decode_MMMRRR_read<2>(index); break;
 +			case 3: address = decode_MMMRRR_read<3>(index); break;
 +			case 4: address = decode_MMMRRR_read<4>(index); break;
++			case 5: address = decode_MMMRRR_read<5>(index); break;
++			case 7: address = decode_MMMRRR_read<7>(index); break;
 +			}
 +		} catch(...) { reg.r[index] = saved; throw; }
 +		const auto after = reg.r[index].toWord();
@@ -741,7 +743,7 @@
 +		m_referenceVectorActive = false;
 +	}
 +
-@@ -331,0 +702,11 @@
+@@ -331,0 +704,11 @@
 +		if(m_referenceAttempt) {
 +			if(Opcodes::isNonParallelOpcode(op)) {
 +				const auto* info = m_opcodes.findNonParallelOpcodeInfo(op);
@@ -753,16 +755,16 @@
 +			// Always decode the captured word, including loaded REP. Never reuse partial dispatch.
 +			m_opcodeCache.at(currentOp) = {&DSP::op_ResolveCache};
 +		}
-@@ -341 +722 @@
+@@ -341 +724 @@
 -				m_cycles += getOpcodeCycles(currentOp);
 +				m_cycles += m_referenceMode ? referenceCycleCost(currentOp, op) : getOpcodeCycles(currentOp);
-@@ -413,0 +795,5 @@
+@@ -413,0 +797,5 @@
 +		if(m_referenceVectorActive) {
 +			if(ssIndex() >= reg.ss.size()-1)
 +				throw std::runtime_error("Unsupported reference interrupt stack overflow");
 +			m_referenceLongEntry = true;
 +		}
-@@ -491,0 +878,8 @@
+@@ -491,0 +880,8 @@
 +				if(m_referenceMode) {
 +					// Annulment skips the body, not the architectural frame writes
 +					// (FM13-56/57; retained slots also observed in MCPX b2).
@@ -771,10 +773,10 @@
 +					do_start(&_loopcount, _addr);
 +					do_end();
 +				}
-@@ -525,0 +920,2 @@
+@@ -525,0 +922,2 @@
 +		if(m_referenceMode) return true;
 +
-@@ -603,0 +1000,26 @@
+@@ -603,0 +1002,26 @@
 +		if(m_referenceMode) {
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unsupported nested reference REP");
@@ -801,64 +803,64 @@
 +			reg.lc.var = _loopCount;
 +			return true;
 +		}
-@@ -684,0 +1107,2 @@
+@@ -684,0 +1109,2 @@
 +		if(m_referenceMode && ssIndex() == 0)
 +			throw std::runtime_error("Unqualified DSP reference stack pop at SP=" + std::to_string(reg.sp.var));
-@@ -687 +1111,4 @@
+@@ -687 +1113,4 @@
 -		--reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 0x1fu) & 0x1fu);
 +		else
 +			--reg.sc.var;
-@@ -691,0 +1119,2 @@
+@@ -691,0 +1121,2 @@
 +		if(m_referenceMode && ssIndex() >= reg.ss.size()-1)
 +			throw std::runtime_error("Unqualified DSP reference stack push at SP=" + std::to_string(reg.sp.var));
-@@ -694 +1123,4 @@
+@@ -694 +1125,4 @@
 -		++reg.sc.var;
 +		if(m_referenceMode)
 +			reg.sc.var = static_cast<uint8_t>((static_cast<unsigned>(reg.sc.var) + 1u) & 0x1fu);
 +		else
 +			++reg.sc.var;
-@@ -1152,2 +1583,0 @@
+@@ -1152,2 +1585,0 @@
 -		const auto oldValue = mem.get(MemArea_P, _offset);
 -
-@@ -1156 +1586 @@
+@@ -1156 +1588 @@
 -		if (_offset < m_opcodeCache.size() && oldValue != _value)
 +		if (res && _offset < m_opcodeCache.size())
-@@ -1187 +1617,2 @@
+@@ -1187 +1619,2 @@
 -			m_opcodeCache[_addr].op = &DSP::op_ResolveCache;
 +			if(auto* entry = m_opcodeCache.find(_addr))
 +				entry->op = &DSP::op_ResolveCache;
-@@ -1189 +1620 @@
+@@ -1189 +1622 @@
 -				m_opcodeCycleCache[_addr] = 0;
 +				m_opcodeCycleCache.invalidate(_addr);
-@@ -1306,3 +1737 @@
+@@ -1306,3 +1739 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, static_cast<uint64_t>(d.var) == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, static_cast<uint64_t>(d.var) == minimum);
-@@ -1341,3 +1770 @@
+@@ -1341,3 +1772 @@
 -		sr_z_update(d);
 -		sr_toggle(CCR_V, value == minimum);
 -		sr_l_update_by_v();
 +		finishArithmeticResult(d, value == minimum);
-@@ -1382,2 +1809,3 @@
+@@ -1382,2 +1811,3 @@
 -			reg.mMask[which] = AGU::calcModuloMask(val);
 -			reg.mModulo[which] = val + 1;
 +			// FM4-9 Table4-2: upper XX is raw register data, not modulo arithmetic.
 +			reg.mMask[which] = AGU::calcModuloMask(moduloTest);
 +			reg.mModulo[which] = moduloTest + 1;
-@@ -1484,2 +1912 @@
+@@ -1484,2 +1914 @@
 -		m_opcodeCache.clear();
 -		m_opcodeCache.resize(mem.sizeP(), {&DSP::op_ResolveCache});
 +		m_opcodeCache.reset(mem.sizeP(), {&DSP::op_ResolveCache});
-@@ -1487 +1914 @@
+@@ -1487 +1916 @@
 -			m_opcodeCycleCache.assign(mem.sizeP(), 0);
 +			m_opcodeCycleCache.reset(mem.sizeP());
-@@ -1570,0 +1998,2 @@
+@@ -1570,0 +2000,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error(std::string("Unimplemented DSP instruction: ") + _opName);
-@@ -1682,0 +2112,2 @@
+@@ -1682,0 +2114,2 @@
 +		if(m_referenceMode)
 +			throw std::runtime_error("Unqualified DSP reference WAIT clock state");
 --- a/source/dsp56kEmu/dsp_ops.inl

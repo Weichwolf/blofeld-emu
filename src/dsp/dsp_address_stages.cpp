@@ -10,18 +10,54 @@
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp56kEmu/dsp.h"
 
+#include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string>
 #include <utility>
 
 namespace blofeld {
 namespace {
+bool supported_modifier(const unsigned raw) {
+  // FM4.3.4/Table4-2: arbitrary raw Mn storage is valid; this checks its use
+  // for arithmetic only. Upper XX is ignored. Multiple-wrap modulo requires
+  // bit14=0 and a power-of-two size between2 and16384.
+  constexpr unsigned low_mask = 0xffff;
+  constexpr unsigned normal_maximum = 0x7fff;
+  constexpr unsigned multiple_maximum = 0xbfff;
+  constexpr unsigned multiple_mask = 0x3fff;
+  const auto low = raw & low_mask;
+  if (low <= normal_maximum || low == low_mask) { return true; }
+  const auto modulus_minus_one = low & multiple_mask;
+  return low <= multiple_maximum && modulus_minus_one != 0 &&
+         std::has_single_bit(modulus_minus_one + 1);
+}
+
+void validate_modifier(const dsp56k::DSP &cpu,
+                       const DspMemoryLane form,
+                       const DspProgramWord word,
+                       const unsigned omr) {
+  const bool arithmetic = form.dual_encoding ? form.mode != 0 : form.mode != 4;
+  if (!arithmetic) { return; }
+  const auto raw = cpu.regs().m.at(form.reg).toWord();
+  if (supported_modifier(raw)) { return; }
+  constexpr std::array spaces{"P:", "X:", "Y:"};
+  const std::string operation = form.operation == DspMemoryOperation::read ? "read " : "write ";
+  throw Fault("Unqualified reserved modifier AG1 " + operation +
+              spaces.at(static_cast<unsigned>(form.space)) + "(R" + std::to_string(form.reg) +
+              ") pc=" + hex(word.address, 6) + " omr=" + hex(omr, 6) +
+              " opcode=" + hex(word.value, 6) + " r=" + hex(cpu.regs().r.at(form.reg).toWord(), 6) +
+              " n=" + hex(cpu.regs().n.at(form.reg).toWord(), 6) + " m=" + hex(raw, 6));
+}
+
 DspAddressStageLane calculate(dsp56k::DSP &cpu,
                               const DspMemoryLane form,
                               const DspProgramWord word,
                               const unsigned omr) {
+  validate_modifier(cpu, form, word, omr);
   const auto result = cpu.calculateReferenceAddress(form.mode, form.reg, form.dual_encoding);
   return {.update = {.index = form.reg,
                      .before = result.before,
@@ -31,7 +67,7 @@ DspAddressStageLane calculate(dsp56k::DSP &cpu,
                      .operation = form.operation,
                      .pc = word.address,
                      .omr = omr},
-          .pointer_update = form.dual_encoding ? form.mode != 0 : form.mode != 4};
+          .pointer_update = form.dual_encoding ? form.mode != 0 : form.mode != 4 && form.mode != 5};
 }
 
 DspMemoryAccess access(const DspAddressUpdate update) {

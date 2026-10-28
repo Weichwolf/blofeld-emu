@@ -3113,7 +3113,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n$<TARGET_FILE:blofeld-preupdate-native-test>\n$<TARGET_FILE:blofeld-preupdate-clock-test>\n$<TARGET_FILE:blofeld-preupdate-window-test>\n$<TARGET_FILE:blofeld-preupdate-guard-test>\n$<TARGET_FILE:blofeld-preupdate-load-test>\n$<TARGET_FILE:blofeld-preupdate-producer-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-guard-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-test>\n$<TARGET_FILE:blofeld-preupdate-store-test>\n$<TARGET_FILE:blofeld-preupdate-alu-test>\n$<TARGET_FILE:blofeld-preupdate-alu-window-test>\n$<TARGET_FILE:blofeld-preupdate-loop-test>\n$<TARGET_FILE:blofeld-preupdate-source-window-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3582,4 +3582,87 @@ if(BUILD_TESTING)
     PROPERTIES TIMEOUT 300)
   add_dependencies(quality blofeld-accumulator-load-test blofeld-accumulator-load-window-test
     blofeld-accumulator-load-incoming-test)
+endif()
+
+# Indexed/predecrement scalar moves retain native AGU ownership and explicit reference latency.
+if(BUILD_TESTING)
+  add_executable(blofeld-preupdate-native-test test/dsp_preupdate_native_test.cpp)
+  target_link_libraries(blofeld-preupdate-native-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_native COMMAND blofeld-preupdate-native-test)
+  add_executable(blofeld-preupdate-clock-test test/dsp_preupdate_clock_test.cpp)
+  target_link_libraries(blofeld-preupdate-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_clock COMMAND blofeld-preupdate-clock-test)
+  add_executable(blofeld-preupdate-window-test test/dsp_preupdate_window_test.cpp)
+  target_link_libraries(blofeld-preupdate-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_window COMMAND blofeld-preupdate-window-test)
+  add_executable(blofeld-preupdate-guard-test test/dsp_preupdate_guard_test.cpp)
+  target_link_libraries(blofeld-preupdate-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_guard COMMAND blofeld-preupdate-guard-test)
+  add_executable(blofeld-preupdate-load-test test/dsp_preupdate_load_test.cpp)
+  target_link_libraries(blofeld-preupdate-load-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_load_native COMMAND blofeld-preupdate-load-test --native)
+  add_test(NAME dsp_preupdate_load_staged COMMAND blofeld-preupdate-load-test --staged)
+  add_executable(blofeld-preupdate-producer-test test/dsp_preupdate_producer_test.cpp)
+  target_link_libraries(blofeld-preupdate-producer-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_producer COMMAND blofeld-preupdate-producer-test)
+  add_executable(blofeld-preupdate-modifier-guard-test test/dsp_preupdate_modifier_guard_test.cpp)
+  target_link_libraries(blofeld-preupdate-modifier-guard-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_modifier_guard COMMAND blofeld-preupdate-modifier-guard-test)
+  add_executable(blofeld-preupdate-modifier-test test/dsp_preupdate_modifier_test.cpp)
+  target_link_libraries(blofeld-preupdate-modifier-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_modifier COMMAND blofeld-preupdate-modifier-test)
+  add_executable(blofeld-preupdate-store-test test/dsp_preupdate_store_test.cpp)
+  target_link_libraries(blofeld-preupdate-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_store_native COMMAND blofeld-preupdate-store-test --native)
+  add_test(NAME dsp_preupdate_store_staged COMMAND blofeld-preupdate-store-test --staged)
+  add_executable(blofeld-preupdate-alu-test test/dsp_preupdate_alu_test.cpp)
+  target_link_libraries(blofeld-preupdate-alu-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_alu_native COMMAND blofeld-preupdate-alu-test --native)
+  add_test(NAME dsp_preupdate_alu_staged COMMAND blofeld-preupdate-alu-test --staged)
+  add_executable(blofeld-preupdate-alu-window-test test/dsp_preupdate_alu_window_test.cpp)
+  target_link_libraries(blofeld-preupdate-alu-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_alu_window COMMAND blofeld-preupdate-alu-window-test)
+  add_executable(blofeld-preupdate-loop-test test/dsp_preupdate_loop_test.cpp)
+  target_link_libraries(blofeld-preupdate-loop-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_loop COMMAND blofeld-preupdate-loop-test)
+  set_tests_properties(
+    dsp_preupdate_native
+    dsp_preupdate_clock
+    dsp_preupdate_window
+    dsp_preupdate_guard
+    dsp_preupdate_load_native
+    dsp_preupdate_load_staged
+    dsp_preupdate_producer
+    dsp_preupdate_modifier_guard
+    dsp_preupdate_modifier
+    dsp_preupdate_store_native
+    dsp_preupdate_store_staged
+    dsp_preupdate_alu_native
+    dsp_preupdate_alu_staged
+    dsp_preupdate_alu_window
+    dsp_preupdate_loop
+    PROPERTIES TIMEOUT 300)
+  add_dependencies(quality
+    blofeld-preupdate-native-test
+    blofeld-preupdate-clock-test
+    blofeld-preupdate-window-test
+    blofeld-preupdate-guard-test
+    blofeld-preupdate-load-test
+    blofeld-preupdate-producer-test
+    blofeld-preupdate-modifier-guard-test
+    blofeld-preupdate-modifier-test
+    blofeld-preupdate-store-test
+    blofeld-preupdate-alu-test
+    blofeld-preupdate-alu-window-test
+    blofeld-preupdate-loop-test
+  )
+endif()
+
+# Source dependencies and preupdate waits constrain the same earliest memory phase.
+if(BUILD_TESTING)
+  add_executable(blofeld-preupdate-source-window-test test/dsp_preupdate_source_window_test.cpp)
+  target_link_libraries(blofeld-preupdate-source-window-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_preupdate_source_windows COMMAND blofeld-preupdate-source-window-test)
+  set_tests_properties(dsp_preupdate_source_windows PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-preupdate-source-window-test)
 endif()

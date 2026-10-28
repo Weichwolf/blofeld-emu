@@ -114,7 +114,7 @@ std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode)
     return std::nullopt;
   }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
-  if (mode > 4) { return std::nullopt; }
+  if (mode > 7 || mode == 6) { return std::nullopt; }
   DspMemoryForm result;
   const bool y = type == dsp56k::Movey_ea ||
                  (control && dsp56k::getFieldValue(type, dsp56k::Field_S, opcode) != 0);

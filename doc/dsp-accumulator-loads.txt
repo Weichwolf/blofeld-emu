@@ -29,8 +29,9 @@ initial CCR0/C1. Older CLR CCR and untouched parts survive the younger load;
 younger AG2/loaded fields survive older E2. A load destination adds no source
 hold. These tests are separate from the load-to-part-store windows above.
 
-Indexed/predecrement/extended/short-address and parallel/dual scalar loads
-remain excluded. REP-load bodies remain excluded by the unchanged shared
+Indexed/predecrement standalone loads extend these modes in
+dsp-preupdate-memory.txt. Extended/short-address and parallel/dual accumulator
+loads remain excluded. REP-load bodies remain excluded by the unchanged shared
 whitelist. This is native component/pipeline evidence,not physical timing
 or complete original initialization. Authentic ROM/reserved Y:002000,normal
 original boot/MIDI/audio,persistence/update/recovery and hardware acceptance

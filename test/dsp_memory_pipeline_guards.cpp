@@ -20,12 +20,12 @@ namespace {
 using native_access::fault;
 
 void unqualified_forms() {
-  for (const auto *text : {"move x:(r0+n0),x0",
-                           "move x:-(r0),x0",
+  for (const auto *text : {"clr a x:(r0+n0),a0",
+                           "clr a x:-(r0),a0",
                            "move x:>$7,x0",
                            "move x:<$7,x0",
                            "move r0,x:(r0)+",
-                           "move x:(r0+n0),a",
+                           "clr a x:(r0+n0),a",
                            "add x1,a x:(r0)+,a",
                            "move x:(r0)+,a y:(r4)+,b"}) {
     DspMachine machine;
