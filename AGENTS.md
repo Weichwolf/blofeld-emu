@@ -7,6 +7,7 @@
 - Unknown or unsupported hardware accesses must fail visibly with address, operation, PC and execution context. Keep observed behavior, hypotheses and hardware-verified facts distinct.
 - Device detection is not hardware validation. Hardware update/programming tests require a separately established recovery procedure; never flash experimental firmware as a routine test.
 - Keep the emulator, board model, transport and time-critical audio processing separate. Run as a regular user.
+- Query audio and MIDI host capabilities independently and read back actual settings and buffer/pool grants. Adapt bounded buffering and packetization to those limits; report unsupported configurations, overload and disconnects. Development-host limits are not global hardware limits, and host differences must not change emulated clocks.
 
 # Quality gates
 
