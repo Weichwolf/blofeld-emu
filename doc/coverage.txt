@@ -1065,6 +1065,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           distinguishes final-byte output from
                                           the RE-triggered next-row transfer;
                                           block ends require CE termination.
+                                          Ready buffered-page CE pauses preserve
+                                          the next column, cells and event state
+                                          (candidate datasheet p18/Figure6).
+                                          Directed pause/copy/missing-cell/final-
+                                          byte checks keep physical CE routing
+                                          and unsupported phases separate.
                                           Sequential/CE-abort clock events,
                                           reset/power cancellation and strict
                                           unknown/default guards are separate

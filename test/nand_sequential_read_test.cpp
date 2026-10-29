@@ -342,8 +342,12 @@ void defaults_and_guards() {
   auto early_ce = make_clock({.command = 0, .column = 0});
   require(early_ce.advance(read_ticks).has_value(),
           "Prepared complete page before any byte output");
-  reject([&] { early_ce.observe_read_end(NandReadEnd::ce_high); }, "unqualified CE deassertion");
-  require(early_ce.faulted(), "Unqualified partial-page CE behavior is never silently accepted");
+  early_ce.observe_read_end(NandReadEnd::ce_high);
+  require(!early_ce.faulted() && early_ce.ticks() == read_ticks && !early_ce.next_event() &&
+              early_ce.device().ready() == true && early_ce.device().column() == 0,
+          "Samsung p18/Fig6 CE pause preserves a completed buffered page without a new operation");
+  require(early_ce.read() == ordinary && early_ce.device().column() == 1,
+          "A following timing-admitted selected read starts at the retained next column");
 
   Nand persistent(profile);
   persistent.observe_cell({.page = 0, .column = last_column},

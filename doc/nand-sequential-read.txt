@@ -18,9 +18,14 @@ sequence without starting another transfer. Cells remain independent knowledge.
 
 observe_read_end() accepts qualified read-end edges; the board must first apply
 the separate output/setup timing checks and actual selection/edge ordering.
-It is not a complete CE pin model. Partial-page CE deassertion outside an active
-array transfer remains visibly unqualified. Status output and ordinary byte
-release do not start or restart a transfer. Repeated RE observations during busy
+It is not a complete CE pin model. Printed p18/Figure6 permits CE pauses while
+reading a completed buffered page. In a ready, non-status data phase, CE high
+preserves the page, next column, cell knowledge, Ready and event state. It does
+not consume a byte, reset the column or begin another array transfer. A later
+timing-admitted selected read continues at that column. Pending-read abort and
+final-byte termination retain the separate contracts above. Status/ID, command
+and program-data CE changes are outside this extension. Status output and
+ordinary byte release do not start or restart a transfer. Repeated RE observations during busy
 cannot move its deadline. An unspecified part cannot use this interface to
 convert its unknown post-page state into a successful response.
 
@@ -35,16 +40,23 @@ Events precede same-tick inputs; durations round up to reference ticks.
 Counter exhaustion faults the owner instead of wrapping into a successful event.
 
 Checks
-  cmake --build --preset strict --target blofeld-nand-sequential-read-test
-  ctest --test-dir build/strict -R '^nand_sequential_read$' --output-on-failure
+  cmake --build --preset strict --target blofeld-nand-sequential-read-test blofeld-nand-ce-pause-test
+  ctest --test-dir build/strict -j1 -R '^(nand_sequential_read|nand_ce_pause)$' --output-on-failure
+
+Use the thread preset and build/thread for the separate TSan profile.
 
 The own-data test has seven independent page/area/block vectors, five literal
 clock/abort conversion vectors, final-byte and busy-event value checkpoints,
 fine/coarse completion, status polling, read-only reset/power loss, persistent
 cells with explicit profile, unknown next-page data, stale timer cancellation,
 exact/exhausted counters, invalid fixed-underlying enum representations and
-default/partial-CE/block-boundary refusals. It does not execute manufacturer
-firmware, establish board wiring or supply an installed flash image.
+default-profile/block-boundary refusals. The partial-page case now checks the
+documented retained buffer and exact next selected byte.
+
+nand_ce_pause adds seven directed controls: pauses before columns0,1,255,256,527,
+two value-copy suffixes each, unknown next-cell rejection without column advance,
+and final-byte termination without a fabricated next page. These tests do not
+execute manufacturer firmware, establish board wiring or supply installed cells.
 
 The normal board still needs actual NAND attachment, power/reset/CE routing,
 ROM/memory and transient GPIO qualification, complete original loading and

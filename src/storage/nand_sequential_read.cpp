@@ -28,6 +28,10 @@ void Nand::observe_read_end(const NandReadEnd edge) {
       phase_ = Phase::read_abort_pending;
       return;
     }
+    // K9F1208U0C Rev1.1 p18/Fig6: CE may be inactive between data reads.
+    // The completed page buffer and next column survive this pause; only
+    // the pin timing owner gates data output. Busy abort remains separate.
+    if (phase_ == Phase::data && ready_ == true && !status_mode_) { return; }
     if (phase_ != Phase::end && phase_ != Phase::block_end) {
       fail("read end", "unqualified CE deassertion outside pending read or final-byte output");
     }
