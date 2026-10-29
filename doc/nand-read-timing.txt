@@ -1,7 +1,7 @@
 Candidate NAND array-read output timing
 
-  cmake --build --preset strict --target blofeld-nand-initial-observation-test blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
-  ctest --test-dir build/strict -j1 -R '^(nand_initial_observation|nand_read_timing|original_nand_read_timing)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-nand-read-transition-test blofeld-nand-initial-observation-test blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
+  ctest --test-dir build/strict -j1 -R '^(nand_read_transition|nand_initial_observation|nand_read_timing|original_nand_read_timing)$' --output-on-failure
 
 NandReadTiming is separate from the array/protocol, board wiring and CPU clock.
 It implements the pinned K9F1208U0C Rev1.1 3.3V array-read output bounds from
@@ -28,6 +28,13 @@ the subsequent interval is unknown until the applicable Hi-Z maximum. A legal
 short pulse that never established valid data cannot invent a held byte/driver.
 Two release edges can shorten release without extending the earlier hold.
 
+next_transition() reports the earliest strictly future change in the existing
+output knowledge if pins remain unchanged. It advances no time, retains no
+callback and consumes no protocol byte. Expired, cancelled and unchanged bounds
+are omitted. These are guaranteed knowledge bounds, not observed physical driver
+edges; an owner may offer them to an independent peripheral-event scheduler.
+The query alone does not connect that scheduler or validate board wiring.
+
 Each admitted selected falling RE invokes its caller-supplied protocol source
 once; repeated levels and output samples consume no bytes. No callback is retained.
 Timing rejection precedes the source call. Copies retain value state; the owner
@@ -46,6 +53,12 @@ known bytes cannot disappear early; initialization never calls the data source.
 Full value-state comparisons cover refused first pulses, missing sources,
 overflow and premature CE-window entry. Initial RE-low and unknown pins reject.
 No randomized/fuzz traffic is involved.
+
+nand_read_transition checks fifteen directed waveforms on the same three literal
+grids: initial release, data validity, old-byte hold, Hi-Z, overlapping releases
+and a short pulse cancelling pending access. Repeated queries preserve complete
+value state and never invoke a source. Exact predecessors and bounds distinguish
+known drive/data from uncertainty. This is a component test, not original boot.
 
 Original byte-helper regression
 The optional firmware test checks the official 1.25 ZIP identity, loads the

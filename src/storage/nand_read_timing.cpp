@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 
 namespace blofeld {
@@ -71,6 +72,26 @@ NandReadOutput NandReadTiming::output(const std::uint64_t ticks) {
   check_time(ticks);
   ticks_ = ticks;
   return at(ticks);
+}
+
+std::optional<std::uint64_t> NandReadTiming::next_transition() const {
+  if (!initialized_) { return std::nullopt; }
+  const auto current = at(ticks_);
+  switch (phase_) {
+    case Phase::floating: return std::nullopt;
+    case Phase::reading:
+      return valid_at_.latest > ticks_ && at(valid_at_.latest) != current
+                 ? std::optional{valid_at_.latest}
+                 : std::nullopt;
+    case Phase::releasing: {
+      std::optional<std::uint64_t> result;
+      for (const auto tick : {hold_until_, floating_at_}) {
+        if (tick > ticks_ && at(tick) != current && (!result || tick < *result)) { result = tick; }
+      }
+      return result;
+    }
+    default: fail("invalid output phase while querying transition");
+  }
 }
 
 void NandReadTiming::release(const std::uint64_t ticks, const std::chrono::nanoseconds maximum_ns) {

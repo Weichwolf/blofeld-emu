@@ -40,6 +40,9 @@ public:
   // never retained. Coordinate protocol and timing checkpoints in the owner.
   void observe(std::uint64_t ticks, NandReadPins pins, const Source &source = {});
   [[nodiscard]] NandReadOutput output(std::uint64_t ticks);
+  // Next strictly future output-knowledge change if input pins stay unchanged.
+  // A bound is not a physical edge. This query never advances time or a source.
+  [[nodiscard]] std::optional<std::uint64_t> next_transition() const;
 
   // Requires initialized RE high and expired output/pulse constraints. The
   // caller proves inactive WE and unchanged non-CE controls/Ready in [start,end].

@@ -1024,6 +1024,11 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           bounds; 18 initial vectors,48 histories,
                                           144 pulses and6 CE-window cases pass.
                                           No initial byte/edge is manufactured.
+                                          A read-only next-output-bound query
+                                          passes 15 literal three-grid waveforms;
+                                          access/hold/release changes, cancelled
+                                          bounds and query immutability are checked.
+                                          Default board event wiring is not added.
                                           Cold protocol/full original refill and
                                           default board route remain unproven.
                                           Original 176-word packing and 175
