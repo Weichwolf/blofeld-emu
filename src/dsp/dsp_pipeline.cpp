@@ -478,7 +478,10 @@ void DspInstructionPipeline::capture_branch(DspMachine &machine) {
   if (profile != DspFetchPipeline::automatic_memory || capture_omr_branch(machine)) { return; }
   const auto ag1 = view.cycle.ag1;
   const auto early = ag1 ? decode_peripheral_read(ag1->value) : std::nullopt;
-  if (early && early->bit) { branch_fetch_hold = 1; }
+  if (early && early->bit) {
+    // FM A-1/NXP windows: relative bit branches add one target-fetch period.
+    branch_fetch_hold = early->relative ? 2U : 1U;
+  }
   const auto point = branch_point(view.cycle);
   if (!point.word) { return; }
   const auto word = *point.word;

@@ -3208,3 +3208,19 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   silicon phase placement,authentic remaining ROM/map behavior,complete original
   NAND loading,normal Desktop/Keyboard operation,MIDI/audio,update/recovery and
   realtime/long-run acceptance remain open.
+
+- Automatic fixed-I/O BRCLR/BRSET retains the actual F2 extension,once-only AG1
+  bit sample,native branch confirmation and E2 retirement; signed24 targets
+  and5/6 nominal taken/untaken periods match independent family-model windows.
+  Native PC increments/extension fetches/redirects,REP continuation and DO end
+  comparisons wrap to24bits without masking arbitrary bus addresses.48 vendor
+  encodings,64 branch windows/1920 own instructions and34 independent PC/loop
+  boundary windows support four own gates per ASan/UBSan and separate TSan:
+  608 native branches/1216 suffixes,140 per-period windows/596 cuts/1192 suffixes,
+  18 ordinary/REP/DO boundary windows/36 suffixes,and strict unknown-input/F2/
+  partial-pin/fresh-busy-poll controls,plus53 affected regressions per profile.
+  Format/tidy and hardening/instrumentation pass:1279 recipes,7 native archives,
+  36 ELFs per profile. See dsp-peripheral-relative.txt and its
+  reference manifest. General EA/register branches,REP-bit bodies,unqualified
+  overlaps,silicon phase placement and complete original reset-to-instrument,
+  both profiles,MIDI/audio/storage/update/recovery,realtime/long-run remain open.

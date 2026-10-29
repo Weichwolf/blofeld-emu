@@ -12,6 +12,7 @@ struct DspPeripheralReadForm {
   DspAddress target;
   std::optional<unsigned> bit = std::nullopt;
   bool set = false;
+  bool relative = false;
   unsigned words = 1;
 };
 

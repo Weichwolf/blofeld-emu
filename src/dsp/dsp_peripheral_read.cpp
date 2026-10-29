@@ -146,10 +146,12 @@ DspBranchDecision DspPeripheralRead::preview_branch(const std::uint64_t epoch) c
   const bool value =
       kind_ == DspNativeAccessKind::bit ? value_ != 0 : ((value_ >> *form_.bit) & 1U) != 0;
   const bool taken = value == form_.set;
+  const auto target =
+      form_.relative ? (word_.address + extension_->value) & word_mask : extension_->value;
   return {.word = word_,
           .extension = extension_,
           .omr = omr_,
-          .next_pc = taken ? extension_->value : ((extension_->address + 1) & word_mask),
+          .next_pc = taken ? target : ((extension_->address + 1) & word_mask),
           .taken = taken};
 }
 }

@@ -15,8 +15,10 @@ constexpr unsigned high_begin = 0xffffc0;
 constexpr unsigned low_begin = 0xffff80;
 
 std::optional<DspPeripheralReadForm> branch(const Type type, const unsigned opcode) {
-  const bool high = type == dsp56k::Jset_pp || type == dsp56k::Jclr_pp;
-  const bool low = type == dsp56k::Jset_qq || type == dsp56k::Jclr_qq;
+  const bool relative_high = type == dsp56k::Brset_pp || type == dsp56k::Brclr_pp;
+  const bool relative_low = type == dsp56k::Brset_qq || type == dsp56k::Brclr_qq;
+  const bool high = type == dsp56k::Jset_pp || type == dsp56k::Jclr_pp || relative_high;
+  const bool low = type == dsp56k::Jset_qq || type == dsp56k::Jclr_qq || relative_low;
   if (!high && !low) { return std::nullopt; }
   const auto bit = dsp56k::getFieldValue(type, dsp56k::Field_bbbbb, opcode);
   constexpr unsigned bits = 24;
@@ -27,7 +29,9 @@ std::optional<DspPeripheralReadForm> branch(const Type type, const unsigned opco
                                           .address = (high ? high_begin : low_begin) +
                                                      dsp56k::getFieldValue(type, field, opcode)},
                                .bit = bit,
-                               .set = type == dsp56k::Jset_pp || type == dsp56k::Jset_qq,
+                               .set = type == dsp56k::Jset_pp || type == dsp56k::Jset_qq ||
+                                      type == dsp56k::Brset_pp || type == dsp56k::Brset_qq,
+                               .relative = relative_high || relative_low,
                                .words = 2};
 }
 

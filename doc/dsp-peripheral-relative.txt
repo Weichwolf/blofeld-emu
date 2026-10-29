@@ -1,0 +1,34 @@
+Relative peripheral-bit branches
+
+BRCLR/BRSET pp/qq read their actual selected X/Y bit once in AG1, retain the
+actual F2 extension, and select (opcode PC + signed24 displacement) mod2^24.
+Untaken branches consume both words. Native E1 confirms the captured response
+and selected PC; E2 retires the original opcode. These forms leave CCR intact.
+Relative refill adds one period to the existing absolute JCLR/JSET schedule:
+5taken/6untaken nominal periods, including the existing untaken Decode hold.
+Physical phase placement is not measured silicon timing.
+
+The native dependency now wraps architectural PC increments, extension fetches,
+redirected targets, REP continuation and DO end comparisons to24bits. Bus
+addresses remain strict; invalid external accesses are not globally masked.
+Own boundary tests preserve the initially failing Pffffff extension case and
+exercise NOP, immediate MOVE, absolute JMP, REP and DO (counts0/1/3).
+
+Independent inputs:48 Freescale encodings,64 relative-bit family-model windows
+(1920 own instructions),22 ordinary/relative PC-boundary windows and12 REP/DO
+boundary windows. Processor libraries are unchanged; hashes and rejected
+initial timing/control assumptions are recorded in the reference manifest.
+
+Own gates cover608 native branches/1216 restored suffixes,140 per-period
+windows/596 cuts/1192 suffixes,18 ordinary/REP/DO boundary windows/36 suffixes,
+encoding/unknown-input/F2/partial-pin guards and a fresh TIO busy-poll loop.
+These four groups plus53 affected regressions pass per ASan/UBSan and separate
+TSan profile. Format/tidy,hardened ELF/native instrumentation and preserved
+existing CMake contracts qualify1279 recipes,7 native archives and36 ELFs.
+
+  cmake --build --preset strict --target blofeld-peripheral-relative-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_peripheral_relative_'
+  # Build/run the same scopes separately with preset/test directory thread.
+
+Normal reset-to-instrument,original DSP audio,MIDI,complete storage/update/
+recovery,both complete profiles and realtime/long-run acceptance remain open.

@@ -1,0 +1,68 @@
+{
+  "scope": "Own relative fixed-I/O BRCLR/BRSET and architectural PC boundary expectations; no silicon phase or complete instrument validation",
+  "primary": {
+    "family_manual": "doc/hardware/DSP56300FM.pdf",
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "5.4.4.1",
+      "13-26/27 BRCLR",
+      "13-29/30 BRSET",
+      "A-1",
+      "13-56/57 DO",
+      "13-160 REP"
+    ]
+  },
+  "independent": {
+    "assembler_encodings": 48,
+    "relative_windows": 64,
+    "relative_instructions": 1920,
+    "branch_periods": {
+      "taken": 5,
+      "untaken": 6
+    },
+    "CCR_seeds": [
+      "c00300",
+      "c003ff"
+    ],
+    "PC_boundary_cases": 22,
+    "REP_DO_boundary_cases": 12,
+    "processor_libraries": {
+      "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+      "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+    },
+    "source_result_sha256": "94e6d65b621d7cbb4af08ec6dc395959ec27527c0005d180f6ee7213a2086ebf",
+    "ordinary_PC_result_sha256": "62a8ed2cb171e493b3d73c8493fca81434b25b17bd6b86a017889cd898a154ee",
+    "loop_PC_result_sha256": "f6837d4b57e357b4825c9119a4b192e2c9527c1f36f4564fc073d26de519fa87"
+  },
+  "limits": [
+    "Initial BCR seed2 readback returned0; rejected as an independent mutable control, not interpreted as hardware write-discard behavior. Completed low32 windows retained; new high32 use disabled DMA control.",
+    "Initial untaken11-period branch-plus-six-NOP expectation contradicted by observed12; retained and confirmed on held-out high32 windows.",
+    "Reference AG1/AG2/E1/E2 placement is not fitted-chip/silicon timing validation.",
+    "Native PC-boundary vectors cover ordinary instructions and the specified REP/DO cases; no complete CPU/interrupt/loop boundary acceptance inferred.",
+    "General EA/register bit branches, REP-bit bodies, unqualified DMA overlap and full original instrument runtime remain open."
+  ],
+  "manufacturer_program_bytes_embedded": false,
+  "fuzz_execution": false,
+  "physical_traffic": false,
+  "project_controls_per_profile": {
+    "native_branches": 608,
+    "native_restored_suffixes": 1216,
+    "pipeline_windows": 140,
+    "joint_pipeline_cuts": 596,
+    "restored_pipeline_suffixes": 1192,
+    "generic_REP_DO_boundary_windows": 18,
+    "boundary_restored_suffixes": 36,
+    "independent_encoding_checks": 48,
+    "strict_failure_partial_pin_and_fresh_busy_poll_controls": true
+  },
+  "qualification": {
+    "named_cases_per_profile": 57,
+    "ASan_UBSan_and_separate_TSan": true,
+    "all_existing_CMake_text_preserved": true,
+    "registered_tests": 650,
+    "compile_recipes": 1279,
+    "native_archives": 7,
+    "hardened_ELFs": 36,
+    "four_inert_negative_ELF_controls_per_profile": true
+  }
+}

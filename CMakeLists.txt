@@ -3543,6 +3543,16 @@ endif()
 
 # Partial accumulator stores preserve raw data/CCR through ordinary and REP phases.
 if(BUILD_TESTING)
+  add_executable(blofeld-peripheral-relative-test test/dsp_peripheral_relative_test.cpp
+    test/dsp_peripheral_relative_native.cpp test/dsp_peripheral_relative_guards.cpp
+    test/dsp_peripheral_relative_boundary.cpp)
+  target_link_libraries(blofeld-peripheral-relative-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  foreach(mode IN ITEMS native pipeline boundary guards)
+    add_test(NAME dsp_peripheral_relative_${mode} COMMAND blofeld-peripheral-relative-test ${mode})
+    set_tests_properties(dsp_peripheral_relative_${mode} PROPERTIES TIMEOUT 180)
+  endforeach()
+  add_dependencies(quality blofeld-peripheral-relative-test)
+
   add_executable(blofeld-address-update-test test/dsp_address_update_test.cpp
     test/dsp_address_update_native.cpp test/dsp_address_update_dependencies.cpp
     test/dsp_address_update_guards.cpp)

@@ -180,17 +180,18 @@
 +		void restoreReferenceState(const ReferenceState& state);
 +	private:
 +		void verifyReferenceCheckpoint() const;
-@@ -183 +251,5 @@
+@@ -183 +251,6 @@
 -		void 	setPC							( const TReg24& _val )						{ reg.pc = _val; }
 +		void setPC(const TReg24& _val)
 +		{
 +			reg.pc = _val;
++			reg.pc.doMasking(); // The architectural program counter is 24 bits.
 +			if(m_referenceAttempt) m_referenceRedirected = true;
 +		}
-@@ -189 +261 @@
+@@ -189 +262 @@
 -		ASMJIT_FORCE_INLINE void exec() noexcept
 +		ASMJIT_FORCE_INLINE void exec()
-@@ -208 +280,13 @@
+@@ -208 +281,13 @@
 -		ASMJIT_FORCE_INLINE void execInterpreter() noexcept
 +		// Single bounded reference step, including individual DO/REP body instructions.
 +		void execReference();
@@ -205,7 +206,7 @@
 +	public:
 +
 +		ASMJIT_FORCE_INLINE void execInterpreter()
-@@ -411,2 +495,13 @@
+@@ -411,2 +496,13 @@
 -		TWord	fetchOpWordB()
 -		{
 +		TWord memReadExtension(TWord offset) const
@@ -220,11 +221,18 @@
 +			if(m_referenceRepeat.remaining)
 +				throw std::runtime_error("Unexpected extension in single-word reference REP");
 +			if(!m_referenceVectorActive)
-+				extension = memReadExtension(pcCurrentInstruction + 1);
-@@ -416 +511 @@
++				extension = memReadExtension((pcCurrentInstruction + 1) & TReg24::bitMask);
+@@ -414 +510 @@
+-			if(m_processingMode != FastInterrupt)
++			if(m_processingMode != FastInterrupt) {
+@@ -416 +512,3 @@
 -			return m_opWordB;
++				reg.pc.doMasking();
++			}
 +			return extension;
-@@ -523,15 +618,9 @@
+@@ -424,0 +523 @@
++			reg.pc.doMasking();
+@@ -523,15 +622,9 @@
 -		void	sr_s_update				()
 -		{
 -			if( sr_test_noCache(CCR_S) )
@@ -249,7 +257,7 @@
 +			const int high = 46 + offset + g_aluShift;
 +			const auto value = static_cast<uint64_t>(_source.var);
 +			if(((value >> high) ^ (value >> (high - 1))) & 1) sr_set(CCR_S);
-@@ -610,11 +699,37 @@
+@@ -610,11 +703,37 @@
 -		void sr_v_update( const int64_t& _notLimitedResult, TReg56& _result )
 -		{
 -			if( sr_test_noCache(SR_SM) )
@@ -298,11 +306,11 @@
 +			auto& result = ab ? reg.b : reg.a;
 +			finishArithmeticResult(result, false);
 +			setCCRDirty(ab, result, CCR_E | CCR_U | CCR_N);
-@@ -726,0 +842 @@
+@@ -726,0 +846 @@
 +			sr_s_update(reg.a);
-@@ -735,0 +852 @@
+@@ -735,0 +856 @@
 +			sr_s_update(reg.b);
-@@ -809,19 +926,12 @@
+@@ -809,19 +930,12 @@
 -		void limit_arithmeticSaturation( TReg56& _dst )
 -		{
 -			if( !sr_test_noCache(SR_SM) )
@@ -334,17 +342,17 @@
 +			if(rounded && selector < 4) limit = sixteen ? 0x007fff00000000ull : 0x007fffff000000ull;
 +			result.var = static_cast<TInt64>(limit << g_aluShift);
 +			return true;
-@@ -975,0 +1086 @@
+@@ -975,0 +1090 @@
 +			sr_s_update(_src);
-@@ -1004,0 +1116 @@
+@@ -1004,0 +1120 @@
 +			sr_s_update(_src);
-@@ -1098 +1210 @@
+@@ -1098 +1214 @@
 -		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate );
 +		void	alu_mpy				( bool ab, const TReg24& _s1, const TReg24& _s2, bool _negate, bool _accumulate, bool _round = false );
-@@ -1101 +1213 @@
+@@ -1101 +1217 @@
 -		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu );
 +		void	alu_mac				( bool ab, TReg24 _s1, TReg24 _s2, bool _negate, bool _uu, bool _round = false );
-@@ -1468,0 +1581 @@
+@@ -1468,0 +1585 @@
 +		template <Instruction Inst> bool referenceBitMemory(TWord op, PeripheralBitOp action);
 --- a/source/dsp56kEmu/dsp.cpp
 +++ b/source/dsp56kEmu/dsp.cpp
@@ -386,7 +394,7 @@
 @@ -264 +280 @@
 -				sr_clear(static_cast<CCRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
 +				sr_clear(static_cast<SRMask>(SR_S1 | SR_S0 | SR_SA | SR_LF | SR_FV));
-@@ -324,0 +341,356 @@
+@@ -324,0 +341,357 @@
 +	void DSP::verifyReferenceCheckpoint() const
 +	{
 +		if(g_useJIT || m_referenceAttempt || m_referenceVectorActive || m_externalBusDevice || m_debugger ||
@@ -647,14 +655,14 @@
 +				repeat.opcode = fetchPC();
 +				repeat.extension = 0;
 +			} else {
-+				++reg.pc.var;
++				reg.pc.var = (reg.pc.toWord() + 1) & TReg24::bitMask;
 +				m_opWordB = 0;
 +			}
 +			if(!referenceRepeatTarget(repeat.opcode))
 +				throw std::runtime_error("Unsupported reference REP target");
 +			execOp(repeat.opcode);
 +			notifyProgramMemWrite(repeat.body); // A latched REP must not retain a stale opcode cache entry.
-+			const auto next = repeat.body + m_currentOpLen;
++			const auto next = (repeat.body + m_currentOpLen) & TReg24::bitMask;
 +			if(reg.pc.toWord() != next)
 +				throw std::runtime_error("Unsupported branch/control flow in reference REP");
 +			repeat.next = next;
@@ -671,8 +679,9 @@
 +			m_referenceRepeatCompleted = false;
 +			execInterpreter();
 +		}
-+		if(sr_test_noCache(SR_LF) && pcCurrentInstruction + m_currentOpLen == reg.la.toWord() + 1 &&
-+			reg.pc.toWord() == reg.la.toWord() + 1) {
++		if(sr_test_noCache(SR_LF) &&
++			((pcCurrentInstruction + m_currentOpLen) & TReg24::bitMask) == ((reg.la.toWord() + 1) & TReg24::bitMask) &&
++			reg.pc.toWord() == ((reg.la.toWord() + 1) & TReg24::bitMask)) {
 +			if(!sr_test_noCache(SR_FV) && reg.lc.var <= 1) {
 +				do_end();
 +			} else {
