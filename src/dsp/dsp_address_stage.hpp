@@ -35,7 +35,8 @@ enum class DspAddressStageKind : std::uint8_t {
   peripheral_immediate,
   peripheral_register,
   absolute_short,
-  absolute_long
+  absolute_long,
+  peripheral_bit
 };
 
 struct DspAddressStageView {

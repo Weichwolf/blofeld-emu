@@ -3175,3 +3175,16 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   SA16 execution mode remains unqualified. See dsp-middle-peripheral.txt and
   dsp-middle-peripheral-reference.json. This does not establish complete original
   NAND loading, instrument boot, MIDI/audio or board/silicon equivalence.
+
+- Automatic short-I/O BCLR/BSET/BCHG/BTST retain genuine native bit callbacks,
+  peripheral masks/W1C effects and previous-bit Carry. A declared fixed-operand
+  AG1/AG2,E1 atomic effect,E2 CPU projection uses independent nominal two-clock
+  intervals; individual silicon RMW edges are unqualified. Independent Freescale
+  inputs pin48 encodings/32 windows. Per ASan/UBSan and separate TSan profile,
+  25 affected named cases pass:592 native GPIO cases,128 bit windows,448 cuts/
+  896 suffixes,partial inputs,timer W1C and adjacent carry branches plus22
+  existing regressions. Unqualified bit/early-read and noncontroller active-DMA
+  overlaps remain visible. REP/general EA/register bit forms remain outside
+  automatic admission. See dsp-peripheral-bits.txt and its reference manifest.
+  Complete original NAND loading,normal boot,MIDI/audio and both complete
+  instrument profiles remain unachieved.

@@ -1,0 +1,74 @@
+{
+  "scope": "Own fixed short-I/O bit formats and declared atomic native reference projection; not silicon RMW edge placement or complete instrument",
+  "primary": {
+    "family_manual": "doc/hardware/DSP56300FM.pdf",
+    "family_sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "13-19 BCHG",
+      "13-22 BCLR",
+      "13-34 BSET",
+      "13-40 BTST",
+      "A.1 nominal2cycles",
+      "A.4 peripheral restrictions"
+    ]
+  },
+  "templates": {
+    "BCLR": {
+      "high": "0a8000",
+      "low": "010000"
+    },
+    "BSET": {
+      "high": "0a8020",
+      "low": "010020"
+    },
+    "BCHG": {
+      "high": "0b8000",
+      "low": "014000"
+    },
+    "BTST": {
+      "high": "0b8020",
+      "low": "014020"
+    }
+  },
+  "independent_controls": {
+    "assembler_encodings": 48,
+    "vendor_windows": 32,
+    "vendor_instructions": 769,
+    "normal_bit_clocks": 2,
+    "six_NOP_after_anchor_interval": 8,
+    "old_bit_to_carry": true,
+    "other_CCR_bits_preserved": true,
+    "warnings": 0,
+    "errors": 0,
+    "libraries": {
+      "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+      "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+    },
+    "vendor_runtime_sha256": "604ed89282e2fa3dec5b16591b74eb4c55630b0fc08e56d5a7d07011ec3b04a5",
+    "vendor_result_sha256": "856170038c7651b188b913c91090b7db6399d46aecb264813bd0e8b7fd53573b",
+    "CCR_seed": "c003fe | incomingCarry"
+  },
+  "project_controls_per_profile": {
+    "native_GPIO_cases": 592,
+    "automatic_windows": 128,
+    "joint_cuts": 448,
+    "independent_restored_suffixes": 896,
+    "partial_input_cases": 8,
+    "strict_failure_cases_restored_twice": 5,
+    "timer_W1C_suffixes": 2,
+    "adjacent_carry_branch_cases": 8,
+    "carry_branch_suffixes": 16,
+    "GPIO_matrix_CCR_seed": "c003fe | incomingCarry"
+  },
+  "limits": [
+    "Reference AG1/AG2 receipt,E1 atomic native bit callback,E2 CPU result; physical individual read/write edges not qualified",
+    "New decode hold matches independent nominal2cycle instruction intervals",
+    "Noncontroller bit peripheral accesses with active DMA remain unqualified",
+    "Atomic bit/early-peripheral-read overlap rejects before either effect",
+    "REP-bit bodies and general EA/register bit instructions remain outside automatic admission",
+    "Complete original reset-to-instrument,MIDI/audio and board equivalence unproven"
+  ],
+  "manufacturer_program_bytes_embedded": false,
+  "fuzz_execution": false,
+  "physical_traffic": false
+}

@@ -34,7 +34,7 @@ struct DspStore {
 };
 
 enum class DspMemoryOperation : std::uint8_t { read, write };
-enum class DspMemoryPhase : std::uint8_t { execute, peripheral_sample };
+enum class DspMemoryPhase : std::uint8_t { execute, peripheral_sample, peripheral_bit };
 enum class DspMemoryConflict : std::uint8_t { independent, protected_partition, unqualified };
 enum class DspCoreBusKnowledge : std::uint8_t { unqualified, reference_cycle_occupancy };
 

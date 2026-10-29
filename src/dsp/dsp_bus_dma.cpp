@@ -7,6 +7,7 @@
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <string>
@@ -59,6 +60,27 @@ bool program_store_pair(const DspCoreBusUse core) {
          write.operation == DspMemoryOperation::write;
 }
 
+std::optional<DspMemoryAccess> bit_peripheral(const DspCoreBusUse core) {
+  std::optional<DspMemoryAccess> selected;
+  for (const auto access : core.accesses) {
+    const auto target = access.target;
+    if (target.space == DspSpace::p && access.phase == DspMemoryPhase::execute &&
+        access.operation == DspMemoryOperation::read) {
+      continue;
+    }
+    const bool operation = access.operation == DspMemoryOperation::read ||
+                           access.operation == DspMemoryOperation::write;
+    if (selected || target.space == DspSpace::p || target.address < io_base ||
+        target.address > DspDma::full_word || access.phase != DspMemoryPhase::peripheral_bit ||
+        !operation) {
+      throw Fault("Unqualified indivisible peripheral bit footprint at " + describe(target));
+    }
+    selected = access;
+  }
+  if (!selected) { throw Fault("Indivisible peripheral bit footprint lost its selected operand"); }
+  return controller_access(*selected) ? std::nullopt : selected;
+}
+
 std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreBusUse core) {
   // Short-I/O occupancy is separate from RAM. This never dispatches a core transaction;
   // native E1 still owns register validation and the actual read/write. Writable DMA
@@ -68,6 +90,11 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
   bool early = false;
   bool store = false;
   bool program_read = false;
+  if (std::ranges::any_of(core.accesses, [](const auto access) {
+        return access.phase == DspMemoryPhase::peripheral_bit;
+      })) {
+    return bit_peripheral(core);
+  }
   const bool program_pair = program_store_pair(core);
   for (const auto access : core.accesses) {
     const auto target = access.target;

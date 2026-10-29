@@ -20,6 +20,33 @@ bool data_register(const Reg reg) {
   return reg == Reg::X0 || reg == Reg::X1 || reg == Reg::Y0 || reg == Reg::Y1;
 }
 
+std::optional<DspMemoryForm> peripheral_bit(const Type type, const unsigned opcode) {
+  const bool high = type == dsp56k::Bclr_pp || type == dsp56k::Bset_pp || type == dsp56k::Bchg_pp ||
+                    type == dsp56k::Btst_pp;
+  const bool low = type == dsp56k::Bclr_qq || type == dsp56k::Bset_qq || type == dsp56k::Bchg_qq ||
+                   type == dsp56k::Btst_qq;
+  if (!high && !low) { return std::nullopt; }
+  const auto bit = dsp56k::getFieldValue(type, dsp56k::Field_bbbbb, opcode);
+  constexpr unsigned word_bits = 24;
+  if (bit >= word_bits) { return std::nullopt; }
+  DspBitOperation operation = DspBitOperation::test;
+  if (type == dsp56k::Bclr_pp || type == dsp56k::Bclr_qq) {
+    operation = DspBitOperation::clear;
+  } else if (type == dsp56k::Bset_pp || type == dsp56k::Bset_qq) {
+    operation = DspBitOperation::set;
+  } else if (type == dsp56k::Bchg_pp || type == dsp56k::Bchg_qq) {
+    operation = DspBitOperation::change;
+  }
+  const auto space =
+      dsp56k::getFieldValue(type, dsp56k::Field_S, opcode) != 0 ? DspSpace::y : DspSpace::x;
+  const auto field = high ? dsp56k::Field_pppppp : dsp56k::Field_qqqqqq;
+  const auto address =
+      (high ? high_io_begin : low_io_begin) + dsp56k::getFieldValue(type, field, opcode);
+  return DspMemoryForm{.peripheral = DspAddress{.space = space, .address = address},
+                       .peripheral_bit = DspBitAccess{
+                           .space = space, .address = address, .bit = bit, .operation = operation}};
+}
+
 bool address_register(const Reg reg) {
   return (reg >= Reg::R0 && reg <= Reg::R7) || (reg >= Reg::N0 && reg <= Reg::N7) ||
          (reg >= Reg::M0 && reg <= Reg::M7);
@@ -277,10 +304,13 @@ bool is_program_memory(const DspMemoryForm &form) {
 }
 
 std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
+  constexpr unsigned word_mask = 0xffffff;
+  if (opcode > word_mask) { return std::nullopt; }
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
   auto second = dsp56k::Invalid;
   if (opcodes.getInstructionTypes(opcode, first, second) == 0) { return std::nullopt; }
+  if (const auto bit = peripheral_bit(first, opcode)) { return bit; }
   if (const auto program = program_move(first, opcode)) { return program; }
   if (const auto program = program_transfer(first, opcode)) { return program; }
   if (const auto peripheral = peripheral_immediate(first, opcode)) { return peripheral; }

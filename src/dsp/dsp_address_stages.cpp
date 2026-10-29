@@ -108,6 +108,40 @@ DspAddressStageView prepare(dsp56k::DSP &cpu,
   return result;
 }
 
+DspAddressStageView peripheral(const DspMemoryForm &form,
+                               const DspProgramWord word,
+                               const std::optional<DspProgramWord> extension,
+                               const unsigned omr) {
+  if (!form.peripheral) { throw Fault("Native fixed-port AG1 lost its peripheral operand"); }
+  const auto bit = form.peripheral_bit;
+  const bool immediate = !form.peripheral_register && !bit;
+  if (extension.has_value() != immediate) {
+    throw Fault("Native peripheral AG1 has a mismatched F2 extension form");
+  }
+  const auto target = *form.peripheral;
+  DspAddressStageView view{
+      .word = word,
+      .update = {.space = target.space,
+                 .address = target.address,
+                 .operation = DspMemoryOperation::write,
+                 .pc = word.address,
+                 .omr = omr},
+      .data_accesses = {DspMemoryAccess{.target = target, .operation = DspMemoryOperation::write}},
+      .data_access_count = 1,
+      .kind = form.peripheral_register ? DspAddressStageKind::peripheral_register
+                                       : DspAddressStageKind::peripheral_immediate,
+      .extension = extension};
+  if (bit) {
+    const auto operation = bit->operation == DspBitOperation::test ? DspMemoryOperation::read
+                                                                   : DspMemoryOperation::write;
+    view.kind = DspAddressStageKind::peripheral_bit;
+    view.update.operation = operation;
+    view.data_accesses[0] = {
+        .target = target, .operation = operation, .phase = DspMemoryPhase::peripheral_bit};
+  }
+  return view;
+}
+
 DspAddressStageView absolute(const DspMemoryForm &form,
                              const DspProgramWord word,
                              const std::optional<DspProgramWord> extension,
@@ -154,22 +188,7 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruct
     if (form->absolute_short || absolute_long) {
       view = absolute(*form, word, extension, omr);
     } else if (form->peripheral && !is_program_transfer(*form)) {
-      if (extension.has_value() == form->peripheral_register) {
-        throw Fault("Native peripheral AG1 has a mismatched F2 extension form");
-      }
-      const auto target = *form->peripheral;
-      view = {.word = word,
-              .update = {.space = target.space,
-                         .address = target.address,
-                         .operation = DspMemoryOperation::write,
-                         .pc = word.address,
-                         .omr = omr},
-              .data_accesses = {DspMemoryAccess{.target = target,
-                                                .operation = DspMemoryOperation::write}},
-              .data_access_count = 1,
-              .kind = form->peripheral_register ? DspAddressStageKind::peripheral_register
-                                                : DspAddressStageKind::peripheral_immediate,
-              .extension = extension};
+      view = peripheral(*form, word, extension, omr);
     } else {
       if (extension) { throw Fault("Unexpected extension for native register AG1"); }
       view = prepare(cpu, *form, word, omr);

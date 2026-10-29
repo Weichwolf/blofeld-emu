@@ -105,6 +105,17 @@ std::optional<DspMemoryAccess> peripheral_data(const std::optional<DspAddressSta
     return port;
   }
   const auto access = memory->data_accesses[0];
+  if (memory->kind == DspAddressStageKind::peripheral_bit) {
+    const auto form = decode_memory_stage(memory->word.value);
+    if (!form || !form->peripheral_bit || memory->data_access_count != 1 || memory->extension ||
+        memory->pointer_update || memory->secondary ||
+        access.phase != DspMemoryPhase::peripheral_bit ||
+        access.target.space != form->peripheral_bit->space ||
+        access.target.address != form->peripheral_bit->address) {
+      throw Fault("Unqualified native indivisible peripheral bit footprint");
+    }
+    return access;
+  }
   const bool immediate = memory->kind == DspAddressStageKind::peripheral_immediate;
   if (memory->extension.has_value() != immediate || memory->pointer_update || memory->secondary ||
       memory->data_access_count != 1 || access.target.space == DspSpace::p ||
@@ -220,6 +231,9 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     }
   }
   try {
+    if (memory && memory->kind == DspAddressStageKind::peripheral_bit && early) {
+      throw Fault("Unqualified atomic peripheral bit/early-read overlap");
+    }
     check_resources(bus, result, peripheral_data(memory), early);
   } catch (const std::exception &error) {
     if (!memory) { throw; }

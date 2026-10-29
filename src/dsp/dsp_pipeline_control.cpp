@@ -3,6 +3,7 @@
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
@@ -37,16 +38,19 @@ bool DspInstructionPipeline::hold_ccr_decode(const DspMachine &machine) {
 
 void DspInstructionPipeline::accept_ccr_decode() {
   const auto word = view.cycle.decode;
-  if (!word || !pipeline_ccr_immediate(word->value)) { return; }
+  if (!word) { return; }
+  const auto memory = decode_memory_stage(word->value);
+  const bool bit = memory && memory->peripheral_bit;
+  if (!bit && !pipeline_ccr_immediate(word->value)) { return; }
   const auto captured = selected.next;
   if (ccr_sync || !view.cycle.decode_accepted || view.cycle.decode_words != 1 || !captured ||
       captured->word != word) {
     throw Fault("CCR Decode lost its owned one-word F2 occurrence");
   }
-  // FM A1 and unchanged model: three nominal periods. The two following
-  // Decode slots serialize CCR consumers while genuine prefetch continues.
+  // FM A1 and independent model: bit operations take two nominal periods,
+  // ANDI takes three. Following Decode slots serialize actual CCR consumers.
   // Selected reference stages do not establish measured silicon sampling edges.
-  ccr_sync = DspPipelineCcrSync{.captured = *captured};
+  ccr_sync = DspPipelineCcrSync{.captured = *captured, .decode_hold = bit ? 1U : 2U};
 }
 
 void DspInstructionPipeline::retire_branch() {

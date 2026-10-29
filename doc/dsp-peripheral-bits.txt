@@ -1,0 +1,31 @@
+Native short-I/O bit instructions
+
+Automatic BCLR/BSET/BCHG/BTST decode fixed X/Y addresses in both short-I/O ranges
+and bits 0..23. AG1/AG2 retain the actual F2 operand; E1 commits the real native
+bit callback and E2 publishes its CPU result. The callback supplies the previous
+bit for Carry and retains each peripheral's masks, side effects and strict faults.
+One following Decode hold preserves the independent nominal two-clock cost.
+This atomic reference projection does not identify individual silicon RMW edges.
+
+DSP56300FM Rev. 5 and the independent Freescale assembler/model pin 48 encodings
+and 32 bit/value/carry windows. Six quiet NOPs after each bit instruction give
+an eight-clock anchor interval. Reference hashes and templates:
+dsp-peripheral-bits-reference.json. All reference binaries/listings stay local.
+
+New directed scopes per ASan/UBSan and separate TSan profile:
+- 592 native cases span all 37 documented GPIO bit positions and four operations.
+- 128 period-by-period CPU/stack/flags/counter/GPIO windows; 448 cuts/896 suffixes.
+- Eight partial-input cases preserve unknown neighboring GPIO pins. Actual timer
+ RMW clears unselected W1C flags; eight adjacent BCS cases consume the old bit,
+ opposite the incoming Carry. Both compositions restore real intermediate state.
+- Unsupported native routes, unknown selected inputs, reserved writes, active DMA
+ and bit/early-read ties retain contextual failure/quarantine through restoration.
+
+Build blofeld-peripheral-bit-test in the chosen preset, then run:
+ctest --preset strict -R '^dsp_peripheral_bit_(native|pipeline|guards)$' --output-on-failure
+ctest --preset thread -R '^dsp_peripheral_bit_(native|pipeline|guards)$' --output-on-failure
+
+Noncontroller peripheral/DMA timing and bit/early-read overlaps remain unqualified.
+REP-bit bodies and general EA/register bit forms remain outside this automatic
+admission. Original boot, complete transfers/MIDI/audio and hardware equivalence
+require separate connected evidence.

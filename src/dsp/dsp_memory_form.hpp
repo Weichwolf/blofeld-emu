@@ -24,6 +24,7 @@ struct DspMemoryForm {
   std::optional<DspAddress> peripheral = std::nullopt;
   bool peripheral_register = false;
   std::optional<DspAddress> absolute_short = std::nullopt;
+  std::optional<DspBitAccess> peripheral_bit = std::nullopt;
 };
 
 [[nodiscard]] bool is_program_transfer(const DspMemoryForm &form);

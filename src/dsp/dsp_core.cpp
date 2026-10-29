@@ -738,6 +738,25 @@ public:
     return std::get<DspNativeAccess>(*progress.completed);
   }
 
+  static DspNativeAccess commit_addressed_bit(DspCore &core,
+                                              DspReferenceProgress &progress,
+                                              const DspAddressStageView &view) {
+    const auto form = decode_memory_stage(view.word.value);
+    const auto bit = form ? form->peripheral_bit : std::nullopt;
+    if (!bit || !progress.pending) { throw Fault("Native bit E1 lost its fixed operand"); }
+    const auto *data = std::get_if<DspNativeAccess>(&progress.pending->effect);
+    if (data == nullptr || data->kind != DspNativeAccessKind::bit || !data->bit || data->value ||
+        data->target.space != bit->space || data->target.address != bit->address ||
+        data->bit->index != bit->bit || data->bit->operation != bit->operation ||
+        data->pc != view.word.address || data->omr != view.update.omr || data->ordinal != 1 ||
+        !DspBus::handles_peripheral_bit(data->target)) {
+      throw Fault("Unqualified native bit E1 callback/route at fixed peripheral operand");
+    }
+    progress = core.advance_reference_access(progress.pending->ticket);
+    if (!progress.completed) { throw Fault("Native bit E1 lost its committed callback"); }
+    return std::get<DspNativeAccess>(*progress.completed);
+  }
+
   void apply_move_fields(const DspMoveFields fields) {
     if (fields == DspMoveFields{}) { return; }
     if (!results.retirement) {
@@ -835,8 +854,15 @@ public:
     if (port) { validate_peripheral_address_owner(*request); }
     const bool port_bit = request->kind == DspNativeAccessKind::bit && port && port->bit &&
                           request->bit && request->bit->operation == DspBitOperation::test;
+    const auto operand = admitted_opcode ? decode_memory_stage(*admitted_opcode) : std::nullopt;
+    const bool fixed_bit = request->kind == DspNativeAccessKind::bit && operand &&
+                           operand->peripheral_bit && request->bit &&
+                           request->target.space == operand->peripheral_bit->space &&
+                           request->target.address == operand->peripheral_bit->address &&
+                           request->bit->index == operand->peripheral_bit->bit &&
+                           request->bit->operation == operand->peripheral_bit->operation;
     if (request->kind != DspNativeAccessKind::read && request->kind != DspNativeAccessKind::write &&
-        !port_bit) {
+        !port_bit && !fixed_bit) {
       throw Fault("Unqualified native address-phase access pc=" + hex(request->pc, 6) +
                   " address=" + hex(request->target.address, 6) + " omr=" + hex(request->omr, 6));
     }
@@ -1963,8 +1989,8 @@ DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t add
   const auto &fetch = impl_->native.reference().fetch();
   const auto opcode = fetch.select(address, occurrence);
   const auto form = decode_memory_stage(opcode.word.value);
-  const bool immediate_port =
-      form && form->peripheral && !form->peripheral_register && !is_program_transfer(*form);
+  const bool immediate_port = form && form->peripheral && !form->peripheral_register &&
+                              !form->peripheral_bit && !is_program_transfer(*form);
   const bool absolute_program = form && is_program_memory(*form) && form->lanes[0].mode == 6;
   const auto words = immediate_port || absolute_program ? 2U : 1U;
   const auto captured = fetch.instruction(opcode, words);
@@ -2040,7 +2066,9 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
                                   view.update.omr);
     for (std::size_t index = 0; index < view.data_access_count; ++index) {
       active_access = view.data_accesses.at(index);
-      const auto actual = Impl::commit_addressed_data(*this, progress, active_access);
+      const auto actual = view.kind == DspAddressStageKind::peripheral_bit
+                              ? Impl::commit_addressed_bit(*this, progress, view)
+                              : Impl::commit_addressed_data(*this, progress, active_access);
       if (index == 0) {
         result.data = actual;
       } else {
