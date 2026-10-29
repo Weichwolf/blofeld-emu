@@ -53,3 +53,6 @@ Complete native debug state, timer edges and event counts are checked. Fixed
 malformed contracts, callback reentry/mutation, pinned/decreasing/newborn-past
 inputs and finite budgets refuse. These are supporting component checks, not
 full original firmware boot, physical equivalence or real-time qualification.
+
+A separate causal peripheral-event lane is described in dsp-peripheral-events.txt.
+Its additional source does not relax the inherited-source rules above.

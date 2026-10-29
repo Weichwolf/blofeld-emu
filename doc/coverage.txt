@@ -30,7 +30,13 @@ MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner
                                           checkpoints cover run/WAI/reset edges
                                           and fault recovery. External events,
                                           physical DSP reset wiring and normal
-                                          boot remain open. The optional Board
+                                          boot remain open. A separate causal
+                                          peripheral calendar handles held-reset
+                                          deadlines, shared input budgets and
+                                          native peer-write ordering with trusted
+                                          restore/clone (dsp-peripheral-events.txt).
+                                          Actual board payload/wiring and whole
+                                          firmware integration remain open. The optional Board
                                           pipeline executes POR and stages native
                                           owners with MIDI/PCM/USB lifecycle
                                           guards (reference-pipeline.txt).

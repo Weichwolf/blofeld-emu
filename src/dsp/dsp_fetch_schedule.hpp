@@ -3,6 +3,7 @@
 
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
 
@@ -16,6 +17,17 @@ struct DspFetchEventIdentity final {};
 
 struct DspFetchExternalEvents {
   std::shared_ptr<const DspFetchEventIdentity> identity;
+  std::function<std::optional<std::uint64_t>()> next_ticks;
+  std::function<void(std::uint64_t)> observe;
+  DspExternalOrder order = DspExternalOrder::unqualified;
+  unsigned maximum_events = 0;
+};
+
+// Separate causal hardware lane; inherited external input keeps its own cursor.
+// Both lanes share one equal, fixed event budget when a peripheral is bound.
+// The supported explicit order is inherited input, peripheral, then native DSP.
+struct DspFetchPeripheralEvents {
+  std::shared_ptr<const PeripheralEventIdentity> identity;
   std::function<std::optional<std::uint64_t>()> next_ticks;
   std::function<void(std::uint64_t)> observe;
   DspExternalOrder order = DspExternalOrder::unqualified;
@@ -75,17 +87,27 @@ public:
                        DspMachine &machine,
                        std::optional<DspHardwareResetInputs> initial_reset);
   // Explicit snapshot transfer; caller stages the target and external cursor.
-  DspFetchScheduledRun(const DspFetchScheduleCheckpoint &checkpoint, DspMachine &target);
+  DspFetchScheduledRun(const DspFetchScheduleCheckpoint &checkpoint,
+                       DspMachine &target,
+                       const DspFetchPeripheralEvents &peripheral = {});
   DspFetchScheduledRun(const DspFetchScheduledRun &) = delete;
   DspFetchScheduledRun &operator=(const DspFetchScheduledRun &) = delete;
   unsigned advance_to(DspFetchAdvance advance,
                       const CycleInputs &inputs,
                       const Observer &after_cycle = {},
-                      const DspFetchExternalEvents &external = {});
-  void begin_hardware_reset(DspHardwareResetInputs inputs);
-  void release_hardware_reset();
-  [[nodiscard]] DspFetchScheduleCheckpoint checkpoint() const;
-  void restore(const DspFetchScheduleCheckpoint &checkpoint);
+                      const DspFetchExternalEvents &external = {},
+                      const DspFetchPeripheralEvents &peripheral = {});
+  void begin_hardware_reset(DspHardwareResetInputs inputs,
+                            const DspFetchPeripheralEvents &peripheral = {});
+  void release_hardware_reset(const DspFetchPeripheralEvents &peripheral = {});
+  // Board payload must be staged/restored separately; no callback is saved.
+  [[nodiscard]] DspFetchScheduleCheckpoint
+  checkpoint(const DspFetchPeripheralEvents &peripheral = {}) const;
+  void restore(const DspFetchScheduleCheckpoint &checkpoint,
+               const DspFetchPeripheralEvents &peripheral = {});
+  // Call once after an actual peer bus write at the current offered horizon.
+  void observe_peripheral_peer(const DspFetchPeripheralEvents &peripheral);
+  [[nodiscard]] std::optional<PeripheralCalendarState> peripheral_state() const;
   [[nodiscard]] DspFetchScheduleState state() const;
   [[nodiscard]] const DspFetchRun &run() const;
   [[nodiscard]] bool faulted() const;
@@ -94,8 +116,23 @@ private:
   class Guard;
   static const DspFetchScheduleCheckpoint::Storage &
   clone_source(const DspFetchScheduleCheckpoint &checkpoint, const DspMachine &target);
-  DspFetchScheduledRun(const DspFetchScheduleCheckpoint::Storage &source, DspMachine &target);
-  enum class Step : std::uint8_t { none, native, external };
+  DspFetchScheduledRun(const DspFetchScheduleCheckpoint::Storage &source,
+                       DspMachine &target,
+                       const DspFetchPeripheralEvents &peripheral);
+  enum class Step : std::uint8_t { none, native, external, peripheral };
+  static PeripheralCalendarBoundary peripheral_boundary(DspFetchHorizon horizon);
+  static bool peripheral_supplied(const DspFetchPeripheralEvents &peripheral);
+  static void check_peripheral(const DspFetchPeripheralEvents &peripheral);
+  void bind_peripheral(const DspFetchPeripheralEvents &peripheral);
+  void verify_peripheral(const DspFetchPeripheralEvents &peripheral) const;
+  [[nodiscard]] std::optional<std::uint64_t>
+  query_peripheral(const DspFetchPeripheralEvents &peripheral) const;
+  void refresh_peripheral(PeripheralCalendarCause cause,
+                          std::uint64_t ticks,
+                          const DspFetchPeripheralEvents &peripheral);
+  void complete_peripheral(const DspFetchPeripheralEvents &peripheral);
+  [[nodiscard]] unsigned event_budget(const DspFetchExternalEvents &external,
+                                      const DspFetchPeripheralEvents &peripheral) const;
   void healthy() const;
   void check_horizon(DspFetchHorizon horizon) const;
   void bind_external(const DspFetchExternalEvents &external);
@@ -119,6 +156,9 @@ private:
   DspMachine &machine_;
   DspFetchRun run_;
   DspFetchScheduleState state_;
+  std::unique_ptr<PeripheralCalendar> peripheral_ = std::make_unique<PeripheralCalendar>();
+  unsigned peripheral_budget_ = 0;
+  mutable bool querying_peripheral_ = false;
   bool active_ = false;
   bool faulted_ = false;
 };

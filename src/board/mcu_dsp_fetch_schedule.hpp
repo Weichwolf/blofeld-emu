@@ -6,6 +6,7 @@
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_fetch_schedule.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_machine.hpp"
 
@@ -64,13 +65,16 @@ public:
   McuDspFetchSchedule(McuDspFetchInputs inputs,
                       McuMachine &mcu,
                       DspMachine &dsp,
-                      DspFetchExternalEvents external = {});
-  // Stage fresh native targets from trusted state; no callbacks are invoked.
+                      DspFetchExternalEvents external = {},
+                      DspFetchPeripheralEvents peripheral = {});
+  // Stage fresh native targets and board payload from trusted state.
+  // A supplied peripheral is queried after native restoration under owner guards.
   // Targets may change on failure, so publish them only after successful construction.
   McuDspFetchSchedule(const McuDspFetchCheckpoint &checkpoint,
                       McuMachine &mcu,
                       DspMachine &dsp,
-                      const DspFetchExternalEvents &external = {});
+                      const DspFetchExternalEvents &external = {},
+                      const DspFetchPeripheralEvents &peripheral = {});
   McuDspFetchSchedule(const McuDspFetchSchedule &) = delete;
   McuDspFetchSchedule &operator=(const McuDspFetchSchedule &) = delete;
   void begin_cycle(Hc12BusCycle cycle,
@@ -108,22 +112,33 @@ public:
 
   [[nodiscard]] const DspFetchRun &run() const { return dsp_schedule_.run(); }
 
+  [[nodiscard]] std::optional<PeripheralCalendarState> peripheral_state() const {
+    return dsp_schedule_.peripheral_state();
+  }
+
 private:
   class Guard;
-  static const McuDspFetchCheckpoint::Storage &clone_source(const McuDspFetchCheckpoint &checkpoint,
-                                                            McuMachine &mcu,
-                                                            const DspMachine &dsp,
-                                                            const DspFetchExternalEvents &external);
+  static const McuDspFetchCheckpoint::Storage &
+  clone_source(const McuDspFetchCheckpoint &checkpoint,
+               McuMachine &mcu,
+               const DspMachine &dsp,
+               const DspFetchExternalEvents &external,
+               const DspFetchPeripheralEvents &peripheral);
   static McuMachine &clone_mcu(const McuDspFetchCheckpoint::Storage &source, McuMachine &target);
   McuDspFetchSchedule(const McuDspFetchCheckpoint::Storage &source,
                       McuMachine &mcu,
                       DspMachine &dsp,
-                      DspFetchExternalEvents external);
+                      DspFetchExternalEvents external,
+                      DspFetchPeripheralEvents peripheral);
   void healthy() const;
   void consumed() const;
   void validate_dsp_reset_observation() const;
   void prepare_shared_write(const CycleInputs &inputs, const Observer &after_dsp);
   [[nodiscard]] DspFetchExternalEvents checked_events() const;
+  [[nodiscard]] DspFetchPeripheralEvents checked_peripheral() const;
+  [[nodiscard]] static DspFetchPeripheralEvents
+  guarded_peripheral(const DspFetchPeripheralEvents &source, const McuMachine &mcu);
+  [[nodiscard]] std::optional<std::uint64_t> next_input_ticks() const;
   void verify_external_boundary() const;
   void
   advance_horizon(DspFetchHorizon horizon, const CycleInputs &inputs, const Observer &after_dsp);
@@ -138,6 +153,7 @@ private:
   DspMachine &dsp_;
   DspFetchScheduledRun dsp_schedule_;
   const DspFetchExternalEvents external_;
+  const DspFetchPeripheralEvents peripheral_;
   const std::uint64_t initial_mcu_ticks_;
   std::uint64_t end_ticks_;
   std::uint64_t expected_cycles_;

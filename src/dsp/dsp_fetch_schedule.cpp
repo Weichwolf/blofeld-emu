@@ -5,6 +5,7 @@
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
 
 #include <cstdint>
@@ -20,6 +21,8 @@ struct DspFetchScheduleCheckpoint::Storage {
   DspFetchScheduleInputs inputs;
   DspFetchScheduleState state;
   DspFetchCheckpoint native;
+  std::optional<PeripheralCalendarCheckpoint> peripheral;
+  unsigned peripheral_budget;
   const DspMachine *owner;
   std::weak_ptr<const bool> lifetime;
 };
@@ -61,6 +64,7 @@ DspFetchScheduledRun::DspFetchScheduledRun(
   if (state_.horizon.ticks > inputs.epoch_ticks) {
     throw Fault("DSP pipeline initial horizon cannot skip native work before its epoch");
   }
+  peripheral_->reset_unbound(peripheral_boundary(state_.horizon));
   static_cast<void>(native_deadline());
 }
 
@@ -75,13 +79,28 @@ DspFetchScheduledRun::clone_source(const DspFetchScheduleCheckpoint &checkpoint,
 }
 
 DspFetchScheduledRun::DspFetchScheduledRun(const DspFetchScheduleCheckpoint &checkpoint,
-                                           DspMachine &target)
-    : DspFetchScheduledRun(clone_source(checkpoint, target), target) {}
+                                           DspMachine &target,
+                                           const DspFetchPeripheralEvents &peripheral)
+    : DspFetchScheduledRun(clone_source(checkpoint, target), target, peripheral) {}
 
 DspFetchScheduledRun::DspFetchScheduledRun(const DspFetchScheduleCheckpoint::Storage &source,
-                                           DspMachine &target)
+                                           DspMachine &target,
+                                           const DspFetchPeripheralEvents &peripheral)
     : inputs_(source.inputs), machine_(target), run_(source.native, target), state_(source.state) {
   run_.validate_boundary(machine_);
+  if (source.peripheral) {
+    check_peripheral(peripheral);
+    if (peripheral.maximum_events != source.peripheral_budget) {
+      throw Fault("Peripheral clone changed its fixed event budget");
+    }
+    peripheral_ = std::make_unique<PeripheralCalendar>(*source.peripheral,
+                                                       peripheral.identity,
+                                                       query_peripheral(peripheral),
+                                                       peripheral_boundary(state_.horizon));
+    peripheral_budget_ = source.peripheral_budget;
+  } else if (peripheral_supplied(peripheral)) {
+    throw Fault("Peripheral clone cannot invent a source absent from its checkpoint");
+  }
   static_cast<void>(native_deadline());
 }
 
@@ -98,7 +117,7 @@ DspFetchScheduleState DspFetchScheduledRun::state() const {
 }
 
 void DspFetchScheduledRun::healthy() const {
-  if (active_ || faulted()) {
+  if (active_ || querying_peripheral_ || faulted()) {
     throw Fault("DSP pipeline schedule requires a healthy inactive owner");
   }
   run_.validate_boundary(machine_);
@@ -156,6 +175,10 @@ bool DspFetchScheduledRun::external_first(const std::optional<std::uint64_t> nat
 
 DspFetchScheduledRun::Step DspFetchScheduledRun::next_step(const DspFetchHorizon horizon) const {
   const auto native = native_deadline();
+  if (peripheral_budget_ != 0 &&
+      peripheral_->first(native, state_.next_external, peripheral_boundary(horizon))) {
+    return Step::peripheral;
+  }
   const auto event = state_.next_external;
   const bool native_due = native && eligible(*native, horizon.native, horizon);
   const bool event_due = event && eligible(*event, horizon.external, horizon);
@@ -202,7 +225,8 @@ void DspFetchScheduledRun::complete_native(const CycleInputs &inputs,
 unsigned DspFetchScheduledRun::advance_to(const DspFetchAdvance advance,
                                           const CycleInputs &inputs,
                                           const Observer &after_cycle,
-                                          const DspFetchExternalEvents &external) {
+                                          const DspFetchExternalEvents &external,
+                                          const DspFetchPeripheralEvents &peripheral) {
   healthy();
   check_horizon(advance.horizon);
   const Guard guard(*this);
@@ -210,22 +234,30 @@ unsigned DspFetchScheduledRun::advance_to(const DspFetchAdvance advance,
   unsigned events = 0;
   try {
     bind_external(external);
+    bind_peripheral(peripheral);
+    const auto budget = event_budget(external, peripheral);
     auto step = next_step(advance.horizon);
     while (step != Step::none) {
-      if (step == Step::external) {
-        if (events == external.maximum_events) {
-          throw Fault("DSP pipeline event budget exhausted");
+      if (step == Step::external || step == Step::peripheral) {
+        if (events == budget) { throw Fault("DSP pipeline event budget exhausted"); }
+        if (step == Step::external) {
+          reset_until(*state_.next_external, false);
+          complete_external(external);
+          refresh_peripheral(PeripheralCalendarCause::external, *state_.last_external, peripheral);
+        } else {
+          complete_peripheral(peripheral);
+          if (state_.external_identity) { bind_external(external); }
         }
-        reset_until(*state_.next_external, false);
-        complete_external(external);
         ++events;
       } else {
         complete_native(inputs, after_cycle, advance.maximum_cycles, cycles);
         if (state_.external_identity) { bind_external(external); }
+        refresh_peripheral(PeripheralCalendarCause::native, *state_.last_native, peripheral);
       }
       step = next_step(advance.horizon);
     }
     reset_until(advance.horizon.ticks, advance.horizon.native == DspScheduleBoundary::through);
+    if (peripheral_budget_ != 0) { peripheral_->finish(peripheral_boundary(advance.horizon)); }
     state_.horizon = advance.horizon;
     state_.advanced = true;
     return cycles;
@@ -246,37 +278,90 @@ void DspFetchScheduledRun::require_reset_boundary() const {
   }
 }
 
-void DspFetchScheduledRun::begin_hardware_reset(const DspHardwareResetInputs inputs) {
+void DspFetchScheduledRun::begin_hardware_reset(const DspHardwareResetInputs inputs,
+                                                const DspFetchPeripheralEvents &peripheral) {
   require_reset_boundary();
   const Guard guard(*this);
+  verify_peripheral(peripheral);
   run_.begin_hardware_reset(machine_, inputs);
+  verify_peripheral(peripheral);
 }
 
-void DspFetchScheduledRun::release_hardware_reset() {
+void DspFetchScheduledRun::release_hardware_reset(const DspFetchPeripheralEvents &peripheral) {
   require_reset_boundary();
   const Guard guard(*this);
+  verify_peripheral(peripheral);
   run_.release_hardware_reset(machine_);
+  verify_peripheral(peripheral);
 }
 
-DspFetchScheduleCheckpoint DspFetchScheduledRun::checkpoint() const {
+DspFetchScheduleCheckpoint
+DspFetchScheduledRun::checkpoint(const DspFetchPeripheralEvents &peripheral) const {
   healthy();
+  verify_peripheral(peripheral);
   return DspFetchScheduleCheckpoint(std::make_shared<const DspFetchScheduleCheckpoint::Storage>(
-      DspFetchScheduleCheckpoint::Storage{.inputs = inputs_,
-                                          .state = state_,
-                                          .native = run_.checkpoint(machine_),
-                                          .owner = &machine_,
-                                          .lifetime = lifetime_}));
+      DspFetchScheduleCheckpoint::Storage{
+          .inputs = inputs_,
+          .state = state_,
+          .native = run_.checkpoint(machine_),
+          .peripheral =
+              peripheral_budget_ != 0 ? std::optional{peripheral_->checkpoint()} : std::nullopt,
+          .peripheral_budget = peripheral_budget_,
+          .owner = &machine_,
+          .lifetime = lifetime_}));
 }
 
-void DspFetchScheduledRun::restore(const DspFetchScheduleCheckpoint &checkpoint) {
-  if (active_ || !checkpoint.storage_ || checkpoint.storage_->owner != &machine_ ||
+void DspFetchScheduledRun::restore(const DspFetchScheduleCheckpoint &checkpoint,
+                                   const DspFetchPeripheralEvents &peripheral) {
+  if (active_ || querying_peripheral_ || !checkpoint.storage_ ||
+      checkpoint.storage_->owner != &machine_ ||
       checkpoint.storage_->lifetime.lock() != lifetime_ || checkpoint.storage_->inputs != inputs_) {
     throw Fault("DSP pipeline restore requires its matching inactive owner and contract");
+  }
+  if (checkpoint.storage_->peripheral) {
+    check_peripheral(peripheral);
+    if (peripheral.maximum_events != checkpoint.storage_->peripheral_budget) {
+      throw Fault("Peripheral restore changed its fixed event budget");
+    }
+  } else if (peripheral_supplied(peripheral)) {
+    throw Fault("Peripheral restore cannot invent a source absent from its checkpoint");
   }
   const Guard guard(*this);
   faulted_ = true;
   run_.restore(checkpoint.storage_->native, machine_);
   state_ = checkpoint.storage_->state;
+  const auto saved_peripheral = checkpoint.storage_->peripheral;
+  if (saved_peripheral) {
+    peripheral_->restore(*saved_peripheral,
+                         peripheral.identity,
+                         query_peripheral(peripheral),
+                         peripheral_boundary(state_.horizon));
+    peripheral_budget_ = checkpoint.storage_->peripheral_budget;
+  } else {
+    peripheral_->reset_unbound(peripheral_boundary(state_.horizon));
+    peripheral_budget_ = 0;
+  }
   faulted_ = false;
+}
+
+void DspFetchScheduledRun::observe_peripheral_peer(const DspFetchPeripheralEvents &peripheral) {
+  healthy();
+  if (peripheral_budget_ == 0) {
+    throw Fault("Peripheral peer observation requires a bound source");
+  }
+  const Guard guard(*this);
+  check_peripheral(peripheral);
+  const auto state = peripheral_->state();
+  if (peripheral.identity != state.identity || peripheral.maximum_events != peripheral_budget_) {
+    throw Fault("Peripheral peer observation changed its source contract");
+  }
+  // No query result is accepted as a cause. The caller must own the actual peer
+  // write and this exact offered horizon; CPU/native boundary checks stay live.
+  try {
+    refresh_peripheral(PeripheralCalendarCause::peer, state_.horizon.ticks, peripheral);
+  } catch (...) {
+    faulted_ = true;
+    throw;
+  }
 }
 } // namespace blofeld

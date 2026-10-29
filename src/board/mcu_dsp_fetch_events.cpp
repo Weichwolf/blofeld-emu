@@ -1,39 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/detail/mcu_dsp_boundary.hpp"
 #include "board/mcu_dsp_fetch_schedule.hpp"
 #include "board/mcu_dsp_schedule.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_fetch_schedule.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
-#include "mcu/hc12.hpp"
-#include "mcu/mcu_machine.hpp"
-#include "mcu/mcu_run_clock.hpp"
 
-#include <array>
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 namespace blofeld {
-namespace {
-std::array<std::uint64_t, 15> mcu_boundary(const McuMachine &mcu) {
-  const auto cpu = mcu.cpu().state();
-  const auto &clock = mcu.run_clock();
-  return {cpu.pc,
-          cpu.d,
-          cpu.x,
-          cpu.y,
-          cpu.sp,
-          cpu.ccr,
-          static_cast<std::uint64_t>(mcu.cpu().waiting()),
-          clock.elapsed_ticks(),
-          clock.bus_cycles(),
-          clock.oscillator_cycles(),
-          clock.native_epoch(),
-          clock.reset_sysclk_edges(),
-          mcu.idle_bus_cycles(),
-          static_cast<std::uint64_t>(clock.faulted()),
-          static_cast<std::uint64_t>(mcu.timing_faulted())};
-}
-}
+using detail::mcu_boundary;
 
 DspFetchExternalEvents McuDspFetchSchedule::checked_events() const {
   auto result = external_;
@@ -73,8 +52,11 @@ void McuDspFetchSchedule::advance_horizon(const DspFetchHorizon horizon,
     throw Fault("MCU/DSP fetch native period counter exceeded its declared budget");
   }
   const auto available = inputs_.maximum_dsp_cycles_per_period - period_cycles_;
-  const auto done = dsp_schedule_.advance_to(
-      {.horizon = horizon, .maximum_cycles = available}, inputs, after_dsp, checked_events());
+  const auto done = dsp_schedule_.advance_to({.horizon = horizon, .maximum_cycles = available},
+                                             inputs,
+                                             after_dsp,
+                                             checked_events(),
+                                             checked_peripheral());
   period_cycles_ += done;
 }
 
@@ -86,7 +68,8 @@ void McuDspFetchSchedule::prepare_shared_write(const CycleInputs &inputs,
   }
   const bool native = deadline() == end_ticks_;
   const auto state = dsp_schedule_.state();
-  const bool external = state.next_external && *state.next_external == end_ticks_;
+  const auto input = next_input_ticks();
+  const bool external = input && *input == end_ticks_;
   if (native) {
     if (ties_ == std::numeric_limits<std::uint64_t>::max()) {
       throw Fault("MCU/DSP fetch shared write tie counter exhausted");
@@ -108,7 +91,8 @@ void McuDspFetchSchedule::prepare_shared_write(const CycleInputs &inputs,
     if (state.order == DspExternalOrder::reject_tie) {
       throw Fault("Unqualified simultaneous external event and DSP pipeline at MCU shared write");
     }
-    const bool event_before_dsp = state.order == DspExternalOrder::external_before_dsp;
+    const bool event_before_dsp =
+        peripheral_.identity || state.order == DspExternalOrder::external_before_dsp;
     if (native_first != external_first && event_before_dsp != external_first) {
       throw Fault("Cyclic MCU/DSP/external shared-write tie contract");
     }
@@ -119,7 +103,7 @@ void McuDspFetchSchedule::prepare_shared_write(const CycleInputs &inputs,
        .external = external_first ? DspScheduleBoundary::through : DspScheduleBoundary::before},
       inputs,
       after_dsp);
-  const auto pending = dsp_schedule_.state().next_external;
+  const auto pending = next_input_ticks();
   if (pending && *pending == end_ticks_ &&
       inputs_.external_write_order == McuExternalWriteOrder::unqualified) {
     throw Fault("Unqualified newborn external event at MCU shared write");
@@ -128,9 +112,10 @@ void McuDspFetchSchedule::prepare_shared_write(const CycleInputs &inputs,
 
 void McuDspFetchSchedule::verify_external_boundary() const {
   const auto state = dsp_schedule_.state();
+  const auto pending = next_input_ticks();
   if (state.horizon.ticks != end_ticks_ || state.horizon.native != DspScheduleBoundary::through ||
       state.horizon.external != DspScheduleBoundary::through ||
-      (state.next_external && *state.next_external <= end_ticks_)) {
+      (pending && *pending <= end_ticks_)) {
     throw Fault("MCU/DSP fetch completed boundary lost external or native timeline work");
   }
 }

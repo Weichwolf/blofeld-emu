@@ -1,0 +1,60 @@
+Causal peripheral deadlines in the native MCU/DSP timeline
+
+DspFetchPeripheralEvents is a separate hardware-event lane alongside the existing
+DspFetchExternalEvents input cursor. It permits actual power/read/output deadlines
+without changing a pinned inherited input. The board owns the peripheral payload,
+protocol, cells and pin connections; the scheduler owns only the causal calendar.
+A supplied source needs a stable identity, pure next_ticks query, observe callback,
+positive fixed budget and explicit external_before_dsp order. With both lanes,
+inherited input precedes peripheral input, then the native DSP period. Other
+combined orders refuse. Both lanes share one equal event budget per advance.
+
+The calendar pins even an absent deadline. Only actual completed native periods,
+external observations, peripheral dispatches or accepted peer writes may refresh
+it. Native causes cannot create an event at/before their own completed tick.
+Queries are guarded against native CPU/time mutation and owner reentry; source
+identity/order/budget changes refuse. Boundary checks do not detect every possible
+side effect in arbitrary caller callbacks: board queries must remain read-only.
+Unknown hardware accesses remain the responsibility of the strict board/bus model.
+
+The peripheral lane advances while DSP reset is held, including fractional native
+periods and events before an excluded recovery edge. Each horizon separately
+includes/excludes native and input work. Reset APIs verify the retained source;
+they do not infer a peripheral power cycle or a physical pin-sampling phase.
+
+McuDspFetchSchedule accepts this additional source after its inherited source.
+Shared MCU-write arbitration and completed-boundary checks consider both pending
+inputs. Native MCU register/time guards also wrap peripheral callbacks. After the
+actual shared write and observe_signals callback, the MCU owner refreshes the
+peripheral calendar once at the accepted peer boundary. Missing or cyclic order
+contracts reject before the tied actions. Standalone DSP callers use
+observe_peripheral_peer only after an actual peer write at the offered horizon.
+
+Trusted checkpoints retain the entire calendar: identity, pending deadline,
+horizon consumption flags, actor timestamps and counters. Callback objects and
+peripheral payload are not serialized. Stage the board model/cursors separately
+before restoring or cloning native owners, and supply the matching peripheral
+callbacks. Their observed deadline must match the saved calendar. A partial native
+restore remains quarantined. An earlier unbound snapshot can be restored without
+invalidating later bound snapshots from the same live owner. A distinct clone has
+its own restore identity; it cannot restore the original owner's token. Existing
+external-only clone/checkpoint paths do not invoke their input callbacks.
+
+  cmake --build --preset strict --target blofeld-peripheral-calendar-test \
+    blofeld-fetch-peripheral-test blofeld-mcu-dsp-fetch-peripheral-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^(dsp_peripheral_calendar|dsp_fetch_peripheral_.*|mcu_dsp_fetch_peripheral_.*)$'
+
+The calendar test checks independent literal actor states and actual NAND read
+hold/Hi-Z state restoration. Native DSP cases check 45-tick periods, three-way
+order, caused deadlines, shared budgets, malformed/mutating sources, partial
+boundaries, held reset, same-owner restoration and isolated cloning. Own HCS12
+LDAB/STAB and DSP NOP cases check actual GPIO writes, all three acyclic peer/input/
+native orders, cyclic/unqualified rejection, native flags/clocks and joint
+restoration/cloning with a later inherited input kept pinned. The clocks and
+source connections are explicit test contracts, not observed Blofeld hardware.
+
+This implements scheduling infrastructure. Original board wiring, full reset-to-
+instrument operation, original MIDI/audio, persistence/update/recovery and
+realtime equivalence remain incomplete; these component tests do not establish
+normal original-firmware operation on either Blofeld profile.

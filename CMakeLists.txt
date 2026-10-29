@@ -258,7 +258,8 @@ add_library(blofeld_dsp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
-  src/dsp/dsp_fetch_schedule_events.cpp
+  src/dsp/dsp_fetch_schedule_events.cpp src/dsp/dsp_fetch_peripheral_events.cpp
+  src/dsp/dsp_peripheral_calendar.cpp
   src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
   src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
   src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
@@ -277,7 +278,7 @@ target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh blo
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
 add_library(blofeld_mcu_dsp src/board/mcu_dsp_schedule.cpp src/board/mcu_dsp_fetch_schedule.cpp
-  src/board/mcu_dsp_fetch_events.cpp)
+  src/board/mcu_dsp_fetch_events.cpp src/board/mcu_dsp_fetch_peripheral.cpp)
 target_include_directories(blofeld_mcu_dsp PUBLIC src)
 target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
 add_library(blofeld_host_midi src/midi/host_midi.cpp)
@@ -1433,6 +1434,14 @@ if(BUILD_TESTING)
   add_executable(blofeld-fetch-reset-test test/dsp_fetch_reset_test.cpp)
   target_link_libraries(blofeld-fetch-reset-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_fetch_reset COMMAND blofeld-fetch-reset-test)
+  add_executable(blofeld-peripheral-calendar-test test/dsp_peripheral_calendar_test.cpp)
+  target_link_libraries(blofeld-peripheral-calendar-test PRIVATE blofeld_dsp blofeld_nand_read_timing)
+  add_test(NAME dsp_peripheral_calendar COMMAND blofeld-peripheral-calendar-test)
+  add_executable(blofeld-fetch-peripheral-test test/dsp_fetch_peripheral_test.cpp)
+  target_link_libraries(blofeld-fetch-peripheral-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  foreach(scope order causal state guards reset)
+    add_test(NAME dsp_fetch_peripheral_${scope} COMMAND blofeld-fetch-peripheral-test ${scope})
+  endforeach()
   add_executable(blofeld-fetch-schedule-test test/dsp_fetch_schedule_test.cpp
     test/dsp_fetch_schedule_guards.cpp test/dsp_fetch_schedule_pins.cpp)
   target_link_libraries(blofeld-fetch-schedule-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -1693,6 +1702,11 @@ if(BUILD_TESTING)
   add_executable(blofeld-fetch-clone-isolation-test test/fetch_clone_isolation_test.cpp)
   target_link_libraries(blofeld-fetch-clone-isolation-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME fetch_clone_isolation COMMAND blofeld-fetch-clone-isolation-test)
+  add_executable(blofeld-mcu-dsp-fetch-peripheral-test test/mcu_dsp_fetch_peripheral_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-fetch-peripheral-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  foreach(scope external-first mcu-first unqualified state guards running)
+    add_test(NAME mcu_dsp_fetch_peripheral_${scope} COMMAND blofeld-mcu-dsp-fetch-peripheral-test ${scope})
+  endforeach()
   add_executable(blofeld-mcu-dsp-fetch-schedule-test test/mcu_dsp_fetch_schedule_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-fetch-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME mcu_dsp_fetch_schedule COMMAND blofeld-mcu-dsp-fetch-schedule-test)
@@ -3987,4 +4001,8 @@ endif()
 if(BUILD_TESTING)
   add_dependencies(quality blofeld-nand-ce-window-test blofeld-nand-initial-observation-test)
   add_dependencies(quality blofeld-nand-read-transition-test)
+endif()
+
+if(BUILD_TESTING)
+  add_dependencies(quality blofeld-peripheral-calendar-test blofeld-fetch-peripheral-test blofeld-mcu-dsp-fetch-peripheral-test)
 endif()

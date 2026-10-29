@@ -7,6 +7,7 @@
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_fetch_schedule.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
 #include "mcu/hc12.hpp"
@@ -42,6 +43,9 @@ struct McuDspFetchCheckpoint::Storage {
   bool resetting;
   std::shared_ptr<const DspFetchEventIdentity> external;
   DspExternalOrder external_order;
+  std::shared_ptr<const PeripheralEventIdentity> peripheral;
+  DspExternalOrder peripheral_order;
+  unsigned peripheral_budget;
 };
 
 McuDspFetchCheckpoint::McuDspFetchCheckpoint(std::shared_ptr<const Storage> storage)
@@ -83,7 +87,8 @@ std::optional<DspHardwareResetInputs> initial_dsp_reset(const McuDspFetchInputs 
 McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
                                          McuMachine &mcu,
                                          DspMachine &dsp,
-                                         DspFetchExternalEvents external)
+                                         DspFetchExternalEvents external,
+                                         DspFetchPeripheralEvents peripheral)
     : inputs_(inputs),
       mcu_(mcu),
       dsp_(dsp),
@@ -93,6 +98,7 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
                     dsp,
                     initial_dsp_reset(inputs)),
       external_(std::move(external)),
+      peripheral_(std::move(peripheral)),
       initial_mcu_ticks_(mcu_ticks()),
       end_ticks_(mcu_ticks()),
       expected_cycles_(mcu.run_clock().bus_cycles()),
@@ -130,7 +136,8 @@ McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchInputs inputs,
       {.horizon = {.ticks = inputs.initial_reset ? end_ticks_ : initial_mcu_ticks_}},
       {},
       {},
-      checked_events()));
+      checked_events(),
+      checked_peripheral()));
   static_cast<void>(deadline());
 }
 
@@ -138,7 +145,8 @@ const McuDspFetchCheckpoint::Storage &
 McuDspFetchSchedule::clone_source(const McuDspFetchCheckpoint &checkpoint,
                                   McuMachine &mcu,
                                   const DspMachine &dsp,
-                                  const DspFetchExternalEvents &external) {
+                                  const DspFetchExternalEvents &external,
+                                  const DspFetchPeripheralEvents &peripheral) {
   if (!checkpoint.storage_) { throw Fault("Joint clone requires a trusted checkpoint"); }
   const auto &saved = *checkpoint.storage_;
   if (saved.lifetime.lock() && (saved.mcu_owner == &mcu || saved.dsp_owner == &dsp)) {
@@ -149,6 +157,12 @@ McuDspFetchSchedule::clone_source(const McuDspFetchCheckpoint &checkpoint,
       static_cast<bool>(external.next_ticks) != static_cast<bool>(saved.external) ||
       static_cast<bool>(external.observe) != static_cast<bool>(saved.external)) {
     throw Fault("Joint clone requires the retained external identity, order, budget and callbacks");
+  }
+  if (peripheral.identity != saved.peripheral || peripheral.order != saved.peripheral_order ||
+      peripheral.maximum_events != saved.peripheral_budget ||
+      static_cast<bool>(peripheral.next_ticks) != static_cast<bool>(saved.peripheral) ||
+      static_cast<bool>(peripheral.observe) != static_cast<bool>(saved.peripheral)) {
+    throw Fault("Joint clone requires the retained peripheral identity,order,budget and callbacks");
   }
   dsp.validate_fetch_clone_target();
   mcu.validate_reset_boundary();
@@ -169,18 +183,25 @@ McuMachine &McuDspFetchSchedule::clone_mcu(const McuDspFetchCheckpoint::Storage 
 McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchCheckpoint &checkpoint,
                                          McuMachine &mcu,
                                          DspMachine &dsp,
-                                         const DspFetchExternalEvents &external)
-    : McuDspFetchSchedule(clone_source(checkpoint, mcu, dsp, external), mcu, dsp, external) {}
+                                         const DspFetchExternalEvents &external,
+                                         const DspFetchPeripheralEvents &peripheral)
+    : McuDspFetchSchedule(clone_source(checkpoint, mcu, dsp, external, peripheral),
+                          mcu,
+                          dsp,
+                          external,
+                          peripheral) {}
 
 McuDspFetchSchedule::McuDspFetchSchedule(const McuDspFetchCheckpoint::Storage &source,
                                          McuMachine &mcu,
                                          DspMachine &dsp,
-                                         DspFetchExternalEvents external)
+                                         DspFetchExternalEvents external,
+                                         DspFetchPeripheralEvents peripheral)
     : inputs_(source.inputs),
       mcu_(clone_mcu(source, mcu)),
       dsp_(dsp),
-      dsp_schedule_(source.dsp, dsp),
+      dsp_schedule_(source.dsp, dsp, guarded_peripheral(peripheral, mcu)),
       external_(std::move(external)),
+      peripheral_(std::move(peripheral)),
       initial_mcu_ticks_(source.initial_mcu_ticks),
       end_ticks_(source.end_ticks),
       expected_cycles_(source.cycles),
@@ -352,6 +373,7 @@ void McuDspFetchSchedule::observe_write(const BusEvent &event,
   observing_signals_ = false;
   shared_write_observed_ = true;
   consumed();
+  if (peripheral_.identity) { dsp_schedule_.observe_peripheral_peer(checked_peripheral()); }
   advance(true, inputs, after_dsp);
   shared_write_ = false;
 }
@@ -487,7 +509,7 @@ McuDspFetchCheckpoint McuDspFetchSchedule::checkpoint() const {
   verify_external_boundary();
   return McuDspFetchCheckpoint(std::make_shared<const McuDspFetchCheckpoint::Storage>(
       McuDspFetchCheckpoint::Storage{.mcu = mcu_.checkpoint(),
-                                     .dsp = dsp_schedule_.checkpoint(),
+                                     .dsp = dsp_schedule_.checkpoint(checked_peripheral()),
                                      .inputs = inputs_,
                                      .mcu_owner = &mcu_,
                                      .dsp_owner = &dsp_,
@@ -502,7 +524,10 @@ McuDspFetchCheckpoint McuDspFetchSchedule::checkpoint() const {
                                      .lifetime = lifetime_,
                                      .resetting = resetting_,
                                      .external = external_.identity,
-                                     .external_order = external_.order}));
+                                     .external_order = external_.order,
+                                     .peripheral = peripheral_.identity,
+                                     .peripheral_order = peripheral_.order,
+                                     .peripheral_budget = peripheral_.maximum_events}));
 }
 
 void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
@@ -512,6 +537,9 @@ void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
       checkpoint.storage_->external != external_.identity ||
       checkpoint.storage_->external_order != external_.order ||
       checkpoint.storage_->external_budget != external_.maximum_events ||
+      checkpoint.storage_->peripheral != peripheral_.identity ||
+      checkpoint.storage_->peripheral_order != peripheral_.order ||
+      checkpoint.storage_->peripheral_budget != peripheral_.maximum_events ||
       checkpoint.storage_->initial_mcu_ticks != initial_mcu_ticks_) {
     throw Fault("MCU/DSP fetch restore requires matching inactive owners and input contracts");
   }
@@ -519,7 +547,7 @@ void McuDspFetchSchedule::restore(const McuDspFetchCheckpoint &checkpoint) {
   faulted_ = true; // A partial native restore can never become a healthy schedule.
   const auto &saved = *checkpoint.storage_;
   mcu_.restore(saved.mcu);
-  dsp_schedule_.restore(saved.dsp);
+  dsp_schedule_.restore(saved.dsp, guarded_peripheral(peripheral_, mcu_));
   end_ticks_ = saved.end_ticks;
   expected_cycles_ = saved.cycles;
   expected_epoch_ = saved.epoch;
@@ -573,12 +601,12 @@ void McuDspFetchSchedule::validate_dsp_reset_observation() const {
 
 void McuDspFetchSchedule::begin_dsp_reset(const DspHardwareResetInputs inputs) {
   validate_dsp_reset_observation();
-  dsp_schedule_.begin_hardware_reset(inputs);
+  dsp_schedule_.begin_hardware_reset(inputs, checked_peripheral());
 }
 
 void McuDspFetchSchedule::release_dsp_reset() {
   validate_dsp_reset_observation();
-  dsp_schedule_.release_hardware_reset();
+  dsp_schedule_.release_hardware_reset(checked_peripheral());
 }
 
 }
