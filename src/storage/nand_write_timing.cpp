@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "storage/nand_array.hpp"
+#include "storage/nand_time_window.hpp"
 
 #include <array>
 #include <chrono>
@@ -60,13 +61,14 @@ void NandWriteTiming::changed(const std::uint64_t ticks, const KnownPins &pins) 
       if ((low_changes_ & bit) != 0) { fail("control toggled twice while WE low"); }
       low_changes_ |= bit;
     }
-    stable_since_[index] = ticks;
+    stable_since_[index] = NandTimeWindow{.earliest = ticks, .latest = ticks};
   }
 }
 
 NandWriteLatch NandWriteTiming::latch(const std::uint64_t ticks, const KnownPins &pins) const {
   for (std::size_t index = 0; index < setup_ns.size(); ++index) {
-    if (ticks < deadline(stable_since_[index], setup_ns[index])) { fail(setup_names[index]); }
+    const auto &anchor = stable_since_[index];
+    if (anchor && ticks < deadline(anchor->latest, setup_ns[index])) { fail(setup_names[index]); }
   }
   if (pins.ce_n || !pins.re_n) { fail("write latch requires selected CE and inactive RE"); }
   if (pins.data.known != byte_mask) { fail("write latch requires eight known data bits"); }
@@ -82,7 +84,7 @@ std::optional<NandWriteLatch> NandWriteTiming::edge(const std::uint64_t ticks,
   if (pins_.we_n == pins.we_n) { return std::nullopt; }
   if (!pins.we_n) {
     if (pins.ce_n || !pins.re_n) { fail("write pulse requires selected CE and inactive RE"); }
-    if (ticks < deadline(high_since_, high_ns)) { fail("tWH"); }
+    if (high_since_ && ticks < deadline(*high_since_, high_ns)) { fail("tWH"); }
     if (fell_at_ && ticks < deadline(*fell_at_, cycle_ns)) { fail("tWC"); }
     fell_at_ = ticks;
     low_changes_ = 0;
@@ -115,7 +117,7 @@ std::optional<NandWriteLatch> NandWriteTiming::observe(const std::uint64_t ticks
   std::optional<NandWriteLatch> result;
   if (!initialized_) {
     if (!known.we_n) { fail("initial WE-high observation is missing"); }
-    next.stable_since_.fill(ticks);
+    next.stable_since_.fill(NandTimeWindow{.earliest = ticks, .latest = ticks});
     next.high_since_ = ticks;
   } else {
     if (pins_.we_n != known.we_n && pins_.re_n != known.re_n) {

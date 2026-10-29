@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "storage/nand_array.hpp"
+#include "storage/nand_time_window.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -56,7 +57,8 @@ NandReadOutput NandReadTiming::at(const std::uint64_t ticks) const {
   switch (phase_) {
     case Phase::floating: return {.driven = false};
     case Phase::reading:
-      return ticks >= valid_at_ ? NandReadOutput{.driven = true, .data = data_} : NandReadOutput{};
+      return ticks >= valid_at_.latest ? NandReadOutput{.driven = true, .data = data_}
+                                       : NandReadOutput{};
     case Phase::releasing:
       if (ticks >= floating_at_) { return {.driven = false}; }
       if (ticks < hold_until_) { return {.driven = hold_driven_, .data = data_}; }
@@ -95,7 +97,7 @@ void NandReadTiming::select_edge(const std::uint64_t ticks, const bool rising) {
     if (phase_ == Phase::releasing && ticks < floating_at_) {
       fail("unqualified reselect during output release");
     }
-    selected_at_ = ticks;
+    selected_at_ = {.earliest = ticks, .latest = ticks};
     phase_ = Phase::floating;
   }
   ce_n_ = rising;
@@ -116,8 +118,11 @@ void NandReadTiming::read_edge(const std::uint64_t ticks, const bool rising, con
       fail("read cycle shorter than tRC");
     }
     if (!ce_n_) {
-      const auto valid =
-          std::max(deadline(ticks, re_access_ns), deadline(selected_at_, ce_access_ns));
+      const NandTimeWindow valid{
+          .earliest = std::max(deadline(ticks, re_access_ns),
+                               deadline(selected_at_.earliest, ce_access_ns)),
+          .latest =
+              std::max(deadline(ticks, re_access_ns), deadline(selected_at_.latest, ce_access_ns))};
       if (!source) { fail("selected RE edge has no protocol data source"); }
       const auto data = source();
       if ((data.value & data.known) != data.value) { fail("noncanonical protocol byte knowledge"); }

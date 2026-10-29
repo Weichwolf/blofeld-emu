@@ -2,6 +2,7 @@
 #pragma once
 
 #include "storage/nand_array.hpp"
+#include "storage/nand_time_window.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -31,11 +32,18 @@ struct NandReadOutput {
 class NandReadTiming {
 public:
   using Source = std::function<NandByte()>;
+  bool operator==(const NandReadTiming &) const = default;
   explicit NandReadTiming(std::uint32_t timebase_hz);
   // The source is called only for an admitted selected falling RE edge and is
   // never retained. Coordinate protocol and timing checkpoints in the owner.
   void observe(std::uint64_t ticks, NandReadPins pins, const Source &source = {});
   [[nodiscard]] NandReadOutput output(std::uint64_t ticks);
+
+  // Requires initialized RE high and expired output/pulse constraints. The
+  // caller proves inactive WE and unchanged non-CE controls/Ready in [start,end].
+  // Resume records a conservative CE bound, never a manufactured pin edge.
+  void qualify_ce_window(std::uint64_t start) const;
+  void resume_ce_window(std::uint64_t start, std::uint64_t end, bool ce_n);
 
 private:
   enum class Phase : std::uint8_t { floating, reading, releasing };
@@ -49,8 +57,8 @@ private:
   [[nodiscard]] NandReadOutput at(std::uint64_t ticks) const;
   std::uint32_t timebase_hz_ = 0;
   std::uint64_t ticks_ = 0;
-  std::uint64_t selected_at_ = 0;
-  std::uint64_t valid_at_ = 0;
+  NandTimeWindow selected_at_{};
+  NandTimeWindow valid_at_{};
   std::uint64_t hold_until_ = 0;
   std::uint64_t floating_at_ = 0;
   std::optional<std::uint64_t> fell_at_;

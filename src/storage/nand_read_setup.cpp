@@ -33,7 +33,8 @@ void NandReadSetup::check_read(const std::uint64_t ticks, const KnownPins &pins)
     const auto duration =
         (scaled / nanoseconds_per_second) + (scaled % nanoseconds_per_second != 0 ? 1U : 0U);
     // Subtraction avoids forming future deadlines beyond the reference counter.
-    if (ticks - stable_since_[index] < duration) { fail(names[index]); }
+    const auto &anchor = stable_since_[index];
+    if (anchor && ticks - *anchor < duration) { fail(names[index]); }
   }
 }
 

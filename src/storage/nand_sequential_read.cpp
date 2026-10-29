@@ -16,6 +16,12 @@ Nand::Nand(const NandReadContinuation continuation) : continuation_(continuation
   }
 }
 
+bool Nand::quiescent_read_pause() const {
+  const bool command = command_ == 0 || command_ == read_second_half || command_ == read_spare;
+  return continuation_ == NandReadContinuation::k9f1208_p && ready_ == true && !status_mode_ &&
+         command && (phase_ == Phase::data || phase_ == Phase::idle);
+}
+
 void Nand::observe_read_end(const NandReadEnd edge) {
   if (continuation_ != NandReadContinuation::k9f1208_p) {
     fail("read end", "requires an explicit P-package sequential-read profile");
@@ -31,7 +37,7 @@ void Nand::observe_read_end(const NandReadEnd edge) {
     // K9F1208U0C Rev1.1 p18/Fig6: CE may be inactive between data reads.
     // The completed page buffer and next column survive this pause; only
     // the pin timing owner gates data output. Busy abort remains separate.
-    if (phase_ == Phase::data && ready_ == true && !status_mode_) { return; }
+    if (quiescent_read_pause()) { return; }
     if (phase_ != Phase::end && phase_ != Phase::block_end) {
       fail("read end", "unqualified CE deassertion outside pending read or final-byte output");
     }

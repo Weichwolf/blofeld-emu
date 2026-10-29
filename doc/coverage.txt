@@ -1075,6 +1075,15 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           reset/power cancellation and strict
                                           unknown/default guards are separate
                                           component checks (nand-sequential-read.txt).
+                                          Quiescent CE timing windows carry
+                                          explicit selection bounds and retire
+                                          only permanently elapsed constraints.
+                                          Independent read/write/setup vectors,
+                                          both closing levels, strict guards
+                                          and 64 directed histories are separate
+                                          component coverage; caller-owned phase,
+                                          all-pin and CE-hold proofs remain
+                                          required (nand-ce-window.txt).
                                           Fitted variant and normal connected
                                           board attachment remain unproved.
                                           Read-ID90h/address00 uses explicit

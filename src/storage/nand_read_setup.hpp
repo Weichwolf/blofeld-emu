@@ -23,9 +23,16 @@ struct NandReadSetupPins {
 class NandReadSetup {
 public:
   explicit NandReadSetup(std::uint32_t timebase_hz);
+  bool operator==(const NandReadSetup &) const = default;
   // True only for a selected falling RE edge meeting all setup requirements.
   // Compose before protocol consumption; failures retain the preceding state.
   [[nodiscard]] bool observe(std::uint64_t ticks, NandReadSetupPins pins);
+
+  // Requires initialized RE/WE/Ready high and expired setup constraints.
+  // The caller proves unchanged non-CE controls/Ready throughout [start,end].
+  // Resume records a conservative CE bound, never a manufactured pin edge.
+  void qualify_ce_window(std::uint64_t start) const;
+  void resume_ce_window(std::uint64_t start, std::uint64_t end, bool ce_n);
 
 private:
   struct KnownPins {
@@ -35,13 +42,15 @@ private:
     bool ale;
     bool cle;
     std::optional<bool> ready;
+    bool operator==(const KnownPins &) const = default;
   };
 
   [[noreturn]] void fail(const std::string &reason) const;
   void check_read(std::uint64_t ticks, const KnownPins &pins) const;
   std::uint32_t timebase_hz_;
   std::uint64_t ticks_ = 0;
-  std::array<std::uint64_t, 4> stable_since_{};
+  // nullopt means the minimum is permanently met until the next actual change.
+  std::array<std::optional<std::uint64_t>, 4> stable_since_{};
   KnownPins pins_{
       .ce_n = true, .re_n = true, .we_n = true, .ale = false, .cle = false, .ready = std::nullopt};
   bool initialized_ = false;

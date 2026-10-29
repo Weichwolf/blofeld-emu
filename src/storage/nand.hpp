@@ -69,6 +69,11 @@ public:
 
   [[nodiscard]] bool status_mode() const { return status_mode_; }
 
+  // Ready P-package array data or idle from a read command. This does not
+  // establish a valid buffer (an aborted read is idle too). The board separately
+  // proves inactive strobes and CE/setup/hold timing.
+  [[nodiscard]] bool quiescent_read_pause() const;
+
 private:
   enum class Phase : std::uint8_t {
     cold,

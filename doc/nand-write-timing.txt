@@ -57,3 +57,7 @@ not every part covered by the datasheet. Page-end readiness stays unknown in
 the existing protocol model; this component does not infer a variant or invent
 a next page. Reset/clear entry, complete native refill and both-profile boot,
 normal MIDI/audio, updates/recovery and hardware comparison remain open.
+
+Quiescent CE-only uncertainty has a separate explicit timing-window API and
+board-owned proof obligations (nand-ce-window.txt). It selects no driver level
+and does not make unknown GPIO observations valid.

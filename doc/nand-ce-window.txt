@@ -1,0 +1,64 @@
+Quiescent NAND chip-select uncertainty
+
+The read-output, input-latch and read-setup components can conservatively carry
+an opaque CE interval without selecting a driver level or inventing an edge.
+This is separate from GPIO mode semantics, board routing and device operation.
+The K9F1208U0C Rev1.1 input/output tables and page 18/Figure 6 are pinned in
+hardware/sources.json. No fitted part or physical timing is established.
+
+Each timing component exposes qualify_ce_window(start) and
+resume_ce_window(start,end,known_ce_n). The first checks that its initialized
+strobes and prior constraints permit quiescence. The second repeats that guard,
+requires ordered times, and records the actually known closing level. It does
+not observe individual intermediate edges, perform a latch, consume a byte,
+complete an operation or change Ready.
+
+The board must prove the complete interval contract before calling resume:
+  - A completed, ready, non-status array-read session; no pending operation.
+  - RE and WE continuously high, with unchanged other controls/data/Ready.
+  - Prior output-release, setup, hold and pulse constraints have expired.
+  - Any applicable CE high hold, including tCEH 100 ns after the last serial byte.
+These are caller obligations; a single timing component cannot prove device
+phase, all pins, board wiring or an unobserved future. Unsupported intervals
+must remain visible failures. This API does not admit cold/busy/status/staged
+write/reset/power-loss traffic or supply a generic peripheral success stub.
+
+Selection time is explicitly bounded by [0,end], not recorded as an observed
+edge at end. Write acceptance uses the latest possible selection plus tCS.
+Read data remain unknown until both actual-RE tREA and latest-selection tCEA
+have elapsed. A later observed CE selection replaces that interval by its exact
+time. No earlier driver/data knowledge follows merely from interval admission.
+
+Old constraints are retired only after they are permanently satisfied under
+monotonic time: if start>=anchor+minimum, every future time>=start passes until
+a real control transition reinstalls its exact anchor. An absent anchor means
+this retired fact, not a guessed timestamp. Once output Hi-Z is guaranteed,
+expired release data are dead under CE-only changes with RE high. Copies and
+value equality retain the complete remaining abstract state. Equal abstract
+values cover their possible histories; they do not assert identical physical
+histories. No normalization based on public outputs or hashes is used.
+
+Nand::quiescent_read_pause reports ready P-package array data or idle from a
+read command. An aborted read is idle too: the predicate never establishes a
+valid buffer. Repeated CE release in that idle read state retains cells, cursor
+and readiness. It cannot start a new page or make an idle data
+read valid. Actual command/address/completion still starts a fresh transfer.
+The predicate does not replace the board's pin/timing/CE-hold proof.
+
+Own deterministic checks use independent primary-table tick vectors at 1 GHz,
+1.08 GHz and 216 MHz, low/high closing levels, fresh real selections, source-call
+counts, restored copies, reinstated setup/hold and strict time/active/overflow
+guards. Sixty-four directed concrete CE histories additionally check that every
+newly known abstract read output and write latch agrees. Those comparisons are
+supporting evidence; arbitrary histories follow from the edge-exclusion and
+monotonic-bound arguments above, not finite sampling alone. Separate protocol
+checks retain final-page termination, unknown cells and non-read phase guards.
+
+  cmake --build --preset strict --target blofeld-nand-ce-window-test blofeld-nand-ce-pause-test
+  ctest --test-dir build/strict -j1 -R '^(nand_ce_window_.*|nand_ce_pause)$' --output-on-failure
+
+No GUI, host MIDI/audio, original reset-to-instrument, normal storage/update,
+recovery or real-time/long-run acceptance follows. Connecting these components
+to the full original execution and reconstructing its real incoming GPIO/BIU
+state remain outstanding. Rebuild every timing-header consumer after layout
+changes; do not mix archives or snapshot objects from the previous layout.

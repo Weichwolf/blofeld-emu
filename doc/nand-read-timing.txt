@@ -68,3 +68,7 @@ identity, timing, CE routing, actual contents, original refill turnaround/reserv
 Port F modes or the preceding reserved-Y clear. Full scheduled boot, actual
 library installation, audio, update/recovery and real-device equivalence remain
 open in coverage.txt. No manufacturer bytes or traces are distributed.
+
+Quiescent CE-only uncertainty has a separate explicit timing-window API and
+board-owned proof obligations (nand-ce-window.txt). It selects no driver level
+and does not make unknown GPIO observations valid.

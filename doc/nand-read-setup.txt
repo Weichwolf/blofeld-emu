@@ -84,3 +84,7 @@ protocol-byte consumption. Neither path samples CPU payload data or writes its
 buffer. All five busy-state replays pass under ASan/UBSan and separate TSan with
 identical traces; the four preceding lab-release traces remain byte-identical.
 Full initial clear/refill/boot, actual NAND contents and board timing stay open.
+
+Quiescent CE-only uncertainty has a separate explicit timing-window API and
+board-owned proof obligations (nand-ce-window.txt). It selects no driver level
+and does not make unknown GPIO observations valid.
