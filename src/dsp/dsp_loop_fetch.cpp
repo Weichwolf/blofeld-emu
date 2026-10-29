@@ -231,8 +231,11 @@ void DspLoopFetch::predict_subroutine(const DspProgramWord word,
   expected.pc = next_;
   expected.sp = call ? expected.sp + 1 : expected.sp - 1;
   expected.sc = (call ? expected.sc + 1 : expected.sc + max_stack_count) & max_stack_count;
+  // calls_ counts calls since this loop owner began. An older native caller
+  // can return after every tracked DO frame closes; active loops still require
+  // a call recorded inside their own scope.
   bool unsafe = control.after != expected || (call && control.before.sp >= last_stack_frame) ||
-                (call ? calls_ >= last_stack_frame : calls_ == 0);
+                (call ? calls_ >= last_stack_frame : (calls_ == 0 && depth_ != 0));
   // Original1.25 requires finite short BSR at LA-1/-2;independent software
   // windows qualify only this bounded exception to FM A.3.1 (see reference manifest).
   constexpr unsigned short_mask = 0xfffc20;
@@ -257,7 +260,7 @@ void DspLoopFetch::predict_subroutine(const DspProgramWord word,
   forecast_ = control.after;
   if (call) {
     ++calls_;
-  } else {
+  } else if (calls_ != 0) {
     --calls_;
   }
 }

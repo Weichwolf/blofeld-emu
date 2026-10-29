@@ -28,7 +28,7 @@ no host PC rewrite or manufacturer firmware modification supplies execution.
 
 Directed guards check all512 short-call fields,ten excluded Decode forms,nine
 F2 width/value/owner refusals,and24 restored fault suffixes. Empty/full internal
-stack, calls into the loop body and RTS without an owned call frame retain
+stack, calls into the loop body and RTS without an owned call frame in an active DO retain
 literal full CPU/counters/all stack slots; only older instructions actually due at the rejected period may retire.
 These refusals do not implement physical stack-overflow handling.
 
@@ -37,3 +37,11 @@ qualified separately in dsp-near-end-calls.txt. Register-relative calls and
 extended-stack/overflow/interrupt contexts remain unqualified. This component does not establish
 original boot,authentic ROM,normal MIDI/audio,update/recovery or physical equivalence.
 The original first-stage reserved Y:002000 boundary remains unresolved.
+
+Post-DO parent returns: dsp_postloop_return covers54 own native/automatic
+BSR→DO→NOP→RTS paths (counts1..3,body sizes1/2/4,two unused tail lengths,
+three unused values). Full architecture,all retained stack slots,native costs
+and21..31 reference periods are literal expectations. Eight refusals retain
+active-loop,stack/control and boundary guards. Calls predating loop tracking
+may return only after all tracked DO frames close; the relative call counter
+never underflows. Unknown speculative F2 values remain a separate open frontier.
