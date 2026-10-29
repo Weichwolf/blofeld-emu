@@ -1,0 +1,52 @@
+Causal NAND cell verification and held status
+
+NandWriteMedium owns the strict Nand protocol, its read/reset operation clock,
+accepted program data, pre-operation cell values, immutable cell properties and
+its pending program/erase deadline. It exposes no externally selected write
+outcome. Copies retain all pending work without retained bus pointers/callbacks.
+
+Select NandCellContract::reference_pulse_inhibit explicitly. An unqualified
+profile permits existing read/reset behavior but refuses write confirmation.
+Absent inhibit entries mean responsive cells only under that selected reference
+contract; no factory cell image, WP, block condition or history is inferred.
+Programming applies requested one-to-zero transitions. Erase applies zero-to-one
+transitions across the target block. Inhibited bits retain their preceding
+knowledge/value. Verification checks requested program zeros or all erase ones;
+input one over an existing zero is not a programming failure. Known wrong bits
+establish failure; otherwise unknown selected bits quarantine the operation.
+
+The reference controller completes at the Samsung maximum: program 500us and
+erase 3ms, rounded upward to the declared reference grid. Cells and status derive
+from the operation, not a success response supplied by the host. Reset and power
+loss cancel the pending write deadline and preserve conservative unknown target
+state. Failed program-history/block qualifications remain withdrawn. The model
+does not simulate analog pulse progression, temperature or voltage variation.
+
+NandReadSetup's default path retains the array Ready/tRR requirements. The typed
+status70 path uses actual controls and tWHR/tAR/tCLR without inventing Ready.
+NandReadTiming::refresh_status requires an actual selected held RE-low read and
+NandStatusTiming::reference_controller_boundary. It refreshes status knowledge
+without a pin edge or another byte-source callback, preserving initial access
+and final output hold/release bounds. Undefined pins and in-progress fail status
+remain unknown. This logical controller-boundary projection does not establish
+physical asynchronous pad propagation. CE-last assertion while RE is already low
+remains unsupported and fails visibly.
+
+Primary: Samsung K9F1208U0C Rev1.1, pp.12-13,21,30,33-34; URL/size/hash in
+hardware/sources.json. The 3.3V U part uses tRP21/tRC42/tREA30ns; the alternate
+busy35/50/40ns bounds in footnote2 apply only to the 1.8V R part.
+
+Scoped verification:
+  cmake --preset strict
+  cmake --build --preset strict --target blofeld-nand-write-medium-test \
+    blofeld-nand-busy-status-test
+  ctest --test-dir build/strict -R '^nand_(write_medium|busy_status)$' \
+    --output-on-failure
+Repeat with the thread preset for separate TSan instrumentation. These are finite
+independent bit expectations and own native DSP GPIO programs, not fuzzing. The
+fixture uses explicit own cells/history/WP/block, BCR/clock/reset inputs and
+candidate CE/power/P-part wiring. It verifies computed cells, native Carry/status,
+readback and trusted joint restores. It does not establish factory contents,
+physical wiring, complete original startup, both instrument profiles, full-board
+persistence, update/recovery, power-loss safety or sustained realtime operation.
+No manufacturer program bytes or reference assets are embedded in these tests.

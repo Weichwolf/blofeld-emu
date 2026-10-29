@@ -1722,8 +1722,20 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           MCU persistence uses private cold
                                           exports; MCU continuous command journaling
                                           and full board snapshots remain pending.
+                                          A causal reference cell/write controller
+                                          now owns accepted data, preimages,
+                                          program/erase deadlines and computed
+                                          verification/status. Typed Busy-status
+                                          setup and held-output refresh retain
+                                          strict array and release boundaries.
+                                          Independent cells and own native DSP
+                                          GPIO/readback/joint-restore checks are
+                                          scoped in nand-write-medium.txt.
+                                          Runtime board adoption, factory data,
+                                          native power-cut/update/recovery and
+                                          full instrument acceptance stay open.
                                           Candidate NAND geometry and untimed
-                                          program/erase outcomes are explicit;
+                                          program/erase observations are explicit;
                                           interrupted active targets lose knowledge
                                           and history. Board part, ECC, contents,
                                           hardware timing and integration into

@@ -25,10 +25,16 @@ void NandReadSetup::fail(const std::string &reason) const {
               " timebase-hz=" + std::to_string(timebase_hz_) + ": " + reason);
 }
 
-void NandReadSetup::check_read(const std::uint64_t ticks, const KnownPins &pins) const {
+void NandReadSetup::check_read(const std::uint64_t ticks,
+                               const KnownPins &pins,
+                               const NandReadKind kind) const {
+  if (kind != NandReadKind::array && kind != NandReadKind::status70) { fail("invalid read kind"); }
   if (!pins.we_n || pins.ale || pins.cle) { fail("array read requires WE high and ALE/CLE low"); }
-  if (pins.ready != true) { fail("array read requires observed Ready high"); }
+  if (kind == NandReadKind::array && pins.ready != true) {
+    fail("array read requires observed Ready high");
+  }
   for (std::size_t index = 0; index < minimum_ns.size(); ++index) {
+    if (kind == NandReadKind::status70 && index + 1 == minimum_ns.size()) { continue; }
     const auto scaled = static_cast<std::uint64_t>(minimum_ns[index]) * timebase_hz_;
     const auto duration =
         (scaled / nanoseconds_per_second) + (scaled % nanoseconds_per_second != 0 ? 1U : 0U);
@@ -39,6 +45,13 @@ void NandReadSetup::check_read(const std::uint64_t ticks, const KnownPins &pins)
 }
 
 bool NandReadSetup::observe(const std::uint64_t ticks, const NandReadSetupPins pins) {
+  return observe(ticks, pins, NandReadKind::array);
+}
+
+bool NandReadSetup::observe(const std::uint64_t ticks,
+                            const NandReadSetupPins pins,
+                            const NandReadKind kind) {
+  if (kind != NandReadKind::array && kind != NandReadKind::status70) { fail("invalid read kind"); }
   if (ticks < ticks_) { fail("reference time moved backwards"); }
   if (!pins.ce_n || !pins.re_n || !pins.we_n || !pins.ale || !pins.cle) {
     fail("unknown control pin observation");
@@ -68,7 +81,7 @@ bool NandReadSetup::observe(const std::uint64_t ticks, const NandReadSetupPins p
       if (changes[index]) { next.stable_since_[index] = ticks; }
     }
     if (re_changed && !known.re_n && !known.ce_n) {
-      next.check_read(ticks, known);
+      next.check_read(ticks, known, kind);
       admitted = true;
     }
   }

@@ -11,6 +11,9 @@
 #include <string>
 
 namespace blofeld {
+// Logical status propagation projection; physical pad delay remains unqualified.
+enum class NandStatusTiming : std::uint8_t { unqualified, reference_controller_boundary };
+
 struct NandReadPins {
   std::optional<bool> ce_n;
   std::optional<bool> re_n;
@@ -40,6 +43,9 @@ public:
   // never retained. Coordinate protocol and timing checkpoints in the owner.
   void observe(std::uint64_t ticks, NandReadPins pins, const Source &source = {});
   [[nodiscard]] NandReadOutput output(std::uint64_t ticks);
+  // Refresh the actual selected, held-low status read without a new pin edge.
+  // Retains all access/pulse/release bounds; never samples an array byte.
+  void refresh_status(std::uint64_t ticks, NandByte data, NandStatusTiming contract);
   // Next strictly future output-knowledge change if input pins stay unchanged.
   // A bound is not a physical edge. This query never advances time or a source.
   [[nodiscard]] std::optional<std::uint64_t> next_transition() const;

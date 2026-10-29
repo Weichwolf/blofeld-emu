@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "storage/nand.hpp"
+#include "storage/nand_array.hpp"
 
 #include <cstdint>
 #include <limits>
@@ -104,6 +105,13 @@ void NandOperationClock::observe_wp(const std::optional<bool> high) {
   healthy();
   healthy_ = false;
   device_.observe_wp(high);
+  healthy_ = true;
+}
+
+void NandOperationClock::observe_cell(const NandLocation location, const NandByte cell) {
+  healthy();
+  healthy_ = false;
+  device_.observe_cell(location, cell);
   healthy_ = true;
 }
 

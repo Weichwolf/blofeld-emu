@@ -7,6 +7,8 @@
 #include <string>
 
 namespace blofeld {
+enum class NandReadKind : std::uint8_t { unqualified, array, status70 };
+
 struct NandReadSetupPins {
   std::optional<bool> ce_n;
   std::optional<bool> re_n;
@@ -27,6 +29,8 @@ public:
   // True only for a selected falling RE edge meeting all setup requirements.
   // Compose before protocol consumption; failures retain the preceding state.
   [[nodiscard]] bool observe(std::uint64_t ticks, NandReadSetupPins pins);
+  // Actual 70h register reads do not require Ready or the array-only tRR.
+  [[nodiscard]] bool observe(std::uint64_t ticks, NandReadSetupPins pins, NandReadKind kind);
 
   // Requires initialized RE/WE/Ready high and expired setup constraints.
   // The caller proves unchanged non-CE controls/Ready throughout [start,end].
@@ -46,7 +50,7 @@ private:
   };
 
   [[noreturn]] void fail(const std::string &reason) const;
-  void check_read(std::uint64_t ticks, const KnownPins &pins) const;
+  void check_read(std::uint64_t ticks, const KnownPins &pins, NandReadKind kind) const;
   std::uint32_t timebase_hz_;
   std::uint64_t ticks_ = 0;
   // nullopt means the minimum is permanently met until the next actual change.

@@ -38,6 +38,7 @@ public:
   void observe_power_ready();
   void observe_identification(NandIdentification identification);
   void observe_wp(std::optional<bool> high);
+  void observe_cell(NandLocation location, NandByte cell);
   void command(std::uint8_t value);
   void address(std::uint8_t value);
   void write(std::uint8_t value);
