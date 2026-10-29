@@ -60,10 +60,7 @@ dsp56k::Field memory_register_field(const Type type) {
 Mask destination(const Type type, const std::uint32_t opcode) {
   if (peripheral(type)) {
     if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) != 0) { return Mask::None; }
-    const auto reg = dsp56k::getRegister(type, dsp56k::Field_dddddd, opcode);
-    if (reg == dsp56k::Register::A || reg == dsp56k::Register::B) {
-      throw Fault("Unqualified full accumulator peripheral-load writeback");
-    }
+    // FM12.2.1/13-134: A/B loads publish all native accumulator fields together.
     return operand(type, dsp56k::Field_dddddd, opcode);
   }
 

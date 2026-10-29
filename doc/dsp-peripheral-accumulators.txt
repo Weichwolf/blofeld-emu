@@ -1,0 +1,37 @@
+Full-accumulator peripheral loads
+
+FM12.2.1/13-134..136 MOVEP pp/qq,A/B sign-extends the actual24-bit peripheral
+word into the extension/MSP and clears the low24bits. CCR,scaling and arithmetic
+saturation modes do not alter this load. The existing owned AG1 response is
+sampled once; native E1 publishes all three actual completed accumulator fields.
+Native flags/PC/counters retire in E2. Bare staged callers still fail before
+I/O without the actual automatic AG1 response owner. No host result is supplied.
+
+An adjacent A1/B1 bus consumer interlocks one period; a NOP separates it, and
+the opposite accumulator stays independent. A preceding CLR retains its real
+CCR result while the newer MOVEP replaces the selected accumulator. Destructive
+HRX reads consume two real SPI-supplied words at their own AG1 periods; replay
+restores FIFO consumption together with the native/pipeline state. Unknown or
+partially known full words fail with address/operation/PC/OMR before publication.
+
+Independent controls:32 Freescale encodings and472 family-model windows/13168
+own instructions,including88 held-out dependency/preceding-ALU cases. The32
+assembler warnings identify the16 adjacent same-accumulator consumers twice;
+there are no assembler errors. Processor libraries remain unchanged. Nominal
+instruction counts and logical phases are not silicon strobe measurements.
+See dsp-peripheral-accumulator-reference.json for hashes and evidence limits.
+
+Own gates cover768 native loads/1536 suffixes,16 bare-owner guards/32 refusals,
+768 per-period windows/96 changed-source cuts/192 suffixes,352 dependency/ALU
+windows/112 cuts/224 suffixes,18 FIFO cuts/36 suffixes and strict unknown-word
+and raw-A1/B1 controls. These four groups plus48 affected regressions pass per ASan/UBSan and separate
+TSan profile. Format/tidy and actual hardening/instrumentation qualify1283
+recipes,7 native archives and28 ELFs per profile;650 old CMake contracts remain.
+
+  cmake --build --preset strict --target blofeld-peripheral-accumulator-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_peripheral_accumulator_'
+  # Build/run the same scopes separately with preset/test directory thread.
+
+Automatic SA/SC and unqualified DMA/control overlaps remain outside this scope.
+Complete original reset-to-instrument,both profiles/all functions,MIDI/audio,
+storage/update/recovery and realtime/long-run acceptance remain open.

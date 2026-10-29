@@ -95,8 +95,7 @@ void refused_forms() {
                            "movep ssh,x:<<$fffffc",
                            "movep a,x:<<$fffffc",
                            "movep b,x:<<$fffffc",
-                           "movep a0,x:<<$fffffc",
-                           "movep x:<<$ffff94,a"}) {
+                           "movep a0,x:<<$fffffc"}) {
     DspMachine machine;
     const std::array<std::string, 1> code{text};
     prepare(machine, code);
@@ -108,9 +107,41 @@ void refused_forms() {
     require(error.contains("automatic DSP decode P:") && error.contains("pc=") &&
                 error.contains("omr=") && run.faulted() && run.completed_cycles() == 2 &&
                 machine.cpu().debug_state() == before && !machine.bus().once_latch(),
-            "Control/stack/accumulator store sources and full-accumulator loads remain explicit "
-            "frontiers");
+            "Control/stack/full-accumulator and low-part store sources remain explicit frontiers");
   }
+}
+
+void port_load_accumulators() {
+  for (const auto *reg : {"a", "b"}) {
+    DspMachine machine;
+    const std::array<std::string, 1> code{"movep x:<<$ffff90," + std::string(reg)};
+    prepare(machine, code);
+    auto expected = machine.cpu().debug_state();
+    const bool b = std::string(reg) == "b";
+    (b ? expected.cpu.b : expected.cpu.a) = std::uint64_t{1} << word_bits;
+    ++expected.cpu.pc;
+    ++expected.native_instructions;
+    ++expected.native_cycles;
+    DspFetchRun run(contract(), machine);
+    clocks(run, machine, 7);
+    require(machine.cpu().debug_state() == expected && !machine.bus().once_latch(),
+            "Full A/B HCKR loads publish the independent sign/zero-fill/CCR/CPU result");
+  }
+}
+
+void empty_accumulator_source() {
+  DspMachine machine;
+  const std::array<std::string, 1> code{"movep x:<<$ffff94,a"};
+  prepare(machine, code);
+  const auto before = machine.cpu().debug_state();
+  DspFetchRun run(contract(), machine);
+  clocks(run, machine, 3);
+  const auto error =
+      fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
+  require(error.contains("read X:0xffff94") && error.contains("pc=") && error.contains("omr=") &&
+              run.faulted() && run.completed_cycles() == 3 && machine.cpu().debug_state() == before,
+          "Qualified full destination still rejects its actual empty HRX source before native "
+          "publication");
 }
 
 void port_load_agu_dependencies() {
@@ -248,6 +279,8 @@ void register_state_checks() {
   captured_opcode(true);
   transmission_once();
   refused_forms();
+  port_load_accumulators();
+  empty_accumulator_source();
   port_load_agu_dependencies();
   strict_write_failure();
   failed_f2();

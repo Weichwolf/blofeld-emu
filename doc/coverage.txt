@@ -3224,3 +3224,16 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   reference manifest. General EA/register branches,REP-bit bodies,unqualified
   overlaps,silicon phase placement and complete original reset-to-instrument,
   both profiles,MIDI/audio/storage/update/recovery,realtime/long-run remain open.
+
+- Fixed-I/O MOVEP pp/qq full A/B loads publish all actual native accumulator
+  fields in E1,with sign extension/low24 zero-fill and unchanged CCR;E2 retains
+  native retirement.32 independent encodings and472 family-model windows/
+  13168 own instructions qualify nominal1period loads,one-period adjacent
+  bus-consumer interlocks and preceding-CLR ordering.52 named scopes pass per
+  ASan/UBSan and separate TSan:768 native loads/1536 suffixes,16 bare-owner
+  guards/32 refusals,768 per-period windows/96 cuts/192 suffixes,352 dependency/
+  ALU windows/112 cuts/224 suffixes,18 FIFO cuts/36 suffixes,strict unknown-word
+  controls and48 regressions. Format/tidy and actual hardening/instrumentation
+  pass:1283 recipes,7 native archives,28 ELFs/profile.
+  See dsp-peripheral-accumulators.txt and its reference manifest.
+  Normal instrument acceptance remains open.

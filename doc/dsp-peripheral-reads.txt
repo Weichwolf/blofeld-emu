@@ -3,7 +3,9 @@ Native peripheral-read pipeline
 The automatic_memory profile executes selected short X/Y MOVEP register loads
 and JSET/JCLR peripheral-bit branches through the native interpreter. Actual
 F2 words determine the port, destination and extension. Unsupported control,
-stack and full-accumulator destinations fail before I/O. Unknown ports retain
+stack destinations fail before I/O. Qualified full A/B loads are described in
+dsp-peripheral-accumulators.txt; relative bit branches in dsp-peripheral-relative.txt.
+Unknown ports retain
 strict address/operation/PC/OMR failures. An encoding decoder is not proof of
 all destination hazards or all peripheral timing.
 

@@ -54,7 +54,7 @@ void unknown_source(const std::string &instruction, const std::string_view targe
 }
 
 void invalid_destinations() {
-  for (const auto *reg : {"sr", "omr", "ssh", "a", "b"}) {
+  for (const auto *reg : {"sr", "omr", "ssh"}) {
     DspMachine machine;
     const std::array<std::string, 1> code{"movep x:<<$ffff94," + std::string(reg)};
     prepare(machine, code);
@@ -67,7 +67,7 @@ void invalid_destinations() {
     require(error.contains("automatic DSP decode") && error.contains("pc=") &&
                 error.contains("omr=") && run.completed_cycles() == 2 &&
                 machine.cpu().debug_state() == before,
-            "Control/stack/full-accumulator destinations must fail before source capture");
+            "Control/stack destinations must fail before source capture");
   }
 }
 
@@ -192,6 +192,8 @@ void public_phase_bypass() {
 
 void guards() {
   unknown_source("movep x:<<$ffff96,x0", "X:0xffff96");
+  unknown_source("movep x:<<$ffff94,a", "X:0xffff94");
+  unknown_source("movep x:<<$ffff94,b", "X:0xffff94");
   unknown_source("movep y:<<$fffffc,x0", "Y:0xfffffc");
   unknown_source("jset #0,x:<<$ffff96," + number(body + 2), "X:0xffff96");
   invalid_destinations();
