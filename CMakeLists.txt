@@ -288,7 +288,7 @@ add_library(blofeld_host_midi_port src/midi/host_midi_port.cpp
   src/midi/sequence_encode.cpp src/midi/sequence_decode.cpp src/midi/sequence_pool.cpp)
 target_include_directories(blofeld_host_midi_port PUBLIC src)
 target_link_libraries(blofeld_host_midi_port PUBLIC blofeld_quality)
-add_library(blofeld_reference_board src/board/reference_config.cpp
+add_library(blofeld_reference_board src/board/reference_config.cpp src/board/reference_square_clock.cpp src/board/reference_audio_clock.cpp
   src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
   src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
@@ -3113,7 +3113,7 @@ if(BUILD_TESTING)
     endif()
   endforeach()
   file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/hardening-executables.txt"
-    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n$<TARGET_FILE:blofeld-preupdate-native-test>\n$<TARGET_FILE:blofeld-preupdate-clock-test>\n$<TARGET_FILE:blofeld-preupdate-window-test>\n$<TARGET_FILE:blofeld-preupdate-guard-test>\n$<TARGET_FILE:blofeld-preupdate-load-test>\n$<TARGET_FILE:blofeld-preupdate-producer-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-guard-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-test>\n$<TARGET_FILE:blofeld-preupdate-store-test>\n$<TARGET_FILE:blofeld-preupdate-alu-test>\n$<TARGET_FILE:blofeld-preupdate-alu-window-test>\n$<TARGET_FILE:blofeld-preupdate-loop-test>\n$<TARGET_FILE:blofeld-preupdate-source-window-test>\n$<TARGET_FILE:blofeld-short-load-native-test>\n$<TARGET_FILE:blofeld-short-load-stage-test>\n$<TARGET_FILE:blofeld-short-load-guard-test>\n$<TARGET_FILE:blofeld-short-load-agu-test>\n$<TARGET_FILE:blofeld-short-load-accumulator-test>\n$<TARGET_FILE:blofeld-short-load-loop-test>\n$<TARGET_FILE:blofeld-short-load-scaling-test>\n$<TARGET_FILE:blofeld-repeat-register-test>\n$<TARGET_FILE:blofeld-repeat-register-producer-test>\n$<TARGET_FILE:blofeld-repeat-register-guard-test>\n$<TARGET_FILE:blofeld-offset-store-test>\n$<TARGET_FILE:blofeld-repeat-accumulator-preupdate-test>\n$<TARGET_FILE:blofeld-subroutine-clock-test>\n$<TARGET_FILE:blofeld-subroutine-guard-test>\n$<TARGET_FILE:blofeld-dor-clock-test>\n$<TARGET_FILE:blofeld-raw-middle-test>\n$<TARGET_FILE:blofeld-dsp-gpio-pull-test>\n$<TARGET_FILE:blofeld-parallel-middle-test>\n$<TARGET_FILE:blofeld-nand-sequential-read-test>\n$<TARGET_FILE:blofeld-near-end-clock-test>\n$<TARGET_FILE:blofeld-near-end-guard-test>\n$<TARGET_FILE:blofeld-movem-clock-test>\n$<TARGET_FILE:blofeld-dma-pipeline-activation-test>\n$<TARGET_FILE:blofeld-dma-pipeline-controls-test>\n$<TARGET_FILE:blofeld-dma-pipeline-timing-test>\n")
+    CONTENT "${blofeld_hardened_executables}$<TARGET_FILE:blofeld-reference-pipeline-test>\n$<TARGET_FILE:blofeld-original-board-power-on-test>\n$<TARGET_FILE:blofeld-sci-midi-timeline-test>\n$<TARGET_FILE:blofeld-host-midi-session-test>\n$<TARGET_FILE:blofeld-sci-fast-test>\n$<TARGET_FILE:blofeld-sci-overlap-test>\n$<TARGET_FILE:blofeld-gpio-multiple-drivers-test>\n$<TARGET_FILE:blofeld-original-gpio-reset-test>\n$<TARGET_FILE:blofeld-usb-functional-halt-test>\n$<TARGET_FILE:blofeld-scalar-store-test>\n$<TARGET_FILE:blofeld-scalar-store-window-test>\n$<TARGET_FILE:blofeld-repeat-scalar-test>\n$<TARGET_FILE:blofeld-repeat-scalar-guard-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-test>\n$<TARGET_FILE:blofeld-usb-endpoint-status-native-test>\n$<TARGET_FILE:blofeld-modifier-agu-test>\n$<TARGET_FILE:blofeld-modifier-move-test>\n$<TARGET_FILE:blofeld-modifier-window-test>\n$<TARGET_FILE:blofeld-partial-scalar-test>\n$<TARGET_FILE:blofeld-partial-scalar-window-test>\n$<TARGET_FILE:blofeld-repeat-partial-test>\n$<TARGET_FILE:blofeld-repeat-partial-guard-test>\n$<TARGET_FILE:blofeld-accumulator-load-test>\n$<TARGET_FILE:blofeld-accumulator-load-window-test>\n$<TARGET_FILE:blofeld-accumulator-load-incoming-test>\n$<TARGET_FILE:blofeld-preupdate-native-test>\n$<TARGET_FILE:blofeld-preupdate-clock-test>\n$<TARGET_FILE:blofeld-preupdate-window-test>\n$<TARGET_FILE:blofeld-preupdate-guard-test>\n$<TARGET_FILE:blofeld-preupdate-load-test>\n$<TARGET_FILE:blofeld-preupdate-producer-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-guard-test>\n$<TARGET_FILE:blofeld-preupdate-modifier-test>\n$<TARGET_FILE:blofeld-preupdate-store-test>\n$<TARGET_FILE:blofeld-preupdate-alu-test>\n$<TARGET_FILE:blofeld-preupdate-alu-window-test>\n$<TARGET_FILE:blofeld-preupdate-loop-test>\n$<TARGET_FILE:blofeld-preupdate-source-window-test>\n$<TARGET_FILE:blofeld-short-load-native-test>\n$<TARGET_FILE:blofeld-short-load-stage-test>\n$<TARGET_FILE:blofeld-short-load-guard-test>\n$<TARGET_FILE:blofeld-short-load-agu-test>\n$<TARGET_FILE:blofeld-short-load-accumulator-test>\n$<TARGET_FILE:blofeld-short-load-loop-test>\n$<TARGET_FILE:blofeld-short-load-scaling-test>\n$<TARGET_FILE:blofeld-repeat-register-test>\n$<TARGET_FILE:blofeld-repeat-register-producer-test>\n$<TARGET_FILE:blofeld-repeat-register-guard-test>\n$<TARGET_FILE:blofeld-offset-store-test>\n$<TARGET_FILE:blofeld-repeat-accumulator-preupdate-test>\n$<TARGET_FILE:blofeld-subroutine-clock-test>\n$<TARGET_FILE:blofeld-subroutine-guard-test>\n$<TARGET_FILE:blofeld-dor-clock-test>\n$<TARGET_FILE:blofeld-raw-middle-test>\n$<TARGET_FILE:blofeld-dsp-gpio-pull-test>\n$<TARGET_FILE:blofeld-parallel-middle-test>\n$<TARGET_FILE:blofeld-nand-sequential-read-test>\n$<TARGET_FILE:blofeld-near-end-clock-test>\n$<TARGET_FILE:blofeld-near-end-guard-test>\n$<TARGET_FILE:blofeld-movem-clock-test>\n$<TARGET_FILE:blofeld-dma-pipeline-activation-test>\n$<TARGET_FILE:blofeld-dma-pipeline-controls-test>\n$<TARGET_FILE:blofeld-dma-pipeline-timing-test>\n$<TARGET_FILE:blofeld-square-clock-test>\n$<TARGET_FILE:blofeld-audio-clock-board-test>\n")
   set(blofeld_hardening_options)
   if(BLOFELD_USE_LIBSTDCXX)
     list(APPEND blofeld_hardening_options --libstdcxx)
@@ -3846,4 +3846,32 @@ if(BUILD_TESTING)
     blofeld-dma-pipeline-controls-test blofeld-dma-pipeline-timing-test)
   set_tests_properties(dsp_automatic_dma_activation dsp_automatic_dma_controls dsp_automatic_dma_timing
     PROPERTIES LABELS dsp_automatic_dma_runtime TIMEOUT 300)
+endif()
+
+# Explicit free-running audio input clocks retain one declared source and fanout.
+if(BUILD_TESTING)
+  add_executable(blofeld-square-clock-test test/reference_square_clock_test.cpp
+    test/reference_audio_clock_test.cpp)
+  target_link_libraries(blofeld-square-clock-test PRIVATE blofeld_reference_board)
+  add_executable(blofeld-audio-clock-board-test test/reference_audio_clock_board.cpp)
+  target_link_libraries(blofeld-audio-clock-board-test PRIVATE blofeld_reference_board blofeld_dsp_native)
+  add_dependencies(quality blofeld-square-clock-test blofeld-audio-clock-board-test)
+  add_test(NAME reference_square_clock_source COMMAND blofeld-square-clock-test source)
+  add_test(NAME reference_square_clock_serial COMMAND blofeld-square-clock-test serial)
+  add_test(NAME reference_square_clock_snapshots COMMAND blofeld-square-clock-test snapshots)
+  add_test(NAME reference_audio_clock_board COMMAND blofeld-audio-clock-board-test runtime)
+  add_test(NAME reference_audio_clock_restore COMMAND blofeld-audio-clock-board-test restore)
+  add_test(NAME reference_audio_clock_guards COMMAND blofeld-audio-clock-board-test guards)
+  set_tests_properties(reference_square_clock_source reference_square_clock_serial
+    reference_square_clock_snapshots reference_audio_clock_board reference_audio_clock_restore
+    reference_audio_clock_guards PROPERTIES LABELS reference_audio_clock TIMEOUT 300)
+endif()
+
+if(BUILD_TESTING)
+  add_test(NAME reference_audio_clock_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_audio_clock_cli.py"
+    $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-rom-fixture>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/test-artifacts/reference-audio-clock")
+  set_tests_properties(reference_audio_clock_cli PROPERTIES LABELS reference_audio_clock TIMEOUT 300)
 endif()

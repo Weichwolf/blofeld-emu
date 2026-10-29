@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/reference_board.hpp"
+#include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
-#include "mcu/hc12.hpp"
 #include "midi/midi_timed.hpp"
 
 #include <cstdint>
@@ -59,7 +59,7 @@ void Board::trace_dsp_midi(const std::uint64_t at) {
     trace << "idle";
   }
   trace << " synchronized=" << config_.midi_dsp->synchronized
-        << " mcu-pc=" << hex(native_->mcu.cpu().state().pc)
+        << " mcu-pc=" << mcu_pc_context(native_->mcu)
         << " dsp-pc=" << hex(native_->dsp.cpu().state().pc, 6) << '\n';
   if (!trace) { throw Fault("Reference DSP MIDI trace output failed"); }
 }

@@ -188,4 +188,15 @@ void DspGpio::set_drive(const DspGpioDrive drive) {
   *this = next;
 }
 
+void DspGpio::update_drive(const std::uint32_t mask, const DspGpioDrive drive) {
+  if ((mask & ~pin_mask()) != 0 ||
+      ((drive.mask | drive.levels | drive.floating | drive.unknown) & ~mask) != 0) {
+    throw Fault("Invalid masked DSP GPIO external drive at " + address(DspGpioRegister::data));
+  }
+  set_drive({.mask = (external_.mask & ~mask) | drive.mask,
+             .levels = (external_.levels & ~mask) | drive.levels,
+             .floating = (external_.floating & ~mask) | drive.floating,
+             .unknown = (external_.unknown & ~mask) | drive.unknown});
+}
+
 }

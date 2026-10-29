@@ -1213,6 +1213,15 @@ MCU–DSP communication             partial  Local MCU output masks/knownness ar
                                           Native refill/payload ties, external
                                           SCKT/FST, both maps, mixed sources and
                                           periodic cursor/divider replay checked.
+                                          Optional exact-rate source/fanout now
+                                          drives ESAI HCKT and DAX ACI with GPIO
+                                          peer levels and current reference PLL
+                                          rates. Both Board schedules run own
+                                          native PCM/DAX programs and joint replay;
+                                          source phase survives reset/snapshots.
+                                          Physical clock/gating and original
+                                          instrument audio remain unqualified
+                                          (reference-audio-clock.txt).
                                           Missing/unqualified inputs still fail;
                                           no host PCM or physical clock claim.
                                           Physical wake latency remains

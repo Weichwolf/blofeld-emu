@@ -6,6 +6,7 @@
 #include "audio/serial_pcm.hpp"
 #include "board/mcu_dsp_fetch_schedule.hpp"
 #include "board/mcu_dsp_schedule.hpp"
+#include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_machine.hpp"
@@ -85,6 +86,15 @@ struct DspEsaiClock {
   unsigned index = 0;
 };
 
+// Declared laboratory routing: bits0/1 select ESAI0/1 HCKT; bit2 selects DAX ACI.
+// Matching divisors do not establish a physical shared clock net.
+struct AudioClockRoute {
+  std::uint64_t frequency_hz = 0;
+  std::uint64_t epoch_ticks = 0;
+  unsigned destinations = 0;
+  bool initial_level = false;
+};
+
 struct PcmRoute {
   unsigned instance = 0;
   unsigned lane = 0;
@@ -146,6 +156,7 @@ struct Config {
   std::vector<DspInput> dsp_initial;
   std::vector<DspInput> dsp_events;
   std::vector<DspEsaiClock> dsp_clocks;
+  std::optional<AudioClockRoute> audio_clock;
   std::optional<PcmRoute> pcm;
   std::optional<MidiRoute> midi;
   std::optional<SciMidiRoute> midi_sci_timed;
@@ -229,6 +240,8 @@ struct Status {
   std::size_t next_event = 0;
   std::size_t next_dsp_event = 0;
   std::array<std::uint64_t, 2> next_esai_edge{};
+  std::optional<SquareClock> audio_clock;
+  bool audio_clock_started = false;
   std::array<SerialPcmPins, 2> esai_inputs{};
   std::optional<SerialPcmReceiver> pcm;
   std::optional<SerialPcmStamp> pcm_stamp;
@@ -303,6 +316,8 @@ private:
     std::size_t next_event = 0;
     std::size_t next_dsp_event = 0;
     std::array<std::uint64_t, 2> next_esai_edge{};
+    std::optional<SquareClock> audio_clock;
+    bool audio_clock_started = false;
     std::array<SerialPcmPins, 2> esai_inputs{};
     std::optional<SerialPcmReceiver> pcm;
     std::optional<SerialPcmStamp> pcm_stamp;
@@ -350,10 +365,19 @@ private:
     bool collision = false;
     bool midi = false;
     bool sci_midi = false;
+    bool audio_clock = false;
   };
 
   [[nodiscard]] std::optional<DspOffer> next_dsp_input() const;
+  static void select_dsp_input(std::optional<DspOffer> &selected, DspOffer candidate);
   void observe_dsp_input(std::uint64_t at);
+  void prepare_audio_clock();
+  void observe_audio_clock(std::uint64_t at);
+  void trace_audio_clock(const AudioClockRoute &route,
+                         SquareClockLevel event,
+                         bool baseline,
+                         std::uint64_t core_hz);
+  [[nodiscard]] std::uint64_t audio_core_hz() const;
   void apply_dsp(const DspInput &input);
   void trace_dsp_input(const DspInput &input, std::uint64_t at);
   void trace_dsp_midi(std::uint64_t at);

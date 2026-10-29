@@ -1,0 +1,37 @@
+Explicit reference audio clock
+
+Optional reference-board setting, with times in the existing common timebase:
+
+  dsp-input-order input-before-dsp 64
+  dsp-audio-clock 11289600 176400 low 6 reference-reset-edges
+
+Fields: frequency Hz, epoch ticks, initial low/high level, destination mask,
+explicit reference timing. Bits 0/1 select ESAI0/1 HCKT; bit 2 selects DAX ACI.
+Mask 6 drives ESAI1 and DAX from one declared source. No source is implicit.
+The epoch establishes a baseline; the first transition is one half-period later.
+
+Half-periods must fit the common timebase exactly. Example timebase: 211680000000
+Hz, with legacy DSP release no later than 176400. SquareClock::extend_timebase
+computes a checked common multiple; callers must scale existing timestamps too.
+No host audio setting changes an emulated clock. Original programmed divider
+ratios permit 44.1/48 kHz candidates; neither a frequency nor shared wiring is proven.
+
+One source offer fans out to declared peripheral inputs and their GPIO peers.
+Masked updates preserve unrelated driven/floating/unknown pins and contention.
+DAX core rates follow the existing reference PLL/EXTAL boundary contract.
+Missing inputs, rates and unsupported pin modes retain visible failures.
+Independent same-time sources and competing ESAI input routes still reject.
+Failed fanout quarantines the Board; retry requires a joint trusted restore.
+
+Source phase survives guest/peripheral reset and is included in Board checkpoints
+and Status equality. DSP-AUDIO-CLOCK, DSP-ESAI and DSP-DAX trace actual observations.
+MCU PC is marked unknown-reset until the reset sequence completes.
+Both nominal-completion and automatic-reset Board schedules run own native MOVEP
+initialization, PLL switching, literal PCM/DAX samples and coordinated replay.
+Separate source/peripheral checks cover exact edges, overflow, all frame phases
+and endpoint resets. These do not establish original cold startup, DMA/FIFO phase,
+physical clock gating, original instrument audio or realtime performance.
+
+  cmake --build --preset strict --target blofeld-square-clock-test \
+    blofeld-audio-clock-board-test blofeld-headless blofeld-reference-rom-fixture
+  ctest --test-dir build/strict -L '^reference_audio_clock$' --output-on-failure

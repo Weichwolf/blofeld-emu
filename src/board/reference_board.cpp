@@ -2,6 +2,7 @@
 #include "board/reference_board.hpp"
 
 #include "audio/pcm_recording.hpp"
+#include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
 #include "mcu/hc12.hpp"
@@ -49,6 +50,7 @@ Board::Board(const Config &config, const Execution &execution)
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
   control_.scale = common / local;
+  prepare_audio_clock();
   if (config_.midi_sci_timed) {
     if (config_.midi_reference) { native_->mcu.set_sci_receive_reference(config_.midi_reference); }
     control_.midi_sci.emplace(
@@ -180,7 +182,7 @@ void Board::boundary() {
     if (execution_.trace != nullptr) {
       *execution_.trace << "INPUT requested=" << event.ticks << " actual=" << ticks()
                         << " kind=" << static_cast<unsigned>(event.kind)
-                        << " mcu-pc=" << hex(native_->mcu.cpu().state().pc) << '\n';
+                        << " mcu-pc=" << mcu_pc_context(native_->mcu) << '\n';
     }
     if (control_.release_epoch) { transition(sample()); }
     ++control_.next_event;

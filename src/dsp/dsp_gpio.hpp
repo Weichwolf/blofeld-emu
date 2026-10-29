@@ -48,6 +48,8 @@ public:
                                    std::uint32_t mask = DspGpioWrite::word_mask) const;
   void write(DspGpioWrite access);
   void set_drive(DspGpioDrive drive);
+  // Replace only this source's declared pins, retaining unrelated observations.
+  void update_drive(std::uint32_t mask, DspGpioDrive drive);
   void attach_pad_source(GpioPadReader reader);
   [[nodiscard]] DspGpioOutputs outputs() const;
   [[nodiscard]] DspGpioSample observe_pads(std::uint32_t mask) const;

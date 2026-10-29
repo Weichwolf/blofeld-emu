@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/reference_board.hpp"
+#include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "mcu/mcu_bus.hpp"
@@ -21,7 +22,7 @@ SpiInputs Board::sample() const {
   const auto pins = native_->mcu.bus().observe_pads(McuPort::b, mask);
   if (pins.known != mask) {
     throw Fault("Unknown reference SPI pad read at 0x0001 mask=" + hex(mask, 2) +
-                " known=" + hex(pins.known, 2) + " mcu-pc=" + hex(native_->mcu.cpu().state().pc) +
+                " known=" + hex(pins.known, 2) + " mcu-pc=" + mcu_pc_context(native_->mcu) +
                 " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
   }
   return {.selected = (pins.levels & config_.select_n) == 0,
@@ -32,8 +33,7 @@ SpiInputs Board::sample() const {
 void Board::check_signals() const {
   if (control_.release_epoch && !same(sample(), control_.previous)) {
     throw Fault("Unobserved reference SPI pad change at 0x0001 mcu-pc=" +
-                hex(native_->mcu.cpu().state().pc) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+                mcu_pc_context(native_->mcu) + " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
   }
 }
 

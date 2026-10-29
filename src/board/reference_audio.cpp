@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/pcm_sink.hpp"
 #include "board/reference_board.hpp"
+#include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_core.hpp"
-#include "mcu/hc12.hpp"
 
 #include <string>
 
@@ -34,7 +34,7 @@ void Board::check_pcm_output() const {
     pcm_output_->check();
   } catch (const Fault &error) {
     throw Fault("Reference PCM output check at=" + std::to_string(ticks()) +
-                " mcu-pc=" + hex(native_->mcu.cpu().state().pc) +
+                " mcu-pc=" + mcu_pc_context(native_->mcu) +
                 " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + error.what());
   }
 }

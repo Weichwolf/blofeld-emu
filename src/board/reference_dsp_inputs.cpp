@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/reference_board.hpp"
+#include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "mcu/hc12.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -49,7 +49,7 @@ void Board::apply_dsp(const DspInput &input) {
   } catch (const Fault &error) {
     const auto *const kind = input.kind == DspInputKind::tio ? "TIO" : "ESAI";
     throw Fault("Reference DSP " + std::string(kind) + " input write index=" +
-                std::to_string(input.index) + " mcu-pc=" + hex(native_->mcu.cpu().state().pc) +
+                std::to_string(input.index) + " mcu-pc=" + mcu_pc_context(native_->mcu) +
                 " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + error.what());
   }
 }
@@ -73,12 +73,15 @@ void Board::trace_dsp_input(const DspInput &input, const std::uint64_t at) {
           << " tx-levels=" << hex(data.levels, 2) << " clocks-driven=" << hex(clocks.driven, 2)
           << " clocks-known=" << hex(clocks.known, 2) << " clocks-levels=" << hex(clocks.levels, 2);
   }
-  trace << " mcu-pc=" << hex(native_->mcu.cpu().state().pc)
+  trace << " mcu-pc=" << mcu_pc_context(native_->mcu)
         << " dsp-pc=" << hex(native_->dsp.cpu().state().pc, 6) << '\n';
 }
 
 DspExternalEvents Board::dsp_inputs() {
-  if (config_.dsp_events.empty() && config_.dsp_clocks.empty() && !control_.midi_dsp) { return {}; }
+  if (config_.dsp_events.empty() && config_.dsp_clocks.empty() && !control_.midi_dsp &&
+      !control_.audio_clock) {
+    return {};
+  }
   return {.next_ticks = [this]() -> std::optional<std::uint64_t> {
             const auto next = next_dsp_input();
             return next ? std::optional{next->input.ticks} : std::nullopt;

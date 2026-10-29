@@ -1,15 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/reference_board.hpp"
+#include "board/reference_context.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_esai.hpp"
-#include "mcu/hc12.hpp"
 
 #include <cstdint>
 #include <optional>
 #include <string>
 
 namespace blofeld::reference {
+void Board::select_dsp_input(std::optional<DspOffer> &selected, const DspOffer candidate) {
+  if (selected && candidate.input.ticks == selected->input.ticks) {
+    selected->collision = true;
+  } else if (!selected || candidate.input.ticks < selected->input.ticks) {
+    selected = candidate;
+  }
+}
+
 std::optional<Board::DspOffer> Board::next_dsp_input() const {
   std::optional<DspOffer> result;
   if (control_.next_dsp_event < config_.dsp_events.size()) {
@@ -19,38 +27,33 @@ std::optional<Board::DspOffer> Board::next_dsp_input() const {
     const auto edge = control_.next_esai_edge.at(clock.index);
     if (edge == clock.edges) { continue; }
     const auto at = clock.start_ticks + (edge * clock.half_period_ticks);
-    if (result && at > result->input.ticks) { continue; }
-    if (result && at == result->input.ticks) {
-      result->collision = true;
-      continue;
-    }
-    result = DspOffer{.input = {.ticks = at,
-                                .kind = DspInputKind::esai,
-                                .index = clock.index,
-                                .esai = {.high_clock = edge % 2 == 0,
-                                         .timing = DspEsaiClockTiming::reference_reset_edges}},
-                      .clock_index = clock.index};
+    select_dsp_input(
+        result,
+        DspOffer{.input = {.ticks = at,
+                           .kind = DspInputKind::esai,
+                           .index = clock.index,
+                           .esai = {.high_clock = edge % 2 == 0,
+                                    .timing = DspEsaiClockTiming::reference_reset_edges}},
+                 .clock_index = clock.index});
+  }
+  if (control_.audio_clock) {
+    const auto at = control_.audio_clock_started ? control_.audio_clock->next().ticks
+                                                 : control_.audio_clock->current().ticks;
+    select_dsp_input(result, DspOffer{.input = {.ticks = at}, .audio_clock = true});
   }
   if (control_.midi_dsp) {
     if (!config_.midi_dsp) { throw Fault("DSP MIDI source has no configured route"); }
     const auto event = control_.midi_dsp->next_event();
-    if (result && event.ticks == result->input.ticks) {
-      result->collision = true;
-    } else if (!result || event.ticks < result->input.ticks) {
-      result = DspOffer{.input = {.ticks = event.ticks,
-                                  .index = config_.midi_dsp->index,
-                                  .level = event.level,
-                                  .synchronized = config_.midi_dsp->synchronized},
-                        .midi = true};
-    }
+    select_dsp_input(result,
+                     DspOffer{.input = {.ticks = event.ticks,
+                                        .index = config_.midi_dsp->index,
+                                        .level = event.level,
+                                        .synchronized = config_.midi_dsp->synchronized},
+                              .midi = true});
   }
   if (control_.midi_sci) {
     const auto event = control_.midi_sci->next_event();
-    if (result && event.ticks == result->input.ticks) {
-      result->collision = true;
-    } else if (!result || event.ticks < result->input.ticks) {
-      result = DspOffer{.input = {.ticks = event.ticks}, .sci_midi = true};
-    }
+    select_dsp_input(result, DspOffer{.input = {.ticks = event.ticks}, .sci_midi = true});
   }
   return result;
 }
@@ -59,9 +62,12 @@ void Board::observe_dsp_input(const std::uint64_t at) {
   const auto next = next_dsp_input();
   if (!next || at != next->input.ticks) { throw Fault("DSP input source changed its event time"); }
   if (next->collision) {
-    throw Fault("Simultaneous reference DSP input sources at=" + std::to_string(at) +
-                " mcu-pc=" + hex(native_->mcu.cpu().state().pc) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+    throw Fault("Simultaneous reference DSP input sources at=" + std::to_string(at) + " mcu-pc=" +
+                mcu_pc_context(native_->mcu) + " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+  }
+  if (next->audio_clock) {
+    observe_audio_clock(at);
+    return;
   }
   if (next->sci_midi) {
     observe_sci_midi(at);

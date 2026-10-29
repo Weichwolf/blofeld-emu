@@ -238,6 +238,22 @@ DspEsaiClock dsp_clock(std::istringstream &line) {
   return {.start_ticks = start, .half_period_ticks = half, .edges = edges, .index = index};
 }
 
+AudioClockRoute audio_clock(std::istringstream &line) {
+  const auto frequency = number(line, UINT64_MAX);
+  const auto epoch = number(line, UINT64_MAX);
+  const auto level = dsp_level(line);
+  if (!level) { throw Fault("Reference audio clock initial level must be known"); }
+  const auto destinations = static_cast<unsigned>(number(line, 7));
+  literal(line, "reference-reset-edges");
+  if (frequency == 0 || destinations == 0) {
+    throw Fault("Reference audio clock frequency/destinations must be nonzero");
+  }
+  return {.frequency_hz = frequency,
+          .epoch_ticks = epoch,
+          .destinations = destinations,
+          .initial_level = *level};
+}
+
 void dsp_interrupts(Config &config, std::istringstream &line) {
   literal(line, "native-vector-estimates");
   config.dsp.interrupts = DspInterruptTiming::native_vector_estimates;
@@ -348,6 +364,8 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
     dsp_interrupts(config, line);
   } else if (key == "dsp-input-order") {
     dsp_order(config, line);
+  } else if (key == "dsp-audio-clock") {
+    config.audio_clock = audio_clock(line);
   } else if (key == "pcm-receive") {
     config.pcm = pcm_route(line);
   } else if (key == "spi-b") {
@@ -442,7 +460,7 @@ struct Parser {
         throw Fault("Missing reference-board setting: " + std::string(required));
       }
     }
-    if (!result.dsp_events.empty() || !result.dsp_clocks.empty()) {
+    if (!result.dsp_events.empty() || !result.dsp_clocks.empty() || result.audio_clock) {
       if (result.dsp_input_order == DspExternalOrder::unqualified) {
         throw Fault("Timed DSP inputs require an explicit dsp-input-order");
       }
