@@ -99,7 +99,8 @@ std::uint8_t memory_source_dependency(const DspInstructionDependency instruction
   const bool program_store = memory && is_program_memory(*memory) &&
                              memory->lanes[0].operation == DspMemoryOperation::write;
   if (program_store || full_accumulator_scalar_store(consumer.value) ||
-      partial_accumulator_scalar_store(consumer.value)) {
+      partial_accumulator_scalar_store(consumer.value) ||
+      middle_accumulator_peripheral_store(consumer.value)) {
     // FM3.5.1: the native E1 memory source must observe the preceding E2 writer.
     return dependency(operands(producer, false).written, operands(consumer, false).read);
   }

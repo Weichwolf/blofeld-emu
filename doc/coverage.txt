@@ -3164,3 +3164,14 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   Strict reserved Y:002000,required ROM,other ISA/IRQ contexts,full original
   reset-to-instrument/MIDI/audio/storage/update/recovery and both profiles'
   complete function/real-time acceptance remain open.
+
+- Automatic MOVEP admits raw A1/B1 in both X/Y I/O ranges with real native
+  E1 stores and older accumulator-source interlocks. Eight independent
+  Freescale encodings and16 family-model windows pin values and nominal
+  source holds.336 direct native value/scaling/CCR/SA16 cases and16 automatic
+  period-by-period windows cover24 joint cuts/48 suffixes, preserved full
+  CPU/stack/counters, unknown-port quarantine and two explicit automatic-SA16
+  refusals. SA16 raw bus semantics are qualified directly; the broader automatic
+  SA16 execution mode remains unqualified. See dsp-middle-peripheral.txt and
+  dsp-middle-peripheral-reference.json. This does not establish complete original
+  NAND loading, instrument boot, MIDI/audio or board/silicon equivalence.

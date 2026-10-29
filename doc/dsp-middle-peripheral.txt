@@ -1,0 +1,29 @@
+Raw accumulator-middle peripheral stores
+
+Automatic MOVEP now admits A1/B1 stores in both X/Y peripheral address ranges.
+The native interpreter supplies the real 24-bit bus value; full A/B limiting,
+other accumulator parts, control/stack sources and reverse loads stay outside
+this admission. Direct native SA16 uses the documented upper16 middle bits,
+zero-extended. Automatic reference execution still rejects SA16 explicitly;
+this increment does not qualify that broader pipeline mode.
+An immediately preceding writer of the selected accumulator holds consumer E1
+until the older real E2 result publishes. The other accumulator does not stall.
+
+Independent inputs: DSP56300FM Rev.5 sections3.1.3,3.5/Table3-4,13-136 andA-1;
+Freescale assembler6.3.28 pins eight register/space/range encodings. Sixteen own
+normal-mode CLR/MOVEP windows in the pinned Freescale family software model
+confirm values, CLR flags and quiet anchor intervals8+gap+(same&&gap==0).
+The assembler diagnoses exactly the two deliberately adjacent source hazards.
+These references do not measure silicon I/O stages or establish board wiring.
+Hashes and literal expectations: dsp-middle-peripheral-reference.json.
+
+Reproduce after configuring/building the strict or separate thread preset:
+ctest --preset strict -R '^dsp_middle_peripheral_(native|windows)$' --output-on-failure
+ctest --preset thread -R '^dsp_middle_peripheral_(native|windows)$' --output-on-failure
+Native controls cover336 raw-value/scaling/CCR/SA16 cases. Automatic controls
+check16 own windows against full CPU/stack/counter/port expectations each period,
+24 joint cuts/48 suffixes, two SA16 mode refusals, eight exact encodings, source dependency masks,
+unqualified forms and repeatable contextual unknown-port failure/quarantine.
+Reference E1/E2 placement retains dsp-word-decode.txt's architectural-publication
+limits. Complete original reset-to-instrument, NAND loading, MIDI/audio,
+update/recovery and physical equivalence require separate connected evidence.

@@ -75,7 +75,8 @@ std::optional<DspMemoryForm> peripheral_register(const Type type, const unsigned
   }
   const auto source = dsp56k::getRegister(type, dsp56k::Field_dddddd, opcode);
   if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) == 0 ||
-      (!data_register(source) && !address_register(source))) {
+      (!data_register(source) && !address_register(source) &&
+       !middle_accumulator_peripheral_store(opcode))) {
     return std::nullopt;
   }
   const bool high = type == dsp56k::Movep_Spp;
@@ -216,6 +217,19 @@ std::optional<DspMemoryForm> dual(const std::uint32_t opcode) {
                      .dual_encoding = true};
   return result;
 }
+}
+
+bool middle_accumulator_peripheral_store(const std::uint32_t opcode) {
+  // FM13-136, Table12-13: W=1, dddddd=001100/001101; s/q/address bits vary.
+  constexpr unsigned high_mask = 0xfefec0;
+  constexpr unsigned high_store = 0x08cc00;
+  constexpr unsigned low_mask = 0xfffea0;
+  constexpr unsigned low_x_store = 0x04cc80;
+  constexpr unsigned low_y_store = 0x04cc20;
+  constexpr unsigned word_mask = 0xffffff;
+  return opcode <= word_mask &&
+         ((opcode & high_mask) == high_store || (opcode & low_mask) == low_x_store ||
+          (opcode & low_mask) == low_y_store);
 }
 
 bool full_accumulator_long_store(const std::uint32_t opcode) {
