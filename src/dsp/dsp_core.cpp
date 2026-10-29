@@ -116,6 +116,21 @@ DspSubroutineControl forecast_subroutine(const DspLoopArchitecture before,
   return {.before = before, .after = after};
 }
 
+std::optional<bool> short_condition(const DspProgramWord word, const std::uint32_t status) {
+  const auto code = branch_condition_code(word.value);
+  if (!code) { return std::nullopt; }
+  // FM12.5.1/Table12-17: high condition bit complements the low-eight predicates.
+  const bool c = (status & 1U) != 0;
+  const bool v = (status & 2U) != 0;
+  const bool z = (status & 4U) != 0;
+  const bool n = (status & 8U) != 0;
+  const bool u = (status & 0x10U) != 0;
+  const bool e = (status & 0x20U) != 0;
+  const bool l = (status & 0x40U) != 0;
+  const std::array base{!c, n == v, !z, !n, !z && (u || e), !e, !l, !z && n == v};
+  return base.at(*code & 7U) != ((*code & 8U) != 0);
+}
+
 struct StepContext {
   std::uint32_t pc, sr, omr, vba;
 };
@@ -408,6 +423,23 @@ public:
     static_assert(!dsp56k::g_useJIT);
     static_assert(std::is_trivially_copyable_v<dsp56k::DSP::ReferenceAttemptState>);
     static_assert(sizeof(dsp56k::DSP::ReferenceAttemptState) <= 1024);
+  }
+
+  void forecast_relative_branch(DspBranchDecision &decision,
+                                const DspBranchForm &form,
+                                const dsp56k::DSP::ReferenceAttemptState &source) const {
+    if (!form.displacement) { throw Fault("Relative branch forecast lost its displacement"); }
+    auto status = source.registers.sr;
+    const auto pending = native.reference().pending();
+    if (results.retirement && pending && std::holds_alternative<DspInstructionRetire>(*pending)) {
+      // Forecast from a genuine older E1 candidate without publishing it. Native
+      // branch E1/E2 must confirm the selected target and condition independently.
+      status = results.retirement->cpu.registers.sr;
+    }
+    decision.taken = short_condition(decision.word, static_cast<std::uint32_t>(status) & word_mask)
+                         .value_or(true);
+    const auto offset = decision.taken ? *form.displacement : 1U;
+    decision.next_pc = (decision.word.address + offset) & word_mask;
   }
 
   [[nodiscard]] bool has_peripheral_reads() const {
@@ -1900,8 +1932,7 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
         (static_cast<std::uint64_t>(source.registers.ss[index]) >> stack_word_bits) & word_mask);
     decision.taken = true;
   } else if (form->displacement) {
-    decision.next_pc = (opcode.address + *form->displacement) & word_mask;
-    decision.taken = true;
+    impl_->forecast_relative_branch(decision, *form, source);
   } else if (form->address_register) {
     decision.next_pc = state().r.at(*form->address_register);
     decision.taken = true;

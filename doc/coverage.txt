@@ -3151,3 +3151,16 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   address waits retain their independently observed overlap. See
   dsp-movem-memory.txt for reference-phase/manual restrictions and coverage;
   original full boot/MIDI/audio/storage/update/recovery acceptance remains open.
+
+- Opcode AG1 overlaps actual extension Decode; the owned extension traverses
+  its remaining reference word phases through E2. Own controls check the
+  independent Table2-1 seven/eight word-latency phases and mid-extension joint
+  restore,17 peripheral streams,256 signed56 CMP cases and4144 short-CCR-branch
+  cases with genuine older E1 producers. Word-tail observation does not establish
+  an architectural PC/CCR publication edge. Existing independent aggregate branch,
+  AGU,MOVEM and control timing expectations remain unchanged.40 affected cases
+  pass separately under ASan/UBSan and TSan. See dsp-word-decode.txt and
+  dsp-word-decode-reference.json for the exact scope and word-phase rules.
+  Strict reserved Y:002000,required ROM,other ISA/IRQ contexts,full original
+  reset-to-instrument/MIDI/audio/storage/update/recovery and both profiles'
+  complete function/real-time acceptance remain open.

@@ -2,6 +2,7 @@
 #include "dsp/detail/dsp_pipeline.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/dsp_accumulator_transfer.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_branch_form.hpp"
@@ -109,12 +110,93 @@ DspFetchedWord decode_receipt(const std::optional<DspFetchedWord> word) {
   return *word;
 }
 
+bool complete_decode(const std::span<const DspFetchedWord> fetched,
+                     const DspFetchedWord opcode,
+                     const unsigned words) {
+  if (words == 1) { return true; }
+  for (std::size_t index = 0; index < fetched.size(); ++index) {
+    if (fetched[index] != opcode) { continue; }
+    if (index + 1 == fetched.size()) { return false; }
+    const auto extension = fetched[index + 1];
+    if (extension.word.address != ((opcode.word.address + 1) & word_mask) ||
+        extension.occurrence <= opcode.occurrence) {
+      throw Fault("Automatic Decode lost adjacent actual F2 extension read P:" +
+                  hex((opcode.word.address + 1) & word_mask, 6) +
+                  " pc=" + hex(opcode.word.address, 6));
+    }
+    return true;
+  }
+  throw Fault("Automatic Decode lost its actual F2 opcode read P:" + hex(opcode.word.address, 6));
+}
+
+struct BranchPoint {
+  std::optional<DspProgramWord> word = std::nullopt;
+  bool condition = false;
+  bool peripheral = false;
+};
+
+BranchPoint branch_point(const DspPipelineCycle &cycle) {
+  const auto port = cycle.ag2 ? decode_peripheral_read(cycle.ag2->value) : std::nullopt;
+  if (port && port->bit) { return {.word = cycle.ag2, .peripheral = true}; }
+  if (cycle.ag2 && branch_condition_code(cycle.ag2->value)) {
+    return {.word = cycle.ag2, .condition = true};
+  }
+  if (cycle.ag1 && decode_branch_form(cycle.ag1->value) &&
+      !branch_condition_code(cycle.ag1->value)) {
+    return {.word = cycle.ag1};
+  }
+  return {};
+}
+
+std::optional<DspProgramWord> extension_tail(const std::optional<DspFetchedInstruction> &phase) {
+  if (!phase) { return std::nullopt; }
+  if (!phase->extension) { throw Fault("Extension E2 lost its actual F2 word"); }
+  return phase->extension->word;
+}
+
+DspProgramWord extension_decode_word(const DspInstructionPipeline &pipeline,
+                                     const DspFetchedWord opcode,
+                                     const std::span<const DspFetchedWord> fetched,
+                                     const std::optional<DspProgramWord> ag1) {
+  if (ag1 != opcode.word || pipeline.samples.front() != opcode ||
+      !complete_decode(fetched, opcode, 2)) {
+    throw Fault("Extension Decode lost actual opcode/AG1/F2 ownership pc=" +
+                hex(opcode.word.address, 6));
+  }
+  for (std::size_t index = 0; index + 1 < fetched.size(); ++index) {
+    if (fetched[index] == opcode) { return fetched[index + 1].word; }
+  }
+  throw Fault("Extension Decode lost its adjacent actual F2 word");
+}
+
+void advance_extension_phases(DspInstructionPipeline &pipeline) {
+  auto &phases = pipeline.extension_stages;
+  for (std::size_t reverse = phases.size() - 1; reverse != 0; --reverse) {
+    phases.at(reverse) = phases.at(reverse - 1);
+  }
+  phases.front().reset();
+  if (!pipeline.view.cycle.extension_decode) { return; }
+  const auto extension = pipeline.selected.ag1_extension;
+  if (!pipeline.decoding_extension || !extension ||
+      extension->word != pipeline.view.cycle.extension_decode) {
+    throw Fault("Extension phase lost its actual opcode/F2 pair");
+  }
+  phases.front() =
+      DspFetchedInstruction{.opcode = *pipeline.decoding_extension, .extension = extension};
+}
+
 void prepare_decode(DspInstructionPipeline &pipeline,
                     const DspMachine &machine,
                     const DspProgramFetchView &fetch,
+                    const std::span<const DspFetchedWord> fetched,
                     DspPipelineCycle &cycle) {
   if (pipeline.held_program_memory || pipeline.hold_ccr_decode(machine) ||
       pipeline.hold_repeat_decode()) {
+    return;
+  }
+  if (pipeline.decoding_extension) {
+    cycle.extension_decode =
+        extension_decode_word(pipeline, *pipeline.decoding_extension, fetched, cycle.ag1);
     return;
   }
   if (pipeline.hold_loop_decode() || pipeline.deferred_omr_branch) { return; }
@@ -124,6 +206,8 @@ void prepare_decode(DspInstructionPipeline &pipeline,
   // Even an already prefetched successor cannot enter Decode while AG1 resolves
   // this branch and cuts the discarded path from the owned queue.
   if (const auto ag1 = cycle.ag1; ag1 && decode_branch_form(ag1->value)) { return; }
+  // CCR control resolves in AG2, after the older genuine E1 flag candidate.
+  if (cycle.ag2 && branch_condition_code(cycle.ag2->value)) { return; }
   for (const auto word : {cycle.ag1, cycle.ag2}) {
     const auto read = word ? decode_peripheral_read(word->value) : std::nullopt;
     if (read && read->bit) { return; }
@@ -170,6 +254,7 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
                          .ag2 = view.stages[1],
                          .execute1 = view.stages[2],
                          .execute2 = view.awaiting_retirement};
+  cycle.extension_execute2 = extension_tail(extension_stages.back());
   std::array<DspFetchedWord, dsp_program_fetch_capacity> fetched{};
   for (std::size_t index = 0; index < fetch.used; ++index) {
     const auto sample = machine.pipeline_fetched_word(index);
@@ -179,7 +264,7 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
   validate_stage_samples(view, samples);
   select_words(std::span(fetched).first(fetch.used), fetch.omr);
   prepare_program_memory(machine, cycle.execute1);
-  prepare_decode(*this, machine, fetch, cycle);
+  prepare_decode(*this, machine, fetch, std::span(fetched).first(fetch.used), cycle);
   check_accumulator_context(machine, cycle.decode, false);
   validate_program_decode(machine, cycle);
   if (selected.ag1_extension) { cycle.ag1_extension = selected.ag1_extension->word; }
@@ -254,6 +339,30 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
   return pending->ticket;
 }
 
+std::optional<DspProgramWord> DspInstructionPipeline::decoded_word(const DspMachine &machine) {
+  if (view.cycle.extension_decode) {
+    decoding_extension.reset();
+    return std::nullopt;
+  }
+  if (!view.cycle.decode || view.cycle.agu_dependencies != 0) { return std::nullopt; }
+  const auto opcode = decode_receipt(selected.next);
+  if (decoding_extension) { throw Fault("Opcode Decode replaced an owned extension phase"); }
+  if (view.cycle.decode_words == 1) { return view.cycle.decode; }
+  const auto fetch = machine.reference_fetch();
+  std::array<DspFetchedWord, dsp_program_fetch_capacity> fetched{};
+  for (std::size_t index = 0; index < fetch.used; ++index) {
+    const auto sample = machine.pipeline_fetched_word(index);
+    if (!sample) { throw Fault("Automatic Decode lost its actual F2 receipt"); }
+    fetched.at(index) = *sample;
+  }
+  if (!complete_decode(std::span(fetched).first(fetch.used), opcode, view.cycle.decode_words)) {
+    return std::nullopt;
+  }
+  // Table2-1: opcode AG1 overlaps the actual extension's following Decode.
+  decoding_extension = opcode;
+  return view.cycle.decode;
+}
+
 void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCycleResult &bus) {
   if (bus.dma.core_stall) { return; }
   capture_loop_f2(bus);
@@ -309,9 +418,10 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   samples[2] = samples[1];
   samples[1] = samples[0];
   samples[0].reset();
+  advance_extension_phases(*this);
   view.stages[2] = view.stages[1];
   view.stages[1] = view.stages[0];
-  view.stages[0] = view.cycle.agu_dependencies != 0 ? std::nullopt : view.cycle.decode;
+  view.stages[0] = decoded_word(machine);
   if (view.stages[0]) {
     samples[0] = selected.next;
     view.decode_address =
@@ -356,30 +466,29 @@ void DspInstructionPipeline::capture_branch(DspMachine &machine) {
   const auto ag1 = view.cycle.ag1;
   const auto early = ag1 ? decode_peripheral_read(ag1->value) : std::nullopt;
   if (early && early->bit) { branch_fetch_hold = 1; }
-  const auto ag2 = view.cycle.ag2;
-  const auto read = ag2 ? decode_peripheral_read(ag2->value) : std::nullopt;
-  const bool peripheral = read && read->bit;
-  const bool omr = ag1 && decode_branch_form(ag1->value).has_value();
-  if (!peripheral && !omr) { return; }
+  const auto point = branch_point(view.cycle);
+  if (!point.word) { return; }
+  const auto word = *point.word;
   if (branch) { throw Fault("Automatic branch cannot replace an unresolved fetch decision"); }
   DspBranchDecision decision;
-  if (peripheral) {
+  if (point.peripheral) {
     const auto ticket = reads[0];
     if (!ticket) { throw Fault("Peripheral AG2 branch lost its owned AG1 response"); }
     decision = machine.preview_pipeline_peripheral_branch(*ticket);
   } else {
-    const auto captured = samples[0];
-    if (!captured || captured->word != *ag1) {
-      throw Fault("Branch AG1 lost its actual F2 occurrence");
+    const auto captured = samples[point.condition ? 1U : 0U];
+    if (!captured || captured->word != word) {
+      throw Fault("Branch stage lost its actual F2 occurrence");
     }
-    decision = machine.capture_reference_branch(ag1->address, captured->occurrence);
-    branch_fetch_hold = branch_fetch_delay(decode_branch_form(ag1->value));
+    decision = machine.capture_reference_branch(word.address, captured->occurrence);
+    // Moving CCR resolution from AG1 to AG2 consumes the short-branch F1 hold.
+    branch_fetch_hold = point.condition ? 0U : branch_fetch_delay(decode_branch_form(word.value));
   }
   branch = decision;
   branch_target_decoded = false;
   branch_retired = false;
   view.decode_address = decision.next_pc;
-  // Register control resolves in AG1; port sources follow older E1 writes in AG2.
+  // Register control resolves in AG1; CCR/port control follows older E1 in AG2.
   // Direct Rn issues target F1 in the resolving AG1 period; the older forms
   // retain their later F1 and the FM false Decode delay.
   branch_decode_hold = decision.taken ? 0U : 1U;

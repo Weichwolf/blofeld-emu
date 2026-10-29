@@ -1,0 +1,102 @@
+{
+  "scope": "Own actual-F2 word phases, native long-immediate CMP and short CCR branches; not complete original instrument or physical sampling qualification.",
+  "primary": {
+    "file": "doc/hardware/DSP56300FM.pdf",
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "2.3.1/Table2-1 per-word pipeline",
+      "13-45/46 CMP and Table5-1 CCR effects",
+      "12.5.1/Table12-17 conditions",
+      "A.1 and A.2.6.3 short control and false Decode"
+    ]
+  },
+  "literal_initial_phases": {
+    "opcode_F1": 1,
+    "opcode_F2": 2,
+    "opcode_Decode": 3,
+    "extension_F2": 3,
+    "opcode_AG1_and_extension_Decode": 4,
+    "opcode_E2": 7,
+    "extension_E2": 8
+  },
+  "publication_limit": "Word-phase rules do not establish a measured architectural PC/CCR publication edge. Native opcode-based E1/E2 retains its declared reference projection; extension records never supply architectural results.",
+  "controls": {
+    "word_phase_mid_extension_joint_restore": true,
+    "peripheral_and_REP_streams": 17,
+    "stream_restored_suffixes": 2,
+    "stream_assertions": 815,
+    "signed56_CMP_cases": 256,
+    "CMP_E2_restored_suffixes": 256,
+    "CMP_assertions": 1792,
+    "CCR_branch_cases": 4144,
+    "CCR_branch_restored_suffixes": 48,
+    "CCR_branch_assertions": 12480
+  },
+  "regression": {
+    "profiles": [
+      "address-undefined",
+      "thread"
+    ],
+    "passed_named_cases_per_profile": 40,
+    "skips": 0,
+    "tests": [
+      "audio_runtime",
+      "dsp_automatic_alu_pipeline",
+      "dsp_automatic_dma_activation",
+      "dsp_automatic_dma_controls",
+      "dsp_automatic_dma_timing",
+      "dsp_automatic_memory_pipeline",
+      "dsp_ccr_control",
+      "dsp_conditional_branch_pipeline",
+      "dsp_control_composition",
+      "dsp_control_guards",
+      "dsp_decode_extension_streams",
+      "dsp_fetch_reset",
+      "dsp_fetch_run",
+      "dsp_immediate_compare_pipeline",
+      "dsp_indirect_control",
+      "dsp_initial_word_decode",
+      "dsp_movem_guards",
+      "dsp_movem_snapshots",
+      "dsp_movem_streams",
+      "dsp_pipeline_agu_dependencies",
+      "dsp_pipeline_bootstrap_prefix",
+      "dsp_pipeline_branch_state",
+      "dsp_pipeline_occurrences",
+      "dsp_pipeline_omr_branches",
+      "dsp_pipeline_peripheral_state",
+      "dsp_pipeline_peripheral_writes",
+      "dsp_pipeline_register_peripheral_state",
+      "dsp_pipeline_register_peripheral_writes",
+      "dsp_pipeline_transfer_state",
+      "dsp_pipeline_transfers",
+      "dsp_repeat_clock",
+      "dsp_repeat_clock_state",
+      "dsp_repeat_long_count",
+      "dsp_subroutine_guards",
+      "dsp_subroutine_snapshots",
+      "dsp_subroutine_streams",
+      "reference_audio_clock_board",
+      "reference_audio_clock_guards",
+      "reference_audio_clock_restore",
+      "reference_pipeline"
+    ],
+    "legacy_expectations_modified": false,
+    "new_registered_tests": 4,
+    "existing_CMake_test_definitions_and_properties_preserved": 632
+  },
+  "build_checks_per_profile": {
+    "compile_recipes": 1265,
+    "instrumented_native_archives": 7,
+    "scoped_PIE_RELRO_NOW_NX_executables": 30,
+    "inert_negative_ELF_controls": 4,
+    "ASan_and_TSan_separate": true,
+    "clang_tidy_findings": 0,
+    "max_function_lines": 120,
+    "clang_tidy_scope": "Changed project translation units and rebuilt consumers of the changed public/internal pipeline layout; native source remains separate."
+  },
+  "fuzz_execution": false,
+  "manufacturer_program_bytes_embedded": false,
+  "complete_original_reset_to_instrument": false,
+  "remaining": "Authentic required ROM, strict reserved Y:002000, remaining ISA/IRQ/board reconstruction, normal original Desktop/Keyboard runtime, original MIDI/audio, complete storage/update/recovery/power-loss, every documented function and realtime/long-run acceptance remain open."
+}

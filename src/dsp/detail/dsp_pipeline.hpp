@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_pipeline.hpp"
@@ -93,8 +94,11 @@ struct DspInstructionPipeline {
   bool held_program_memory = false;
   std::optional<DspPipelineCcrSync> ccr_sync = std::nullopt;
   std::optional<DspFetchedWord> deferred_omr_branch = std::nullopt;
+  std::optional<DspFetchedWord> decoding_extension = std::nullopt;
+  std::array<std::optional<DspFetchedInstruction>, 4> extension_stages{};
 
   void prepare(const DspMachine &machine);
+  [[nodiscard]] std::optional<DspProgramWord> decoded_word(const DspMachine &machine);
   void select_words(std::span<const DspFetchedWord> fetched, std::uint32_t omr);
   void rebind(const DspMachine &machine);
   void capture_address(DspMachine &machine);

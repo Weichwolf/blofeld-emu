@@ -39,6 +39,9 @@ struct DspPipelineCycle {
   bool retirement_published = false;
   bool execution_captured = false;
   bool advanced = false;
+  // The actual extension word traverses Decode while its opcode occupies AG1.
+  std::optional<DspProgramWord> extension_decode = std::nullopt;
+  std::optional<DspProgramWord> extension_execute2 = std::nullopt;
 };
 
 struct DspPipelineView {

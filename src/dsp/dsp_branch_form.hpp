@@ -36,4 +36,6 @@ struct DspBranchDecision {
 };
 
 [[nodiscard]] std::optional<DspBranchForm> decode_branch_form(std::uint32_t opcode);
+// Only the currently qualified short Bcc form returns a CCR condition.
+[[nodiscard]] std::optional<unsigned> branch_condition_code(std::uint32_t opcode);
 }

@@ -26,18 +26,18 @@
 namespace blofeld {
 namespace {
 using Type = dsp56k::Instruction;
-// FM5.3/Table5-1 and A-1: normal single-word register ALU operations.
+// FM5.3/Table5-1 and A-1: register ALU operations and immediate CMP forms.
 constexpr std::array allowed{
-    dsp56k::Nop,       dsp56k::Abs,       dsp56k::Add_SD,     dsp56k::Add_xx,    dsp56k::Addl,
-    dsp56k::Addr,      dsp56k::And_SD,    dsp56k::And_xx,     dsp56k::Asl_D,     dsp56k::Asl_ii,
-    dsp56k::Asl_S1S2D, dsp56k::Asr_D,     dsp56k::Asr_ii,     dsp56k::Asr_S1S2D, dsp56k::Clr,
-    dsp56k::Cmp_S1S2,  dsp56k::Cmp_xxS2,  dsp56k::Cmpm_S1S2,  dsp56k::Cmpu_S1S2, dsp56k::Eor_SD,
-    dsp56k::Eor_xx,    dsp56k::Lsl_D,     dsp56k::Lsl_ii,     dsp56k::Lsl_SD,    dsp56k::Lsr_D,
-    dsp56k::Lsr_ii,    dsp56k::Lsr_SD,    dsp56k::Mac_S1S2,   dsp56k::Macr_S1S2, dsp56k::Max,
-    dsp56k::Maxm,      dsp56k::Mpy_S1S2D, dsp56k::Mpyr_S1S2D, dsp56k::Neg,       dsp56k::Not,
-    dsp56k::Or_SD,     dsp56k::Or_xx,     dsp56k::Rnd,        dsp56k::Sub_SD,    dsp56k::Sub_xx,
-    dsp56k::Subl,      dsp56k::Subr,      dsp56k::Tfr,        dsp56k::Tst,       dsp56k::Inc,
-    dsp56k::Dec};
+    dsp56k::Nop,       dsp56k::Abs,        dsp56k::Add_SD,    dsp56k::Add_xx,     dsp56k::Addl,
+    dsp56k::Addr,      dsp56k::And_SD,     dsp56k::And_xx,    dsp56k::Asl_D,      dsp56k::Asl_ii,
+    dsp56k::Asl_S1S2D, dsp56k::Asr_D,      dsp56k::Asr_ii,    dsp56k::Asr_S1S2D,  dsp56k::Clr,
+    dsp56k::Cmp_S1S2,  dsp56k::Cmp_xxxxS2, dsp56k::Cmp_xxS2,  dsp56k::Cmpm_S1S2,  dsp56k::Cmpu_S1S2,
+    dsp56k::Eor_SD,    dsp56k::Eor_xx,     dsp56k::Lsl_D,     dsp56k::Lsl_ii,     dsp56k::Lsl_SD,
+    dsp56k::Lsr_D,     dsp56k::Lsr_ii,     dsp56k::Lsr_SD,    dsp56k::Mac_S1S2,   dsp56k::Macr_S1S2,
+    dsp56k::Max,       dsp56k::Maxm,       dsp56k::Mpy_S1S2D, dsp56k::Mpyr_S1S2D, dsp56k::Neg,
+    dsp56k::Not,       dsp56k::Or_SD,      dsp56k::Or_xx,     dsp56k::Rnd,        dsp56k::Sub_SD,
+    dsp56k::Sub_xx,    dsp56k::Subl,       dsp56k::Subr,      dsp56k::Tfr,        dsp56k::Tst,
+    dsp56k::Inc,       dsp56k::Dec};
 using Mask = dsp56k::RegisterMask;
 
 struct Operands {
@@ -165,7 +165,7 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
     const auto words = pipeline_word_count(word);
     if ((!arithmetic && !standalone_move && !branch && !loop && !repeat) ||
         (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
-        words > ((transfer || branch || loop || control ||
+        words > ((transfer || branch || loop || control || first == dsp56k::Cmp_xxxxS2 ||
                   (memory && (form->peripheral || is_program_memory(*form))))
                      ? 2U
                      : 1U)) {

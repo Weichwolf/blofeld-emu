@@ -1,0 +1,55 @@
+Program-word Decode and conditional control
+
+DSP56300FM2.3.1/Table2-1 shows each opcode and extension traversing Decode,
+AG1,AG2,E1,E2 in consecutive word periods. Opcode AG1 overlaps extension
+Decode. The first opcode reaches E2 in period7; a two-word instruction's
+extension reaches E2 in period8. These word phases alone do not identify a
+measured architectural PC/CCR publication edge.
+
+The automatic pipeline requires an adjacent actual F2 extension before admitting
+a two-word opcode into AG1. It reserves the following Decode period for that
+owned extension, even when younger opcodes are already prefetched. The actual
+opcode/extension pair follows four retained extension phase slots through E2.
+Missing receipts wait; stale identities, wrong addresses and unqualified native
+effects fail visibly. Native opcode-based E1/E2 execution retains its separately
+qualified reference projection; extension phase records never supply CPU results.
+The two-word extension tail is distinct from an architectural retirement claim.
+
+Joint checkpoints retain both the pending extension Decode and its phase slots.
+DMA holds preserve these owners with the older actual stages. Rebuild every
+consumer of the public/internal pipeline layout after changes. No firmware
+bytes, program-counter assignments or invented fetches supply data.
+
+Long-immediate CMP executes through the native interpreter with its captured
+extension. Independent signed56 subtraction expectations check all CCR bits,
+unchanged operands and full architectural state, including E2 restore suffixes.
+Short Bcc supports all16 CCR conditions. CCR control resolves in AG2 after an
+older genuine E1 candidate is available; that forecast changes fetching only.
+Native branch E1/E2 independently confirm the condition, target and PC/SR.
+The short-branch reference timing and false Decode delay follow FM A1/A2.6.3.
+
+Own controls check literal Table2-1 word phases and joint mid-extension restore,
+consecutive two-word peripheral writes, REP exit, literal X/Y data,256 signed56
+CMP cases and4144 conditional cases. The latter include all256 prior CCR values
+and adjacent two-word CMP/one-word CLR producers. Existing independent aggregate
+branch,AGU,MOVEM and control timing expectations remain required.
+
+  cmake --build --preset strict --target blofeld-word-decode-test \
+    blofeld-decode-extension-test blofeld-immediate-compare-test \
+    blofeld-conditional-branch-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^(dsp_initial_word_decode|dsp_decode_extension_streams|dsp_immediate_compare_pipeline|dsp_conditional_branch_pipeline)$'
+
+Use the separate thread preset for TSan. These controls do not run fuzzing.
+Forty named affected regression cases pass separately under ASan/UBSan and TSan,
+including unchanged aggregate branch,AGU,MOVEM,subroutine and control references.
+See dsp-word-decode-reference.json for the exact scope and word-phase rules.
+
+This is supporting CPU/DSP evidence, not complete-device acceptance. Other
+instruction/IRQ/loop contexts, authentic required ROM contents, reserved-memory
+semantics, board wiring and complete original reset-to-instrument execution
+remain open. The strict original reserved Y:002000 failure is not bypassed.
+Original MIDI/audio/storage/update/recovery, both device profiles, all documented
+functions and real-time operation still require connected tests. No measured
+physical sampling edge or physical flash-safety claim follows from these
+reference-stage checks. See objective.txt and coverage.txt.
