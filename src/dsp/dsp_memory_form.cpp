@@ -149,10 +149,23 @@ std::optional<DspMemoryForm> program_move(const Type type, const unsigned opcode
 }
 
 bool accumulator_scalar_load(const std::uint32_t opcode) {
-  // FM13-118/122, Table12-14: standalone W=1,EA=1,all eight accumulator fields.
-  constexpr unsigned encoding_mask = 0xf0c0ff;
+  // FM13-118/122,Table12-14: W=1,EA=1. Standalone loads retain all eight fields.
+  // ADD13-7/8 additionally loads full A/B while adding its OLD value to the other
+  // accumulator. Duplicate ALU/move destinations and other ALU bytes stay out.
+  constexpr unsigned encoding_mask = 0xf0c000;
   constexpr unsigned accumulator_load = 0x50c000;
-  return (opcode & encoding_mask) == accumulator_load;
+  constexpr unsigned arithmetic_mask = 0xff;
+  constexpr unsigned destination_shift = 16;
+  constexpr unsigned destination_mask = 7;
+  constexpr unsigned a = 6;
+  constexpr unsigned b = 7;
+  constexpr unsigned add_a_to_b = 0x18;
+  constexpr unsigned add_b_to_a = 0x10;
+  if ((opcode & encoding_mask) != accumulator_load) { return false; }
+  const auto arithmetic = opcode & arithmetic_mask;
+  const auto destination = (opcode >> destination_shift) & destination_mask;
+  return arithmetic == 0 || (destination == a && arithmetic == add_a_to_b) ||
+         (destination == b && arithmetic == add_b_to_a);
 }
 
 bool accumulator_register(const Reg reg) {

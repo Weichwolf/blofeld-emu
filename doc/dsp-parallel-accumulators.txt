@@ -1,0 +1,40 @@
+Parallel full-accumulator ADD and scalar load
+
+FM13-7/8,13-118/122: ADD A,B with X/Y:EA,A and the symmetric B,A/B form
+use both old56-bit operands. The actual24-bit E1 load sign-extends into the
+other full accumulator and clears its low24bits. AG2 publishes the real pointer
+update; E2 retires the native sum,flags and counters. Scaling and arithmetic
+saturation affect the addition,not the memory load.
+
+Functional operands remain distinct from E1 visibility: an incoming ALU can
+forward a value which the same instruction's actual MOVE then overwrites.
+E2 validates the recorded publication without treating it as an altered input.
+Adjacent raw A1/B1 bus consumers interlock once; ALU operands remain forwarded.
+Joint checkpoints retain these distinct inputs/publications and real read counts.
+
+Independent evidence:224 own encodings and1240 continuous Freescale model
+windows/43904 instruction rows. Eight signed56/fractional48 operand pairs,
+four load words,three scales,SM and CCR cases plus all eight R/N/M indices and
+seven linear EA modes.252 producer/consumer windows cover gaps0/1/2,raw bus,
+both ALU directions and consecutive loads. The processor DLLs are unchanged;
+36 assembler interlock warnings,no errors. See the reference manifest for pins.
+
+Five gates cover988 native and988 per-period windows,252 dependencies,
+336 checkpoints/672 suffixes,252 unknown sources and8 unsupported encodings.
+Unknown reads preserve only genuinely accepted older E2/younger AG2 effects.
+Other ALU bytes,partial/overlapping accumulator destinations,stores and REP
+body expansion remain excluded. No BIU/GPIO/private board hypothesis is enabled.
+
+All five gates and30 affected regressions pass per ASan/UBSan and separate
+TSan,with no skips. Format/tidy and hardening/instrumentation pass1293 recipes,
+7 unchanged native archives and23 affected ELFs/profile. All657 parent CMake
+contracts remain;662 tests registered. The global TSan inventory still lacks62
+unrelated executables; its CTest/checks remain unchanged and were not rerun.
+
+  cmake --build --preset strict --target blofeld-parallel-accumulator-add-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_parallel_accumulator_add_'
+  # Build/run the same scopes separately with preset/test directory thread.
+
+Nominal instruction costs/logical phases are not silicon strobe measurements.
+Complete original reset-to-instrument,both profiles/all functions,MIDI/audio,
+storage/update/recovery and realtime/long-run acceptance remain open.

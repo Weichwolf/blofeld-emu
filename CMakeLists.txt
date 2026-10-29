@@ -1455,6 +1455,14 @@ if(BUILD_TESTING)
   add_test(NAME dsp_parallel_memory_addresses COMMAND blofeld-parallel-memory-test address)
   add_test(NAME dsp_parallel_memory_execution COMMAND blofeld-parallel-memory-test execution)
   add_test(NAME dsp_parallel_memory_state COMMAND blofeld-parallel-memory-test state)
+  add_executable(blofeld-parallel-accumulator-add-test
+    test/dsp_parallel_accumulator_fixture.cpp test/dsp_parallel_accumulator_add_test.cpp
+    test/dsp_parallel_accumulator_dependency.cpp)
+  target_link_libraries(blofeld-parallel-accumulator-add-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  foreach(scope native pipeline dependencies state guards)
+    add_test(NAME dsp_parallel_accumulator_add_${scope}
+      COMMAND blofeld-parallel-accumulator-add-test ${scope})
+  endforeach()
   add_executable(blofeld-transfer-pipeline-test test/dsp_transfer_pipeline_fields.cpp
     test/dsp_transfer_pipeline_agu.cpp test/dsp_transfer_pipeline_state.cpp)
   target_link_libraries(blofeld-transfer-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
@@ -3260,6 +3268,7 @@ add_custom_target(quality
     blofeld-accumulator-thread-test blofeld-postloop-context-test
     blofeld-fetch-run-test blofeld-fetch-reset-test blofeld-fetch-schedule-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
+    blofeld-parallel-accumulator-add-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test
     blofeld-dax-test
     blofeld-reference-checkpoint-test blofeld-reference-rom-fixture blofeld-reference-pipeline-test blofeld-original-board-power-on-test

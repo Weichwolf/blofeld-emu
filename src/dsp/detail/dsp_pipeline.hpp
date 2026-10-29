@@ -96,6 +96,8 @@ struct DspInstructionPipeline {
   std::optional<DspFetchedWord> deferred_omr_branch = std::nullopt;
   std::optional<DspFetchedWord> decoding_extension = std::nullopt;
   std::array<std::optional<DspFetchedInstruction>, 4> extension_stages{};
+  // Functional operands survive E1; actual MOVE fields may replace their visible values.
+  std::optional<std::array<std::uint64_t, 2>> awaiting_visible_accumulators = std::nullopt;
 
   void prepare(const DspMachine &machine);
   [[nodiscard]] std::optional<DspProgramWord> decoded_word(const DspMachine &machine);

@@ -684,6 +684,10 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           reference core now integrated with strict
                                           memory and custom SHI. Arithmetic, P writes,
                                           code mutation and bounded DO/REP tested.
+                                          Parallel full-accumulator ADD/scalar
+                                          loads retain old operands and distinct
+                                          AG2/E1/E2 publication,including restored
+                                          forwarding (dsp-parallel-accumulators.txt).
                                           Paged host dispatch retains 24-bit
                                           addresses, boundary code changes and
                                           trusted restore; guest maps unchanged

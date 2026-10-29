@@ -332,10 +332,12 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
   }
   const auto inputs = view.awaiting_inputs;
   if (!inputs) { throw Fault("Automatic DSP E2 lost its functional input record"); }
+  const auto visible = awaiting_visible_accumulators;
+  if (!visible) { throw Fault("Automatic DSP E2 lost its actual E1 accumulator visibility"); }
   const auto actual = machine.cpu().state();
   const auto deferred = view.awaiting_deferred_accumulators;
-  if (((deferred & 1U) != 0 && actual.a != inputs->a) ||
-      ((deferred & 2U) != 0 && actual.b != inputs->b)) {
+  if (((deferred & 1U) != 0 && actual.a != visible->at(0)) ||
+      ((deferred & 2U) != 0 && actual.b != visible->at(1))) {
     throw Fault("Automatic DSP E2 forwarded operand differs from its actual native candidate");
   }
   return pending->ticket;
@@ -366,6 +368,19 @@ std::optional<DspProgramWord> DspInstructionPipeline::decoded_word(const DspMach
 }
 
 namespace {
+void capture_accumulator_visibility(DspInstructionPipeline &pipeline, const DspMachine &machine) {
+  const auto &cycle = pipeline.view.cycle;
+  const auto inputs = pipeline.view.awaiting_inputs;
+  if (!inputs) { throw Fault("Actual E1 lost its functional accumulator operands"); }
+  const auto move = cycle.memory ? cycle.memory->move : cycle.transfer;
+  const auto fields = move ? move->fields : DspMoveFields{};
+  const auto actual = machine.cpu().state();
+  // A real E1 MOVE can overwrite an operand forwarded from the preceding ALU.
+  // Keep its published visibility distinct from the native functional inputs.
+  pipeline.awaiting_visible_accumulators =
+      std::array{fields.a != 0 ? actual.a : inputs->a, fields.b != 0 ? actual.b : inputs->b};
+}
+
 template <typename Result>
 void capture_addressed_result(DspInstructionPipeline &pipeline, const Result &result) {
   const auto word = pipeline.view.cycle.execute1;
@@ -403,6 +418,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     view.awaiting_retirement.reset();
     view.awaiting_inputs.reset();
     view.awaiting_deferred_accumulators = 0;
+    awaiting_visible_accumulators.reset();
   }
   if (view.cycle.memory_source_stall || held_program_memory) { return; }
   if (view.cycle.execute1) {
@@ -415,6 +431,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     } else {
       execute(machine);
     }
+    capture_accumulator_visibility(*this, machine);
   }
   complete_program_memory();
   capture_loop_target(machine);
