@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
+#include "dsp/dsp_address_only.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_memory_form.hpp"
@@ -39,15 +40,17 @@ bool supported_modifier(const unsigned raw) {
 void validate_modifier(const dsp56k::DSP &cpu,
                        const DspMemoryLane form,
                        const DspProgramWord word,
-                       const unsigned omr) {
+                       const unsigned omr,
+                       const bool address_only = false) {
   const bool arithmetic = form.dual_encoding ? form.mode != 0 : form.mode != 4;
   if (!arithmetic) { return; }
   const auto raw = cpu.regs().m.at(form.reg).toWord();
   if (supported_modifier(raw)) { return; }
   constexpr std::array spaces{"P:", "X:", "Y:"};
   const std::string operation = form.operation == DspMemoryOperation::read ? "read " : "write ";
-  throw Fault("Unqualified reserved modifier AG1 " + operation +
-              spaces.at(static_cast<unsigned>(form.space)) + "(R" + std::to_string(form.reg) +
+  const auto operand =
+      address_only ? "update (R" : operation + spaces.at(static_cast<unsigned>(form.space)) + "(R";
+  throw Fault("Unqualified reserved modifier AG1 " + operand + std::to_string(form.reg) +
               ") pc=" + hex(word.address, 6) + " omr=" + hex(omr, 6) +
               " opcode=" + hex(word.value, 6) + " r=" + hex(cpu.regs().r.at(form.reg).toWord(), 6) +
               " n=" + hex(cpu.regs().n.at(form.reg).toWord(), 6) + " m=" + hex(raw, 6));
@@ -56,8 +59,9 @@ void validate_modifier(const dsp56k::DSP &cpu,
 DspAddressStageLane calculate(dsp56k::DSP &cpu,
                               const DspMemoryLane form,
                               const DspProgramWord word,
-                              const unsigned omr) {
-  validate_modifier(cpu, form, word, omr);
+                              const unsigned omr,
+                              const bool address_only = false) {
+  validate_modifier(cpu, form, word, omr, address_only);
   const auto result = cpu.calculateReferenceAddress(form.mode, form.reg, form.dual_encoding);
   return {.update = {.index = form.reg,
                      .before = result.before,
@@ -176,7 +180,8 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruct
   const auto word = fetched.opcode.word;
   const auto extension = fetched.extension ? std::optional(fetched.extension->word) : std::nullopt;
   const auto form = decode_memory_stage(word.value);
-  if (!form || serial == std::numeric_limits<std::uint64_t>::max()) {
+  const auto update = decode_address_only(word.value);
+  if ((!form && !update) || serial == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Unqualified/exhausted native AG1 at P:" + hex(word.address, 6));
   }
   for (std::size_t slot = 0; slot < records.size(); ++slot) {
@@ -184,8 +189,15 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruct
     const auto source = cpu.referenceAttemptState();
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
     DspAddressStageView view;
-    const bool absolute_long = is_program_memory(*form) && form->lanes[0].mode == 6;
-    if (form->absolute_short || absolute_long) {
+    const bool absolute_long = form && is_program_memory(*form) && form->lanes[0].mode == 6;
+    if (update) {
+      if (extension) { throw Fault("Address-only AG1 cannot capture an extension"); }
+      const auto lane = calculate(cpu, {.mode = update->mode, .reg = update->reg}, word, omr, true);
+      view = {.word = word,
+              .update = lane.update,
+              .pointer_update = true,
+              .kind = DspAddressStageKind::address_only};
+    } else if (form->absolute_short || absolute_long) {
       view = absolute(*form, word, extension, omr);
     } else if (form->peripheral && !is_program_transfer(*form)) {
       view = peripheral(*form, word, extension, omr);

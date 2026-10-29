@@ -2,6 +2,7 @@
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/dsp_accumulator_transfer.hpp"
+#include "dsp/dsp_address_only.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
@@ -148,8 +149,11 @@ pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &pr
                           const DspProgramWord consumer) {
   const auto memory = decode_memory_stage(consumer.value);
   const auto branch = decode_branch_form(consumer.value);
+  const auto address_only = decode_address_only(consumer.value);
   unsigned read = 0;
-  if (branch && branch->address_register) {
+  if (address_only) {
+    read = 1U << address_only->reg;
+  } else if (branch && branch->address_register) {
     read = 1U << *branch->address_register;
   } else {
     if (!memory || memory->absolute_short ||

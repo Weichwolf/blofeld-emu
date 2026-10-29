@@ -36,7 +36,8 @@ enum class DspAddressStageKind : std::uint8_t {
   peripheral_register,
   absolute_short,
   absolute_long,
-  peripheral_bit
+  peripheral_bit,
+  address_only
 };
 
 struct DspAddressStageView {
@@ -49,6 +50,12 @@ struct DspAddressStageView {
   std::size_t data_access_count = 0;
   DspAddressStageKind kind = DspAddressStageKind::register_agu;
   std::optional<DspProgramWord> extension = std::nullopt;
+};
+
+struct DspAddressOnlyStageResult {
+  DspAddressStageView address;
+  DspState inputs;
+  DspReferenceProgress progress;
 };
 
 struct DspMemoryStageResult {

@@ -228,6 +228,26 @@ struct DspMachine::State {
     }
   }
 
+  [[nodiscard]] std::optional<DspAddressStageView>
+  reference_memory_operand(const DspReferenceCycleInputs &inputs) const {
+    if (inputs.address_only) {
+      cpu.validate_reference_address(*inputs.address_only, true);
+      const auto address = cpu.address_stage(*inputs.address_only);
+      if (inputs.memory || address.kind != DspAddressStageKind::address_only ||
+          address.data_access_count != 0) {
+        throw Fault("Bus-cycle address-only continuation cannot acquire a data operand");
+      }
+    }
+    if (inputs.address_update) { cpu.validate_reference_address(*inputs.address_update, false); }
+    if (!inputs.memory) { return std::nullopt; }
+    cpu.validate_reference_address(*inputs.memory, true);
+    const auto operand = cpu.address_stage(*inputs.memory);
+    if (operand.kind == DspAddressStageKind::address_only || operand.data_access_count == 0) {
+      throw Fault("Memory bus-cycle requires an actual data operand");
+    }
+    return operand;
+  }
+
   void advance_reference_memory(const DspReferenceCycleInputs &inputs,
                                 DspReferenceCycleResult &result) {
     // The older register source must be sampled before a younger AG2 R update.
@@ -243,6 +263,9 @@ struct DspMachine::State {
     }
     if (inputs.memory && !result.memory) {
       result.memory = cpu.execute_reference_memory(*inputs.memory);
+    }
+    if (inputs.address_only) {
+      result.address_only = cpu.execute_reference_address_only(*inputs.address_only);
     }
   }
 
@@ -700,14 +723,7 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
           *inputs.access, inputs.retirement.has_value(), inputs.dma.cycle);
     }
     if (inputs.fetch) { state_->cpu.validate_reference_fetch(*inputs.fetch); }
-    std::optional<DspAddressStageView> memory;
-    if (inputs.address_update) {
-      state_->cpu.validate_reference_address(*inputs.address_update, false);
-    }
-    if (inputs.memory) {
-      state_->cpu.validate_reference_address(*inputs.memory, true);
-      memory = state_->cpu.address_stage(*inputs.memory);
-    }
+    const auto memory = state_->reference_memory_operand(inputs);
     const auto early = inputs.peripheral_capture
                            ? std::optional(state_->cpu.pipeline_peripheral_access(
                                  *inputs.peripheral_capture, capture_occurrence))

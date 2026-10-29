@@ -5,6 +5,7 @@
 #include "dsp/detail/dsp_native_access.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/detail/dsp_reference_execution.hpp"
+#include "dsp/dsp_address_only.hpp"
 #include "dsp/dsp_address_phase.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_address_stages.hpp"
@@ -684,7 +685,8 @@ public:
       base.mModulo.at(index) = source.mModulo.at(index);
       results.addresses.published.at(index) = update.value;
     };
-    if (record.view.kind == DspAddressStageKind::register_agu) {
+    if (record.view.kind == DspAddressStageKind::register_agu ||
+        record.view.kind == DspAddressStageKind::address_only) {
       bind(record.view.update);
       if (record.view.secondary) { bind(record.view.secondary->update); }
     }
@@ -2044,10 +2046,55 @@ DspAddressStageView DspCore::publish_reference_address(const DspAddressStageTick
   return record.view;
 }
 
+DspAddressOnlyStageResult
+DspCore::execute_reference_address_only(const DspAddressStageTicket &ticket) {
+  validate_reference_address(ticket, true);
+  const auto record = impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_});
+  const auto &view = record.view;
+  if (view.kind != DspAddressStageKind::address_only || view.data_access_count != 0 ||
+      view.extension || view.secondary || !view.pointer_update ||
+      !decode_address_only(view.word.value)) {
+    throw Fault("Address-only E1 requires its actual operand-free AG1/AG2 record");
+  }
+  try {
+    const auto inputs = state();
+    const auto progress = impl_->memory_entry(*this, record);
+    record.fetched.check_consumed(impl_->native.reference().fetch().consumed_pair(),
+                                  view.update.omr);
+    const auto base = impl_->results.base;
+    const auto retirement = impl_->results.retirement;
+    if (!progress.pending ||
+        !std::holds_alternative<DspInstructionRetire>(progress.pending->effect) || !retirement ||
+        !base || impl_->results.writeback.pending) {
+      throw Fault("Address-only E1 produced an unqualified native effect");
+    }
+    const auto &before = base->registers;
+    const auto &after = retirement->cpu.registers;
+    for (unsigned index = 0; index < before.r.size(); ++index) {
+      const auto expected = index == view.update.index
+                                ? view.update.value
+                                : static_cast<std::uint32_t>(before.r.at(index)) & word_mask;
+      if ((static_cast<std::uint32_t>(after.r.at(index)) & word_mask) != expected) {
+        throw Fault("Native address-only E1 differs from its captured AG1/AG2 calculation");
+      }
+    }
+    impl_->stages.records.at(ticket.slot_).reset();
+    return {.address = view, .inputs = inputs, .progress = progress};
+  } catch (const std::exception &error) {
+    impl_->faulted = true;
+    throw Fault("Native address-only E1 update R" + std::to_string(view.update.index) +
+                " pc=" + hex(view.word.address, 6) + " omr=" + hex(view.update.omr, 6) + ": " +
+                error.what());
+  }
+}
+
 DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTicket &ticket) {
   validate_reference_address(ticket, true);
   const auto record = impl_->stages.get({.slot = ticket.slot_, .serial = ticket.serial_});
   const auto &view = record.view;
+  if (view.kind == DspAddressStageKind::address_only || view.data_access_count == 0) {
+    throw Fault("Memory E1 requires an actual data operand");
+  }
   auto active_access = view.data_accesses[0];
   try {
     DspMemoryStageResult result{.address = view, .inputs = state(), .data = {}, .progress = {}};

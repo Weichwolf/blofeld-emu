@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/dsp_accumulator_transfer.hpp"
+#include "dsp/dsp_address_only.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_core.hpp"
@@ -274,7 +275,8 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
   for (std::size_t index = 0; index < words.size(); ++index) {
     const auto word = words.at(index);
     const bool memory = profile == DspFetchPipeline::automatic_memory && word &&
-                        decode_memory_stage(word->value).has_value();
+                        (decode_memory_stage(word->value).has_value() ||
+                         decode_address_only(word->value).has_value());
     const bool port_read = profile == DspFetchPipeline::automatic_memory && word &&
                            decode_peripheral_read(word->value).has_value();
     if (reads.at(index).has_value() != port_read) {
@@ -363,6 +365,22 @@ std::optional<DspProgramWord> DspInstructionPipeline::decoded_word(const DspMach
   return view.cycle.decode;
 }
 
+namespace {
+template <typename Result>
+void capture_addressed_result(DspInstructionPipeline &pipeline, const Result &result) {
+  const auto word = pipeline.view.cycle.execute1;
+  if (!word || !result.progress.pending || result.address.word != *word) {
+    throw Fault("Automatic addressed E1 lost its actual native result");
+  }
+  pipeline.view.cycle.candidate_inputs = result.inputs;
+  pipeline.view.cycle.execution = result.progress;
+  pipeline.view.cycle.execution_captured = true;
+  pipeline.view.awaiting_retirement = word;
+  pipeline.view.awaiting_inputs = result.inputs;
+  pipeline.view.awaiting_deferred_accumulators = pipeline.view.cycle.e1_deferred_accumulators;
+}
+}
+
 void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCycleResult &bus) {
   if (bus.dma.core_stall) { return; }
   capture_loop_f2(bus);
@@ -389,16 +407,11 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   if (view.cycle.memory_source_stall || held_program_memory) { return; }
   if (view.cycle.execute1) {
     if (bus.memory) {
-      if (!bus.memory->progress.pending || bus.memory->address.word != *view.cycle.execute1) {
-        throw Fault("Automatic memory E1 lost its actual native result");
-      }
       view.cycle.memory = bus.memory;
-      view.cycle.candidate_inputs = bus.memory->inputs;
-      view.cycle.execution = bus.memory->progress;
-      view.cycle.execution_captured = true;
-      view.awaiting_retirement = view.cycle.execute1;
-      view.awaiting_inputs = bus.memory->inputs;
-      view.awaiting_deferred_accumulators = view.cycle.e1_deferred_accumulators;
+      capture_addressed_result(*this, *bus.memory);
+    } else if (bus.address_only) {
+      view.cycle.address_only = bus.address_only;
+      capture_addressed_result(*this, *bus.address_only);
     } else {
       execute(machine);
     }
@@ -450,7 +463,7 @@ void DspInstructionPipeline::capture_address(DspMachine &machine) {
   const auto word = view.cycle.ag1;
   if (profile == DspFetchPipeline::automatic_memory && word) {
     const auto instruction = *word;
-    if (decode_memory_stage(instruction.value)) {
+    if (decode_memory_stage(instruction.value) || decode_address_only(instruction.value)) {
       const auto captured = samples[0];
       next = machine.capture_reference_address(instruction.address,
                                                captured ? captured->occurrence : 0);

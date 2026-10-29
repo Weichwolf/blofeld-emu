@@ -1,0 +1,47 @@
+{
+  "primary": {
+    "manifest": "doc/hardware/sources.json",
+    "manual": "doc/hardware/DSP56300FM.pdf",
+    "sha256": "b2e8e346fe55b05d20ad0e6bc03d45fd1e080d46d9a9cd9540271c0c37f5a31e",
+    "sections": [
+      "4.3.4",
+      "4.5",
+      "13-117 (U)",
+      "A-1",
+      "A.2.4",
+      "13-44 (CLR)"
+    ]
+  },
+  "independent_vendor": {
+    "processor_dlls": {
+      "libdsp56300simapi.dll": "602d93d794acb835a5f6b335b47cedb59f8edbf0e02bf63330dce5620bff2ce5",
+      "libdsp56300.dll": "9f3c1393ec89aaf6f64b29f7aebf3ffa50f3d4c0108ccf635a8b4b47fdbd6e23"
+    },
+    "arithmetic_windows": 192,
+    "arithmetic_instructions": 5568,
+    "dependency_and_chain_windows": 224,
+    "dependency_and_chain_instructions": 7040,
+    "arithmetic_runtime_sha256": "f0f28ab5c32d66f205eabee36904fdc3189dde08e18bc92fff864bfedd0b358b",
+    "dependency_runtime_sha256": "bcf4d452c5d5a07a9e57d42ce0d0cc7d9c0322ef07c04ecf718dbe98744b34d8",
+    "arithmetic_expected_sha256": "5381f77e8d63a96f44a0e63b9a4c8f579a31d7c04b1a97b6409f79d680d18077",
+    "dependency_expected_sha256": "dc403256d12bfc7310458dd2f63922260f226793fa71412885132f0d26025d91",
+    "scope": "Family software model; nominal timing and own native instruction outcomes, no silicon-stage or fitted-chip validation",
+    "assembler_encodings": 32,
+    "dependency_assembler_pipeline_warnings": 120,
+    "assembler_errors": 0,
+    "ordinary_anchor_T": 7,
+    "assembler_32_source_sha256": "65493e837cb651e647ab486e5b502abcaa04c830f56a6858e31684f6a7bd5174",
+    "assembler_32_listing_sha256": "680f2cd93f4d81c6adc3d3d1f398452b61720923667ed3d928f4e134efd67931"
+  },
+  "limits": [
+    "Automatic SC/SA modes and loaded REP U remain outside the admitted context.",
+    "Full original reset-to-instrument startup, voices/audio, host MIDI, persistence and complete update/recovery remain open."
+  ],
+  "scope": "Own U formats, arithmetic and declared native reference projection; no silicon-stage or complete instrument proof",
+  "templates": {
+    "base": "204000",
+    "mode_shift": 11,
+    "register_shift": 8,
+    "parallel_ALU_bits": "7..0"
+  }
+}

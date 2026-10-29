@@ -24,6 +24,7 @@ struct DspPeripheralReadPoint;
 struct DspBranchDecision;
 struct DspAddressStageView;
 struct DspMemoryStageResult;
+struct DspAddressOnlyStageResult;
 
 struct DspState {
   std::uint32_t pc = 0;
@@ -188,6 +189,8 @@ private:
   rebind_address_stage(const DspAddressStageTicket &ticket) const;
   [[nodiscard]] DspAddressStageView publish_reference_address(const DspAddressStageTicket &ticket);
   void validate_reference_address(const DspAddressStageTicket &ticket, bool published) const;
+  [[nodiscard]] DspAddressOnlyStageResult
+  execute_reference_address_only(const DspAddressStageTicket &ticket);
   [[nodiscard]] DspMemoryStageResult execute_reference_memory(const DspAddressStageTicket &ticket);
   [[nodiscard]] DspPeripheralReadTicket
   capture_reference_peripheral_read(DspPeripheralReadPoint point);

@@ -1,0 +1,29 @@
+Address-only DSP U moves
+
+FM13-117 U updates R0..R7 with -N,+N,-1,+1 and no data operand. Native AG1
+captures the actual F2 word/R/N/M; AG2 publishes the native address calculation.
+E1 executes the unchanged opcode from that captured source and checks every R
+against the real held native result. E2 publishes native counters/PC/ALU/CCR.
+No dummy memory effect or ordinary move-writeback is introduced. The shared
+address record's memory fields are unused for U; its data-access count is zero.
+
+Explicit R/N/M producers hold same-triplet Decode: short3/2/1/0 and long2/1/0/0
+extra periods for0..3 NOP gaps. Implicit U updates forward without rearming.
+Existing allowed parallel ALU forms retain native execution;32 joint CLR cases
+check independent full-state outcomes. SC/SA and loaded REP U remain outside
+this automatic profile. Reference phase placement is not measured silicon.
+
+Independent family-model inputs:32 assembler encodings,192 arithmetic windows
+and224 producer/chain windows (12608 own instructions). The120 dependency
+assembler warnings are the expected pipeline-stall diagnostics; no errors or
+literal substitutions. Primary/manual/library/result hashes: dsp-address-update-reference.json.
+Own gates cover192 native cases/384 suffixes,192 per-period pipeline windows,
+576 cuts/1152 suffixes,192 producer cases/48 cuts/96 suffixes and32 U chains;
+reserved modifiers,operand-slot guards,F2 immutability and32 CLR cuts/64 suffixes.
+
+  cmake --build --preset strict --target blofeld-address-update-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_address_update_'
+  # Build/run the same scopes separately with preset/test directory thread.
+
+Normal original Desktop/Keyboard startup,voices/audio,MIDI,complete storage and
+update/recovery,physical equivalence and realtime/long-run acceptance remain open.

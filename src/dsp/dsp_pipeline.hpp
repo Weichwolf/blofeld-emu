@@ -32,6 +32,7 @@ struct DspPipelineCycle {
   std::optional<DspProgramWord> ag1_extension = std::nullopt;
   std::optional<DspProgramWord> e1_extension = std::nullopt;
   std::optional<DspMoveWriteback> transfer = std::nullopt;
+  std::optional<DspAddressOnlyStageResult> address_only = std::nullopt;
   unsigned decode_words = 1;
   std::uint8_t agu_dependencies = 0;
   bool decode_accepted = false;

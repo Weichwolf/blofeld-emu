@@ -3194,3 +3194,17 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   automatic admission. See dsp-peripheral-bits.txt and its reference manifest.
   Complete original NAND loading,normal boot,MIDI/audio and both complete
   instrument profiles remain unachieved.
+
+- Automatic address-only U moves retain actual F2/R/N/M capture, native AG2
+  calculation, genuine opcode execution/confirmation in E1 and E2 retirement.
+  No data operand or ordinary move-writeback is fabricated; adjacent updates
+  forward without rearming explicit R/N/M interlocks.32 independent Freescale
+  encodings and416 family-model windows/12608 own instructions pin arithmetic
+  and nominal timing.38 affected named cases pass per ASan/UBSan and separate
+  TSan profile:192 native cases/384 suffixes,192 per-period windows/576 cuts/
+  1152 suffixes,192 producer cases/48 cuts/96 suffixes,32 chains,strict operand/
+  modifier/F2 guards and32 parallel CLR cuts/64 suffixes plus34 regressions.
+  See dsp-address-update.txt and its reference manifest. SC/SA,loaded REP U,
+  silicon phase placement,authentic remaining ROM/map behavior,complete original
+  NAND loading,normal Desktop/Keyboard operation,MIDI/audio,update/recovery and
+  realtime/long-run acceptance remain open.

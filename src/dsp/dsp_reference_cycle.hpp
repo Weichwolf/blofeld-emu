@@ -25,6 +25,7 @@ struct DspReferenceCycleInputs {
   std::optional<DspReferenceTicket> retirement = std::nullopt;
   std::optional<DspAddressStageTicket> address_update = std::nullopt;
   std::optional<DspAddressStageTicket> memory = std::nullopt;
+  std::optional<DspAddressStageTicket> address_only = std::nullopt;
   // P address of an actual queued AG1 instruction; no supplied opcode or data.
   std::optional<std::uint32_t> peripheral_capture = std::nullopt;
   DspReferenceBusOrder order = DspReferenceBusOrder::unqualified;
@@ -38,6 +39,7 @@ struct DspReferenceCycleResult {
   std::optional<DspInstructionRetire> retirement = std::nullopt;
   std::optional<DspAddressStageView> address_update = std::nullopt;
   std::optional<DspMemoryStageResult> memory = std::nullopt;
+  std::optional<DspAddressOnlyStageResult> address_only = std::nullopt;
   std::optional<DspProgramFetchView> fetch = std::nullopt;
   std::optional<DspPeripheralReadTicket> peripheral_read = std::nullopt;
   std::array<DspMemoryAccess, dsp_reference_cycle_accesses> core_accesses{};

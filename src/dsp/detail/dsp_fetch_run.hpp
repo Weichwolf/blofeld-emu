@@ -34,6 +34,8 @@ struct DspFetchState {
   std::optional<std::uint64_t> expected_dma;
   std::shared_ptr<const bool> expected_owner;
 
+  void select_address_execution(const DspMachine &machine,
+                                DspReferenceCycleInputs &selection) const;
   void bind(const DspMachine &machine);
   void verify(const DspMachine &machine) const;
   [[nodiscard]] std::uint64_t period(const DspMachine &machine) const;

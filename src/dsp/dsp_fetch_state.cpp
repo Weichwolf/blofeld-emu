@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_fetch_run.hpp"
+#include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
@@ -26,6 +27,19 @@ bool program_read(const DspReferencePending &pending) {
   return effect != nullptr && (effect->kind == DspNativeAccessKind::opcode ||
                                effect->kind == DspNativeAccessKind::extension);
 }
+
+}
+
+void DspFetchState::select_address_execution(const DspMachine &machine,
+                                             DspReferenceCycleInputs &selection) const {
+  if (!pipeline) { throw Fault("Address execution requires its automatic pipeline owner"); }
+  const auto ticket = pipeline->addresses[1];
+  if (!ticket) { return; }
+  if (machine.address_stage(*ticket).kind == DspAddressStageKind::address_only) {
+    selection.address_only = ticket;
+  } else {
+    selection.memory = ticket;
+  }
 }
 
 void DspFetchState::bind(const DspMachine &machine) {
@@ -100,7 +114,7 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
       if (decode_peripheral_read(word.value)) { result.peripheral_capture = word.address; }
     }
     result.address_update = pipeline->addresses[0];
-    result.memory = pipeline->addresses[1];
+    select_address_execution(machine, result);
     return result;
   }
   if (input.retire_previous) {

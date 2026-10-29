@@ -155,7 +155,8 @@ DspMoveFields decode_move_writeback(const std::uint32_t opcode, const DspMoveDec
   }
   const auto move = transfer(first) ? first : second;
   if (!transfer(move)) {
-    if (second != dsp56k::Invalid && second != dsp56k::Move_Nop) {
+    // FM13-117 U uses AG1/AG2, without an ordinary data-register writeback.
+    if (second != dsp56k::Invalid && second != dsp56k::Move_Nop && second != dsp56k::Move_ea) {
       throw Fault("Unqualified native move-writeback format opcode=" + hex(opcode, 6));
     }
     return {};

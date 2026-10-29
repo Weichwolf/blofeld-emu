@@ -252,7 +252,7 @@ add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp 
 target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
 add_library(blofeld_dsp
-  src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
+  src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_only.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
   src/dsp/dsp_omr_move.cpp src/dsp/dsp_fetch_context.cpp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
@@ -3543,6 +3543,16 @@ endif()
 
 # Partial accumulator stores preserve raw data/CCR through ordinary and REP phases.
 if(BUILD_TESTING)
+  add_executable(blofeld-address-update-test test/dsp_address_update_test.cpp
+    test/dsp_address_update_native.cpp test/dsp_address_update_dependencies.cpp
+    test/dsp_address_update_guards.cpp)
+  target_link_libraries(blofeld-address-update-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  foreach(mode IN ITEMS native pipeline dependencies guards)
+    add_test(NAME dsp_address_update_${mode} COMMAND blofeld-address-update-test ${mode})
+    set_tests_properties(dsp_address_update_${mode} PROPERTIES TIMEOUT 120)
+  endforeach()
+  add_dependencies(quality blofeld-address-update-test)
+
   add_executable(blofeld-peripheral-bit-test test/dsp_peripheral_bit_test.cpp test/dsp_peripheral_bit_guards.cpp)
   target_link_libraries(blofeld-peripheral-bit-test PRIVATE blofeld_dsp blofeld_dsp_native)
   foreach(mode native pipeline guards)

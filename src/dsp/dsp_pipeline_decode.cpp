@@ -2,6 +2,7 @@
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/dsp_accumulator_transfer.hpp"
+#include "dsp/dsp_address_only.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_loop_source.hpp"
@@ -153,6 +154,8 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
         profile == DspFetchPipeline::automatic_memory &&
         (decode_branch_form(word.value).has_value() || (port_read && port_read->bit));
     const auto form = decode_memory_stage(word.value);
+    const bool address_only = profile == DspFetchPipeline::automatic_memory &&
+                              decode_address_only(word.value).has_value();
     const bool memory = profile == DspFetchPipeline::automatic_memory && form.has_value();
     const bool transfer = profile == DspFetchPipeline::automatic_memory && !memory &&
                           pipeline_transfer_fields(word.value) != DspMoveFields{};
@@ -162,10 +165,11 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
     const bool control =
         profile == DspFetchPipeline::automatic_memory && decode_omr_move(word.value).has_value();
     const bool standalone_move =
-        (memory || transfer || port_read || control) && second == dsp56k::Invalid;
+        (memory || transfer || port_read || control || address_only) && second == dsp56k::Invalid;
     const auto words = pipeline_word_count(word);
     if ((!arithmetic && !standalone_move && !branch && !loop && !repeat) ||
-        (!memory && !transfer && second != dsp56k::Invalid && second != dsp56k::Move_Nop) ||
+        (!memory && !transfer && !address_only && second != dsp56k::Invalid &&
+         second != dsp56k::Move_Nop) ||
         words > ((transfer || branch || loop || control || first == dsp56k::Cmp_xxxxS2 ||
                   (memory && (form->peripheral || is_program_memory(*form))))
                      ? 2U
