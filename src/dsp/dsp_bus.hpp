@@ -102,6 +102,8 @@ public:
   [[nodiscard]] DspMemoryResource memory_resource(DspMemoryAccess access) const;
   [[nodiscard]] bool stable_program_context(std::uint32_t address, std::uint32_t omr) const;
   [[nodiscard]] DspMemoryConflict memory_conflict(DspMemoryPair pair) const;
+  // Actual P-memory sampling preserves absent data; map/resource checks stay strict.
+  [[nodiscard]] std::optional<std::uint32_t> sample_program(std::uint32_t address) const;
   // Decoder lookahead may substitute an unknown word; never use it to admit execution.
   [[nodiscard]] std::uint32_t peek_program(std::uint32_t address) const;
   // Strict, side-effect-free P-space observation, including map/knowledge checks.

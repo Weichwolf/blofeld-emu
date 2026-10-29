@@ -181,7 +181,9 @@ std::optional<DspProgramWord> pipeline_extension(const DspProgramFetchView &fetc
   const auto address = (instruction.address + 1) & word_mask;
   for (std::size_t index = 0; index < fetch.used; ++index) {
     const auto word = fetch.words.at(index);
-    if (word.address == address) { return word; }
+    if (word.address == address) {
+      return word.require_known({.pc = instruction.address, .omr = fetch.omr});
+    }
   }
   throw Fault("Automatic AG1 awaits actual extension read P:" + hex(address, 6) +
               " pc=" + hex(instruction.address, 6) + " omr=" + hex(fetch.omr, 6));

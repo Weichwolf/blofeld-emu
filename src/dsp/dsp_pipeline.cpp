@@ -111,7 +111,7 @@ DspFetchedWord decode_receipt(const std::optional<DspFetchedWord> word) {
   return *word;
 }
 
-bool complete_decode(const std::span<const DspFetchedWord> fetched,
+bool complete_decode(const std::span<const DspFetchedSample> fetched,
                      const DspFetchedWord opcode,
                      const unsigned words) {
   if (words == 1) { return true; }
@@ -119,7 +119,7 @@ bool complete_decode(const std::span<const DspFetchedWord> fetched,
     if (fetched[index] != opcode) { continue; }
     if (index + 1 == fetched.size()) { return false; }
     const auto extension = fetched[index + 1];
-    if (extension.word.address != ((opcode.word.address + 1) & word_mask) ||
+    if (extension.sample.address != ((opcode.word.address + 1) & word_mask) ||
         extension.occurrence <= opcode.occurrence) {
       throw Fault("Automatic Decode lost adjacent actual F2 extension read P:" +
                   hex((opcode.word.address + 1) & word_mask, 6) +
@@ -157,15 +157,17 @@ std::optional<DspProgramWord> extension_tail(const std::optional<DspFetchedInstr
 
 DspProgramWord extension_decode_word(const DspInstructionPipeline &pipeline,
                                      const DspFetchedWord opcode,
-                                     const std::span<const DspFetchedWord> fetched,
-                                     const std::optional<DspProgramWord> ag1) {
+                                     const std::span<const DspFetchedSample> fetched,
+                                     const std::optional<DspProgramWord> ag1,
+                                     DspProgramReadContext context) {
+  context.pc = opcode.word.address;
   if (ag1 != opcode.word || pipeline.samples.front() != opcode ||
       !complete_decode(fetched, opcode, 2)) {
     throw Fault("Extension Decode lost actual opcode/AG1/F2 ownership pc=" +
                 hex(opcode.word.address, 6));
   }
   for (std::size_t index = 0; index + 1 < fetched.size(); ++index) {
-    if (fetched[index] == opcode) { return fetched[index + 1].word; }
+    if (fetched[index] == opcode) { return fetched[index + 1].sample.require_known(context); }
   }
   throw Fault("Extension Decode lost its adjacent actual F2 word");
 }
@@ -189,7 +191,7 @@ void advance_extension_phases(DspInstructionPipeline &pipeline) {
 void prepare_decode(DspInstructionPipeline &pipeline,
                     const DspMachine &machine,
                     const DspProgramFetchView &fetch,
-                    const std::span<const DspFetchedWord> fetched,
+                    const std::span<const DspFetchedSample> fetched,
                     DspPipelineCycle &cycle) {
   if (pipeline.held_program_memory || pipeline.hold_ccr_decode(machine) ||
       pipeline.hold_repeat_decode()) {
@@ -197,7 +199,11 @@ void prepare_decode(DspInstructionPipeline &pipeline,
   }
   if (pipeline.decoding_extension) {
     cycle.extension_decode =
-        extension_decode_word(pipeline, *pipeline.decoding_extension, fetched, cycle.ag1);
+        extension_decode_word(pipeline,
+                              *pipeline.decoding_extension,
+                              fetched,
+                              cycle.ag1,
+                              {.pc = machine.cpu().state().pc, .omr = fetch.omr});
     return;
   }
   if (pipeline.hold_loop_decode() || pipeline.deferred_omr_branch) { return; }
@@ -215,8 +221,12 @@ void prepare_decode(DspInstructionPipeline &pipeline,
   }
   // Select the FIFO position after the actual older E1/AG2/AG1 occurrences.
   // Decode sees the prior cycle's F2 latch, never the new F2 of this clock.
-  if (pipeline.selected.next) {
-    const auto word = pipeline.selected.next->word;
+  if (pipeline.selected.next_sample) {
+    const auto word = pipeline.selected.next_sample->sample.require_known(
+        {.pc = machine.cpu().state().pc, .omr = fetch.omr});
+    if (!pipeline.selected.next || pipeline.selected.next->word != word) {
+      throw Fault("Known Decode lost its owned actual F2 value");
+    }
     if (word.address != pipeline.view.decode_address) {
       throw Fault("Automatic Decode cursor differs from its actual F2 occurrence pc=" +
                   hex(word.address, 6) + " omr=" + hex(fetch.omr, 6));
@@ -228,11 +238,14 @@ void prepare_decode(DspInstructionPipeline &pipeline,
 }
 }
 
-void DspInstructionPipeline::select_words(const std::span<const DspFetchedWord> fetched,
+void DspInstructionPipeline::select_words(const std::span<const DspFetchedSample> fetched,
                                           const std::uint32_t omr) {
   const auto repeated = repeat_setup ? repeat_setup->body : std::nullopt;
-  selected = select_pipeline_words(fetched, samples, extension_samples, repeated);
-  if (repeat_setup && repeated && repeat_setup->remaining != 0) { selected.next = repeated; }
+  selected = select_pipeline_samples(fetched, samples, extension_samples, repeated, {.omr = omr});
+  if (repeat_setup && repeated && repeat_setup->remaining != 0) {
+    selected.next = repeated;
+    selected.next_sample = DspFetchedSample::retain(*repeated);
+  }
   if (repeated) {
     const auto word = repeated->word;
     if (!fetch_repeat_body(word.value)) {
@@ -256,9 +269,9 @@ void DspInstructionPipeline::prepare(const DspMachine &machine) {
                          .execute1 = view.stages[2],
                          .execute2 = view.awaiting_retirement};
   cycle.extension_execute2 = extension_tail(extension_stages.back());
-  std::array<DspFetchedWord, dsp_program_fetch_capacity> fetched{};
+  std::array<DspFetchedSample, dsp_program_fetch_capacity> fetched{};
   for (std::size_t index = 0; index < fetch.used; ++index) {
-    const auto sample = machine.pipeline_fetched_word(index);
+    const auto sample = machine.pipeline_fetched_sample(index);
     if (!sample) { throw Fault("Automatic DSP lost its actual F2 receipt"); }
     fetched.at(index) = *sample;
   }
@@ -353,9 +366,9 @@ std::optional<DspProgramWord> DspInstructionPipeline::decoded_word(const DspMach
   if (decoding_extension) { throw Fault("Opcode Decode replaced an owned extension phase"); }
   if (view.cycle.decode_words == 1) { return view.cycle.decode; }
   const auto fetch = machine.reference_fetch();
-  std::array<DspFetchedWord, dsp_program_fetch_capacity> fetched{};
+  std::array<DspFetchedSample, dsp_program_fetch_capacity> fetched{};
   for (std::size_t index = 0; index < fetch.used; ++index) {
-    const auto sample = machine.pipeline_fetched_word(index);
+    const auto sample = machine.pipeline_fetched_sample(index);
     if (!sample) { throw Fault("Automatic Decode lost its actual F2 receipt"); }
     fetched.at(index) = *sample;
   }

@@ -194,7 +194,7 @@ void fetch_wait_and_admit() {
             "The actual destination write wins and does not also sample the conflicting P word");
     const auto fetched = machine.advance_reference_bus_cycle(
         cycle({.index = 4}, std::nullopt, DspProgramFetchStage::read));
-    require(fetched.fetch && fetched.fetch->words.front().value == opcode &&
+    require(fetched.fetch && fetched.fetch->words.front().data == opcode &&
                 machine.cpu().debug_state() == before,
             "A later actual F2 read sees DMA's replacement without native retirement");
     const auto retired = machine.advance_reference_bus_cycle(
@@ -264,14 +264,23 @@ void dual_port_preflight() {
       "Rejected preflight preserves the same DMA index and legitimate separate P-data admission");
 }
 
-void failed_fetch_keeps_dma_prefix() {
+void failed_required_read_keeps_dma_prefix() {
   DspMachine machine;
-  const std::array words{0U};
+  const auto words = checkpoint::assemble("move y:>$20,x0");
+  require(words.size() == 2, "Own absolute Y-data load has its independently expected extension");
   prepare(machine, words);
-  const auto progress = machine.begin_reference_instruction(access::boundaries);
+  auto progress = machine.begin_reference_instruction(access::boundaries);
   static_cast<void>(machine.start_reference_fetch(access::ticket(progress)));
-  static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-  static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::read));
+  for (unsigned index = 0; index < 2; ++index) {
+    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
+    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::read));
+  }
+  progress = machine.advance_reference_access(access::ticket(progress));
+  progress = machine.advance_reference_access(access::ticket(progress));
+  require(access::request(progress).kind == DspNativeAccessKind::read &&
+              access::request(progress).target.space == DspSpace::y &&
+              access::request(progress).target.address == 0x20,
+          "Actual opcode and extension reach the genuine required Y-data read");
   static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
   const auto saved = machine.checkpoint();
   const auto before = machine.cpu().debug_state();
@@ -280,7 +289,7 @@ void failed_fetch_keeps_dma_prefix() {
         cycle({.index = 1, .requests = 1}, access::ticket(progress), DspProgramFetchStage::read)));
   });
   require(
-      error.contains("cycle=1") && error.contains("Unknown DSP memory read at P:0x000101") &&
+      error.contains("cycle=1") && error.contains("Unknown DSP memory read at Y:0x000020") &&
           error.contains("pc=0x000100") && error.contains("omr=0x000305") &&
           machine.cpu().debug_state() == before &&
           machine.bus().access_peripheral_bit({.space = DspSpace::x,
@@ -288,21 +297,23 @@ void failed_fetch_keeps_dma_prefix() {
                                                .bit = 8,
                                                .operation = DspBitOperation::test}) == true &&
           machine.bus().read({.space = DspSpace::y, .address = dma::destination}) == access::second,
-      "A real F2 failure retains the admitted DMA source prefix without executing the later native "
-      "admission");
+      "Required unknown data still fails after DMA source/F2 without committing native results");
   static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
   static_cast<void>(fault([&] { static_cast<void>(machine.reference_pending()); }));
   machine.restore(saved);
-  machine.bus().write({.address = program + 1});
+  machine.bus().write({.space = DspSpace::y, .address = 0x20, .value = access::third});
+  machine.bus().write({.address = program + 2});
   const auto changed_opcode = checkpoint::assemble("move #<$34,r0").front();
   machine.bus().write({.address = program, .value = changed_opcode});
   const auto recovered = machine.advance_reference_bus_cycle(
       cycle({.index = 1, .requests = 1}, access::ticket(machine), DspProgramFetchStage::read));
   require(recovered.dma.phase && recovered.dma.phase->kind == DspDmaPhaseKind::source_read &&
-              completed(recovered).retired && machine.cpu().state().pc == program + 1 &&
-              machine.cpu().state().r[0] == initial_r0 && recovered.core_access_count == 1,
-          "Trusted coordinated restore recovers the original native/F1/DMA boundary before actual "
-          "valid memory is supplied");
+              completed(recovered).retired && machine.cpu().state().pc == program + 2 &&
+              machine.cpu().state().r[0] == initial_r0 &&
+              (machine.cpu().state().x & word_mask) == access::third &&
+              recovered.core_access_count == 2,
+          "Trusted restore preserves the captured instruction and samples initialized data with "
+          "actual F2");
 }
 
 void protocol_preflight() {
@@ -422,7 +433,7 @@ int main() {
     fetch_wait_and_admit();
     simultaneous_fetch_and_redirect();
     dual_port_preflight();
-    failed_fetch_keeps_dma_prefix();
+    failed_required_read_keeps_dma_prefix();
     protocol_preflight();
     controller_bit_with_fetch();
     peripheral_preflight();

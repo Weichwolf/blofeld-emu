@@ -22,10 +22,13 @@
 
 namespace blofeld {
 namespace {
-bool program_read(const DspReferencePending &pending) {
+bool awaiting_program_sample(const DspReferencePending &pending, const DspProgramFetchView &fetch) {
   const auto *effect = std::get_if<DspNativeAccess>(&pending.effect);
-  return effect != nullptr && (effect->kind == DspNativeAccessKind::opcode ||
-                               effect->kind == DspNativeAccessKind::extension);
+  return effect != nullptr &&
+         (effect->kind == DspNativeAccessKind::opcode ||
+          effect->kind == DspNativeAccessKind::extension) &&
+         !pending.latched_program_word &&
+         (fetch.used == 0 || fetch.words.front().address != effect->target.address);
 }
 
 }
@@ -125,7 +128,9 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
   if (!input.admit_native) { return result; }
   const auto pending = machine.reference_pending();
   if (!pending) { throw Fault("DSP fetch clock has no pending native effect to admit"); }
-  starved = program_read(*pending) && !pending->latched_program_word;
+  // An absent value in a completed F2 is ready for strict admission, not a
+  // missing bus sample that may wait indefinitely or be repaired by RAM.
+  starved = awaiting_program_sample(*pending, fetch);
   if (!starved) { result.access = pending->ticket; }
   return result;
 }

@@ -212,7 +212,7 @@ int main() {
     for (const unsigned count : {1U, 2U, 3U}) {
       for (const unsigned size : {1U, 2U, 4U}) {
         for (const unsigned value : {0U, return_opcode, all_ones}) {
-          for (const unsigned known : {2U, 4U}) {
+          for (const unsigned known : {0U, 1U, 2U, 4U}) {
             const Case sample{.count = count, .size = size, .known_tail = known, .value = value};
             native(sample);
             pipeline(sample);
@@ -221,7 +221,7 @@ int main() {
       }
     }
     for (unsigned variant = 0; variant < 8; ++variant) { refused_return(variant); }
-    std::cout << "PASS54 own native DO-return controls,54 frontend windows,8 refusals\n";
+    std::cout << "PASS108 own native DO-return controls,108 frontend windows,8 refusals\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

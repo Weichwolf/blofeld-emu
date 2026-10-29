@@ -74,7 +74,9 @@ The native attempt reports whether execution actually wrote the PC through its
 control-transfer path. Sequential opcode/extension fetch increments do not set
 this result. A taken JMP/JSR/BRA/BSR, conditional transfer or return discards
 all younger samples and an issued F1 address even when its destination equals
-the sequential cursor. A false condition retains these real samples. A PC that
+the sequential cursor. Without an early owned prediction, a false condition
+retains these real samples. The automatic profile uses its separately declared
+branch refill (dsp-branch-pipeline.txt). A PC that
 differs from the consumed cursor without a native redirect rejects contextually;
 resulting-PC comparison cannot substitute for an actual branch decision.
 The adapter does not reevaluate conditions from later RAM or status values.
@@ -98,7 +100,7 @@ both ready and issued-address snapshots. Native literal register/PC/flag/length
 and nominal-cost expectations cover their later consumption. Separate P-data
 reads see the newer RAM value while the same address's queued opcode stays old.
 JMP redirects invalidate ready and issued words, including a fallthrough target.
-Capacity, starvation, competing APIs, reset and unknown speculative-read recovery
+Capacity, starvation, competing APIs, reset and unknown-value consumption/recovery
 remain explicit. Full seven-stage scheduling and physical bus timing are open.
 
   cmake --build --preset strict --target blofeld-prefetch-condition-test
@@ -119,3 +121,34 @@ The selected automatic_memory OMR bit-branch profile owns an early fetch segment
 while preserving older opcode/extension samples. Actual native confirmation
 retains newly read target words; generic explicit redirects above still clear
 their queue. Scope, timing limits and same-address checks: dsp-branch-pipeline.txt.
+
+Mapped unknown F2 samples
+
+DspProgramSample records an actual address with optional data; absent data is
+never a zero/NOP. F2 retains resource,occurrence,loop metadata and occupancy.
+DspProgramWord remains known data for Decode and native admission. Unknown used
+opcodes/extensions refuse with address,PC,OMR before their effects. Neutral
+suspension/loop/REP queries must not demand an unrelated head value. Unsupported
+physical maps still refuse at F2; data operands,vectors and untimed latches
+retain strict reads.
+Explicit scheduling distinguishes a missing F2 from a captured absent value;
+the latter reaches strict admission instead of waiting indefinitely.
+
+Later RAM/DMA writes cannot resolve a captured absent value. Copied/joint
+checkpoints retain it; only a new actual F2 can observe initialized memory.
+The existing automatic branch profile refills even false/sequential targets.
+Its original and fresh F2 receipts remain distinct; generic false-condition
+retention above is unchanged. Branch F1/F2 timing never depends on value knownness.
+
+Own cases check120 full-state native/automatic return paths,16 bit-branch
+vectors with80 joint cuts/160 restored suffixes,used opcode/extension/data
+refusals and native-configured P-to-P DMA/wait/stale-ticket suffixes. Literal
+native counters are SDK diagnostics; reference periods are not silicon edges.
+They do not establish original boot or normal instrument/MIDI/audio/storage.
+
+  cmake --build --preset strict --target blofeld-unknown-fetch-returns-test \
+    blofeld-unknown-fetch-samples-test blofeld-unknown-fetch-actual-test \
+    blofeld-unknown-fetch-dma-test blofeld-unknown-fetch-branches-test \
+    blofeld-postloop-return-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^(dsp_unknown_fetch_.*|dsp_postloop_return)$'

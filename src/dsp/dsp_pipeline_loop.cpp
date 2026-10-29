@@ -75,7 +75,12 @@ void DspInstructionPipeline::capture_loop_f2(const DspReferenceCycleResult &bus)
   setup.target_ready = true;
   // FM A2.6.5: positive one-instruction bodies add one Decode period. Derive
   // size from the actual first F2 opcode; zero-count annulment adds three.
-  const auto target = fetch.words.at(fetch.used - 1);
+  const auto sample = fetch.words.at(fetch.used - 1);
+  // Unknown target width cannot supply a DO setup shortcut; actual Decode
+  // retains the absent value and will refuse before native consumption.
+  if (!sample.data) { return; }
+  const auto target =
+      sample.require_known({.pc = setup.captured.opcode.word.address, .omr = fetch.omr});
   // This consumed pair already passed native opening/result validation in E1.
   constexpr unsigned word_mask = 0xffffff;
   const auto last =

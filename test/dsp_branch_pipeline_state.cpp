@@ -67,7 +67,7 @@ void fresh_same_address_target() {
           "The first branch consumes its old F2 pair; the same-address target uses fresh NOP data");
 }
 
-void failed_target_f2_and_recovery() {
+void failed_target_decode_and_recovery() {
   DspMachine machine;
   const std::array<std::string, 1> code{"jset #2,omr," + number(unknown_target)};
   prepare(machine, code);
@@ -75,13 +75,13 @@ void failed_target_f2_and_recovery() {
   DspFetchRun run(contract(), machine);
   clocks(run, machine, 4);
   const auto saved = run.checkpoint(machine);
-  clocks(run, machine, 1);
+  clocks(run, machine, 2);
   const auto error =
       fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
   require(error.contains("P:0x000800") && error.contains("pc=") && error.contains("omr=") &&
-              run.faulted() && run.completed_cycles() == 5 &&
+              run.faulted() && run.completed_cycles() == 6 &&
               machine.cpu().debug_state() == expected && machine.bus().last_dma_cycle() == 6,
-          "Unknown actual target F2 fails before branch E1/retirement or elapsed success");
+          "Actual unknown target Decode refuses before branch E2 publication or elapsed success");
   run.restore(saved, machine);
   const std::array<std::uint32_t, 8> target{};
   checkpoint::ram(machine.bus(), unknown_target, target);
@@ -143,7 +143,7 @@ void state_checks() {
   snapshots(false);
   snapshots(true);
   fresh_same_address_target();
-  failed_target_f2_and_recovery();
+  failed_target_decode_and_recovery();
   reset_pending_branch();
   unsupported_sources_stay_strict();
 }

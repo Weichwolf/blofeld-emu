@@ -201,10 +201,11 @@ DspInstructionPipeline capture(DspMachine &machine, const Input input) {
   static_cast<void>(machine.start_reference_fetch(ticket(progress)));
   static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
   const auto fetched = machine.advance_reference_fetch(DspProgramFetchStage::read);
-  require(fetched.used == 1 && fetched.words.front().value == instruction(input),
+  require(fetched.used == 1 && fetched.words.front().data == instruction(input),
           "Only a real F1/F2 sample supplies the captured memory component");
   DspInstructionPipeline component{.profile = DspFetchPipeline::automatic_memory, .view = {}};
-  component.view.cycle.ag1 = fetched.words.front();
+  component.view.cycle.ag1 =
+      fetched.words.front().require_known({.pc = fetched.consume_address, .omr = fetched.omr});
   // Invoke the existing component with actual fetched input. This does not run
   // automatic Decode or claim any hardware stage clock.
   component.capture_address(machine);

@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_pipeline.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
+#include "dsp/dsp_program_fetch.hpp"
 
 #include <array>
 #include <cstddef>
@@ -12,7 +13,7 @@
 
 namespace blofeld {
 namespace {
-std::size_t initial_cursor(const std::span<const DspFetchedWord> fetched,
+std::size_t initial_cursor(const std::span<const DspFetchedSample> fetched,
                            const std::optional<DspFetchedWord> repeat) {
   if (!repeat) { return 0; }
   if (fetched.empty() || fetched.front() != repeat) {
@@ -32,25 +33,29 @@ bool repeated_stage(const DspFetchedWord stage,
   return true;
 }
 
-DspFetchedWord adjacent(const std::span<const DspFetchedWord> fetched,
+DspFetchedWord adjacent(const std::span<const DspFetchedSample> fetched,
                         const std::size_t cursor,
-                        const DspFetchedWord stage) {
+                        const DspFetchedWord stage,
+                        DspProgramReadContext context) {
   constexpr unsigned word_mask = 0xffffff;
   const auto address = (stage.word.address + 1) & word_mask;
-  if (cursor >= fetched.size() || fetched[cursor].word.address != address ||
+  if (cursor >= fetched.size() || fetched[cursor].sample.address != address ||
       fetched[cursor].occurrence == 0 || fetched[cursor].occurrence <= stage.occurrence) {
     throw Fault("Automatic DSP stage awaits adjacent actual F2 extension read P:" +
                 hex(address, 6) + " pc=" + hex(stage.word.address, 6));
   }
-  return fetched[cursor];
+  context.pc = stage.word.address;
+  return fetched[cursor].require_known(context);
 }
+
 }
 
 DspPipelineWords
-select_pipeline_words(const std::span<const DspFetchedWord> fetched,
-                      const std::array<std::optional<DspFetchedWord>, 3> &stages,
-                      const std::array<std::optional<DspFetchedWord>, 2> &extensions,
-                      const std::optional<DspFetchedWord> repeat) {
+select_pipeline_samples(const std::span<const DspFetchedSample> fetched,
+                        const std::array<std::optional<DspFetchedWord>, 3> &stages,
+                        const std::array<std::optional<DspFetchedWord>, 2> &extensions,
+                        const std::optional<DspFetchedWord> repeat,
+                        const DspProgramReadContext context) {
   DspPipelineWords result;
   auto cursor = initial_cursor(fetched, repeat);
   for (std::size_t reverse = stages.size(); reverse != 0; --reverse) {
@@ -72,7 +77,7 @@ select_pipeline_words(const std::span<const DspFetchedWord> fetched,
       }
       continue;
     }
-    const auto next = adjacent(fetched, cursor, *stage);
+    const auto next = adjacent(fetched, cursor, *stage, context);
     if (reverse == 1) {
       result.ag1_extension = next;
     } else if (extension != next) {
@@ -81,7 +86,28 @@ select_pipeline_words(const std::span<const DspFetchedWord> fetched,
     }
     ++cursor;
   }
-  if (cursor < fetched.size()) { result.next = fetched[cursor]; }
+  if (cursor < fetched.size()) {
+    result.next_sample = fetched[cursor];
+    if (fetched[cursor].sample.data) {
+      result.next = fetched[cursor].require_known({.pc = fetched[cursor].sample.address});
+    }
+  }
   return result;
+}
+
+DspPipelineWords
+select_pipeline_words(const std::span<const DspFetchedWord> fetched,
+                      const std::array<std::optional<DspFetchedWord>, 3> &stages,
+                      const std::array<std::optional<DspFetchedWord>, 2> &extensions,
+                      const std::optional<DspFetchedWord> repeat) {
+  if (fetched.size() > dsp_program_fetch_capacity) {
+    throw Fault("Actual F2 queue exceeds its bound");
+  }
+  std::array<DspFetchedSample, dsp_program_fetch_capacity> samples{};
+  for (std::size_t index = 0; index < fetched.size(); ++index) {
+    samples.at(index) = DspFetchedSample::retain(fetched[index]);
+  }
+  return select_pipeline_samples(
+      std::span(samples).first(fetched.size()), stages, extensions, repeat, {});
 }
 }

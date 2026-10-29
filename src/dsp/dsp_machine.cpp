@@ -579,6 +579,10 @@ DspProgramFetchView DspMachine::advance_reference_fetch(const DspProgramFetchSta
   return state_->cpu.advance_reference_fetch(stage);
 }
 
+std::optional<DspFetchedSample> DspMachine::pipeline_fetched_sample(const std::size_t index) const {
+  return state_->cpu.pipeline_fetched_sample(index);
+}
+
 std::optional<DspFetchedWord> DspMachine::pipeline_fetched_word(const std::size_t index) const {
   return state_->cpu.pipeline_fetched_word(index);
 }

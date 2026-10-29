@@ -17,6 +17,7 @@
 
 namespace blofeld {
 struct DspFetchedWord;
+struct DspFetchedSample;
 struct DspAddressRecord;
 class DspAddressStageTicket;
 class DspPeripheralReadTicket;
@@ -158,6 +159,7 @@ private:
   [[nodiscard]] DspProgramFetchView advance_reference_fetch(DspProgramFetchStage stage);
   [[nodiscard]] DspProgramFetchView reference_fetch() const;
   [[nodiscard]] std::optional<DspFetchedWord> pipeline_fetched_word(std::size_t index) const;
+  [[nodiscard]] std::optional<DspFetchedSample> pipeline_fetched_sample(std::size_t index) const;
   // Read-only native-owned loop proofs and actual occurrence metadata.
   [[nodiscard]] bool pipeline_loop_control() const;
   [[nodiscard]] bool pipeline_loop_result() const;

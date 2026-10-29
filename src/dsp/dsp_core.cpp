@@ -1569,6 +1569,13 @@ DspProgramFetchView DspCore::reference_fetch() const {
   return impl_->native.reference().fetch().view();
 }
 
+std::optional<DspFetchedSample> DspCore::pipeline_fetched_sample(const std::size_t index) const {
+  if (impl_->active || impl_->faulted || impl_->run.begin) {
+    throw Fault("Unavailable actual pipeline F2 sample pc=" + hex(state().pc, 6));
+  }
+  return impl_->native.reference().fetch().sampled(index);
+}
+
 std::optional<DspFetchedWord> DspCore::pipeline_fetched_word(const std::size_t index) const {
   if (impl_->active || impl_->faulted || impl_->run.begin) {
     throw Fault("Unavailable actual pipeline F2 receipt pc=" + hex(state().pc, 6));
@@ -1605,7 +1612,7 @@ DspProgramFetchView DspCore::advance_reference_fetch(const DspProgramFetchStage 
 }
 
 bool DspCore::pipeline_interrupt_deferred() const {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   const auto native = repeat_control(impl_->cpu.referenceAttemptState());
   const auto &fetch = impl_->native.reference().fetch();
   if (native.remaining != 0) { fetch.verify_repeat(native); }
@@ -1616,17 +1623,17 @@ bool DspCore::pipeline_interrupt_deferred() const {
 }
 
 std::optional<DspRepeatControl> DspCore::pipeline_repeat_control() const {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   return impl_->native.reference().fetch().repeat_control();
 }
 
 std::optional<DspFetchedWord> DspCore::pipeline_repeat_body() const {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   return impl_->native.reference().fetch().repeat_body();
 }
 
 std::optional<DspRepeatControl> DspCore::pipeline_repeat_result() const {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   const auto &reference = impl_->native.reference();
   const auto &result = impl_->results.retirement;
   const auto pending = reference.pending();
@@ -1661,19 +1668,19 @@ bool DspCore::pipeline_loop_result() const {
 }
 
 std::optional<std::uint32_t> DspCore::pipeline_loop_last(const DspFetchedWord word) const {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   return impl_->native.reference().fetch().loop_last(word);
 }
 
 std::uint32_t DspCore::pipeline_continuation(const DspFetchedWord word,
                                              const unsigned words) const {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   const auto &fetch = impl_->native.reference().fetch();
   return fetch.continuation_after(fetch.instruction(word, words));
 }
 
 void DspCore::hold_pipeline_loop(const DspFetchedWord word) {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   if (!automatic_loop_source(word.word.value)) {
     throw Fault("Unqualified automatic DO source read P:" + hex(word.word.address, 6) +
                 " pc=" + hex(state().pc, 6) + " omr=" + hex(state().omr, 6));
@@ -1683,7 +1690,7 @@ void DspCore::hold_pipeline_loop(const DspFetchedWord word) {
 }
 
 void DspCore::hold_pipeline_branch(const DspFetchedWord word) {
-  static_cast<void>(pipeline_fetched_word(0));
+  static_cast<void>(pipeline_fetched_sample(0));
   const auto form = decode_branch_form(word.word.value);
   if (!form || form->displacement || form->address_register || form->absolute_extension) {
     throw Fault("OMR branch barrier requires its actual two-word F2 instruction");

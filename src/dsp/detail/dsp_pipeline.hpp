@@ -101,7 +101,7 @@ struct DspInstructionPipeline {
 
   void prepare(const DspMachine &machine);
   [[nodiscard]] std::optional<DspProgramWord> decoded_word(const DspMachine &machine);
-  void select_words(std::span<const DspFetchedWord> fetched, std::uint32_t omr);
+  void select_words(std::span<const DspFetchedSample> fetched, std::uint32_t omr);
   void rebind(const DspMachine &machine);
   void capture_address(DspMachine &machine);
 

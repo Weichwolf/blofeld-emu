@@ -3262,6 +3262,11 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   See dsp-peripheral-accumulators.txt and its reference manifest.
   Normal instrument acceptance remains open.
 
-Post-DO parent RTS: dsp_postloop_return checks54 native/automatic paths and8
+Post-DO parent RTS: dsp_postloop_return checks108 native/automatic paths and8
 control/active-loop refusals; see dsp-subroutines.txt. No original runtime,
-unknown-value F2,physical timing or whole-instrument completion claim.
+physical timing or whole-instrument completion claim.
+
+Unknown mapped DSP program samples: five dsp_unknown_fetch_* scopes plus
+extended dsp_postloop_return check absent values,actual consumption,owned
+branch refills,joint snapshots and native DMA writes. Strict unknown physical
+maps/data/vectors remain; original boot and normal instrument acceptance open.

@@ -25,7 +25,7 @@ constexpr unsigned unsupported_status = 0xa2000; // CE, SA, SC.
 constexpr unsigned condition_mask = 0xff;
 constexpr unsigned max_stack_count = 31;
 
-std::string context(const DspProgramWord word, const DspLoopArchitecture &cpu) {
+std::string context(const auto word, const DspLoopArchitecture &cpu) {
   return "read P:" + hex(word.address, 6) + " pc=" + hex(cpu.pc, 6) + " omr=" + hex(cpu.omr, 6);
 }
 
@@ -55,7 +55,8 @@ DspLoopFetch::DspLoopFetch(const DspLoopArchitecture initial)
   if ((initial.status & (loop_flags | unsupported_status | condition_mask)) != 0 ||
       initial.pc > word_mask || initial.omr > word_mask || initial.la > word_mask ||
       initial.lc > word_mask || initial.sp > word_mask || initial.sc > max_stack_count) {
-    throw Fault("Unqualified initial DSP loop fetch " + context({.address = initial.pc}, initial));
+    throw Fault("Unqualified initial DSP loop fetch " +
+                context(DspProgramWord{.address = initial.pc}, initial));
   }
 }
 
@@ -120,7 +121,7 @@ std::uint64_t DspLoopFetch::next_occurrence() {
   for (;;) {
     if (previous == std::numeric_limits<std::uint64_t>::max()) {
       throw Fault("DSP loop occurrence identity exhausted " +
-                  context({.address = next_}, forecast_));
+                  context(DspProgramWord{.address = next_}, forecast_));
     }
     if (sequence_->serial.compare_exchange_weak(
             previous, previous + 1, std::memory_order_relaxed)) {
@@ -133,13 +134,18 @@ void DspLoopFetch::check_fetch(const std::uint32_t address) const {
   const bool end = depth_ != 0 && address == frames_.at(depth_ - 1).last;
   if (address != next_ || (end && (pending_ == boundaries_.size() ||
                                    calls_ != frames_.at(depth_ - 1).calls_at_entry))) {
-    throw Fault("Unavailable DSP loop F2 " + context({.address = address}, forecast_));
+    throw Fault("Unavailable DSP loop F2 " +
+                context(DspProgramWord{.address = address}, forecast_));
   }
 }
 
 std::optional<DspLoopBoundary> DspLoopFetch::fetched(const DspProgramWord word) {
+  return sampled({.address = word.address, .data = word.value});
+}
+
+std::optional<DspLoopBoundary> DspLoopFetch::sampled(const DspProgramSample word) {
   check_fetch(word.address);
-  if (word.address != next_ || word.value > word_mask ||
+  if (word.address != next_ || (word.data && *word.data > word_mask) ||
       occurrence_ == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Unqualified DSP loop F2 occurrence " + context(word, forecast_));
   }
@@ -200,7 +206,7 @@ void DspLoopFetch::discard_after(const Prediction &prediction, const std::uint32
       prediction.cut_ < confirmed_ || prediction.cut_ > occurrence_ || next_pc > word_mask ||
       revision_ == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Stale, foreign or confirmed DSP loop discard " +
-                context({.address = next_pc}, forecast_));
+                context(DspProgramWord{.address = next_pc}, forecast_));
   }
   while (pending_ != 0 && boundaries_.at(pending_ - 1).occurrence > prediction.cut_) {
     boundaries_.at(--pending_) = {};

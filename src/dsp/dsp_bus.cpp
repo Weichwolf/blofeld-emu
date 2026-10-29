@@ -363,13 +363,20 @@ void DspBus::write(const DspStore access) {
   if (access.space == DspSpace::p) { changes_.addresses.push_back(access.address); }
 }
 
+std::optional<std::uint32_t> DspBus::sample_program(const std::uint32_t address) const {
+  const auto location = locate({.address = address});
+  const auto &memory = (location.rom ? rom_ : ram_).at(location.bank);
+  if (memory.known.at(location.offset) == 0) { return std::nullopt; }
+  return memory.words.at(location.offset);
+}
+
 std::uint32_t DspBus::peek_program(const std::uint32_t address) const {
   try {
     const auto location = locate({.address = address});
     const auto &memory = (location.rom ? rom_ : ram_).at(location.bank);
     return memory.known.at(location.offset) != 0 ? memory.words.at(location.offset) : 0;
   } catch (const Fault &) {
-    return 0; // Decoder lookahead only; actual extension/fetch always uses strict read().
+    return 0; // Decoder lookahead only; actual admissions still require captured known data.
   }
 }
 

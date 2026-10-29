@@ -22,6 +22,19 @@ struct DspFetchedWord {
   bool operator==(const DspFetchedWord &) const = default;
 };
 
+// Value/occurrence metadata; only known owned words can enter execution.
+struct DspFetchedSample {
+  DspProgramSample sample;
+  std::uint64_t occurrence = 0;
+  [[nodiscard]] DspFetchedWord require_known(DspProgramReadContext context) const;
+  [[nodiscard]] static DspFetchedSample retain(DspFetchedWord known);
+  bool operator==(const DspFetchedSample &) const = default;
+
+  bool operator==(const DspFetchedWord &known) const {
+    return sample == known.word && occurrence == known.occurrence;
+  }
+};
+
 struct DspInstructionRetire;
 
 struct DspFetchOrigin {
@@ -85,6 +98,7 @@ public:
   void capture(DspBus &bus);
   [[nodiscard]] std::optional<std::uint32_t> peek(std::uint32_t address) const;
   [[nodiscard]] std::optional<DspFetchedWord> queued(std::size_t index) const;
+  [[nodiscard]] std::optional<DspFetchedSample> sampled(std::size_t index) const;
   [[nodiscard]] DspFetchedWord select(std::uint32_t address, std::uint64_t identity = 0) const;
   [[nodiscard]] DspFetchedInstruction instruction(DspFetchedWord opcode, unsigned words) const;
   // Stop speculative fetch after the actual decoded two-word instruction.

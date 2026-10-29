@@ -20,6 +20,23 @@
 #include <utility>
 
 namespace blofeld {
+DspProgramWord DspProgramSample::require_known(const DspProgramReadContext context) const {
+  if (!data) {
+    throw Fault("Unknown DSP program sample read P:" + hex(address, 6) +
+                " pc=" + hex(context.pc, 6) + " omr=" + hex(context.omr, 6));
+  }
+  return {.address = address, .value = *data};
+}
+
+DspFetchedWord DspFetchedSample::require_known(const DspProgramReadContext context) const {
+  return {.word = sample.require_known(context), .occurrence = occurrence};
+}
+
+DspFetchedSample DspFetchedSample::retain(const DspFetchedWord known) {
+  return {.sample = {.address = known.word.address, .data = known.word.value},
+          .occurrence = known.occurrence};
+}
+
 namespace {
 constexpr unsigned word_mask = 0xffffff;
 
@@ -113,18 +130,18 @@ void DspProgramFetch::capture(DspBus &bus) {
                 " pc=" + hex(branch_->word.address, 6) + " omr=" + hex(branch_->omr, 6));
   }
   const auto identity = next_occurrence();
-  unsigned value = 0;
+  std::optional<std::uint32_t> value;
   DspMemoryResource resource;
   try {
     resource = bus.memory_resource({.target = {.address = address}});
-    value = bus.read({.address = address});
+    value = bus.sample_program(address);
   } catch (const std::exception &error) {
     throw Fault("Native F2 read P:" + hex(address, 6) + " pc=" + hex(state_.consume_address, 6) +
                 " omr=" + hex(state_.omr, 6) + ": " + error.what());
   }
-  const DspProgramWord word{.address = address, .value = value};
+  const DspProgramSample word{.address = address, .data = value};
   if (loop_) {
-    boundaries_.at(state_.used) = loop_->fetched(word);
+    boundaries_.at(state_.used) = loop_->sampled(word);
     predictions_.at(state_.used) = loop_->prediction();
     state_.next_address = loop_->next_address();
   }
@@ -138,25 +155,34 @@ void DspProgramFetch::capture(DspBus &bus) {
 std::optional<std::uint32_t> DspProgramFetch::peek(const std::uint32_t address) const {
   for (std::size_t index = 0; index < state_.used; ++index) {
     const auto word = state_.words.at(index);
-    if (word.address == address) { return word.value; }
+    if (word.address == address) { return word.data; }
   }
   return std::nullopt;
 }
 
 std::optional<DspFetchedWord> DspProgramFetch::queued(const std::size_t index) const {
+  const auto value = sampled(index);
+  return value ? std::optional(
+                     value->require_known({.pc = state_.consume_address, .omr = state_.omr}))
+               : std::nullopt;
+}
+
+std::optional<DspFetchedSample> DspProgramFetch::sampled(const std::size_t index) const {
   if (index >= state_.used) { return std::nullopt; }
-  return DspFetchedWord{.word = state_.words.at(index), .occurrence = occurrences_.at(index)};
+  return DspFetchedSample{.sample = state_.words.at(index), .occurrence = occurrences_.at(index)};
 }
 
 DspFetchedWord DspProgramFetch::select(const std::uint32_t address,
                                        const std::uint64_t identity) const {
   std::optional<DspFetchedWord> result;
   for (std::size_t index = 0; index < state_.used; ++index) {
-    const DspFetchedWord sample{.word = state_.words.at(index),
-                                .occurrence = occurrences_.at(index)};
-    if (sample.word.address != address || (identity != 0 && sample.occurrence != identity)) {
+    if (state_.words.at(index).address != address ||
+        (identity != 0 && occurrences_.at(index) != identity)) {
       continue;
     }
+    const DspFetchedWord sample{.word = state_.words.at(index).require_known(
+                                    {.pc = state_.consume_address, .omr = state_.omr}),
+                                .occurrence = occurrences_.at(index)};
     if (result) {
       throw Fault("Ambiguous actual F2 read P:" + hex(address, 6) +
                   " pc=" + hex(state_.consume_address, 6) + " omr=" + hex(state_.omr, 6));
@@ -181,8 +207,9 @@ DspFetchedInstruction DspProgramFetch::instruction(const DspFetchedWord opcode,
   if (words == 2) {
     for (std::size_t index = 0; index + 1 < state_.used; ++index) {
       if (occurrences_.at(index) != opcode.occurrence) { continue; }
-      const DspFetchedWord next{.word = state_.words.at(index + 1),
-                                .occurrence = occurrences_.at(index + 1)};
+      const DspFetchedWord next{
+          .word = state_.words.at(index + 1).require_known({.pc = address, .omr = state_.omr}),
+          .occurrence = occurrences_.at(index + 1)};
       if (next.word.address == ((address + 1) & word_mask)) {
         return {.opcode = opcode, .extension = next};
       }
@@ -214,7 +241,10 @@ void DspFetchedInstruction::check_consumed(const std::array<DspFetchedWord, 2> &
 
 std::optional<DspProgramWord> DspProgramFetch::occurrence(const std::uint64_t identity) const {
   for (std::size_t index = 0; index < state_.used; ++index) {
-    if (identity != 0 && occurrences_.at(index) == identity) { return state_.words.at(index); }
+    if (identity != 0 && occurrences_.at(index) == identity) {
+      return state_.words.at(index).require_known(
+          {.pc = state_.consume_address, .omr = state_.omr});
+    }
   }
   return std::nullopt;
 }
@@ -224,6 +254,8 @@ void DspProgramFetch::check_consume(const std::uint32_t address) const {
       state_.consume_address != address || consumed_end_ || opening_) {
     throw Fault("Native program-fetch admission awaits actual queued read P:" + hex(address, 6));
   }
+  static_cast<void>(
+      state_.words.front().require_known({.pc = state_.consume_address, .omr = state_.omr}));
 }
 
 void DspProgramFetch::shift_queue() {
@@ -243,7 +275,8 @@ void DspProgramFetch::shift_queue() {
 
 std::uint32_t DspProgramFetch::consume(const std::uint32_t address) {
   check_consume(address);
-  const auto word = state_.words.front();
+  const auto word =
+      state_.words.front().require_known({.pc = state_.consume_address, .omr = state_.omr});
   if (repeat_) {
     auto &repeat = *repeat_;
     if (repeat.prefix_pending || repeat.consumed || address != repeat.current.body ||
@@ -270,6 +303,7 @@ std::optional<DspRepeatControl> DspProgramFetch::repeat_control() const {
 }
 
 std::optional<DspFetchedWord> DspProgramFetch::repeat_body() const {
+  if (!repeat_) { return std::nullopt; }
   const auto head = queued(0);
   return repeat_ && head && head->word.address == repeat_->current.body ? head : std::nullopt;
 }

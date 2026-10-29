@@ -17,8 +17,12 @@ native consumption. Only younger samples and issued addresses are discarded.
 The target must be read by a fresh F2, including self targets or addresses still
 present in the retained prefix. Native confirmation preserves those real target
 samples. No younger AG2 pointer update, E1 memory access or device write may
-escape from the discarded path. Actual speculative P reads remain real and can
-still fail at the strict map/unknown-data boundary.
+escape from the discarded path. Unqualified physical P maps still fail at the
+real read. Mapped unknown samples remain absent until actual Decode; no zero
+opcode is substituted.
+The declared reference profile refills even false/sequential targets. A fresh
+F2 may see later code writes; it never repairs the earlier unknown receipt.
+Sampling does not depend on knownness. See dsp-program-fetch.txt.
 
 The declared reference schedule uses an AG1 fetch decision, one refill hold
 and actual target F1/F2. It matches the four-clock register-branch baseline.

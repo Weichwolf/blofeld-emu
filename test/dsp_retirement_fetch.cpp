@@ -167,7 +167,7 @@ void memory_switch_starts_at_publication() {
           "Three following completed clocks, excluding retirement itself, expose the real alias");
 }
 
-void failed_fetch_preserves_held_result() {
+void unknown_f2_preserves_held_result() {
   DspMachine machine;
   const std::array words{0U, 0U, 0U};
   clock::prepare(machine, words, {.execution = execution});
@@ -178,15 +178,43 @@ void failed_fetch_preserves_held_result() {
   }
   static_cast<void>(run.advance_cycle(machine, clock::input()));
   const auto saved = run.checkpoint(machine);
-  const auto error =
-      fault([&] { static_cast<void>(run.advance_cycle(machine, clock::input(true))); });
-  require(error.contains("completed-cycles=4") && error.contains("DMA-index=5") &&
-              error.contains("P:0x000103") && error.contains("pc=0x000100") && run.faulted() &&
-              run.completed_cycles() == 4 && run.elapsed_ticks() == 4 * period &&
-              machine.cpu().debug_state() == before && machine.bus().last_dma_cycle() == 5,
-          "An actual unknown F2 keeps its DMA prefix and prevents selected retirement or clock "
-          "completion");
-  static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
+  for (const bool rewrite : {false, true}) {
+    run.restore(saved, machine);
+    const auto retired = run.advance_cycle(machine, clock::input(true));
+    auto expected = before;
+    ++expected.cpu.pc;
+    ++expected.native_instructions;
+    ++expected.native_cycles;
+    const auto sample = retired.fetch.words.at(retired.fetch.used - 1);
+    require(retired.bus.progress && retired.bus.progress->retired &&
+                sample.address == clock::program + 3 && !sample.data &&
+                run.completed_cycles() == 5 && run.elapsed_ticks() == 5 * period &&
+                machine.cpu().debug_state() == expected,
+            "A genuinely absent younger F2 cannot block the older completed native NOP result");
+    if (rewrite) { machine.bus().write({.address = clock::program + 3}); }
+    for (unsigned index = 0; index < 2; ++index) {
+      static_cast<void>(run.begin_instruction(machine));
+      static_cast<void>(run.advance_cycle(machine, clock::input(true)));
+      require(machine.cpu().debug_state() == expected,
+              "Each following real NOP result remains held before its distinct retirement");
+      const auto next = run.advance_cycle(machine, clock::input(true));
+      ++expected.cpu.pc;
+      ++expected.native_instructions;
+      ++expected.native_cycles;
+      require(next.bus.progress && next.bus.progress->retired &&
+                  machine.cpu().debug_state() == expected,
+              "Only the two genuinely known FIFO words may retire before the unknown opcode");
+    }
+    static_cast<void>(run.begin_instruction(machine));
+    const auto error =
+        fault([&] { static_cast<void>(run.advance_cycle(machine, clock::input(true))); });
+    require(error.contains("Unknown DSP program sample read P:0x000103") &&
+                error.contains("pc=0x000103") && error.contains("omr=0x000305") && run.faulted() &&
+                run.completed_cycles() == 9 && run.elapsed_ticks() == 9 * period &&
+                machine.bus().last_dma_cycle() == 9 && machine.cpu().debug_state() == expected,
+            "Actual unknown opcode admission refuses without effects or a later-RAM repair");
+    static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
+  }
   run.restore(saved, machine);
   machine.bus().write({.address = clock::program + 3});
   machine.bus().write(
@@ -204,6 +232,6 @@ void fetch_checks() {
   delayed_same_cursor_redirect();
   dma_cannot_replace_completed_result();
   memory_switch_starts_at_publication();
-  failed_fetch_preserves_held_result();
+  unknown_f2_preserves_held_result();
 }
 }

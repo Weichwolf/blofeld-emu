@@ -37,7 +37,7 @@ struct DspSubroutineControl {
 };
 
 struct DspLoopBoundary {
-  DspProgramWord last;
+  DspProgramSample last;
   std::uint64_t occurrence = 0;
   DspLoopArchitecture expected;
   bool backedge = false;
@@ -83,6 +83,7 @@ public:
   void opened(const DspLoopOpening &opening);
   void check_fetch(std::uint32_t address) const;
   [[nodiscard]] std::optional<DspLoopBoundary> fetched(DspProgramWord word);
+  [[nodiscard]] std::optional<DspLoopBoundary> sampled(DspProgramSample word);
   void confirm(const DspLoopBoundary &boundary, DspLoopArchitecture native_result);
   [[nodiscard]] Prediction prediction() const;
   void discard_after(const Prediction &prediction, std::uint32_t next_pc);

@@ -4,6 +4,7 @@
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <span>
 #include <string>
 
 namespace {
@@ -77,7 +79,7 @@ void dma_stalls_clock_and_replay() {
     request.requests = 0;
     const auto fetched = run.advance_cycle(machine, request);
     require(fetched.native_starved && !fetched.bus.progress &&
-                fetched.fetch.words.front().value == opcode &&
+                fetched.fetch.words.front().data == opcode &&
                 fetched.issued_address == program + 1 && machine.cpu().debug_state() == before,
             "The following F2 samples DMA's word and overlaps the next F1 without early native "
             "retirement");
@@ -194,25 +196,84 @@ void failure_and_joint_recovery() {
   static_cast<void>(run.advance_cycle(machine, input()));
   const auto saved = run.checkpoint(machine);
   const auto before = machine.cpu().debug_state();
-  const auto error = fault([&] { static_cast<void>(run.advance_cycle(machine, input(true))); });
-  require(error.contains("completed-cycles=2") && error.contains("DMA-index=3") &&
-              error.contains("P:0x000101") && error.contains("pc=0x000100") &&
-              error.contains("omr=0x000305") && run.faulted() && run.completed_cycles() == 2 &&
-              run.elapsed_ticks() == 2 * base_period_ticks && machine.bus().last_dma_cycle() == 3 &&
-              machine.cpu().debug_state() == before,
-          "Unknown real F2 retains the DMA prefix, quarantines both owners and commits no "
-          "completed clock");
-  static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
-  static_cast<void>(fault([&] { static_cast<void>(run.checkpoint(machine)); }));
+  const auto sampled = run.advance_cycle(machine, input(true));
+  auto retired_before = before;
+  retired_before.cpu.pc = program + 1;
+  ++retired_before.native_instructions;
+  ++retired_before.native_cycles;
+  require(retired(sampled) && sampled.fetch.used == 1 &&
+              sampled.fetch.words.front().address == program + 1 &&
+              !sampled.fetch.words.front().data && machine.cpu().debug_state() == retired_before,
+          "Mapped unknown F2 preserves its absent value while the older genuine NOP retires");
+  const auto absent = run.checkpoint(machine);
+  for (const bool rewrite : {false, true}) {
+    run.restore(absent, machine);
+    if (rewrite) { machine.bus().write({.address = program + 1}); }
+    static_cast<void>(run.begin_instruction(machine));
+    const auto error = fault([&] { static_cast<void>(run.advance_cycle(machine, input(true))); });
+    require(error.contains("completed-cycles=3") && error.contains("DMA-index=4") &&
+                error.contains("Unknown DSP program sample read P:0x000101") &&
+                error.contains("pc=0x000101") && error.contains("omr=0x000305") && run.faulted() &&
+                run.completed_cycles() == 3 && run.elapsed_ticks() == 3 * base_period_ticks &&
+                machine.bus().last_dma_cycle() == 3 &&
+                machine.cpu().debug_state() == retired_before,
+            "Actual unknown opcode admission refuses before DMA; restore or later RAM writes "
+            "cannot repair the captured absent value");
+    static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
+    static_cast<void>(fault([&] { static_cast<void>(run.checkpoint(machine)); }));
+  }
   run.restore(saved, machine);
   machine.bus().write({.address = program + 1});
   machine.bus().write({.address = program, .value = checkpoint::assemble("move #<$34,r0").front()});
   const auto recovered = run.advance_cycle(machine, input(true));
-  require(!run.faulted() && retired(recovered) && run.completed_cycles() == 3 &&
-              run.elapsed_ticks() == 3 * base_period_ticks &&
-              machine.cpu().state().r[0] == initial_r0,
-          "Only joint restore recovers clock/index/queue; the already sampled zero survives RAM "
-          "overwrite");
+  require(
+      !run.faulted() && retired(recovered) && run.completed_cycles() == 3 &&
+          run.elapsed_ticks() == 3 * base_period_ticks && machine.cpu().state().r[0] == initial_r0,
+      "Joint restore recovers clock/index/queue; an already sampled zero survives RAM overwrite");
+}
+
+void unknown_extension_admission() {
+  constexpr unsigned immediate_value = 0x123456;
+  DspMachine machine;
+  const auto words = checkpoint::assemble("move #>$123456,r0");
+  require(words.size() == 2, "Own long immediate has an independently expected extension word");
+  prepare(machine, std::span(words).first(1));
+  const auto before = machine.cpu().debug_state();
+  DspFetchRun run(contract(), machine);
+  static_cast<void>(run.advance_cycle(machine, input()));
+  static_cast<void>(run.advance_cycle(machine, input()));
+  const auto before_extension = run.checkpoint(machine);
+  const auto opcode = run.advance_cycle(machine, input(true));
+  const auto pending = machine.reference_pending();
+  require(!retired(opcode) && pending &&
+              std::get<DspNativeAccess>(pending->effect).kind == DspNativeAccessKind::extension &&
+              opcode.fetch.used == 1 && opcode.fetch.words.front().address == program + 1 &&
+              !opcode.fetch.words.front().data && machine.cpu().debug_state() == before,
+          "Actual opcode admission and absent extension F2 complete without instruction effects");
+  const auto absent = run.checkpoint(machine);
+  for (const bool rewrite : {false, true}) {
+    run.restore(absent, machine);
+    if (rewrite) { machine.bus().write({.address = program + 1, .value = words.at(1)}); }
+    const auto error = fault([&] { static_cast<void>(run.advance_cycle(machine, input(true))); });
+    require(error.contains("Unknown DSP program sample read P:0x000101") &&
+                error.contains("pc=0x000100") && error.contains("omr=0x000305") && run.faulted() &&
+                run.completed_cycles() == 3 && run.elapsed_ticks() == 3 * base_period_ticks &&
+                machine.bus().last_dma_cycle() == 3 && machine.cpu().debug_state() == before,
+            "Actual absent extension refuses before DMA or CPU effects despite a later RAM write");
+  }
+  run.restore(before_extension, machine);
+  machine.bus().write({.address = program + 1, .value = words.at(1)});
+  static_cast<void>(run.advance_cycle(machine, input(true)));
+  const auto recovered = run.advance_cycle(machine, input(true));
+  auto expected = before;
+  expected.cpu.pc = program + 2;
+  expected.cpu.r[0] = immediate_value;
+  ++expected.native_instructions;
+  expected.native_cycles += 2;
+  require(retired(recovered) && run.completed_cycles() == 4 &&
+              run.elapsed_ticks() == 4 * base_period_ticks &&
+              machine.cpu().debug_state() == expected,
+          "A genuinely fresh extension F2 executes the own long immediate with full native state");
 }
 
 void uncoordinated_restore_guard() {
@@ -252,6 +313,7 @@ int main() {
     pll_and_odd_phase_restore();
     memory_switch_delay();
     failure_and_joint_recovery();
+    unknown_extension_admission();
     uncoordinated_restore_guard();
     guard_checks();
     std::cout << "Clocked automatic DSP F1/F2 checks passed\n";

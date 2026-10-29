@@ -258,20 +258,32 @@ void unknown_read_and_recovery() {
   static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
   const auto saved = machine.checkpoint();
   const auto before = machine.cpu().debug_state();
-  const auto error = fault(
-      [&] { static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::read)); });
-  require(error.contains("Unknown DSP memory read at P:0x000101") &&
-              error.contains("pc=0x000100") && error.contains("omr=0x000305") &&
+  const auto unknown = machine.advance_reference_fetch(DspProgramFetchStage::read);
+  require(unknown.used == 2 && unknown.words[1].address == program + 1 && !unknown.words[1].data &&
               machine.cpu().debug_state() == before,
-          "Actual speculative F2 errors retain operation, address and native context without "
-          "retirement");
-  static_cast<void>(fault([&] { static_cast<void>(machine.reference_fetch()); }));
-  static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
+          "Mapped unknown F2 is a real absent-value sample without native retirement");
+  const auto captured = machine.checkpoint();
+  for (const bool rewrite : {false, true}) {
+    machine.restore(captured);
+    if (rewrite) { machine.bus().write({.address = program + 1}); }
+    static_cast<void>(
+        access::finish(machine, machine.advance_reference_access(access::ticket(machine))));
+    auto after_first = before;
+    after_first.cpu.pc = program + 1;
+    ++after_first.native_instructions;
+    ++after_first.native_cycles;
+    const auto error = fault([&] { access::execute(machine); });
+    require(error.contains("Unknown DSP program sample read P:0x000101") &&
+                error.contains("pc=0x000101") && error.contains("omr=0x000305") &&
+                machine.cpu().debug_state() == after_first,
+            "Only actual unknown consumption refuses; neither restore nor a later RAM write "
+            "resolves its old sample");
+  }
   machine.restore(saved);
-  machine.bus().write({.address = program + 1, .value = 0});
+  machine.bus().write({.address = program + 1});
   const auto recovered = machine.advance_reference_fetch(DspProgramFetchStage::read);
   require(recovered.used == 2 && recovered.words[1] == DspProgramWord{.address = program + 1},
-          "Trusted restore recovers the original F1 address and already captured NOP");
+          "A restored pending F1 performs a fresh F2 and can sample explicitly initialized RAM");
   static_cast<void>(
       access::finish(machine, machine.advance_reference_access(access::ticket(machine))));
   access::execute(machine);

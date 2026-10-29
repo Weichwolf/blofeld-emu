@@ -10,6 +10,7 @@
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_pll.hpp"
+#include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
 #include "mcu/hc12.hpp"
@@ -221,31 +222,80 @@ void test_unqualified_order() {
   throw Fault("Expected unqualified initial-reset order rejection");
 }
 
-void test_missing_rom_after_release() {
-  Fixture f(3, true);
-  constexpr unsigned nominal_edges = 195;
-  f.mcu.advance_system_reset(nominal_edges, McuResetPad::high);
-  f.schedule.end_system_reset();
-  const auto before = f.schedule.end_ticks();
-  f.mcu.set_cycle_observer(
-      [&](const Hc12BusCycle period) { f.schedule.begin_cycle(period, false, Fixture::pins); });
-  f.schedule.release_dsp_reset();
+void require_missing_rom_decode(Fixture &f,
+                                const DspDebugState &before,
+                                const std::uint64_t recovery_ticks) {
   try {
-    for (unsigned step = 0; step < 2; ++step) {
-      f.mcu.cpu().step();
-      f.schedule.end_instruction();
-    }
+    f.mcu.cpu().step();
+    f.schedule.end_instruction();
   } catch (const Fault &error) {
     const std::string diagnostic(error.what());
-    require(
-        diagnostic.contains("Unknown DSP memory read") && diagnostic.contains("0xff0000") &&
-            f.schedule.faulted() && f.schedule.run().completed_cycles() == 1 &&
-            f.schedule.run().hardware_reset_ticks() == before + bus_ticks,
-        "A genuinely missing ROM fails at the first post-recovery native read, with its address");
+    require(diagnostic.contains("Unknown DSP program sample read P:0xff0000") &&
+                diagnostic.contains("pc=0xff0000") && diagnostic.contains("omr=0x000305") &&
+                f.schedule.faulted() && f.schedule.run().completed_cycles() == 2 &&
+                f.schedule.run().hardware_reset_ticks() == recovery_ticks &&
+                f.dsp.cpu().debug_state() == before,
+            "A genuinely absent ROM refuses actual Decode before instruction effects or elapsed "
+            "success");
     std::cout << "Missing-ROM startup refusal: " << diagnostic << '\n';
     return;
   }
   throw Fault("Missing DSP ROM must not be replaced by a successful reset or opcode stub");
+}
+
+void test_missing_rom_after_release() {
+  Fixture f(3, true);
+  constexpr unsigned nominal_edges = 195;
+  constexpr unsigned fresh_periods = 8;
+  constexpr auto fresh_ticks = std::uint64_t{fresh_periods} * reset_ticks;
+  const std::array<std::uint32_t, fresh_periods> own_nops{};
+  f.mcu.advance_system_reset(nominal_edges, McuResetPad::high);
+  f.schedule.end_system_reset();
+  const auto before = f.schedule.end_ticks();
+  const auto attach = [&] {
+    f.mcu.set_cycle_observer(
+        [&](const Hc12BusCycle period) { f.schedule.begin_cycle(period, false, Fixture::pins); });
+  };
+  attach();
+  f.schedule.release_dsp_reset();
+  f.mcu.cpu().step();
+  f.schedule.end_instruction();
+  const auto after_reset = f.dsp.cpu().debug_state();
+  const auto fresh = f.schedule.checkpoint();
+  require(!f.schedule.run().hardware_reset_active() && f.schedule.run().completed_cycles() == 0 &&
+              after_reset.cpu.pc == boot &&
+              f.schedule.run().hardware_reset_ticks() == before + bus_ticks,
+          "One real MCU NOP supplies exactly two declared DSP recovery periods without execution");
+  f.mcu.cpu().step();
+  f.schedule.end_instruction();
+  const auto fetch = f.dsp.reference_fetch();
+  require(f.schedule.run().completed_cycles() == 2 && fetch.used == 1 &&
+              fetch.words.front().address == boot && !fetch.words.front().data &&
+              f.dsp.cpu().debug_state() == after_reset,
+          "Real F1/F2 captures missing boot ROM without inventing a NOP or native progress");
+  const auto absent = f.schedule.checkpoint();
+  for (const bool install : {false, true}) {
+    f.schedule.restore(absent);
+    attach();
+    if (install) { f.dsp.bus().install_rom({.start = boot, .words = own_nops}); }
+    require_missing_rom_decode(f, after_reset, before + bus_ticks);
+  }
+  f.schedule.restore(fresh);
+  attach();
+  f.dsp.bus().install_rom({.start = boot, .words = own_nops});
+  for (unsigned index = 0; index < fresh_periods / 2; ++index) {
+    f.mcu.cpu().step();
+    f.schedule.end_instruction();
+  }
+  auto expected = after_reset;
+  expected.cpu.pc += fresh_periods - pipeline_fill;
+  expected.native_instructions += fresh_periods - pipeline_fill;
+  expected.native_cycles += fresh_periods - pipeline_fill;
+  require(
+      !f.schedule.faulted() && f.schedule.run().completed_cycles() == fresh_periods &&
+          f.schedule.run().elapsed_ticks() == before + bus_ticks + fresh_ticks &&
+          f.dsp.cpu().debug_state() == expected,
+      "A trusted pre-F2 restore reads new own ROM and retires two literal NOPs with full state");
 }
 }
 

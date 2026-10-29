@@ -226,12 +226,14 @@ void unknown_read() {
   DspProgramFetch fetch;
   fetch.start(unknown_target, omr);
   fetch.issue();
+  fetch.capture(bus);
   const auto before = fetch.view();
-  const auto diagnostic = refuses([&] { fetch.capture(bus); });
+  const auto diagnostic = refuses([&] { static_cast<void>(fetch.consume(unknown_target)); });
   require(
-      fetch.view() == before && diagnostic.contains("read P:0x000400") &&
-          diagnostic.contains("pc=0x000400") && diagnostic.contains("omr=0x000305"),
-      "Unknown actual P read must fail with operation/address/native context before F2 insertion");
+      before.used == 1 && !before.words.front().data && fetch.view() == before &&
+          diagnostic.contains("read P:0x000400") && diagnostic.contains("pc=0x000400") &&
+          diagnostic.contains("omr=0x000305"),
+      "Mapped unknown F2 retains its queue entry; actual consumption refuses with exact context");
 }
 }
 }
