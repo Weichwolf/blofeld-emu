@@ -13,6 +13,8 @@ struct DspBranchForm {
   bool set = false;
   // A signed short displacement is retained as a sign-extended 24-bit word.
   std::optional<std::uint32_t> displacement = std::nullopt;
+  // FM13-80: the short absolute Jcc field is zero-extended, never PC-relative.
+  std::optional<std::uint32_t> absolute_short = std::nullopt;
   std::optional<std::uint8_t> address_register = std::nullopt;
   bool absolute_extension = false;
   bool relative_extension = false;
@@ -20,7 +22,7 @@ struct DspBranchForm {
   bool subroutine_return = false;
 
   [[nodiscard]] unsigned words() const {
-    return displacement || address_register || subroutine_return ? 1U : 2U;
+    return displacement || absolute_short || address_register || subroutine_return ? 1U : 2U;
   }
 };
 
@@ -36,6 +38,6 @@ struct DspBranchDecision {
 };
 
 [[nodiscard]] std::optional<DspBranchForm> decode_branch_form(std::uint32_t opcode);
-// Only the currently qualified short Bcc form returns a CCR condition.
+// Qualified short Bcc and Jcc forms use the same CCR condition table.
 [[nodiscard]] std::optional<unsigned> branch_condition_code(std::uint32_t opcode);
 }

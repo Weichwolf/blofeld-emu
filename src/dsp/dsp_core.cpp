@@ -426,10 +426,12 @@ public:
     static_assert(sizeof(dsp56k::DSP::ReferenceAttemptState) <= 1024);
   }
 
-  void forecast_relative_branch(DspBranchDecision &decision,
-                                const DspBranchForm &form,
-                                const dsp56k::DSP::ReferenceAttemptState &source) const {
-    if (!form.displacement) { throw Fault("Relative branch forecast lost its displacement"); }
+  void forecast_short_branch(DspBranchDecision &decision,
+                             const DspBranchForm &form,
+                             const dsp56k::DSP::ReferenceAttemptState &source) const {
+    if (form.displacement.has_value() == form.absolute_short.has_value()) {
+      throw Fault("Short branch forecast requires exactly one relative or absolute target");
+    }
     auto status = source.registers.sr;
     const auto pending = native.reference().pending();
     if (results.retirement && pending && std::holds_alternative<DspInstructionRetire>(*pending)) {
@@ -439,8 +441,9 @@ public:
     }
     decision.taken = short_condition(decision.word, static_cast<std::uint32_t>(status) & word_mask)
                          .value_or(true);
-    const auto offset = decision.taken ? *form.displacement : 1U;
-    decision.next_pc = (decision.word.address + offset) & word_mask;
+    const auto target = form.absolute_short.value_or(
+        (decision.word.address + form.displacement.value_or(0)) & word_mask);
+    decision.next_pc = decision.taken ? target : ((decision.word.address + 1) & word_mask);
   }
 
   [[nodiscard]] bool has_peripheral_reads() const {
@@ -1692,7 +1695,8 @@ void DspCore::hold_pipeline_loop(const DspFetchedWord word) {
 void DspCore::hold_pipeline_branch(const DspFetchedWord word) {
   static_cast<void>(pipeline_fetched_sample(0));
   const auto form = decode_branch_form(word.word.value);
-  if (!form || form->displacement || form->address_register || form->absolute_extension) {
+  if (!form || form->displacement || form->absolute_short || form->address_register ||
+      form->absolute_extension) {
     throw Fault("OMR branch barrier requires its actual two-word F2 instruction");
   }
   auto &fetch = impl_->native.reference().fetch();
@@ -1966,8 +1970,8 @@ DspBranchDecision DspCore::capture_reference_branch(const std::uint32_t address,
     decision.next_pc = static_cast<std::uint32_t>(
         (static_cast<std::uint64_t>(source.registers.ss[index]) >> stack_word_bits) & word_mask);
     decision.taken = true;
-  } else if (form->displacement) {
-    impl_->forecast_relative_branch(decision, *form, source);
+  } else if (form->displacement || form->absolute_short) {
+    impl_->forecast_short_branch(decision, *form, source);
   } else if (form->address_register) {
     decision.next_pc = state().r.at(*form->address_register);
     decision.taken = true;

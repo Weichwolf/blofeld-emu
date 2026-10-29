@@ -65,7 +65,8 @@ void DspProgramFetch::stage_context(const DspInstructionRetire &result, const Ds
     const auto branch = decode_branch_form(branch_->word.value);
     const auto last = writer.extension.value_or(writer.opcode);
     if (!branch ||
-        (!branch->displacement && !branch->address_register && !branch->absolute_extension) ||
+        (!branch->displacement && !branch->absolute_short && !branch->address_register &&
+         !branch->absolute_extension) ||
         branch_occurrence_ <= last.occurrence || branch_->omr != result.omr) {
       throw Fault("Unqualified OMR source of pending branch pc=" + hex(result.pc, 6));
     }

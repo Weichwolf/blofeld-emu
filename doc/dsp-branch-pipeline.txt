@@ -33,6 +33,21 @@ agree with those complete primary rules (dsp-branch-reference.json). This does
 not establish a measured silicon branch-resolution stage or bus sampling order.
 The vendor model's switched-memory disagreement remains open.
 
+Short absolute Jcc (FM13-80,Tables12-17/18) retains a zero-extended12-bit
+target. Its CCR decision follows the genuine older E1 candidate in AG2;
+actual native retirement independently confirms PC,condition and OMR.
+False paths add the FM A.2.6.3 Decode period. Discarded unknown samples
+cannot be repaired; a selected refill is a new actual F2 occurrence.
+
+The dsp_absolute_branch* and dsp_absolute_unknown_branches tests cover all
+conditions/CCRs,preceding CMP/CLR,full CPU/stack/counters,self/sequential/
+zero/fff targets,high source addresses and coordinated restore. The native
+probe also separates opcode admission from retirement. Own edge fixtures
+declare their standalone map settlement; they do not validate timed switching.
+Active-DO Jcc fails visibly pending FM A.2.6.1 LA/LA-1 interlock qualification.
+
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_absolute_'
+
 Joint snapshots retain the owned fetch segment, actual CPU candidate, fresh
 samples and remaining holds. Directed cases cover taken/false paths, same-PC
 and self targets, future target replacement, discarded AGU/I/O/unsupported code,

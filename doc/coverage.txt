@@ -3276,3 +3276,8 @@ Unknown mapped DSP program samples: five dsp_unknown_fetch_* scopes plus
 extended dsp_postloop_return check absent values,actual consumption,owned
 branch refills,joint snapshots and native DMA writes. Strict unknown physical
 maps/data/vectors remain; original boot and normal instrument acceptance open.
+
+Short absolute DSP Jcc: five dsp_absolute_* scopes cover independent native
+and automatic PC/CCR/whole-state expectations,short CMP producer hazards,
+absolute12 target boundaries,unknown path samples and trusted restore.
+Active-DO target timing remains visibly unsupported;see dsp-branch-pipeline.txt.

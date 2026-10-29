@@ -26,6 +26,10 @@ std::optional<DspBranchForm> decode_branch_form(const std::uint32_t opcode) {
     return DspBranchForm{.address_register = static_cast<std::uint8_t>(reg)};
   }
   if (first == dsp56k::Rts) { return DspBranchForm{.subroutine_return = true}; }
+  if (first == dsp56k::Jcc_xxx) {
+    return DspBranchForm{.absolute_short =
+                             dsp56k::getFieldValue(first, dsp56k::Field_aaaaaaaaaaaa, opcode)};
+  }
   if (first == dsp56k::Bsr_xxxx) {
     return DspBranchForm{.relative_extension = true, .subroutine_call = true};
   }
@@ -51,8 +55,8 @@ std::optional<unsigned> branch_condition_code(const std::uint32_t opcode) {
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
   auto second = dsp56k::Invalid;
-  if (opcodes.getInstructionTypes(opcode, first, second) == 0 || first != dsp56k::Bcc_xxx ||
-      second != dsp56k::Invalid) {
+  if (opcodes.getInstructionTypes(opcode, first, second) == 0 ||
+      (first != dsp56k::Bcc_xxx && first != dsp56k::Jcc_xxx) || second != dsp56k::Invalid) {
     return std::nullopt;
   }
   return dsp56k::getFieldValue(first, dsp56k::Field_CCCC, opcode);

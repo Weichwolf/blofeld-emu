@@ -6,6 +6,7 @@
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_pipeline.hpp"
+#include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
 #include "dsp_address_update_fixture.hpp"
 #include "dsp_checkpoint_fixture.hpp"
@@ -55,7 +56,7 @@ void operand_aliases() {
     const auto fetch = machine.reference_fetch();
     require(fetch.used != 0 && fetch.words.front().address == entry,
             "The component captures the real queued F2 occurrence");
-    component.view.cycle.ag1 = fetch.words.front();
+    component.view.cycle.ag1 = fetch.words.front().require_known({.pc = entry, .omr = fetch.omr});
     component.capture_address(machine);
     const auto captured = component.addresses[0];
     if (!captured) { throw Fault("The actual U component lost its AG1 ticket"); }

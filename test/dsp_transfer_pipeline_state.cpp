@@ -85,7 +85,9 @@ DspAddressStageTicket capture_actual_address(DspMachine &machine, const unsigned
   const auto fetch = machine.reference_fetch();
   for (unsigned index = 0; index < fetch.used; ++index) {
     const auto word = fetch.words.at(index);
-    if (word.address == address) { stage.view.cycle.ag1 = word; }
+    if (word.address == address) {
+      stage.view.cycle.ag1 = word.require_known({.pc = address, .omr = fetch.omr});
+    }
   }
   require(stage.view.cycle.ag1.has_value(), "Explicit AG1 requires the actual earlier F2 word");
   stage.capture_address(machine);

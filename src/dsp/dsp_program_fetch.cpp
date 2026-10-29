@@ -494,6 +494,12 @@ void DspProgramFetch::predict_branch(const DspBranchDecision &decision,
                                      const std::uint64_t identity) {
   const auto form = decode_branch_form(decision.word.value);
   const bool one_word = form && form->words() == 1;
+  if (form && form->absolute_short && loop_ && (loop_->depth() != 0 || loop_->pending() != 0)) {
+    // FM A.2.6.1 requires additional jump/LA boundary interlocks. Keep this
+    // new form visible until its active-DO target timing is qualified.
+    throw Fault("Unqualified short Jcc/active DO read P:" + hex(decision.word.address, 6) +
+                " pc=" + hex(decision.word.address, 6) + " omr=" + hex(decision.omr, 6));
+  }
   if (form &&
       (form->absolute_extension ||
        ((form->subroutine_call || form->subroutine_return) && !decision.subroutine)) &&

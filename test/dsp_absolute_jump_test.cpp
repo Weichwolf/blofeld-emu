@@ -72,7 +72,7 @@ DspFetchCycleResult tick(DspFetchRun &run, DspMachine &machine, std::ostream &tr
     const auto &fetched = *cycle.bus.fetch;
     require(fetched.used != 0, "Actual F2 completion retains its real program word");
     const auto word = fetched.words.at(fetched.used - 1);
-    trace << " F2=" << hex(word.address, 6) << ':' << hex(word.value, 6);
+    trace << " F2=" << hex(word.address, 6) << ':' << (word.data ? hex(*word.data, 6) : "unknown");
   }
   const auto &phase = stages(cycle);
   if (phase.retirement_published) {
