@@ -26,7 +26,9 @@ struct NandReadOutput {
 // K9F1208U0C Rev1.1, 3.3V array-read output bounds only. The caller supplies a
 // monotonic reference timebase, actual CE/RE observations and each protocol
 // byte. No chip selection, array completion, data or physical timing is guessed.
-// Initial idle-high levels still require the output-release bound. Dynamic
+// First known RE-high with either CE level bounds prior edges/selection; no
+// source is sampled until an actual later falling RE. Release still takes its
+// full maximum, and the first new pulse waits out prior constraints. Dynamic
 // status, write-side timing and ready-to-read setup need separate contracts.
 // Input/output observations advance reference time; copies retain value state.
 class NandReadTiming {
@@ -61,6 +63,7 @@ private:
   NandTimeWindow valid_at_{};
   std::uint64_t hold_until_ = 0;
   std::uint64_t floating_at_ = 0;
+  // Initial values bound latest unobserved prior edges; later values are exact.
   std::optional<std::uint64_t> fell_at_;
   std::optional<std::uint64_t> rose_at_;
   NandByte data_{};

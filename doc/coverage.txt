@@ -1018,8 +1018,14 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           original byte-helper calls read all 528
                                           bytes with bounded output timing; missing
                                           contents and early native sampling reject
-                                          (nand-read-timing.txt). Full original
-                                          refill/default board route unproven.
+                                          (nand-read-timing.txt). First known
+                                          RE-high accepts either observed CE level
+                                          with conservative prior-edge/release
+                                          bounds; 18 initial vectors,48 histories,
+                                          144 pulses and6 CE-window cases pass.
+                                          No initial byte/edge is manufactured.
+                                          Cold protocol/full original refill and
+                                          default board route remain unproven.
                                           Original 176-word packing and 175
                                           buffered getter calls retain actual
                                           prefetches, cursor stores and loop state;

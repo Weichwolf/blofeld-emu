@@ -143,10 +143,17 @@ void NandReadTiming::observe(const std::uint64_t ticks,
   auto next = *this;
   next.ticks_ = ticks;
   if (!initialized_) {
-    if (!*pins.ce_n || !*pins.re_n) { fail("initial CE/RE idle-high observation is missing"); }
+    if (!*pins.re_n) { fail("initial RE-high observation is missing"); }
+    // Latest bounds on unobserved past events, not manufactured pin edges.
+    // A first known sample bounds every earlier RE transition/CE selection.
+    next.selected_at_ = {.earliest = 0, .latest = ticks};
+    next.fell_at_ = ticks;
+    next.rose_at_ = ticks;
+    next.ce_n_ = *pins.ce_n;
+    next.re_n_ = true;
     next.phase_ = Phase::releasing;
     next.hold_until_ = ticks;
-    next.floating_at_ = next.deadline(ticks, ce_release_ns);
+    next.floating_at_ = next.deadline(ticks, *pins.ce_n ? ce_release_ns : re_release_ns);
     next.initialized_ = true;
   } else {
     const bool ce_changed = ce_n_ != *pins.ce_n;

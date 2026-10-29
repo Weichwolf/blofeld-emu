@@ -152,7 +152,7 @@ void unknown_controls_and_sources() {
   reject([] { const NandReadTiming timing(0); }, "zero reference timebase");
   NandReadTiming unobserved(exact_hz);
   require(unobserved.output(0) == NandReadOutput{}, "Unobserved idle pins are not assumed high");
-  reject([&] { unobserved.observe(0, {.ce_n = false, .re_n = true}); }, "idle-high");
+  reject([&] { unobserved.observe(0, {.ce_n = false, .re_n = false}); }, "initial RE-high");
   reject([&] { unobserved.observe(0, {.ce_n = true, .re_n = std::nullopt}); }, "unknown CE/RE");
   reject([&] { unobserved.observe(0, {.ce_n = std::nullopt, .re_n = true}); }, "unknown CE/RE");
   unobserved.observe(0, {.ce_n = true, .re_n = true});

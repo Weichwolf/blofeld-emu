@@ -1,7 +1,7 @@
 Candidate NAND array-read output timing
 
-  cmake --build --preset strict --target blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
-  ctest --test-dir build/strict -j1 -R '^(nand_read_timing|original_nand_read_timing)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-nand-initial-observation-test blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
+  ctest --test-dir build/strict -j1 -R '^(nand_initial_observation|nand_read_timing|original_nand_read_timing)$' --output-on-failure
 
 NandReadTiming is separate from the array/protocol, board wiring and CPU clock.
 It implements the pinned K9F1208U0C Rev1.1 3.3V array-read output bounds from
@@ -16,8 +16,13 @@ the AC-characteristics table (nand-read.txt, hardware/sources.json):
 
 The owner supplies a nonzero reference frequency and monotonic tick observations.
 Deadlines round up to whole ticks with checked overflow. Initial CE/RE levels
-are unknown; even the first idle-high observation requires the CE release bound
-before Hi-Z is established. Before both access maxima, drive/data remain unknown.
+are unknown. A first known RE-high observation accepts either CE level without
+inventing an earlier edge or consuming a byte. CE-high establishes Hi-Z only
+after tCHZ; CE-low requires the full tRHZ bound. Earlier drive/data stay unknown.
+The observation time bounds every unobserved prior RE rise/fall and CE selection.
+The first new falling RE waits out tREH and tRC from those latest bounds; it
+samples only an actual selected edge. Later real edges replace these bounds.
+Before both access maxima, drive/data remain unknown.
 After release, a valid byte remains driven throughout the guaranteed hold window;
 the subsequent interval is unknown until the applicable Hi-Z maximum. A legal
 short pulse that never established valid data cannot invent a held byte/driver.
@@ -34,7 +39,13 @@ write-side setup/hold, ready/CLE/ALE-to-read setup or analog pad behavior.
 
 The own deterministic regression independently checks exact and rounded bounds
 at 1GHz, 1.08GHz and 216MHz, active/released copies, initial uncertainty, partial
-byte knowledge and directed failures. No randomized/fuzz traffic is involved.
+byte knowledge and directed failures. nand_initial_observation adds eighteen
+literal initial-level/time vectors, forty-eight retained concrete histories and
+144 future pulses, plus six initial/quiescent-CE-window interactions. Prior
+known bytes cannot disappear early; initialization never calls the data source.
+Full value-state comparisons cover refused first pulses, missing sources,
+overflow and premature CE-window entry. Initial RE-low and unknown pins reject.
+No randomized/fuzz traffic is involved.
 
 Original byte-helper regression
 The optional firmware test checks the official 1.25 ZIP identity, loads the
