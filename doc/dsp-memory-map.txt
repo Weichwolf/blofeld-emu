@@ -5,6 +5,12 @@ RAM endpoints. The unchanged data windows start at X/Y:000000 and 00c000;
 their low endpoints remain X:003000 and Y:002000 in every configuration.
 P starts at 000000. ROM windows do not move. Source identity: hardware/sources.json.
 
+Lower X/Y RAM uses1K-word modules; upper RAM uses8K-word modules. Core accesses
+on independent logical buses can use distinct known modules of one physical
+bank. Same-logical-space and shared-module restrictions remain in force;
+see dsp-core-blocks.txt. This does not change the relocation and switching
+qualifications below or establish physical arbitration timing.
+
   MS  MSW    P end    upper X end    upper Y end
    0   xx   001000       012000         016000
    1   11   003000       010000         016000

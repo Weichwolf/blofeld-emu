@@ -3313,3 +3313,12 @@ Independent per-period state/cell/stack expectations and joint continuations
 support acceptance requirements2/3/6; see dsp-boot-instructions.txt for exact
 admission and refusals. This does not establish requirements4/7/8/9 or complete
 original boot, audio, MIDI, physical timing or full instrument operation.
+
+Concurrent core memory modules: dsp_core_blocks checks actual OMR/NOP/JMP
+setup, native absolute24 loads/stores and simultaneous F2 across declared
+lower1K/upper8K module classes. Per-period CPU/stack/counters, cell canaries,
+captured-code replacement and trusted continuations support requirements2/3/6.
+Same logical bus, shared/unknown module and ROM contention restrictions remain;
+reference-cycle, bank, map, DMA and Board tests retain their separate scopes.
+See dsp-core-blocks.txt. Physical timing/relocation and complete original
+Desktop/Keyboard instrument, MIDI/USB/audio and update/recovery remain open.

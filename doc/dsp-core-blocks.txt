@@ -1,0 +1,46 @@
+Concurrent DSP core accesses to RAM modules
+
+DSP56371UM Rev2.1 sections3.1.1/3.1.3/3.1.5/3.1.7 and Figures3-1/3-2
+distinguish lower1K-word RAM modules from upper8K-word modules. Switching
+MS/MSW remaps whole blocks into P space. Equality of the original physical
+X/Y bank alone does not establish contention between two different modules.
+Primary document identity is pinned in hardware/sources.json.
+
+The reference-cycle preflight keeps the independent logical P/X/Y buses and
+the physical memory module as separate constraints. Same-logical-space ordinary
+memory accesses still refuse. For different logical spaces, resources with different
+physical banks or known distinct RAM modules may proceed. Same RAM module,
+same-bank ROM and same-bank unknown module geometry remain visible
+failures with address/operation/PC/OMR context. Existing peripheral overlap,
+unmapped/unknown data and protected-ROM checks remain in force.
+
+The model uses the existing DspMemoryResource bank/ROM/word/block_words fields.
+Two known RAM resources share a module only when both block widths and their
+word/block_words indices match. The new admission rule introduces no extra
+clock, DMA grant, speculative data read or host-computed native result. Actual
+F2 samples and native E1 memory effects keep their separate owners.
+DMA protection and switching timing retain their separate contracts; see
+dsp-automatic-dma.txt and dsp-memory-map.txt.
+
+For MS/MSW111, P:001000..002fff belongs to the switched upper-X8K class,
+whereas X:002c34 belongs to lower1K module11. Their module classes are distinct
+without assuming an intra8K physical word order. The existing numerical
+X-to-P relocation remains an explicit hypothesis. This rule does not establish
+Y-to-P aliases, physical bus edges or otherwise unknown memory contents.
+
+The own dsp_core_blocks program performs genuine OMR writes, settling NOPs
+and JMPs before concurrent absolute24 R6 loads/stores and actual F2 reads.
+Six declared OMR settings, lower/upper memory boundaries, both data spaces,
+both directions and two CCR patterns have literal per-period CPU/stack/counter,
+cell/canary, resource and elapsed-time expectations. Checkpoint suffixes and
+fresh clones retain real captured instructions after backing-code replacement.
+These are emulator component checks; no manufacturer program is embedded.
+Existing reference-cycle/bank/map guards cover excluded resources separately.
+
+  cmake --build --preset strict --target blofeld-core-blocks-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_core_blocks$'
+
+Connected original Desktop/Keyboard boot, normal MIDI/USB/audio, complete
+storage/update/recovery, realtime operation and every documented function remain
+required by objective.txt and coverage.txt. This component does not establish
+physical memory arbitration, fitted board wiring or complete instrument operation.

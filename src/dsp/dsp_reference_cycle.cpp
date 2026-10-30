@@ -143,6 +143,15 @@ void check_port_overlap(const std::optional<DspMemoryAccess> peripheral,
   }
 }
 
+// UM3.1.1/3.1.5/3.1.7: a physical X/Y space contains distinct1K/8K RAM modules.
+// Expanded P RAM and the retained X window can use separate modules of one bank.
+bool same_module(const DspMemoryResource first, const DspMemoryResource second) {
+  if (first.bank != second.bank || first.rom != second.rom) { return false; }
+  if (first.rom || first.block_words == 0 || second.block_words == 0) { return true; }
+  return first.block_words == second.block_words &&
+         first.word / first.block_words == second.word / second.block_words;
+}
+
 void check_resources(const DspBus &bus,
                      const DspReferenceCycleResult &result,
                      const std::optional<DspMemoryAccess> peripheral,
@@ -175,8 +184,7 @@ void check_resources(const DspBus &bus,
       const auto first = resources.at(index);
       const auto second = resources.at(other);
       if (!phased_ports &&
-          (a.target.space == b.target.space ||
-           (first && second && first->bank == second->bank && first->rom == second->rom))) {
+          (a.target.space == b.target.space || (first && second && same_module(*first, *second)))) {
         throw Fault("Unqualified dual core bus-cycle use: " + describe(a) + " and " + describe(b));
       }
     }
