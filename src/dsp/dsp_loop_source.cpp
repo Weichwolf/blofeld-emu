@@ -26,6 +26,7 @@ std::optional<DspLoopCountSource> automatic_loop_source(const std::uint32_t opco
   constexpr unsigned register_do = 0x06c000;
   constexpr unsigned source_mask = 0x3f;
   constexpr unsigned source_x0 = 4;
+  constexpr unsigned source_y0 = 6; // FM13-56: DDDDDD=6 selects the low Y data word.
   constexpr unsigned source_y1 = 7;
   constexpr unsigned source_r0 = 16;
   constexpr unsigned source_a = 14;
@@ -37,6 +38,7 @@ std::optional<DspLoopCountSource> automatic_loop_source(const std::uint32_t opco
   if ((opcode & register_mask) != register_do) { return std::nullopt; }
   switch ((opcode >> 8) & source_mask) {
     case source_x0: return DspLoopCountSource::x0;
+    case source_y0: return DspLoopCountSource::y0;
     case source_y1: return DspLoopCountSource::y1;
     case source_r0: return DspLoopCountSource::r0;
     case source_a: return DspLoopCountSource::a;

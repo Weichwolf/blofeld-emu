@@ -5,7 +5,7 @@
 #include <optional>
 
 namespace blofeld {
-enum class DspLoopCountSource : std::uint8_t { immediate, x0, y1, r0, a, a0 };
+enum class DspLoopCountSource : std::uint8_t { immediate, x0, y1, r0, a, a0, y0 };
 // Clocked forms with independently retained source/producer timing evidence.
 [[nodiscard]] std::optional<DspLoopCountSource> automatic_loop_source(std::uint32_t opcode);
 [[nodiscard]] bool relative_loop(std::uint32_t opcode);

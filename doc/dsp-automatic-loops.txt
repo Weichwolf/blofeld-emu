@@ -1,7 +1,7 @@
 Automatic counted-loop pipeline
 
 The automatic memory pipeline admits normal immediate DO and selected register
-counts X0,R0,A,A0. Actual accepted Decode cuts the owned F2 queue after its exact
+counts X0,Y0,R0,A,A0. Actual accepted Decode cuts the owned F2 queue after its exact
 pair; older samples remain, younger fetch is canceled. Native E1 alone selects
 the real body/annul F1 address and native E2 confirms the opening. Active LF
 requires the observed native control tuple. Native ends confirm actual consumed
@@ -19,6 +19,13 @@ single-word transfer writers to accumulator A add one source period for DO A/A0.
 The older E2 actually publishes while DO E1/F1 is held. Two-word immediate writers
 already separate Decode and do not acquire a false extra interlock. These clocks
 are a documented/model contract, not measured Blofeld silicon stage clocks.
+
+Y0 uses its entry word after an immediate or single-word register producer,
+without an accumulator interlock. Body writes to Y0 do not replace the latched
+count. The existing source target adds19 literal cases,70 producer/body-write
+cases and100 source/setup/annul/body cuts with200 suffixes and100 fresh owners.
+Each continuation checks independent CPU/frame/PC/instruction-count expectations
+and fixed reference periods. Neighboring unsupported count sources still refuse.
 
 R0..7 are also admitted as explicit data-transfer sources. Own tests check all64
 R-to-R pairs,224 X/Y/A/B/N/M field transfers, literal/internal-RAM producers and AG2 postincrement

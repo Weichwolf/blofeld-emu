@@ -2099,8 +2099,10 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           checkpoint continuations are checked.
                                           Automatic selected counted DO now binds
                                           real Decode/F2 cuts, native E1/E2 and
-                                          owned LF/end control. X0/R0/A/A0 source
-                                          and A producer interlocks, explicit R
+                                          owned LF/end control. X0/Y0/R0/A/A0 source
+                                          and A producer interlocks; Y0 entry counts
+                                          survive body writes and trusted suffixes.
+                                          Explicit R
                                           data sources, document-prefix real SPI
                                           address/DO/empty waits and two faulted
                                           checkpoint continuations are checked.
