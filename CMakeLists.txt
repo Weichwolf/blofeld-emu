@@ -261,7 +261,7 @@ target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gp
 add_library(blofeld_dsp
   src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_only.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
-  src/dsp/dsp_omr_move.cpp src/dsp/dsp_sr_move.cpp src/dsp/dsp_fetch_context.cpp
+  src/dsp/dsp_omr_move.cpp src/dsp/dsp_sr_move.cpp src/dsp/dsp_sp_move.cpp src/dsp/dsp_fetch_context.cpp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
@@ -4131,6 +4131,16 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(blofeld-sp-control-test test/dsp_sp_control_test.cpp)
+  target_link_libraries(blofeld-sp-control-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_sp_control COMMAND blofeld-sp-control-test)
+  set_tests_properties(dsp_sp_control PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-sp-control-test)
+  add_executable(blofeld-sp-flow-test test/dsp_sp_flow_test.cpp)
+  target_link_libraries(blofeld-sp-flow-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_sp_flow COMMAND blofeld-sp-flow-test)
+  set_tests_properties(dsp_sp_flow PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-sp-flow-test)
   add_executable(blofeld-sr-control-test test/dsp_sr_control_test.cpp)
   target_link_libraries(blofeld-sr-control-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_sr_control COMMAND blofeld-sr-control-test)

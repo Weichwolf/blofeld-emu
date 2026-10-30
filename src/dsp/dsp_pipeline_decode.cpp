@@ -15,6 +15,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_repeat_fetch.hpp"
+#include "dsp/dsp_sp_move.hpp"
 #include "dsp/dsp_sr_move.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
@@ -176,7 +177,8 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
         profile == DspFetchPipeline::automatic_memory && fetch_repeat_prefix(word.value);
     const bool control =
         profile == DspFetchPipeline::automatic_memory &&
-        (decode_omr_move(word.value).has_value() || decode_sr_move(word.value).has_value());
+        (decode_omr_move(word.value).has_value() || decode_sr_move(word.value).has_value() ||
+         decode_sp_move(word.value).has_value());
     const bool standalone_move =
         (memory || transfer || port_read || control || address_only) && second == dsp56k::Invalid;
     const auto words = pipeline_word_count(word);

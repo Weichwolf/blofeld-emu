@@ -16,6 +16,17 @@ dsp_sr_control, dsp_sr_memory and dsp_sr_guard check encoding fields, native
 publication, following ALU/condition/memory behavior, checkpoint suffixes,
 fresh clones and refused modes/interrupts.
 
+Nonmemory MOVEC to SP accepts short/long immediates and X0/X1/Y0/Y1/R0..R7.
+The actual native E2 result changes SP while retaining SC and all stack cells;
+SP creates no ordinary E1 move field. The current automatic contract qualifies
+nonextended physical indices0..15. Stack-status bits, extended stack and interrupt
+contexts remain visibly unsupported; this is not a24-bit hardware pointer limit.
+Memory sources, SSH sources and the undocumented fixed-bit alias remain refused.
+dsp_sp_control checks224 cases,448 restored suffixes,224 fresh owners and16
+status refusals with literal per-period full CPU/stack/CCR/counter expectations.
+dsp_sp_flow checks8 real DO exits followed by SP/SR/JSR/RTS,16 restored suffixes
+and8 fresh owners. No host SP assignment supplies execution or stack results.
+
 MOVEC M0..M7 to M0..M7 accepts both documented W encodings (FM13-131/12-20).
 The native result supplies modifier caches as well as raw register values.
 Decode dependencies and native AGU consumers retain the existing interlocks;

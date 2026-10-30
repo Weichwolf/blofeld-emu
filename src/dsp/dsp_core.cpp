@@ -26,6 +26,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_repeat_fetch.hpp"
+#include "dsp/dsp_sp_move.hpp"
 #include "dsp/dsp_sr_move.hpp"
 #include "dsp/dsp_timers.hpp"
 #include "dsp56kEmu/disasm.h"
@@ -827,6 +828,17 @@ public:
       // not publish a fictitious ordinary register field at the move boundary.
       const bool status = reference.fetch().active() && decode_sr_move(*opcode).has_value();
       if (decode_omr_move(*opcode) || status) { return {}; }
+      if (reference.fetch().active() && decode_sp_move(*opcode)) {
+        constexpr unsigned stack_extension = 0x100000;
+        constexpr unsigned last_physical_stack_entry = 15;
+        // FM5.4.3.1: SE transitions require a stack-error exception, not a plain
+        // stored pointer. Extended/status contexts remain visibly unsupported.
+        if (reference.interrupt() || (word(cpu.regs().omr) & stack_extension) != 0 ||
+            word(cpu.regs().sp) > last_physical_stack_entry) {
+          throw Fault("Unqualified native SP stack-status/extension/interrupt context");
+        }
+        return {};
+      }
       return decode_move_writeback(*opcode, scope);
     } catch (const std::exception &error) {
       std::string operation;

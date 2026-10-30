@@ -107,7 +107,10 @@ void decoder_guards() {
         decode_sr_move(direct_sr | (field << 8U)).has_value() == allowed,
         "Literal FM direct fields admit exactly X0/X1/Y0/Y1/R0..R7, retaining control/SSH guards");
   }
-  constexpr std::array refused{0x05f039U, 0x05f43bU, 0x1000000U};
+  // SP has its own qualified control route; SC remains unsupported here.
+  constexpr std::array refused{0x05f039U, 0x05f431U, 0x1000000U};
+  constexpr unsigned immediate_sp = 0x05f43b;
+  require(!decode_sr_move(immediate_sp), "SP does not alias the SR control route");
   for (const auto opcode : refused) {
     require(!decode_sr_move(opcode),
             "Memory inputs, other control targets and wide words are excluded");

@@ -33,6 +33,8 @@ are not assigned speculative stages. Memory cases reject those conditions
 before actual operand I/O, with operation/address/PC/OMR; computational-only
 cases reject before result publication. Other memory forms retain their strict
 address-phase frontiers (dsp-address-phase.txt).
+The separate selected nonmemory SR/OMR/SP control routes retain actual native
+E2 publication without an ordinary E1 move field; see dsp-boot-instructions.txt.
 
 Each address/move/retirement position has a distinct trusted owner ticket.
 Snapshots/forks retain original computation base, already published address

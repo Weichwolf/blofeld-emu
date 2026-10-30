@@ -9,6 +9,7 @@
 #include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_sp_move.hpp"
 #include "dsp/dsp_sr_move.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
@@ -119,7 +120,7 @@ unsigned pipeline_word_count(const DspProgramWord word) {
 }
 
 DspMoveFields pipeline_transfer_fields(const std::uint32_t opcode) {
-  if (decode_omr_move(opcode) || decode_sr_move(opcode)) { return {}; }
+  if (decode_omr_move(opcode) || decode_sr_move(opcode) || decode_sp_move(opcode)) { return {}; }
   static const dsp56k::Opcodes opcodes;
   Type first = dsp56k::Invalid;
   Type second = dsp56k::Invalid;
@@ -170,7 +171,10 @@ pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &pr
   }
   unsigned result = 0;
   for (const auto word : preceding) {
-    if (!word || decode_omr_move(word->value) || decode_sr_move(word->value)) { continue; }
+    if (!word || decode_omr_move(word->value) || decode_sr_move(word->value) ||
+        decode_sp_move(word->value)) {
+      continue;
+    }
     // Only explicit move destinations rearm this interlock, never ordinary AG2 updates.
     const auto fields = decode_move_writeback(word->value);
     result |= read & static_cast<unsigned>(fields.r | fields.n | fields.m);
