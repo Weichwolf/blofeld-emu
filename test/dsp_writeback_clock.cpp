@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "bank_fixture.hpp"
+#include "common/bus.hpp"
+#include "dma_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
@@ -127,7 +130,7 @@ void dma_wait_retains_e1() {
           "Joint recovery after E1 preserves the real captured load despite later memory changes");
 }
 
-void failed_f2_preserves_accepted_e1() {
+void mapped_unknown_f2_preserves_accepted_e1() {
   DspMachine machine;
   auto program = checkpoint::assemble("move x:(r0)+,x0");
   program.insert(program.end(), 4, 0);
@@ -144,28 +147,78 @@ void failed_f2_preserves_accepted_e1() {
   }
   require(machine.cpu().debug_state() == visible, "The real E1 result has actually been accepted");
   const auto saved = run.checkpoint(machine);
-  const auto error =
-      fault([&] { static_cast<void>(run.advance_cycle(machine, clock::input(true))); });
-  require(error.contains("P:0x000105") && error.contains("completed-cycles=6") &&
-              error.contains("pc=0x000100") && run.faulted() && run.elapsed_ticks() == 6 * period &&
-              machine.bus().last_dma_cycle() == 7 && machine.cpu().debug_state() == visible,
-          "A failed actual F2 keeps accepted E1 and the DMA prefix without retiring or completing "
-          "time");
+  const auto retired = run.advance_cycle(machine, clock::input(true));
+  auto expected = visible.cpu;
+  expected.pc = clock::program + 1;
+  require(retired.bus.progress && retired.bus.progress->retired && !run.faulted() &&
+              run.completed_cycles() == 7 && run.elapsed_ticks() == 7 * period &&
+              retired.fetch.used == 5 && retired.fetch.words[4].address == clock::program + 5 &&
+              !retired.fetch.words[4].data && machine.cpu().state() == expected,
+          "Mapped unknown speculative F2 remains absent;it cannot undo accepted E1 or block E2");
   run.restore(saved, machine);
   machine.bus().write({.address = clock::program + 5});
   machine.bus().write(
       {.space = DspSpace::x, .address = clock::initial_r0, .value = reference::third});
   const auto recovered = run.advance_cycle(machine, clock::input(true));
-  require(recovered.bus.progress && recovered.bus.progress->retired && !run.faulted() &&
-              machine.cpu().state().x == reference::first &&
-              machine.cpu().state().pc == clock::program + 1,
-          "Trusted joint restore retains accepted E1 and its original pending E2 result");
+  require(
+      recovered.bus.progress && recovered.bus.progress->retired && !run.faulted() &&
+          machine.cpu().state().x == reference::first &&
+          machine.cpu().state().pc == clock::program + 1,
+      "Trusted joint restore retains accepted E1 and original pending E2 despite a new F2 value");
+}
+
+void physical_f2_preserves_accepted_e1() {
+  constexpr unsigned edge = 0xffb;
+  constexpr unsigned unavailable = 0x1000;
+  DspMachine machine;
+  DspProgram code;
+  code.immediate("r0", clock::initial_r0);
+  for (const auto address :
+       {dma_test::source0, dma_test::destination0, dma_test::counter0, dma_test::control0}) {
+    code.emit("movep #>$0,x:<<" + number(address));
+  }
+  code.word(reference::long_jump);
+  code.word(edge);
+  code.install(machine.bus());
+  machine.bus().pll().observe_pinit(false);
+  machine.cpu().reset_spi_boot();
+  auto program = checkpoint::assemble("move x:(r0)+,x0");
+  program.insert(program.end(), 4, 0);
+  checkpoint::ram(machine.bus(), edge, program);
+  static_cast<void>(machine.advance_dma(banks::inputs({.index = 0}), banks::use()));
+  checkpoint::run(machine, 6);
+  require(machine.cpu().state().pc == edge,
+          "Own native jump enters the actual last five mapped program words");
+  static_cast<void>(machine.begin_reference_instruction(execution));
+  machine.bus().write(
+      {.space = DspSpace::x, .address = clock::initial_r0, .value = reference::first});
+  auto visible = machine.cpu().debug_state();
+  visible.cpu.r[0] = clock::initial_r0 + 1;
+  visible.cpu.x = reference::first;
+  DspFetchRun run(contract(), machine);
+  for (unsigned cycle = 0; cycle < 6; ++cycle) {
+    static_cast<void>(run.advance_cycle(machine, clock::input(true)));
+  }
+  require(machine.cpu().debug_state() == visible,
+          "Boundary case accepts the real load E1 before physical F2 fails");
+  const auto saved = run.checkpoint(machine);
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    if (replay != 0) { run.restore(saved, machine); }
+    const auto error =
+        fault([&] { static_cast<void>(run.advance_cycle(machine, clock::input(true))); });
+    require(error.contains("P:" + hex(unavailable, 6)) && error.contains("completed-cycles=6") &&
+                error.contains("pc=" + hex(edge, 6)) && run.faulted() &&
+                run.elapsed_ticks() == 6 * period && machine.bus().last_dma_cycle() == 6 &&
+                machine.cpu().debug_state() == visible,
+            "Physical F2 admission preserves E1 before DMA/E2/time: " + error);
+  }
 }
 }
 
 void clock_checks() {
   separate_e1_e2_clocks();
   dma_wait_retains_e1();
-  failed_f2_preserves_accepted_e1();
+  mapped_unknown_f2_preserves_accepted_e1();
+  physical_f2_preserves_accepted_e1();
 }
 }
