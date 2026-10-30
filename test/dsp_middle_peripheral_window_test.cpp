@@ -201,8 +201,8 @@ void decode_checks() {
     require(!middle_accumulator_peripheral_store(opcode | 0x1000000U),
             "Out-of-word encodings cannot alias a qualified register source");
   }
-  for (const auto *text : {"movep a,x:<<$fffffc",
-                           "movep b,x:<<$fffffc",
+  for (const auto *text : {"movep a0,y:<<$fffffc",
+                           "movep b0,y:<<$fffffc",
                            "movep a0,x:<<$fffffc",
                            "movep b0,x:<<$fffffc",
                            "movep a2,x:<<$fffffc",
@@ -213,7 +213,7 @@ void decode_checks() {
     const auto words = checkpoint::assemble(text);
     require(words.size() == 1 && !middle_accumulator_peripheral_store(words.front()) &&
                 !decode_memory_stage(words.front()),
-            "Other parts, full accumulators, stack/control sources and loads remain unqualified");
+            "Other parts, stack/control sources and loads remain unqualified");
   }
 }
 

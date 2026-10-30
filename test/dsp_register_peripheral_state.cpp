@@ -7,6 +7,7 @@
 #include "dsp_memory_pipeline_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_peripheral_pipeline_fixture.hpp"
+#include "dsp_peripheral_unknown_fetch_fixture.hpp"
 #include "native_access_fixture.hpp"
 
 #include <array>
@@ -93,8 +94,8 @@ void transmission_once() {
 void refused_forms() {
   for (const auto *text : {"movep sr,x:<<$fffffc",
                            "movep ssh,x:<<$fffffc",
-                           "movep a,x:<<$fffffc",
-                           "movep b,x:<<$fffffc",
+                           "movep a0,y:<<$fffffc",
+                           "movep b0,y:<<$fffffc",
                            "movep a0,x:<<$fffffc"}) {
     DspMachine machine;
     const std::array<std::string, 1> code{text};
@@ -107,7 +108,7 @@ void refused_forms() {
     require(error.contains("automatic DSP decode P:") && error.contains("pc=") &&
                 error.contains("omr=") && run.faulted() && run.completed_cycles() == 2 &&
                 machine.cpu().debug_state() == before && !machine.bus().once_latch(),
-            "Control/stack/full-accumulator and low-part store sources remain explicit frontiers");
+            "Control/stack and low/extension-part store sources remain explicit frontiers");
   }
 }
 
@@ -200,21 +201,15 @@ void strict_write_failure() {
   }
 }
 
-void failed_f2() {
+void unknown_f2() {
   DspMachine machine;
   auto words = checkpoint::assemble("movep r0,x:<<$fffffc");
   words.insert(words.end(), 3, 0);
   fetch_clock::prepare(
       machine, words, {.execution = DspReferenceExecution::staged_register_boundaries});
-  const auto before = machine.cpu().debug_state();
   DspFetchRun run(contract(), machine);
   clocks(run, machine, 5);
-  const auto error =
-      fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-  require(error.contains("P:0x000104") && error.contains("pc=") && error.contains("omr=") &&
-              run.faulted() && run.completed_cycles() == 5 &&
-              machine.cpu().debug_state() == before && !machine.bus().once_latch(),
-          "Unknown simultaneous actual F2 fails before register E1 can commit its write");
+  unknown_fetch(machine, run, {});
 }
 
 void active_dma() {
@@ -283,7 +278,7 @@ void register_state_checks() {
   empty_accumulator_source();
   port_load_agu_dependencies();
   strict_write_failure();
-  failed_f2();
+  unknown_f2();
   active_dma();
   reset_pending();
 }

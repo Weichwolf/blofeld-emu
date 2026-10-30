@@ -1,0 +1,49 @@
+Full-accumulator peripheral stores
+
+The automatic_memory pipeline admits register-source MOVEP from full A/B to
+the documented high and low X/Y short-I/O encodings. The predicate in
+dsp_full_peripheral_store.hpp classifies only those 24-bit instruction words;
+the original interpreter supplies the signed56-bit source, scaling, limiting,
+24-bit bus value and actual flags. No host source value or new peripheral
+handler substitutes for native execution. Raw A1/B1 has its separate scope in
+dsp-middle-peripheral.txt; A0/A2/B0/B2 and control/stack stores remain unqualified.
+
+The real F2 occurrence supplies the instruction through AG1/AG2 and native E1.
+The existing source dependency interlock holds a consumer until the selected
+older accumulator result is available. Partial/full writers and the opposite
+accumulator retain their independently checked source masks. E1 writes the
+actual native peripheral value once; E2 publishes genuine PC/counters/CCR.
+Reserved scaling and unsupported CE/FV/SA/SC modes remain visible refusals.
+REP-body admission and the SDK are unchanged.
+
+Primary scope: DSP56300FM Rev5 sections3.1.3/3.5, Table12-13, MOVEP13-136
+and AppendixA. The selected pipeline/publication order remains a reference
+contract, not a measured DSP56371 sampling edge. Register-source MOVEP keeps
+its nominal one instruction period plus actual interlocks. Known register
+ownership is still required: reserved X:ffff80, unknown high-Y and other
+unsupported ports do not become successful writes merely because the
+instruction encoding is admitted.
+
+The four own directed groups cover pp/split-qq fields, full A/B signed numeric
+extrema and scale/limit flags, source-producer windows, accepted-code mutation,
+checkpoint suffixes and fresh clones. The ESAI group samples two modeled
+24-bit serial frames: an in-progress frame retains its older payload and the
+next frame transmits the independently expected native value. This is not a
+connected original voice chain or host audio stream.
+
+Older peripheral fixtures distinguish mapped unknown F2 samples from their
+actual use. A known older E1 write may complete while an unknown sample is
+recorded. Its later required Decode fails without another clock or invented
+instruction, preserving the actual older I/O. Later RAM writes cannot repair
+that receipt. Trusted restore before F2 permits fresh known sampling and one
+real write/retirement. Unsupported neighboring source forms remain guarded.
+
+  cmake --build --preset strict --target blofeld-full-peripheral-test \
+    blofeld-full-peripheral-ports-test blofeld-full-peripheral-guards-test \
+    blofeld-full-peripheral-producers-test
+  ctest --test-dir build/strict -j1 --output-on-failure \
+    -R '^dsp_full_peripheral(_ports|_guards|_producers)?$'
+
+These component tests verify the emulator. Complete unmodified original
+Desktop/Keyboard reset-to-instrument, MIDI/USB/audio, storage/update/recovery,
+realtime stability and every documented function remain required by objective.txt.

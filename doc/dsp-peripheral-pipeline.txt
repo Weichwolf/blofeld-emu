@@ -4,7 +4,9 @@ The opt-in automatic_memory profile accepts immediate and X/Y/R/N/M register
 MOVEP stores to short X/Y I/O. The selected high- and low-I/O encodings use the
 real F2 opcode and, for immediate data only, its extension. Nine immediate and
 112 register/port own encodings are pinned independently against the Freescale
-assembler. No manufacturer program bytes are embedded in tests. Control, stack and accumulator store sources remain unqualified. Selected
+assembler. No manufacturer program bytes are embedded in tests. Control/stack
+and unsupported accumulator parts remain unqualified. Raw A1/B1 stores are
+scoped in dsp-middle-peripheral.txt; full A/B stores in dsp-full-peripheral.txt. Selected
 native port reads are described separately in dsp-peripheral-reads.txt.
 
 AG1 captures the fixed port address and actual extension where present, with no
@@ -32,7 +34,7 @@ Joint snapshots retain extension identity, phase records, actual effects and
 peripheral state. Directed cases cover literal extrema, low X/Y registers, SHI
 transmission without a repeated HTX write, captured/future code replacement,
 trusted replay, register producer/younger AGU overlap, captured/future opcodes,
-unknown Y ownership, reserved bits, failed simultaneous F2,
+unknown Y ownership, reserved bits, mapped unknown F2 with preserved older I/O,
 active DMA and the separate public native-reference caller.
 
   cmake --build --preset strict --target blofeld-peripheral-pipeline-test

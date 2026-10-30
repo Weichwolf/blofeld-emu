@@ -2,6 +2,7 @@
 #include "dsp/dsp_memory_form.hpp"
 
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_full_peripheral_store.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
@@ -103,7 +104,8 @@ std::optional<DspMemoryForm> peripheral_register(const Type type, const unsigned
   const auto source = dsp56k::getRegister(type, dsp56k::Field_dddddd, opcode);
   if (dsp56k::getFieldValue(type, dsp56k::Field_W, opcode) == 0 ||
       (!data_register(source) && !address_register(source) &&
-       !middle_accumulator_peripheral_store(opcode))) {
+       !middle_accumulator_peripheral_store(opcode) &&
+       !full_accumulator_peripheral_store(opcode))) {
     return std::nullopt;
   }
   const bool high = type == dsp56k::Movep_Spp;

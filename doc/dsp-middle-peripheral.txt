@@ -6,6 +6,8 @@ other accumulator parts, control/stack sources and reverse loads stay outside
 this admission. Direct native SA16 uses the documented upper16 middle bits,
 zero-extended. Automatic reference execution still rejects SA16 explicitly;
 this increment does not qualify that broader pipeline mode.
+Full A/B stores have a separate native scaling/limiting and source-interlock
+scope in dsp-full-peripheral.txt; this raw-middle contract remains distinct.
 An immediately preceding writer of the selected accumulator holds consumer E1
 until the older real E2 result publishes. The other accumulator does not stall.
 

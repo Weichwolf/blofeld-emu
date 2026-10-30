@@ -5,6 +5,7 @@
 #include "dsp/dsp_address_only.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_full_peripheral_store.hpp"
 #include "dsp/dsp_loop_source.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_move_writeback.hpp"
@@ -111,6 +112,7 @@ std::uint8_t memory_source_dependency(const DspInstructionDependency instruction
                              memory->lanes[0].operation == DspMemoryOperation::write;
   if (program_store || full_accumulator_scalar_store(consumer.value) ||
       partial_accumulator_scalar_store(consumer.value) ||
+      full_accumulator_peripheral_store(consumer.value) ||
       middle_accumulator_peripheral_store(consumer.value)) {
     // FM3.5.1: the native E1 memory source must observe the preceding E2 writer.
     return dependency(operands(producer, false).written, operands(consumer, false).read);

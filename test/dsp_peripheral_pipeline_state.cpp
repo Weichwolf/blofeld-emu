@@ -10,6 +10,7 @@
 #include "dsp_fetch_run_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
 #include "dsp_peripheral_pipeline_fixture.hpp"
+#include "dsp_peripheral_unknown_fetch_fixture.hpp"
 #include "dsp_spi_prefix_fixture.hpp"
 #include "native_access_fixture.hpp"
 #include "reference_execution_fixture.hpp"
@@ -105,20 +106,15 @@ void rejected_write(const WriteFailure &sample) {
   }
 }
 
-void failed_f2_precedes_write() {
+void unknown_f2() {
   DspMachine machine;
   auto words = checkpoint::assemble("movep #>$234567,x:<<$fffffc");
   words.insert(words.end(), 2, 0);
   fetch_clock::prepare(
       machine, words, {.execution = DspReferenceExecution::staged_register_boundaries});
-  const auto before = machine.cpu().debug_state();
   DspFetchRun run(contract(), machine);
   clocks(run, machine, 5);
-  const auto error =
-      fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-  require(error.contains("P:0x000104") && run.faulted() && run.completed_cycles() == 5 &&
-              machine.cpu().debug_state() == before && !machine.bus().once_latch(),
-          "A real unknown simultaneous F2 fails before native E1 can write the peripheral");
+  unknown_fetch(machine, run, {.words = 2, .payload = literal});
 }
 
 void active_dma_refuses_port() {
@@ -239,7 +235,7 @@ void state_checks() {
   rejected_write({.instruction = "movep #>$234567,y:<<$fffffc",
                   .reason = "Unimplemented DSP peripheral write",
                   .access = "write Y:0xfffffc"});
-  failed_f2_precedes_write();
+  unknown_f2();
 }
 
 void bootstrap(const BootstrapFiles &files) {

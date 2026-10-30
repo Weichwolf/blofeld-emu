@@ -3322,3 +3322,11 @@ Same logical bus, shared/unknown module and ROM contention restrictions remain;
 reference-cycle, bank, map, DMA and Board tests retain their separate scopes.
 See dsp-core-blocks.txt. Physical timing/relocation and complete original
 Desktop/Keyboard instrument, MIDI/USB/audio and update/recovery remain open.
+
+Full A/B peripheral stores: dsp_full_peripheral{,_ports,_guards,_producers}
+checks actual native signed/scaled/limited values and flags, pp/qq encodings,
+source interlocks, captured F2 identity, modeled ESAI frames and trusted
+continuations. Legacy peripheral guards retain unsupported neighboring parts
+and actual unknown-sample use/refusal without undoing older genuine I/O.
+See dsp-full-peripheral.txt. These support requirements2/3/6, not complete
+original instrument boot, host audio/MIDI/USB, update/recovery or realtime.

@@ -8,6 +8,7 @@
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_branch_form.hpp"
 #include "dsp/dsp_core.hpp"
+#include "dsp/dsp_full_peripheral_store.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_memory_form.hpp"
 #include "dsp/dsp_native_access.hpp"
@@ -58,6 +59,7 @@ void check_accumulator_context(const DspMachine &machine,
       ((register_transfer && accumulator_transfer_source(execute->value)) ||
        full_accumulator_long_store(execute->value) ||
        full_accumulator_scalar_store(execute->value) ||
+       full_accumulator_peripheral_store(execute->value) ||
        partial_accumulator_scalar_store(execute->value)) &&
       (cpu.sr & scaling_mask) == scaling_mask) {
     throw Fault("Unqualified accumulator MOVE scaling read P:" + hex(execute->address, 6) +
