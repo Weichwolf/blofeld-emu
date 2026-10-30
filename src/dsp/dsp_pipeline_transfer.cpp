@@ -72,7 +72,11 @@ bool accumulator_source(const Type first,
   const bool parallel = kind == AccumulatorSource::middle && second == dsp56k::Mover &&
                         ((first == dsp56k::Add_SD && alu == add_opposite) ||
                          (first == dsp56k::Tfr && alu == transfer_y0));
-  if (!standalone && !parallel) { return false; }
+  // FM13-137/138,Table12-16: signed MPY with a full A/B bus source.
+  // Native parallel execution reads old operands before publishing either result.
+  const bool multiply =
+      kind == AccumulatorSource::full && first == dsp56k::Mpy_S1S2D && second == dsp56k::Mover;
+  if (!standalone && !parallel && !multiply) { return false; }
   const auto move = standalone ? first : second;
   const auto source = dsp56k::getRegister(move, dsp56k::Field_eeeee, opcode);
   const bool full = source == dsp56k::Register::A || source == dsp56k::Register::B;

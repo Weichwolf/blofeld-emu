@@ -1,10 +1,13 @@
 Accumulator bus transfers and completed loop context
 ===================================================
 
-The automatic memory pipeline executes standalone full A/B sources to
-X0/X1/Y0/Y1/R0..R7 through the native interpreter. Native E1 publishes only
+The automatic memory pipeline executes full A/B sources to X0/X1/Y0/Y1/R0..R7,
+standalone or parallel with signed register MPY, through the native interpreter.
+Native E1 publishes only
 the genuine destination fields; E2 publishes PC, flags and diagnostic costs.
-The 56-bit source and the other accumulator remain intact. Signed scaling
+Standalone moves retain both accumulators. Parallel MPY reads the old full
+source and both old multiplier registers, then publishes its new accumulator
+at E2; the transferred register may also be a multiplier input. Signed scaling
 precedes signed 24-bit clipping. S growth uses source bits 46/45 normally,
 47/46 when scaling down and 45/44 when scaling up; S and L remain sticky.
 The old native offset and older own transfer oracle reversed the scaled
@@ -13,9 +16,21 @@ growth cases. Both now follow the independent FM5-13 equations.
 An adjacent ALU or transfer writer to the same accumulator requires one
 actual consumer period. The older E2 publishes while the real younger E1 is
 held; the consumer then executes once using that native result. Disjoint
-writers or a one-NOP gap introduce no extra period. Partial accumulator
-sources, unqualified destinations and parallel source forms still refuse
-before automatic effects. Reserved scaling refuses before native E1.
+writers or a one-NOP gap introduce no extra period. Other parallel full-source
+ALUs, partial-source MPY and unqualified destinations still refuse before
+automatic effects. Separate raw-middle ADD/TFR contracts remain unchanged.
+Reserved scaling refuses before native E1.
+
+dsp_mpy_transfer_{native,clocks,producers,snapshots,guards,recurrence} checks
+1,920 signed product/old-source/scale/flag cases per execution path, all eight
+register-pair encodings, both ALU/source accumulators and12 X/Y/R destinations.
+Sixteen producer windows pin same-source interlocks;84 cuts restore168 suffixes
+and84 fresh owners. Eight Decode refusals and two restored scaling refusals
+retain their context. A seven-term own recurrence composes real MPY/MACR,
+parallel stores and an eight-word multiple-wrap ring, with independent full
+CPU/RAM/cost expectations and trusted continuations. Its coefficients, seed,
+stride and length are own inputs; no firmware bytes or waveform substitute
+are supplied. Native arithmetic and data conversion remain unmodified.
 
 A completed or annulled DO releases only finished speculative observer state
 after native confirmation. Forecast depth, pending boundaries, queued active
