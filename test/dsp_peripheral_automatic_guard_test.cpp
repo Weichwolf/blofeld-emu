@@ -72,6 +72,44 @@ void invalid_destinations() {
 }
 
 void failed_f2_precedes_read() {
+  // UM table3-1: default P RAM ends at $0fff. The simultaneous F2 at
+  // $1000 has no admitted physical resource, unlike a mapped unknown word.
+  constexpr unsigned unmapped = 0x1000;
+  constexpr unsigned start = unmapped - 2;
+  DspMachine machine;
+  auto code = checkpoint::assemble("movep x:<<$ffff90,x0");
+  code.push_back(0);
+  checkpoint::ram(machine.bus(), start, code);
+  DspProgram bootstrap;
+  constexpr unsigned long_absolute_jump = 0x0af080; // FM13 absolute JMP extension form.
+  bootstrap.word(long_absolute_jump);
+  bootstrap.word(start);
+  bootstrap.install(machine.bus());
+  machine.bus().pll().observe_pinit(false);
+  machine.cpu().reset_spi_boot();
+  static_cast<void>(machine.bus().advance_dma(banks::inputs({.index = 0}), banks::use()));
+  checkpoint::run(machine, 1);
+  static_cast<void>(
+      machine.begin_reference_instruction(DspReferenceExecution::staged_register_boundaries));
+  const auto before = machine.cpu().debug_state();
+  require(before.cpu.pc == start, "A genuine native JMP enters the own boundary program");
+  DspFetchRun run(contract(), machine);
+  clocks(run, machine, 3);
+  const auto saved = run.checkpoint(machine);
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    run.restore(saved, machine);
+    const auto error = checkpoint::rejects(
+        [&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); },
+        "Unmapped simultaneous F2 reached the early data phase");
+    require(error.contains("P:0x001000") && error.contains("Unmapped") && error.contains("pc=") &&
+                error.contains("omr=") && run.completed_cycles() == 3 &&
+                machine.cpu().debug_state() == before &&
+                machine.bus().read({.space = DspSpace::x, .address = hckr}) == 1,
+            "A genuinely failed physical F2 precedes the older early read/writeback");
+  }
+}
+
+void mapped_unknown_f2() {
   DspMachine machine;
   auto code = checkpoint::assemble("movep x:<<$ffff90,x0");
   code.push_back(0);
@@ -83,13 +121,23 @@ void failed_f2_precedes_read() {
   const auto saved = run.checkpoint(machine);
   for (unsigned replay = 0; replay < 2; ++replay) {
     run.restore(saved, machine);
+    const auto sample = run.advance_cycle(machine, fetch_clock::input());
+    constexpr unsigned absent = fetch_clock::program + 2;
+    require(
+        sample.fetch.used == 3 && sample.fetch.words.at(2).address == absent &&
+            !sample.fetch.words.at(2).data &&
+            sample.fetch.words.front().address == fetch_clock::program &&
+            sample.fetch.words.front().data && sample.bus.peripheral_read &&
+            run.completed_cycles() == 4 && machine.cpu().debug_state() == before,
+        "Mapped unknown F2 remains absent while the known older MOVEP captures its real source");
     const auto error = checkpoint::rejects(
         [&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); },
-        "Unknown simultaneous F2 reached the early data phase");
+        "Absent F2 became an invented known Decode opcode");
     require(error.contains("P:0x000102") && error.contains("pc=") && error.contains("omr=") &&
-                run.completed_cycles() == 3 && machine.cpu().debug_state() == before &&
-                machine.bus().read({.space = DspSpace::x, .address = hckr}) == 1,
-            "An unknown simultaneous F2 must fail before successful early read/writeback");
+                run.completed_cycles() == 4 && machine.cpu().debug_state() == before &&
+                run.faulted(),
+            "The captured absent opcode refuses at actual Decode before any native destination or "
+            "retirement");
   }
 }
 
@@ -198,6 +246,7 @@ void guards() {
   unknown_source("jset #0,x:<<$ffff96," + number(body + 2), "X:0xffff96");
   invalid_destinations();
   failed_f2_precedes_read();
+  mapped_unknown_f2();
   active_dma();
   ownership();
   public_phase_bypass();
