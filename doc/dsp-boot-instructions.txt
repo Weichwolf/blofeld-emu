@@ -26,6 +26,13 @@ dsp_sp_control checks224 cases,448 restored suffixes,224 fresh owners and16
 status refusals with literal per-period full CPU/stack/CCR/counter expectations.
 dsp_sp_flow checks8 real DO exits followed by SP/SR/JSR/RTS,16 restored suffixes
 and8 fresh owners. No host SP assignment supplies execution or stack results.
+The16 dsp_sp_adjacent_call cases remove the four NOPs and exercise short/long
+SP0, immediate SR0 and short/long JSR, including the original adjacency.
+Actual older SP/SR E2 results update only pending call-control forecasts;
+target/F2 ownership and scheduling stay fixed. Native JSR independently
+confirms the forecast. All stack cells,SC,native costs and32 restored suffixes/
+16 fresh owners are checked. dsp_subroutine_writers rejects24 invalid writer,
+occurrence,PC,stack and mode histories; unchanged control retains its forecast.
 
 MOVEC M0..M7 to M0..M7 accepts both documented W encodings (FM13-131/12-20).
 The native result supplies modifier caches as well as raw register values.

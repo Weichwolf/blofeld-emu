@@ -119,6 +119,10 @@ public:
   [[nodiscard]] std::uint32_t consume(std::uint32_t address);
   void redirect(std::uint32_t pc, std::uint32_t omr);
   void predict_branch(const DspBranchDecision &decision, std::uint64_t identity = 0);
+  // Follow actual older control retirement without changing the owned target.
+  void follow_subroutine_writer(const DspFetchedInstruction &writer,
+                                DspLoopArchitecture before,
+                                DspLoopArchitecture after);
   [[nodiscard]] bool
   confirm_branch(std::uint32_t pc, std::uint32_t next_pc, std::uint32_t omr, bool redirected);
   [[nodiscard]] bool confirm_subroutine(DspFetchCommit completed,

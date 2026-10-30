@@ -7,6 +7,8 @@
 #include "dsp/dsp_loop_fetch.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_repeat_fetch.hpp"
+#include "dsp/dsp_sp_move.hpp"
+#include "dsp/dsp_sr_move.hpp"
 
 #include <algorithm>
 #include <array>
@@ -585,6 +587,47 @@ bool DspProgramFetch::confirm_branch(const std::uint32_t pc,
   branch_occurrence_ = 0;
   branch_target_captured_ = false;
   return true;
+}
+
+void DspProgramFetch::follow_subroutine_writer(const DspFetchedInstruction &writer,
+                                               DspLoopArchitecture before,
+                                               DspLoopArchitecture after) {
+  if (!branch_ || !branch_->subroutine) { return; }
+  const auto sp = decode_sp_move(writer.opcode.word.value);
+  const auto sr = decode_sr_move(writer.opcode.word.value);
+  const auto form = decode_branch_form(branch_->word.value);
+  if (!sp && !sr) {
+    throw Fault(
+        "Unqualified subroutine SP/SR predecessor read P:" + hex(writer.opcode.word.address, 6) +
+        " pc=" + hex(branch_->word.address, 6) + " omr=" + hex(before.omr, 6));
+  }
+  writer.check_consumed(consumed_, before.omr);
+  const auto last = writer.extension.value_or(writer.opcode);
+  const bool sequential =
+      before.pc == writer.opcode.word.address && after.pc == ((last.word.address + 1) & word_mask);
+  before.pc = branch_->word.address;
+  auto unchanged = after;
+  unchanged.pc = before.pc;
+  const bool retained = unchanged == before;
+  if (sp) { unchanged.sp = before.sp; }
+  if (sr) { unchanged.status = before.status; }
+  constexpr unsigned last_internal_frame = 15;
+  if (!sequential || writer.opcode.occurrence >= branch_occurrence_ ||
+      writer.extension.has_value() != ((sp ? sp->words : sr->words) == 2) ||
+      (!retained && (!form || !form->subroutine_call || loop_ || observed_loop_ ||
+                     branch_->subroutine->before != before || unchanged != before ||
+                     after.sp >= last_internal_frame))) {
+    throw Fault("Unqualified subroutine predecessor retirement read P:" +
+                hex(writer.opcode.word.address, 6) + " pc=" + hex(branch_->word.address, 6) +
+                " omr=" + hex(before.omr, 6));
+  }
+  if (retained) { return; }
+  // The target and F2 ownership are unchanged. Only an actually retired older
+  // SP/SR result updates this call's control forecast; JSR must confirm it later.
+  after.pc = before.pc;
+  branch_->subroutine->before = after;
+  branch_->subroutine->after.sp = after.sp + 1;
+  branch_->subroutine->after.status = after.status;
 }
 
 bool DspProgramFetch::confirm_subroutine(const DspFetchCommit completed,

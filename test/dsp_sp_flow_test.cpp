@@ -12,12 +12,14 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace {
 using namespace blofeld;
 constexpr unsigned boot = 0xff0000, caller = 0x100, callee = 0x180;
 constexpr unsigned do_immediate = 0x060080, sp_short = 0x0500bb, sp_long = 0x05f43b;
 constexpr unsigned sr_short = 0x0500b9, call_short = 0x0d0000, rts = 0x00000c;
+constexpr unsigned call_long = 0x0bf080;
 constexpr unsigned status = 0x300, retained_la = 0x321, retained_lc = 7;
 constexpr unsigned first_high = 0x111111, first_low = 0x222222;
 constexpr unsigned second_high = 0x333333, second_low = 0x444444;
@@ -32,12 +34,14 @@ void require(const bool value, const std::string &message) {
 struct Case {
   unsigned count;
   bool extended;
+  bool adjacent = false;
+  bool long_call = false;
 
   [[nodiscard]] unsigned words() const { return extended ? 2U : 1U; }
 
-  [[nodiscard]] unsigned call() const { return writer + words() + 5; }
+  [[nodiscard]] unsigned call() const { return writer + words() + (adjacent ? 1U : 5U); }
 
-  [[nodiscard]] unsigned tail() const { return call() + 1; }
+  [[nodiscard]] unsigned tail() const { return call() + (long_call ? 2U : 1U); }
 };
 
 DspDebugState prepare(DspMachine &machine, const Case sample) {
@@ -71,7 +75,8 @@ DspDebugState prepare(DspMachine &machine, const Case sample) {
   put(caller + 1, last);
   put(writer, sample.extended ? sp_long : sp_short);
   put(writer + sample.words(), sr_short);
-  put(sample.call(), call_short | callee);
+  put(sample.call(), sample.long_call ? call_long : call_short | callee);
+  if (sample.long_call) { put(sample.call() + 1, callee); }
   put(callee + 1, rts);
   machine.bus().pll().observe_pinit(false);
   machine.cpu().reset_spi_boot();
@@ -109,8 +114,9 @@ DspDebugState expected(DspDebugState before, const Case sample) {
   before.stack_low[4] = status;
   before.stack_high[1] = sample.tail();
   before.stack_low[1] = 0;
-  constexpr unsigned fixed_instructions = 11;
-  constexpr unsigned fixed_native_cost = 19; // DO5,JSR3,RTS3; other instructions1.
+  const unsigned fixed_instructions = sample.adjacent ? 7U : 11U;
+  // DO5, short JSR3/long JSR4, RTS3; remaining own instructions1 each.
+  const unsigned fixed_native_cost = (sample.adjacent ? 15U : 19U) + (sample.long_call ? 1U : 0U);
   before.native_instructions += fixed_instructions + (2 * sample.count);
   before.native_cycles += fixed_native_cost + (2 * sample.count) + (sample.extended ? 1U : 0U);
   return before;
@@ -193,14 +199,28 @@ void one_case(const Case sample) {
 }
 }
 
-int main() {
+int main(const int argc, const char *const argv[]) {
   try {
+    const bool adjacent = argc == 2 && std::string_view(argv[1]) == "--adjacent";
+    require(argc == 1 || adjacent, "Select default SP flow or --adjacent");
     for (const unsigned count : {1U, 2U, 3U, 17U}) {
-      for (const bool extended : {false, true}) {
-        one_case({.count = count, .extended = extended});
+      if (adjacent) {
+        for (const bool extended : {false, true}) {
+          for (const bool long_call : {false, true}) {
+            one_case(
+                {.count = count, .extended = extended, .adjacent = true, .long_call = long_call});
+          }
+        }
+      } else {
+        for (const bool extended : {false, true}) {
+          one_case({.count = count, .extended = extended});
+        }
       }
     }
-    std::cout << "SP flow=8 DO exits;native SP/SR/JSR/RTS;16suffixes/8clones\n";
+    std::cout
+        << (adjacent
+                ? "SP adjacency=16 DO exits;short/long SP0;SR0;short/long JSR;32suffixes/16clones\n"
+                : "SP flow=8 DO exits;native SP/SR/JSR/RTS;16suffixes/8clones\n");
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

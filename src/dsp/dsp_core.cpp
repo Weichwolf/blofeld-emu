@@ -1091,6 +1091,19 @@ public:
     if (fetch.confirm_opening(control, redirected) || fetch.confirm_loop(control, redirected)) {
       return;
     }
+    const auto opcode = reference.opcode();
+    const auto sp = opcode ? decode_sp_move(*opcode) : std::nullopt;
+    const auto sr = opcode ? decode_sr_move(*opcode) : std::nullopt;
+    if (sp || sr) {
+      if (!results.base) { throw Fault("Control retirement lost its actual native input"); }
+      const auto pair = fetch.consumed_pair();
+      const unsigned words = sp ? sp->words : sr->words;
+      fetch.follow_subroutine_writer(
+          {.opcode = words == 2 ? pair.front() : pair.back(),
+           .extension = words == 2 ? std::optional(pair.back()) : std::nullopt},
+          loop_control(*results.base),
+          control);
+    }
     if (fetch.confirm_subroutine(
             {.pc = before.pc, .next_pc = next, .omr = omr, .redirected = redirected}, control)) {
       return;
