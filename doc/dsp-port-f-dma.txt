@@ -1,0 +1,37 @@
+Port-F configuration writes beside internal DMA
+
+  cmake --build --preset strict --target blofeld-port-f-dma-test blofeld-port-f-dma-guards-test blofeld-port-f-dma-serial-test
+  ctest --test-dir build/strict -R '^dsp_port_f_dma($|_)' --output-on-failure
+
+DSP56371UM6.2.4 places Port F on the BIU. APR23sections5.1..5.3 distinguish
+internal memory/peripheral paths from the shared external port. Sources are
+pinned in hardware/sources.json. All currently admitted DMA endpoints are
+internal memory or ESAI/DAX data words. Y:fffff6/fffff7 execute writes therefore
+do not consume those DMA resources. Other core memory footprints still
+arbitrate normally. External DMA memory and unsupported peripheral endpoints
+retain visible failures. This is not general external-BIU arbitration.
+
+The resource predicate performs no GPIO transaction. Actual native MOVEP
+stores retain the BCR01ffff gate, upper-bit/pin-function checks and rejection
+state. Other Port-F phases/data-word accesses require separate qualification.
+No clocks, padding cycles, register masks or firmware instructions change.
+
+Per ASan/UBSan and separate TSan:104 RAM windows,48 joint cuts/96 suffixes/
+48 clones and12 native fault suffixes check all11pins plus zero/allones,
+source/destination/held DMA phases, full CPU/CCR/stack and E1-store/E2-retirement
+boundaries.18 guards retain unsupported footprints, captured DMA payload and
+real program-fetch contention.16 serial windows/20 suffixes/10 clones use
+actual DMA0/3 ESAI_1TX requests across four frames with independent ESAI/BMC
+decoding. Missing BCR and reserved-pin writes still fail after older real
+NOP/DMA effects; no successful retirement or rollback is fabricated.
+
+Twelve ordinary groups/profile include nine affected existing regressions.
+The one-producer actual-MCU closure retains33 archives; ten Board suffixes
+and four idle-input cases/profile preserve their complete parent output.
+Qualification:7f1f4667866598aa898f1470b95181b07cbb9cb98f9084738d030b16e90ad48f.
+
+These are reference resource/period tests, not calibrated BIU wait states,
+pad timing or physical-device equivalence. Original reset-to-instrument boot,
+live MIDI/audio and complete storage/update/recovery/realtime acceptance remain
+open. The connected original observation retains its separately declared
+partial-ROM, NAND and timing hypotheses; passing these fixtures is not boot.

@@ -3380,3 +3380,10 @@ continuations. Legacy peripheral guards retain unsupported neighboring parts
 and actual unknown-sample use/refusal without undoing older genuine I/O.
 See dsp-full-peripheral.txt. These support requirements2/3/6, not complete
 original instrument boot, host audio/MIDI/USB, update/recovery or realtime.
+
+Port-F configuration/DMA: dsp_port_f_dma{,_guards,_serial} qualifies native
+PCRF/PRRF writes beside internal RAM and genuine ESAI_1/DAX DMA phases,
+full CPU/CCR/stack, trusted continuations and strict BCR/pin/neighbor failures.
+Twelve ordinary groups/profile and unchanged actual-MCU Board/idle outputs
+support requirements2/3/6. See dsp-port-f-dma.txt; BIU physical timing, other
+Port-F accesses and complete original instrument acceptance remain open.

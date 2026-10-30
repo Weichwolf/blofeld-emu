@@ -53,8 +53,20 @@ bool timer_access(const DspMemoryAccess access) {
          (bit || read || write);
 }
 
+// UM6.2.4 routes Port F through the BIU. All admitted DMA endpoints use
+// internal memory or ESAI/DAX data registers, not that external port (APR23
+// sections5.1..5.3). Native stores still enforce BCR and pin-function validity.
+// This resource distinction supplies neither BIU wait cycles nor pad timing.
+bool port_f_configuration_write(const DspMemoryAccess access) {
+  constexpr unsigned direction = 0xfffff6;
+  constexpr unsigned control = 0xfffff7;
+  return access.target.space == DspSpace::y &&
+         (access.target.address == direction || access.target.address == control) &&
+         access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write;
+}
+
 bool independent_peripheral(const DspMemoryAccess access) {
-  return gpio_data_bit(access) || timer_access(access);
+  return gpio_data_bit(access) || timer_access(access) || port_f_configuration_write(access);
 }
 
 DspSpace space(const DspDmaSpace value) {
@@ -251,7 +263,7 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
     throw Fault("DSP DMA bank arbitration requires explicitly known core-cycle occupancy");
   }
   const auto peripheral = core_peripheral(*this, core);
-  // GPIO data-bit and timer words are distinct from admitted ESAI/DAX data registers.
+  // Qualified GPIO/timer/Port-F configuration resources are distinct from admitted DMA paths.
   // Native handlers still own the actual transactions and every strict fault.
   // Other peripheral collisions require separate qualification.
   if (peripheral && dma_.active() && !independent_peripheral(*peripheral)) {
