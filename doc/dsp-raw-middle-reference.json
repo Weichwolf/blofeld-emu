@@ -67,8 +67,9 @@
     "Decode_guards": 160,
     "independent_Core_supporting_evidence": "1440 valid raw transfers and480 explicit reserved-scaling refusals/4801 full-state assertions per ASan/UBSan and separate TSan; stopped/all-at-retirement only, not early pipeline acceptance.",
     "reserved_scaling": "S1:S0=11 is reserved in FM Table5-1. Legacy SDK raw-transfer behavior under that pattern is characterized, not silicon-qualified.",
-    "original_runtime": "Current original P002ee8 refusal motivates this increment; a changed connected original has not yet run.",
+    "original_runtime": "Conditional current-MCU original passes prior raw-middle Decode refusal:973551 DSP instructions/2020506 pipeline periods (+76897/+102781);next strict refusal is a Port-F-control write with active DMA. Full waveform banks and instrument operation unproven.",
     "full_original_startup_qualified": false,
-    "canonical_qualification_sha256": "be64b064c5bae55b66d4253656de7704a3e078ab3b3115f6ad3f6624d18f36d1"
+    "canonical_qualification_sha256": "be64b064c5bae55b66d4253656de7704a3e078ab3b3115f6ad3f6624d18f36d1",
+    "connected_original_qualification_sha256": "e8e83992746e18c29fe9d5693d2e05ebf0d3cfc7fec2a64bc891e13654916614"
   }
 }

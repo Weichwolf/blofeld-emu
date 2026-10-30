@@ -27,11 +27,12 @@ cases and100 source/setup/annul/body cuts with200 suffixes and100 fresh owners.
 Each continuation checks independent CPU/frame/PC/instruction-count expectations
 and fixed reference periods. Neighboring unsupported count sources still refuse.
 
-The conditional connected original1.25 run now passes the Y0 Decode frontier
+The Y0-only conditional connected original1.25 run passes the Y0 Decode frontier
 and retires four additional DSP instructions (896654 total;1917725 reference
 pipeline periods). Its next strict refusal is at P002ee8 (reconstructed source:
-B1-to-N4 register transfer). All107 NAND pages/56496 bytes match:56238 original
-updater bytes plus258 explicitly synthetic tail bytes. The private terminal
+B1-to-N4 register transfer); the later raw-middle increment and terminal run
+are recorded in dsp-raw-middle-transfers.txt. All107 NAND pages/56496 bytes match:
+56238 original updater bytes plus258 explicitly synthetic tail bytes. The private terminal
 qualification SHA256 is
 d8b34af3c31361dd5ab204fd93b06e31b65e60333cb75b46d4db05a8d9e21b3a.
 Inputs/hardware hypotheses are unchanged; no sanitizer findings. The actual B1
