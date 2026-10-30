@@ -3226,12 +3226,14 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
 
 - Automatic short-I/O BCLR/BSET/BCHG/BTST retain genuine native bit callbacks,
   peripheral masks/W1C effects and previous-bit Carry. A declared fixed-operand
-  AG1/AG2,E1 atomic effect,E2 CPU projection uses independent nominal two-clock
+  AG1/AG2,E1 read,E2 write/CPU projection uses independent nominal two-clock
   intervals; individual silicon RMW edges are unqualified. Independent Freescale
   inputs pin48 encodings/32 windows. Per ASan/UBSan and separate TSan profile,
-  25 affected named cases pass:592 native GPIO cases,128 bit windows,448 cuts/
-  896 suffixes,partial inputs,timer W1C and adjacent carry branches plus22
-  existing regressions. Unqualified bit/early-read and noncontroller active-DMA
+  61 affected named cases pass:592 native GPIO cases,128 bit windows,448 cuts/
+  896 suffixes,partial inputs,timer W1C,adjacent carry branches,clock-owned
+  post-read flags,peer changes,reset/fault recovery and DO/DOR at LA/LA-1.
+  Existing MCU/DSP,peripheral-calendar and NAND regressions remain strict.
+  Unqualified bit/early-read and noncontroller active-DMA
   overlaps remain visible. REP/general EA/register bit forms remain outside
   automatic admission. See dsp-peripheral-bits.txt and its reference manifest.
   Complete original NAND loading,normal boot,MIDI/audio and both complete

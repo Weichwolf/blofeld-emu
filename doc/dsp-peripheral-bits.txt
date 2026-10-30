@@ -1,11 +1,17 @@
 Native short-I/O bit instructions
 
 Automatic BCLR/BSET/BCHG/BTST decode fixed X/Y addresses in both short-I/O ranges
-and bits 0..23. AG1/AG2 retain the actual F2 operand; E1 commits the real native
-bit callback and E2 publishes its CPU result. The callback supplies the previous
-bit for Carry and retains each peripheral's masks, side effects and strict faults.
+and bits 0..23. AG1/AG2 retain the actual F2 operand. Mutating operations read in
+E1 and write the captured value in E2, then publish the genuine native CPU result.
+BTST remains an E1 read with E2 retirement. Carry uses the actual old bit, even
+if a peer changes its input between the phases. Peripheral masks/side effects and
+strict faults remain active; timer/DAX/DMA writeback retains full-word semantics.
 One following Decode hold preserves the independent nominal two-clock cost.
-This atomic reference projection does not identify individual silicon RMW edges.
+
+This is an explicit E1-read/E2-write reference projection. FM13-22/34 documents
+two destination accesses; neither the manual's instruction cost nor passing NAND
+setup limits establishes individual silicon pin edges. Unclocked native stepping
+retains its atomic callback; no native arithmetic or firmware is replaced.
 
 DSP56300FM Rev. 5 and the independent Freescale assembler/model pin 48 encodings
 and 32 bit/value/carry windows. Six quiet NOPs after each bit instruction give
@@ -21,9 +27,18 @@ New directed scopes per ASan/UBSan and separate TSan profile:
 - Unsupported native routes, unknown selected inputs, reserved writes, active DMA
  and bit/early-read ties retain contextual failure/quarantine through restoration.
 
-Build blofeld-peripheral-bit-test in the chosen preset, then run:
-ctest --preset strict -R '^dsp_peripheral_bit_(native|pipeline|guards)$' --output-on-failure
-ctest --preset thread -R '^dsp_peripheral_bit_(native|pipeline|guards)$' --output-on-failure
+Additional RMW scopes: real post-read timer flags, full-word W1C writeback,
+reset cancellation, strict E2 fault/quarantine/trusted recovery, changed peer
+inputs, and DO/DOR at LA/LA-1 with independently expected CPU/stack/Carry state.
+Opaque pending-read snapshots retain values across restoration and fresh owners.
+A clock-owned case raises TCF on the actual post-E1 CLK/2 edge; E2 retains this
+new status flag through three restores and a distinct-owner clone.
+
+Build blofeld-peripheral-bit-test, blofeld-rmw-lifecycle-test and
+blofeld-rmw-loop-test, blofeld-rmw-peer-test and blofeld-rmw-timer-clock-test
+in the chosen preset, then run:
+ctest --preset strict -R '^(dsp_peripheral_bit_(native|pipeline|guards)|dsp_rmw_.*)$' --output-on-failure
+ctest --preset thread -R '^(dsp_peripheral_bit_(native|pipeline|guards)|dsp_rmw_.*)$' --output-on-failure
 
 Noncontroller peripheral/DMA timing and bit/early-read overlaps remain unqualified.
 REP-bit bodies and general EA/register bit forms remain outside this automatic

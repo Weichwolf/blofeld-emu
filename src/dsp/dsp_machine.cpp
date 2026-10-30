@@ -13,6 +13,7 @@
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interlocks.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_peripheral_read_stage.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_cycle.hpp"
@@ -29,6 +30,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <variant>
 
 namespace blofeld {
 namespace {
@@ -721,6 +723,7 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
     if (inputs.order != DspReferenceBusOrder::dma_then_fetch_then_native) {
       throw Fault("Native bus cycle requires explicit DMA/fetch/native order");
     }
+    if (inputs.bit_write) { state_->cpu.validate_reference_bit_write(*inputs.bit_write); }
     if (inputs.retirement) { state_->cpu.validate_reference_retirement(*inputs.retirement); }
     if (inputs.access) {
       state_->cpu.validate_reference_admission(
@@ -752,6 +755,15 @@ DspMachine::advance_reference_bus_cycle_impl(const DspReferenceCycleInputs &inpu
     }
     if (inputs.retirement) {
       result.retirement = state_->cpu.retire_reference_overlap(*inputs.retirement);
+    }
+    if (inputs.bit_write) {
+      auto progress = state_->cpu.advance_reference_access(*inputs.bit_write);
+      if (!progress.completed || !progress.pending ||
+          !std::holds_alternative<DspInstructionRetire>(progress.pending->effect)) {
+        throw Fault("RMW E2 write did not produce its genuine native CPU result");
+      }
+      result.bit_write = std::get<DspNativeAccess>(*progress.completed);
+      result.progress = state_->cpu.advance_reference_access(progress.pending->ticket);
     }
     if (inputs.access) { result.progress = state_->cpu.advance_reference_access(*inputs.access); }
     state_->advance_reference_memory(inputs, result);

@@ -110,6 +110,7 @@ std::optional<DspMemoryAccess> peripheral_data(const std::optional<DspAddressSta
     if (!form || !form->peripheral_bit || memory->data_access_count != 1 || memory->extension ||
         memory->pointer_update || memory->secondary ||
         access.phase != DspMemoryPhase::peripheral_bit ||
+        access.operation != DspMemoryOperation::read ||
         access.target.space != form->peripheral_bit->space ||
         access.target.address != form->peripheral_bit->address) {
       throw Fault("Unqualified native indivisible peripheral bit footprint");
@@ -185,6 +186,38 @@ void check_resources(const DspBus &bus,
 }
 
 namespace {
+std::optional<DspMemoryAccess>
+peripheral_bit_write(const DspReferenceCycleInputs &inputs,
+                     const std::optional<DspReferencePending> &pending,
+                     const std::optional<DspAddressStageView> &memory,
+                     const std::optional<DspMemoryAccess> &early) {
+  if (!inputs.bit_write) { return std::nullopt; }
+  const auto *access = pending ? std::get_if<DspNativeAccess>(&pending->effect) : nullptr;
+  if (access == nullptr || access->kind != DspNativeAccessKind::bit || !access->bit) {
+    throw Fault("RMW E2 requires its actual native bit operand");
+  }
+  const DspMemoryAccess write{.target = access->target,
+                              .operation = DspMemoryOperation::write,
+                              .phase = DspMemoryPhase::peripheral_bit};
+  if (access->bit->operation == DspBitOperation::test || memory || early || inputs.access ||
+      inputs.retirement) {
+    throw Fault("Unqualified RMW E2 " + describe(write) + " pc=" + hex(access->pc, 6) +
+                " omr=" + hex(access->omr, 6) + ": requires an isolated native write phase");
+  }
+  return write;
+}
+
+void append_memory(DspReferenceCycleResult &result,
+                   const std::optional<DspAddressStageView> &memory) {
+  if (!memory) { return; }
+  for (std::size_t index = 0; index < memory->data_access_count; ++index) {
+    if (result.core_access_count == result.core_accesses.size()) {
+      throw Fault("Unqualified extra native memory-stage footprint");
+    }
+    append(result, memory->data_accesses.at(index));
+  }
+}
+
 void reject_sampled_program_write(const std::optional<DspAddressStageView> &memory,
                                   const DspProgramFetchView &fetch) {
   if (!memory) { return; }
@@ -221,20 +254,15 @@ DspReferenceCycleResult reference_cycle_footprint(const DspBus &bus,
     if (!pending) { throw Fault("Bus-cycle admission lost its actual native pending effect"); }
     if (const auto access = native_access(*pending)) { append(result, *access); }
   }
+  const auto bit_write = peripheral_bit_write(inputs, pending, memory, early);
+  if (bit_write) { append(result, *bit_write); }
   if (early) { append(result, *early); }
-  if (memory) {
-    for (std::size_t index = 0; index < memory->data_access_count; ++index) {
-      if (result.core_access_count == result.core_accesses.size()) {
-        throw Fault("Unqualified extra native memory-stage footprint");
-      }
-      append(result, memory->data_accesses.at(index));
-    }
-  }
+  append_memory(result, memory);
   try {
     if (memory && memory->kind == DspAddressStageKind::peripheral_bit && early) {
       throw Fault("Unqualified atomic peripheral bit/early-read overlap");
     }
-    check_resources(bus, result, peripheral_data(memory), early);
+    check_resources(bus, result, bit_write ? bit_write : peripheral_data(memory), early);
   } catch (const std::exception &error) {
     if (!memory) { throw; }
     std::string group;

@@ -311,6 +311,30 @@ std::uint32_t DspReferenceTape::peek_program(const std::uint32_t address) {
   return value;
 }
 
+void DspReferenceTape::capture_pending_bit() {
+  check_admission();
+  const auto *access = state_.pending ? std::get_if<DspNativeAccess>(&*state_.pending) : nullptr;
+  if (mode_ != DspReferenceMode::ordinary || state_.bit_read || access == nullptr ||
+      access->kind != DspNativeAccessKind::bit || !access->bit ||
+      access->bit->operation == DspBitOperation::test || access->value) {
+    throw Fault("Owned RMW read requires its actual unconsumed native bit request");
+  }
+  state_.bit_read = DspReferenceBitRead{
+      .access = *access,
+      .sample = bus_.capture_peripheral_bit({.space = access->target.space,
+                                             .address = access->target.address,
+                                             .bit = access->bit->index,
+                                             .operation = access->bit->operation})};
+}
+
+void DspReferenceTape::validate_pending_bit_write() const {
+  const auto *access = state_.pending ? std::get_if<DspNativeAccess>(&*state_.pending) : nullptr;
+  const auto &saved = state_.bit_read;
+  if (!saved || access == nullptr || !same_effect(saved->access, *access)) {
+    throw Fault("Owned RMW write requires its matching captured native read");
+  }
+}
+
 std::uint32_t DspReferenceTape::perform(const DspReferenceEffect &effect) {
   if (std::holds_alternative<DspInstructionRetire>(effect) ||
       std::holds_alternative<DspAddressUpdate>(effect) ||
@@ -335,6 +359,12 @@ std::uint32_t DspReferenceTape::perform(const DspReferenceEffect &effect) {
   }
   if (access->kind != DspNativeAccessKind::bit) { return bus_.read(access->target); }
   if (!access->bit) { throw Fault("Native reference bit request lost its operation"); }
+  if (state_.bit_read) {
+    validate_pending_bit_write();
+    const auto value = bus_.commit_peripheral_bit(state_.bit_read->sample);
+    state_.bit_read.reset();
+    return value ? 1U : 0U;
+  }
   const auto value = bus_.access_peripheral_bit({.space = access->target.space,
                                                  .address = access->target.address,
                                                  .bit = access->bit->index,

@@ -7,6 +7,7 @@
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_pipeline.hpp"
+#include "dsp/dsp_reference_cycle.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp_fetch_run_fixture.hpp"
 #include "dsp_norm_fixture.hpp"
@@ -45,6 +46,18 @@ void native_one(const Input input) {
           "FM bit truth table preserves every other GPIO/CPU/stack/CCR bit and costs two clocks");
 }
 
+void footprint(const DspReferenceCycleResult &cycle, const DspMemoryOperation expected) {
+  unsigned count = 0;
+  for (unsigned index = 0; index < cycle.core_access_count; ++index) {
+    const auto &access = cycle.core_accesses.at(index);
+    if (access.phase != DspMemoryPhase::peripheral_bit) { continue; }
+    require(access.operation == expected,
+            "The phase reserves its independently expected bus operation");
+    ++count;
+  }
+  require(count == 1, "Each RMW phase has exactly one actual peripheral operand");
+}
+
 struct Oracle {
   DspDebugState expected;
   unsigned effects = 0;
@@ -63,22 +76,29 @@ void step(DspFetchRun &run, DspMachine &machine, const Input input, Oracle &orac
                 !phase.ag1_address->extension && !phase.ag1_address->pointer_update,
             "Actual AG1 records the fixed bit operand without a fictitious address register");
   }
+  const bool mutating = input.operation != 3;
   if (phase.memory) {
     ++oracle.effects;
     const auto &data = phase.memory->data;
     require(period == 7 && data.kind == DspNativeAccessKind::bit && data.bit &&
                 data.bit->index == input.bit &&
+                data.bit->operation == operations.at(input.operation).kind && data.pc == body + 1 &&
+                data.ordinal == 1 && phase.memory->bit_read == mutating &&
+                (mutating ? !data.value : data.value == static_cast<unsigned>(input.old)) &&
+                data.stage ==
+                    (mutating ? DspNativeAccessStage::before : DspNativeAccessStage::after),
+            "E1 records one actual native RMW read or completes the read-only BTST callback");
+    footprint(cycle.bus, DspMemoryOperation::read);
+  }
+  if (cycle.bus.bit_write) {
+    const auto &data = *cycle.bus.bit_write;
+    require(mutating && period == 8 && data.pc == body + 1 && data.bit &&
+                data.bit->index == input.bit &&
                 data.bit->operation == operations.at(input.operation).kind &&
-                data.value == static_cast<unsigned>(input.old) && data.pc == body + 1 &&
-                data.stage == DspNativeAccessStage::after && data.ordinal == 1,
-            "Reference E1 executes the once-only real native indivisible bit callback");
-    unsigned footprints = 0;
-    for (unsigned index = 0; index < cycle.bus.core_access_count; ++index) {
-      if (cycle.bus.core_accesses.at(index).phase == DspMemoryPhase::peripheral_bit) {
-        ++footprints;
-      }
-    }
-    require(footprints == 1, "DMA preflight owns the exact indivisible peripheral operand");
+                data.value == static_cast<unsigned>(input.old) &&
+                data.stage == DspNativeAccessStage::after,
+            "E2 writes once and supplies the genuine captured E1 old bit to native Carry");
+    footprint(cycle.bus, DspMemoryOperation::write);
   }
   const bool retires = period == 7 || period == 8 || (period >= 10 && period <= 15);
   require(phase.retirement_published == retires,
@@ -95,7 +115,7 @@ void step(DspFetchRun &run, DspMachine &machine, const Input input, Oracle &orac
   }
   require(machine.cpu().debug_state() == oracle.expected &&
               machine.bus().read({.space = port.space, .address = port.address}) ==
-                  (period >= 7 ? value(input) : seed(input)),
+                  (period >= 8 ? value(input) : seed(input)),
           "Each period matches the independent full CPU/stack/counter/GPIO expectation");
 }
 

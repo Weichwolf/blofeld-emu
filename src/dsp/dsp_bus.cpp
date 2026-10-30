@@ -203,6 +203,74 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   return old;
 }
 
+DspPeripheralBitSample DspBus::capture_peripheral_bit(const DspBitAccess access) {
+  constexpr unsigned word_bits = 24;
+  constexpr unsigned timer_input = 0x1000;
+  const DspAddress target{.space = access.space, .address = access.address};
+  static_cast<void>(bank(access.space));
+  if (access.address > word_mask || access.bit >= word_bits ||
+      access.operation == DspBitOperation::test ||
+      static_cast<unsigned>(access.operation) > static_cast<unsigned>(DspBitOperation::change) ||
+      !handles_peripheral_bit(target)) {
+    throw Fault("Unsupported owned RMW read at " + address_text(target));
+  }
+  DspPeripheralBitSample sample;
+  sample.access_ = access;
+  sample.memory_mode_ = memory_mode_;
+  sample.bus_control_ = bus_control_;
+  const auto mask = 1U << access.bit;
+  if (access.space == DspSpace::x && DspDax::handles(access.address)) {
+    sync_dax();
+    sample.source_ = dax_.read(access.address);
+  } else if (access.space == DspSpace::x && DspDma::handles(access.address)) {
+    sample.source_ = dma_.read(access.address);
+  } else if (access.space == DspSpace::x && DspTimers::is_control(access.address)) {
+    sample.source_ = timers_.read(access.address, (word_mask & ~timer_input) | mask);
+  } else {
+    const auto mapping = gpio_register(target);
+    if (!mapping || (mapping->port == DspPort::f && bus_control_ != port_f_bus_control)) {
+      throw Fault("Unsupported owned GPIO RMW read at " + address_text(target));
+    }
+    sample.port_ = mapping->port;
+    sample.reg_ = mapping->reg;
+    sample.source_ = gpio(mapping->port).read(mapping->reg, mask);
+  }
+  sample.old_ = (sample.source_ & mask) != 0;
+  return sample;
+}
+
+bool DspBus::commit_peripheral_bit(const DspPeripheralBitSample &sample) {
+  const auto access = sample.access_;
+  const DspAddress target{.space = access.space, .address = access.address};
+  if (memory_mode_ != sample.memory_mode_ || bus_control_ != sample.bus_control_) {
+    throw Fault("Owned RMW write changed its sampled bus context at " + address_text(target));
+  }
+  const auto mask = 1U << access.bit;
+  if (sample.port_) {
+    const auto port = *sample.port_;
+    gpio(port).write({.reg = sample.reg_,
+                      .value = change_bit(sample.source_, mask, access.operation),
+                      .mask = mask});
+    sync_esai_port(port);
+    if (port == DspPort::d) { sync_dax(); }
+  } else {
+    constexpr unsigned timer_input = 0x1000;
+    const bool timer = access.space == DspSpace::x && DspTimers::is_control(access.address);
+    const auto source = timer ? sample.source_ & ~timer_input : sample.source_;
+    const auto value = change_bit(source, mask, access.operation);
+    if (timer) {
+      timers_.write({.address = access.address, .value = value});
+    } else if (access.space == DspSpace::x && DspDax::handles(access.address)) {
+      dax_.write(access.address, value);
+    } else if (access.space == DspSpace::x && DspDma::handles(access.address)) {
+      dma_.write(access.address, value);
+    } else {
+      throw Fault("Owned RMW write lost its sampled peripheral route at " + address_text(target));
+    }
+  }
+  return sample.old_;
+}
+
 DspBus::MemoryLayout DspBus::memory_layout(const unsigned mode) {
   // DSP56371UM Rev. 2.1 tables 3-1..3-6: default, then MS=1/MSW=00,01,10,11.
   constexpr std::array<MemoryLayout, 5> layouts{{

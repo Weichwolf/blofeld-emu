@@ -33,6 +33,11 @@ struct DspReferenceInterrupt {
   std::uint32_t address = 0;
 };
 
+struct DspReferenceBitRead {
+  DspNativeAccess access;
+  DspPeripheralBitSample sample;
+};
+
 struct DspReferenceState {
   std::array<DspReferenceEntry, dsp_reference_capacity> entries{};
   std::size_t used = 0;
@@ -44,6 +49,7 @@ struct DspReferenceState {
   DspReferenceExecution execution = DspReferenceExecution::unqualified;
   DspProgramFetch fetch;
   std::optional<DspFetchedWord> repeated_opcode;
+  std::optional<DspReferenceBitRead> bit_read;
 };
 
 enum class DspReferenceMode : std::uint8_t { ordinary, attempt, restoring };
@@ -101,6 +107,9 @@ public:
   void latch_program();
 
   [[nodiscard]] DspReferenceEffect commit();
+  // Capture actual pending RMW read;write/old-bit response remain native-owned.
+  void capture_pending_bit();
+  void validate_pending_bit_write() const;
   // DspCore supplies only an owned, identity-checked actual early bus response.
   [[nodiscard]] DspReferenceEffect commit_owned_read(const DspNativeAccess &access,
                                                      std::uint32_t value);

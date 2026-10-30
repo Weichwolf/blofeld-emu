@@ -140,8 +140,9 @@ DspAddressStageView peripheral(const DspMemoryForm &form,
                                                                    : DspMemoryOperation::write;
     view.kind = DspAddressStageKind::peripheral_bit;
     view.update.operation = operation;
-    view.data_accesses[0] = {
-        .target = target, .operation = operation, .phase = DspMemoryPhase::peripheral_bit};
+    view.data_accesses[0] = {.target = target,
+                             .operation = DspMemoryOperation::read,
+                             .phase = DspMemoryPhase::peripheral_bit};
   }
   return view;
 }

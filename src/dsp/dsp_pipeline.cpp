@@ -10,6 +10,7 @@
 #include "dsp/dsp_core.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_memory_form.hpp"
+#include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pipeline.hpp"
@@ -329,6 +330,14 @@ DspReferenceTicket DspInstructionPipeline::retirement(const DspMachine &machine)
   if (!pending || !view.awaiting_retirement || pending->execution != execution) {
     throw Fault("Automatic DSP E2 lost its actual native candidate");
   }
+  if (awaiting_bit_write) {
+    const auto *bit = std::get_if<DspNativeAccess>(&pending->effect);
+    if (bit == nullptr || bit->pc != view.awaiting_retirement->address) {
+      throw Fault("RMW E2 lost its actual pending bit callback");
+    }
+    // Native-owned capture validation belongs to the machine bus preflight.
+    return pending->ticket;
+  }
   const auto *effect = std::get_if<DspInstructionRetire>(&pending->effect);
   if (effect == nullptr || effect->pc != view.awaiting_retirement->address ||
       (effect->next_omr != effect->omr && !decode_omr_move(view.awaiting_retirement->value))) {
@@ -395,11 +404,14 @@ void capture_accumulator_visibility(DspInstructionPipeline &pipeline, const DspM
 }
 
 template <typename Result>
-void capture_addressed_result(DspInstructionPipeline &pipeline, const Result &result) {
+void capture_addressed_result(DspInstructionPipeline &pipeline,
+                              const Result &result,
+                              const bool bit_read = false) {
   const auto word = pipeline.view.cycle.execute1;
   if (!word || !result.progress.pending || result.address.word != *word) {
     throw Fault("Automatic addressed E1 lost its actual native result");
   }
+  pipeline.awaiting_bit_write = bit_read;
   pipeline.view.cycle.candidate_inputs = result.inputs;
   pipeline.view.cycle.execution = result.progress;
   pipeline.view.cycle.execution_captured = true;
@@ -428,6 +440,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
     view.cycle.retirement_published = true;
     retire_branch();
     retire_repeat(machine);
+    awaiting_bit_write = false;
     view.awaiting_retirement.reset();
     view.awaiting_inputs.reset();
     view.awaiting_deferred_accumulators = 0;
@@ -437,7 +450,7 @@ void DspInstructionPipeline::complete(DspMachine &machine, const DspReferenceCyc
   if (view.cycle.execute1) {
     if (bus.memory) {
       view.cycle.memory = bus.memory;
-      capture_addressed_result(*this, *bus.memory);
+      capture_addressed_result(*this, *bus.memory, bus.memory->bit_read);
     } else if (bus.address_only) {
       view.cycle.address_only = bus.address_only;
       capture_addressed_result(*this, *bus.address_only);

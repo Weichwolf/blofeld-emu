@@ -82,6 +82,7 @@ struct DspInstructionPipeline {
   std::array<std::optional<DspProgramWord>, 2> extensions{};
   std::array<std::optional<DspPeripheralReadTicket>, 2> reads{};
   std::optional<DspBranchDecision> branch = std::nullopt;
+  bool awaiting_bit_write = false;
   unsigned branch_fetch_hold = 0;
   unsigned branch_decode_hold = 0;
   bool branch_target_ready = false;

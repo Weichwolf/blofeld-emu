@@ -62,6 +62,7 @@ struct DspMemoryStageResult {
   DspAddressStageView address;
   DspState inputs;
   DspNativeAccess data;
+  bool bit_read = false; // Genuine E1 read;native bit callback remains pending for E2.
   std::optional<DspNativeAccess> additional_data = std::nullopt;
   std::optional<DspMoveWriteback> move = std::nullopt;
   DspReferenceProgress progress;

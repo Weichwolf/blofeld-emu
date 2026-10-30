@@ -79,6 +79,24 @@ struct DspBitAccess {
   DspBitOperation operation = DspBitOperation::test;
 };
 
+// Private genuine bus-read payload;only native-owned RMW stages can consume it.
+class DspPeripheralBitSample {
+public:
+  DspPeripheralBitSample(const DspPeripheralBitSample &) = default;
+  DspPeripheralBitSample &operator=(const DspPeripheralBitSample &) = default;
+
+private:
+  friend class DspBus;
+  DspPeripheralBitSample() = default;
+  DspBitAccess access_;
+  std::uint32_t source_ = 0;
+  std::uint32_t memory_mode_ = 0;
+  std::uint32_t bus_control_ = 0;
+  std::optional<DspPort> port_;
+  DspGpioRegister reg_ = DspGpioRegister::data;
+  bool old_ = false;
+};
+
 struct DspRom {
   DspSpace space = DspSpace::p;
   std::uint32_t start = 0;
@@ -150,6 +168,8 @@ public:
 
 private:
   friend class DspReferenceTape;
+  [[nodiscard]] DspPeripheralBitSample capture_peripheral_bit(DspBitAccess access);
+  [[nodiscard]] bool commit_peripheral_bit(const DspPeripheralBitSample &sample);
   friend class DspFetchRun;
   void advance_reference_cycle_delays(std::uint64_t admitted_dma_cycle, bool switch_was_pending);
   void advance_core_delays(unsigned cycles);

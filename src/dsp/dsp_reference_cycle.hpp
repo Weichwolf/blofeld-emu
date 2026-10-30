@@ -23,6 +23,7 @@ struct DspReferenceCycleInputs {
   std::optional<DspProgramFetchStage> fetch = std::nullopt;
   std::optional<DspReferenceTicket> access = std::nullopt;
   std::optional<DspReferenceTicket> retirement = std::nullopt;
+  std::optional<DspReferenceTicket> bit_write = std::nullopt;
   std::optional<DspAddressStageTicket> address_update = std::nullopt;
   std::optional<DspAddressStageTicket> memory = std::nullopt;
   std::optional<DspAddressStageTicket> address_only = std::nullopt;
@@ -37,6 +38,7 @@ struct DspReferenceCycleResult {
   DspDmaBusResult dma;
   std::optional<DspReferenceProgress> progress = std::nullopt;
   std::optional<DspInstructionRetire> retirement = std::nullopt;
+  std::optional<DspNativeAccess> bit_write = std::nullopt;
   std::optional<DspAddressStageView> address_update = std::nullopt;
   std::optional<DspMemoryStageResult> memory = std::nullopt;
   std::optional<DspAddressOnlyStageResult> address_only = std::nullopt;

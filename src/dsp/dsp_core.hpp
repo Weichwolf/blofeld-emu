@@ -176,6 +176,8 @@ private:
   void validate_reference_admission(const DspReferenceTicket &ticket,
                                     bool retiring_previous = false,
                                     std::optional<std::uint64_t> cycle = std::nullopt) const;
+  void capture_reference_bit_read(const DspReferenceTicket &ticket);
+  void validate_reference_bit_write(const DspReferenceTicket &ticket) const;
   void validate_reference_fetch(DspProgramFetchStage stage) const;
   void fail_reference_cycle() noexcept;
   [[nodiscard]] std::optional<DspReferencePending> reference_pending() const;

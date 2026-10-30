@@ -143,13 +143,16 @@ void timer_w1c() {
   expected.native_cycles += 2;
   for (unsigned replay = 0; replay < 2; ++replay) {
     run.restore(saved, machine);
+    const auto read = run.advance_cycle(machine, fetch_clock::input());
+    require(read.bus.memory && read.bus.memory->bit_read &&
+                machine.bus().timers().read(timer_control, flags) == flags,
+            "Actual E1 read leaves real W1C flags unchanged until the distinct E2 write");
     const auto cycle = run.advance_cycle(machine, fetch_clock::input());
-    require(cycle.bus.memory && cycle.bus.memory->data.kind == DspNativeAccessKind::bit &&
-                cycle.bus.memory->data.value == 1 &&
+    require(cycle.bus.bit_write && cycle.bus.bit_write->kind == DspNativeAccessKind::bit &&
+                cycle.bus.bit_write->value == 1 &&
                 machine.bus().timers().read(timer_control, flags) == 0 &&
                 machine.bus().timers().read(timer_control, 1) == 1,
             "Native timer RMW writes back both unselected W1C flags and returns the old TE bit");
-    pipeline::clocks(run, machine, 1);
     require(machine.cpu().debug_state() == expected,
             "Actual bit carry and two-clock retirement preserve complete CPU and stack state");
   }
@@ -238,10 +241,16 @@ void failure(const Failure kind) {
   std::string first;
   for (unsigned replay = 0; replay < 2; ++replay) {
     run.restore(saved, machine);
+    if (kind == Failure::reserved) {
+      const auto read = run.advance_cycle(machine, fetch_clock::input());
+      require(read.bus.memory && read.bus.memory->bit_read,
+              "A reserved write remains pending after a nonmutating actual E1 read");
+    }
     const auto error = native_access::fault(
         [&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
     require(error.contains("pc=") && error.contains("omr=") && run.faulted() &&
-                run.completed_cycles() == 5 && machine.cpu().debug_state() == before &&
+                run.completed_cycles() == (kind == Failure::reserved ? 6U : 5U) &&
+                machine.cpu().debug_state() == before &&
                 machine.bus().gpio(DspPort::c).outputs().levels == outputs.levels,
             "Each strict bit failure retains context, CPU/clock/GPIO state and quarantine");
     switch (kind) {

@@ -22,6 +22,18 @@
 
 namespace blofeld {
 namespace {
+void select_retirement(const DspInstructionPipeline &pipeline,
+                       const DspMachine &machine,
+                       DspReferenceCycleInputs &selection) {
+  if (!pipeline.view.awaiting_retirement) { return; }
+  const auto ticket = pipeline.retirement(machine);
+  if (pipeline.awaiting_bit_write) {
+    selection.bit_write = ticket;
+  } else {
+    selection.access = ticket;
+  }
+}
+
 bool awaiting_program_sample(const DspReferencePending &pending, const DspProgramFetchView &fetch) {
   const auto *effect = std::get_if<DspNativeAccess>(&pending.effect);
   return effect != nullptr &&
@@ -100,7 +112,7 @@ DspReferenceCycleInputs DspFetchState::plan(const DspMachine &machine,
   const auto fetch = machine.reference_fetch();
   if (fetch.pending_address) { result.fetch = DspProgramFetchStage::read; }
   if (pipeline) {
-    if (pipeline->view.awaiting_retirement) { result.access = pipeline->retirement(machine); }
+    select_retirement(*pipeline, machine, result);
     if (pipeline->view.cycle.memory_source_stall) {
       result.fetch.reset();
       return result;

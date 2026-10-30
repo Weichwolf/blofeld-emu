@@ -757,6 +757,11 @@ public:
         !DspBus::handles_peripheral_bit(data->target)) {
       throw Fault("Unqualified native bit E1 callback/route at fixed peripheral operand");
     }
+    if (bit->operation != DspBitOperation::test) {
+      const auto request = *data;
+      core.capture_reference_bit_read(progress.pending->ticket);
+      return request;
+    }
     progress = core.advance_reference_access(progress.pending->ticket);
     if (!progress.completed) { throw Fault("Native bit E1 lost its committed callback"); }
     return std::get<DspNativeAccess>(*progress.completed);
@@ -1728,6 +1733,22 @@ void DspCore::fail_reference_cycle() noexcept {
   impl_->faulted = true;
 }
 
+void DspCore::capture_reference_bit_read(const DspReferenceTicket &ticket) {
+  validate_reference_admission(ticket);
+  const ExecutionGuard guard(impl_->active);
+  try {
+    impl_->native.reference().capture_pending_bit();
+  } catch (...) {
+    impl_->faulted = true;
+    throw;
+  }
+}
+
+void DspCore::validate_reference_bit_write(const DspReferenceTicket &ticket) const {
+  validate_reference_admission(ticket);
+  impl_->native.reference().validate_pending_bit_write();
+}
+
 DspReferenceProgress DspCore::advance_reference_access(const DspReferenceTicket &ticket) {
   validate_reference_admission(ticket);
   const auto before = impl_->native.reference().snapshot().context;
@@ -2138,9 +2159,10 @@ DspMemoryStageResult DspCore::execute_reference_memory(const DspAddressStageTick
       if (!progress.completed) { throw Fault("Native memory E1 lost its real load publication"); }
       result.move = std::get<DspMoveWriteback>(*progress.completed);
     }
-    if (!progress.pending ||
-        !std::holds_alternative<DspInstructionRetire>(progress.pending->effect)) {
-      throw Fault("Native memory E1 did not reach actual retirement");
+    result.bit_read = view.kind == DspAddressStageKind::peripheral_bit && !result.data.value;
+    if (!progress.pending || (!result.bit_read && !std::holds_alternative<DspInstructionRetire>(
+                                                      progress.pending->effect))) {
+      throw Fault("Native memory E1 did not reach its actual retirement or captured RMW read");
     }
     result.progress = progress;
     impl_->stages.records.at(ticket.slot_).reset();
