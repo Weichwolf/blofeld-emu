@@ -1180,6 +1180,14 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           before/after a real half transition.
                                           Shared data-peripheral accesses still
                                           reject without fabricated effects.
+                                          Native GPIO data-bit footprints now
+                                          admit independent DMA with actual
+                                          reads,RMW,CCR and captured-word state;
+                                          all37bits and genuine ESAI/DAX DRS22
+                                          streams have directed reference cases.
+                                          Direction/control and other unsafe
+                                          footprints remain unsupported
+                                          (dsp-gpio-dma.txt).
                                           Automatic-memory native controller word
                                           writes and active DMA use real CPU/DMA
                                           bus footprints and retained source data.

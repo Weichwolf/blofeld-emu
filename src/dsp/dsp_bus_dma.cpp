@@ -24,6 +24,21 @@ bool controller_access(const DspMemoryAccess access) {
           (access.operation == DspMemoryOperation::write && access.target.address != dma::status));
 }
 
+// UM tables3-7/3-8 identify these GPIO data words; their direction/control
+// neighbors are separate registers. APR23 section5.2 locates peripheral
+// contention at the accessed data register, not every active DMA channel.
+bool gpio_data_bit(const DspMemoryAccess access) {
+  constexpr DspAddress port_c{.space = DspSpace::x, .address = 0xffffbd};
+  constexpr DspAddress port_e{.space = DspSpace::y, .address = 0xffff9d};
+  constexpr DspAddress port_f{.space = DspSpace::y, .address = 0xfffff5};
+  constexpr DspAddress port_d{.space = DspSpace::x, .address = 0xffffd5};
+  constexpr std::array ports{port_c, port_e, port_f, port_d};
+  return access.phase == DspMemoryPhase::peripheral_bit &&
+         std::ranges::any_of(ports, [&](const auto port) {
+           return access.target.space == port.space && access.target.address == port.address;
+         });
+}
+
 DspSpace space(const DspDmaSpace value) {
   switch (value) {
     case DspDmaSpace::x: return DspSpace::x;
@@ -133,8 +148,9 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
 bool core_conflict(const DspBus &bus, const DspCoreBusUse core, const DspMemoryAccess target) {
   bool conflict = false;
   for (const auto access : core.accesses) {
-    // Controller inspection does not use the DMA source/destination data path.
-    if (controller_access(access)) { continue; }
+    // Controller inspection and an independent GPIO data-bit access do not
+    // consume the DMA memory path. Other core accesses still arbitrate normally.
+    if (controller_access(access) || gpio_data_bit(access)) { continue; }
     const auto relation = bus.memory_conflict({.core = access, .dma = target});
     if (relation == DspMemoryConflict::unqualified) {
       const bool write = target.operation == DspMemoryOperation::write;
@@ -217,9 +233,10 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
     throw Fault("DSP DMA bank arbitration requires explicitly known core-cycle occupancy");
   }
   const auto peripheral = core_peripheral(*this, core);
-  // The idle controller has no source/destination bus phase. Concurrent peripheral/DMA
-  // timing is not qualified: reject before request sampling or either device effect.
-  if (peripheral && dma_.active()) {
+  // GPIO data words are distinct from all DMA-admitted ESAI/DAX data registers.
+  // Native RMW still validates/captures/commits its real GPIO bit. Direction,
+  // control and other peripheral collisions require separate qualification.
+  if (peripheral && dma_.active() && !gpio_data_bit(*peripheral)) {
     const auto *const operation =
         peripheral->operation == DspMemoryOperation::write ? "write" : "read";
     throw Fault("Unqualified DSP peripheral memory resource " + std::string(operation) + " at " +

@@ -22,6 +22,8 @@
 
 namespace blofeld::test::peripheral_bit {
 namespace {
+// FM13-24 qq: BCLR #0,X:$ffffbf; GPIO control is not a qualified DMA overlap.
+constexpr unsigned control_gpio_clear = 0x013f00;
 constexpr unsigned unknown_once_bit = 0x0abc09;  // FM13-24: BCLR #9,X:fffffc.
 constexpr unsigned reserved_gpio_set = 0x013d37; // FM13-36: BSET #23,X:ffffbd.
 constexpr unsigned pdr_c = 0xffffbd;
@@ -214,6 +216,9 @@ void failure(const Failure kind) {
   unsigned word = opcode({});
   if (kind == Failure::unknown) { word = unknown_once_bit; }
   if (kind == Failure::reserved) { word = reserved_gpio_set; }
+  // GPIO data bits now share independently with DMA; control-register effects
+  // remain unqualified. FM13-24 qq template: BCLR #0,X:$ffffbf (Port C control).
+  if (kind == Failure::dma) { word = control_gpio_clear; }
   const auto before = unit(machine, word, kind == Failure::overlap);
   if (kind != Failure::selected) { gpio(machine); }
   if (kind == Failure::selected) {

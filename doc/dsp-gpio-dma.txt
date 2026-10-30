@@ -1,0 +1,29 @@
+GPIO data bits with concurrent DSP DMA
+
+DSP56371UM tables3-7/3-8 identify four GPIO data registers. DSP56300FM10.2
+and APR23 section5.2 distinguish core/DMA paths and peripheral data-register
+collisions. Their primary documents are pinned in hardware/sources.json.
+
+Only native peripheral_bit footprints at these four data words bypass the
+blanket active-DMA peripheral refusal. Real GPIO reads/writes still validate
+pad knowledge,implemented width and selection;the native core owns CCR and
+the actual RMW result. DMA source capture,priority,word publication and all
+other core-memory arbitration remain unchanged. Direction/control registers,
+ordinary peripheral accesses,unknown ports and unsupported collisions remain
+visible failures. DE,pending and settling states also count as dma.active();
+that predicate alone does not establish a simultaneous DMA bus word.
+
+The directed RAM test covers all37implemented bits with four native operations,
+old-bit/carry choices and four sampled DMA schedules. Independent CPU/GPIO/DMA
+expectations include source mutation after capture and restored suffixes.
+Guard cases retain unsupported footprints and native pin/reserved-write faults.
+An integrated ESAI/DAX witness uses genuine DRS22 requests and independent
+serial receivers with literal payload,padding,preamble and parity checks.
+Its declared500kHz/12MHz grid is a reference case,not a Blofeld clock choice.
+
+  ctest --test-dir build/strict -R '^dsp_gpio_dma(_guards|_serial)?$' --output-on-failure
+
+Separate ASan/UBSan and TSan qualification is required. The900s serial timeout
+allows sanitizer overhead without reducing the fixed windows or assertions.
+These component checks do not prove physical wiring,normal original firmware
+startup,instrument audio or complete Desktop/Keyboard operation.
