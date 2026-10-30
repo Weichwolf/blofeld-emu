@@ -9,6 +9,22 @@
 #include <optional>
 
 namespace blofeld {
+namespace {
+std::optional<DspBranchForm> effective_branch(const dsp56k::Instruction type,
+                                              const std::uint32_t opcode) {
+  constexpr unsigned direct = 4;
+  constexpr unsigned extended = 6;
+  const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
+  const auto reg = dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode);
+  const bool call = type == dsp56k::Jsr_ea;
+  if (mode == extended && reg == 0) {
+    return DspBranchForm{.absolute_extension = true, .subroutine_call = call};
+  }
+  if (mode != direct) { return std::nullopt; }
+  return DspBranchForm{.address_register = static_cast<std::uint8_t>(reg), .subroutine_call = call};
+}
+}
+
 std::optional<DspBranchForm> decode_branch_form(const std::uint32_t opcode) {
   static const dsp56k::Opcodes opcodes;
   auto first = dsp56k::Invalid;
@@ -16,19 +32,14 @@ std::optional<DspBranchForm> decode_branch_form(const std::uint32_t opcode) {
   if (opcodes.getInstructionTypes(opcode, first, second) == 0 || second != dsp56k::Invalid) {
     return std::nullopt;
   }
-  if (first == dsp56k::Jmp_ea) {
-    constexpr unsigned direct = 4;
-    constexpr unsigned extended = 6;
-    const auto mode = dsp56k::getFieldValue(first, dsp56k::Field_MMM, opcode);
-    const auto reg = dsp56k::getFieldValue(first, dsp56k::Field_RRR, opcode);
-    if (mode == extended && reg == 0) { return DspBranchForm{.absolute_extension = true}; }
-    if (mode != direct) { return std::nullopt; }
-    return DspBranchForm{.address_register = static_cast<std::uint8_t>(reg)};
+  if (first == dsp56k::Jmp_ea || first == dsp56k::Jsr_ea) {
+    return effective_branch(first, opcode);
   }
   if (first == dsp56k::Rts) { return DspBranchForm{.subroutine_return = true}; }
-  if (first == dsp56k::Jcc_xxx) {
+  if (first == dsp56k::Jcc_xxx || first == dsp56k::Jsr_xxx) {
     return DspBranchForm{.absolute_short =
-                             dsp56k::getFieldValue(first, dsp56k::Field_aaaaaaaaaaaa, opcode)};
+                             dsp56k::getFieldValue(first, dsp56k::Field_aaaaaaaaaaaa, opcode),
+                         .subroutine_call = first == dsp56k::Jsr_xxx};
   }
   if (first == dsp56k::Bsr_xxxx) {
     return DspBranchForm{.relative_extension = true, .subroutine_call = true};

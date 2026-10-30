@@ -147,20 +147,34 @@ DspAddressStageView peripheral(const DspMemoryForm &form,
   return view;
 }
 
+bool long_absolute(const DspMemoryForm &form) {
+  constexpr unsigned extended = 6;
+  return !form.peripheral && !form.absolute_short && !form.long_pair && form.lane_count == 1 &&
+         form.lanes[0].mode == extended && form.lanes[0].reg == 0;
+}
+
 DspAddressStageView absolute(const DspMemoryForm &form,
                              const DspProgramWord word,
                              const std::optional<DspProgramWord> extension,
                              const unsigned omr) {
-  const bool long_address = is_program_memory(form) && form.lanes[0].mode == 6;
+  const bool long_address = long_absolute(form);
   DspAddress target;
   if (long_address) {
     if (!extension) { throw Fault("Native absolute-long AG1 lost its actual F2 extension"); }
-    target = {.space = DspSpace::p, .address = extension->value};
+    target = {.space = form.lanes[0].space, .address = extension->value};
   } else {
     if (extension || !form.absolute_short) {
       throw Fault("Native absolute-short AG1 has a mismatched literal/F2 form");
     }
     target = *form.absolute_short;
+  }
+  constexpr unsigned io_begin = 0xffff80;
+  if (long_address && target.space != DspSpace::p && target.address >= io_begin) {
+    const auto *const operation =
+        form.lanes[0].operation == DspMemoryOperation::read ? "read" : "write";
+    const auto *const space = target.space == DspSpace::x ? "X:" : "Y:";
+    throw Fault("Unqualified absolute data peripheral " + std::string(operation) + " at " + space +
+                hex(target.address, 6) + " pc=" + hex(word.address, 6) + " omr=" + hex(omr, 6));
   }
   const auto operation = form.lanes[0].operation;
   return {.word = word,
@@ -190,7 +204,7 @@ std::size_t DspAddressStages::capture(dsp56k::DSP &cpu, const DspFetchedInstruct
     const auto source = cpu.referenceAttemptState();
     const auto omr = static_cast<std::uint32_t>(source.registers.omr);
     DspAddressStageView view;
-    const bool absolute_long = form && is_program_memory(*form) && form->lanes[0].mode == 6;
+    const bool absolute_long = form && long_absolute(*form);
     if (update) {
       if (extension) { throw Fault("Address-only AG1 cannot capture an extension"); }
       const auto lane = calculate(cpu, {.mode = update->mode, .reg = update->reg}, word, omr, true);

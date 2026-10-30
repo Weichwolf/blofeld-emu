@@ -26,6 +26,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_repeat_fetch.hpp"
+#include "dsp/dsp_sr_move.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
@@ -818,7 +819,8 @@ public:
       if (!opcode) { throw Fault("Native move-writeback lost its admitted opcode"); }
       // Control writes remain in the actual native retirement result. They do
       // not publish a fictitious ordinary register field at the move boundary.
-      if (decode_omr_move(*opcode)) { return {}; }
+      const bool status = reference.fetch().active() && decode_sr_move(*opcode).has_value();
+      if (decode_omr_move(*opcode) || status) { return {}; }
       return decode_move_writeback(*opcode, scope);
     } catch (const std::exception &error) {
       std::string operation;
@@ -2025,8 +2027,9 @@ DspAddressStageTicket DspCore::capture_reference_address(const std::uint32_t add
   const auto form = decode_memory_stage(opcode.word.value);
   const bool immediate_port = form && form->peripheral && !form->peripheral_register &&
                               !form->peripheral_bit && !is_program_transfer(*form);
-  const bool absolute_program = form && is_program_memory(*form) && form->lanes[0].mode == 6;
-  const auto words = immediate_port || absolute_program ? 2U : 1U;
+  const bool absolute_memory = form && !form->peripheral && form->lane_count == 1 &&
+                               form->lanes[0].mode == 6 && form->lanes[0].reg == 0;
+  const auto words = immediate_port || absolute_memory ? 2U : 1U;
   const auto captured = fetch.instruction(opcode, words);
   const ExecutionGuard guard(impl_->active);
   const auto slot = impl_->stages.capture(impl_->cpu, captured);

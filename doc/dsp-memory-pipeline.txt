@@ -12,7 +12,9 @@ Selected immediate/register transfers, their actual extension words, one-word
 R/N/M memory loads and decoded AGU dependencies extend this scope in
 dsp-transfer-pipeline.txt. Indexed/predecrement scalar moves and their explicit
 reference E1 delay extend this scope in dsp-preupdate-memory.txt. Data-address
-extensions, absolute and general control forms still refuse.
+extensions and control forms remain scoped. Selected absolute24 X/Y operands
+and nonmemory SR writes are described in dsp-boot-instructions.txt; other
+extended data/control forms still refuse.
 Selected two-word OMR bit branches and their strict fetch/retirement boundaries
 are scoped separately in dsp-branch-pipeline.txt.
 

@@ -7,8 +7,10 @@ full/partial A/B and R0..R7/N0..N7/M0..M7. Standalone MOVEC M0..M7 sources also
 admit M0..M7 and full A/B destinations (FM13-131/Table12-14). Raw24 transfers
 preserve CCR and bypass scaling/limiting; full A/B receives sign extension and
 zero low24. Native conversion, arithmetic and modifier-cache updates remain in
-the interpreter. Other control/status/SSH operands, unqualified accumulator
-sources and extended data addresses still fail contextually before actual I/O.
+the interpreter. Both documented W directions of modifier-to-modifier MOVEC
+are admitted. Selected nonmemory SR writes and absolute24 data operands have
+the separate scope in dsp-boot-instructions.txt. Other control/status/SSH
+operands and unqualified accumulator sources fail contextually before actual I/O.
 
 Decode derives instruction length from the captured opcode and skips an actual
 extension as a separate instruction. AG1 retains that extension from the prior
@@ -72,7 +74,7 @@ manufacturer program bytes or tool binaries are redistributed.
   ctest --test-dir build/strict -j1 --output-on-failure \
     -R '^dsp_modifier_(moves|windows)$'
 
-General data-address extensions, full accumulator S/L phases, control/status,
+Other data-address extensions, full accumulator S/L phases, control/status,
 active physical DMA/arbitration, branch/loop/REP/cache/IRQ/reset fill, authentic
 needed ROM/reserved Y:002000 and actual normal original Keyboard/Desktop startup,
 MIDI/audio/storage/assets/USB/all documented functions remain required. These

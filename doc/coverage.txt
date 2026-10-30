@@ -3303,3 +3303,13 @@ Short absolute DSP Jcc: five dsp_absolute_* scopes cover independent native
 and automatic PC/CCR/whole-state expectations,short CMP producer hazards,
 absolute12 target boundaries,unknown path samples and trusted restore.
 Active-DO target timing remains visibly unsupported;see dsp-branch-pipeline.txt.
+
+Selected DSP boot instructions: dsp_sr_{control,memory,guard},
+dsp_modifier_direction{,_window}, dsp_repeat_handoff{,_guard},
+dsp_absolute_call{,_guard,_producer} and dsp_absolute_data{,_guard} cover native
+SR retirement, both modifier MOVEC directions, draining REP ownership,
+absolute/register JSR and absolute24 X/Y scalar/M0..M7 memory operands.
+Independent per-period state/cell/stack expectations and joint continuations
+support acceptance requirements2/3/6; see dsp-boot-instructions.txt for exact
+admission and refusals. This does not establish requirements4/7/8/9 or complete
+original boot, audio, MIDI, physical timing or full instrument operation.

@@ -69,7 +69,7 @@ void future_code_is_really_fetched() {
   }
 }
 
-void failed_f2_joint_recovery() {
+void unknown_decode_joint_recovery() {
   DspMachine machine;
   constexpr std::array code{"add x1,a"};
   prepare(machine, code, {.padding = 0});
@@ -77,27 +77,48 @@ void failed_f2_joint_recovery() {
   clocks(run, machine, 2);
   const auto saved = run.checkpoint(machine);
   const auto before = machine.cpu().debug_state();
-  const auto error =
-      fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
-  require(
-      error.contains("P:") && error.contains("completed-cycles=2") && run.faulted() &&
-          run.completed_cycles() == 2 && run.elapsed_ticks() == 2 * period &&
-          machine.cpu().debug_state() == before && machine.bus().last_dma_cycle() == 3,
-      "Failed actual F2 retains the entered DMA prefix without advancing decode or elapsed time");
-  const auto failed = run.pipeline();
-  require(failed && failed->cycle.decode && !failed->cycle.advanced && !failed->stages[0],
-          "The planned decode remains unapplied after the real F2 fault");
+  const auto accepted = run.advance_cycle(machine, fetch_clock::input());
+  const auto &phase = stages(accepted);
+  const auto fetched = machine.reference_fetch();
+  require(phase.decode_accepted && phase.decode && phase.decode->address == body &&
+              fetched.used == 2 && fetched.words[1].address == body + 1 && !fetched.words[1].data &&
+              run.completed_cycles() == 3 && run.elapsed_ticks() == 3 * period &&
+              machine.cpu().debug_state() == before && machine.bus().last_dma_cycle() == 3,
+          "Mapped unknown F2 retains absence while the older known ADD enters Decode");
+  const auto unresolved = run.checkpoint(machine);
+  for (const unsigned replacement : {0U, 0xffffffU}) {
+    run.restore(unresolved, machine);
+    machine.bus().write({.address = body + 1, .value = replacement});
+    require(machine.reference_fetch() == fetched,
+            "A later RAM write cannot initialize an already captured unknown F2 receipt");
+    const auto error =
+        fault([&] { static_cast<void>(run.advance_cycle(machine, fetch_clock::input())); });
+    require(error.contains("Unknown DSP program sample read P:" + hex(body + 1, 6)) &&
+                error.contains("pc=") && error.contains("omr=") &&
+                error.contains("completed-cycles=3") && run.faulted() &&
+                run.completed_cycles() == 3 && run.elapsed_ticks() == 3 * period &&
+                machine.cpu().debug_state() == before && machine.bus().last_dma_cycle() == 3,
+            "Actual unknown Decode fails before another DMA phase, CPU effect or elapsed clock");
+  }
   run.restore(saved, machine);
   for (unsigned index = 1; index <= 16; ++index) { machine.bus().write({.address = body + index}); }
   clocks(run, machine, 5);
-  require(!run.faulted() && machine.cpu().state().a == unit && run.completed_cycles() == 7,
-          "Trusted joint recovery restores native/frontend and automatic stage clocks together");
+  auto expected = before;
+  expected.cpu.a = unit;
+  expected.cpu.pc = body + 1;
+  expected.cpu.sr = masked_status | unnormalized;
+  ++expected.native_instructions;
+  ++expected.native_cycles;
+  require(!run.faulted() && machine.cpu().debug_state() == expected &&
+              run.completed_cycles() == 7 && run.elapsed_ticks() == 7 * period &&
+              machine.bus().last_dma_cycle() == 7,
+          "Restore before F2 admits fresh known samples and genuine complete ADD retirement");
 }
 }
 
 void state_checks() {
   joint_replay_and_captured_code();
   future_code_is_really_fetched();
-  failed_f2_joint_recovery();
+  unknown_decode_joint_recovery();
 }
 }

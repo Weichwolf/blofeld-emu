@@ -14,6 +14,7 @@
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_repeat_fetch.hpp"
+#include "dsp/dsp_sr_move.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
@@ -40,6 +41,15 @@ constexpr std::array allowed{
     dsp56k::Sub_xx,    dsp56k::Subl,       dsp56k::Subr,      dsp56k::Tfr,        dsp56k::Tst,
     dsp56k::Inc,       dsp56k::Dec};
 using Mask = dsp56k::RegisterMask;
+
+bool absolute_data_operand(const DspMemoryForm &form) {
+  return !form.peripheral && !form.long_pair && form.lane_count == 1 && form.lanes[0].mode == 6 &&
+         form.lanes[0].reg == 0;
+}
+
+bool extended_memory(const DspMemoryForm &form) {
+  return form.peripheral || is_program_memory(form) || absolute_data_operand(form);
+}
 
 struct Operands {
   Mask written = Mask::None;
@@ -163,7 +173,8 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
     const bool repeat =
         profile == DspFetchPipeline::automatic_memory && fetch_repeat_prefix(word.value);
     const bool control =
-        profile == DspFetchPipeline::automatic_memory && decode_omr_move(word.value).has_value();
+        profile == DspFetchPipeline::automatic_memory &&
+        (decode_omr_move(word.value).has_value() || decode_sr_move(word.value).has_value());
     const bool standalone_move =
         (memory || transfer || port_read || control || address_only) && second == dsp56k::Invalid;
     const auto words = pipeline_word_count(word);
@@ -171,7 +182,7 @@ DspPipelineFormat decode_pipeline_word(const DspProgramWord word,
         (!memory && !transfer && !address_only && second != dsp56k::Invalid &&
          second != dsp56k::Move_Nop) ||
         words > ((transfer || branch || loop || control || first == dsp56k::Cmp_xxxxS2 ||
-                  (memory && (form->peripheral || is_program_memory(*form))))
+                  (memory && extended_memory(*form)))
                      ? 2U
                      : 1U)) {
       throw Fault("Unqualified native instruction form");

@@ -22,7 +22,7 @@ using native_access::fault;
 void unqualified_forms() {
   for (const auto *text : {"clr a x:(r0+n0),a0",
                            "clr a x:-(r0),a0",
-                           "move x:>$7,x0",
+                           "clr a x:>$7,x0",
                            "clr a x:<$7,x0",
                            "move r0,x:(r0)+",
                            "clr a x:(r0+n0),a",

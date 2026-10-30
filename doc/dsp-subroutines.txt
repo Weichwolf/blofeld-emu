@@ -5,6 +5,8 @@ Automatic DSP subroutine calls and returns
   ctest --test-dir build/strict -j1 --output-on-failure -L '^dsp_subroutine_runtime$'
 
 The automatic memory pipeline accepts short and long PC-relative BSR and RTS.
+Absolute12, absolute24 and register-indirect JSR have the separate scope in
+dsp-boot-instructions.txt, including their active-DO refusal.
 The original interpreter pushes the real following PC and SR,then pops the
 actual return PC. RTS preserves the callee's current CCR. Return-target
 prediction observes the stack without an SSH read/pop; native E1/E2 independently

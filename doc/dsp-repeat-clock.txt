@@ -11,10 +11,13 @@ AG2 publication and native data operation. Joint checkpoints retain that state.
 
 Current automatic repeated bodies include NOP, full A -> L:(R4)+ and the scalar
 stores described in dsp-repeat-registers.txt. Zero counts, unsupported count
-sources/bodies, active DO/cache/overlapping setup and automatic interrupt
+sources/bodies, active DO/cache and automatic interrupt
 entry remain unqualified visible refusals. Native REP interrupt inhibition is
 projected; pending-interrupt automatic execution is not qualified by these tests.
 No physical sampling-edge or complete DSP56371 timing claim follows.
+An adjacent REP prefix may decode while the preceding completed body drains
+to native E2. Ownership and overlapping-setup guards are described in
+dsp-boot-instructions.txt; arbitrary overlapping REP setup remains refused.
 
 Standalone full A/B long stores support the five direct/postupdate address
 modes through actual native effects. Scaling treats the source as a signed

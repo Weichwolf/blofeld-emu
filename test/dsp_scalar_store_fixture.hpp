@@ -215,16 +215,10 @@ inline void restores() {
 }
 
 inline void guards() {
-  // Parallel accumulator forms, extended addressing and reserved contexts stay unqualified.
-  constexpr std::array refused{0x56e813U,
-                               0x5ff000U,
-                               0x50f813U,
-                               0x52e813U,
-                               0x549813U,
-                               0x565840U,
-                               0x566813U,
-                               0x567000U,
-                               0x567813U};
+  // Parallel arithmetic, other extended selectors and reserved contexts remain unqualified.
+  // Standalone absolute24 forms have positive coverage in dsp_absolute_data_test.cpp.
+  constexpr std::array refused{
+      0x56e813U, 0x50f813U, 0x52e813U, 0x549813U, 0x565840U, 0x566813U, 0x567813U};
   constexpr unsigned reserved_scale = 0xc00;
   for (const auto word : refused) {
     DspMachine machine;

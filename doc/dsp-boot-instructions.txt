@@ -1,0 +1,66 @@
+Selected automatic DSP control and absolute operands
+
+These forms extend DspFetchPipeline::automatic_memory under the explicit
+staged_register_boundaries contract. The native interpreter still supplies
+registers, flags, stack, memory effects and instruction retirement. The frontend
+owns actual F2 opcode/extension occurrences; no firmware patch or host result
+substitutes for execution. The selected elapsed-period ordering is a reference
+model, not measured DSP56371 wiring or silicon sampling edges.
+
+Nonmemory MOVEC writes to SR accept short/long immediate values and
+X0/X1/Y0/Y1/R0..R7 sources. decode_sr_move identifies only those encodings.
+They publish no fictitious ordinary move field in E1; the genuine SR result
+becomes architectural at E2. Unsupported SR reads, memory sources, other
+processor modes and pending automatic interrupts retain visible guards.
+dsp_sr_control, dsp_sr_memory and dsp_sr_guard check encoding fields, native
+publication, following ALU/condition/memory behavior, checkpoint suffixes,
+fresh clones and refused modes/interrupts.
+
+MOVEC M0..M7 to M0..M7 accepts both documented W encodings (FM13-131/12-20).
+The native result supplies modifier caches as well as raw register values.
+Decode dependencies and native AGU consumers retain the existing interlocks;
+the undocumented fixed-bit alias stays refused. dsp_modifier_direction and
+dsp_modifier_direction_window cover all source/destination fields, flags,
+cache-sensitive consumers, preceding ALU results and restored continuations.
+
+Adjacent REP prefixes retain separate occurrence ownership. A younger prefix
+may start its normal setup only after all older logical body Decodes and setup
+holds are finished. The previous actual body receipt survives until its last
+native E2; that retirement clears the old body without deleting the younger
+prefix. dsp_repeat_handoff checks independent per-period CPU, cells, fetch
+counts and elapsed time, including adjacent counts/sources/body variants and
+checkpoint/clone suffixes. dsp_repeat_handoff_guard rejects incomplete setup,
+remaining iterations, invalid occurrence ordering and loop/branch overlap.
+This does not admit arbitrary nested REP or new repeated body forms.
+
+JSR accepts zero-extended absolute12, genuine absolute24 extension and direct
+(Rn) targets. Native execution pushes the following PC/SR and supplies the
+return path. Nominal instruction periods are three for short/register JSR,
+four for absolute24 JSR and three for RTS (FM Appendix A); selected F1 placement
+remains a model assumption. dsp_absolute_call, dsp_absolute_call_guard and
+dsp_absolute_call_producer check complete CPU/stack/counters, target fields,
+actual extension ownership, source-register dependencies and joint suffixes.
+Active/pending DO, unsupported stack contexts and other effective-address
+selectors remain refused. No host PC assignment supplies a call or return.
+
+Absolute24 scalar X/Y MOVE accepts data/address/full or partial accumulator
+operands without parallel ALU; absolute24 MOVEC accepts M0..M7. The actual
+mode6/register0 extension supplies the address in AG1, with no invented R/N/M
+dependency. E1 consumes the frozen native request once and publishes real
+load/store effects; E2 owns native retirement. dsp_absolute_data checks literal
+integer register/cell/flag/counter expectations, both spaces/directions, actual
+two-word F2 ownership, producer windows, checkpoints and fresh clones.
+dsp_absolute_data_guard retains MMIO, unknown/unmapped memory, ROM-write,
+reserved selector, parallel and unsupported REP refusals with PC/context.
+Program MOVEM retains its separate path and guards (dsp-movem-memory.txt).
+
+Reproduce the twelve directed groups after building their corresponding
+blofeld-<hyphenated-name>-test targets with the strict or thread preset:
+
+  ctest --test-dir build/strict -j1 --output-on-failure -R \
+    '^dsp_(sr_(control|memory|guard)|modifier_direction(_window)?|repeat_handoff(_guard)?|absolute_call(_guard|_producer)?|absolute_data(_guard)?)$'
+
+These are component requirements, not original reset-to-instrument acceptance.
+Full ROM/memory arbitration, connected Desktop/Keyboard boot, original live
+MIDI/USB/audio, persistent full-device operation, update/recovery and every
+documented function remain required by objective.txt and coverage.txt.

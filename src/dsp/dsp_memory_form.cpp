@@ -173,6 +173,33 @@ bool accumulator_register(const Reg reg) {
          reg == Reg::B2 || reg == Reg::A || reg == Reg::B;
 }
 
+std::optional<DspMemoryForm> absolute_long_scalar(const Type type, const unsigned opcode) {
+  const bool control = type == dsp56k::Movec_ea;
+  if (type != dsp56k::Movex_ea && type != dsp56k::Movey_ea && !control) { return std::nullopt; }
+  constexpr unsigned extended = 6;
+  if (dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode) != extended ||
+      dsp56k::getFieldValue(type, dsp56k::Field_RRR, opcode) != 0) {
+    return std::nullopt;
+  }
+  const auto reg =
+      dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
+  constexpr unsigned arithmetic_bits = 0xff;
+  if (control) {
+    if (reg < Reg::M0 || reg > Reg::M7) { return std::nullopt; }
+  } else if ((opcode & arithmetic_bits) != 0 ||
+             (!data_register(reg) && !address_register(reg) && !accumulator_register(reg))) {
+    return std::nullopt;
+  }
+  const bool y = type == dsp56k::Movey_ea ||
+                 (control && dsp56k::getFieldValue(type, dsp56k::Field_S, opcode) != 0);
+  DspMemoryForm result;
+  result.lanes[0] = {.space = y ? DspSpace::y : DspSpace::x,
+                     .operation = operation(type, dsp56k::Field_W, opcode),
+                     .mode = extended,
+                     .reg = 0};
+  return result;
+}
+
 std::optional<DspMemoryForm> absolute_short_load(const Type type, const unsigned opcode) {
   const bool control = type == dsp56k::Movec_aa;
   if (type != dsp56k::Movex_aa && type != dsp56k::Movey_aa && !control) { return std::nullopt; }
@@ -328,6 +355,8 @@ std::optional<DspMemoryForm> decode_memory_stage(const std::uint32_t opcode) {
   if (const auto program = program_transfer(first, opcode)) { return program; }
   if (const auto peripheral = peripheral_immediate(first, opcode)) { return peripheral; }
   if (const auto peripheral = peripheral_register(first, opcode)) { return peripheral; }
+  const auto scalar = memory(first) ? first : second;
+  if (const auto absolute = absolute_long_scalar(scalar, opcode)) { return absolute; }
   if (dsp56k::Opcodes::getOpcodeLength(opcode, first, second) != 1) { return std::nullopt; }
   if (const auto direct = absolute_short_load(first, opcode)) { return direct; }
   if (const auto direct = absolute_short_load(second, opcode)) { return direct; }

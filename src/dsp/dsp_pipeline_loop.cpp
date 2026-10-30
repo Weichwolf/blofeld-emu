@@ -13,6 +13,20 @@
 #include <variant>
 
 namespace blofeld {
+namespace {
+std::optional<DspFetchedWord> draining_repeat_body(const std::optional<DspPipelineRepeat> &old,
+                                                   const DspFetchedWord next) {
+  if (!old) { return std::nullopt; }
+  if (!old->body || old->remaining != 0 || old->setup_hold != 0 ||
+      old->prefix.occurrence >= old->body->occurrence || old->body->occurrence >= next.occurrence) {
+    throw Fault("Unqualified overlapping automatic REP setup read P:" + hex(next.word.address, 6));
+  }
+  // All logical body Decodes are issued. Keep their actual retained F2 receipt
+  // until the native last E2, while the younger prefix starts its normal setup.
+  return old->body;
+}
+}
+
 bool DspInstructionPipeline::hold_loop_decode() {
   if (!loop_setup) { return false; }
   auto &setup = *loop_setup;
@@ -103,11 +117,12 @@ void DspInstructionPipeline::accept_repeat_decode() {
   const auto captured = samples.front();
   if (!captured) { return; }
   if (fetch_repeat_prefix(captured->word.value)) {
-    if (repeat_setup || loop_setup || branch) {
+    if (loop_setup || branch) {
       throw Fault("Unqualified overlapping automatic REP setup read P:" +
                   hex(captured->word.address, 6));
     }
-    repeat_setup = DspPipelineRepeat{.prefix = *captured, .body = std::nullopt};
+    const auto draining = draining_repeat_body(repeat_setup, *captured);
+    repeat_setup = DspPipelineRepeat{.prefix = *captured, .body = draining};
     return;
   }
   if (repeat_setup && repeat_setup->body == captured) {
@@ -135,14 +150,18 @@ void DspInstructionPipeline::capture_repeat_target(const DspMachine &machine) {
 }
 
 void DspInstructionPipeline::retire_repeat(const DspMachine &machine) {
-  if (!repeat_setup || !repeat_setup->body || view.cycle.execute2 != repeat_setup->body->word ||
-      machine.pipeline_repeat_control()) {
-    return;
-  }
+  if (!repeat_setup || !repeat_setup->body) { return; }
+  const auto body = *repeat_setup->body;
+  if (view.cycle.execute2 != body.word || machine.pipeline_repeat_control()) { return; }
   if (repeat_setup->remaining != 0) {
     throw Fault("Native REP completed before all owned logical Decode iterations");
   }
-  repeat_setup.reset();
+  if (body.occurrence < repeat_setup->prefix.occurrence) {
+    // This E2 closes the preceding native owner, not the already decoded prefix.
+    repeat_setup->body.reset();
+  } else {
+    repeat_setup.reset();
+  }
 }
 
 }

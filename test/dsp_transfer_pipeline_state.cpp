@@ -290,10 +290,10 @@ void unqualified_sources_and_control() {
   for (const auto *text : {"move a0,x0",
                            "move sr,x0",
                            "move n0,x0",
-                           "move #>7,sr",
+                           "move x:>$7,sr",
                            "move x:(r0),omr",
                            "move r0,x:(r0)",
-                           "move x:>$7,x0"}) {
+                           "clr a x:>$7,x0"}) {
     DspMachine machine;
     const std::array code{std::string(text)};
     prepare(machine, code);

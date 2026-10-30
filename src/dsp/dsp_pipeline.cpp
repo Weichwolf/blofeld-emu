@@ -40,8 +40,12 @@ bool program_memory_operand(const DspProgramWord word) {
 
 unsigned branch_fetch_delay(const std::optional<DspBranchForm> &form) {
   if (!form) { throw Fault("Native branch lost its qualified fetch form"); }
-  // Selected F1 placement preserves nominal RTS/JMP3,short BSR/BRA4,long BSR5.
-  if (form->address_register || form->subroutine_return) { return 0; }
+  // FM A-1: RTS/register JMP/short JSR3, absolute-extension JMP/JSR4,
+  // short BSR/BRA4 and long BSR5 retain their selected F1 placement.
+  if (form->address_register || form->subroutine_return ||
+      (form->absolute_short && form->subroutine_call)) {
+    return 0;
+  }
   return form->relative_extension ? 2U : 1U;
 }
 

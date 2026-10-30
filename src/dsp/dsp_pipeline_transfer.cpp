@@ -9,6 +9,7 @@
 #include "dsp/dsp_omr_move.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_sr_move.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
@@ -43,14 +44,16 @@ bool transfer(const Type type, const unsigned opcode) {
 
 bool modifier_source(const Type first, const Type second, const std::uint32_t opcode) {
   if (first != dsp56k::Movec_S1D2 || second != dsp56k::Invalid) { return false; }
-  // FM13-131/12-20: raw M0..M7 -> M0..M7, or M0..M7 -> full A/B.
+  // FM13-131/12-20: both W encodings of M0..M7 -> M0..M7; M0..M7 -> full A/B.
   // Fixed bit6=0 excludes the SDK's undocumented alias; no other control
   // sources/destinations or partial accumulators are admitted here.
   constexpr unsigned modifier_mask = 0xfff8f8;
   constexpr unsigned modifier_to_modifier = 0x04e0a0;
+  constexpr unsigned control_to_modifier = 0x0460a0;
   constexpr unsigned accumulator_mask = 0xfffef8;
   constexpr unsigned modifier_to_accumulator = 0x044ea0;
   return (opcode & modifier_mask) == modifier_to_modifier ||
+         (opcode & modifier_mask) == control_to_modifier ||
          (opcode & accumulator_mask) == modifier_to_accumulator;
 }
 
@@ -116,7 +119,7 @@ unsigned pipeline_word_count(const DspProgramWord word) {
 }
 
 DspMoveFields pipeline_transfer_fields(const std::uint32_t opcode) {
-  if (decode_omr_move(opcode)) { return {}; }
+  if (decode_omr_move(opcode) || decode_sr_move(opcode)) { return {}; }
   static const dsp56k::Opcodes opcodes;
   Type first = dsp56k::Invalid;
   Type second = dsp56k::Invalid;
@@ -157,7 +160,7 @@ pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &pr
     read = 1U << *branch->address_register;
   } else {
     if (!memory || memory->absolute_short ||
-        (is_program_memory(*memory) && memory->lanes[0].mode == 6) ||
+        (memory->lane_count == 1 && memory->lanes[0].mode == 6) ||
         (memory->peripheral && !is_program_transfer(*memory))) {
       return 0;
     }
@@ -167,7 +170,7 @@ pipeline_agu_dependencies(const std::array<std::optional<DspProgramWord>, 3> &pr
   }
   unsigned result = 0;
   for (const auto word : preceding) {
-    if (!word || decode_omr_move(word->value)) { continue; }
+    if (!word || decode_omr_move(word->value) || decode_sr_move(word->value)) { continue; }
     // Only explicit move destinations rearm this interlock, never ordinary AG2 updates.
     const auto fields = decode_move_writeback(word->value);
     result |= read & static_cast<unsigned>(fields.r | fields.n | fields.m);
