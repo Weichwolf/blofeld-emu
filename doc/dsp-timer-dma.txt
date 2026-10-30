@@ -1,0 +1,34 @@
+Timer registers with concurrent DSP DMA
+
+DSP56371UM table3-7 places all14 timer words at X:ffff82..ffff8f.
+APR23 sections5.2/5.6 describe contention at a shared peripheral data
+register and initialization of a timer after its DMA channel. Sources are
+pinned in hardware/sources.json. These timer words are distinct from every
+currently admitted ESAI/DAX DMA data endpoint, including equal numeric
+addresses in separate X/Y spaces.
+
+The bus admits timer bit phases, sampled reads and ordinary writes alongside
+independent DMA. Native handlers retain actual register effects and failures.
+All timer words use the native bit route; only TCSR masks its read-only DI
+during RMW writeback. TPCR/TCR write refusals, TLR read refusals, unknown
+compare/DI values and unsupported source/reserved writes remain explicit.
+TCSR W1C behavior remains native, including unselected flags in a real RMW.
+
+Owned peripheral reads qualify an active-DMA epoch only for their actual
+decoded X timer target. Actual F2 occurrence, exact epoch, ticket identity,
+consumed opcode/extension, native access and two-cycle response age remain
+mandatory. Other active-DMA peripheral reads remain unsupported.
+
+Directed tests cover resource footprints, native control/word bit operations,
+ordinary MOVEP writes/reads, strict faults, held captured DMA words and joint
+restore/clone suffixes. A serial case combines timer bit operations with real
+DRS22 DMA and independently decoded ESAI/DAX payloads. Its500kHz/12MHz grid
+is an explicit reference, not a physical Blofeld clock choice.
+
+  ctest --test-dir build/strict -R '^dsp_timer_dma(_ports|_words|_reads|_serial)?$' --output-on-failure
+
+Both ASan/UBSan and separate TSan qualification are required. Serial tests
+retain all fixed windows/assertions with a900s sanitizer timeout. These
+component tests do not establish complete original startup, physical wiring,
+original instrument audio or all Desktop/Keyboard functions. Reserved/ROM
+write behavior and private board hypotheses are not changed by this increment.

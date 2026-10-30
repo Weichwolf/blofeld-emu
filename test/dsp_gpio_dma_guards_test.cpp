@@ -79,7 +79,7 @@ void footprints() {
   constexpr std::array data{DspAddress{.space = DspSpace::x, .address = 0xffffa0},
                             DspAddress{.space = DspSpace::y, .address = 0xffff80},
                             DspAddress{.space = DspSpace::x, .address = 0xffffd2},
-                            DspAddress{.space = DspSpace::x, .address = 0xffff8f}};
+                            DspAddress{.space = DspSpace::x, .address = 0xffff90}};
   for (const auto address : data) {
     for (const auto operation : {DspMemoryOperation::read, DspMemoryOperation::write}) {
       rejection(

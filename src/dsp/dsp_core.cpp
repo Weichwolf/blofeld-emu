@@ -27,6 +27,7 @@
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_repeat_fetch.hpp"
 #include "dsp/dsp_sr_move.hpp"
+#include "dsp/dsp_timers.hpp"
 #include "dsp56kEmu/disasm.h"
 #include "dsp56kEmu/dsp.h"
 #include "dsp56kEmu/memory.h"
@@ -452,9 +453,14 @@ public:
                                [](const auto &record) { return record.has_value(); });
   }
 
-  [[nodiscard]] std::uint64_t peripheral_epoch() const {
+  [[nodiscard]] std::uint64_t
+  peripheral_epoch(const std::optional<DspAddress> target = std::nullopt) const {
     const auto epoch = bus.last_dma_cycle();
-    if (!epoch || bus.has_active_dma()) {
+    // APR23 section5.2/UM table3-7: only the actual decoded timer word
+    // is independent of every supported DMA endpoint. Other readers stay strict.
+    const bool independent_timer =
+        target && target->space == DspSpace::x && DspTimers::handles(target->address);
+    if (!epoch || (bus.has_active_dma() && !independent_timer)) {
       throw Fault("Unqualified peripheral-read cycle/DMA state pc=" + hex(word(cpu.regs().pc), 6));
     }
     return *epoch;
@@ -506,7 +512,7 @@ public:
         request->target.address < short_io_begin) {
       return;
     }
-    const auto epoch = cycle ? *cycle : peripheral_epoch();
+    const auto epoch = cycle ? *cycle : peripheral_epoch(request->target);
     const auto opcode = native.reference().committed_access(DspNativeAccessKind::opcode);
     const auto form = opcode && opcode->value ? decode_memory_stage(*opcode->value) : std::nullopt;
     if (!form || !form->peripheral ||
@@ -1821,8 +1827,7 @@ DspPeripheralReadTicket DspCore::capture_peripheral_read(const DspPeripheralRead
                                                          const bool automatic,
                                                          const std::uint64_t occurrence) {
   const auto &reference = impl_->native.reference();
-  if (impl_->active || impl_->faulted || impl_->run.begin || !reference.fetch().active() ||
-      impl_->peripheral_epoch() != point.epoch) {
+  if (impl_->active || impl_->faulted || impl_->run.begin || !reference.fetch().active()) {
     throw Fault("Unqualified peripheral capture pc=" + hex(point.address, 6));
   }
   if (automatic) {
@@ -1838,6 +1843,10 @@ DspPeripheralReadTicket DspCore::capture_peripheral_read(const DspPeripheralRead
     impl_->validate_peripheral_capture(point);
   }
   const auto selected = capture_read_word(reference.fetch(), point, occurrence, automatic);
+  const auto form = decode_peripheral_read(selected.word.value);
+  if (!form || impl_->peripheral_epoch(form->target) != point.epoch) {
+    throw Fault("Unqualified peripheral capture epoch pc=" + hex(point.address, 6));
+  }
   auto &stages = impl_->peripheral_reads;
   if (stages.serial == std::numeric_limits<std::uint64_t>::max() ||
       (stages.last_store_cycle && point.epoch <= *stages.last_store_cycle)) {
@@ -1903,7 +1912,9 @@ DspBranchDecision DspCore::preview_pipeline_peripheral_branch(const DspPeriphera
       peripheral_record(impl_->peripheral_reads,
                         {.origin = read.origin_, .slot = read.slot_, .serial = read.serial_});
   if (!record.automatic) { throw Fault("Branch preview requires the pipeline read owner"); }
-  const auto decision = record.sample.preview_branch(impl_->peripheral_epoch());
+  const auto form = decode_peripheral_read(record.sample.fetched().opcode.word.value);
+  if (!form) { throw Fault("Owned peripheral branch lost its decoded target"); }
+  const auto decision = record.sample.preview_branch(impl_->peripheral_epoch(form->target));
   impl_->native.reference().fetch().predict_branch(decision,
                                                    record.sample.fetched().opcode.occurrence);
   return decision;
@@ -1933,7 +1944,7 @@ DspReferenceProgress DspCore::advance_peripheral_read(const DspPeripheralReadTic
   if (!opcode || access == nullptr || reference.execution() != execution) {
     throw Fault("Owned peripheral admission requires a real pending native data read");
   }
-  const auto epoch = impl_->peripheral_epoch();
+  const auto epoch = impl_->peripheral_epoch(access->target);
   const ExecutionGuard guard(impl_->active);
   try {
     auto &record =

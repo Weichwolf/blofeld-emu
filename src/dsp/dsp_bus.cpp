@@ -146,7 +146,7 @@ DspGpio &DspBus::gpio(const DspPort port) {
 bool DspBus::handles_peripheral_bit(const DspAddress access) {
   return (access.space == DspSpace::x &&
           (DspDax::handles(access.address) || DspDma::handles(access.address) ||
-           DspTimers::is_control(access.address))) ||
+           DspTimers::handles(access.address))) ||
          gpio_register(access).has_value();
 }
 
@@ -175,13 +175,15 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
     }
     return old;
   }
-  if (access.space == DspSpace::x && DspTimers::is_control(access.address)) {
+  if (access.space == DspSpace::x && DspTimers::handles(access.address)) {
     constexpr unsigned timer_input = 0x1000;
     const bool old = (timers_.read(access.address, mask) & mask) != 0;
     if (access.operation != DspBitOperation::test) {
-      // DI is read-only. All other TCSR fields participate in word writeback,
-      // including unselected W1C flags, exactly as in a hardware RMW access.
-      const auto current = timers_.read(access.address, word_mask & ~timer_input);
+      // Only TCSR has read-only DI and W1C flags. Other timer words retain
+      // their ordinary full-word value; native register checks stay strict.
+      const auto read_mask =
+          DspTimers::is_control(access.address) ? word_mask & ~timer_input : word_mask;
+      const auto current = timers_.read(access.address, read_mask);
       timers_.write(
           {.address = access.address, .value = change_bit(current, mask, access.operation)});
     }
@@ -224,8 +226,10 @@ DspPeripheralBitSample DspBus::capture_peripheral_bit(const DspBitAccess access)
     sample.source_ = dax_.read(access.address);
   } else if (access.space == DspSpace::x && DspDma::handles(access.address)) {
     sample.source_ = dma_.read(access.address);
-  } else if (access.space == DspSpace::x && DspTimers::is_control(access.address)) {
-    sample.source_ = timers_.read(access.address, (word_mask & ~timer_input) | mask);
+  } else if (access.space == DspSpace::x && DspTimers::handles(access.address)) {
+    const auto read_mask =
+        DspTimers::is_control(access.address) ? (word_mask & ~timer_input) | mask : word_mask;
+    sample.source_ = timers_.read(access.address, read_mask);
   } else {
     const auto mapping = gpio_register(target);
     if (!mapping || (mapping->port == DspPort::f && bus_control_ != port_f_bus_control)) {
@@ -255,8 +259,9 @@ bool DspBus::commit_peripheral_bit(const DspPeripheralBitSample &sample) {
     if (port == DspPort::d) { sync_dax(); }
   } else {
     constexpr unsigned timer_input = 0x1000;
-    const bool timer = access.space == DspSpace::x && DspTimers::is_control(access.address);
-    const auto source = timer ? sample.source_ & ~timer_input : sample.source_;
+    const bool timer = access.space == DspSpace::x && DspTimers::handles(access.address);
+    const bool timer_control = timer && DspTimers::is_control(access.address);
+    const auto source = timer_control ? sample.source_ & ~timer_input : sample.source_;
     const auto value = change_bit(source, mask, access.operation);
     if (timer) {
       timers_.write({.address = access.address, .value = value});

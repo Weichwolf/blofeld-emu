@@ -6,6 +6,7 @@
 #include "dsp/dsp_dma_registers.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_timers.hpp"
 
 #include <algorithm>
 #include <array>
@@ -37,6 +38,23 @@ bool gpio_data_bit(const DspMemoryAccess access) {
          std::ranges::any_of(ports, [&](const auto port) {
            return access.target.space == port.space && access.target.address == port.address;
          });
+}
+
+// UM table3-7: timer control/counter words are distinct from every admitted
+// DMA ESAI/DAX data endpoint. Native E1/E2 retain all timer validation and
+// clock ordering; this predicate grants resources, never performs a transaction.
+bool timer_access(const DspMemoryAccess access) {
+  const bool bit = access.phase == DspMemoryPhase::peripheral_bit;
+  const bool read = access.phase == DspMemoryPhase::peripheral_sample &&
+                    access.operation == DspMemoryOperation::read;
+  const bool write =
+      access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write;
+  return access.target.space == DspSpace::x && DspTimers::handles(access.target.address) &&
+         (bit || read || write);
+}
+
+bool independent_peripheral(const DspMemoryAccess access) {
+  return gpio_data_bit(access) || timer_access(access);
 }
 
 DspSpace space(const DspDmaSpace value) {
@@ -148,9 +166,9 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
 bool core_conflict(const DspBus &bus, const DspCoreBusUse core, const DspMemoryAccess target) {
   bool conflict = false;
   for (const auto access : core.accesses) {
-    // Controller inspection and an independent GPIO data-bit access do not
+    // Controller inspection and qualified independent peripheral accesses do not
     // consume the DMA memory path. Other core accesses still arbitrate normally.
-    if (controller_access(access) || gpio_data_bit(access)) { continue; }
+    if (controller_access(access) || independent_peripheral(access)) { continue; }
     const auto relation = bus.memory_conflict({.core = access, .dma = target});
     if (relation == DspMemoryConflict::unqualified) {
       const bool write = target.operation == DspMemoryOperation::write;
@@ -233,10 +251,10 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
     throw Fault("DSP DMA bank arbitration requires explicitly known core-cycle occupancy");
   }
   const auto peripheral = core_peripheral(*this, core);
-  // GPIO data words are distinct from all DMA-admitted ESAI/DAX data registers.
-  // Native RMW still validates/captures/commits its real GPIO bit. Direction,
-  // control and other peripheral collisions require separate qualification.
-  if (peripheral && dma_.active() && !gpio_data_bit(*peripheral)) {
+  // GPIO data-bit and timer words are distinct from admitted ESAI/DAX data registers.
+  // Native handlers still own the actual transactions and every strict fault.
+  // Other peripheral collisions require separate qualification.
+  if (peripheral && dma_.active() && !independent_peripheral(*peripheral)) {
     const auto *const operation =
         peripheral->operation == DspMemoryOperation::write ? "write" : "read";
     throw Fault("Unqualified DSP peripheral memory resource " + std::string(operation) + " at " +
