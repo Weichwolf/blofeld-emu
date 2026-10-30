@@ -1,11 +1,12 @@
 Raw DSP middle-word register transfers
 
-  cmake --build --preset strict --target blofeld-raw-middle-test
+  cmake --build --preset strict --target blofeld-raw-middle-test blofeld-raw-offset-agu-test
   ctest --test-dir build/strict -j1 --output-on-failure -L '^dsp_raw_middle_runtime$'
 
-Standalone A1/B1 -> X0/X1/Y0/Y1/R0..7 copies all24 bits without running the
+Standalone A1/B1 -> X0/X1/Y0/Y1/R0..7/N0..7 copies all24 bits without running the
 full-accumulator shifter/limiter. SR and the source accumulator remain intact,
-including overflowing extensions and scaling modes0..3. Full A/B transfers keep
+including overflowing extensions. Scaling patterns0..3 characterize the SDK;
+pattern3 is reserved by FM Table5-1, not a silicon acceptance claim. Full A/B transfers keep
 their separate scaling/limiting rules. Other partial sources remain excluded.
 Qualified parallel TFR/ADD forms are documented in dsp-parallel-middle-transfers.txt.
 
@@ -23,6 +24,20 @@ stack cells every period. Exact destination lanes publish at native E1; PC and
 instruction-table counters retire at E2.692 cuts across18 raw/interlocked/
 multiword/count/call cases restore twice per sanitizer profile. Initial seeds,
 scaling bits and source extensions have independent literal checks.
+
+Standalone N destinations add704 cases:320 literal/scaling/extension vectors
+and384 source-producer windows.718 joint cuts restore1436 suffixes.384 X/Y AGU
+windows check all8 N registers, zero/wrapping offsets and gaps0..3: matching
+explicit N writes retain3/2/1/0 Decode/F2/F1 holds. Full CPU/CCR/counters/stack
+are checked each reference period, including E1 N publication, native AG1/AG2
+and the real E1 memory read/E2 retirement.48 cuts restore96 further suffixes.
+Full A/B sources and parallel raw N forms remain excluded;160 Decode guards
+cover neighboring unsupported sources/destinations and retained old guards.
+The source-producer fixture uses no unrelated Y1-count loop for N destinations.
+These are model periods; no calibrated silicon timing or full waveform-bank
+completion follows. Seven ordinary CTest groups/profile qualify under ASan/UBSan
+and separate TSan, including the old692 cuts; source/ELF proof is pinned in the
+reference manifest. No test skips or sanitizer/format/tidy findings.
 
 Subsequent SR-read timing keeps its separate uncertainty/refusals documented in
 dsp-status-pipeline.txt. Arithmetic/memory producers,other partial consumers,

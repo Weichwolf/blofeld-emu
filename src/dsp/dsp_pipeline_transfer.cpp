@@ -85,9 +85,12 @@ bool accumulator_source(const Type first,
   auto written = Mask::None;
   auto read = Mask::None;
   dsp56k::getRegisters(written, read, move, opcode);
-  constexpr auto destinations = static_cast<std::uint64_t>(Mask::X) |
-                                static_cast<std::uint64_t>(Mask::Y) |
-                                static_cast<std::uint64_t>(Mask::R);
+  // FM13-115/116,Tables12-13/16: standalone raw A1/B1 may also feed N0..N7.
+  // Full accumulators and parallel ALU forms keep their existing destinations.
+  const auto offsets = kind == AccumulatorSource::middle && standalone ? Mask::N : Mask::None;
+  const auto destinations =
+      static_cast<std::uint64_t>(Mask::X) | static_cast<std::uint64_t>(Mask::Y) |
+      static_cast<std::uint64_t>(Mask::R) | static_cast<std::uint64_t>(offsets);
   return written != Mask::None && (static_cast<std::uint64_t>(written) & ~destinations) == 0;
 }
 

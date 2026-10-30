@@ -35,6 +35,7 @@ constexpr unsigned x0_seed = 0x112233, x1_seed = 0x445566, y0_seed = 0x778899;
 constexpr unsigned a0_seed = 0xd4e5f6, a1_seed = 0x112244, a2_seed = 0xe9;
 constexpr unsigned b0_seed = 0x6c7d8e, b1_seed = 0x557799, b2_seed = 0x12;
 constexpr unsigned a0_code = 8, a2_code = 10, a1_code = 12, b1_code = 13, r0_code = 16;
+constexpr unsigned n0_code = 24, offset_streams = 704;
 constexpr unsigned mover = 0x200000, mover_source_shift = 13, mover_target_shift = 8;
 constexpr unsigned immediate_source_shift = 16, word_shift = 24, byte_mask = 0xff;
 constexpr unsigned loop_flags = 0x18000, loop_flag = 0x8000, scale_shift = 10;
@@ -187,7 +188,7 @@ Program program(const Case sample) {
     code.words.at(helper_write + 1 - ram) = helper_value;
     static_cast<void>(put(code, helper_return, {.opcode = rts, .cost = 3, .effect = Effect::ret}));
   }
-  if (sample.kind != Kind::raw) {
+  if (sample.kind != Kind::raw && sample.destination < n0_code) {
     pc = opening(code, pc, {.count = sample.value, .immediate = false}) + 3;
   }
   code.stop = pc + tail_words;
@@ -249,8 +250,10 @@ void write_word(DspState &cpu, const Instruction instruction) {
     const auto shift = part * word_shift;
     const std::uint64_t mask = part == 2 ? byte_mask : word_mask;
     accumulator = (accumulator & ~(mask << shift)) | (value << shift);
-  } else {
+  } else if (reg < n0_code) {
     cpu.r.at(reg - r0_code) = instruction.value;
+  } else {
+    cpu.n.at(reg - n0_code) = instruction.value;
   }
 }
 
@@ -268,8 +271,10 @@ DspMoveFields destination_fields(const unsigned reg) {
       part = 2;
     }
     accumulator = static_cast<std::uint8_t>(1U << part);
-  } else {
+  } else if (reg < n0_code) {
     fields.r = static_cast<std::uint8_t>(1U << (reg - r0_code));
+  } else {
+    fields.n = static_cast<std::uint8_t>(1U << (reg - n0_code));
   }
   return fields;
 }
@@ -366,6 +371,23 @@ void retire(Oracle &oracle, const Program &code) {
   oracle.next_e2 += instruction.cost + code.instructions.at(cpu.pc - ram).hold_before;
 }
 
+void state_difference(const DspDebugState &actual, const DspDebugState &expected) {
+  if (actual == expected) { return; }
+  std::cerr << "state-difference cpu=" << (actual.cpu == expected.cpu)
+            << " cycles=" << actual.native_cycles << '/' << expected.native_cycles
+            << " instructions=" << actual.native_instructions << '/' << expected.native_instructions
+            << " ep=" << actual.ep << '/' << expected.ep << " sz=" << actual.sz << '/'
+            << expected.sz << " sc=" << actual.sc << '/' << expected.sc
+            << " stack=" << (actual.stack_high == expected.stack_high) << '/'
+            << (actual.stack_low == expected.stack_low) << '\n';
+  for (unsigned index = 0; index < actual.cpu.n.size(); ++index) {
+    if (actual.cpu.n.at(index) != expected.cpu.n.at(index)) {
+      std::cerr << "N" << index << '=' << hex(actual.cpu.n.at(index), 6)
+                << " expected=" << hex(expected.cpu.n.at(index), 6) << '\n';
+    }
+  }
+}
+
 void step(DspFetchRun &run, DspMachine &machine, Oracle &oracle, const Program &code) {
   const auto cycle = run.advance_cycle(machine, fetch_clock::input());
   const auto &phase = pipeline::stages(cycle);
@@ -392,6 +414,7 @@ void step(DspFetchRun &run, DspMachine &machine, Oracle &oracle, const Program &
             "Exact raw register lane and actual instruction own E1 publication");
     write_word(oracle.expected.cpu, next);
   }
+  state_difference(machine.cpu().debug_state(), oracle.expected);
   require(machine.cpu().debug_state() == oracle.expected,
           "Every period preserves full CPU,table counters and all16 stack cells at pc=" +
               hex(machine.cpu().state().pc, 6) + " period=" + hex(cycle.completed_cycles, 4));
@@ -464,6 +487,47 @@ std::vector<Case> cases() {
   return result;
 }
 
+std::vector<Case> offset_cases() {
+  constexpr std::array values{0U, 1U, 0x7fffffU, high_word, word_mask};
+  std::vector<Case> result;
+  for (const auto source : {a1_code, b1_code}) {
+    const auto low_bit = source & 1U;
+    const std::array writers{a0_code + low_bit,
+                             a1_code + low_bit,
+                             a2_code + low_bit,
+                             a1_code + (1U - low_bit),
+                             long_writer,
+                             short_writer};
+    for (unsigned index = 0; index < 8; ++index) {
+      const auto destination = n0_code + index;
+      for (const auto value : values) {
+        for (unsigned scale = 0; scale < 4; ++scale) {
+          result.push_back(
+              {.source = source, .destination = destination, .value = value, .scale = scale});
+        }
+      }
+      for (const auto writer : writers) {
+        for (unsigned gap = 0; gap < 4; ++gap) {
+          result.push_back({.kind = Kind::producer,
+                            .source = source,
+                            .destination = destination,
+                            .writer = writer,
+                            .gap = gap});
+        }
+      }
+    }
+  }
+  require(result.size() == offset_streams, "All704 own raw offset programs are present");
+  return result;
+}
+
+bool offset_snapshot(const Case sample) {
+  if (sample.kind == Kind::raw) {
+    return sample.scale == 3 && (sample.value == 0 || sample.value == high_word);
+  }
+  return sample.destination == n0_code + 4 && sample.gap == 0 && sample.writer == sample.source;
+}
+
 bool snapshot_case(const Case sample) {
   if (sample.kind == Kind::raw) { return sample.scale == 3; }
   if (sample.kind == Kind::count || sample.kind == Kind::call) {
@@ -499,25 +563,40 @@ void guards() {
       refused(mover | (source << mover_source_shift) | (destination << 8U));
     }
   }
+  for (const unsigned source : {8U, 9U, 10U, 11U, 14U, 15U}) {
+    for (unsigned index = 0; index < 8; ++index) {
+      refused(mover | (source << mover_source_shift) | ((n0_code + index) << 8U));
+    }
+  }
+  for (const auto source : {a1_code, b1_code}) {
+    for (unsigned index = 0; index < 8; ++index) {
+      for (const unsigned alu : {0x01U, 0x10U, 0x51U}) {
+        refused(mover | (source << mover_source_shift) | ((n0_code + index) << 8U) | alu);
+      }
+    }
+  }
 }
 }
 
 int main(const int count, char **arguments) {
   try {
-    require(count == 2, "Select streams,snapshots or guards");
+    require(count == 2, "Select streams,snapshots,offsets,offset-snapshots or guards");
     const std::string_view mode(arguments[1]);
     if (mode == "guards") {
       guards();
       std::cout << "Raw-middle Decode guards passed\n";
       return 0;
     }
-    require(mode == "streams" || mode == "snapshots", "Unknown raw-middle scope");
+    const bool offsets = mode == "offsets" || mode == "offset-snapshots";
+    const bool streams = mode == "streams" || mode == "offsets";
+    require(streams || mode == "snapshots" || mode == "offset-snapshots",
+            "Unknown raw-middle scope");
     unsigned checked = 0;
-    for (const auto sample : cases()) {
-      if (mode == "streams") {
+    for (const auto sample : offsets ? offset_cases() : cases()) {
+      if (streams) {
         static_cast<void>(one_case(sample, std::nullopt));
         ++checked;
-      } else if (snapshot_case(sample)) {
+      } else if (offsets ? offset_snapshot(sample) : snapshot_case(sample)) {
         const auto periods = one_case(sample, std::nullopt);
         for (unsigned cut = 0; cut <= periods; ++cut) {
           static_cast<void>(one_case(sample, cut));

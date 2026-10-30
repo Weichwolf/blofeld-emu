@@ -3191,12 +3191,16 @@ power-loss phase, realtime/long-run and physical comparison requirements remain.
   negative/wrapped endpoints and physical/full original startup remain open;
   the reserved Y:002000 frontier is unchanged.
 
-- Standalone raw A1/B1 -> X0/X1/Y0/Y1/R0..7 preserve all24 bits without
+- Standalone raw A1/B1 -> X0/X1/Y0/Y1/R0..7/N0..7 preserve all24 bits without
   full-accumulator limiting/scaling. Same-accumulator producer interlocks and
   the Y1 count path through actual BSR/inner-DOR/RTS have independent model
-  evidence.118 automatic streams,692 joint cuts/two suffixes and full native
-  E1/E2/CPU/counters/all16 stack cells pass per sanitizer profile. See
-  dsp-raw-middle-transfers.txt. Other partial sources,unqualified parallel forms,
+  evidence.118 old streams/692 cuts remain. N destinations add704 cases/718
+  cuts/1436 suffixes;384 X/Y AGU windows retain exact matching-register holds,
+  E1 N/AG2 address/E1 data/E2 retirement and48 cuts/96 suffixes. Complete native
+  CPU/CCR/counters/stack are checked each period;160 neighboring Decode guards
+  remain. Both sanitizer profiles pass the named scopes; reserved scaling3
+  is SDK characterization only. See dsp-raw-middle-transfers.txt.
+  Other partial sources,unqualified parallel forms,
   SR-read timing,original near-end calls and full original hardware acceptance remain open.
 
 - Parallel raw A1/B1 -> X0/X1/Y0/Y1/R0..7 accompanying TFR Y0,A/B or

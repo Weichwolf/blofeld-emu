@@ -10,7 +10,10 @@
       "3.5.2.1",
       "A.2.3",
       "Table A-1",
-      "13-120..124 MOVE"
+      "13-120..124 MOVE",
+      "13-115..116 Register-to-Register Data Move",
+      "Table12-13/16",
+      "5-13 Table5-1 reserved scaling11"
     ]
   },
   "qualification_sha256": "7e1f9685500a54de7782686a7cd4a78b61fe7c43e8caccd16472ef28cd965220",
@@ -50,5 +53,22 @@
   "limits": "Raw A0/A2/B0/B2 consumers,parallel forms outside dsp-parallel-middle-transfers.txt,arithmetic/memory producer windows and subsequent SR-read timing are separate. Original near-end calls,negative/wrapped loops,IRQ/cache/extended stack,authentic ROM,reservedY/reset-to-instrument,MIDI/audio/storage/update/recovery/realtime/physical acceptance remain open.",
   "manufacturer_program_bytes_embedded": false,
   "physical_timing_qualified": false,
-  "complete_original_startup_qualified": false
+  "complete_original_startup_qualified": false,
+  "middle_to_offset": {
+    "scope": "Standalone raw A1/B1 to N0..N7; no full-accumulator or parallel N admission; no SDK,class-field,timing or hardware-hypothesis change.",
+    "pilot_qualification_sha256": "fce15f3e101005ab23dc0c0ac43cdea3b5444cb7537007d447e51238f6ff49cc",
+    "literal_cases": 320,
+    "producer_cases": 384,
+    "joint_cuts": 718,
+    "restored_suffixes": 1436,
+    "AGU_windows": 384,
+    "AGU_joint_cuts": 48,
+    "AGU_restored_suffixes": 96,
+    "Decode_guards": 160,
+    "independent_Core_supporting_evidence": "1440 valid raw transfers and480 explicit reserved-scaling refusals/4801 full-state assertions per ASan/UBSan and separate TSan; stopped/all-at-retirement only, not early pipeline acceptance.",
+    "reserved_scaling": "S1:S0=11 is reserved in FM Table5-1. Legacy SDK raw-transfer behavior under that pattern is characterized, not silicon-qualified.",
+    "original_runtime": "Current original P002ee8 refusal motivates this increment; a changed connected original has not yet run.",
+    "full_original_startup_qualified": false,
+    "canonical_qualification_sha256": "be64b064c5bae55b66d4253656de7704a3e078ab3b3115f6ad3f6624d18f36d1"
+  }
 }
