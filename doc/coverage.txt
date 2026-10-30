@@ -3342,8 +3342,10 @@ Desktop/Keyboard instrument, MIDI/USB/audio and update/recovery remain open.
 Parallel full-accumulator MPY: dsp_mpy_transfer_{native,clocks,producers,
 snapshots,guards,recurrence} checks old bus sources, independent signed
 products/flags, E1/E2 separation, source interlocks, multiple-wrap recurrence
-stores and trusted continuations. See dsp-accumulator-transfers.txt. Supports
-requirements2/3/6; complete original instrument/MIDI/audio remains pending.
+stores and trusted continuations. The conditional connected original passes
+the former MPY frontier and advances 3,861 DSP instructions to a register-DO
+refusal. See dsp-accumulator-transfers.txt for terminal evidence and limits.
+Supports requirements2/3/6; complete original instrument/MIDI/audio is pending.
 
 Full A/B peripheral stores: dsp_full_peripheral{,_ports,_guards,_producers}
 checks actual native signed/scaled/limited values and flags, pp/qq encodings,

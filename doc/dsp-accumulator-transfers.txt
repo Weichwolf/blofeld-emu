@@ -32,6 +32,14 @@ CPU/RAM/cost expectations and trusted continuations. Its coefficients, seed,
 stride and length are own inputs; no firmware bytes or waveform substitute
 are supplied. Native arithmetic and data conversion remain unmodified.
 
+The conditional connected original now passes the former full-source MPY
+frontier: 896,650 DSP instructions, 3,861 beyond the preceding boundary.
+All 107 NAND pages match the input, including its synthetic 258-byte tail.
+Execution then refuses an unsupported register-counted DO; no complete
+waveform-memory comparison or normal instrument operation is established.
+Local terminal evidence SHA256:
+8799fc37ae00feb20a76bb5fd88fccaf818e26bab55e7d349acddb3ebd31f2c2.
+
 A completed or annulled DO releases only finished speculative observer state
 after native confirmation. Forecast depth, pending boundaries, queued active
 predictions and native LF/FV must all permit closure. Real F1/F2 receipts,
