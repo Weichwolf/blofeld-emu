@@ -3349,6 +3349,15 @@ the former MPY frontier and advances 3,861 DSP instructions to a register-DO
 refusal. See dsp-accumulator-transfers.txt for terminal evidence and limits.
 Supports requirements2/3/6; complete original instrument/MIDI/audio is pending.
 
+Y0 counted-loop admission: existing dsp_automatic_loop_sources adds19 literals,
+70 producer/body-overwrite cases and100 cuts/200 suffixes/100 fresh owners.
+Both sanitizer profiles retain source/transfer/guard regressions. A subsequent
+conditional connected original passes the register-DO refusal and retires four
+more DSP instructions before refusing at P002ee8 (source: B1-to-N4). All107 pages
+match the retained original-plus-declared-tail input; no sanitizer findings.
+See dsp-automatic-loops.txt for terminal evidence and unchanged hardware limits.
+Supports requirements2/3/6; full waveform banks and instrument operation pending.
+
 Full A/B peripheral stores: dsp_full_peripheral{,_ports,_guards,_producers}
 checks actual native signed/scaled/limited values and flags, pp/qq encodings,
 source interlocks, captured F2 identity, modeled ESAI frames and trusted
