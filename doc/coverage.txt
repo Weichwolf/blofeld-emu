@@ -3365,8 +3365,11 @@ Supports requirements2/3/6; full waveform banks and instrument operation pending
 Raw-middle N admission: the changed conditional connected original retires
 973551 DSP instructions (+76897) over2020506 pipeline periods (+102781), then
 refuses a Port-F-control write with active DMA. All107 NAND pages match the
-declared input; no sanitizer findings or input changes. Actual write value,
-DMA phase/channel/endpoints and full waveform banks remain unobserved.
+declared input; no sanitizer findings or input changes. A diagnostic-only rerun
+preserves all terminal CPU/pipeline counts: DMA0 shows X:00068f -> Y:ffff80,
+DMA3 X:00068f -> X:ffffd2, both select ESAI_1 TX requests; DSTR DACT=0.
+These are observed controller cursors, not a selected transfer phase. Actual
+CPU write value, prospective DMA phase and full waveform banks remain unobserved.
 See dsp-raw-middle-transfers.txt and its terminal qualification hash. Supports
 requirements2/3/6; authentic board behavior and full instrument acceptance pending.
 

@@ -70,6 +70,14 @@
     "original_runtime": "Conditional current-MCU original passes prior raw-middle Decode refusal:973551 DSP instructions/2020506 pipeline periods (+76897/+102781);next strict refusal is a Port-F-control write with active DMA. Full waveform banks and instrument operation unproven.",
     "full_original_startup_qualified": false,
     "canonical_qualification_sha256": "be64b064c5bae55b66d4253656de7704a3e078ab3b3115f6ad3f6624d18f36d1",
-    "connected_original_qualification_sha256": "e8e83992746e18c29fe9d5693d2e05ebf0d3cfc7fec2a64bc891e13654916614"
+    "connected_original_qualification_sha256": "e8e83992746e18c29fe9d5693d2e05ebf0d3cfc7fec2a64bc891e13654916614",
+    "diagnostic_original": {
+      "qualification_sha256": "e6b9c047afb64569dbfa0fb47574f4f5086e0c7ba1df506edf6807d29bbd196e",
+      "field_interpretation_sha256": "05eb5d919d53c03a55cd757dad91293cbd764064f51002238d5fb28cb66ab672",
+      "terminal_MCU_DSP_pipeline_count_deltas": [0, 0, 0],
+      "enabled_DMA_channels": [0, 3],
+      "status_DACT": 0,
+      "limits": "Read-only model controller observations; no prospective phase, CPU write value, old PortF/BCR state, grant or physical timing captured. Original strict refusal retained; no full instrument proof."
+    }
   }
 }

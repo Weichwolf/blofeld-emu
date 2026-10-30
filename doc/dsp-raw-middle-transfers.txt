@@ -49,6 +49,14 @@ phase/channel/endpoints and complete waveform-bank contents were not captured.
 The reference manifest pins its qualification; all hardware hypotheses remain
 unverified. See dsp-automatic-loops.txt for the preceding Y0-only run.
 
+A read-only diagnostic rerun preserves every terminal MCU/DSP/pipeline count.
+Enabled DMA0 has DCR=aab604, DSR=00068f, DDR=ffff80; DMA3 has DCR=a8b600,
+DSR=00068f, DDR=ffffd2; both use ESAI_1 TX requests. DSTR=000036 has DACT=0,
+so DCH is not interpreted. These are model register observations, not a selected
+next phase, transfer, BIU grant or hardware timing proof. The actual CPU write
+value and old Port-F/BCR state remain uncaptured. No arbiter admission changed.
+The manifest pins the diagnostic qualification and field interpretation.
+
 Subsequent SR-read timing keeps its separate uncertainty/refusals documented in
 dsp-status-pipeline.txt. Arithmetic/memory producers,other partial consumers,
 unqualified parallel forms,original near-end calls and full original reset/MIDI/audio/storage/
