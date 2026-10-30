@@ -80,6 +80,10 @@ status is unobserved; writing a command cannot establish that status. Other BCR
 configurations, BIU arbitration and wait-state timing are unsupported.
 Core BCR state is restored on external reset; peripheral RESET clears GPIO modes.
 This gate qualifies the documented logical setup, not measured BIU cycle timing.
+Data sheet Rev4.1 Table25 (printed54) specifies Port F minimum high/low
+pulse widths of6*Tc; note2 states PLL disabled and square-wave EXTAL. These
+pin constraints do not define a six-cycle MOVEP cost or a BIU grant. Complete
+PLL-enabled access-phase timing remains unqualified.
 
 The original_dsp_boot regression checks that the executed published SPI prefix
 and reached original stage retain the modeled BCR reset value. A separate original
