@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <sys/random.h>
+#include <utility>
 
 namespace blofeld {
 std::string generate_virtual_serial() {
@@ -60,13 +61,25 @@ public:
   }
 
   void healthy() const {
+    if (updating) { throw Fault("Virtual device NVM publication is active; reentry is forbidden"); }
     if (!valid) { throw Fault("Virtual device NVM publication failed; reopen the device state"); }
   }
 
   PrivateDirectory directory;
+
+  void authorize(const std::shared_ptr<const void> &token) const {
+    healthy();
+    if (writer.lock() != token) {
+      throw Fault("Virtual device NVM is bound to another live MCU writer");
+    }
+  }
+
   std::filesystem::path filename;
   PrivateFileLease lease;
   McuFlashImage image;
+  PrivateFileObserver observer;
+  std::weak_ptr<const void> writer;
+  bool updating = false;
   bool valid = true;
 };
 
@@ -83,11 +96,36 @@ const McuFlashImage &VirtualDeviceState::image() const {
 }
 
 void VirtualDeviceState::save(const McuFlashImage &image) {
+  save(image, {});
+}
+
+std::shared_ptr<const void> VirtualDeviceState::claim_writer() {
   impl_->healthy();
+  if (!impl_->writer.expired()) { throw Fault("Virtual device NVM already has a live MCU writer"); }
+  auto token = std::make_shared<const unsigned>(0);
+  impl_->writer = token;
+  return token;
+}
+
+void VirtualDeviceState::save(const McuFlashImage &image,
+                              const std::shared_ptr<const void> &writer) {
+  impl_->authorize(writer);
   const auto bytes = encode_flash_image(image);
   impl_->valid = false;
-  impl_->directory.write(impl_->filename, bytes);
+  impl_->updating = true;
+  try {
+    impl_->directory.write(impl_->filename, bytes, impl_->observer);
+  } catch (...) {
+    impl_->updating = false;
+    throw;
+  }
   impl_->image = image;
   impl_->valid = true;
+  impl_->updating = false;
+}
+
+void VirtualDeviceState::set_observer(PrivateFileObserver observer) {
+  impl_->healthy();
+  impl_->observer = std::move(observer);
 }
 }

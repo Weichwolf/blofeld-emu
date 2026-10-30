@@ -7,6 +7,7 @@
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
+#include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_midi.hpp"
@@ -125,10 +126,10 @@ void clocks(Config &config, std::istringstream &line) {
   const auto extal = static_cast<std::uint32_t>(number(line, UINT32_MAX));
   const auto timebase = number(line, UINT64_MAX);
   literal(line, "reference-boundaries");
-  config.mcu = {.clock = {.oscillator_hz = oscillator,
-                          .initial_oscillator_phase_ticks = phase,
-                          .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
-                .memory_timing = McuRunMemory::internal_flash_reads};
+  config.mcu.clock = {.oscillator_hz = oscillator,
+                      .initial_oscillator_phase_ticks = phase,
+                      .switch_timing = McuRunClockSwitch::reference_cycle_boundary};
+  config.mcu.memory_timing = McuRunMemory::internal_flash_reads;
   config.dsp.clock = {.extal_hz = extal,
                       .timebase_hz = timebase,
                       .switch_timing = DspClockSwitch::reference_instruction_boundary};
@@ -138,6 +139,30 @@ void clocks(Config &config, std::istringstream &line) {
   if (dsp.timebase_hz() < mcu.timebase_hz() || timebase % mcu.timebase_hz() != 0) {
     throw Fault("Reference-board common timebase must be an integer MCU multiple");
   }
+}
+
+void flash_timing(Config &config, std::istringstream &line) {
+  const auto contract = token(line);
+  if (contract == "unqualified") {
+    config.mcu.flash_timing = {};
+    return;
+  }
+  if (contract != "uf32-formula") { throw Fault("Unknown MCU flash timing contract"); }
+  const auto transfer = static_cast<unsigned>(number(line, std::numeric_limits<unsigned>::max()));
+  if (transfer == 0) { throw Fault("MCU flash initial transfer candidate must be positive"); }
+  literal(line, "zero-gap");
+  const auto unit = token(line);
+  FlashVerifyUnit scan = FlashVerifyUnit::unqualified;
+  if (unit == "words") {
+    scan = FlashVerifyUnit::words;
+  } else if (unit == "bytes") {
+    scan = FlashVerifyUnit::bytes;
+  } else if (unit != "unqualified") {
+    throw Fault("Unknown MCU flash blank-check scan unit");
+  }
+  config.mcu.flash_timing = {.contract = FlashTimingContract::uf32_formula_candidate,
+                             .transfer_bus_cycles = transfer,
+                             .verify_unit = scan};
 }
 
 void ordering(Config &config, std::istringstream &line) {
@@ -354,13 +379,22 @@ bool midi_setting(Config &config, const std::string_view key, std::istringstream
   return true;
 }
 
-void setting(Config &config, const std::string_view key, std::istringstream &line) {
-  if (midi_setting(config, key, line)) { return; }
+bool timing_setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "clock") {
     clocks(config, line);
+  } else if (key == "mcu-flash-timing") {
+    flash_timing(config, line);
   } else if (key == "ordering") {
     ordering(config, line);
-  } else if (key == "dsp-interrupts") {
+  } else {
+    return false;
+  }
+  return true;
+}
+
+void setting(Config &config, const std::string_view key, std::istringstream &line) {
+  if (midi_setting(config, key, line) || timing_setting(config, key, line)) { return; }
+  if (key == "dsp-interrupts") {
     dsp_interrupts(config, line);
   } else if (key == "dsp-input-order") {
     dsp_order(config, line);

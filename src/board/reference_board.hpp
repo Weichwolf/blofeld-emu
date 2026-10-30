@@ -36,6 +36,7 @@
 
 namespace blofeld {
 class UsbipRuntime;
+class VirtualDeviceState;
 }
 
 namespace blofeld::reference {
@@ -197,7 +198,7 @@ struct Execution {
   std::uint64_t instructions = 0;
   std::optional<AudioOutput> audio = std::nullopt;
   // External persistent unit owner; never rewound with modeled checkpoints.
-  std::function<void(const McuFlashImage &)> nvm_output = nullptr;
+  std::shared_ptr<VirtualDeviceState> device_state = nullptr;
 };
 
 class Board;

@@ -2,11 +2,15 @@
 #include "common/bus.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_flash.hpp"
+#include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_memory.hpp"
 #include "storage/flash_image.hpp"
 
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 
 namespace blofeld {
 
@@ -44,6 +48,33 @@ void McuBus::observe_flash_clock(const FlashClockRates rates) {
   flash_.observe_clock(rates);
 }
 
+void McuBus::configure_flash_timing(const FlashTimingInputs inputs) {
+  if (notifying_) { throw Fault("MCU flash timing setup requires an inactive bus observer"); }
+  flash_.configure_timing(inputs);
+}
+
+void McuBus::attach_flash_store(std::shared_ptr<VirtualDeviceState> store) {
+  if (notifying_) { throw Fault("MCU flash store attachment requires an inactive bus observer"); }
+  flash_.attach_store(std::move(store));
+}
+
+std::optional<std::uint64_t> McuBus::next_flash_event_ticks() const {
+  return flash_.next_timed_event();
+}
+
+void McuBus::advance_flash_time(const FlashClockBoundary boundary) {
+  try {
+    if (notifying_) { throw Fault("MCU flash clock advance requires an inactive bus observer"); }
+    const auto mutations = flash_.advance_time(boundary);
+    revision_ += mutations;
+    code_revision_ += mutations;
+  } catch (const Fault &error) {
+    throw Fault("MCU flash operation=clock register-offset=0x0105 pc=" + hex(context_.pc) +
+                " ccr=" + hex(context_.ccr, 2) +
+                " attempted-ticks=" + std::to_string(boundary.ticks) + ": " + error.what());
+  }
+}
+
 void McuBus::observe_flash_stop(const FlashStopTransition transition,
                                 const FlashStopContract contract) {
   try {
@@ -59,6 +90,7 @@ void McuBus::observe_flash_stop(const FlashStopTransition transition,
 }
 
 void McuBus::power_cycle() {
+  flash_.require_storage();
   memory_.power_cycle();
   reset();
 }

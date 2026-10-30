@@ -1,0 +1,53 @@
+Native MCU flash clocks and live device files
+
+The FTS32K controller owns accepted command/address/data, transfer and completion.
+Native McuRunClock advances its calendar in run and WAI; reads add no time. The
+legacy milestone interface remains a separate supporting reference. A native
+launch requires explicit timing or reference-clock qualification. Idle CBEIF
+without a staged command stays unsupported. No firmware code is modified.
+
+Optional development-board setting (reference-board.txt):
+  mcu-flash-timing uf32-formula 1 zero-gap words
+The positive integer is the initial transfer delay in bus periods. zero-gap
+explicitly selects completion-then-successor-transfer at one timestamp. The final
+field selects words, bytes, or unqualified for the blank-check scan. The setting
+may precede clock. Omission, or mcu-flash-timing unqualified, supplies no timing.
+These are research inputs, not a measured Blofeld board profile.
+
+Primary sources are S12FTS32KV1 V01.03 and 9S12UF32DGV1 V01.05 from the official
+9S12UF32 archive in hardware/sources.json. UF32 printed109/110 give single-word
+9NVM+25bus periods, same-row burst4NVM+9bus, sector/mass approximately4000/20000NVM
+periods. Exact integer ticks retain fractional bus Hz and off-bus deadlines.
+Internal transfer/HV timing remains unknown. The word-versus-byte blank-scan
+text/table conflict and rounded timing-table discrepancies remain explicit.
+The inherited COP-priority endpoint policy is a reference, not silicon proof.
+
+--device-state binds the reference Board to its existing VirtualDeviceState lease.
+Actual transfer/completion publishes the candidate cold cut and directory fsync
+before committing flash cells/history/controller flags. RAM/peripheral inputs
+are untouched. The binding has one opaque writer capability; ordinary saves and
+another controller cannot bypass it. Hardware reset retains it. RAM-only Board
+checkpoints/restore and automatic replay cannot include or rewind the file owner.
+A cold --flash-out export and a live device file cannot be combined.
+
+Publication failure blocks flags, reset and stale power-off export until reopen.
+The Board does not perform a second end-budget export for bound units, preserving
+the original execution error and the actual durable file. Pure verification skips
+unchanged images. Unclocked MCU-only diagnostics retain their documented cold
+export behavior; they do not establish a normal standalone instrument.
+
+Directed checks: flash_timing, flash_native_clock, flash_calendar,
+flash_native_persistence and reference_flash. Own ROM starts from held POR and
+copies its algorithm into RAM through guest instructions. Tests cover all four
+commands, fractional deadlines, CCIF/WAI/ISR/RTI, queued row/cross-row operations,
+post-erase verify, actual reset/cold recovery, writer/checkpoint guards and both
+file publications at five POSIX phases. Real SIGSTOP/SIGKILL and I/O rejection are
+offline controls, not physical device traffic or fuzzing. Independent Python
+encoding checks every byte, knowledge/history bit, CRC and file permission. Cold
+guest LDAA follows independent S12CPUV2 Rev4 printed214 flag expectations.
+
+Synchronous file transactions are outside any future real-time audio callback.
+Host-process death is not physical host-disk power-failure validation. Complete
+original Desktop/Keyboard boot, original update/recovery, realtime and all
+instrument functions remain open. These component/Board controls do not replace
+connected execution of the unmodified original firmware.

@@ -193,13 +193,16 @@ add_library(blofeld_nand_store src/storage/nand_file.cpp src/storage/nand_store.
 target_include_directories(blofeld_nand_store PUBLIC src)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
 add_library(blofeld_mcu src/mcu/mcu_bus.cpp src/mcu/mcu_bus_clone.cpp src/mcu/mcu_bus_usb.cpp src/mcu/mcu_code_cache.cpp src/mcu/mcu_memory.cpp src/mcu/mcu_gpio.cpp
-  src/mcu/mcu_flash_config.cpp src/mcu/mcu_flash.cpp src/mcu/mcu_flash_backdoor.cpp src/mcu/mcu_flash_memory.cpp src/mcu/mcu_bus_flash.cpp
+  src/mcu/mcu_flash_config.cpp src/mcu/mcu_flash.cpp src/mcu/mcu_flash_clock.cpp
+  src/mcu/mcu_flash_timing.cpp src/mcu/mcu_flash_persistence.cpp
+  src/mcu/mcu_flash_backdoor.cpp src/mcu/mcu_flash_memory.cpp src/mcu/mcu_bus_flash.cpp
   src/mcu/mcu_clock.cpp src/mcu/mcu_cop.cpp src/mcu/mcu_reset.cpp src/mcu/mcu_run_clock.cpp src/mcu/mcu_sci.cpp src/mcu/mcu_timer.cpp src/mcu/mcu_interrupts.cpp
   src/mcu/mcu_usb.cpp src/mcu/mcu_usb_io.cpp src/mcu/mcu_usb_status.cpp src/mcu/mcu_usb_packets.cpp
   src/mcu/mcu_usb_control.cpp src/mcu/mcu_usb_standard_status.cpp
   src/mcu/mcu_usb_ique_control.cpp src/mcu/mcu_usb_reset.cpp src/mcu/mcu_usb_host.cpp)
 target_include_directories(blofeld_mcu PUBLIC src)
-target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage blofeld_gpio_pads)
+target_link_libraries(blofeld_mcu PUBLIC blofeld_firmware blofeld_storage blofeld_gpio_pads
+  PRIVATE blofeld_device_identity)
 add_library(blofeld_usb_host src/usb/usb_transfer.cpp src/usb/usb_host.cpp src/usb/usb_host_packets.cpp
   src/usb/usb_device_probe.cpp src/usb/usb_descriptors.cpp)
 target_include_directories(blofeld_usb_host PUBLIC src)
@@ -2038,6 +2041,35 @@ if(BUILD_TESTING)
   add_executable(blofeld-flash-backdoor-test test/flash_backdoor_test.cpp test/flash_backdoor_native.cpp)
   target_link_libraries(blofeld-flash-backdoor-test PRIVATE blofeld_core)
   add_test(NAME flash_backdoor COMMAND blofeld-flash-backdoor-test)
+  add_executable(blofeld-flash-timing-test test/mcu_flash_timing_test.cpp)
+  target_link_libraries(blofeld-flash-timing-test PRIVATE blofeld_core)
+  add_test(NAME flash_timing COMMAND blofeld-flash-timing-test)
+  add_executable(blofeld-flash-clock-test test/mcu_flash_clock_test.cpp)
+  target_link_libraries(blofeld-flash-clock-test PRIVATE blofeld_core)
+  add_test(NAME flash_native_clock COMMAND blofeld-flash-clock-test)
+  add_executable(blofeld-flash-calendar-test test/mcu_flash_calendar_test.cpp)
+  target_link_libraries(blofeld-flash-calendar-test PRIVATE blofeld_core)
+  add_test(NAME flash_calendar COMMAND blofeld-flash-calendar-test)
+  add_executable(blofeld-flash-live-test test/mcu_flash_live_test.cpp)
+  target_link_libraries(blofeld-flash-live-test PRIVATE blofeld_core)
+  add_executable(blofeld-flash-live-worker test/mcu_flash_live_worker.cpp)
+  target_link_libraries(blofeld-flash-live-worker PRIVATE blofeld_core)
+  add_executable(blofeld-flash-durable-queue-test test/mcu_flash_durable_queue_test.cpp)
+  target_link_libraries(blofeld-flash-durable-queue-test PRIVATE blofeld_core)
+  add_test(NAME flash_native_persistence COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/mcu_flash_live_processes.py"
+    $<TARGET_FILE:blofeld-flash-live-test> $<TARGET_FILE:blofeld-flash-durable-queue-test>
+    $<TARGET_FILE:blofeld-flash-live-worker>)
+  set_tests_properties(flash_native_persistence PROPERTIES TIMEOUT 120)
+  add_executable(blofeld-reference-flash-test test/reference_flash_test.cpp)
+  target_link_libraries(blofeld-reference-flash-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_flash COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_flash_processes.py"
+    $<TARGET_FILE:blofeld-reference-flash-test>)
+  add_test(NAME reference_flash_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_flash_cli.py" $<TARGET_FILE:blofeld-headless>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip")
+  set_tests_properties(reference_flash_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-flash-test test/mcu_flash_test.cpp)
   target_link_libraries(blofeld-flash-test PRIVATE blofeld_core)
   add_test(NAME flash_commands COMMAND blofeld-flash-test)
@@ -3403,6 +3435,9 @@ add_custom_target(quality
     blofeld-mcu-sender-test
     blofeld-flash-config-test blofeld-original-flash-config-test
     blofeld-flash-test blofeld-flash-stop-test blofeld-original-flash-stop-test
+    blofeld-flash-timing-test blofeld-flash-clock-test blofeld-flash-calendar-test
+    blofeld-flash-live-test blofeld-flash-live-worker blofeld-flash-durable-queue-test
+    blofeld-reference-flash-test
     blofeld-flash-backdoor-test
     blofeld-original-flash-test
     blofeld-original-flash-restart-test

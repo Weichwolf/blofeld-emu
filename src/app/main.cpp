@@ -470,9 +470,9 @@ int run(const Options &config) {
   std::cout << "Firmware: " << firmware.mcu.size() << " MCU bytes, " << firmware.dsp.size()
             << " DSP records, " << firmware.sysex_packets << " checked data packets\n";
   if (config.inspect) { return 0; }
-  std::unique_ptr<blofeld::VirtualDeviceState> device;
+  std::shared_ptr<blofeld::VirtualDeviceState> device;
   if (!config.device_state.empty()) {
-    device = std::make_unique<blofeld::VirtualDeviceState>(
+    device = std::make_shared<blofeld::VirtualDeviceState>(
         config.device_state, blofeld::McuFlashImage::from_known(firmware.mcu));
   }
   std::ofstream trace;
@@ -483,16 +483,14 @@ int run(const Options &config) {
   }
   const auto image = execution_image(config, firmware, device.get());
   if (board) {
-    blofeld::reference::Execution execution{.image = image,
-                                            .rom = rom,
-                                            .specification = specification,
-                                            .flash_out = config.flash_out,
-                                            .trace = trace.is_open() ? &trace : nullptr,
-                                            .instructions = config.instructions,
-                                            .audio = audio_output(config)};
-    if (device) {
-      execution.nvm_output = [&device](const auto &state) { device->save(state); };
-    }
+    const blofeld::reference::Execution execution{.image = image,
+                                                  .rom = rom,
+                                                  .specification = specification,
+                                                  .flash_out = config.flash_out,
+                                                  .trace = trace.is_open() ? &trace : nullptr,
+                                                  .instructions = config.instructions,
+                                                  .audio = audio_output(config),
+                                                  .device_state = device};
     return run_reference(config, *board, execution);
   }
   return run_mcu(config, image, specification, trace, device.get());

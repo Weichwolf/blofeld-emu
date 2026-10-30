@@ -46,6 +46,8 @@ Development processes can select a persistent virtual MCU unit with
 --device-state /private/existing-dir/unit.bfnvm (device-identity.txt). This is
 separate factory/NVM ownership, not a working normal device profile. The first
 creation allocates its own serial; later starts use the complete saved state.
+The reference Board binds that owner to live native MCU flash publication;
+mcu-flash-clock.txt records explicit timing choices and remaining limits.
 
 Display snapshots and live GUI access use packed 1-bit PBM/text files below
 $XDG_RUNTIME_DIR/blofeld-emu/. Atomic replacement and directory change events

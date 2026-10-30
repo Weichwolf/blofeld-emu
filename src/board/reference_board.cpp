@@ -24,6 +24,9 @@
 namespace blofeld::reference {
 namespace {
 McuMachine make_mcu(const Config &config, const Execution &execution) {
+  if (execution.device_state && (!execution.flash_out.empty() || config.checkpoint)) {
+    throw Fault("A live device state excludes cold export and automatic RAM checkpoint replay");
+  }
   if (config.pipeline) {
     return {execution.image, execution.specification, config.mcu, config.pipeline->power_on};
   }
@@ -38,7 +41,9 @@ constexpr unsigned decoder_full_speed = 8;
 
 Board::Owners::Owners(const Config &config, const Execution &execution)
     : mcu(make_mcu(config, execution)),
-      dsp(config.pipeline ? std::nullopt : std::optional{config.dsp}) {}
+      dsp(config.pipeline ? std::nullopt : std::optional{config.dsp}) {
+  if (execution.device_state) { mcu.attach_flash_store(execution.device_state); }
+}
 
 Board::Board(const Config &config, const Execution &execution)
     : config_(config),
@@ -274,10 +279,9 @@ void Board::report(std::ostream &stream) const {
 }
 
 void Board::persist() const {
-  if (execution_.nvm_output) {
-    execution_.nvm_output(native_->mcu.bus().power_off_flash_image());
-    return;
-  }
+  // A bound controller has already published every cold cut before its flags.
+  // Never export stale modeled state after an uncertain writer failure.
+  if (execution_.device_state) { return; }
   if (execution_.flash_out.empty()) { return; }
   save_flash_image(execution_.flash_out, native_->mcu.bus().power_off_flash_image());
   std::cout << "Saved private MCU NVM image: " << execution_.flash_out << '\n';

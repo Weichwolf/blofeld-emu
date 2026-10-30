@@ -4,6 +4,7 @@
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
+#include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "mcu/mcu_sci.hpp"
@@ -17,12 +18,14 @@
 #include <vector>
 
 namespace blofeld {
+class VirtualDeviceState;
 
 enum class McuRunMemory : std::uint8_t { unqualified, unstretched_internal, internal_flash_reads };
 
 struct McuRunContract {
   McuRunClockInputs clock;
   McuRunMemory memory_timing = McuRunMemory::unqualified;
+  FlashTimingInputs flash_timing = {};
   bool operator==(const McuRunContract &) const = default;
 };
 
@@ -88,6 +91,8 @@ public:
   [[nodiscard]] const McuBus &bus() const;
   [[nodiscard]] const Hc12 &cpu() const;
   [[nodiscard]] bool clocked() const;
+  // External file ownership is never included in trusted modeled checkpoints.
+  void attach_flash_store(std::shared_ptr<VirtualDeviceState> store);
   [[nodiscard]] const McuRunClock &run_clock() const;
   [[nodiscard]] bool timing_faulted() const;
   // Explicit board event. Replaces native objects, drops external observers,

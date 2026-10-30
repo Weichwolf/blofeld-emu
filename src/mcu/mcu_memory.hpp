@@ -44,6 +44,8 @@ public:
   void invalidate_flash(FlashRange range);
 
 private:
+  friend class McuFlash;
+  void commit_flash(const McuMemory &source) noexcept;
   static constexpr std::size_t flash_size = 32768;
   static constexpr std::size_t smram_size = 3584;
   static constexpr std::size_t qram_size = 1536;

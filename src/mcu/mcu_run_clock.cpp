@@ -83,6 +83,11 @@ void McuRunClock::advance_cycle(McuBus &bus, const ExecutionContext context, con
         bus_cycles_ == std::numeric_limits<std::uint64_t>::max()) {
       throw Fault("MCU run clock counter exhausted");
     }
+    bus.advance_flash_time({.ticks = elapsed_ticks_ + ticks,
+                            .timebase_hz = timebase_hz_,
+                            .oscillator_hz = oscillator_hz_,
+                            .bus_period_ticks = next_cycle_ticks(bus),
+                            .include_endpoint = !period.cop_deadline});
     if (period.cop_deadline) { advance_to_cop_deadline(bus, static_cast<unsigned>(edges)); }
     if (gates.sci) { bus.advance_sci(1); }
     if (gates.timer) { bus.advance_timer(1); }

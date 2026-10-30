@@ -113,6 +113,7 @@ void McuBus::reset() {
 }
 
 void McuBus::reset_modules() {
+  flash_.require_storage();
   reset_asserted_ = false;
   memory_.reset();
   decoded_bytes_.reset();

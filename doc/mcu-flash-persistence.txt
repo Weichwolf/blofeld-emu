@@ -77,7 +77,7 @@ is absent. No manufacturer code or runtime images are included in test sources.
 Original-command exports and cold-process recovery/SCI checks are described in
 original-update-restarts.txt; they preserve the same reference-timing limits.
 
-Offline fuzzing
+Offline fuzzing (only after an explicit user request)
   cmake --preset fuzz
   cmake --build build/fuzz --target flash-image-fuzz
   python3 tools/make_flash_image_fuzz_seeds.py doc/local/flash-image-fuzz-corpus
@@ -90,5 +90,6 @@ mutations repair the CRC to reach semantic checks; the other half retain raw
 corruption coverage. This parser harness performs no file or physical-device I/O.
 The current strict-sanitizer campaign completed 166146 runs in 61 seconds without
 findings. This is a short parser campaign, not sustained storage/board fuzzing.
-Full live storage durability, board snapshots, timed power-loss behavior and
-original end-to-end update/recovery validation remain outstanding.
+Native clock/Board live file publication and directed process-death controls are
+described in mcu-flash-clock.txt. Full instrument storage, board snapshots,
+physical power-loss and original end-to-end update/recovery remain outstanding.

@@ -6,6 +6,7 @@
 #include "mcu/mcu_clock.hpp"
 #include "mcu/mcu_cop.hpp"
 #include "mcu/mcu_flash.hpp"
+#include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_interrupts.hpp"
 #include "mcu/mcu_memory.hpp"
@@ -24,6 +25,7 @@
 #include <string_view>
 
 namespace blofeld {
+class VirtualDeviceState;
 
 struct BusEvent {
   bool write = false;
@@ -108,6 +110,10 @@ public:
   void reset();
   void power_cycle();
   void observe_flash_clock(FlashClockRates rates);
+  void configure_flash_timing(FlashTimingInputs inputs);
+  void attach_flash_store(std::shared_ptr<VirtualDeviceState> store);
+  void advance_flash_time(FlashClockBoundary boundary);
+  [[nodiscard]] std::optional<std::uint64_t> next_flash_event_ticks() const;
   void advance_flash(FlashMilestone milestone);
   void observe_flash_stop(FlashStopTransition transition,
                           FlashStopContract contract = FlashStopContract::unqualified);

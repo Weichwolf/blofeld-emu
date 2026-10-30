@@ -290,8 +290,12 @@ RAM/ROM/flash mapping             partial  Physical SMRAM/QRAM, unknown-byte tra
                                           target mask unknown (mcu-flash-errata.txt).
                                           Cold MCU NVM files preserve bytes,
                                           knowledge and erase history; see
-                                          mcu-flash-persistence.txt. Timed flash
-                                          scheduling remains pending.
+                                          mcu-flash-persistence.txt. Explicit native
+                                          formula clocks and live file publication
+                                          have own-ROM/reset/WAI/queued/Board
+                                          controls (mcu-flash-clock.txt);silicon
+                                          phases/mask and original whole-device
+                                          update/recovery remain unqualified.
                                           DSP initial and MS/MSW=111 maps, retained
                                           X/P alias, protected/missing ROM and
                                           explicit three-cycle switch tested.
@@ -1719,9 +1723,13 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           unknownness and erase history across
                                           reconstruction; native/CLI and real
                                           process-death file-publication tests.
-                                          MCU persistence uses private cold
-                                          exports; MCU continuous command journaling
-                                          and full board snapshots remain pending.
+                                          Reference Board device-state ownership
+                                          now publishes actual native command cut
+                                          and completion before flags;process-death,
+                                          cold guest loads and writer/checkpoint
+                                          guards are scoped in mcu-flash-clock.txt.
+                                          Original update/recovery,realtime and
+                                          full board snapshots remain pending.
                                           A causal reference cell/write controller
                                           now owns accepted data, preimages,
                                           program/erase deadlines and computed

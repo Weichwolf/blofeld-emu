@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_flash_config.hpp"
+#include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_memory.hpp"
 #include "storage/flash_image.hpp"
 
@@ -56,7 +57,10 @@ McuFlash::McuFlash(McuMemory &memory, const McuFlash &source)
       key_locked_(source.key_locked_),
       clock_(source.clock_),
       stopped_(source.stopped_),
-      command_known_(source.command_known_) {}
+      command_known_(source.command_known_),
+      timing_(source.timing_),
+      store_(source.store_),
+      store_writer_(source.store_writer_) {}
 
 FlashRange McuFlash::affected(const Job job) {
   if (job.command == mass_erase) { return {.size = array_bytes}; }
@@ -68,6 +72,8 @@ FlashRange McuFlash::affected(const Job job) {
 }
 
 void McuFlash::reset() {
+  require_storage();
+  cancel_timing();
   if (active_ && active_->command != erase_verify) { memory_.invalidate_flash(affected(*active_)); }
   active_.reset();
   buffer_state_ = BufferState::empty;
@@ -85,11 +91,16 @@ void McuFlash::reset() {
 }
 
 void McuFlash::require_running() const {
+  require_storage();
+  if (timing_.faulted) {
+    throw Fault("MCU flash clock failure requires coordinated reset or restore");
+  }
   if (stopped_) { throw Fault("Unqualified MCU flash access while nominal STOP is held"); }
 }
 
 void McuFlash::observe_stop(const FlashStopTransition transition,
                             const FlashStopContract contract) {
+  require_storage();
   if (contract != FlashStopContract::nominal_active_abort) {
     throw Fault("MCU flash STOP requires the explicit nominal active-abort contract");
   }
@@ -110,6 +121,7 @@ void McuFlash::observe_stop(const FlashStopTransition transition,
   active_.reset();
   buffer_state_ = BufferState::empty;
   buffered_ = {};
+  cancel_timing();
   errors_ |= access_error;
   command_known_ = false; // No post-abort FCMD readback value is inferred.
   stopped_ = true;
@@ -221,8 +233,10 @@ void McuFlash::write_status(const std::uint8_t value) {
     return;
   }
   if (errors_ != 0) { return; }
+  const auto next = plan_launch();
   blank_ = false;
   buffer_state_ = BufferState::launched;
+  timing_ = next;
 }
 
 void McuFlash::write(const ByteWrite access) {
@@ -265,18 +279,22 @@ void McuFlash::write(const ByteWrite access) {
   if (!McuFlashConfig::register_name(access.address).empty()) { config_.write(access); }
 }
 
-void McuFlash::transfer() {
+void McuFlash::transfer_state() {
   if (active_ || buffer_state_ != BufferState::launched) {
     throw Fault("MCU flash buffer-transfer milestone without an available executing slot");
   }
-  if (!clock_) { throw Fault("Unknown MCU flash operating clocks at command transfer"); }
-  constexpr unsigned minimum_nvm_hz = 150000;
-  constexpr unsigned maximum_nvm_hz = 200000;
-  const auto divisor = config_.oscillator_divisor();
-  if (!divisor) { throw Fault("MCU flash transfer lost its configured divider"); }
-  if (clock_->oscillator_hz < minimum_nvm_hz * *divisor ||
-      clock_->oscillator_hz > maximum_nvm_hz * *divisor) {
-    throw Fault("Unqualified MCU flash operating clock outside 150..200 kHz");
+  if (timing_.inputs.contract == FlashTimingContract::unqualified && !clock_) {
+    throw Fault("Unknown MCU flash operating clocks at command transfer");
+  }
+  if (timing_.inputs.contract == FlashTimingContract::unqualified) {
+    constexpr unsigned minimum_nvm_hz = 150000;
+    constexpr unsigned maximum_nvm_hz = 200000;
+    const auto divisor = config_.oscillator_divisor();
+    if (!divisor) { throw Fault("MCU flash transfer lost its configured divider"); }
+    if (clock_->oscillator_hz < minimum_nvm_hz * *divisor ||
+        clock_->oscillator_hz > maximum_nvm_hz * *divisor) {
+      throw Fault("Unqualified MCU flash operating clock outside 150..200 kHz");
+    }
   }
   if (buffered_.command == word_program) { memory_.check_flash_program(buffered_.offset); }
   active_ = buffered_;
@@ -284,7 +302,7 @@ void McuFlash::transfer() {
   buffered_ = {};
 }
 
-void McuFlash::complete() {
+void McuFlash::complete_state() {
   if (!active_) { throw Fault("MCU flash completion milestone without an executing command"); }
   const auto job = *active_;
   if (job.command == word_program) {
@@ -306,6 +324,9 @@ void McuFlash::complete() {
 
 void McuFlash::advance(const FlashMilestone milestone) {
   require_running();
+  if (timing_.inputs.contract != FlashTimingContract::unqualified) {
+    throw Fault("Manual milestones cannot advance a clock-owned MCU flash controller");
+  }
   std::string target = "none";
   if (milestone == FlashMilestone::transfer_buffer) {
     if (buffer_state_ == BufferState::launched) { target = hex(buffered_.offset); }
@@ -334,6 +355,7 @@ void McuFlash::check_array_read() const {
 }
 
 bool McuFlash::interrupt_pending() const {
+  require_storage();
   if (stopped_) {
     // CCIF is set on abort. Only CBEIF is unspecified before STOP exit.
     if ((control_ & command_complete) != 0) { return true; }
@@ -346,6 +368,7 @@ bool McuFlash::interrupt_pending() const {
 }
 
 McuFlashImage McuFlash::power_off_image() const {
+  require_storage();
   auto image = memory_.flash_image();
   if (active_ && active_->command != erase_verify) { image.invalidate(affected(*active_)); }
   return image;
@@ -353,6 +376,9 @@ McuFlashImage McuFlash::power_off_image() const {
 
 void McuFlash::observe_clock(const FlashClockRates rates) {
   require_running();
+  if (timing_.inputs.contract != FlashTimingContract::unqualified) {
+    throw Fault("MCU flash clock rates belong to the configured native owner");
+  }
   if (active_ || buffer_state_ == BufferState::launched) {
     throw Fault("Unqualified MCU flash clock change while a command is in progress");
   }

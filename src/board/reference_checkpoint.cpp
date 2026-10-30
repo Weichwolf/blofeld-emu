@@ -125,6 +125,9 @@ void Board::advance() {
 }
 
 Checkpoint Board::checkpoint() const {
+  if (execution_.device_state) {
+    throw Fault("A live device state cannot be included in a RAM-only Board checkpoint");
+  }
   require_healthy();
   if (native_->mcu.system_reset_active()) {
     native_->mcu.validate_reset_boundary();
@@ -149,6 +152,9 @@ Checkpoint Board::checkpoint() const {
 
 void Board::restore(const Checkpoint &checkpoint) {
   require_idle();
+  if (execution_.device_state) {
+    throw Fault("A live device state cannot be rewound or removed by Board restore");
+  }
   if (!checkpoint.storage_ || checkpoint.storage_->identity != identity_) {
     throw Fault("Reference-board checkpoint belongs to another owner");
   }
@@ -368,6 +374,9 @@ Board::Outcome Board::finish_branch(const std::function<void(Board &)> &input) {
     }
   } catch (const Fault &error) {
     mark_fault();
+    // A failed live writer cannot supply a cold snapshot. Preserve the causal
+    // execution fault instead of replacing it with the storage quarantine error.
+    if (execution_.device_state) { throw; }
     fault = error.what();
   }
   return {.fault = std::move(fault), .state = status()};

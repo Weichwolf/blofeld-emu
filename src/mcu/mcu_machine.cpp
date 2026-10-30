@@ -6,6 +6,7 @@
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_cop.hpp"
+#include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_memory.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
@@ -103,6 +104,7 @@ struct McuMachine::State {
                               [this](const auto transfer) { return read_timing(transfer); })
                         : nullptr),
         cpu(timed ? static_cast<Bus &>(*timed) : *bus, specification) {
+    bus->configure_flash_timing(run.contract ? run.contract->flash_timing : FlashTimingInputs{});
     if (const auto &clock = run.clock; timed && clock) {
       if (run.idle_cycles > clock->bus_cycles()) { throw Fault("Invalid MCU idle clock count"); }
       timed->restore_boundary(clock->bus_cycles() - run.idle_cycles, bus->context_);
@@ -350,6 +352,11 @@ void McuMachine::check_specification() const {
   }
 }
 
+void McuMachine::attach_flash_store(std::shared_ptr<VirtualDeviceState> store) {
+  state_->check_inactive();
+  state_->bus->attach_flash_store(std::move(store));
+}
+
 McuCheckpoint McuMachine::checkpoint() const {
   if (state_->reset_advancing) { throw Fault("Cannot checkpoint during MCU reset advancement"); }
   std::optional<Hc12Checkpoint> cpu_state;
@@ -367,6 +374,9 @@ McuCheckpoint McuMachine::checkpoint() const {
 void McuMachine::restore(const McuCheckpoint &checkpoint) {
   if (state_->cpu.executing() || state_->bus->notifying_ || state_->reset_advancing) {
     throw Fault("Cannot restore during active MCU execution or bus observation");
+  }
+  if (state_->bus->flash_.persistent()) {
+    throw Fault("A live MCU flash store cannot be rewound or removed by RAM checkpoint restore");
   }
   if (!checkpoint.storage_) { throw Fault("Cannot restore an empty MCU checkpoint"); }
   if (checkpoint.storage_->specification != specification_bytes_) {
@@ -420,7 +430,9 @@ void McuMachine::begin_system_reset(const McuResetSource source,
   run.wait_faulted = false;
   run.reset_faulted = false;
   run.timer_inputs = 0;
-  auto bus = state_->bus->clone();
+  // A hardware reset preserves the single external store owner. Public clones
+  // and RAM checkpoints deliberately reject that ownership instead.
+  auto bus = std::unique_ptr<McuBus>(new McuBus(*state_->bus, McuBus::CloneState{}));
   bus->reset_modules();
   bus->reset_asserted_ = true;
   auto replacement = std::make_unique<State>(std::move(bus), specification_, run);

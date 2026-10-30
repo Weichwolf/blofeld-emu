@@ -22,6 +22,9 @@ McuBus::McuBus(const McuBus &source, CloneState /*tag*/)
 
 std::unique_ptr<McuBus> McuBus::clone() const {
   if (notifying_) { throw Fault("Cannot clone during an active MCU bus observation"); }
+  if (flash_.persistent()) {
+    throw Fault("A live MCU flash store cannot be cloned or rewound with a RAM checkpoint");
+  }
   // The flash object must bind to this clone's memory, never the source's array.
   return std::unique_ptr<McuBus>(new McuBus(*this, CloneState{}));
 }

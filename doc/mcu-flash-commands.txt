@@ -25,11 +25,12 @@ clear while an executing or launched job remains. Completion without an active
 command and transfer into an occupied slot fail visibly. FCNFG's CBEIE/CCIE
 generate the documented shared FFB8 interrupt source.
 
-No CPU instruction count, elapsed time, buffer-transfer latency or high-voltage
-pulse schedule is inferred. The UF32 timing formulae do not specify all internal
+Without an explicit native formula candidate, no CPU instruction count, elapsed
+time, buffer-transfer latency or high-voltage pulse schedule is inferred. The UF32 timing formulae do not specify all internal
 phase boundaries or failure effects. Tests choose transitions explicitly; they
 establish protocol/state behavior and conditional original-code behavior, not
-calibrated timing. No default scheduler supplies completion to polling loops.
+calibrated timing. No default scheduler supplies completion to polling loops. The optional native
+calendar and its explicit hypotheses are described in mcu-flash-clock.txt.
 
 Unknown operating clocks fail. The documented oscillator range 0.5..60 MHz, bus
 minimum 1 MHz, and exact rational NVM divider range 150..200 kHz are checked.

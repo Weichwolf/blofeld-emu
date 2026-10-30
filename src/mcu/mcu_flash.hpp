@@ -3,14 +3,17 @@
 
 #include "common/bus.hpp"
 #include "mcu/mcu_flash_config.hpp"
+#include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_memory.hpp"
 #include "storage/flash_image.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string_view>
 
 namespace blofeld {
+class VirtualDeviceState;
 
 // Explicit reference-state transitions, not timed clocks or observed silicon
 // latencies. A future qualified scheduler must determine when these occur.
@@ -34,6 +37,10 @@ public:
   void write(ByteWrite access);
   void stage(MemoryWrite physical_word);
   void advance(FlashMilestone milestone);
+  // Native clock owner, separate from the explicit legacy milestone interface.
+  void configure_timing(FlashTimingInputs inputs);
+  [[nodiscard]] unsigned advance_time(FlashClockBoundary boundary);
+  [[nodiscard]] std::optional<std::uint64_t> next_timed_event() const;
   void observe_clock(FlashClockRates rates);
   // Explicit nominal active-command observation; not a whole-MCU STOP/wake model.
   void observe_stop(FlashStopTransition transition,
@@ -41,6 +48,8 @@ public:
   void check_array_read() const;
   [[nodiscard]] bool interrupt_pending() const;
   [[nodiscard]] McuFlashImage power_off_image() const;
+  void attach_store(std::shared_ptr<VirtualDeviceState> store);
+  [[nodiscard]] bool persistent() const;
 
 private:
   friend class McuBus;
@@ -63,7 +72,20 @@ private:
   void write_key(MemoryWrite physical_word);
   void transfer();
   void complete();
+  void transfer_state();
+  void complete_state();
+  void require_storage() const;
+  using Transition = void (McuFlash::*)();
+  void transact(Transition transition);
+  void commit_state(const McuFlash &source) noexcept;
   void require_running() const;
+  [[nodiscard]] FlashTimeBasis timing_basis() const;
+  [[nodiscard]] FlashTimedOperation timed_operation() const;
+  [[nodiscard]] unsigned timed_verify_scans(FlashTimedOperation operation) const;
+  [[nodiscard]] std::uint64_t timed_duration(FlashTimedOperation operation) const;
+  [[nodiscard]] FlashTimingState plan_launch() const;
+  void timed_transfer();
+  void cancel_timing();
   static constexpr unsigned key_access = 0x20;
   McuMemory &memory_;
   McuFlashConfig config_;
@@ -79,6 +101,9 @@ private:
   std::optional<FlashClockRates> clock_;
   bool stopped_ = false;
   bool command_known_ = true;
+  FlashTimingState timing_;
+  std::shared_ptr<VirtualDeviceState> store_;
+  std::shared_ptr<const void> store_writer_;
 };
 
 }
