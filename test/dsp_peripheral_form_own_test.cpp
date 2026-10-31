@@ -64,6 +64,43 @@ void relative_forms() {
   }
 }
 
+void ram_form(const RelativeInput input) {
+  constexpr unsigned base = 0x0c8080;
+  constexpr unsigned space_bit = 0x40;
+  constexpr unsigned set_bit = 0x20;
+  constexpr unsigned operand_shift = 8;
+  constexpr unsigned word_bits = 24;
+  constexpr unsigned wider_word = 0x1000000;
+  const bool y = (input.fields & 1U) != 0;
+  const bool set = (input.fields & 2U) != 0;
+  const auto opcode = base | (input.address << operand_shift) | (y ? space_bit : 0U) |
+                      (set ? set_bit : 0U) | input.bit;
+  require(!blofeld::decode_peripheral_read(opcode | wider_word),
+          "An AA6 bit branch still requires a real24-bit instruction word");
+  const auto form = blofeld::decode_peripheral_read(opcode);
+  if (input.bit >= word_bits) {
+    require(!form, "Reserved AA6 bit was accepted");
+    return;
+  }
+  require(form && form->target.address == input.address &&
+              form->target.space == (y ? blofeld::DspSpace::y : blofeld::DspSpace::x) &&
+              form->bit == input.bit && form->set == set && form->relative && form->words == 2,
+          "RAM bitbranch fields differ from the independent AA6 encoding");
+}
+
+void ram_forms() {
+  constexpr unsigned field_count = 4;
+  constexpr unsigned address_count = 64;
+  constexpr unsigned bit_count = 32;
+  for (unsigned fields = 0; fields < field_count; ++fields) {
+    for (unsigned address = 0; address < address_count; ++address) {
+      for (unsigned bit = 0; bit < bit_count; ++bit) {
+        ram_form({.fields = fields, .address = address, .bit = bit});
+      }
+    }
+  }
+}
+
 void unsupported_forms() {
   constexpr std::array refused{0U,
                                0x018098U,
@@ -85,6 +122,7 @@ int main() {
   try {
     assembled_forms();
     relative_forms();
+    ram_forms();
     unsupported_forms();
     std::cout << "Own DSP peripheral read forms match independent expectations.\n";
   } catch (const std::exception &error) {

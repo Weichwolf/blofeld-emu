@@ -7,7 +7,8 @@
 #include <optional>
 
 namespace blofeld {
-// Port operand only; destination writeback and pipeline timing require their own contracts.
+// Owned fixed X/Y read operand:AA6 bit branches and short-I/O forms.
+// Destination writeback and pipeline timing require their own contracts.
 struct DspPeripheralReadForm {
   DspAddress target;
   std::optional<unsigned> bit = std::nullopt;

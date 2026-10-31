@@ -13,6 +13,26 @@ namespace {
 constexpr unsigned high_begin = 0xffffc0;
 constexpr unsigned low_begin = 0xffff80;
 
+std::optional<DspPeripheralReadForm> ram_branch(const unsigned opcode) {
+  // FM13-27/30:AA6 only,not EA,register,subroutine or peripheral families.
+  constexpr unsigned mask = 0xffc080;
+  constexpr unsigned family = 0x0c8080;
+  constexpr unsigned bit_mask = 0x1f;
+  constexpr unsigned bits = 24;
+  if ((opcode & mask) != family || (opcode & bit_mask) >= bits) { return std::nullopt; }
+  constexpr unsigned space_bit = 0x40;
+  constexpr unsigned set_bit = 0x20;
+  constexpr unsigned address_mask = 0x3f;
+  constexpr unsigned address_shift = 8;
+  return DspPeripheralReadForm{
+      .target = {.space = (opcode & space_bit) != 0 ? DspSpace::y : DspSpace::x,
+                 .address = (opcode >> address_shift) & address_mask},
+      .bit = opcode & bit_mask,
+      .set = (opcode & set_bit) != 0,
+      .relative = true,
+      .words = 2};
+}
+
 std::optional<DspPeripheralReadForm> branch(const dsp56300::InstructionShape shape,
                                             const std::uint32_t opcode) {
   using enum dsp56300::InstructionKind;
@@ -75,8 +95,11 @@ std::optional<DspPeripheralReadForm> word(const std::uint32_t opcode) {
 }
 
 std::optional<DspPeripheralReadForm> decode_peripheral_read(const std::uint32_t opcode) {
+  constexpr unsigned word_mask = 0xffffff;
+  if (opcode > word_mask) { return std::nullopt; }
   const auto shape = dsp56300::inspect_instruction(opcode);
   if (!shape) { return std::nullopt; }
+  if (const auto form = ram_branch(opcode)) { return form; }
   if (const auto form = branch(*shape, opcode)) { return form; }
   return word(opcode);
 }
