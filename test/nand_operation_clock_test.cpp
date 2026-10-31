@@ -24,11 +24,14 @@ constexpr std::uint8_t payload = 0xa5;
 constexpr unsigned read_ticks = 15000, reset_ticks = 5000, stationary_polls = 100;
 constexpr unsigned erase_reset_ticks = 500000;
 // Independent p.13 conversions: Hz, 15us read, 5us/10us/500us reset.
-constexpr std::array<std::array<unsigned, 5>, 4> vectors{{
+constexpr std::array<std::array<std::uint64_t, 5>, 7> vectors{{
     {{1000000000, 15000, 5000, 10000, 500000}},
     {{540000000, 8100, 2700, 5400, 270000}},
     {{1000001, 16, 6, 11, 501}},
     {{3, 1, 1, 1, 1}},
+    {{211680000000, 3175200, 1058400, 2116800, 105840000}},
+    {{211680000001, 3175201, 1058401, 2116801, 105840001}},
+    {{18446744073709551615ULL, 276701161105644, 92233720368548, 184467440737096, 9223372036854776}},
 }};
 
 void require(const bool value, const std::string &message) {

@@ -29,7 +29,7 @@ struct NandReadSetupPins {
 // impose a universal CE-to-control hold on write-only sequences.
 class NandReadSetup {
 public:
-  explicit NandReadSetup(std::uint32_t timebase_hz);
+  explicit NandReadSetup(std::uint64_t timebase_hz);
   bool operator==(const NandReadSetup &) const = default;
   // True only for a selected falling RE edge meeting all setup requirements.
   // Compose before protocol consumption; failures retain the preceding state.
@@ -58,7 +58,7 @@ private:
   void check_read(std::uint64_t ticks, const KnownPins &pins, NandReadKind kind) const;
   void check_control_hold(std::uint64_t ticks) const;
   void observe_read_exit(std::uint64_t ticks, const KnownPins &pins);
-  std::uint32_t timebase_hz_;
+  std::uint64_t timebase_hz_;
   std::uint64_t ticks_ = 0;
   // nullopt means the minimum is permanently met until the next actual change.
   std::array<std::optional<std::uint64_t>, 4> stable_since_{};

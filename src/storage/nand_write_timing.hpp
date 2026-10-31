@@ -34,7 +34,7 @@ struct NandWriteLatch {
 // Protocol effects, read turnaround, busy timing and board routing are separate.
 class NandWriteTiming {
 public:
-  explicit NandWriteTiming(std::uint32_t timebase_hz);
+  explicit NandWriteTiming(std::uint64_t timebase_hz);
   bool operator==(const NandWriteTiming &) const = default;
   [[nodiscard]] std::optional<NandWriteLatch> observe(std::uint64_t ticks, NandWritePins pins);
 
@@ -62,7 +62,7 @@ private:
                                                               const KnownPins &pins);
   [[nodiscard]] std::optional<NandWriteLatch> edge(std::uint64_t ticks, const KnownPins &pins);
   [[nodiscard]] NandWriteLatch latch(std::uint64_t ticks, const KnownPins &pins) const;
-  std::uint32_t timebase_hz_;
+  std::uint64_t timebase_hz_;
   std::uint64_t ticks_ = 0;
   // nullopt is a retired constraint: its minimum is met for every future time.
   std::array<std::optional<NandTimeWindow>, 4> stable_since_{};

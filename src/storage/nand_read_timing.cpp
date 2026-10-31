@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "storage/nand_array.hpp"
+#include "storage/nand_interval.hpp"
 #include "storage/nand_time_window.hpp"
 
 #include <algorithm>
@@ -25,7 +26,7 @@ constexpr std::chrono::nanoseconds re_high_ns{15};
 constexpr std::chrono::nanoseconds read_cycle_ns{42};
 }
 
-NandReadTiming::NandReadTiming(const std::uint32_t timebase_hz) : timebase_hz_(timebase_hz) {
+NandReadTiming::NandReadTiming(const std::uint64_t timebase_hz) : timebase_hz_(timebase_hz) {
   if (timebase_hz_ == 0) { fail("zero reference timebase"); }
 }
 
@@ -36,17 +37,16 @@ void NandReadTiming::fail(const std::string &reason) const {
 
 std::uint64_t NandReadTiming::deadline(const std::uint64_t ticks,
                                        const std::chrono::nanoseconds interval) const {
-  if (interval.count() < 0 || static_cast<std::uint64_t>(interval.count()) >
-                                  std::numeric_limits<std::uint64_t>::max() / timebase_hz_) {
+  if (interval.count() < 0 ||
+      static_cast<std::uint64_t>(interval.count()) > std::numeric_limits<std::uint32_t>::max()) {
     fail("invalid reference interval");
   }
-  const auto scaled = static_cast<std::uint64_t>(interval.count()) * timebase_hz_;
-  const auto duration =
-      (scaled / nanoseconds_per_second) + (scaled % nanoseconds_per_second != 0 ? 1U : 0U);
-  if (duration > std::numeric_limits<std::uint64_t>::max() - ticks) {
+  const auto duration = nand_interval_ticks<nanoseconds_per_second>(
+      timebase_hz_, static_cast<std::uint32_t>(interval.count()));
+  if (!duration || *duration > std::numeric_limits<std::uint64_t>::max() - ticks) {
     fail("reference deadline overflow");
   }
-  return ticks + duration;
+  return ticks + *duration;
 }
 
 void NandReadTiming::check_time(const std::uint64_t ticks) const {

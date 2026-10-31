@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
+#include "storage/nand_interval.hpp"
 
 #include <cstdint>
 #include <limits>
@@ -23,7 +24,7 @@ constexpr std::uint8_t reset_command = 0xff;
 }
 
 NandOperationClock::NandOperationClock(Nand device,
-                                       const std::uint32_t timebase_hz,
+                                       const std::uint64_t timebase_hz,
                                        const NandOperationContract contract)
     : device_(std::move(device)), timebase_hz_(timebase_hz) {
   if (contract != NandOperationContract::reference_maximum) {
@@ -44,13 +45,11 @@ void NandOperationClock::healthy() const {
 }
 
 void NandOperationClock::schedule(const NandPending operation, const unsigned microseconds) {
-  const auto scaled = static_cast<std::uint64_t>(microseconds) * timebase_hz_;
-  const auto duration =
-      (scaled / microseconds_per_second) + (scaled % microseconds_per_second != 0 ? 1U : 0U);
-  if (duration > std::numeric_limits<std::uint64_t>::max() - ticks_) {
+  const auto duration = nand_interval_ticks<microseconds_per_second>(timebase_hz_, microseconds);
+  if (!duration || *duration > std::numeric_limits<std::uint64_t>::max() - ticks_) {
     fail("completion deadline exceeds the reference counter");
   }
-  event_ = {.ticks = ticks_ + duration, .operation = operation};
+  event_ = {.ticks = ticks_ + *duration, .operation = operation};
 }
 
 std::optional<NandCompletionEvent> NandOperationClock::next_event() const {

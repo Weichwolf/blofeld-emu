@@ -38,7 +38,7 @@ class NandReadTiming {
 public:
   using Source = std::function<NandByte()>;
   bool operator==(const NandReadTiming &) const = default;
-  explicit NandReadTiming(std::uint32_t timebase_hz);
+  explicit NandReadTiming(std::uint64_t timebase_hz);
   // The source is called only for an admitted selected falling RE edge and is
   // never retained. Coordinate protocol and timing checkpoints in the owner.
   void observe(std::uint64_t ticks, NandReadPins pins, const Source &source = {});
@@ -68,7 +68,7 @@ private:
   void observe_edges(std::uint64_t ticks, bool ce_n, bool re_n, const Source &source);
   void release(std::uint64_t ticks, std::chrono::nanoseconds maximum_ns);
   [[nodiscard]] NandReadOutput at(std::uint64_t ticks) const;
-  std::uint32_t timebase_hz_ = 0;
+  std::uint64_t timebase_hz_ = 0;
   std::uint64_t ticks_ = 0;
   NandTimeWindow selected_at_{};
   NandTimeWindow valid_at_{};

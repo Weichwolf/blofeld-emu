@@ -23,7 +23,7 @@ struct NandCompletionEvent {
 // Copies are complete trusted value checkpoints, including cells and pending time.
 class NandOperationClock {
 public:
-  NandOperationClock(Nand device, std::uint32_t timebase_hz, NandOperationContract contract);
+  NandOperationClock(Nand device, std::uint64_t timebase_hz, NandOperationContract contract);
   // Events precede inputs at the same tick. The board must interleave other
   // devices at next_event(); a larger advance still reports the exact event tick.
   [[nodiscard]] std::optional<NandCompletionEvent> advance(std::uint64_t ticks);
@@ -56,7 +56,7 @@ private:
   void schedule(NandPending operation, unsigned microseconds);
   [[nodiscard]] unsigned reset_duration() const;
   Nand device_;
-  std::uint32_t timebase_hz_;
+  std::uint64_t timebase_hz_;
   std::uint64_t ticks_ = 0;
   std::optional<NandCompletionEvent> event_;
   bool healthy_ = true;

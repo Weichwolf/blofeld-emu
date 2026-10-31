@@ -16,7 +16,7 @@ namespace blofeld {
 // No external pass/fail completion entry point. Copies own complete pending work.
 class NandWriteMedium {
 public:
-  NandWriteMedium(Nand nand, std::uint32_t timebase, NandCellProfile profile);
+  NandWriteMedium(Nand nand, std::uint64_t timebase, NandCellProfile profile);
 
   [[nodiscard]] const Nand &device() const { return clock_.device(); }
 
@@ -54,7 +54,7 @@ private:
   static void merge(std::optional<bool> &verified, std::optional<bool> next);
   NandOperationClock clock_;
   std::optional<NandCellModel> cells_;
-  std::uint32_t timebase_;
+  std::uint64_t timebase_;
   std::vector<std::uint8_t> staged_;
   unsigned program_page_ = 0;
   unsigned program_column_ = 0;

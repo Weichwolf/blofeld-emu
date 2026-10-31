@@ -5,6 +5,7 @@
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
 #include "storage/nand_cell_model.hpp"
+#include "storage/nand_interval.hpp"
 #include "storage/nand_operation_clock.hpp"
 
 #include <cstdint>
@@ -26,7 +27,7 @@ constexpr std::uint8_t confirm_erase = 0xd0;
 constexpr std::uint8_t reset_command = 0xff;
 }
 
-NandWriteMedium::NandWriteMedium(Nand nand, const std::uint32_t timebase, NandCellProfile profile)
+NandWriteMedium::NandWriteMedium(Nand nand, const std::uint64_t timebase, NandCellProfile profile)
     : clock_(std::move(nand), timebase, NandOperationContract::reference_maximum),
       timebase_(timebase) {
   if (profile.contract == NandCellContract::unqualified) {
@@ -54,13 +55,12 @@ std::optional<NandCompletionEvent> NandWriteMedium::next_event() const {
 }
 
 NandWriteMedium::Job NandWriteMedium::prepare(const NandPending kind) const {
-  const auto scaled =
-      static_cast<std::uint64_t>(kind == NandPending::program ? program_us : erase_us) * timebase_;
-  const auto duration = (scaled / per_second) + (scaled % per_second != 0 ? 1U : 0U);
-  if (duration > std::numeric_limits<std::uint64_t>::max() - ticks()) {
+  const auto duration = nand_interval_ticks<per_second>(
+      timebase_, kind == NandPending::program ? program_us : erase_us);
+  if (!duration || *duration > std::numeric_limits<std::uint64_t>::max() - ticks()) {
     fail("completion overflow");
   }
-  Job result{.event = {.ticks = ticks() + duration, .operation = kind},
+  Job result{.event = {.ticks = ticks() + *duration, .operation = kind},
              .first_page = device().page(),
              .column = program_column_,
              .data = staged_,

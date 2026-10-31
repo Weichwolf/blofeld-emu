@@ -119,11 +119,15 @@ requires an observed outcome. No timer creates known data or successful writes.
 Failed operations poison the owner; trusted value copies restore cells, protocol,
 time and event together. Counter exhaustion fails instead of wrapping.
 
-  cmake --build --preset strict --target blofeld-nand-operation-clock-test
-  ctest --test-dir build/strict -R '^nand_operation_clock$' --output-on-failure
-Four independent timebase vectors check read and all reset deadlines, fine/coarse
-advance, polling invariance, cancellation, unknown data and complete owner copies.
-The same scoped gate passes separately under ASan/UBSan and TSan.
+  cmake --build --preset strict --target blofeld-nand-operation-clock-test \
+    blofeld-nand-wide-timebase-test
+  ctest --test-dir build/strict -R '^nand_(operation_clock|wide_timebase)$' --output-on-failure
+All five NAND timing/operation/write owners accept uint64 reference frequencies.
+Ceiling conversion avoids intermediate product overflow; counter exhaustion still
+fails. Seven fixed read/reset vectors and four directed timing/write rate vectors
+cover 211680000000Hz, +1Hz and UINT64_MAX, alongside existing rates. Exact setup,
+hold, access, release, program/erase, copied work and overflow rollback are checked
+under ASan/UBSan and separate TSan. These arithmetic bounds select no board clock.
 original_nand_read_setup additionally couples this owner to four unchanged
 original read-address paths and a missing-byte control, with saved-busy replay
 and visible rejection of skewed clocks or further steps after a device fault.

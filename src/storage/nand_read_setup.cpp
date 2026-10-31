@@ -2,6 +2,7 @@
 #include "storage/nand_read_setup.hpp"
 
 #include "common/bus.hpp"
+#include "storage/nand_interval.hpp"
 #include "storage/nand_time_window.hpp"
 
 #include <array>
@@ -18,7 +19,7 @@ constexpr unsigned nanoseconds_per_second = 1000000000;
 constexpr unsigned read_exit_control_hold_ns = 10;
 }
 
-NandReadSetup::NandReadSetup(const std::uint32_t timebase_hz) : timebase_hz_(timebase_hz) {
+NandReadSetup::NandReadSetup(const std::uint64_t timebase_hz) : timebase_hz_(timebase_hz) {
   if (timebase_hz_ == 0) { fail("zero reference timebase"); }
 }
 
@@ -37,21 +38,21 @@ void NandReadSetup::check_read(const std::uint64_t ticks,
   }
   for (std::size_t index = 0; index < minimum_ns.size(); ++index) {
     if (kind == NandReadKind::status70 && index + 1 == minimum_ns.size()) { continue; }
-    const auto scaled = static_cast<std::uint64_t>(minimum_ns[index]) * timebase_hz_;
     const auto duration =
-        (scaled / nanoseconds_per_second) + (scaled % nanoseconds_per_second != 0 ? 1U : 0U);
+        nand_interval_ticks<nanoseconds_per_second>(timebase_hz_, minimum_ns[index]);
+    if (!duration) { fail("reference interval overflow"); }
     // Subtraction avoids forming future deadlines beyond the reference counter.
     const auto &anchor = stable_since_[index];
-    if (anchor && ticks - *anchor < duration) { fail(names[index]); }
+    if (anchor && ticks - *anchor < *duration) { fail(names[index]); }
   }
 }
 
 void NandReadSetup::check_control_hold(const std::uint64_t ticks) const {
   if (!read_ce_release_) { return; }
-  const auto scaled = static_cast<std::uint64_t>(read_exit_control_hold_ns) * timebase_hz_;
   const auto duration =
-      (scaled / nanoseconds_per_second) + (scaled % nanoseconds_per_second != 0 ? 1U : 0U);
-  if (ticks - read_ce_release_->latest < duration) {
+      nand_interval_ticks<nanoseconds_per_second>(timebase_hz_, read_exit_control_hold_ns);
+  if (!duration) { fail("reference interval overflow"); }
+  if (ticks - read_ce_release_->latest < *duration) {
     fail("tCSD: selected-read exit requires10ns before CLE/ALE change");
   }
 }

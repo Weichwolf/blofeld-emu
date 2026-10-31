@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "storage/nand_array.hpp"
+#include "storage/nand_interval.hpp"
 #include "storage/nand_time_window.hpp"
 
 #include <array>
@@ -29,7 +30,7 @@ constexpr std::array<const char *, 4> setup_names{"tCS", "tCLS", "tALS", "tDS"};
 constexpr std::array<const char *, 4> hold_names{"tCH", "tCLH", "tALH", "tDH"};
 }
 
-NandWriteTiming::NandWriteTiming(const std::uint32_t timebase_hz) : timebase_hz_(timebase_hz) {
+NandWriteTiming::NandWriteTiming(const std::uint64_t timebase_hz) : timebase_hz_(timebase_hz) {
   if (timebase_hz_ == 0) { fail("zero reference timebase"); }
 }
 
@@ -41,12 +42,16 @@ void NandWriteTiming::fail(const std::string &reason) const {
 std::uint64_t NandWriteTiming::deadline(const std::uint64_t ticks,
                                         const std::chrono::nanoseconds interval) const {
   constexpr unsigned billion = 1000000000;
-  const auto scaled = static_cast<std::uint64_t>(interval.count()) * timebase_hz_;
-  const auto duration = (scaled / billion) + (scaled % billion != 0 ? 1U : 0U);
-  if (duration > std::numeric_limits<std::uint64_t>::max() - ticks) {
+  if (interval.count() < 0 ||
+      static_cast<std::uint64_t>(interval.count()) > std::numeric_limits<std::uint32_t>::max()) {
+    fail("invalid reference interval");
+  }
+  const auto duration =
+      nand_interval_ticks<billion>(timebase_hz_, static_cast<std::uint32_t>(interval.count()));
+  if (!duration || *duration > std::numeric_limits<std::uint64_t>::max() - ticks) {
     fail("reference deadline overflow");
   }
-  return ticks + duration;
+  return ticks + *duration;
 }
 
 void NandWriteTiming::changed(const std::uint64_t ticks, const KnownPins &pins) {

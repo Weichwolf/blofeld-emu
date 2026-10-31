@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "storage/nand_interval.hpp"
 #include "storage/nand_read_setup.hpp"
 #include "storage/nand_time_window.hpp"
 
@@ -19,10 +20,10 @@ void NandReadSetup::qualify_ce_window(const std::uint64_t start) const {
   }
   check_control_hold(start);
   for (std::size_t index = 0; index < read_setup.size(); ++index) {
-    const auto scaled = static_cast<std::uint64_t>(read_setup[index]) * timebase_hz_;
-    const auto duration = (scaled / billion) + (scaled % billion != 0 ? 1U : 0U);
+    const auto duration = nand_interval_ticks<billion>(timebase_hz_, read_setup[index]);
+    if (!duration) { fail("reference interval overflow"); }
     const auto &anchor = stable_since_[index];
-    if (anchor && start - *anchor < duration) {
+    if (anchor && start - *anchor < *duration) {
       fail("CE window precedes expired read setup constraints");
     }
   }

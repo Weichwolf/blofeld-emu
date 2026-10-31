@@ -1903,6 +1903,10 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-operation-clock-test test/nand_operation_clock_test.cpp)
   target_link_libraries(blofeld-nand-operation-clock-test PRIVATE blofeld_nand_operation_clock)
   add_test(NAME nand_operation_clock COMMAND blofeld-nand-operation-clock-test)
+  add_executable(blofeld-nand-wide-timebase-test test/nand_wide_timebase_test.cpp)
+  target_link_libraries(blofeld-nand-wide-timebase-test PRIVATE blofeld_nand_write_medium
+    blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup)
+  add_test(NAME nand_wide_timebase COMMAND blofeld-nand-wide-timebase-test)
   add_executable(blofeld-nand-ce-window-test test/nand_ce_window_test.cpp
     test/nand_ce_window_boundaries.cpp test/nand_ce_window_guards.cpp test/nand_ce_window_histories.cpp)
   target_link_libraries(blofeld-nand-ce-window-test PRIVATE
@@ -4407,4 +4411,8 @@ if(BUILD_TESTING)
     set_tests_properties(dsp_${kind} PROPERTIES TIMEOUT 300)
     add_dependencies(quality blofeld-${target_kind}-test)
   endforeach()
+endif()
+
+if(BUILD_TESTING)
+  add_dependencies(quality blofeld-nand-wide-timebase-test)
 endif()
