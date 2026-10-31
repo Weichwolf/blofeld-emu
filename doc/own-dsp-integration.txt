@@ -187,23 +187,30 @@ this does not independently verify every resident memory word or full boot.
 All frozen build artifacts and runtime references remain unchanged. Provenance,
 limits and input hashes: `doc/own-dsp-updater-tail-reference.json`; detailed
 trace and audits: `doc/local/own-core-timeline-updater-image/`.
-A subsequent SHI component change exposes an explicit selected-quiescent SPI
-reset contract while retaining the documented-idle default. It preserves real
-SS/HBUSY and performs the actual delayed reset before selected re-enable.
-Both CPHA1 polarities, copied pending reset state, partial/completed transfer
-refusals, unknown baseline, CPHA0, active request changes and legacy default
-behavior have directed component checks. The independent-only CMake build now
-provides the SHI test alongside the own-core tests. The above coupled runtime
-predates this selectable contract and is not its integration evidence.
-A new current-ABI coupled candidate explicitly selects this SHI contract.
-All 56,496 actual PDRF values and their preceding NAND output timestamps match
-the earlier conditional-image run. The original runtime passes the SHI stop
-and reaches its native secondary ESAI clock-configuration write, where the
-existing active-configuration guard refuses. Its source, binary and 42 frozen
-build artifacts remain unchanged. No SS edge or HBUSY value is substituted.
-The SHI interpretation and updater-fixture tail remain assumptions; this does
-not establish audio, host USB/MIDI, complete boot or firmware-update safety.
-Evidence: `doc/local/own-core-timeline-shi-reset/{runtime3,audit,frozen-build}.json`.
+The explicit selected-quiescent SPI reset contract preserves real SS/HBUSY and
+performs the delayed reset before selected re-enable. The documented-idle default
+remains unchanged. Directed component tests cover quiet CPHA1 modes, pending
+state copies, actual receive, partial/completed transfers, unknown baselines and
+active changes; see dsp-shi.txt. An additional cold-unclocked ESAI initialization
+contract admits only disabled configuration before any selected known clock
+observation; its reset-required default remains unchanged (dsp-esai.txt).
+
+The coupled candidates run original MCU and own DSP from reset with the conditional
+NAND image. Selecting SHI alone reaches the secondary ESAI configuration guard.
+Also selecting the cold ESAI contract completes the four original clock/format,
+TX0 priming and transmitter-enable stores, then refuses the next reserved X-space
+peripheral write. No successful reserved-access stub, HCKT, audio data or reset
+bit is supplied. In both candidates all 56,496 actual full PDRF values match the
+conditional image; preceding NAND output values/timestamps remain identical.
+Each run pins its binary/references and 42 frozen build artifacts. Sixty-seven
+conflicting net observations remain logged; no unknown sampled level is guessed.
+The final fixed-stage diagnostic still concerns an original self-modified location
+and is not a complete resident-memory or corruption verdict. Chip semantics,
+conditional-image provenance, fitted clocks, host USB/MIDI, audio, complete boot
+and update safety remain unqualified. Detailed inputs, traces and audits:
+  doc/local/own-core-timeline-shi-reset/{runtime3,audit,frozen-build}.json
+  doc/local/own-core-timeline-esai-cold/{runtime3,audit,frozen-build}.json
+
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference

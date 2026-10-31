@@ -88,6 +88,9 @@ native instructions, 28 literal observations; no HCKT/FST supplied). The local
 qualified-observations receipt has SHA-256
 e8a245d1cea864e03d3e57c05811bf2b9408b4e385ba303722e34e0f7d26465d.
 This is software-model evidence, not a physical cold-start or clock guarantee.
+Separate native negative controls show that this simulator also retains reserved
+TCCR bit23. Its acceptance therefore does not validate reserved-bit handling or
+silicon safety; the emulator keeps those writes strict.
 
 An explicit cold_unclocked_reference contract admits changed clock/common/format
 programming only before the first transmitter enable and before any known clock,

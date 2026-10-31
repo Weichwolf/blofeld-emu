@@ -38,5 +38,17 @@
     "runtime_integrity_verified": true,
     "full_boot_proven": false,
     "local_evidence": "doc/local/own-core-timeline-shi-reset/{runtime3,audit,frozen-build}.json"
+  },
+  "selected_cold_esai_runtime": {
+    "qualification": "Additional explicit secondary ESAI cold-unclocked reference contract; no audio source supplied and no silicon validation.",
+    "matched_native_PDRF_values": 56496,
+    "prior_nand_output_values_and_timestamps_unchanged": true,
+    "original_ESAI_configuration_stores_completed": 4,
+    "next_refusal": "Unimplemented reserved X-space peripheral write; no successful stub added",
+    "frozen_build_artifacts": 42,
+    "runtime_integrity_verified": true,
+    "audio_or_full_boot_proven": false,
+    "runtime_log_sha256": "a707ca7eaa0a76b0a6c60023657a8eb525024bdb1d653a18d2aedbdea169db24",
+    "local_evidence": "doc/local/own-core-timeline-esai-cold/{runtime3,audit,frozen-build}.json"
   }
 }

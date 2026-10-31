@@ -22,7 +22,11 @@ ESAI cold initialization         partial  Explicit cold-unclocked reference cont
                                           and closed-window lifetime have directed
                                           ASan/UBSan tests. Software-simulator evidence
                                           does not establish chip timing, board clocks,
-                                          original boot or audio (dsp-esai.txt).
+                                          original boot or audio. A coupled conditional
+                                          run completes four real ESAI stores, then
+                                          refuses a reserved peripheral write; preceding
+                                          NAND values/timestamps remain unchanged
+                                          (dsp-esai.txt, own-dsp-integration.txt).
 Own-core SHI reset contract       partial  Explicit selected-quiescent SPI reset
                                           contract has SHI/fetch/checkpoint tests
                                           under ASan/UBSan; real SS/HBUSY retained,
