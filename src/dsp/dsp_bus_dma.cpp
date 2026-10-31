@@ -18,6 +18,10 @@ namespace {
 constexpr unsigned io_base = 0xffff80;
 constexpr unsigned shi_status = 0xffff91;
 constexpr unsigned shi_receive = 0xffff94;
+constexpr std::array gpio_data_registers{DspAddress{.space = DspSpace::x, .address = 0xffffbd},
+                                         DspAddress{.space = DspSpace::y, .address = 0xffff9d},
+                                         DspAddress{.space = DspSpace::y, .address = 0xfffff5},
+                                         DspAddress{.space = DspSpace::x, .address = 0xffffd5}};
 
 bool controller_access(const DspMemoryAccess access) {
   return access.target.space == DspSpace::x && DspDma::handles(access.target.address) &&
@@ -29,15 +33,10 @@ bool controller_access(const DspMemoryAccess access) {
 // neighbors are separate registers. APR23 section5.2 locates peripheral
 // contention at the accessed data register, not every active DMA channel.
 bool gpio_data_access(const DspMemoryAccess access) {
-  constexpr DspAddress port_c{.space = DspSpace::x, .address = 0xffffbd};
-  constexpr DspAddress port_e{.space = DspSpace::y, .address = 0xffff9d};
-  constexpr DspAddress port_f{.space = DspSpace::y, .address = 0xfffff5};
-  constexpr DspAddress port_d{.space = DspSpace::x, .address = 0xffffd5};
-  constexpr std::array ports{port_c, port_e, port_f, port_d};
   const bool bit = access.phase == DspMemoryPhase::peripheral_bit;
   const bool write =
       access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write;
-  return (bit || write) && std::ranges::any_of(ports, [&](const auto port) {
+  return (bit || write) && std::ranges::any_of(gpio_data_registers, [&](const auto port) {
            return access.target.space == port.space && access.target.address == port.address;
          });
 }
@@ -55,20 +54,23 @@ bool timer_access(const DspMemoryAccess access) {
          (bit || read || write);
 }
 
-// UM6.2.4 routes Port F through the BIU. All admitted DMA endpoints use
-// internal memory or ESAI/DAX data registers, not that external port (APR23
-// sections5.1..5.3). Native stores still enforce BCR and pin-function validity.
-// This resource distinction supplies neither BIU wait cycles nor pad timing.
-bool port_f_configuration_write(const DspMemoryAccess access) {
-  constexpr unsigned direction = 0xfffff6;
-  constexpr unsigned control = 0xfffff7;
-  return access.target.space == DspSpace::y &&
-         (access.target.address == direction || access.target.address == control) &&
-         access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write;
+// UM GPIO maps place direction/control beside each data word; these are
+// distinct from admitted DMA data endpoints (APR23sections5.1..5.3). Port F
+// uses the BIU (UM6.2.4); native BCR, mux and clock validation still apply.
+// This predicate supplies neither a GPIO transaction nor physical pad timing.
+bool gpio_configuration_write(const DspMemoryAccess access) {
+  constexpr auto direction = static_cast<unsigned>(DspGpioRegister::direction);
+  constexpr auto control = static_cast<unsigned>(DspGpioRegister::control);
+  return access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write &&
+         std::ranges::any_of(gpio_data_registers, [&](const auto port) {
+           return access.target.space == port.space &&
+                  (access.target.address == port.address + direction ||
+                   access.target.address == port.address + control);
+         });
 }
 
 bool independent_peripheral(const DspMemoryAccess access) {
-  return gpio_data_access(access) || timer_access(access) || port_f_configuration_write(access);
+  return gpio_data_access(access) || timer_access(access) || gpio_configuration_write(access);
 }
 
 DspSpace space(const DspDmaSpace value) {

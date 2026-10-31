@@ -6,9 +6,9 @@ GPIO data-word writes beside internal DMA
 UM tables3-7/3-8 and APR23sections5.1..5.3 support separate register resources
 for C/X:ffffbd, E/Y:ffff9d, F/Y:fffff5 and D/X:ffffd5 versus the admitted
 internal-memory and ESAI/DAX DMA endpoints. Execute writes join the existing
-data-bit accesses. Whole-word reads, early writes and neighboring C/E/D
-configuration registers remain outside this admission. Other P footprints
-still arbitrate; no global grant or DACT shortcut is introduced.
+data-bit accesses. Whole-word reads and early writes remain outside this
+admission. Later mode-write admission is covered in dsp-gpio-configuration-dma.txt.
+Other P footprints still arbitrate; no global grant or DACT shortcut is introduced.
 
 The predicate performs no transaction. Native MOVEP retains actual operand
 conversion, Port-F BCR validation, reserved-bit/pad checks and rejection state.
@@ -32,6 +32,14 @@ Four new groups and eleven affected regressions pass in each sanitizer profile.
 The actual-MCU closure changes one producer and retains33 provider archives;
 ten Board suffixes and four idle cases/profile preserve complete parent output.
 Qualification:2e94d8e4a9c0c9cabd1f48e76fbf833bb771daf5e21c706376266a83bbacd79b.
+
+The changed conditional original reaches joined NAND after the PDRC store,
+then refuses simultaneous RE/WE changes under its held-selected CE hypothesis.
+DSP retirement remains973554 instructions;2020511 pipeline periods add one.
+All107 seeded pages match; no sanitizer findings. E2 retirement is not proved.
+Terminal:8be7722879cd646420d46832c295b337eceaf50dbc9df744aaee675c4a7f0844.
+NAND selection/gating and deselected timing require separate reconstruction;
+GPIO configuration admission alone does not resolve this downstream refusal.
 
 These are reference resource/period tests, not calibrated BIU/pad timing.
 Reset-to-instrument operation, live host MIDI/audio, complete storage/update/

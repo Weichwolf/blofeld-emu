@@ -147,7 +147,8 @@ int main() {
       if (port == port_f) { continue; } // Its execute configuration stores qualify separately.
       for (const unsigned offset : {1U, 2U}) {
         refusal({.target = {.space = address.space, .address = address.address + offset},
-                 .operation = DspMemoryOperation::write});
+                 .operation = DspMemoryOperation::write,
+                 .phase = DspMemoryPhase::peripheral_sample});
       }
     }
     program_contention();

@@ -3394,5 +3394,21 @@ ESAI/DAX phases. Independent literal/whole-state expectations retain native
 GPIO/BCR validation, limited-store faults, older DMA effects and strict unknown
 reads;15 ordinary groups and unchanged actual-MCU Board/idle outputs pass per
 sanitizer profile. See dsp-gpio-word-dma.txt.
-Supports requirements2/3/6; neighboring configuration/read resources, physical
-timing and full original instrument/MIDI/audio acceptance remain open.
+Supports requirements2/3/6; reads and other resources, physical timing and full
+original instrument/MIDI/audio acceptance remain open.
+
+The conditional data-word original reaches NAND pin observation after PDRC E1,
+then refuses simultaneous RE/WE changes under held-selected CE. DSP instruction
+count remains973554 with one additional pipeline period; E2 retirement is not
+proved. All107 seeded pages match; no sanitizer findings. See the terminal hash
+in dsp-gpio-word-dma.txt. NAND selection/gating and inactive-bus timing remain
+reconstruction tasks; no instruction-progress or complete-boot claim follows.
+
+GPIO configuration/DMA: dsp_gpio_configuration_dma{,_guards,_serial} checks
+C/E/F/D direction/control execute writes beside internal RAM and genuine
+shared-DRS22 ESAI/DAX phases, native CPU/CCR/stack, cold latch knowledge,
+strict wrong-space/phase/owner guards and trusted continuations. Nineteen
+ordinary groups/profile and complete parent actual-MCU Board/idle output pass
+under ASan/UBSan and separate TSan. See dsp-gpio-configuration-dma.txt.
+Supports requirements2/3/6; no timing or hardware hypothesis changes. Joined
+NAND selection/gating and full original instrument/MIDI/audio remain open.

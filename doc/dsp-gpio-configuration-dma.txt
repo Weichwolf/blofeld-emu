@@ -1,0 +1,41 @@
+GPIO configuration writes beside internal DMA
+
+  cmake --build --preset strict --target blofeld-gpio-configuration-dma-test blofeld-gpio-configuration-dma-guards-test blofeld-gpio-configuration-dma-serial-test
+  ctest --test-dir build/strict -R '^dsp_gpio_configuration_dma($|_)' --output-on-failure
+
+Execute writes to direction/control registers C/X:ffffbe/bf, E/Y:ffff9e/9f,
+F/Y:fffff6/f7 and D/X:ffffd6/d7 use distinct register resources beside admitted
+internal-memory and ESAI/DAX DMA. Six classifications are new; Port F retains
+its earlier admission. Typed data-register bases also preserve existing bit
+and data-word rules. Reads, early writes and configuration-bit operations
+remain outside this admission. Other P footprints still arbitrate.
+
+The resource predicate performs no transaction or clock advance. Native GPIO,
+Port-F BCR, reserved-bit/function, mux and clock validation remain unchanged.
+Mode changes do not invent unknown output latches. UM tables3-7/3-8 and APR23
+sections5.1..5.3 support this resource inference, not measured BIU/pad timing.
+
+Per sanitizer profile, independent literal MOVEP and whole CPU/CCR/stack
+expectations check360 RAM windows,192 cuts/384 suffixes/192 clones,24 native
+fault suffixes and103154 assertions. Sixty refused footprints/304 assertions
+retain capture and real P-fetch contention. Existing word/Port-F guards use
+early-write refusals for the newly admitted C/E/D execute-write scopes.
+
+Thirty-two live shared-DRS22 serial windows/80 suffixes/40 clones use independent
+ESAI/BMC decoders and actual mode/pin ownership. Five mode writes per alignment
+change a mode; three are deliberate idempotent cases. E direction adds an
+output whose cold latch stays unknown. Four frames transfer16 words total,
+eight per channel in64-word rings; ring wrap is not exercised.
+
+All19 ordinary groups/profile pass under ASan/UBSan and separate TSan, with
+zero skipped tests or findings. The actual-MCU closure replaces one producer,
+retains33 archives and preserves complete parent output for ten Board suffixes
+and four idle cases/profile. Static source review and compiler/artifact gates
+are positive. Qualification:8f4f152345edfd8386df5cc97b8ffb4b21ac613674f6b7236e47611052f662d4.
+
+The separate data-word original reaches joined NAND after PDRC E1, then refuses
+simultaneous RE/WE changes under held-selected CE; no extra instruction retires.
+See dsp-gpio-word-dma.txt for terminal evidence. Configuration admission alone
+does not resolve that downstream refusal; no duplicate original run is claimed.
+Reset-to-instrument operation, live MIDI/audio, full storage/update/recovery,
+realtime and physical equivalence remain open.
