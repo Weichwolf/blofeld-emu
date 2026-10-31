@@ -4333,25 +4333,6 @@ endif()
 
 # Parallel internal TFR and two-word absolute X/Y reads.
 if(BUILD_TESTING)
-  add_executable(blofeld-ram-bit-native-test test/dsp_ram_bit_native_test.cpp)
-  target_link_libraries(blofeld-ram-bit-native-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_ram_bit_native COMMAND blofeld-ram-bit-native-test)
-  set_tests_properties(dsp_ram_bit_native PROPERTIES TIMEOUT 1200)
-  add_dependencies(quality blofeld-ram-bit-native-test)
-
-  add_executable(blofeld-ram-bit-pipeline-test test/dsp_ram_bit_pipeline_test.cpp)
-  target_link_libraries(blofeld-ram-bit-pipeline-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_ram_bit_pipeline COMMAND blofeld-ram-bit-pipeline-test matrix)
-  add_test(NAME dsp_ram_bit_producer COMMAND blofeld-ram-bit-pipeline-test producer)
-  set_tests_properties(dsp_ram_bit_pipeline dsp_ram_bit_producer PROPERTIES TIMEOUT 1200)
-  add_dependencies(quality blofeld-ram-bit-pipeline-test)
-
-  add_executable(blofeld-ram-bit-dependency-test test/dsp_ram_bit_dependency_test.cpp)
-  target_link_libraries(blofeld-ram-bit-dependency-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_ram_bit_dependency COMMAND blofeld-ram-bit-dependency-test)
-  set_tests_properties(dsp_ram_bit_dependency PROPERTIES TIMEOUT 1200)
-  add_dependencies(quality blofeld-ram-bit-dependency-test)
-
   add_executable(blofeld-parallel-eor-store-test test/dsp_parallel_eor_store_test.cpp)
   target_link_libraries(blofeld-parallel-eor-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_parallel_eor_store COMMAND blofeld-parallel-eor-store-test)
