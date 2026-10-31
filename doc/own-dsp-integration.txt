@@ -144,6 +144,15 @@ Conditional board contracts, each separately controlled and recorded:
   outside bounds are unsatisfiable; both endpoints are feasible. The calculation
   covers only these constraints; it does not establish a physical delay circuit,
   signal routing, calibrated instruction time or other NAND timing requirements.
+  A further local candidate delays falling RE by 2,100 ticks and preserves
+  partially known NAND status bits through the resolved GPIO pads. An own JSR
+  caller executes the original helper, which programs a known-erased target;
+  all 528 resulting cells are known and match the original source page. After
+  program completion, the NAND status has known mask C1 and value C0. At
+  PC 002ed1 the actual full-word GPIO read refuses unknown status bits 3E;
+  no status values are invented and the helper does not return. The delay,
+  direct nets, cell profile, host setup and instruction spacing remain explicit
+  experiment inputs, not demonstrated physical hardware or a full update.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -198,6 +207,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-original-helper/{runtime,audit}.json
   doc/local/own-core-pdrf-word/{runtime,audit}.json
   doc/local/own-core-nand-read-skew/{window.smt2,audit.json}
+  doc/local/own-core-nand-status-pads/{runtime,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
