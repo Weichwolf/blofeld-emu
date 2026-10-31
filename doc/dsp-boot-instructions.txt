@@ -62,21 +62,29 @@ Active/pending DO, unsupported stack contexts and other effective-address
 selectors remain refused. No host PC assignment supplies a call or return.
 
 Absolute24 scalar X/Y MOVE accepts data/address/full or partial accumulator
-operands without parallel ALU; absolute24 MOVEC accepts M0..M7. The actual
+operands; parallel ALU admission is limited to TFR with reads.
+Absolute24 MOVEC accepts M0..M7. The actual
 mode6/register0 extension supplies the address in AG1, with no invented R/N/M
 dependency. E1 consumes the frozen native request once and publishes real
 load/store effects; E2 owns native retirement. dsp_absolute_data checks literal
 integer register/cell/flag/counter expectations, both spaces/directions, actual
 two-word F2 ownership, producer windows, checkpoints and fresh clones.
+dsp_parallel_absolute defines2080 SC=0 pipeline windows, including opposite
+partial accumulator destinations,old-source E1/E2 ordering,72 restores and72
+fresh clones. Its2080 separate settled-SC=1 native windows retain16-bit AGU
+load destinations and full-width internal TFR results. Native scalar R/N MOVE
+settling/history and further regressions are scoped in dsp-sc-moves.txt.
+Automatic SC=1 start still refuses; exact transition sampling and physical
+pipeline timing remain unqualified.
 dsp_absolute_data_guard retains MMIO, unknown/unmapped memory, ROM-write,
 reserved selector, parallel and unsupported REP refusals with PC/context.
 Program MOVEM retains its separate path and guards (dsp-movem-memory.txt).
 
-Reproduce the twelve directed groups after building their corresponding
+Reproduce the thirteen directed groups after building their corresponding
 blofeld-<hyphenated-name>-test targets with the strict or thread preset:
 
   ctest --test-dir build/strict -j1 --output-on-failure -R \
-    '^dsp_(sr_(control|memory|guard)|modifier_direction(_window)?|repeat_handoff(_guard)?|absolute_call(_guard|_producer)?|absolute_data(_guard)?)$'
+    '^dsp_(sr_(control|memory|guard)|modifier_direction(_window)?|repeat_handoff(_guard)?|absolute_call(_guard|_producer)?|absolute_data(_guard)?|parallel_absolute)$'
 
 These are component requirements, not original reset-to-instrument acceptance.
 Full ROM/memory arbitration, connected Desktop/Keyboard boot, original live

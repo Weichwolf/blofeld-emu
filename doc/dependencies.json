@@ -61,6 +61,18 @@
       "file": "source/dsp56kEmu/dsp.h",
       "reference": "DSP56300FM 3.1.6 and 5-13; doc/dsp-accumulator-reference.json",
       "integration": "Reference-only selected-source S growth uses S0-S1: high bits 46 normal, 47 down, 45 up. Sticky semantics and numeric transfers remain unchanged. The installed upstream checkout is untouched."
+    },
+    "asmjit": {
+      "source": "https://github.com/dsp56300/asmjit",
+      "revision": "3577608cab0bc509f856ebf6e41b2f9d9f71acc4",
+      "license": "Zlib",
+      "integration": "Required pinned submodule; configure verifies revision and tracked source cleanliness before copying and patching."
+    },
+    "scalar_agu_compatibility": {
+      "patch": "patches/dsp56300-sc-moves.patch",
+      "owner_header": "src/dsp/dsp_compatibility_mode.hpp",
+      "reference": "DSP56300FM Rev5 section4.2 and Table5-1; doc/dsp-sc-moves.txt",
+      "integration": "Build-copy-only native five-bit scalar R/N transfers under settled SC. Both native snapshot forms retain SC retirement history; unqualified transition sampling rejects. Other SC mode behavior remains separately scoped."
     }
   },
   "dsp56300_assembly_tool": {

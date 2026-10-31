@@ -4313,6 +4313,27 @@ if(BUILD_TESTING)
   add_dependencies(quality blofeld-absolute-data-guard-test)
 endif()
 
+# Parallel internal TFR and two-word absolute X/Y reads.
+if(BUILD_TESTING)
+  add_executable(blofeld-compatibility-mode-test test/dsp_compatibility_mode_test.cpp)
+  target_include_directories(blofeld-compatibility-mode-test PRIVATE src)
+  target_link_libraries(blofeld-compatibility-mode-test PRIVATE blofeld_quality)
+  add_test(NAME dsp_compatibility_mode COMMAND blofeld-compatibility-mode-test)
+  add_dependencies(quality blofeld-compatibility-mode-test)
+
+  add_executable(blofeld-compatibility-moves-test test/dsp_compatibility_moves_test.cpp)
+  target_link_libraries(blofeld-compatibility-moves-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_compatibility_moves COMMAND blofeld-compatibility-moves-test)
+  set_tests_properties(dsp_compatibility_moves PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-compatibility-moves-test)
+
+  add_executable(blofeld-parallel-absolute-test test/dsp_parallel_absolute_test.cpp)
+  target_link_libraries(blofeld-parallel-absolute-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_parallel_absolute COMMAND blofeld-parallel-absolute-test)
+  set_tests_properties(dsp_parallel_absolute PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-parallel-absolute-test)
+endif()
+
 # Native core accesses across distinct physical RAM modules.
 if(BUILD_TESTING)
   add_executable(blofeld-core-blocks-test test/dsp_core_blocks_test.cpp)

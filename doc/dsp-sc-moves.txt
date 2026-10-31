@@ -1,0 +1,34 @@
+Native scalar AGU MOVE compatibility
+
+DSP56300FM Rev5 section4.2/page4-3 and Table5-1/page5-12 require clearing
+the upper8 destination bits on AGU transfers under settled SC=1. The native
+five-bit R0..R7/N0..N7 read/write path now preserves24 bits under SC=0 and
+transfers16 bits under settled SC=1. Reading an AGU register does not rewrite
+its retained high bits. Data/accumulator transfers keep their separate rules.
+
+Native retirement records an actual SC change. Scalar AGU transfers require
+three additional nominal instruction cycles and matching raw SR history;
+earlier transfers fail visibly instead of choosing an unqualified sampling
+phase. A load can already have completed its source read before the register
+guard fails; that accepted access prefix is not an architectural rollback.
+Both full native checkpoints and internal attempt rollback retain the
+fixed-size history. Hardware reset clears it. No allocation or host register
+repair supplies the MOVE result. The installed SDK checkout remains unchanged;
+patches/dsp56300-sc-moves.patch modifies only the build copy.
+
+  cmake --build --preset strict --target blofeld-compatibility-mode-test blofeld-compatibility-moves-test blofeld-parallel-absolute-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_(compatibility_(mode|moves)|parallel_absolute)$'
+
+The directed native matrix checks768 full-state R/N load/read windows,22
+settled/42 refused transition suffixes,28 same-owner/28 fresh-owner restores
+and three pending-SR-write cuts in both owners. All64 transition suffixes retain
+one observed completed source read, including the42 register-guard refusals.
+Parallel TFR coverage adds2080
+SC=0 pipeline windows and2080 separate settled-SC=1 native windows, including
+opposite partial accumulator destinations,72 restores/72 clones and4 guards.
+
+Exact transition sampling, automatic SC=1 pipeline execution, M/PCU transfers,
+SC address arithmetic/memory mapping and physical timing are not qualified by
+this change. Complete original Desktop/Keyboard instrument acceptance remains
+open; see objective.txt and coverage.txt. This is an emulator correction, not
+a manufacturer firmware patch.

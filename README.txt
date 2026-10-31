@@ -40,6 +40,10 @@ installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java a
 runtime.
 DSP56300_ROOT must point to a clean checkout of the revision in
 doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
+Initialize its pinned submodule before configuring:
+
+  git -C "${DSP56300_ROOT:-$HOME/Git/dsp56300}" submodule update --init source/asmjit
+
 Pinned zlib, PulseAudio client and libsndfile sources are built locally; system
 libraries do not replace these instrumented dependencies. Pinned Python Meson
 configures the native audio client without installation.

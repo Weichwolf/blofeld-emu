@@ -175,6 +175,15 @@ bool accumulator_register(const Reg reg) {
          reg == Reg::B2 || reg == Reg::A || reg == Reg::B;
 }
 
+bool parallel_tfr_load(const unsigned opcode) {
+  static const dsp56k::Opcodes opcodes;
+  auto first = dsp56k::Invalid;
+  auto second = dsp56k::Invalid;
+  return opcodes.getInstructionTypes(opcode, first, second) != 0 && first == dsp56k::Tfr &&
+         (second == dsp56k::Movex_ea || second == dsp56k::Movey_ea) &&
+         dsp56k::getFieldValue(second, dsp56k::Field_W, opcode) != 0;
+}
+
 std::optional<DspMemoryForm> absolute_long_scalar(const Type type, const unsigned opcode) {
   const bool control = type == dsp56k::Movec_ea;
   if (type != dsp56k::Movex_ea && type != dsp56k::Movey_ea && !control) { return std::nullopt; }
@@ -188,7 +197,7 @@ std::optional<DspMemoryForm> absolute_long_scalar(const Type type, const unsigne
   constexpr unsigned arithmetic_bits = 0xff;
   if (control) {
     if (reg < Reg::M0 || reg > Reg::M7) { return std::nullopt; }
-  } else if ((opcode & arithmetic_bits) != 0 ||
+  } else if (((opcode & arithmetic_bits) != 0 && !parallel_tfr_load(opcode)) ||
              (!data_register(reg) && !address_register(reg) && !accumulator_register(reg))) {
     return std::nullopt;
   }

@@ -3375,9 +3375,15 @@ Active-DO target timing remains visibly unsupported;see dsp-branch-pipeline.txt.
 
 Selected DSP boot instructions: dsp_sp_{control,flow}, dsp_sr_{control,memory,guard},
 dsp_modifier_direction{,_window}, dsp_repeat_handoff{,_guard},
-dsp_absolute_call{,_guard,_producer} and dsp_absolute_data{,_guard} cover native
+dsp_absolute_call{,_guard,_producer}, dsp_absolute_data{,_guard} and
+dsp_parallel_absolute cover native
 SP/SR retirement with retained SC/stack, both modifier MOVEC directions, draining REP ownership,
 absolute/register JSR and absolute24 X/Y scalar/M0..M7 memory operands.
+Parallel TFR/absolute reads add2080 SC=0 pipeline and2080 settled-SC=1 native
+windows/profile,opposite partial destinations,72 restores/72 fresh clones and4
+guards. Native scalar R/N compatibility adds768 full-state windows,28 restores/
+28 fresh clones and three pending-SR-write cuts in both owners. See
+dsp-sc-moves.txt. Exact transition sampling and automatic SC=1 remain unqualified.
 Independent per-period state/cell/stack expectations and joint continuations
 support acceptance requirements2/3/6; see dsp-boot-instructions.txt for exact
 admission and refusals. This does not establish requirements4/7/8/9 or complete

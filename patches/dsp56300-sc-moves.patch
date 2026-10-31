@@ -1,0 +1,64 @@
+--- a/source/dsp56kEmu/dsp.h
++++ b/source/dsp56kEmu/dsp.h
+@@ -7,0 +8 @@
++#include "dsp/dsp_compatibility_mode.hpp"
+@@ -181,0 +183 @@
++		blofeld::DspCompatibilityMode m_referenceCompatibility;
+@@ -187,0 +190 @@
++			blofeld::DspCompatibilityMode compatibility;
+@@ -212,0 +216 @@
++			blofeld::DspCompatibilityMode compatibility;
+@@ -229,0 +234,8 @@
++		TWord referenceScalarAguMoveMask() const
++		{
++			if(!m_referenceMode) return TReg24::bitMask;
++			const auto mode = m_referenceCompatibility.sample(m_cycles, (reg.sr.toWord() & SR_SC) != 0);
++			if(!mode.has_value())
++				throw std::runtime_error("Unqualified native scalar AGU MOVE during SC transition at P:" + std::to_string(pcCurrentInstruction));
++			return *mode ? 0xffff : TReg24::bitMask;
++		}
+--- a/source/dsp56kEmu/dsp.cpp
++++ b/source/dsp56kEmu/dsp.cpp
+@@ -125,0 +126 @@
++		m_referenceCompatibility = {};
+@@ -368,0 +370 @@
++		state.compatibility = m_referenceCompatibility;
+@@ -393,0 +396 @@
++		m_referenceCompatibility = state.compatibility;
+@@ -465,0 +469 @@
++		state.compatibility = m_referenceCompatibility;
+@@ -514,0 +519 @@
++		m_referenceCompatibility = state.compatibility;
+@@ -729,0 +735,2 @@
++		if(m_referenceMode && !m_referenceCompatibility.retire(m_cycles, (reg.sr.toWord() & SR_SC) != 0))
++			throw std::runtime_error("Invalid native SC retirement clock");
+--- a/source/dsp56kEmu/dsp_decode.inl
++++ b/source/dsp56kEmu/dsp_decode.inl
+@@ -81 +81,5 @@
+-			convert( res, reg.r[_ddddd&0x07] );
++		{
++			TReg24 value = reg.r[_ddddd&0x07];
++			value.var &= referenceScalarAguMoveMask();
++			convert(res, value);
++		}
+@@ -83 +87,5 @@
+-			convert( res, reg.n[_ddddd&0x07] );
++		{
++			TReg24 value = reg.n[_ddddd&0x07];
++			value.var &= referenceScalarAguMoveMask();
++			convert(res, value);
++		}
+@@ -119 +127,5 @@
+-					convertU(reg.r[_ddddd&0x07],_val);
++					const auto mask = referenceScalarAguMoveMask();
++					TReg24 value;
++					convertU(value,_val);
++					value.var &= mask;
++					reg.r[_ddddd&0x07] = value;
+@@ -124 +136,5 @@
+-					convertU(reg.n[_ddddd&0x07],_val);
++					const auto mask = referenceScalarAguMoveMask();
++					TReg24 value;
++					convertU(value,_val);
++					value.var &= mask;
++					reg.n[_ddddd&0x07] = value;
