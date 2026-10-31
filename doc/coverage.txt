@@ -24,6 +24,10 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           links only parser/zlib and retains its full
                                           private input hash; independent fields and
                                           bounded image construction are checked.
+                                          Native PCM/host-audio fixtures use actual
+                                          reset, timeline and joint checkpoints with
+                                          literal word/tick expectations, without
+                                          the old executor or assembler.
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).

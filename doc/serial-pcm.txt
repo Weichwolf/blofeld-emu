@@ -51,12 +51,16 @@ the 32-slot bound, both clock edges and FS polarities, unknown padding, mid-fram
 joining, truncated frames, failures, quarantine and mid-word/padding/boundary
 copies. No transmitter/receiver round trip supplies these expectations.
 
-Own native MOVEP/NOP programs configure both ESAI maps and refill TX0 during
-an active word. The production DspScheduledRun merges their completions with
-explicit HCKT observations; mux-qualified clock and TX0 snapshots feed the same
-receiver. Literal signed values -5913697 and 1193046, sampling ticks 2230..13822,
-one complete two-slot frame and three joint mid-word replays are checked. The
-receiver and pin observations must leave native debug state unchanged.
+Authored literal MOVEP/NOP/JMP programs execute on dsp56300, configure both ESAI
+maps and refill TX0 during an active word. The native timeline advances actual
+reset hold/recovery and explicit effect-per-reference-cycle execution, with
+input-first HCKT ties. Mux-qualified clock and TX0 snapshots feed the receiver.
+Literal signed values -5913697 and 1193046, sampling ticks 2230..13822, one
+complete two-slot frame and three fresh-owner mid-word replays are checked.
+An independent frontend-period ledger checks the pending retirement at the
+cutoff; observations cannot advance CPU state or time. The trusted checkpoint
+contains the chip, frontend, timeline, source and partial receiver together.
+Neither this fixture nor its ROM-word builder needs the legacy core/assembler.
 
 Scope
 

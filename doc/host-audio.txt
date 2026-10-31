@@ -74,13 +74,15 @@ explicitly configured null sink and native Unix protocol module are loaded in
 that test daemon. No module/routing/default changes reach the user's service.
 Each test process is closed on success/failure, including a stopped service.
 
-An own DSP program actually executes MOVEP, NOP and JMP through the native core.
+An authored DSP program actually executes MOVEP, NOP and JMP through dsp56300.
 An explicit reference HCKT source drives primary/secondary ESAI and the serial
 receiver. At a declared3072000000-tick timebase, bit periods1000 and64 bits per
-frame imply48000 frames/s. All256 decoded frames have independent literal word
-expectations. After its first refill the test program leaves TX unchanged;
-the modeled ESAI underrun retransmits that known TX value. This is test-program
-behavior, not original firmware voices or a physical Blofeld clock claim.
+frame imply48000 frames/s. The shared native timeline fixture includes actual
+reset hold/recovery and explicit reference-effect scheduling; it has no legacy
+core/assembler dependency. All256 decoded frames have independent literal word
+and timestamp expectations. After its first refill the test program leaves TX
+unchanged; the modeled ESAI underrun retransmits that known TX value. This is
+test-program behavior, not original firmware voices or a physical Blofeld clock claim.
 
 Primary, secondary and default-server cases compare all256 frames exactly once
 against the private server's stereo s32le monitor. The null sink has norewinds=1

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dsp_pcm_program.hpp"
+#include "dsp_rom_program.hpp"
 
 #include <array>
 #include <cstdint>
@@ -181,6 +183,12 @@ Program esai_program(const std::string_view mode) {
 }
 
 Program program(const std::string_view mode) {
+  if (mode == "esai0-refill" || mode == "esai1-refill") {
+    const auto native = blofeld::test::dsp_pcm_program(mode == "esai1-refill");
+    Program result;
+    for (const auto word : native.words()) { result.word(word); }
+    return result;
+  }
   if (mode == "esai0" || mode == "esai1" || mode == "esai0-refill" || mode == "esai1-refill" ||
       mode == "esai1-external" || mode == "esai1-tied-refill" || mode == "esai1-missing-hckt" ||
       mode == "esai1-active" || mode == "esai1-external-word" || mode == "esai1-external-sckt" ||
