@@ -214,6 +214,16 @@ Conditional board contracts, each separately controlled and recorded:
   neither its gates nor the NAND part and clock are established board facts.
   The local run's inherited banner incorrectly also says CE is tied low; the
   candidate implementation and its CE-gate field describe the tested wiring.
+  With the same candidate and a 4,100-tick delay, the first ID byte becomes
+  available after Port F becomes input. This exposed and fixed the model's
+  incorrect rejection of RE release during ID output. A subsequent run with
+  pull-downs on floating Port F pins reached later operations, but those pulls
+  were fixture assumptions: the output log is not proof of the DSP's sampled
+  bytes. Without any pull-down the first read refuses unknown PF8/PF9. With
+  pull-downs assumed only for those two auxiliary pins, the second ID read
+  refuses all eight NAND data bits before the delayed output becomes available.
+  Thus neither the later operations of the all-pulled-down run nor that gate
+  and delay combination establish a valid firmware ID exchange.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -278,6 +288,10 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-we-gated-re/runtime.json
   doc/local/own-core-main-we-gated-pe7/runtime.json
   doc/local/own-core-main-pe-ce-gate/runtime.json
+  doc/local/own-core-main-pe-ce-delay4100/runtime.json
+  doc/local/own-core-main-id-release/runtime.json
+  doc/local/own-core-main-id-floating/runtime.json
+  doc/local/own-core-main-id-data-floating/runtime.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
