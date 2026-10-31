@@ -12,10 +12,12 @@
 
 namespace blofeld {
 class OwnDspMachine;
+enum class OwnDspNativeCycleModel : std::uint8_t;
 
 struct OwnDspFetchCycleResult {
   DspDmaBusResult dma;
   bool captured = false;
+  std::optional<dsp56300::InstructionProgress> native;
 };
 
 // Untimed F1/F2 owner. The machine must outlive this object. Reset and restore
@@ -30,6 +32,9 @@ public:
   void capture();
   // Explicit DMA-first cycle for the actual issued F2 read; the CPU is held.
   [[nodiscard]] OwnDspFetchCycleResult advance_dma_capture(DspDmaInputs inputs);
+  // Explicit DMA, F2, native-effect order with a global DMA destination stall.
+  [[nodiscard]] OwnDspFetchCycleResult advance_dma_capture_native(DspDmaInputs inputs,
+                                                                  OwnDspNativeCycleModel model);
   // Admission uses the actual owned foreground F2 words. Vector reads remain
   // native staged bus effects and are acknowledged by the interrupt owner.
   [[nodiscard]] bool admit_interrupt();
@@ -40,6 +45,7 @@ public:
 private:
   void check_owner() const;
   void check_sample_context() const;
+  [[nodiscard]] OwnDspFetchCycleResult capture_cycle(DspDmaInputs inputs, bool admit_native);
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
   [[nodiscard]] dsp56300::InstructionProgress begin_native();
   void finish_interrupt_vector();

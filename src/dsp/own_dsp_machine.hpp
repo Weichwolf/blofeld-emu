@@ -93,6 +93,8 @@ public:
 private:
   friend class OwnDspFetch;
   void require_running() const;
+  [[nodiscard]] static std::optional<DspMemoryAccess>
+  dma_native_footprint(const dsp56300::PendingInstruction &pending);
   [[nodiscard]] OwnDspDmaCycleResult dma_cycle(DspDmaInputs inputs, bool admit_native);
   DspBus bus_;
   OwnDspIo io_;

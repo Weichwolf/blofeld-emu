@@ -71,8 +71,12 @@ pipeline or audio timing; the caller still owns effect placement, ESAI and board
 scheduling. A separate explicit F2/DMA cycle derives the P-memory footprint from
 the actual issued F1 address while holding the native CPU. A destination conflict
 retains that address through DMA wait/write; the subsequent genuine F2 read can
-then sample the written word. F2/native overlap and automatic F1 placement remain
-unqualified.
+then sample the written word. An additional caller-selected DMA/F2/native order
+admits the actual pending native effect alongside F2 when their memory resources
+are independently qualified. A conflicting DMA destination holds both effects;
+the synthetic test resumes the actual X load and executes the DMA-written opcode.
+Concurrent native P or peripheral access and automatic F1 placement remain
+unqualified. These are reference-order hypotheses, not measured pipeline timing.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected

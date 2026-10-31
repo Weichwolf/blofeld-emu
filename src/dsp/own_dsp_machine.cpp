@@ -283,6 +283,12 @@ std::uint64_t OwnDspMachine::advance_reference_cycle() {
   return duration;
 }
 
+std::optional<DspMemoryAccess>
+OwnDspMachine::dma_native_footprint(const dsp56300::PendingInstruction &pending) {
+  qualify_native_memory(pending);
+  return native_footprint(pending.effect);
+}
+
 DspDmaBusResult OwnDspMachine::advance_dma_reference_cycle(const DspDmaInputs inputs) {
   return dma_cycle(inputs, false).dma;
 }
@@ -316,8 +322,7 @@ OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const b
   std::array<DspMemoryAccess, 1> access{};
   std::size_t count = 0;
   if (admit_native) {
-    qualify_native_memory(*pending);
-    if (const auto footprint = native_footprint(pending->effect)) { access[count++] = *footprint; }
+    if (const auto footprint = dma_native_footprint(*pending)) { access[count++] = *footprint; }
   }
   const EffectGuard guard(advancing_effect_);
   static_cast<void>(clock_.next_step_ticks(bus_, 1));

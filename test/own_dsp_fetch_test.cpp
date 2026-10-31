@@ -175,6 +175,119 @@ void dma_fetch_conflict() {
           "The actual sampled DMA-written opcode must retire on the own core");
 }
 
+void dma_fetch_native_overlap() {
+  constexpr Word source_register = 0xffffef;
+  constexpr Word destination_register = 0xffffee;
+  constexpr Word counter_register = 0xffffed;
+  constexpr Word control_register = 0xffffec;
+  constexpr Word source = 0x120;
+  constexpr Word program_copy = 0x9802da;
+  constexpr Word load_x0_absolute = 0x44f000;
+  constexpr Word data_address = 0x500;
+  constexpr Word data = 0x123456;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 2> rom{jump_absolute, ram_entry};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  for (const auto write :
+       std::array{DspStore{.address = source, .value = 0},
+                  DspStore{.address = ram_entry, .value = load_x0_absolute},
+                  DspStore{.address = ram_entry + 1, .value = data_address},
+                  DspStore{.address = ram_entry + 2, .value = immediate_x0},
+                  DspStore{.space = DspSpace::x, .address = data_address, .value = data}}) {
+    machine.bus().write(write);
+  }
+  reset(machine);
+  static_cast<void>(machine.begin_fetch());
+  retire(machine);
+  for (const auto write : std::array{
+           DspStore{.space = DspSpace::x, .address = source_register, .value = source},
+           DspStore{.space = DspSpace::x, .address = destination_register, .value = ram_entry + 2},
+           DspStore{.space = DspSpace::x, .address = counter_register},
+           DspStore{.space = DspSpace::x, .address = control_register, .value = program_copy}}) {
+    machine.bus().write(write);
+  }
+  const auto source_read = machine.advance_dma_reference_cycle(dma_input(0));
+  require(source_read.phase && source_read.phase->kind == DspDmaPhaseKind::source_read,
+          "DMA must really read its source before testing the destination overlap");
+  OwnDspFetch fetch(machine);
+  read_word(fetch, ram_entry);
+  read_word(fetch, ram_entry + 1);
+  static_cast<void>(fetch.begin());
+  auto pending = machine.cpu().pending_instruction();
+  if (!pending || pending->effect.kind != EffectKind::read || pending->effect.space != Space::x ||
+      pending->effect.address != data_address) {
+    throw std::runtime_error("Native load did not reach its actual X read");
+  }
+  fetch.issue();
+  rejects(
+      [&] {
+        static_cast<void>(
+            fetch.advance_dma_capture_native(dma_input(1), OwnDspNativeCycleModel::unqualified));
+      },
+      "Unqualified overlapping cycle was accepted");
+  const auto waiting = fetch.advance_dma_capture_native(dma_input(1, DspDmaGrant::wait),
+                                                        OwnDspNativeCycleModel::isolated_effect);
+  const auto written =
+      fetch.advance_dma_capture_native(dma_input(2), OwnDspNativeCycleModel::isolated_effect);
+  const auto held = machine.cpu().pending_instruction();
+  require(waiting.dma.core_stall && !waiting.captured && !waiting.native &&
+              written.dma.core_stall && written.dma.word && !written.captured && !written.native &&
+              fetch.view().pending_address == ram_entry + 2 && held &&
+              held->effect == pending->effect,
+          "The selected global stall must retain both actual F2 and native X read");
+  const auto completed =
+      fetch.advance_dma_capture_native(dma_input(3), OwnDspNativeCycleModel::isolated_effect);
+  require(completed.captured && completed.native &&
+              completed.native->fault.kind == FaultKind::none &&
+              fetch.view().words.front() == DspProgramWord{.address = ram_entry + 2, .value = 0} &&
+              machine.clock().native_cycle_units() == 4 && machine.clock().timer_clk2_edges() == 2,
+          "Released cycle must perform the actual F2 read and independent native X read");
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().x == data, "Native instruction must publish the real X word");
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().pc == ram_entry + 3,
+          "DMA-written opcode captured during the X load must execute on the own core");
+}
+
+void dma_fetch_native_program_conflict() {
+  constexpr Word movem_x0 = 0x07f084;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 3> rom{movem_x0, ram_entry, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = ram_entry, .value = 7});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  const auto pending = machine.cpu().pending_instruction();
+  if (!pending || pending->effect.kind != EffectKind::read ||
+      pending->effect.space != Space::program || pending->effect.address != ram_entry) {
+    throw std::runtime_error("Native MOVEM did not reach its actual program read");
+  }
+  fetch.issue();
+  try {
+    static_cast<void>(
+        fetch.advance_dma_capture_native(dma_input(0), OwnDspNativeCycleModel::isolated_effect));
+    throw std::runtime_error("Two unqualified program bus reads were accepted");
+  } catch (const blofeld::Fault &error) {
+    const std::string detail(error.what());
+    const auto held = machine.cpu().pending_instruction();
+    require(detail.contains("read P:0xff0002") && detail.contains("native=read P:0x000100") &&
+                detail.contains("pc=0xff0000") && held && held->effect == pending->effect &&
+                fetch.view().pending_address == boot_entry + 2 &&
+                machine.clock().native_cycle_units() == 0 && !machine.bus().last_dma_cycle(),
+            "Unqualified dual program reads must retain addresses and leave both effects pending");
+  }
+}
+
 void cache_fallback() {
   constexpr Word cache_status = 0xc80300;
   constexpr Word normal_status = 0xc00300;
@@ -570,6 +683,8 @@ int main() {
   try {
     actual_fetch();
     dma_fetch_conflict();
+    dma_fetch_native_overlap();
+    dma_fetch_native_program_conflict();
     invalidation();
     cache_fallback();
     cache_unmapped_program();
