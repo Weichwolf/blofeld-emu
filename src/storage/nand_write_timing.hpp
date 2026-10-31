@@ -58,6 +58,8 @@ private:
   [[nodiscard]] std::uint64_t deadline(std::uint64_t ticks,
                                        std::chrono::nanoseconds interval) const;
   void changed(std::uint64_t ticks, const KnownPins &pins);
+  [[nodiscard]] std::optional<NandWriteLatch> observe_changes(std::uint64_t ticks,
+                                                              const KnownPins &pins);
   [[nodiscard]] std::optional<NandWriteLatch> edge(std::uint64_t ticks, const KnownPins &pins);
   [[nodiscard]] NandWriteLatch latch(std::uint64_t ticks, const KnownPins &pins) const;
   std::uint32_t timebase_hz_;

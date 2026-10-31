@@ -131,6 +131,7 @@ void NandReadTiming::read_edge(const std::uint64_t ticks, const bool rising, con
     }
     release(ticks, re_release_ns);
     rose_at_ = ticks;
+    selected_re_low_ = false;
   } else {
     if (rose_at_ && ticks < deadline(*rose_at_, re_high_ns)) {
       fail("RE high pulse shorter than tREH");
@@ -152,8 +153,36 @@ void NandReadTiming::read_edge(const std::uint64_t ticks, const bool rising, con
       phase_ = Phase::reading;
     }
     fell_at_ = ticks;
+    selected_re_low_ = !ce_n_;
   }
   re_n_ = rising;
+}
+
+void NandReadTiming::standby_edge(const std::uint64_t ticks, const bool rising) {
+  if (rising) {
+    if (selected_re_low_ && fell_at_ && ticks < deadline(*fell_at_, re_low_ns)) {
+      fail("selected RE low pulse shorter than tRP after deselection");
+    }
+    // Retain the actual high-setup anchor, not an output release or source event.
+    rose_at_ = ticks;
+    selected_re_low_ = false;
+  }
+  re_n_ = rising;
+}
+
+void NandReadTiming::observe_edges(const std::uint64_t ticks,
+                                   const bool ce_n,
+                                   const bool re_n,
+                                   const Source &source) {
+  const bool ce_changed = ce_n_ != ce_n;
+  const bool re_changed = re_n_ != re_n;
+  if (ce_changed && re_changed) { fail("unordered simultaneous CE/RE edges"); }
+  if (ce_n_ && ce_n) {
+    if (re_changed) { standby_edge(ticks, re_n); }
+    return;
+  }
+  if (ce_changed) { select_edge(ticks, ce_n); }
+  if (re_changed) { read_edge(ticks, re_n, source); }
 }
 
 void NandReadTiming::observe(const std::uint64_t ticks,
@@ -164,24 +193,20 @@ void NandReadTiming::observe(const std::uint64_t ticks,
   auto next = *this;
   next.ticks_ = ticks;
   if (!initialized_) {
-    if (!*pins.re_n) { fail("initial RE-high observation is missing"); }
+    if (!*pins.re_n && !*pins.ce_n) { fail("initial RE-high observation is missing"); }
     // Latest bounds on unobserved past events, not manufactured pin edges.
     // A first known sample bounds every earlier RE transition/CE selection.
     next.selected_at_ = {.earliest = 0, .latest = ticks};
     next.fell_at_ = ticks;
     next.rose_at_ = ticks;
     next.ce_n_ = *pins.ce_n;
-    next.re_n_ = true;
+    next.re_n_ = *pins.re_n;
     next.phase_ = Phase::releasing;
     next.hold_until_ = ticks;
     next.floating_at_ = next.deadline(ticks, *pins.ce_n ? ce_release_ns : re_release_ns);
     next.initialized_ = true;
   } else {
-    const bool ce_changed = ce_n_ != *pins.ce_n;
-    const bool re_changed = re_n_ != *pins.re_n;
-    if (ce_changed && re_changed) { fail("unordered simultaneous CE/RE edges"); }
-    if (ce_changed) { next.select_edge(ticks, *pins.ce_n); }
-    if (re_changed) { next.read_edge(ticks, *pins.re_n, source); }
+    next.observe_edges(ticks, *pins.ce_n, *pins.re_n, source);
   }
   *this = next;
 }

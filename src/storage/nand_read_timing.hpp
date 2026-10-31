@@ -29,8 +29,8 @@ struct NandReadOutput {
 // K9F1208U0C Rev1.1, 3.3V array-read output bounds only. The caller supplies a
 // monotonic reference timebase, actual CE/RE observations and each protocol
 // byte. No chip selection, array completion, data or physical timing is guessed.
-// First known RE-high with either CE level bounds prior edges/selection; no
-// source is sampled until an actual later falling RE. Release still takes its
+// Initial selected observations require RE high; deselected ones allow either
+// level. Prior history remains bounded until a real selected falling RE. Release still takes its
 // full maximum, and the first new pulse waits out prior constraints. Dynamic
 // status, write-side timing and ready-to-read setup need separate contracts.
 // Input/output observations advance reference time; copies retain value state.
@@ -64,6 +64,8 @@ private:
   void check_time(std::uint64_t ticks) const;
   void read_edge(std::uint64_t ticks, bool rising, const Source &source);
   void select_edge(std::uint64_t ticks, bool rising);
+  void standby_edge(std::uint64_t ticks, bool rising);
+  void observe_edges(std::uint64_t ticks, bool ce_n, bool re_n, const Source &source);
   void release(std::uint64_t ticks, std::chrono::nanoseconds maximum_ns);
   [[nodiscard]] NandReadOutput at(std::uint64_t ticks) const;
   std::uint32_t timebase_hz_ = 0;
@@ -81,5 +83,7 @@ private:
   bool initialized_ = false;
   bool ce_n_ = true;
   bool re_n_ = true;
+  // A selected read's low pulse stays subject to tRP after deselection.
+  bool selected_re_low_ = false;
 };
 }

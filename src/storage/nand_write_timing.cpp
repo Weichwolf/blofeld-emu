@@ -56,7 +56,7 @@ void NandWriteTiming::changed(const std::uint64_t ticks, const KnownPins &pins) 
   for (std::size_t index = 0; index < changes.size(); ++index) {
     if (!changes[index]) { continue; }
     if (rose_at_ && ticks < deadline(*rose_at_, hold_ns)) { fail(hold_names[index]); }
-    if (!old.we_n && index < 3) {
+    if (!old.ce_n && !old.we_n && index < 3) {
       const unsigned bit = 1U << index;
       if ((low_changes_ & bit) != 0) { fail("control toggled twice while WE low"); }
       low_changes_ |= bit;
@@ -97,6 +97,30 @@ std::optional<NandWriteLatch> NandWriteTiming::edge(const std::uint64_t ticks,
   return value;
 }
 
+std::optional<NandWriteLatch> NandWriteTiming::observe_changes(const std::uint64_t ticks,
+                                                               const KnownPins &pins) {
+  const bool standby = pins_.ce_n && pins.ce_n;
+  if (!standby && pins_.we_n != pins.we_n && pins_.re_n != pins.re_n) {
+    fail("unordered simultaneous RE/WE edges");
+  }
+  if (pins_.ce_n && !pins.ce_n && !pins_.we_n) {
+    fail("unqualified CE assertion during an existing WE-low pulse");
+  }
+  changed(ticks, pins);
+  if (standby) {
+    if (pins_.we_n != pins.we_n && pins.we_n) {
+      const bool selected_low = fell_at_ && (!high_since_ || *fell_at_ >= *high_since_);
+      if (selected_low && ticks < deadline(*fell_at_, pulse_ns)) {
+        fail("selected WE low pulse shorter than tWP after deselection");
+      }
+      high_since_ = ticks;
+    }
+    return std::nullopt;
+  }
+  if (!pins_.we_n && !pins.re_n) { fail("RE asserted during write pulse"); }
+  return edge(ticks, pins);
+}
+
 std::optional<NandWriteLatch> NandWriteTiming::observe(const std::uint64_t ticks,
                                                        const NandWritePins pins) {
   if (ticks < ticks_) { fail("reference time moved backwards"); }
@@ -116,16 +140,11 @@ std::optional<NandWriteLatch> NandWriteTiming::observe(const std::uint64_t ticks
   next.ticks_ = ticks;
   std::optional<NandWriteLatch> result;
   if (!initialized_) {
-    if (!known.we_n) { fail("initial WE-high observation is missing"); }
+    if (!known.we_n && !known.ce_n) { fail("initial WE-high observation is missing"); }
     next.stable_since_.fill(NandTimeWindow{.earliest = ticks, .latest = ticks});
-    next.high_since_ = ticks;
+    next.high_since_ = known.we_n ? std::optional{ticks} : std::nullopt;
   } else {
-    if (pins_.we_n != known.we_n && pins_.re_n != known.re_n) {
-      next.fail("unordered simultaneous RE/WE edges");
-    }
-    next.changed(ticks, known);
-    if (!pins_.we_n && !known.re_n) { next.fail("RE asserted during write pulse"); }
-    result = next.edge(ticks, known);
+    result = next.observe_changes(ticks, known);
   }
   next.pins_ = known;
   next.initialized_ = true;

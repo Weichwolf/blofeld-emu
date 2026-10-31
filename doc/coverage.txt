@@ -3412,3 +3412,12 @@ ordinary groups/profile and complete parent actual-MCU Board/idle output pass
 under ASan/UBSan and separate TSan. See dsp-gpio-configuration-dma.txt.
 Supports requirements2/3/6; no timing or hardware hypothesis changes. Joined
 NAND selection/gating and full original instrument/MIDI/audio remain open.
+
+NAND standby/read exit: known stable CE-high ignores RE/WE activity while
+retaining selected pulse,cycle,setup and output-release constraints. Established
+selected-read CE exit retains tCSD10ns,including explicit opaque-history bounds.
+Eighteen groups/profile pass under ASan/UBSan and separateTSan:13 fresh native
+groups plus5 closed-evidence reuses;1136 standby/2795 read-exit assertions.
+All11 existing read-setup header consumers are rebuilt/profile. See nand-standby.txt.
+Supports requirements2/3/6; read-to-input turnaround,generic write tCSD,unknown
+initial read history,CE/WP/latch identification and complete boot remain open.

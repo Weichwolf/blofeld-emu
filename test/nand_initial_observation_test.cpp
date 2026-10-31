@@ -87,12 +87,14 @@ void initial_vector(const Vector row, const bool ce, const std::uint64_t start) 
   require(calls == 0, "First known levels cannot invent a source read or CE/RE edge");
   const auto initial_state = timing;
   auto guarded = timing;
-  rejected([&] { guarded.observe(start + row.high - 1, {.ce_n = ce, .re_n = false}, source); },
-           "tREH");
-  rejected([&] { guarded.observe(start + row.cycle - 1, {.ce_n = ce, .re_n = false}, source); },
-           "tRC");
-  require(calls == 0 && guarded == initial_state && guarded.output(start) == NandReadOutput{},
-          "Premature first pulse rejects before source consumption and time commit");
+  if (!ce) {
+    rejected([&] { guarded.observe(start + row.high - 1, {.ce_n = ce, .re_n = false}, source); },
+             "tREH");
+    rejected([&] { guarded.observe(start + row.cycle - 1, {.ce_n = ce, .re_n = false}, source); },
+             "tRC");
+    require(calls == 0 && guarded == initial_state && guarded.output(start) == NandReadOutput{},
+            "Premature first pulse rejects before source consumption and time commit");
+  }
   const auto release = ce ? row.ce_release : row.re_release;
   require(timing.output(start) == NandReadOutput{} &&
               timing.output(start + release - 1) == NandReadOutput{} &&
@@ -110,9 +112,8 @@ void initial_vector(const Vector row, const bool ce, const std::uint64_t start) 
 
 void initial_guards() {
   constexpr unsigned hz = 1000000000;
-  constexpr std::array<NandReadPins, 4> invalid{{{.ce_n = std::nullopt, .re_n = true},
+  constexpr std::array<NandReadPins, 3> invalid{{{.ce_n = std::nullopt, .re_n = true},
                                                  {.ce_n = false, .re_n = std::nullopt},
-                                                 {.ce_n = true, .re_n = false},
                                                  {.ce_n = false, .re_n = false}}};
   for (const auto pins : invalid) {
     NandReadTiming timing(hz);

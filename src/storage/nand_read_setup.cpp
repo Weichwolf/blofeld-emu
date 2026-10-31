@@ -2,6 +2,7 @@
 #include "storage/nand_read_setup.hpp"
 
 #include "common/bus.hpp"
+#include "storage/nand_time_window.hpp"
 
 #include <array>
 #include <cstddef>
@@ -14,6 +15,7 @@ namespace {
 constexpr std::array<unsigned, 4> minimum_ns{60, 10, 10, 20};
 constexpr std::array<const char *, 4> names{"tWHR", "tAR", "tCLR", "tRR"};
 constexpr unsigned nanoseconds_per_second = 1000000000;
+constexpr unsigned read_exit_control_hold_ns = 10;
 }
 
 NandReadSetup::NandReadSetup(const std::uint32_t timebase_hz) : timebase_hz_(timebase_hz) {
@@ -44,6 +46,28 @@ void NandReadSetup::check_read(const std::uint64_t ticks,
   }
 }
 
+void NandReadSetup::check_control_hold(const std::uint64_t ticks) const {
+  if (!read_ce_release_) { return; }
+  const auto scaled = static_cast<std::uint64_t>(read_exit_control_hold_ns) * timebase_hz_;
+  const auto duration =
+      (scaled / nanoseconds_per_second) + (scaled % nanoseconds_per_second != 0 ? 1U : 0U);
+  if (ticks - read_ce_release_->latest < duration) {
+    fail("tCSD: selected-read exit requires10ns before CLE/ALE change");
+  }
+}
+
+void NandReadSetup::observe_read_exit(const std::uint64_t ticks, const KnownPins &pins) {
+  if (!pins_.ce_n && pins.ce_n && selected_read_) {
+    read_ce_release_ = NandTimeWindow{.earliest = ticks, .latest = ticks};
+    selected_read_ = false;
+  }
+  const bool controls_changed = pins_.ale != pins.ale || pins_.cle != pins.cle;
+  if (controls_changed) { check_control_hold(ticks); }
+  // A selected input-mode transition ends the observed read context. Its own
+  // WE-relative setup/hold and output-turnaround constraints remain separate.
+  if (!pins.ce_n && (controls_changed || !pins.we_n)) { selected_read_ = false; }
+}
+
 bool NandReadSetup::observe(const std::uint64_t ticks, const NandReadSetupPins pins) {
   return observe(ticks, pins, NandReadKind::array);
 }
@@ -66,11 +90,13 @@ bool NandReadSetup::observe(const std::uint64_t ticks,
   next.ticks_ = ticks;
   bool admitted = false;
   if (!initialized_) {
-    if (!known.re_n) { next.fail("initial RE-high observation is missing"); }
+    if (!known.re_n && !known.ce_n) { next.fail("initial RE-high observation is missing"); }
     next.stable_since_.fill(ticks);
   } else {
+    next.observe_read_exit(ticks, known);
     const bool re_changed = pins_.re_n != known.re_n;
-    if (re_changed && (pins_.ce_n != known.ce_n || pins_.we_n != known.we_n)) {
+    const bool standby = pins_.ce_n && known.ce_n;
+    if (!standby && re_changed && (pins_.ce_n != known.ce_n || pins_.we_n != known.we_n)) {
       next.fail("unordered simultaneous RE/CE or RE/WE edges");
     }
     const std::array changes{pins_.we_n != known.we_n,
@@ -82,6 +108,7 @@ bool NandReadSetup::observe(const std::uint64_t ticks,
     }
     if (re_changed && !known.re_n && !known.ce_n) {
       next.check_read(ticks, known, kind);
+      next.selected_read_ = true;
       admitted = true;
     }
   }

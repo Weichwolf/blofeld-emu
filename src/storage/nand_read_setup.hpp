@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
+#include "storage/nand_time_window.hpp"
+
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -22,6 +24,9 @@ struct NandReadSetupPins {
 // Does not generate Ready, infer protocol mode, consume bytes or drive outputs.
 // Observe every control/Ready change. Unknown Ready is allowed until a selected
 // falling RE edge, which requires its complete known-high setup interval.
+// Also retain tCSD after CE releases a read established by an admitted RE edge.
+// This bounded contract does not infer a prior read from initial pin levels or
+// impose a universal CE-to-control hold on write-only sequences.
 class NandReadSetup {
 public:
   explicit NandReadSetup(std::uint32_t timebase_hz);
@@ -51,12 +56,16 @@ private:
 
   [[noreturn]] void fail(const std::string &reason) const;
   void check_read(std::uint64_t ticks, const KnownPins &pins, NandReadKind kind) const;
+  void check_control_hold(std::uint64_t ticks) const;
+  void observe_read_exit(std::uint64_t ticks, const KnownPins &pins);
   std::uint32_t timebase_hz_;
   std::uint64_t ticks_ = 0;
   // nullopt means the minimum is permanently met until the next actual change.
   std::array<std::optional<std::uint64_t>, 4> stable_since_{};
+  std::optional<NandTimeWindow> read_ce_release_;
   KnownPins pins_{
       .ce_n = true, .re_n = true, .we_n = true, .ale = false, .cle = false, .ready = std::nullopt};
   bool initialized_ = false;
+  bool selected_read_ = false;
 };
 }

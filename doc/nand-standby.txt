@@ -1,0 +1,35 @@
+NAND standby and bounded read exit
+---------------------------------
+Reference: K9F1208U0C Rev1.1 pp.12/13/19/22; geometry/routing remain candidates.
+
+Known stable CE-high ignores short/low/coincident RE/WE activity without a
+read source or input latch. Actual rising strobes retain future high-setup
+anchors; ignored falling strobes preserve selected cycle history. Selected
+low pulses and output-release bounds survive deselection. Initial CE-high
+samples allow either strobe level while retaining conservative output bounds.
+Selected simultaneous/unknown edges still fail transactionally.
+
+An admitted selected RE establishes read context. RE rise retains it; subsequent
+CE rise starts the10ns tCSD control hold. CLE/ALE changes before expiry fail.
+CE-only opaque windows retain a possible exit bound only with preceding read
+context,without manufacturing an edge. Rounding at1GHz/1.08GHz/216MHz gives
+10/11/3ticks. Independent5ns write holds remain5/6/2ticks.
+
+Scope: selected ACL changes or selected WE-low observations end that read
+context before a completed input latch is required. Physical admission of
+read-to-input transitions,generic write-side tCSD applicability and unknown
+initial read history remain unqualified. Output turnaround,CE/WP wiring,cold
+latches and complete original boot remain separate reconstruction tasks.
+
+Validation:1136 standby assertions and2795 read-exit assertions/profile;
+18 scoped groups/profile under ASan/UBSan and separateTSan. Five groups reuse
+qualified evidence after held-binary or exact preprocessing/code-generation
+closure checks;13 groups/profile have fresh native execution. All11 existing
+read-setup header consumers are rebuilt in both profiles. No fuzz/device
+traffic. Firmware assets remain local; these fixtures establish bounded timing.
+
+The following commands select five component groups,not all18 regression groups:
+cmake --build --preset strict --target blofeld-nand-standby-test blofeld-nand-read-exit-test blofeld-nand-ce-window-test
+ctest --preset strict -R '^(nand_standby|nand_read_exit|nand_ce_window_(boundaries|guards|histories))$' --output-on-failure
+Repeat with preset thread for separateTSan. Private original-firmware fixtures
+and native calendar/medium/status regressions are recorded by the local gates.

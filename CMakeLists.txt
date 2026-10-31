@@ -1876,6 +1876,16 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-nand-read-transition-test PRIVATE blofeld_nand_read_timing)
   add_test(NAME nand_read_transition COMMAND blofeld-nand-read-transition-test)
   set_tests_properties(nand_read_transition PROPERTIES TIMEOUT 30)
+  add_executable(blofeld-nand-standby-test test/nand_standby_test.cpp)
+  target_link_libraries(blofeld-nand-standby-test PRIVATE
+    blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup)
+  add_test(NAME nand_standby COMMAND blofeld-nand-standby-test)
+  set_tests_properties(nand_standby PROPERTIES TIMEOUT 30)
+  add_executable(blofeld-nand-read-exit-test test/nand_read_exit_test.cpp)
+  target_link_libraries(blofeld-nand-read-exit-test PRIVATE
+    blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup)
+  add_test(NAME nand_read_exit COMMAND blofeld-nand-read-exit-test)
+  set_tests_properties(nand_read_exit PROPERTIES TIMEOUT 30)
   add_executable(blofeld-nand-initial-observation-test test/nand_initial_observation_test.cpp)
   target_link_libraries(blofeld-nand-initial-observation-test PRIVATE blofeld_nand_read_timing)
   add_test(NAME nand_initial_observation COMMAND blofeld-nand-initial-observation-test)
@@ -4150,7 +4160,8 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
-  add_dependencies(quality blofeld-nand-ce-window-test blofeld-nand-initial-observation-test)
+  add_dependencies(quality blofeld-nand-ce-window-test blofeld-nand-initial-observation-test
+    blofeld-nand-standby-test blofeld-nand-read-exit-test)
   add_dependencies(quality blofeld-nand-read-transition-test)
 endif()
 

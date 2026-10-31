@@ -34,6 +34,7 @@ void NandReadTiming::resume_ce_window(const std::uint64_t start,
   floating_at_ = 0;
   fell_at_.reset();
   rose_at_.reset();
+  selected_re_low_ = false;
   data_ = {};
   hold_driven_.reset();
   phase_ = Phase::floating;
