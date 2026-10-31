@@ -175,6 +175,18 @@ its final template was not independently captured, so that obsolete equality
 check is not a boot or corruption verdict. NAND write latches still use intended
 GPIO outputs, limiting bidirectional pad evidence. Detailed inputs and audit:
 `doc/local/own-core-timeline-resolved-pads/{runtime3,audit,frozen-build}.json`.
+A separate conditional image uses the old updater-fixture program/readback
+trace for the final 258 bytes. They equal a separately captured pre-update RAM
+window; an uninterrupted update and intervening writer history remain unproved,
+and the old updater runner receipt is missing. The sparse reference is unchanged.
+The new run reuses the identical frozen binary and changes only its NAND input.
+All 56,496 actual full PDRF values match that conditional image. Execution then
+reaches a loaded runtime record and refuses SHI reset reconfiguration because
+the model lacks known inactive HBUSY. The original record covers the stop PC;
+this does not independently verify every resident memory word or full boot.
+All frozen build artifacts and runtime references remain unchanged. Provenance,
+limits and input hashes: `doc/own-dsp-updater-tail-reference.json`; detailed
+trace and audits: `doc/local/own-core-timeline-updater-image/`.
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference

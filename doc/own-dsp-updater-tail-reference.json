@@ -1,0 +1,32 @@
+{
+  "qualification": "Conditional logical updater-fixture result. Not a physical NAND dump or evidence of an uninterrupted firmware update.",
+  "base_source_manifest": "own-dsp-nand-reference.json",
+  "unchanged_original_source_bytes": 56238,
+  "additional_conditional_trace_bytes": 258,
+  "tail_ram_capture_words": 86,
+  "checked_updater_page_cycles": 171,
+  "candidate_image_bytes": 113884,
+  "candidate_image_sha256": "b3795460cf7dafec7496e95caf40fd39d6c84b5f145cf6786ca00ea2eb245e5b",
+  "conditional_tail_sha256": "6bd3749a368b56ead82399ee6d06456c94bde1edab4477a48d4b48ea5e032053",
+  "program_readback_trace_sha256": "fe9cce1ab627ca12ae380e2a911fd1e365e2194188e1e7d2e58edfdd1fe37a4d",
+  "separate_ram_capture_sha256": "ea468ed8260258c6075df25ba0a7961ebaf6c0e3fe5540c936c6cd7dcf77bec1",
+  "program_count_or_block_history_assigned": false,
+  "old_updater_runner_receipt": "missing",
+  "unproven": [
+    "Physical NAND contents and wiring",
+    "Intervening RAM writers before original update entry",
+    "Continuous MCU/DSP update transport and programming",
+    "Full instrument boot and functions"
+  ],
+  "local_reproducer": "python3 doc/local/own-core-timeline-updater-image/prepare_image.py",
+  "local_reproducer_sha256": "780dfc62ecd0fb7dd0b442c3c983ab0bf3b51d363fe212f1e42665238248efee",
+  "conditional_runtime": {
+    "cpu_PDRF_words_matched": 56496,
+    "protocol_outputs_matched": 56496,
+    "frozen_build_artifacts": 50,
+    "runtime_code_stop": "SHI reset reconfiguration needs known inactive HBUSY",
+    "runtime_integrity_verified": true,
+    "full_boot_proven": false,
+    "local_evidence": "doc/local/own-core-timeline-updater-image/{image-audit,runtime3,audit,entry-audit}.json"
+  }
+}
