@@ -64,6 +64,10 @@ same owner or a fresh owner; old effect tickets cannot be reused. GPIO readers
 are detached and must be explicitly reconnected before consuming pad inputs.
 External board devices, shared event queues and persistent files are excluded.
 Capture/restore allocate and are not real-time callback operations.
+The own-core retirement candidate can also be captured with its current bus
+and clock state. This is an untimed speculative continuation, not retirement
+or a complete board snapshot; the original owner keeps its ticket. Capture
+rejects pending interrupt-vector ownership and unpublished OMR transitions.
 The synthetic checkpoint test passes under ASan/UBSan and resumes all 32 native
 effect cuts of an own immediate/CLR/REP/ADD/store program against literal final
 register/RAM expectations. It

@@ -62,6 +62,9 @@ public:
   [[nodiscard]] dsp56300::InstructionProgress advance(const dsp56300::EffectTicket &ticket);
   [[nodiscard]] bool admit_interrupt(dsp56300::InstructionWords foreground);
   [[nodiscard]] OwnDspCheckpoint checkpoint() const;
+  // An untimed speculative continuation, not a published instruction or
+  // complete board checkpoint. Peripheral effects already admitted are copied.
+  [[nodiscard]] OwnDspCheckpoint candidate_checkpoint(const dsp56300::EffectTicket &ticket) const;
   // Strong exception guarantee. Requires identical clock inputs. External pad
   // readers are detached, retaining the obligation to reconnect before sampling.
   // Previously issued effect tickets become invalid, including on the same owner.

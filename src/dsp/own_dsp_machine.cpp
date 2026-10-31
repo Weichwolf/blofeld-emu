@@ -51,6 +51,29 @@ OwnDspCheckpoint OwnDspMachine::checkpoint() const {
                                 .failure = io_.failure_}));
 }
 
+OwnDspCheckpoint OwnDspMachine::candidate_checkpoint(const dsp56300::EffectTicket &ticket) const {
+  require_running();
+  if (interrupts_.pending()) {
+    throw Fault("Own DSP candidate requires completed interrupt vector ownership pc=" +
+                hex(cpu_.registers().pc, 6));
+  }
+  const auto pending = cpu_.pending_instruction();
+  if (!pending || pending->computed.omr != cpu_.registers().omr) {
+    throw Fault("Own DSP candidate requires a published OMR boundary pc=" +
+                hex(cpu_.registers().pc, 6));
+  }
+  auto native = cpu_.candidate_checkpoint(ticket);
+  return OwnDspCheckpoint(std::make_shared<const OwnDspCheckpoint::Storage>(
+      OwnDspCheckpoint::Storage{.inputs = clock_inputs_,
+                                .bus = bus_,
+                                .cpu = std::move(native),
+                                .request = interrupts_.request_,
+                                .vector = interrupts_.vector_,
+                                .first = interrupts_.first_,
+                                .clock = clock_,
+                                .failure = io_.failure_}));
+}
+
 void OwnDspMachine::restore(const OwnDspCheckpoint &checkpoint) {
   if (!checkpoint.storage_) { throw std::invalid_argument("Empty own DSP checkpoint"); }
   const auto &state = *checkpoint.storage_;

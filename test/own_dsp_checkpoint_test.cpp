@@ -13,6 +13,7 @@
 #include <iostream>
 #include <span>
 #include <stdexcept>
+#include <string>
 
 namespace {
 using namespace blofeld;
@@ -182,6 +183,13 @@ void vector_cut(const bool fetched) {
   require(source.admit_interrupt({.address = boot_entry + 2, .opcode = 0}), "IRQA not admitted");
   static_cast<void>(source.begin_fetch());
   require(pending(source).effect.address == irqa_vector, "Wrong first vector read");
+  try {
+    static_cast<void>(source.candidate_checkpoint(pending(source).ticket));
+    throw std::runtime_error("Pending vector candidate was accepted");
+  } catch (const blofeld::Fault &error) {
+    require(std::string(error.what()).contains("interrupt vector ownership"),
+            "Candidate did not reject unresolved vector ownership");
+  }
   if (fetched) { static_cast<void>(source.advance(pending(source).ticket)); }
   const auto saved = source.checkpoint();
   OwnDspMachine clone(clocks);
@@ -283,6 +291,76 @@ void callback_guard() {
   require(calls == 1 && source.cpu().registers().x == incoming && !source.io().failure(),
           "Rejected callback reentry changed the actual native read");
 }
+
+void candidate_continuation() {
+  const std::array<Word, 4> program{immediate_x0, 7, clear_a, 0};
+  OwnDspMachine source(clocks);
+  boot(source, program);
+  source.bus().write({.space = DspSpace::x, .address = cookie_address, .value = cookie});
+  static_cast<void>(source.begin_fetch());
+  const auto fetch = pending(source);
+  reject([&] { static_cast<void>(source.candidate_checkpoint(fetch.ticket)); });
+  for (unsigned effects = 0; effects < 32; ++effects) {
+    const auto current = pending(source);
+    if (current.effect.kind == EffectKind::retire) { break; }
+    const auto result = source.advance(current.ticket);
+    require(result.fault.kind == FaultKind::none && !result.retired,
+            "Candidate preparation must preserve native ownership");
+  }
+  const auto retirement = pending(source);
+  require(retirement.effect.kind == EffectKind::retire, "Candidate requires actual retirement");
+  const auto visible = source.cpu().registers();
+  const auto ticks = source.clock().elapsed_ticks();
+  const auto saved = source.candidate_checkpoint(retirement.ticket);
+  OwnDspMachine successor(clocks);
+  successor.restore(saved);
+  require(source.cpu().registers() == visible && source.cpu().progress().instructions == 0 &&
+              source.clock().elapsed_ticks() == ticks &&
+              pending(source).effect == retirement.effect,
+          "Capturing a candidate must not publish or clock the original owner");
+  require(successor.cpu().registers().x == 7 && successor.cpu().registers().pc == boot_entry + 2 &&
+              successor.cpu().progress().instructions == 1 &&
+              successor.clock().elapsed_ticks() == ticks &&
+              successor.bus().read({.space = DspSpace::x, .address = cookie_address}) == cookie,
+          "Candidate must contain real CPU, bus and clock state");
+  static_cast<void>(successor.begin_fetch());
+  reject([&] { static_cast<void>(successor.candidate_checkpoint(retirement.ticket)); });
+  retire(successor);
+  require(successor.cpu().registers().pc == boot_entry + 3 &&
+              successor.cpu().progress().instructions == 2,
+          "Candidate executes the real successor instruction");
+  require(source.advance(retirement.ticket).retired && source.cpu().registers().x == 7,
+          "The original owner retains its actual retirement ticket");
+  reject([&] { static_cast<void>(source.candidate_checkpoint(retirement.ticket)); });
+}
+
+void candidate_omr_guard() {
+  constexpr Word movec_omr = 0x05f43a;
+  constexpr Word changed_omr = 0x304;
+  const std::array<Word, 2> program{movec_omr, changed_omr};
+  OwnDspMachine source(clocks);
+  boot(source, program);
+  static_cast<void>(source.begin_fetch(InstructionPublication::retirement));
+  for (unsigned effects = 0; effects < 32; ++effects) {
+    const auto effect = pending(source);
+    if (effect.effect.kind == EffectKind::retire) { break; }
+    const auto step = source.advance(effect.ticket);
+    require(step.fault.kind == FaultKind::none && !step.retired, "OMR instruction failed");
+  }
+  const auto retirement = pending(source);
+  require(retirement.effect.kind == EffectKind::retire && retirement.computed.omr == changed_omr &&
+              source.cpu().registers().omr != changed_omr,
+          "OMR guard requires a computed but unpublished transition");
+  try {
+    static_cast<void>(source.candidate_checkpoint(retirement.ticket));
+    throw std::runtime_error("Unpublished OMR candidate was accepted");
+  } catch (const blofeld::Fault &error) {
+    require(std::string(error.what()).contains("published OMR boundary"),
+            "Candidate did not reject an unpublished OMR transition");
+  }
+  require(source.advance(retirement.ticket).retired && source.cpu().registers().omr == changed_omr,
+          "Rejected candidate must leave the actual OMR retirement intact");
+}
 }
 
 int main() {
@@ -294,6 +372,8 @@ int main() {
     pad_binding();
     failure_latch();
     callback_guard();
+    candidate_continuation();
+    candidate_omr_guard();
     std::cout << "Own DSP coordinated checkpoint checks passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
