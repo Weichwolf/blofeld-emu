@@ -98,7 +98,12 @@ other vector transitions still refuse rather than being skipped.
 Synthetic tests cover arithmetic, real REP-latch reuse, owner recovery and
 repeated X/Y stores with exact address/count expectations, an actual OnCE write,
 SHI status, active-DMA refusal and interrupt retention. These are reference-order hypotheses, not measured pipeline
-timing. With a locally supplied inactive SPI baseline the private 55-word
+timing. OwnDspTimeline exposes one-cycle deadlines on the DSP timebase and
+explicit before/through boundaries for a future MCU scheduler. Synthetic ties
+execute different captured program values according to the external-write order;
+stale owners after restore are rejected. The caller still owns event ordering,
+reset and wiring; this is not yet the live board. With a locally supplied
+inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
 cycles; it does not connect the firmware MCU or establish the physical board.
 A separately selected program-write-priority hypothesis holds an issued F2 while

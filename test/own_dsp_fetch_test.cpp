@@ -8,6 +8,7 @@
 #include "dsp/dsp_shi.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
+#include "dsp/own_dsp_timeline.hpp"
 #include "dsp56300/core.hpp"
 
 #include <array>
@@ -610,6 +611,110 @@ void automatic_interrupt_missing_first() {
     }
   }
   throw std::runtime_error("Automatic IRQ skipped the missing first vector word");
+}
+
+void timeline_boundaries() {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{immediate_x0, 7, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  constexpr std::uint64_t epoch = 1000;
+  constexpr std::uint64_t period = 45;
+  OwnDspTimeline timeline(machine, OwnDspAutomaticTiming::one_effect_per_cycle, epoch);
+  const auto first = epoch + hold_ticks + recovery_ticks + period;
+  require(timeline.next_deadline() == first, "Deadline must include reset, epoch and DSP period");
+  require(!timeline.advance_one(first, OwnDspBoundary::before, dma_input(0)) &&
+              machine.clock().native_cycle_units() == 0,
+          "Before boundary must preserve a simultaneous DSP cycle");
+  const auto started = timeline.advance_one(first, OwnDspBoundary::through, dma_input(0));
+  require(started && machine.clock().native_cycle_units() == 1 &&
+              timeline.next_deadline() == first + period,
+          "Through boundary must execute exactly one real DSP cycle");
+  rejects(
+      [&] { static_cast<void>(timeline.advance_one(first, OwnDspBoundary::before, dma_input(1))); },
+      "Timeline rewound a consumed boundary");
+  const auto later = first + (2 * period);
+  require(timeline.advance_one(later, OwnDspBoundary::through, dma_input(1)).has_value() &&
+              timeline.advance_one(later, OwnDspBoundary::through, dma_input(2)).has_value() &&
+              !timeline.advance_one(later, OwnDspBoundary::through, dma_input(3)),
+          "A shared horizon must admit each due DSP period once");
+  require(machine.clock().native_cycle_units() == 3 && machine.bus().last_dma_cycle() == 2,
+          "Timeline must preserve the real DSP and DMA cycle counts");
+}
+
+void timeline_program_tie(const bool external_first) {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 2> rom{jump_absolute, ram_entry};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = ram_entry, .value = immediate_x0});
+  machine.bus().write({.address = ram_entry + 1, .value = 7});
+  machine.bus().write({.address = ram_entry + 2, .value = 0});
+  reset(machine);
+  static_cast<void>(machine.begin_fetch());
+  retire(machine);
+  OwnDspTimeline timeline(machine, OwnDspAutomaticTiming::one_effect_per_cycle, 0);
+  for (unsigned cycle = 0; cycle < 2; ++cycle) {
+    require(
+        timeline.advance_one(timeline.next_deadline(), OwnDspBoundary::through, dma_input(cycle))
+            .has_value(),
+        "Actual opcode fetch cycle must execute");
+  }
+  const auto tie = timeline.next_deadline();
+  if (external_first) {
+    require(!timeline.advance_one(tie, OwnDspBoundary::before, dma_input(2)),
+            "DSP sampled before the selected external-first boundary");
+    machine.bus().write({.address = ram_entry + 1, .value = 9});
+  }
+  const auto captured = timeline.advance_one(tie, OwnDspBoundary::through, dma_input(2));
+  require(captured && captured->captured, "The selected tie must perform the real F2 fetch");
+  if (!external_first) { machine.bus().write({.address = ram_entry + 1, .value = 9}); }
+  for (unsigned cycle = 3; cycle < 12 && machine.cpu().registers().pc == ram_entry; ++cycle) {
+    static_cast<void>(
+        timeline.advance_one(timeline.next_deadline(), OwnDspBoundary::through, dma_input(cycle)));
+  }
+  require(machine.cpu().registers().x == (external_first ? 9U : 7U),
+          "F2 must execute the value observed in the selected external/DSP order");
+}
+
+void timeline_fault() {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 1> rom{immediate_x0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspTimeline timeline(machine, OwnDspAutomaticTiming::one_effect_per_cycle, 0);
+  for (unsigned cycle = 0; cycle < 10; ++cycle) {
+    try {
+      static_cast<void>(timeline.advance_one(
+          timeline.next_deadline(), OwnDspBoundary::through, dma_input(cycle)));
+    } catch (const blofeld::Fault &error) {
+      require(std::string(error.what()).contains("0xff0001") && timeline.faulted(),
+              "Unknown actual program read must report its address and quarantine the timeline");
+      rejects([&] { static_cast<void>(timeline.next_deadline()); },
+              "Faulted timeline accepted another native step");
+      return;
+    }
+  }
+  throw std::runtime_error("Timeline skipped an unknown program extension");
+}
+
+void timeline_stale_owner() {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 1> rom{0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  const auto checkpoint = machine.checkpoint();
+  OwnDspTimeline timeline(machine, OwnDspAutomaticTiming::one_effect_per_cycle, 0);
+  machine.restore(checkpoint);
+  rejects([&] { static_cast<void>(timeline.next_deadline()); },
+          "Timeline accepted a restored machine with stale fetch ownership");
 }
 
 void dma_fetch_conflict() {
@@ -1319,6 +1424,11 @@ int main() {
     automatic_interrupt_vector(false);
     automatic_interrupt_vector(true);
     automatic_interrupt_missing_first();
+    timeline_boundaries();
+    timeline_program_tie(false);
+    timeline_program_tie(true);
+    timeline_fault();
+    timeline_stale_owner();
     dma_fetch_conflict();
     dma_fetch_native_overlap();
     dma_fetch_native_program_conflict();

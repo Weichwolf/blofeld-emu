@@ -32,6 +32,7 @@ add_library(blofeld_dsp_control_decode src/dsp/dsp_control_move.cpp src/dsp/dsp_
 target_include_directories(blofeld_dsp_control_decode PUBLIC src)
 target_link_libraries(blofeld_dsp_control_decode PUBLIC blofeld_firmware dsp56300::core)
 add_library(blofeld_own_dsp_fetch STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_fetch.cpp
+  src/dsp/own_dsp_timeline.cpp
   src/dsp/dsp_program_fetch.cpp src/dsp/dsp_fetch_context.cpp src/dsp/dsp_loop_fetch.cpp
   src/dsp/dsp_loop_source.cpp)
 target_include_directories(blofeld_own_dsp_fetch PUBLIC src)
