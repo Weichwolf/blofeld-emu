@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace blofeld {
 class OwnDspMachine;
@@ -29,9 +30,12 @@ private:
   void check_owner() const;
   void check_eligible() const;
   void check_sample_context() const;
+  [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
   OwnDspMachine &machine_;
   std::shared_ptr<const bool> identity_;
   DspProgramFetch fetch_;
+  std::optional<DspFetchedInstruction> admitted_;
+  std::optional<DspFetchedInstruction> repeated_;
   std::uint64_t instructions_ = 0;
   bool in_flight_ = false;
 };

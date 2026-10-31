@@ -79,8 +79,9 @@ OwnDspFetch connects the existing F1/F2 queue to actual captured instruction
 admission in the independent core. It owns its machine exclusively, validates
 the real sampled opcode/extension and memory context, and redirects on actual
 native retirement. Reset and restore invalidate its identity. The focused test
-covers stale/unknown samples, two-word capture, real branch redirection and an
-OMR transition. Cache-enabled fetch, loaded REP opcode latches and interrupt
+covers stale/unknown samples, two-word capture, real branch redirection, an
+OMR transition and native REP latch reuse after program memory changes.
+Cache-enabled fetch, speculative F2 reads during loaded REP and interrupt
 entry are explicitly unqualified. This is untimed component integration, not
 the production scheduler or a reset-to-instrument run.
 No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, joint board

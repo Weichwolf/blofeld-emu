@@ -8,6 +8,7 @@
 #include "dsp56300/core.hpp"
 
 #include <array>
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
@@ -130,27 +131,80 @@ void unqualified_cache() {
   }
 }
 
-void unqualified_repeat() {
+void repeat_latch() {
+  constexpr Word repeat_three = 0x0603a0;
+  constexpr Word add_x0 = 0x200040;
+  const std::array<Word, 2> rom{jump_absolute, ram_entry};
+  OwnDspMachine machine(clocks);
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = ram_entry, .value = immediate_x0});
+  machine.bus().write({.address = ram_entry + 1, .value = 7});
+  machine.bus().write({.address = ram_entry + 2, .value = repeat_three});
+  machine.bus().write({.address = ram_entry + 3, .value = add_x0});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  read_word(fetch, ram_entry);
+  read_word(fetch, ram_entry + 1);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  read_word(fetch, ram_entry + 2);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  read_word(fetch, ram_entry + 3);
+  machine.bus().write({.address = ram_entry + 3, .value = 0});
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  rejects([&] { fetch.issue(); }, "F1 after retirement bypassed REP synchronization");
+  fetch.synchronize();
+  for (unsigned iteration = 0; iteration < 2; ++iteration) {
+    require(machine.cpu().instruction_fetch().latched_opcode == add_x0 &&
+                fetch.view().consume_address == ram_entry + 4,
+            "REP must own the actual original F2 opcode latch");
+    rejects([&] { fetch.issue(); }, "Unqualified REP prefetch was accepted");
+    static_cast<void>(fetch.begin());
+    retire(machine);
+    fetch.synchronize();
+  }
+  constexpr unsigned fractional_shift = 24;
+  constexpr std::uint64_t expected_sum = 21;
+  require(machine.cpu().registers().a == (expected_sum << fractional_shift) &&
+              machine.cpu().registers().pc == ram_entry + 4 &&
+              machine.cpu().progress().instructions == 6 && fetch.view().used == 0,
+          "All REP iterations must execute the genuine latch despite overwritten RAM");
+}
+
+void missing_repeat_provenance() {
   constexpr Word repeat_three = 0x0603a0;
   const std::array<Word, 2> rom{repeat_three, 0};
   OwnDspMachine machine(clocks);
   machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
   reset(machine);
-  OwnDspFetch fetch(machine);
-  read_word(fetch, boot_entry);
-  static_cast<void>(fetch.begin());
-  retire(machine);
-  fetch.synchronize();
-  read_word(fetch, boot_entry + 1);
-  static_cast<void>(fetch.begin());
-  retire(machine);
-  try {
+  {
+    OwnDspFetch fetch(machine);
+    read_word(fetch, boot_entry);
+    static_cast<void>(fetch.begin());
+    retire(machine);
     fetch.synchronize();
-    throw std::runtime_error("Unqualified REP latch was accepted");
-  } catch (const blofeld::Fault &error) {
-    require(std::string(error.what()).contains("REP opcode latch"),
-            "REP-dependent F2 must fail with its real cause");
+    read_word(fetch, boot_entry + 1);
+    static_cast<void>(fetch.begin());
+    retire(machine);
+    fetch.synchronize();
   }
+  require(machine.cpu().instruction_fetch().latched_opcode == 0,
+          "Native REP must still own the original NOP latch");
+  rejects([&] { const OwnDspFetch unproven(machine); },
+          "A new F2 owner fabricated provenance for a live REP latch");
+  static_cast<void>(machine.begin_fetch());
+  retire(machine);
+  require(machine.cpu().progress().instructions == 3,
+          "Rejected F2 ownership must preserve the actual native REP continuation");
 }
 
 void changed_memory_context() {
@@ -212,7 +266,8 @@ int main() {
     actual_fetch();
     invalidation();
     unqualified_cache();
-    unqualified_repeat();
+    repeat_latch();
+    missing_repeat_provenance();
     changed_memory_context();
     std::cout << "Own DSP uses actual owned F1/F2 samples.\n";
   } catch (const std::exception &error) {
