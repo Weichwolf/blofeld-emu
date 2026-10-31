@@ -275,6 +275,12 @@ Conditional board contracts, each separately controlled and recorded:
   checksum-word discard place the image at the next word boundary. Modified
   checksum controls fail. This identifies the handoff for a future connected
   MCU run; neither the handshake nor MCU flash programming has been executed.
+  The original copy extents yield 107 runtime pages followed by 64 MCU pages.
+  Their source intervals overlap by 127 DSP words: the first 381 bytes of the
+  first runtime page are also the last 381 bytes of the last MCU page. The
+  final runtime page includes 86 words from the separate earlier capture. This
+  arithmetic defines future cross-region checks; it is not evidence that either
+  complete region has already been programmed in the running experiment.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -349,6 +355,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-program-ce/{audit_addresses_v2.py,audit_erases.py,snapshot-block-boundary.json}
   doc/local/own-core-main-program-ce/cpu-read-audit/{audit.py,audit.json}
   doc/local/main-updater-handoff/{audit.py,audit.json}
+  doc/local/main-updater-overlap/{audit.py,audit.json}
   doc/local/we-recovery-rc/{candidate.cir,candidate-82k.cir,audit.py,audit.json}
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
