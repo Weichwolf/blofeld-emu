@@ -107,7 +107,16 @@ ticks advance the real reset clock, and recovery stops exactly at completion
 before offering the first native deadline. Tests cover fractional hold time,
 early-release refusal, no ROM access under reset, real execution after recovery
 and stale ownership after a restore during reset. The caller still owns event
-ordering and wiring; this is not yet the live board. With a locally supplied
+ordering and wiring; this is not yet the live board. A private coupled run
+now drives this timeline from actual MCU run-period offers, with explicit
+DSP-before-MCU writes and scripted-input-before-DSP ties. It samples timer
+pins without reconfiguring the MCU during execution. With the existing board
+hypotheses, original MCU SPI writes load and verify all 94 DSP first-stage words;
+the preceding 184,320 no-cell writes match the isolated trace hash. Ten native
+MCU interrupts occur before the candidate NAND read refuses its unknown cell.
+Inputs, binaries, limits and the terminal run audit remain local in
+`doc/local/own-core-timeline-mcu/{runtime3,audit}.json`. Physical wiring, DSP
+pipeline timing and full boot remain unqualified. With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
 cycles; it does not connect the firmware MCU or establish the physical board.
