@@ -291,18 +291,24 @@ void McuDspRuntime::offer_period(const bool waiting) {
 }
 
 void McuDspRuntime::prepare_write(const CycleInputs &inputs, const Observer &observer) {
+  const auto reject = [this](const std::string_view reason) {
+    throw Fault(
+        std::string(reason) + " at " + (cycle_.address ? hex(*cycle_.address) : "<unaddressed>") +
+        " mcu-pc=" + hex(cycle_.context.pc) + " dsp-pc=" + hex(dsp_.cpu().registers().pc, 6) +
+        " tick=" + std::to_string(state_.end_ticks));
+  };
   const bool native = deadline() == state_.end_ticks;
   const auto input = next_external();
   const bool external = input && *input == state_.end_ticks;
   if (native) {
     ++state_.ties;
     if (inputs_.writes != McuWriteOrder::before_mcu && inputs_.writes != McuWriteOrder::after_mcu) {
-      throw Fault("Unqualified simultaneous DSP cycle and MCU shared write");
+      reject("Unqualified simultaneous DSP cycle and MCU shared write");
     }
   }
   if (external && inputs_.external_writes != McuWriteOrder::before_mcu &&
       inputs_.external_writes != McuWriteOrder::after_mcu) {
-    throw Fault("Unqualified simultaneous external event and MCU shared write");
+    reject("Unqualified simultaneous external event and MCU shared write");
   }
   const bool native_first = inputs_.writes == McuWriteOrder::before_mcu;
   const bool external_first = inputs_.external_writes == McuWriteOrder::before_mcu;
@@ -310,7 +316,7 @@ void McuDspRuntime::prepare_write(const CycleInputs &inputs, const Observer &obs
       (external_.order == DspPeerOrder::reject_tie ||
        (native_first != external_first &&
         (external_.order == DspPeerOrder::peer_first) != external_first))) {
-    throw Fault("Cyclic MCU/DSP/external shared-write ordering");
+    reject("Cyclic MCU/DSP/external shared-write ordering");
   }
   advance(native_first, external_first, inputs, observer);
 }

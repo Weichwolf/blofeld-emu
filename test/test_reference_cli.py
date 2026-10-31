@@ -22,7 +22,8 @@ operations 23
 initial drive B 16 02 00
 initial drive E 03 03 00
 """
-# Own DSP ROM: NOP; long absolute JMP ff0000. Independent FM costs: 1 + 4.
+# Authored NOP/JMP loop. The explicit effect-per-cycle profile publishes PC
+# then retires each instruction; F1/F2 refill makes a six-cycle loop.
 ROM = bytes.fromhex("000000 0af080 ff0000")
 # Own LDS/LDD/LDX/LDY/ANDCC/WAI/NOP, using independently specified native costs.
 WAIT = bytes.fromhex("cf2000 cc1234 ce4567 cd6789 10ef 3e a7")
@@ -161,17 +162,22 @@ class ReferenceCli(unittest.TestCase):
         self.assertIn("boot completion is not established", result.stdout)
         self.assertIn("pc=0x900f", result.stdout)
         self.assertIn("instructions=6 operations=23 interrupts=0 cycles=38 idle=17 ticks=380", result.stdout)
-        self.assertIn("completed-steps=27 units=66 ticks=2970", result.stdout)
+        self.assertIn("completed-steps=21 units=64 ticks=3420", result.stdout)
         self.assertIn("DSP-RELEASE requested=450 actual=450 pc=0xff0000", trace)
-        steps = re.findall(r"^DSP end=(\d+) pc=(0x\w+) start=(\d+) units=(\d+) ticks=(\d+)$", trace, re.M)
-        self.assertEqual(len(steps), 27)
-        elapsed = 0
-        for index, (end, pc, start, units, ticks) in enumerate(steps):
-            cost = (1, 4)[index % 2]
-            self.assertEqual(int(pc, 16), (0xff0000, 0xff0001)[index % 2])
-            self.assertEqual((int(start), int(units), int(ticks)), (elapsed, cost, cost * 45))
-            elapsed += cost * 45
-            self.assertEqual(int(end), elapsed + 450)
+        cycles = re.findall(
+            r"^DSP-PIPELINE start=(\d+) end=(\d+) cycle=(\d+) f1=(\d+) "
+            r"f1-known=([01]) retirement=([01])$", trace, re.M)
+        # Recovery450..540;64 actual45-tick periods through3420. This pins the
+        # chosen reference order, not measured DSP56371 instruction timing.
+        self.assertEqual(len(cycles), 64)
+        expected = ((0, 0), (1, 0), (2, 0), (None, 1), (3, 0), (None, 1))
+        for index, (start, end, cycle, issued, known, retired) in enumerate(cycles):
+            self.assertEqual((int(start), int(end), int(cycle)),
+                             (540 + index * 45, 585 + index * 45, index))
+            offset, retirement = expected[index % 6]
+            self.assertEqual((int(issued), int(known), int(retired)),
+                             (0 if offset is None else 0xff0000 + offset,
+                              int(offset is not None), retirement))
         self.assertEqual(saved, image(WAIT))
 
     def test_quantized_release_and_external_events_are_visible(self):
@@ -181,7 +187,7 @@ class ReferenceCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("INPUT requested=451 actual=630", trace)
         self.assertIn("DSP-RELEASE requested=451 actual=630", trace)
-        self.assertIn("completed-steps=25 units=61 ticks=2745", result.stdout)
+        self.assertIn("completed-steps=20 units=60 ticks=3420", result.stdout)
 
     def test_real_rti_wake_reuses_native_wai_frame(self):
         code = bytes.fromhex("cf2000 8610 7a003b 8680 7a0038 10ef 3e a7 20fd")
@@ -238,10 +244,10 @@ class ReferenceCli(unittest.TestCase):
             self.assertIn("operations=23 idle=17", branches[-1])
             self.assertEqual(saved, image(WAIT))
             if release == 450:
-                self.assertIn("completed-steps=27 units=66 ticks=2970", result.stdout)
+                self.assertIn("completed-steps=21 units=64 ticks=3420", result.stdout)
             else:
                 self.assertIn("DSP-RELEASE requested=2000 actual=2070", branches[0])
-                self.assertIn("completed-steps=12 units=30 ticks=1350", result.stdout)
+                self.assertIn("completed-steps=9 units=28 ticks=3420", result.stdout)
 
     def test_joint_checkpoint_recovers_the_same_real_operand_failure(self):
         code = bytes.fromhex("a7 a7 b63000")

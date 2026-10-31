@@ -97,21 +97,25 @@ def spi_words(trace):
 
 
 def echo_counts():
-    """Manual-cycle ledger for the declared reference clocks and DSP-before-MCU ties."""
-    # MCU: reset5, four LDAA1/STAA3 pairs, then three frames, final GPIO check.
-    # Each frame: ready LDAA3/CMPA1/BEQ3, SS4, 24*(SCK4+check7+SCK4), SS4, ready7.
+    """Independent ledger for the explicitly chosen effect-per-cycle order."""
+    # MCU: reset5, four LDAA1/STAA3 pairs, then three frames and final GPIO check.
+    # Each frame: ready7, SS4,24*(SCK4+check7+SCK4), SS4, ready7.
     frame_cycles = 7 + 4 + 24 * 15 + 4 + 7
     mcu_cycles = 5 + 16 + 3 * frame_cycles + 7
-    # DSP56300FM native estimates: immediate MOVEP/MOVE2, JCLR4, register MOVEP1,
-    # memory MOVE1, absolute JMP4. Data arrives on each last leading clock edge.
-    cursor, polls = 450 + 8 * 45, 0
+    # DSP: recovery90 after release450,3 initial captures, four3-effect setup
+    # instructions, then the first JCLR bit read. A taken JCLR has bit/PC/retire
+    # plus3 refill periods. Input capture is the STAA w period before its final O.
+    cursor, polls = 450 + 90 + 16 * 45, 0
     for frame in range(3):
-        capture = (5 + 16 + frame * frame_cycles + 7 + 4 + 23 * 15 + 4) * 90
-        count = (capture - cursor) // (4 * 45) + 1
-        polls += count  # A completion tied to capture still sees the preceding empty FIFO.
-        cursor += (4 * count + 7) * 45
-    polls += (mcu_cycles * 90 - cursor) // (4 * 45)
-    return mcu_cycles, 4 + polls + 3 * 4, 8 + polls * 4 + 3 * 7
+        capture = (5 + 16 + frame * frame_cycles + 7 + 4 + 23 * 15 + 3) * 90
+        empty = (capture - cursor) // (6 * 45) + 1
+        polls += empty + 1  # Same-tick DSP read precedes the MCU's final input bit.
+        ready = cursor + empty * 6 * 45
+        # Successful JCLR3, HRX4, store/postupdate4, HTX3, JMP2, refill3.
+        cursor = ready + 19 * 45
+    # Count only polls whose PC and retirement have completed before the end.
+    polls += max(0, (mcu_cycles * 90 - cursor - 2 * 45) // (6 * 45) + 1)
+    return mcu_cycles, 4 + polls + 3 * 4, (mcu_cycles * 90 - 450 - 90) // 45
 
 
 class ShiReturnCli(unittest.TestCase):
@@ -174,7 +178,7 @@ class ShiReturnCli(unittest.TestCase):
     def test_echo_replays_both_shift_directions_between_real_cpu_reads(self):
         base = self.serial_config() + "initial drive Q ff 00 00\nat 20000 drive Q ff 01 00\n"
         mcu_cycles, dsp_steps, dsp_units = echo_counts()
-        self.assertEqual((mcu_cycles, dsp_steps, dsp_units), (1174, 593, 2337))
+        self.assertEqual((mcu_cycles, dsp_steps, dsp_units), (1174, 396, 2336))
         for first in (0x123456, 0xfedcba):
             words = (first, 0x654321, 0x0f0f0f)
             code, _ = echo_exchange(words)
@@ -187,7 +191,7 @@ class ShiReturnCli(unittest.TestCase):
             self.assertIn("r4=259 lc=0", result.stdout)
             self.assertIn(f"instructions=545 operations=545 interrupts=0 cycles={mcu_cycles} "
                           f"idle=0 ticks={mcu_cycles * 10}", result.stdout)
-            self.assertIn(f"completed-steps={dsp_steps} units={dsp_units} ticks={dsp_units * 45}",
+            self.assertIn(f"completed-steps={dsp_steps} units={dsp_units} ticks={mcu_cycles * 90}",
                           result.stdout)
             self.assertIn(f"pc=0x{0x9000 + len(code):04x}", result.stdout)
             for point, frame, high in ((71, 0, True), (72, 0, True), (76, 0, False),
@@ -200,7 +204,7 @@ class ShiReturnCli(unittest.TestCase):
                     self.assertIn("r4=259 lc=0", result.stdout)
                     self.assertIn(f"cycles={mcu_cycles} idle=0 ticks={mcu_cycles * 10}", result.stdout)
                     self.assertIn(f"completed-steps={dsp_steps} units={dsp_units} "
-                                  f"ticks={dsp_units * 45}", result.stdout)
+                                  f"ticks={mcu_cycles * 90}", result.stdout)
                     prefix, branches = replay_sections(trace)
                     self.assertEqual(len(branches), 3)
                     self.assertEqual(branches, [branches[0]] * 3)
@@ -238,9 +242,11 @@ class ShiReturnCli(unittest.TestCase):
 
     def test_htx_completion_tied_to_select_respects_both_shared_write_orders(self):
         base = CONFIG.replace("operations 23", "operations 40")
-        base = base.replace("dsp-release 450", "dsp-release 1170")
+        base = base.replace("dsp-release 450", "dsp-release 900")
         base += "shi-miso P 01 direct\ninitial drive P fe 00 00\nat 1170 drive B 00 00 00\n"
-        # Native HTX completes at1440, exactly when the MCU's select store completes.
+        # Explicit45-tick periods: release900 + recovery90 +10 periods=1440.
+        # Three F1/F2 periods capture the first two-word MOVEP, then HCR and HSR
+        # write/PC/retire precede HTX's actual write at the MCU select boundary.
         # Mode zero loads the prepared word at selection; a later HTX stays pending.
         code = store(1, 2) + store(3, 0x16) + store(1, 0) + check_pin(0x258, 1)
         for order in ("dsp-before-mcu", "mcu-before-dsp"):
@@ -254,9 +260,10 @@ class ShiReturnCli(unittest.TestCase):
                 self.assertIn("Unknown MCU GPIO input at 0x0258 mask=0x01", result.stderr)
                 self.assertIn("signal=miso driven=1 level=unknown", trace)
             self.assertIn("ties=1", result.stdout + result.stderr)
-            self.assertIn("DSP end=1440", trace)
+            cycle = "DSP-PIPELINE start=1395 end=1440"
+            self.assertIn(cycle, trace)
             self.assertIn("SPI end=1440", trace)
-            self.assertEqual(trace.index("DSP end=1440") < trace.index("SPI end=1440"),
+            self.assertEqual(trace.index(cycle) < trace.index("SPI end=1440"),
                              order == "dsp-before-mcu")
 
     def test_driven_unknown_transmit_cannot_be_replaced_by_receiver_pull(self):
@@ -290,11 +297,14 @@ class ShiReturnCli(unittest.TestCase):
         config = CONFIG.replace("operations 23", "operations 200")
         config = config.replace("initial drive E 03 03", "initial drive E 01 01")
         config += "shi-hreq E 02 direct\n"
-        result, trace = self.run_cli("wai-irq", config, WAIT, mode="delayed-request",
-                                     instructions=10, irq=True)
+        # Explicit edge mode keeps this wake/return fixture independent of
+        # a request that stays active across the handler's return instruction.
+        code = WAIT[:3] + store(0x1e, 0xc0) + WAIT[3:]
+        result, trace = self.run_cli("wai-irq", config, code, mode="delayed-request",
+                                     instructions=12, irq=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("IRQ vector=0xfff2 stack-reused=1", trace)
-        self.assertIn("pc=0x9010 d=0x1234 x=0x4567 y=0x6789 sp=0x2000", result.stdout)
+        self.assertIn("pc=0x9015 d=0x1234 x=0x4567 y=0x6789 sp=0x2000", result.stdout)
         self.assertIn("interrupts=1", result.stdout)
         idle = re.search(r"cycles=\d+ idle=(\d+)", result.stdout)
         self.assertIsNotNone(idle)
@@ -315,24 +325,26 @@ class ShiReturnCli(unittest.TestCase):
         self.assertIn("IRQ vector=0xfff2 stack-reused=1", trace)
         self.assertIn("interrupts=1", result.stdout)
         self.assertIn("sp=0x2000", result.stdout)
-        # Independent MCU:25 setup/reset +7 idle +6 wake +12 handler +1 NOP.
-        self.assertIn("instructions=12 operations=20 interrupts=1 cycles=51 idle=7 ticks=510", result.stdout)
-        # Independent DSP:257 NOP +3 MOVEP(2 each) +39*(NOP1+JMP4) +one NOP.
-        self.assertIn("completed-steps=339 units=459 ticks=4131", result.stdout)
+        # Independent MCU:25 setup/reset +33 idle +6 wake +12 handler +1 NOP.
+        self.assertIn("instructions=12 operations=46 interrupts=1 cycles=77 idle=33 ticks=770", result.stdout)
+        # DSP recovery ends468;257 NOPs need514 effects plus2 fetch cycles.
+        # Three MOVEPs need9 effects, then the prefetched loop retires2 instructions
+        # before31 complete six-cycle refills. The final3 cycles have not retired.
+        self.assertIn("completed-steps=324 units=718 ticks=6930", result.stdout)
         events = [(int(ticks), int(driven), level) for ticks, driven, level in
                   re.findall(r"SHI-RETURN end=(\d+) signal=hreq driven=([01]) level=(\w+)", trace)]
-        self.assertEqual(events, [(450, 0, "unknown"), (2799, 1, "0"), (2817, 0, "unknown")])
+        self.assertEqual(events, [(450, 0, "unknown"), (5148, 1, "0"), (5175, 0, "unknown")])
         # Both transitions occur strictly inside the same 90-common-tick MCU idle period.
         self.assertEqual(events[1][0] // 90, events[2][0] // 90)
         self.assertLess(events[1][0] % 90, events[2][0] % 90)
-        self.assertLess(trace.index("SHI-RETURN end=2817"), trace.index("IRQ vector=0xfff2"))
+        self.assertLess(trace.index("SHI-RETURN end=5175"), trace.index("IRQ vector=0xfff2"))
 
     def test_checkpoint_replays_native_edge_irq_and_future_input_cursor(self):
         config = CONFIG.replace("operations 23", "operations 200")
         config = config.replace("12000000 540000000", "60000000 540000000")
         config = config.replace("initial drive E 03 03", "initial drive E 01 01")
         config += ("shi-hreq E 02 direct\ninitial drive Q ff 00 00\n"
-                   "at 2799 drive Q ff 01 00\ncheckpoint 10 2\n")
+                   "at 5148 drive Q ff 01 00\ncheckpoint 10 2\n")
         code = WAIT[:3] + store(0x1e, 0xc0) + WAIT[3:] + check_pin(0x260, 1)
         result, trace = self.run_cli("checkpoint-edge-input", config, code, mode="short-request",
                                      instructions=15, irq=True)
@@ -341,9 +353,9 @@ class ShiReturnCli(unittest.TestCase):
         self.assertEqual(len(branches), 3)
         self.assertEqual(branches, [branches[0]] * 3)
         for branch in branches:
-            self.assertIn("SHI-RETURN end=2799 signal=hreq driven=1 level=0", branch)
-            self.assertIn("SHI-RETURN end=2817 signal=hreq driven=0 level=unknown", branch)
-            self.assertIn("INPUT requested=2799 actual=2880", branch)
+            self.assertIn("SHI-RETURN end=5148 signal=hreq driven=1 level=0", branch)
+            self.assertIn("SHI-RETURN end=5175 signal=hreq driven=0 level=unknown", branch)
+            self.assertIn("INPUT requested=5148 actual=5220", branch)
             self.assertIn("IRQ vector=0xfff2 stack-reused=1", branch)
         self.assertIn("interrupts=1", result.stdout)
         self.assertIn("sp=0x2000", result.stdout)

@@ -711,3 +711,18 @@ migration work. Original DSP audio, full boot and calibrated wiring remain open.
 
   cmake --build build/strict --target blofeld-headless blofeld-mcu-dsp-runtime-test blofeld-reference-pipeline-test blofeld-reference-checkpoint-test blofeld-original-board-power-on-test blofeld-sci-midi-timeline-test blofeld-audio-clock-board-test -j4
   ctest --test-dir build/strict --output-on-failure -R '^(mcu_dsp_runtime|reference_pipeline|reference_checkpoint|original_board_power_on|sci_midi_timeline|reference_audio_clock_(board|restore|guards))$'
+
+Standalone CLI fixtures
+The reference ROM generator now emits authored literal instructions without any
+DSP core or assembler dependency. All17 variants retain byte-for-byte identity.
+The basic CLI and SHI/echo suites use independently specified MCU bus periods
+and the selected DSP effect/fetch order, replacing legacy instruction estimates.
+They verify actual SPI words and GPIO reads, input-bit perturbation, shared HTX/
+select order, partial serial checkpoints, WAI/IRQ entry and persistent MCU NVM.
+IRQ pulse fixtures select a real INTCR edge mode explicitly; they do not qualify
+persistent-level release sampling or measured device latency. Tied-write refusal
+messages include the actual address, both PCs and the common-time boundary.
+The runtime and frontend checkpoint tests are required by the quality target.
+
+  BLOFELD_TEST_BINARY=$PWD/build/strict/blofeld-headless python3 -m unittest discover -s test -p test_reference_cli.py -v
+  ctest --test-dir build/strict --output-on-failure -R '^(mcu_dsp_runtime|reference_shi_cli|reference_echo_cli)$'

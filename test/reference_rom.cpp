@@ -1,24 +1,61 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
-#include "dsp/dsp_bus.hpp"
-#include "dsp_norm_fixture.hpp"
 
 #include <array>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
-void write_rom(const std::filesystem::path &path, const blofeld::test::DspProgram &program) {
-  blofeld::DspBus bus;
-  program.install(bus);
+constexpr unsigned boot = 0xff0000;
+constexpr unsigned word_mask = 0xffffff;
+constexpr unsigned absolute_jump = 0x0af080;
+
+struct PortWrite {
+  bool y;
+  unsigned address;
+  unsigned value;
+};
+
+// Literal authored instructions, independent of an assembler or execution model.
+class Program {
+public:
+  void word(const std::uint32_t value) {
+    if (value > word_mask) { throw blofeld::Fault("DSP fixture word exceeds 24 bits"); }
+    words_.push_back(value);
+  }
+
+  void movep(const PortWrite input) {
+    const auto [y, address, value] = input;
+    constexpr unsigned io_base = 0xffff80;
+    constexpr unsigned high_io_base = 0xffffc0;
+    constexpr unsigned group_width = 64;
+    // DSP56300FM MOVEP immediate forms, low-X/low-Y/high-X/high-Y groups.
+    constexpr std::array opcodes{0x07f400U, 0x07b480U, 0x08f480U, 0x09f480U};
+    if (address < io_base || address > word_mask) {
+      throw blofeld::Fault("Authored MOVEP destination exceeds the documented I/O groups");
+    }
+    const auto group = (address >= high_io_base ? 2U : 0U) + static_cast<unsigned>(y);
+    word(opcodes.at(group) | ((address - io_base) % group_width));
+    word(value);
+  }
+
+  [[nodiscard]] unsigned pc() const { return boot + static_cast<unsigned>(words_.size()); }
+
+  [[nodiscard]] const std::vector<std::uint32_t> &words() const { return words_; }
+
+private:
+  std::vector<std::uint32_t> words_;
+};
+
+void write_rom(const std::filesystem::path &path, const Program &program) {
   std::ofstream stream(path, std::ios::binary);
   stream.exceptions(std::ios::failbit | std::ios::badbit);
-  for (unsigned address = blofeld::test::boot; address < program.pc(); ++address) {
-    const auto word = bus.peek_program(address);
+  for (const auto word : program.words()) {
     constexpr unsigned high_shift = 16;
     const std::array bytes{static_cast<char>(word >> high_shift),
                            static_cast<char>(word >> 8U),
@@ -28,46 +65,65 @@ void write_rom(const std::filesystem::path &path, const blofeld::test::DspProgra
   stream.close();
 }
 
-void echo_loop(blofeld::test::DspProgram &result) {
-  // Own polling diagnostic: actual HRX -> RAM -> HTX, never host word injection.
-  result.immediate("r4", 0x100);
+void echo_loop(Program &result) {
+  // Authored polling diagnostic: actual HRX -> RAM -> HTX, no host word injection.
+  constexpr unsigned immediate_r4 = 0x64f400;
+  constexpr unsigned address = 0x100;
+  constexpr unsigned jclr_hrdf = 0x019191;
+  constexpr unsigned hrx_x0 = 0x044494;
+  constexpr unsigned store_x0_post_r4 = 0x445c00;
+  constexpr unsigned x0_htx = 0x04c493;
+  result.word(immediate_r4);
+  result.word(address);
   const auto loop = result.pc();
-  result.emit("jclr #17,x:<<$ffff91," + blofeld::test::number(loop));
-  result.emit("movep x:<<$ffff94,x0");
-  result.emit("move x0,x:(r4)+");
-  result.emit("movep x0,x:<<$ffff93");
-  constexpr unsigned absolute_jump = 0x0af080;
+  result.word(jclr_hrdf);
+  result.word(loop);
+  result.word(hrx_x0);
+  result.word(store_x0_post_r4);
+  result.word(x0_htx);
   result.word(absolute_jump);
   result.word(loop);
 }
 
-blofeld::test::DspProgram capture_program() {
+Program capture_program() {
   constexpr unsigned status = 0xc00000;
   constexpr unsigned vector_offset = 0x54;
-  constexpr unsigned absolute_jump = 0x0af080;
-  blofeld::test::DspProgram result;
-  result.immediate("vba", blofeld::test::boot);
-  result.immediate("sr", status);
-  result.emit("movep #>0,x:<<$ffff90");
-  result.emit("movep #>$200,x:<<$fffffe");
-  result.emit("movep #>0,x:<<$ffff8e");
-  result.emit("movep #>1,x:<<$ffff8d");
-  result.emit("movep #>$165,x:<<$ffff8f");
+  Program result;
+  constexpr unsigned immediate_vba = 0x05f430;
+  constexpr unsigned immediate_sr = 0x05f439;
+  constexpr unsigned shi_control = 0xffff90;
+  constexpr unsigned interrupt_priority = 0xfffffe;
+  constexpr unsigned timer_load = 0xffff8e;
+  constexpr unsigned timer_compare = 0xffff8d;
+  constexpr unsigned timer_control = 0xffff8f;
+  constexpr unsigned timer_priority = 0x200;
+  constexpr unsigned capture_enabled = 0x165;
+  result.word(immediate_vba);
+  result.word(boot);
+  result.word(immediate_sr);
+  result.word(status);
+  result.movep({.y = false, .address = shi_control, .value = 0});
+  result.movep({.y = false, .address = interrupt_priority, .value = timer_priority});
+  result.movep({.y = false, .address = timer_load, .value = 0});
+  result.movep({.y = false, .address = timer_compare, .value = 1});
+  result.movep({.y = false, .address = timer_control, .value = capture_enabled});
   const auto loop = result.pc();
-  result.emit("nop");
+  result.word(0);
   result.word(absolute_jump);
   result.word(loop);
-  while (result.pc() < blofeld::test::boot + vector_offset) { result.emit("nop"); }
-  blofeld::test::require(result.pc() == blofeld::test::boot + vector_offset,
-                         "Own capture vector has its declared VBA-relative address");
+  while (result.pc() < boot + vector_offset) { result.word(0); }
+  if (result.pc() != boot + vector_offset) {
+    throw blofeld::Fault("Authored capture vector exceeds its declared VBA-relative address");
+  }
   // Actual two-word fast vector enables a real SHI request output.
-  result.emit("movep #>$89,x:<<$ffff91");
+  constexpr unsigned shi_status = 0xffff91;
+  constexpr unsigned request_enabled = 0x89;
+  result.movep({.y = false, .address = shi_status, .value = request_enabled});
   return result;
 }
 
-blofeld::test::DspProgram esai_program(const std::string_view mode) {
+Program esai_program(const std::string_view mode) {
   const bool second = mode.starts_with("esai1");
-  const std::string space = second ? "y:<<" : "x:<<";
   constexpr unsigned primary = 0xffffa0;
   constexpr unsigned secondary = 0xffff80;
   constexpr unsigned legal_mux = 0x838;
@@ -77,10 +133,9 @@ blofeld::test::DspProgram esai_program(const std::string_view mode) {
   constexpr unsigned transmit_control = 21;
   constexpr unsigned clock_control = 22;
   const unsigned base = second ? secondary : primary;
-  blofeld::test::DspProgram result;
+  Program result;
   const auto put = [&](const unsigned offset, const unsigned value) {
-    result.emit("movep #>" + blofeld::test::number(value) + ',' + space +
-                blofeld::test::number(base + offset));
+    result.movep({.y = second, .address = base + offset, .value = value});
   };
   const auto mux = mode.ends_with("missing-hckt") ? missing_hckt_mux : legal_mux;
   constexpr unsigned word32 = 0x7d00;
@@ -109,7 +164,7 @@ blofeld::test::DspProgram esai_program(const std::string_view mode) {
     constexpr unsigned ordinary_delay = 64;
     constexpr unsigned tied_delay = 154;
     const auto refill_delay = mode.ends_with("tied-refill") ? tied_delay : ordinary_delay;
-    for (unsigned index = 0; index < refill_delay; ++index) { result.emit("nop"); }
+    for (unsigned index = 0; index < refill_delay; ++index) { result.word(0); }
     constexpr unsigned next = 0x123456;
     if (mode.ends_with("drop-sckt")) {
       constexpr unsigned sckt_mux = 8;
@@ -119,14 +174,13 @@ blofeld::test::DspProgram esai_program(const std::string_view mode) {
     }
   }
   const auto loop = result.pc();
-  result.emit("nop");
-  constexpr unsigned absolute_jump = 0x0af080;
+  result.word(0);
   result.word(absolute_jump);
   result.word(loop);
   return result;
 }
 
-blofeld::test::DspProgram program(const std::string_view mode) {
+Program program(const std::string_view mode) {
   if (mode == "esai0" || mode == "esai1" || mode == "esai0-refill" || mode == "esai1-refill" ||
       mode == "esai1-external" || mode == "esai1-tied-refill" || mode == "esai1-missing-hckt" ||
       mode == "esai1-active" || mode == "esai1-external-word" || mode == "esai1-external-sckt" ||
@@ -136,31 +190,41 @@ blofeld::test::DspProgram program(const std::string_view mode) {
   if (mode == "capture-irq") { return capture_program(); }
   if (mode != "transmit" && mode != "unknown-transmit" && mode != "delayed-request" &&
       mode != "short-request" && mode != "echo") {
-    throw blofeld::Fault("Unknown own SHI ROM scenario");
+    throw blofeld::Fault("Unknown SHI test ROM scenario");
   }
-  blofeld::test::DspProgram result;
+  Program result;
   if (mode == "delayed-request" || mode == "short-request") {
     constexpr unsigned ordinary_delay = 64;
     constexpr unsigned short_delay = 257;
     const unsigned delay = mode == "short-request" ? short_delay : ordinary_delay;
-    for (unsigned i = 0; i < delay; ++i) { result.emit("nop"); }
+    for (unsigned i = 0; i < delay; ++i) { result.word(0); }
   }
-  // Own mode-0, 24-bit single-word receive request. DSP56371UM chapter 7.
-  result.emit("movep #>0,x:<<$ffff90");
-  result.emit(mode == "echo" ? "movep #>$189,x:<<$ffff91" : "movep #>$89,x:<<$ffff91");
-  if (mode == "transmit" || mode == "echo") { result.emit("movep #>$a15c37,x:<<$ffff93"); }
+  // Authored mode-0, 24-bit single-word receive request. DSP56371UM chapter 7.
+  constexpr unsigned shi_control = 0xffff90;
+  constexpr unsigned shi_status = 0xffff91;
+  constexpr unsigned shi_transmit = 0xffff93;
+  constexpr unsigned receive_request = 0x89;
+  constexpr unsigned transmit_receive_request = 0x189;
+  constexpr unsigned outbound = 0xa15c37;
+  result.movep({.y = false, .address = shi_control, .value = 0});
+  result.movep({.y = false,
+                .address = shi_status,
+                .value = mode == "echo" ? transmit_receive_request : receive_request});
+  if (mode == "transmit" || mode == "echo") {
+    result.movep({.y = false, .address = shi_transmit, .value = outbound});
+  }
   if (mode == "echo") {
     echo_loop(result);
     return result;
   }
   if (mode == "delayed-request" || mode == "short-request") {
     const unsigned pulse = mode == "delayed-request" ? 16 : 0;
-    for (unsigned i = 0; i < pulse; ++i) { result.emit("nop"); }
-    result.emit("movep #>$88,x:<<$ffff91");
+    for (unsigned i = 0; i < pulse; ++i) { result.word(0); }
+    constexpr unsigned request_disabled = 0x88;
+    result.movep({.y = false, .address = shi_status, .value = request_disabled});
   }
   const auto loop = result.pc();
-  result.emit("nop");
-  constexpr unsigned absolute_jump = 0x0af080;
+  result.word(0);
   result.word(absolute_jump);
   result.word(loop);
   return result;

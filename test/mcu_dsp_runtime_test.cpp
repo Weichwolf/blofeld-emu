@@ -43,10 +43,10 @@ void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
 }
 
-void rejects(const auto &operation) {
+std::string rejects(const auto &operation) {
   try {
     operation();
-  } catch (const std::exception &) { return; }
+  } catch (const std::exception &error) { return error.what(); }
   throw std::runtime_error("Expected MCU/DSP runtime refusal");
 }
 
@@ -218,8 +218,11 @@ void ordering_matrix() {
     Fixture fixture(spec);
     fixture.step();
     if (spec.expected.empty()) {
-      rejects([&] { fixture.step(); });
-      require(fixture.runtime->faulted(), "Cyclic ordering was not quarantined");
+      const auto message = rejects([&] { fixture.step(); });
+      require(message.contains("Cyclic MCU/DSP/external shared-write ordering at 0x0001") &&
+                  message.contains("mcu-pc=0x8002") && message.contains("dsp-pc=0xff0000") &&
+                  message.contains("tick=720") && fixture.runtime->faulted(),
+              "Cyclic ordering lost native PCs/address/time or was not quarantined");
     } else {
       fixture.step();
       require(fixture.events == spec.expected && fixture.runtime->end_ticks() == write_ticks &&

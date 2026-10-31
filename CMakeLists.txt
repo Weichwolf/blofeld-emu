@@ -1700,7 +1700,7 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-original-midi")
   set_tests_properties(reference_original_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-reference-rom-fixture test/reference_rom.cpp)
-  target_link_libraries(blofeld-reference-rom-fixture PRIVATE blofeld_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-reference-rom-fixture PRIVATE blofeld_firmware)
   add_test(NAME reference_shi_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_shi_cli.py"
     $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-rom-fixture>
@@ -3270,7 +3270,8 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test
+  DEPENDS blofeld-mcu-dsp-runtime-test blofeld-own-dsp-timeline-checkpoint-test
+    blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test
     blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test
     blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
     blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
