@@ -79,6 +79,13 @@ cycles and instruction-boundary GPIO observation are uncalibrated; neither
 physical wiring nor reset-to-instrument operation follows from these runs.
 
 Conditional board contracts, each separately controlled and recorded:
+
+- The MCU/DSP GPIO fixture now shares an explicit one-to-one candidate-driver
+  conversion usable with the own DSP bus. A component test connects the actual
+  MCU and DSP GPIO models, checks both directions and refuses opposing drivers.
+  Floating inputs stay unknown unless a pull is explicitly supplied. The
+  existing original-firmware pair fixture builds with this shared conversion;
+  this component result does not qualify physical wiring, scheduling or boot.
 - A no-selected-cell hypothesis admits only reserved/ROM writes in the low
   128K X/Y window. It creates no cells/read values; real RAM and peripherals
   remain strict. Twenty controls pass, including unchanged ROM and default

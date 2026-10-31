@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/gpio_pads.hpp"
+#include "board/mcu_dsp_peer.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "mcu/hc12_registers.hpp"
@@ -66,6 +67,65 @@ void net_expectations() {
   rejects([&] { static_cast<void>(resolve_gpio_net(mask, {.reduced = 1}, {})); }, "driver");
   rejects([&] { static_cast<void>(resolve_gpio_net(mask, {.pull_up = 1, .pull_down = 1}, {})); },
           "driver");
+}
+
+void peer_driver_expectations() {
+  using namespace blofeld;
+  auto drivers = mcu_dsp_peer_drivers(mask, {}, {}, {}, 0);
+  auto pads = resolve_gpio_net(mask, drivers.mcu, drivers.dsp);
+  require(pads.known == 0 && pads.conflicts == 0, "Unconnected candidate pins remain unknown");
+
+  drivers = mcu_dsp_peer_drivers(mask, {}, {}, {.mask = mask, .known = mask, .levels = first}, 0);
+  pads = resolve_gpio_net(mask, drivers.mcu, drivers.dsp);
+  require(pads.known == mask && pads.levels == first, "DSP output reaches the candidate nets");
+
+  drivers = mcu_dsp_peer_drivers(mask,
+                                 {.mask = lower, .known = lower, .levels = 0},
+                                 {},
+                                 {.mask = mask, .known = mask, .levels = first},
+                                 0);
+  pads = resolve_gpio_net(mask, drivers.mcu, drivers.dsp);
+  require(pads.conflicts == (first & lower) && pads.known == (mask ^ (first & lower)),
+          "Opposed MCU and DSP outputs remain visibly conflicted");
+
+  drivers = mcu_dsp_peer_drivers(mask, {}, {.up = upper}, {.peripheral = lower}, lower);
+  pads = resolve_gpio_net(mask, drivers.mcu, drivers.dsp);
+  require(pads.known == upper && pads.levels == upper && pads.conflicts == 0,
+          "An unknown active DSP peripheral defeats an assumed idle pull-down");
+
+  drivers = mcu_dsp_peer_drivers(mask, {}, {}, {}, mask);
+  pads = resolve_gpio_net(mask, drivers.mcu, drivers.dsp);
+  require(pads.known == mask && pads.levels == 0,
+          "A declared idle pull-down is applied without inventing active drive");
+}
+
+void peer_register_exchange() {
+  using namespace blofeld;
+  McuBus mcu(flash);
+  DspGpio dsp(DspPort::c);
+  mcu.begin_instruction({.pc = context_pc, .ccr = context_ccr});
+  const auto sample = [&](const std::uint32_t requested) {
+    const auto selected = static_cast<std::uint8_t>(requested & mask);
+    const auto drivers = mcu_dsp_peer_drivers(
+        selected, mcu.gpio_outputs(McuPort::q), mcu.gpio_biases(McuPort::q), dsp.outputs(), 0);
+    return resolve_gpio_net(selected, drivers.mcu, drivers.dsp);
+  };
+  mcu.attach_gpio_pad_source(McuPort::q, sample);
+  dsp.attach_pad_source(sample);
+  dsp.write({.reg = DspGpioRegister::direction, .value = mask});
+  dsp.write({.reg = DspGpioRegister::data, .value = first});
+  require(mcu.read(reg::ptq) == first, "Actual MCU GPIO reads the DSP latch through the net");
+  dsp.write({.reg = DspGpioRegister::direction, .value = 0});
+  dsp.write({.reg = DspGpioRegister::control, .value = mask});
+  mcu.write(reg::ptq, second);
+  mcu.write(reg::ddrq, mask);
+  require(dsp.read(DspGpioRegister::data, mask) == second,
+          "Actual DSP GPIO reads the MCU latch after turnaround");
+  dsp.write({.reg = DspGpioRegister::control, .value = 0});
+  dsp.write({.reg = DspGpioRegister::direction, .value = mask});
+  dsp.write({.reg = DspGpioRegister::data, .value = first});
+  rejects([&] { static_cast<void>(dsp.read(DspGpioRegister::data, mask)); },
+          "Unknown DSP GPIO data read");
 }
 
 void binding_lifetime() {
@@ -220,6 +280,8 @@ void dsp_register_and_pad() {
 int main() {
   try {
     net_expectations();
+    peer_driver_expectations();
+    peer_register_exchange();
     binding_lifetime();
     mcu_register_and_pad();
     mcu_interrupt_pads();

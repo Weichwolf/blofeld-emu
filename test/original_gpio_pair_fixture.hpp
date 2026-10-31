@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include "board/gpio_pads.hpp"
+#include "board/mcu_dsp_peer.hpp"
 #include "board/mcu_dsp_schedule.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
@@ -409,16 +410,9 @@ struct OriginalGpioPair {
     const auto local = mcu.bus().gpio_outputs(McuPort::q);
     const auto bias = mcu.bus().gpio_biases(McuPort::q);
     const auto remote = dsp.bus().gpio(DspPort::c).outputs();
-    link.mcu_drive = {.active = local.mask,
-                      .known = local.known,
-                      .levels = local.levels,
-                      .reduced = local.reduced_drive,
-                      .pull_up = bias.up,
-                      .pull_down = bias.down};
-    link.dsp_drive = {.active = (remote.mask | remote.peripheral) & mask,
-                      .known = remote.known & mask,
-                      .levels = remote.levels & mask,
-                      .pull_down = mask & ~(remote.mask | remote.peripheral)};
+    const auto drivers = mcu_dsp_peer_drivers(mask, local, bias, remote, mask);
+    link.mcu_drive = drivers.mcu;
+    link.dsp_drive = drivers.dsp;
     const auto observation = net();
     if (observation.known != mask && (observation.known != link.last_net.known ||
                                       observation.conflicts != link.last_net.conflicts ||
