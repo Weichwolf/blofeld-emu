@@ -11,11 +11,15 @@
 #include "dsp56300/checkpoint.hpp"
 #include "dsp56300/core.hpp"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 
@@ -33,6 +37,48 @@ public:
 private:
   bool &active_;
 };
+
+DspSpace native_space(const dsp56300::Space space) {
+  switch (space) {
+    case dsp56300::Space::program: return DspSpace::p;
+    case dsp56300::Space::x: return DspSpace::x;
+    case dsp56300::Space::y: return DspSpace::y;
+    default: throw Fault("Invalid own DSP memory space");
+  }
+}
+
+std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffect effect) {
+  using enum dsp56300::EffectKind;
+  switch (effect.kind) {
+    case fetch_opcode:
+    case fetch_extension:
+    case read:
+      return DspMemoryAccess{
+          .target = {.space = native_space(effect.space), .address = effect.address}};
+    case write:
+      return DspMemoryAccess{
+          .target = {.space = native_space(effect.space), .address = effect.address},
+          .operation = DspMemoryOperation::write};
+    case retire:
+    case address_update:
+    case move_update:
+    case alu_update:
+    case unit_update:
+    case pcu_update: return std::nullopt;
+    case bit: {
+      constexpr std::array names{"P:", "X:", "Y:"};
+      const auto space = native_space(effect.space);
+      throw Fault("Unqualified own DSP DMA/native bit " +
+                  std::string(names.at(static_cast<unsigned>(space))) + hex(effect.address, 6) +
+                  " pc=" + hex(effect.pc, 6) + " omr=" + hex(effect.omr, 6));
+    }
+    case reset:
+      throw Fault("Unqualified own DSP DMA/native peripheral reset pc=" + hex(effect.pc, 6) +
+                  " omr=" + hex(effect.omr, 6));
+    default: throw Fault("Invalid own DSP native effect pc=" + hex(effect.pc, 6));
+  }
+}
+
 }
 
 struct OwnDspCheckpoint::Storage {
@@ -218,6 +264,19 @@ std::uint64_t OwnDspMachine::advance_reference_cycle() {
 }
 
 DspDmaBusResult OwnDspMachine::advance_dma_reference_cycle(const DspDmaInputs inputs) {
+  return dma_cycle(inputs, false).dma;
+}
+
+OwnDspDmaCycleResult OwnDspMachine::advance_dma_native_cycle(const DspDmaInputs inputs,
+                                                             const OwnDspNativeCycleModel model) {
+  if (model != OwnDspNativeCycleModel::isolated_effect) {
+    throw Fault("Own DSP DMA/native cycle requires an explicit isolated-effect hypothesis pc=" +
+                hex(cpu_.registers().pc, 6));
+  }
+  return dma_cycle(inputs, true);
+}
+
+OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const bool admit_native) {
   require_running();
   const auto regs = cpu_.registers();
   const auto context = " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
@@ -230,18 +289,35 @@ DspDmaBusResult OwnDspMachine::advance_dma_reference_cycle(const DspDmaInputs in
   if (!captured_fetch_owner_.expired()) {
     throw Fault("Own DSP DMA cycle requires an unoccupied captured-fetch bus" + context);
   }
+  const auto pending = cpu_.pending_instruction();
+  if (admit_native && !pending) {
+    throw Fault("Own DSP DMA/native cycle requires an actual pending effect" + context);
+  }
+  std::array<DspMemoryAccess, 1> access{};
+  std::size_t count = 0;
+  if (admit_native) {
+    if (const auto footprint = native_footprint(pending->effect)) { access[count++] = *footprint; }
+  }
   const EffectGuard guard(advancing_effect_);
   static_cast<void>(clock_.next_step_ticks(bus_, 1));
   const bool switch_was_pending = bus_.switch_delay_ != 0;
   clock_.begin_step(bus_, {.pc = regs.pc, .omr = regs.omr});
   try {
-    const auto result = bus_.advance_dma(
-        inputs, {.accesses = {}, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    OwnDspDmaCycleResult result;
+    result.dma = bus_.advance_dma(inputs,
+                                  {.accesses = std::span(access).first(count),
+                                   .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    if (admit_native && !result.dma.core_stall) {
+      result.native = interrupts_.advance(pending->ticket);
+      if (result.native->fault.kind == dsp56300::FaultKind::none) {
+        bus_.observe_omr(cpu_.registers().omr);
+      }
+    }
     clock_.finish_dma_cycle(bus_, inputs.cycle, switch_was_pending);
     return result;
   } catch (const std::exception &error) {
     clock_.fail();
-    throw Fault("Own DSP held-core DMA cycle" + context + ": " + error.what());
+    throw Fault("Own DSP DMA cycle" + context + ": " + error.what());
   }
 }
 

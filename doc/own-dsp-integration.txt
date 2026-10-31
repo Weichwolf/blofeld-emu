@@ -54,11 +54,18 @@ samples and a grant, executes the real DMA bus phase, and advances the same
 peripheral and timer clocks. Once DMA sampling begins, subsequent cycles must
 continue sampling; skipping a sample fails. A synthetic X-to-Y transfer checks
 real source and destination words while the native fetch remains pending, timer
-division, invalid sample sequences and checkpoint restoration. Concurrent core
-or F1/F2 bus activity remains unqualified: this is a caller-selected held-core
-experiment, not a DMA priority or pipeline timing claim. The caller still owns
-effect placement, ESAI and board scheduling; neither interface establishes
-calibrated pipeline or audio timing.
+division, invalid sample sequences and checkpoint restoration. A second explicit
+cycle admits a selected pending native effect after the DMA phase, deriving its
+bus occupancy from the actual own-core effect. The caller explicitly supplies
+an isolated-effect hypothesis: ordinary staged reads and writes do not identify
+whether a containing instruction has an indivisible multi-effect sequence, so
+this interface cannot infer that qualification. DMA source contention defers the
+DMA read; DMA destination contention holds the same native ticket until the
+write completes. Synthetic tests verify both directions, global wait and an
+independent program fetch. Atomic bit and peripheral reset effects, captured
+F1/F2 overlap and automatic pipeline placement remain unqualified. This is a
+caller-selected ordering experiment, not calibrated pipeline or audio timing;
+the caller still owns effect placement, ESAI and board scheduling.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected

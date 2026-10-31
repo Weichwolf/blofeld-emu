@@ -228,6 +228,183 @@ void held_core_dma() {
           "Checkpoint must restore both DMA sampling and reference time");
 }
 
+DspDmaInputs dma_input(const unsigned cycle, const DspDmaGrant grant = DspDmaGrant::available) {
+  return {.cycle = cycle,
+          .known_requests = 15,
+          .timing = DspDmaTiming::reference_sampled_cycles,
+          .grant = grant};
+}
+
+void prepare_native_dma(OwnDspMachine &machine, const Word operand) {
+  constexpr Word source_register = 0xffffef;
+  constexpr Word destination_register = 0xffffee;
+  constexpr Word counter_register = 0xffffed;
+  constexpr Word control_register = 0xffffec;
+  constexpr Word source = 0x100;
+  constexpr Word destination = 0x200;
+  constexpr Word sample = 0x5a1234;
+  constexpr Word initial_destination = 0x112233;
+  constexpr Word x_copy = 0x9802d0;
+  constexpr Word load_x0_absolute = 0x44f000;
+  const std::array<Word, 2> rom{load_x0_absolute, operand};
+  boot(machine, rom);
+  machine.bus().write({.space = DspSpace::x, .address = source, .value = sample});
+  machine.bus().write({.space = DspSpace::x, .address = destination, .value = initial_destination});
+  static_cast<void>(machine.begin_fetch());
+  for (unsigned index = 0; index < 8; ++index) {
+    const auto pending = machine.cpu().pending_instruction();
+    if (!pending) { throw std::runtime_error("Native DMA fixture lost pending load"); }
+    if (pending->effect.kind == EffectKind::read) {
+      require(pending->effect.space == Space::x && pending->effect.address == operand,
+              "Native DMA fixture must use the actual expected data read");
+      for (const auto write : std::array{
+               DspStore{.space = DspSpace::x, .address = source_register, .value = source},
+               DspStore{
+                   .space = DspSpace::x, .address = destination_register, .value = destination},
+               DspStore{.space = DspSpace::x, .address = counter_register},
+               DspStore{.space = DspSpace::x, .address = control_register, .value = x_copy}}) {
+        machine.bus().write(write);
+      }
+      return;
+    }
+    require(machine.advance(pending->ticket).fault.kind == FaultKind::none,
+            "Native DMA fixture fetch failed");
+  }
+  throw std::runtime_error("Native DMA fixture did not reach its real data read");
+}
+
+void native_dma_fetch_independent() {
+  constexpr Word source_register = 0xffffef;
+  constexpr Word destination_register = 0xffffee;
+  constexpr Word counter_register = 0xffffed;
+  constexpr Word control_register = 0xffffec;
+  constexpr Word source = 0x100;
+  constexpr Word destination = 0x200;
+  constexpr Word sample = 0x5a1234;
+  constexpr Word x_copy = 0x9802d0;
+  OwnDspMachine machine(clocks);
+  const std::array<Word, 1> rom{0};
+  boot(machine, rom);
+  machine.bus().write({.space = DspSpace::x, .address = source, .value = sample});
+  for (const auto write : std::array{
+           DspStore{.space = DspSpace::x, .address = source_register, .value = source},
+           DspStore{.space = DspSpace::x, .address = destination_register, .value = destination},
+           DspStore{.space = DspSpace::x, .address = counter_register},
+           DspStore{.space = DspSpace::x, .address = control_register, .value = x_copy}}) {
+    machine.bus().write(write);
+  }
+  rejects(
+      [&] {
+        static_cast<void>(machine.advance_dma_native_cycle(
+            dma_input(0), OwnDspNativeCycleModel::isolated_effect));
+      },
+      "DMA/native cycle without a pending core effect was accepted");
+  require(!machine.bus().last_dma_cycle() && machine.clock().native_cycle_units() == 0,
+          "Rejected native admission must not consume a DMA sample");
+  static_cast<void>(machine.begin_fetch());
+  const auto pending = machine.cpu().pending_instruction();
+  require(pending && pending->effect.kind == EffectKind::fetch_opcode,
+          "Expected the actual native program fetch");
+  rejects(
+      [&] {
+        static_cast<void>(
+            machine.advance_dma_native_cycle(dma_input(0), OwnDspNativeCycleModel::unqualified));
+      },
+      "DMA/native cycle must require an explicit isolated-effect hypothesis");
+  require(!machine.bus().last_dma_cycle() && machine.clock().native_cycle_units() == 0,
+          "Unqualified model must not consume a DMA sample");
+  const auto result =
+      machine.advance_dma_native_cycle(dma_input(0), OwnDspNativeCycleModel::isolated_effect);
+  require(result.dma.phase && result.dma.phase->kind == DspDmaPhaseKind::source_read &&
+              !result.dma.core_stall && result.native &&
+              result.native->fault.kind == FaultKind::none,
+          "Independent native program fetch and DMA data read must both execute");
+  const auto destination_phase = machine.advance_dma_reference_cycle(dma_input(1));
+  require(destination_phase.word && destination_phase.word->value == sample,
+          "Independent native fetch must preserve the real DMA destination");
+}
+
+void native_dma_source_conflict() {
+  constexpr Word source = 0x100;
+  constexpr Word sample = 0x5a1234;
+  OwnDspMachine machine(clocks);
+  prepare_native_dma(machine, source);
+  const auto first =
+      machine.advance_dma_native_cycle(dma_input(0), OwnDspNativeCycleModel::isolated_effect);
+  require(first.dma.phase && first.dma.phase->kind == DspDmaPhaseKind::source_read &&
+              !first.dma.word && !first.dma.core_stall && first.native &&
+              first.native->fault.kind == FaultKind::none,
+          "Conflicting native read must execute while DMA source waits");
+  const auto second = machine.advance_dma_reference_cycle(dma_input(1));
+  const auto third = machine.advance_dma_reference_cycle(dma_input(2));
+  require(second.phase && second.phase->kind == DspDmaPhaseKind::source_read && third.word &&
+              third.word->value == sample && machine.clock().native_cycle_units() == 3,
+          "Deferred DMA source must later read and copy the real value");
+  retire(machine);
+  require(machine.cpu().registers().x == sample, "Native load must read the original source");
+}
+
+void native_dma_destination_conflict() {
+  constexpr Word destination = 0x200;
+  constexpr Word sample = 0x5a1234;
+  OwnDspMachine machine(clocks);
+  prepare_native_dma(machine, destination);
+  const auto original = machine.cpu().pending_instruction();
+  const auto source = machine.advance_dma_reference_cycle(dma_input(0));
+  const auto waiting = machine.advance_dma_native_cycle(dma_input(1, DspDmaGrant::wait),
+                                                        OwnDspNativeCycleModel::isolated_effect);
+  const auto stalled =
+      machine.advance_dma_native_cycle(dma_input(2), OwnDspNativeCycleModel::isolated_effect);
+  const auto pending = machine.cpu().pending_instruction();
+  require(source.phase && source.phase->kind == DspDmaPhaseKind::source_read &&
+              waiting.dma.core_stall && !waiting.dma.word && !waiting.native &&
+              stalled.dma.core_stall && stalled.dma.word && !stalled.native && original &&
+              pending && original->effect == pending->effect &&
+              machine.bus().read({.space = DspSpace::x, .address = destination}) == sample,
+          "DMA destination must hold the genuine pending core read through wait and write");
+  const auto admitted =
+      machine.advance_dma_native_cycle(dma_input(3), OwnDspNativeCycleModel::isolated_effect);
+  require(!admitted.dma.core_stall && admitted.native &&
+              admitted.native->fault.kind == FaultKind::none,
+          "The held native read must execute after DMA releases the bank");
+  retire(machine);
+  require(machine.cpu().registers().x == sample && machine.clock().native_cycle_units() == 4,
+          "Native load must observe the actually written DMA value");
+}
+
+void native_dma_bit_refusal() {
+  constexpr Word memory_clear = 0x0b8000;
+  OwnDspMachine machine(clocks);
+  const std::array<Word, 1> rom{memory_clear};
+  boot(machine, rom);
+  static_cast<void>(machine.begin_fetch());
+  for (unsigned index = 0; index < 8; ++index) {
+    const auto pending = machine.cpu().pending_instruction();
+    if (!pending) { throw std::runtime_error("Native bit fixture lost its effect"); }
+    if (pending->effect.kind == EffectKind::bit) {
+      try {
+        static_cast<void>(machine.advance_dma_native_cycle(
+            dma_input(0), OwnDspNativeCycleModel::isolated_effect));
+        throw std::runtime_error("Unqualified atomic native bit cycle was accepted");
+      } catch (const blofeld::Fault &error) {
+        const std::string detail(error.what());
+        require(detail.contains("bit X:0xffffc0") && detail.contains("pc=0xff0000") &&
+                    !machine.bus().last_dma_cycle() && machine.clock().native_cycle_units() == 0 &&
+                    !machine.clock().faulted(),
+                "Unqualified bit cycle must retain address and PC without consuming time");
+      }
+      return;
+    }
+    const auto result = machine.advance(pending->ticket);
+    if (result.fault.kind != FaultKind::none) {
+      throw std::runtime_error(
+          "Native bit fixture fault=" + std::to_string(static_cast<unsigned>(result.fault.kind)) +
+          " address=" + std::to_string(result.fault.address));
+    }
+  }
+  throw std::runtime_error("Native bit fixture did not reach its transaction");
+}
+
 void timer_fault_recovery() {
   OwnDspMachine machine(clocks);
   const std::array<Word, 1> rom{0};
@@ -314,6 +491,10 @@ int main() {
     pll_contract();
     dma_refusal();
     held_core_dma();
+    native_dma_fetch_independent();
+    native_dma_source_conflict();
+    native_dma_destination_conflict();
+    native_dma_bit_refusal();
     timer_fault_recovery();
     stopped_and_waiting(stop, ProcessingState::stopped);
     stopped_and_waiting(wait, ProcessingState::waiting);

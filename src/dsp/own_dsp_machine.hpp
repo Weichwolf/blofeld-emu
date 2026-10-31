@@ -38,6 +38,13 @@ private:
   std::shared_ptr<const Storage> storage_;
 };
 
+enum class OwnDspNativeCycleModel : std::uint8_t { unqualified, isolated_effect };
+
+struct OwnDspDmaCycleResult {
+  DspDmaBusResult dma;
+  std::optional<dsp56300::InstructionProgress> native;
+};
+
 // Coordinated own-core owner. Only reset time is modeled here; staged execution
 // remains untimed until the board scheduler supplies pipeline and bus cycles.
 class OwnDspMachine {
@@ -68,6 +75,11 @@ public:
   // Explicit DMA-first cycle with the native CPU and captured fetch held.
   // The caller supplies actual request levels and consecutive cycle numbers.
   [[nodiscard]] DspDmaBusResult advance_dma_reference_cycle(DspDmaInputs inputs);
+  // DMA first, then the actual pending native effect if its bus is not stalled.
+  // The caller must qualify the whole instruction as safe to split at this effect;
+  // staged ordinary memory effects alone do not identify atomic instructions.
+  [[nodiscard]] OwnDspDmaCycleResult advance_dma_native_cycle(DspDmaInputs inputs,
+                                                              OwnDspNativeCycleModel model);
   [[nodiscard]] bool admit_interrupt(dsp56300::InstructionWords foreground);
   [[nodiscard]] OwnDspCheckpoint checkpoint() const;
   // An untimed speculative continuation, not a published instruction or
@@ -81,6 +93,7 @@ public:
 private:
   friend class OwnDspFetch;
   void require_running() const;
+  [[nodiscard]] OwnDspDmaCycleResult dma_cycle(DspDmaInputs inputs, bool admit_native);
   DspBus bus_;
   OwnDspIo io_;
   dsp56300::Core cpu_;
