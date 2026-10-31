@@ -234,8 +234,13 @@ Conditional board contracts, each separately controlled and recorded:
   during program data loading. Both now have independent component tests.
   These results do not qualify the timing gate, clock, fixture, NAND part or
   complete update; the full page has not yet been confirmed and compared in
-  this run. One earlier run pinned a mutable build archive which was later
-  rebuilt; the later preserved-pointer run retains frozen library inputs.
+  that run. A subsequent running fixture includes both model fixes. An
+  immutable log snapshot independently compares ten completed page cycles:
+  each contains 528 programmed and NAND-output bytes equal to the corresponding
+  host-loaded fixture bytes. That confirms only the logged prefix, not final
+  firmware completion, the remaining pages or a real board. One earlier run
+  pinned a mutable build archive which was later rebuilt; later runs retain
+  frozen library inputs.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -305,6 +310,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-id-floating/runtime.json
   doc/local/own-core-main-id-data-floating/runtime.json
   doc/local/own-core-main-preserved-pointer/runtime.json
+  doc/local/own-core-main-program-ce/{audit_pages.py,snapshot-pages.json}
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
