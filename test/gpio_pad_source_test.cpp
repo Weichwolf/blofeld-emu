@@ -2,7 +2,10 @@
 #include "board/gpio_pads.hpp"
 #include "board/mcu_dsp_peer.hpp"
 #include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp56300/core.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
@@ -11,6 +14,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -126,6 +130,55 @@ void peer_register_exchange() {
   dsp.write({.reg = DspGpioRegister::data, .value = first});
   rejects([&] { static_cast<void>(dsp.read(DspGpioRegister::data, mask)); },
           "Unknown DSP GPIO data read");
+}
+
+void own_peer_adapter_exchange() {
+  using namespace blofeld;
+  using namespace dsp56300;
+  constexpr Word data_register = 0xffffbd;
+  constexpr Word direction_register = 0xffffbe;
+  constexpr Word control_register = 0xffffbf;
+  constexpr Word fault_pc = 0x42;
+  McuBus mcu(flash);
+  DspBus bus;
+  OwnDspIo io(bus);
+  auto &dsp = bus.gpio(DspPort::c);
+  mcu.begin_instruction({.pc = context_pc, .ccr = context_ccr});
+  const auto sample = [&](const std::uint32_t requested) {
+    const auto selected = static_cast<std::uint8_t>(requested & mask);
+    const auto drivers = mcu_dsp_peer_drivers(
+        selected, mcu.gpio_outputs(McuPort::q), mcu.gpio_biases(McuPort::q), dsp.outputs(), 0);
+    return resolve_gpio_net(selected, drivers.mcu, drivers.dsp);
+  };
+  mcu.attach_gpio_pad_source(McuPort::q, sample);
+  dsp.attach_pad_source(sample);
+  require(io.write(Space::x, direction_register, 0, mask) &&
+              io.write(Space::x, data_register, 0, first) && mcu.read(reg::ptq) == first,
+          "Own DSP bus output must reach the MCU input");
+  require(io.write(Space::x, direction_register, 0, 0) &&
+              io.write(Space::x, control_register, 0, mask),
+          "Own DSP GPIO must accept the real input-direction writes");
+  mcu.write(reg::ptq, second);
+  mcu.write(reg::ddrq, mask);
+  for (Word bit = 0; bit < 8; ++bit) {
+    bool value = false;
+    require(io.bit(Space::x, data_register, 0, bit, BitAction::test, value) &&
+                value == ((second & (1U << bit)) != 0),
+            "Own DSP adapter must read every actual MCU-driven bit");
+  }
+  require(io.write(Space::x, control_register, 0, 0) &&
+              io.write(Space::x, direction_register, 0, mask) &&
+              io.write(Space::x, data_register, 0, first),
+          "Own DSP GPIO output setup failed");
+  bool value = false;
+  require(!io.bit(Space::x, data_register, fault_pc, 0, BitAction::test, value),
+          "Conflicting MCU/DSP drivers must be refused");
+  const auto failure = io.failure();
+  if (!failure) { throw std::runtime_error("Missing own DSP GPIO failure context"); }
+  require(failure->operation == OwnDspIo::Operation::bit && failure->space == Space::x &&
+              failure->address == data_register && failure->pc == fault_pc && failure->value == 0 &&
+              failure->cause,
+          "Conflicting MCU/DSP drivers must fail with original adapter context");
 }
 
 void binding_lifetime() {
@@ -282,6 +335,7 @@ int main() {
     net_expectations();
     peer_driver_expectations();
     peer_register_exchange();
+    own_peer_adapter_exchange();
     binding_lifetime();
     mcu_register_and_pad();
     mcu_interrupt_pads();

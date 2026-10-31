@@ -3040,7 +3040,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-gpio-unknown-driver-test PRIVATE blofeld_mcu blofeld_dsp_peripherals)
   add_test(NAME gpio_unknown_drivers COMMAND blofeld-gpio-unknown-driver-test)
   add_executable(blofeld-gpio-pad-source-test test/gpio_pad_source_test.cpp)
-  target_link_libraries(blofeld-gpio-pad-source-test PRIVATE blofeld_mcu blofeld_dsp_peripherals)
+  target_link_libraries(blofeld-gpio-pad-source-test PRIVATE blofeld_mcu blofeld_own_dsp_io)
   add_test(NAME gpio_pad_sources COMMAND blofeld-gpio-pad-source-test)
   add_executable(blofeld-gpio-pad-checkpoint-test test/gpio_pad_checkpoint_test.cpp)
   target_link_libraries(blofeld-gpio-pad-checkpoint-test PRIVATE

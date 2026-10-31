@@ -84,7 +84,10 @@ Conditional board contracts, each separately controlled and recorded:
   conversion usable with the own DSP bus. A component test connects the actual
   MCU and DSP GPIO models, checks both directions and refuses opposing drivers.
   Floating inputs stay unknown unless a pull is explicitly supplied. The
-  existing original-firmware pair fixture builds with this shared conversion;
+  same candidate exchange is checked through the own DSP I/O adapter, including
+  bit reads and address/PC/operation context on contention. It does not execute
+  either firmware CPU or establish clock ordering. The existing original-firmware
+  pair fixture builds with this shared conversion;
   this component result does not qualify physical wiring, scheduling or boot.
 - A no-selected-cell hypothesis admits only reserved/ROM writes in the low
   128K X/Y window. It creates no cells/read values; real RAM and peripherals
