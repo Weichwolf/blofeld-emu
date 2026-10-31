@@ -1,20 +1,30 @@
-Explicit P-package NAND read continuation
+Explicit P/J NAND read contracts
 
 The K9F1208U0C Rev1.1 reference is pinned in hardware/sources.json. Printed
 pp2/26/29 distinguish TSOP P-package sequential row reading from the FBGA
 J-package. This is not identification of the part fitted to either Blofeld.
-NandReadContinuation::k9f1208_p must be selected explicitly, including when
+NandReadContinuation::k9f1208_p or k9f1208_j must be selected explicitly, including when
 constructing a device from persistent cells. Default construction and the
 original image constructor keep the unspecified post-page guard. Image bytes
 and Read-ID observations do not select a continuation profile.
 
-For this profile, consuming column527 leaves the last output byte pending and
+For the P profile, consuming column527 leaves the last output byte pending and
 Ready high. A qualified selected rising RE ends that output. Within a block,
 the device selects the next row and becomes busy. Read1/01 resumes at column0;
 Read2/50 resumes at column512. After row31 within each block, no transfer or
 row wrap is invented: the device requires CE-high termination before another
 command/address sequence. A final-byte CE deassertion instead terminates the
 sequence without starting another transfer. Cells remain independent knowledge.
+
+The J profile has no automatic sequential-row operation. Its qualified final
+RE-high observation ends the serial page without incrementing the row, changing
+Ready or scheduling a prefetch. Another read needs a fresh command, four address
+cycles and its own tR interval, including across rows31/32 and63/64. Reading
+beyond the completed page without that sequence refuses. CE is don't-care during
+J busy reads: CE-high preserves the original deadline and completed buffer rather
+than invoking P's read-abort/tCRY path. Completed-page CE pauses preserve the next
+column for both profiles. These are bounded read contracts, not full J part or
+board identification. Status/ID and program-data CE handling remain separate.
 
 observe_read_end() accepts qualified read-end edges; the board must first apply
 the separate output/setup timing checks and actual selection/edge ordering.
@@ -31,7 +41,9 @@ convert its unknown post-page state into a successful response.
 
 NandOperationClock owns protocol and events. Its explicit reference_maximum
 contract uses the p13 maximum tR=15us for a sequential read and tCRY=5us for
-CE-aborted pending reads. Busy recognition at final RE high uses zero tRB,
+P CE-aborted pending reads. The clock distinguishes an actual protocol abort
+from J's ignored busy CE; it does not shorten or restart a J deadline. Busy
+recognition at final P RE high uses zero tRB,
 within the table's100ns maximum, as an explicit reference choice. This is not
 a silicon timing measurement. CE abort replaces the previous event; Ready
 remains low until the abort deadline. Abort completion provides no valid data
@@ -40,8 +52,8 @@ Events precede same-tick inputs; durations round up to reference ticks.
 Counter exhaustion faults the owner instead of wrapping into a successful event.
 
 Checks
-  cmake --build --preset strict --target blofeld-nand-sequential-read-test blofeld-nand-ce-pause-test
-  ctest --test-dir build/strict -j1 -R '^(nand_sequential_read|nand_ce_pause)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-nand-read-test blofeld-nand-sequential-read-test blofeld-nand-operation-clock-test blofeld-nand-ce-pause-test
+  ctest --test-dir build/strict -j1 -R '^nand_(read|sequential_read|operation_clock|ce_pause)$' --output-on-failure
 
 Use the thread preset and build/thread for the separate TSan profile.
 
@@ -52,6 +64,10 @@ cells with explicit profile, unknown next-page data, stale timer cancellation,
 exact/exhausted counters, invalid fixed-underlying enum representations and
 default-profile/block-boundary refusals. The partial-page case now checks the
 documented retained buffer and exact next selected byte.
+J checks add six full command-stepped pages across two block boundaries and the
+last physical page, no row/column wrap or prefetch, a fresh tR per request, busy
+CE deadline retention, fine/coarse copied completion, paused cursor retention and
+strict unknown-cell refusal. P/default and J cases pass separately under ASan/UBSan.
 
 nand_ce_pause checks pauses before columns0,1,255,256,527, two value-copy
 suffixes each, unknown next-cell rejection without column advance and final-byte

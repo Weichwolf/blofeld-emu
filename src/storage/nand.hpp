@@ -14,7 +14,7 @@ namespace blofeld {
 
 enum class NandOutcome : std::uint8_t { pass, fail };
 enum class NandPending : std::uint8_t { none, read, reset, program, erase };
-enum class NandReadContinuation : std::uint8_t { unqualified, k9f1208_p };
+enum class NandReadContinuation : std::uint8_t { unqualified, k9f1208_p, k9f1208_j };
 enum class NandReadEnd : std::uint8_t { re_high, ce_high };
 
 // ID contents are external observations, separate from cells and geometry.
@@ -53,7 +53,7 @@ public:
   void observe_completion();
   void observe_completion(NandOutcome outcome);
   // Qualified selected RE rising or CE deassertion, after pin-timing checks.
-  // P-package continuation is explicit; unspecified parts retain their guard.
+  // P/J read-end contracts are explicit; unspecified parts retain their guard.
   void observe_read_end(NandReadEnd edge);
   void power_loss();
   [[nodiscard]] std::uint8_t read(std::uint8_t mask = byte_mask);
@@ -69,12 +69,13 @@ public:
 
   [[nodiscard]] bool status_mode() const { return status_mode_; }
 
-  // Ready P-package array data or idle from a read command. This does not
+  // Ready qualified array data or idle from a read command. This does not
   // establish a valid buffer (an aborted read is idle too). The board separately
   // proves inactive strobes and CE/setup/hold timing.
   [[nodiscard]] bool quiescent_read_pause() const;
 
 private:
+  friend class NandOperationClock;
   enum class Phase : std::uint8_t {
     cold,
     idle,

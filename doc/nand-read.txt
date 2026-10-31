@@ -11,8 +11,9 @@ preserves cells when no write is active; interrupted writes remain unknown.
 Read-ID uses separate immutable observations (nand-identification.txt); no
 identity, ECC or successful write outcome is inferred. Unobserved cells stay
 unknown, including spare and bad-block markers. A missing byte fails with row/column/command context and
-does not advance. Post-page sequential-row behavior remains unqualified; readiness
-becomes unknown. Nonzero upper spare-column bits fail conservatively because the
+does not advance. Default post-page behavior remains unqualified; readiness
+becomes unknown. Explicit P/J read contracts are in nand-sequential-read.txt.
+Nonzero upper spare-column bits fail conservatively because the
 address table and read prose describe them differently. This profile is not
 automatically attached to either Blofeld board.
 Surplus addresses are ignored only while the current transfer is pending.

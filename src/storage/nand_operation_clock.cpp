@@ -156,7 +156,7 @@ void NandOperationClock::observe_read_end(const NandReadEnd edge) {
   const auto before = device_.pending();
   device_.observe_read_end(edge);
   if (device_.pending() == NandPending::read) {
-    if (edge == NandReadEnd::ce_high) {
+    if (edge == NandReadEnd::ce_high && device_.phase_ == Nand::Phase::read_abort_pending) {
       schedule(NandPending::read, read_abort_microseconds);
     } else if (before != NandPending::read) {
       schedule(NandPending::read, read_microseconds);

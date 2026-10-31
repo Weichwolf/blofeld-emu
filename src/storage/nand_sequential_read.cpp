@@ -11,27 +11,29 @@ constexpr std::uint8_t read_spare = 0x50;
 
 Nand::Nand(const NandReadContinuation continuation) : continuation_(continuation) {
   if (continuation != NandReadContinuation::unqualified &&
-      continuation != NandReadContinuation::k9f1208_p) {
+      continuation != NandReadContinuation::k9f1208_p &&
+      continuation != NandReadContinuation::k9f1208_j) {
     fail("read continuation", "invalid part profile");
   }
 }
 
 bool Nand::quiescent_read_pause() const {
   const bool command = command_ == 0 || command_ == read_second_half || command_ == read_spare;
-  return continuation_ == NandReadContinuation::k9f1208_p && ready_ == true && !status_mode_ &&
+  return continuation_ != NandReadContinuation::unqualified && ready_ == true && !status_mode_ &&
          command && (phase_ == Phase::data || phase_ == Phase::idle);
 }
 
 void Nand::observe_read_end(const NandReadEnd edge) {
-  if (continuation_ != NandReadContinuation::k9f1208_p) {
-    fail("read end", "requires an explicit P-package sequential-read profile");
+  if (continuation_ == NandReadContinuation::unqualified) {
+    fail("read end", "requires an explicit P-package or J-package read profile");
   }
   if (edge != NandReadEnd::re_high && edge != NandReadEnd::ce_high) {
     fail("read end", "invalid observed edge");
   }
   if (edge == NandReadEnd::ce_high) {
     if (phase_ == Phase::read_pending) {
-      phase_ = Phase::read_abort_pending;
+      // Rev1.1 p26: P-package CE interrupts tR; J-package CE is don't-care.
+      if (continuation_ == NandReadContinuation::k9f1208_p) { phase_ = Phase::read_abort_pending; }
       return;
     }
     // K9F1208U0C Rev1.1 p18/Fig6: CE may be inactive between data reads.
@@ -47,6 +49,11 @@ void Nand::observe_read_end(const NandReadEnd edge) {
   // Status output and ordinary byte release do not start/restart an array read.
   if (status_mode_ || phase_ == Phase::data || phase_ == Phase::read_pending) { return; }
   if (phase_ != Phase::end) { fail("read end", "no final array byte awaiting release"); }
+  // Only P-package parts automatically select another row (Rev1.1 p26).
+  if (continuation_ == NandReadContinuation::k9f1208_j) {
+    phase_ = Phase::idle;
+    return;
+  }
   if (page_ % block_pages == block_pages - 1) {
     phase_ = Phase::block_end;
     return;

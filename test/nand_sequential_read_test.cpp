@@ -404,6 +404,76 @@ void late_abort_and_counter_exhaustion() {
   require(abort.faulted(),
           "Abort counter exhaustion cannot wrap into an immediate successful event");
 }
+
+void select_j_row(NandOperationClock &clock, const unsigned row) {
+  clock.command(0);
+  clock.address(0);
+  clock.address(static_cast<std::uint8_t>(row & byte_mask));
+  clock.address(static_cast<std::uint8_t>((row >> 8U) & byte_mask));
+  clock.address(static_cast<std::uint8_t>((row >> 16U) & byte_mask));
+}
+
+void j_command_stepped_pages() {
+  // Rev1.1 p26: J has serial pages, without P's automatic sequential rows.
+  constexpr std::array<unsigned, 6> rows{31, 32, 63, 64, last_page - 1, last_page};
+  Nand device(NandReadContinuation::k9f1208_j);
+  for (const auto row : rows) {
+    std::array<std::uint8_t, page_bytes> cells{};
+    cells.fill(static_cast<std::uint8_t>(row & byte_mask));
+    device.observe_bytes(row, 0, cells);
+  }
+  device.observe_power_ready();
+  NandOperationClock clock(std::move(device), ghz, contract);
+  for (const auto row : rows) {
+    select_j_row(clock, row);
+    const NandCompletionEvent expected{.ticks = clock.ticks() + read_ticks,
+                                       .operation = NandPending::read};
+    require(clock.next_event() == expected, "Each J page requires a fresh address transfer");
+    require(clock.advance(expected.ticks) == expected, "J page completes at its own tR deadline");
+    for (unsigned column = 0; column < page_bytes; ++column) {
+      require(clock.read() == (row & byte_mask), "J array byte lost its independently set row");
+      clock.observe_read_end(NandReadEnd::re_high);
+      require(!clock.next_event() && clock.device().ready() == true &&
+                  clock.device().pending() == NandPending::none && clock.device().page() == row,
+              "J serial reads must not prefetch, increment or become busy at page/block end");
+    }
+    auto invalid = clock;
+    reject([&] { static_cast<void>(invalid.read()); }, "no completed page transfer");
+    require(clock.device().column() == page_bytes,
+            "J final-byte release must not wrap its column into invented data");
+    // The following actual command starts the next row; no CE edge is supplied.
+  }
+}
+
+void j_busy_ce_does_not_abort() {
+  constexpr std::uint64_t ce_at = 1000;
+  constexpr std::uint64_t before_read = 10000;
+  Nand device(NandReadContinuation::k9f1208_j);
+  device.observe_bytes(0, 0, std::array{final_byte, following});
+  device.observe_power_ready();
+  NandOperationClock clock(std::move(device), ghz, contract);
+  select_j_row(clock, 0);
+  const NandCompletionEvent expected{.ticks = read_ticks, .operation = NandPending::read};
+  no_event(clock, ce_at);
+  clock.observe_read_end(NandReadEnd::ce_high);
+  require(clock.next_event() == expected && clock.device().ready() == false,
+          "J busy CE must not replace tR with P's shorter tCRY abort");
+  no_event(clock, before_read);
+  require(clock.device().ready() == false, "J busy CE must not manufacture early Ready");
+  auto copied = clock;
+  require(clock.advance(read_ticks) == expected && copied.advance(read_ticks + 1) == expected,
+          "J copies retain their unchanged read deadline after busy CE");
+  require(clock.read() == final_byte && copied.read() == final_byte,
+          "J busy CE must preserve the valid page buffer after completion");
+  clock.observe_read_end(NandReadEnd::ce_high);
+  require(clock.device().quiescent_read_pause() && clock.device().column() == 1 &&
+              clock.read() == following && !clock.next_event(),
+          "J completed-page CE pause must retain the cursor and actual next cell");
+  auto unknown = clock;
+  reject([&] { static_cast<void>(unknown.read()); }, "unknown contents");
+  require(unknown.device().column() == 2 && unknown.faulted(),
+          "J profile must not turn unspecified cells into erased or zero data");
+}
 }
 
 int main() {
@@ -413,8 +483,11 @@ int main() {
     termination_recovery_and_unknown_cells();
     defaults_and_guards();
     late_abort_and_counter_exhaustion();
+    j_command_stepped_pages();
+    j_busy_ce_does_not_abort();
     std::cout << "NAND P-part:7 page/area/block vectors,5 clock/abort "
-                 "vectors,checkpoint/recovery/strict guards passed\n";
+                 "vectors; J-part:6 command-stepped rows and busy CE; "
+                 "checkpoint/recovery/strict guards passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
