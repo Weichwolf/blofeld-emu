@@ -237,8 +237,11 @@ Conditional board contracts, each separately controlled and recorded:
   that run. A subsequent running fixture includes both model fixes. An
   immutable log snapshot independently compares ten completed page cycles:
   each contains 528 programmed and NAND-output bytes equal to the corresponding
-  host-loaded fixture bytes. That confirms only the logged prefix, not final
-  firmware completion, the remaining pages or a real board. One earlier run
+  host-loaded fixture bytes. A separate audit also checks both four-byte row
+  addresses and the program/read completion events for those transitions;
+  altered-address and missing-completion controls are rejected. That confirms
+  only the logged prefix, not final firmware completion, the remaining pages
+  or a real board. One earlier run
   pinned a mutable build archive which was later rebuilt; later runs retain
   frozen library inputs.
 
@@ -311,6 +314,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-id-data-floating/runtime.json
   doc/local/own-core-main-preserved-pointer/runtime.json
   doc/local/own-core-main-program-ce/{audit_pages.py,snapshot-pages.json}
+  doc/local/own-core-main-program-ce/{audit_addresses.py,snapshot-addresses.json}
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
