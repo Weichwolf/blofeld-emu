@@ -144,6 +144,13 @@ Conditional board contracts, each separately controlled and recorded:
   outside bounds are unsatisfiable; both endpoints are feasible. The calculation
   covers only these constraints; it does not establish a physical delay circuit,
   signal routing, calibrated instruction time or other NAND timing requirements.
+  A local ngspice counterexample uses an ideal 3.3V source, 27k/100pF and an
+  assumed 50% threshold. With the conditional helper trace's shortest observed
+  5,000-tick low and 4,000-tick high intervals, the first falling edge crosses
+  after about 2,021 ticks, but the seventh crosses after about 1,304 ticks.
+  This simple RC candidate therefore does not maintain the conservative
+  DDR-before-RE bound through repeated reads. Component values, loading and
+  thresholds are experiment inputs; no actual board circuit is established.
   A further local candidate delays falling RE by 2,100 ticks and preserves
   partially known NAND status bits through the resolved GPIO pads. An own JSR
   caller executes the original helper, which programs a known-erased target;
@@ -223,6 +230,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-original-helper/{runtime,audit}.json
   doc/local/own-core-pdrf-word/{runtime,audit}.json
   doc/local/own-core-nand-read-skew/{window.smt2,audit.json}
+  doc/local/nand-re-rc-hypothesis/{candidate.cir,audit.json}
   doc/local/own-core-nand-status-pads/{runtime,audit}.json
   doc/local/own-core-nand-status-variants/{runtime,audit}.json
   doc/local/own-core-nand-program-compare/{runtime,audit}.json
