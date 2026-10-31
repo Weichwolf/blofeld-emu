@@ -136,6 +136,14 @@ Conditional board contracts, each separately controlled and recorded:
   writes with upper bits were logged. Physical pin skew, routing and reserved
   write behavior remain unqualified. No firmware instruction is patched or
   skipped, and this is still an isolated helper with synthetic timing.
+  A separate Z3 bound assumes CLE follows the candidate GPIO immediately, the
+  next three 1,000-tick instruction boundaries publish PCRF, PRRF and the CPU
+  read, and NAND RE falling is independently delayed. Requiring PRRF's input
+  publication strictly before RE, plus reference tCLR=11 and tREA=33 ticks,
+  gives a feasible delay of 2,001..2,967 ticks at 1.08GHz. The two adjacent
+  outside bounds are unsatisfiable; both endpoints are feasible. The calculation
+  covers only these constraints; it does not establish a physical delay circuit,
+  signal routing, calibrated instruction time or other NAND timing requirements.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -189,6 +197,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-medium/{validation,audit}.json
   doc/local/own-core-nand-original-helper/{runtime,audit}.json
   doc/local/own-core-pdrf-word/{runtime,audit}.json
+  doc/local/own-core-nand-read-skew/{window.smt2,audit.json}
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
