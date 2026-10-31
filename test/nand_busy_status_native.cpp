@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_pipeline.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
-#include "dsp56kEmu/assembler.h"
+#include "dsp/dsp_peripheral_calendar.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "nand_native_peer.hpp"
+#include "nand_native_run.hpp"
 #include "nand_native_tests.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
@@ -30,8 +26,15 @@ namespace blofeld::test {
 namespace {
 using namespace blofeld;
 constexpr unsigned boot = 0xff0000;
+// FM MOVEP: low-X qq, high-X/high-Y pp; register reads use X0/Y0/full A fields.
+constexpr unsigned write_port_c = 0x07f43d, write_port_f = 0x09f4b5;
+constexpr unsigned write_direction_f = 0x09f4b6, write_function_f = 0x09f4b7;
+constexpr unsigned write_bus_control = 0x08f4bb, write_direction_c = 0x07f43e;
+constexpr unsigned write_function_c = 0x07f43f;
+constexpr unsigned read_port_f_x0 = 0x094435, read_port_f_y0 = 0x094635, read_port_f_a = 0x094e35;
+constexpr unsigned port_f_bus_control = 0x01ffff;
+constexpr unsigned control_directions = 0x000f00, control_functions = 0x0000ff;
 constexpr unsigned extal = 12000000;
-constexpr unsigned period = 90;
 constexpr unsigned byte_mask = 0xff;
 constexpr NandByte busy_status{.value = 0x80, .known = 0xc0};
 constexpr unsigned word_mask = 0xffffff;
@@ -48,7 +51,6 @@ constexpr unsigned program_nops = 7000;
 constexpr unsigned erase_nops = 40000;
 constexpr unsigned read_nops = 256;
 constexpr unsigned max_cycles = 100000;
-constexpr std::uint64_t power_tick = 108000;
 constexpr std::uint64_t inherited_tick = 98000000;
 constexpr std::uint64_t program_ticks = 540000;
 constexpr std::uint64_t erase_ticks = 3240000;
@@ -133,19 +135,19 @@ public:
 
   [[nodiscard]] const Markers &markers() const { return markers_; }
 
-  void emit(const std::string &line) {
-    const auto result = assembler_.assemble(line.c_str());
-    ensure(result.success(), "Own native medium assembly failed: " + line);
-    for (unsigned i = 0; i < result.wordCount; ++i) { words_.push_back(result.word[i]); }
+  // DSP56300FM MOVEP immediate opcodes; each carries one literal extension.
+  void emit(const std::uint32_t opcode, const unsigned value) {
+    words_.push_back(opcode);
+    words_.push_back(value);
   }
 
   void nops(const unsigned count) { words_.insert(words_.end(), count, 0); }
 
   [[nodiscard]] unsigned pc() const { return boot + static_cast<unsigned>(words_.size()); }
 
-  void x(const unsigned value) { emit("movep #$" + hex(value, 6).substr(2) + ",x:<<$ffffbd"); }
+  void x(const unsigned value) { emit(write_port_c, value); }
 
-  void f(const unsigned value) { emit("movep #$" + hex(value, 6).substr(2) + ",y:<<$fffff5"); }
+  void f(const unsigned value) { emit(write_port_f, value); }
 
   void latch(const NandWriteKind kind, const unsigned value) {
     unsigned controls = data_controls;
@@ -159,22 +161,20 @@ public:
   }
 
   void input() {
-    emit("movep #$" + hex(read_direction, 6).substr(2) + ",y:<<$fffff6");
-    emit("movep #$" + hex(input_function, 6).substr(2) + ",y:<<$fffff7");
+    emit(write_direction_f, read_direction);
+    emit(write_function_f, input_function);
   }
 
   void output() {
-    emit("movep #$" + hex(output_function, 6).substr(2) + ",y:<<$fffff7");
-    emit("movep #$" + hex(output_direction, 6).substr(2) + ",y:<<$fffff6");
+    emit(write_function_f, output_function);
+    emit(write_direction_f, output_direction);
   }
 
   void install(DspBus &bus, const NativeCase &test) {
-    for (const auto *line : {"movep #$01ffff,x:<<$fffffb",
-                             "movep #$000f00,x:<<$ffffbe",
-                             "movep #$0000ff,x:<<$ffffbf",
-                             "movep #$000700,x:<<$ffffbd"}) {
-      emit(line);
-    }
+    emit(write_bus_control, port_f_bus_control);
+    emit(write_direction_c, control_directions);
+    emit(write_function_c, control_functions);
+    x(command_controls);
     output();
     if (test.erase) {
       constexpr unsigned setup = 0x60;
@@ -219,10 +219,10 @@ public:
     x(data_controls);
     nops(read_nops);
     input();
-    for (const auto *reg : {"x0", "y0", "a"}) {
+    for (const auto opcode : {read_port_f_x0, read_port_f_y0, read_port_f_a}) {
       x(low_read);
       nops(2);
-      emit("movep y:<<$fffff5," + std::string(reg));
+      words_.push_back(opcode);
       x(data_controls);
     }
     markers_.stop = pc();
@@ -232,54 +232,24 @@ public:
 
 private:
   Markers markers_;
-  dsp56k::Assembler assembler_;
   std::vector<std::uint32_t> words_;
 };
-
-DspFetchScheduleInputs native_settings() {
-  return {.dsp = {.extal_hz = extal,
-                  .timebase_hz = nand_timebase_hz,
-                  .timing = DspFetchTiming::reference_cycle_order,
-                  .execution = DspReferenceExecution::staged_register_boundaries,
-                  .pipeline = DspFetchPipeline::automatic_memory,
-                  .resets = DspFetchResetTiming::reference_cycle_boundary}};
-}
 
 struct NativeFixture {
   explicit NativeFixture(const NativeCase &test)
       : program(machine.bus(), test),
         peer(machine, native_device(test), native_physics(test)),
-        schedule(native_settings(),
-                 machine,
-                 DspHardwareResetInputs{
-                     .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}),
-        inherited{.identity = std::make_shared<const DspFetchEventIdentity>(),
-                  .next_ticks = []() -> std::optional<std::uint64_t> { return inherited_tick; },
-                  .observe = [](std::uint64_t) { throw Fault("Inherited source remains pending"); },
-                  .order = DspExternalOrder::external_before_dsp,
-                  .maximum_events = 4} {
-    static_cast<void>(schedule.advance_to(
-        {.horizon = {.ticks = power_tick}, .maximum_cycles = 0},
-        [] { return DspFetchCycleInputs{}; },
-        {},
-        inherited,
-        peer.events()));
-    schedule.release_hardware_reset(peer.events());
-  }
+        schedule(
+            machine,
+            peer,
+            {.identity = std::make_shared<const PeripheralEventIdentity>(),
+             .next_ticks = []() -> std::optional<std::uint64_t> { return inherited_tick; },
+             .observe = [](std::uint64_t) { throw Fault("Inherited source remains pending"); }}) {}
 
   void tick() {
-    const auto elapsed = schedule.run().elapsed_ticks();
-    const auto next = power_tick + (((elapsed - power_tick) / period + 1) * period);
-    static_cast<void>(schedule.advance_to(
-        {.horizon = {.ticks = next}, .maximum_cycles = 1},
-        [&] {
-          peer.before_native(schedule.run().elapsed_ticks());
-          return DspFetchCycleInputs{.known_requests = 15, .grant = DspDmaGrant::available};
-        },
-        [&](const DspFetchCycleResult &cycle) { peer.after_native(cycle.completion_ticks); },
-        inherited,
-        peer.events()));
-    const auto state = machine.cpu().state();
+    const auto cycle = schedule.tick();
+    if (!cycle.native || !cycle.native->retired) { return; }
+    const auto state = machine.cpu().registers();
     if (state.pc == program.markers().busy) {
       busy_seen = true;
       ensure((state.sr & carry_mask) == 0, "Native GPIO BTST sees Busy status6 with held RE low");
@@ -290,29 +260,31 @@ struct NativeFixture {
              "Native GPIO BTST sees derived Ready status6 without another read edge");
     }
     if (state.pc == program.markers().status) { status_seen = true; }
+    if (state.pc == program.markers().stop) { stopped = true; }
   }
 
   void finish() {
     unsigned count = 0;
-    while (machine.cpu().state().pc != program.markers().stop) {
+    while (!stopped) {
       ensure(++count < max_cycles, "Native write/poll/status/readback suffix bounded");
       tick();
     }
   }
 
-  DspMachine machine;
+  OwnDspMachine machine{{.extal_hz = extal,
+                         .timebase_hz = nand_timebase_hz,
+                         .switch_timing = DspClockSwitch::reference_cycle_boundary}};
   NativeProgram program;
   NandPeer peer;
-  DspFetchScheduledRun schedule;
-  DspFetchExternalEvents inherited;
-  bool busy_seen = false, ready_seen = false, status_seen = false;
+  NandNativeRun schedule;
+  bool busy_seen = false, ready_seen = false, status_seen = false, stopped = false;
 };
 
 void native_endpoint(NativeFixture &f, const NativeCase &test) {
   constexpr unsigned second = 0xc8;
   constexpr unsigned third = 0xed;
   constexpr unsigned first = 0xa2;
-  const auto cpu = f.machine.cpu().debug_state();
+  const auto cpu = native_cpu(f.machine);
   const bool fails = test.inhibited && (test.erase || !test.input_one);
   unsigned expected_first = first | (test.inhibited || test.input_one ? 1U : 0U);
   if (test.erase) { expected_first = fails ? byte_mask - 1 : byte_mask; }
@@ -323,7 +295,7 @@ void native_endpoint(NativeFixture &f, const NativeCase &test) {
          "Actual native readback matches independently computed physical cells");
   ensure(((cpu.cpu.sr & carry_mask) != 0) == fails,
          "Native GPIO BTST sees computed verification status");
-  ensure(f.busy_seen && f.ready_seen && f.status_seen,
+  ensure(f.busy_seen && f.ready_seen && f.status_seen && f.stopped,
          "Genuine native Busy,Ready and status instructions retired");
   ensure(f.peer.detailed().base.ready == true &&
              f.peer.detailed().base.pending == NandPending::none,
@@ -350,25 +322,26 @@ void execute_native(const NativeCase &test) {
   ensure(f.peer.detailed().previous_re == false && f.peer.detailed().output.data == busy_status,
          "Pending snapshot contains actual held Busy output with undefined fail bit");
   const auto payload = f.peer.checkpoint();
-  const auto saved = f.schedule.checkpoint(f.peer.events());
-  const auto cpu_cut = f.machine.cpu().debug_state();
+  const auto saved = f.schedule.checkpoint();
+  const auto cpu_cut = native_cpu(f.machine);
   const auto nand_cut = f.peer.detailed();
   f.finish();
   native_endpoint(f, test);
-  const auto endpoint = f.machine.cpu().debug_state();
+  const auto endpoint = native_cpu(f.machine);
   const auto nand_endpoint = f.peer.detailed();
   const auto calendar_endpoint = f.schedule.peripheral_state();
   if (test.restore) {
     f.peer.restore(payload);
-    f.schedule.restore(saved, f.peer.events());
-    ensure(f.machine.cpu().debug_state() == cpu_cut && f.peer.detailed() == nand_cut,
+    f.schedule.restore(saved);
+    ensure(native_cpu(f.machine) == cpu_cut && f.peer.detailed() == nand_cut,
            "Trusted native plus full pending cell job restores");
     f.busy_seen = true; // Busy instruction already retired at this saved cut.
+    f.stopped = false;
     f.ready_seen = false;
     f.status_seen = false;
     f.finish();
     native_endpoint(f, test);
-    ensure(f.machine.cpu().debug_state() == endpoint && f.peer.detailed() == nand_endpoint &&
+    ensure(native_cpu(f.machine) == endpoint && f.peer.detailed() == nand_endpoint &&
                f.schedule.peripheral_state() == calendar_endpoint,
            "Restored native write/poll/status/readback suffix repeats completely");
   }

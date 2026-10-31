@@ -36,11 +36,19 @@ Primary: Samsung K9F1208U0C Rev1.1, pp.12-13,21,30,33-34; URL/size/hash in
 hardware/sources.json. The 3.3V U part uses tRP21/tRC42/tREA30ns; the alternate
 busy35/50/40ns bounds in footnote2 apply only to the 1.8V R part.
 
+The native fixtures use the independent DSP core, literal authored MOVEP/BTST
+instructions and the explicit effect-per-reference-cycle timeline. Inherited
+inputs and NAND deadlines precede a tied native effect; completed GPIO effects
+then update the real NAND models. Register/stack/progress, cells, pending work and
+calendar checkpoints retain their independent outcome expectations. A separate
+actual TIO0/Carry test checks tied input sampling and external-cursor/owner restore
+refusals. No legacy DSP core or assembler is linked into these three tests.
+
 Scoped verification:
   cmake --preset strict
   cmake --build --preset strict --target blofeld-nand-write-medium-test \
-    blofeld-nand-busy-status-test
-  ctest --test-dir build/strict -R '^nand_(write_medium|busy_status)$' \
+    blofeld-nand-busy-status-test blofeld-nand-native-runtime-test
+  ctest --test-dir build/strict -R '^nand_(write_medium|busy_status|native_runtime)$' \
     --output-on-failure
 Repeat with the thread preset for separate TSan instrumentation. These are finite
 independent bit expectations and own native DSP GPIO programs, not fuzzing. The

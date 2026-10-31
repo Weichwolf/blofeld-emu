@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-#include "dsp/dsp_fetch_schedule.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
@@ -8,11 +8,12 @@
 #include "storage/nand_read_timing.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 
 namespace blofeld {
-class DspMachine;
+class OwnDspMachine;
 }
 
 namespace blofeld::test {
@@ -42,6 +43,12 @@ struct PeerDetailed {
   bool operator==(const PeerDetailed &) const = default;
 };
 
+struct NandPeerEvents {
+  std::shared_ptr<const PeripheralEventIdentity> identity;
+  std::function<std::optional<std::uint64_t>()> next_ticks;
+  std::function<void(std::uint64_t)> observe;
+};
+
 class NandPeer;
 
 class NandPeerSnapshot {
@@ -61,15 +68,15 @@ private:
 // bus reference. The native owner replaces its internal bus during restoration.
 class NandPeer {
 public:
-  NandPeer(blofeld::DspMachine &machine, blofeld::Nand device);
-  NandPeer(blofeld::DspMachine &machine, blofeld::Nand device, NandCellProfile profile);
-  NandPeer(const NandPeerSnapshot &snapshot, blofeld::DspMachine &target);
+  NandPeer(blofeld::OwnDspMachine &machine, blofeld::Nand device);
+  NandPeer(blofeld::OwnDspMachine &machine, blofeld::Nand device, NandCellProfile profile);
+  NandPeer(const NandPeerSnapshot &snapshot, blofeld::OwnDspMachine &target);
   ~NandPeer();
   NandPeer(const NandPeer &) = delete;
   NandPeer &operator=(const NandPeer &) = delete;
-  [[nodiscard]] blofeld::DspFetchPeripheralEvents events();
+  [[nodiscard]] NandPeerEvents events();
   void before_native(std::uint64_t common_ticks);
-  void after_native(std::uint64_t common_ticks);
+  void after_native(std::uint64_t common_ticks, std::optional<std::uint32_t> native_pc);
   [[nodiscard]] PeerDetailed detailed() const;
   // One-way complete protocol observation; cannot replace live state or publish IO.
   [[nodiscard]] blofeld::Nand protocol_copy() const;

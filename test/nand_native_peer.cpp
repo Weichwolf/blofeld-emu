@@ -3,14 +3,11 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
 #include "storage/nand_read_setup.hpp"
@@ -56,7 +53,7 @@ struct PeerState {
 }
 
 struct NandPeer::Impl {
-  Impl(DspMachine &machine, Nand device, NandCellProfile profile)
+  Impl(OwnDspMachine &machine, Nand device, NandCellProfile profile)
       : machine_(machine),
         state_(std::make_unique<PeerState>(
             NandWriteMedium(std::move(device), nand_timebase_hz, std::move(profile)))) {
@@ -67,7 +64,7 @@ struct NandPeer::Impl {
     drive(0);
   }
 
-  Impl(DspMachine &target,
+  Impl(OwnDspMachine &target,
        const PeerState &state,
        std::shared_ptr<const PeripheralEventIdentity> identity)
       : machine_(target),
@@ -88,30 +85,6 @@ struct NandPeer::Impl {
             .last_pc = state_->context.pc,
             .last_omr = state_->context.omr,
             .trace_access = state_->trace_access};
-  }
-
-  void record_restart(const std::uint8_t value) const {
-    const auto ready = state_->device.device().ready();
-    if (!ready || !*ready) { throw Fault("Random-read restart requires actual known Ready high"); }
-    std::cerr << "UNQUALIFIED_RANDOM_RESTART operation=command at=X:0xffffbd/Y:0xfffff5"
-              << " pc=" << hex(state_->context.pc, 6) << " omr=" << hex(state_->context.omr, 6)
-              << " value=" << hex(value, 2) << " ticks=" << state_->device.ticks()
-              << " row=" << state_->device.device().page()
-              << " column=" << state_->device.device().column() << " ready=" << *ready
-              << " hypothesis=fresh-read-command-terminates-sequential-state CE-edge-injected=0\n";
-  }
-
-  void record(const DspNativeAccess &access) const {
-    if (!state_->trace_access || access.stage != DspNativeAccessStage::after || !access.value ||
-        (access.kind != DspNativeAccessKind::read && access.kind != DspNativeAccessKind::write &&
-         access.kind != DspNativeAccessKind::bit)) {
-      return;
-    }
-    std::cerr << "NAND_ACCESS pc=" << hex(access.pc, 6)
-              << " kind=" << static_cast<unsigned>(access.kind)
-              << " space=" << static_cast<unsigned>(access.target.space)
-              << " address=" << hex(access.target.address, 6) << " value=" << hex(*access.value, 6)
-              << " ordinal=" << access.ordinal << '\n';
   }
 
   void before(const std::uint64_t ticks, const DspRunContext context) {
@@ -171,15 +144,6 @@ struct NandPeer::Impl {
       }
       state_->faulted = false;
     } catch (const Fault &cause) { fail(std::string("dispatch: ") + cause.what()); }
-  }
-
-  void reattach() {
-    healthy();
-    publish();
-    drive(state_->device.ticks());
-    std::cerr << "NAND_LIFETIME_REATTACH ticks=" << state_->device.ticks()
-              << " pending=" << static_cast<unsigned>(state_->device.device().pending())
-              << " power-ready=" << state_->power_ready << " protocol-and-cells-preserved=1\n";
   }
 
   [[nodiscard]] PeerStatus status() const {
@@ -337,7 +301,7 @@ struct NandPeer::Impl {
   }
 
   static constexpr std::uint64_t power_ready_tick = 108000;
-  DspMachine &machine_;
+  OwnDspMachine &machine_;
   std::unique_ptr<PeerState> state_;
   const std::shared_ptr<const PeripheralEventIdentity> identity_ =
       std::make_shared<const PeripheralEventIdentity>();
@@ -346,7 +310,7 @@ struct NandPeer::Impl {
 struct NandPeerSnapshot::Storage {
   PeerState state;
   const NandPeer *owner;
-  const DspMachine *machine;
+  const OwnDspMachine *machine;
   std::weak_ptr<const bool> lifetime;
   std::shared_ptr<const PeripheralEventIdentity> identity;
 };
@@ -356,13 +320,13 @@ NandPeerSnapshot::NandPeerSnapshot(std::shared_ptr<const Storage> storage)
 
 NandPeerSnapshot::~NandPeerSnapshot() = default;
 
-NandPeer::NandPeer(DspMachine &machine, Nand device)
+NandPeer::NandPeer(OwnDspMachine &machine, Nand device)
     : NandPeer(machine, std::move(device), NandCellProfile{}) {}
 
-NandPeer::NandPeer(DspMachine &machine, Nand device, NandCellProfile profile)
+NandPeer::NandPeer(OwnDspMachine &machine, Nand device, NandCellProfile profile)
     : impl_(std::make_unique<Impl>(machine, std::move(device), std::move(profile))) {}
 
-NandPeer::NandPeer(const NandPeerSnapshot &snapshot, DspMachine &target) {
+NandPeer::NandPeer(const NandPeerSnapshot &snapshot, OwnDspMachine &target) {
   if (!snapshot.storage_ ||
       (snapshot.storage_->lifetime.lock() && snapshot.storage_->machine == &target)) {
     throw Fault("NAND clone requires a distinct native owner and trusted payload");
@@ -373,7 +337,7 @@ NandPeer::NandPeer(const NandPeerSnapshot &snapshot, DspMachine &target) {
 
 NandPeer::~NandPeer() = default;
 
-DspFetchPeripheralEvents NandPeer::events() {
+NandPeerEvents NandPeer::events() {
   const std::weak_ptr<const bool> owner = lifetime_;
   return {.identity = impl_->identity_,
           .next_ticks = [this, owner]() -> std::optional<std::uint64_t> {
@@ -387,17 +351,17 @@ DspFetchPeripheralEvents NandPeer::events() {
                   throw Fault("NAND event dispatch lost its live board owner");
                 }
                 impl_->dispatch(ticks);
-              },
-          .order = DspExternalOrder::external_before_dsp,
-          .maximum_events = 4};
+              }};
 }
 
 void NandPeer::before_native(const std::uint64_t common_ticks) {
-  const auto cpu = impl_->machine_.cpu().state();
+  const auto cpu = impl_->machine_.cpu().registers();
   impl_->before(common_ticks, {.pc = cpu.pc, .omr = cpu.omr});
 }
 
-void NandPeer::after_native(const std::uint64_t common_ticks) {
+void NandPeer::after_native(const std::uint64_t common_ticks,
+                            const std::optional<std::uint32_t> native_pc) {
+  if (native_pc) { impl_->state_->context.pc = *native_pc; }
   impl_->after(common_ticks);
 }
 

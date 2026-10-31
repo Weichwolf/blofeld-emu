@@ -266,7 +266,6 @@ if(BUILD_TESTING OR BLOFELD_FUZZING)
     src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
     src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
     src/dsp/dsp_fetch_schedule_events.cpp src/dsp/dsp_fetch_peripheral_events.cpp
-    src/dsp/dsp_peripheral_calendar.cpp
     src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
     src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
     src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
@@ -274,7 +273,7 @@ if(BUILD_TESTING OR BLOFELD_FUZZING)
     src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
     src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp)
   target_include_directories(blofeld_dsp PUBLIC src)
-  target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals
+  target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals blofeld_dsp_peripheral_calendar
     PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
     "$<LINK_ONLY:blofeld_dsp_address_decode>"
     "$<LINK_ONLY:blofeld_dsp_peripheral_decode>"
@@ -4232,14 +4231,20 @@ endif()
 
 # Causal cell verification and actual native GPIO status/write/readback paths.
 if(BUILD_TESTING)
-  add_library(blofeld_nand_native_fixture STATIC test/nand_native_peer.cpp)
+  add_library(blofeld_nand_native_fixture STATIC test/nand_native_peer.cpp test/nand_native_run.cpp)
   target_link_libraries(blofeld_nand_native_fixture PUBLIC blofeld_nand_write_medium
-    blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup blofeld_dsp)
+    blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup
+    blofeld_own_dsp_fetch blofeld_dsp_peripheral_calendar)
+  add_executable(blofeld-nand-native-runtime-test test/nand_native_runtime_test.cpp)
+  target_link_libraries(blofeld-nand-native-runtime-test PRIVATE blofeld_nand_native_fixture)
+  add_test(NAME nand_native_runtime COMMAND blofeld-nand-native-runtime-test)
+  set_tests_properties(nand_native_runtime PROPERTIES TIMEOUT 30)
+  add_dependencies(quality blofeld-nand-native-runtime-test)
   foreach(kind write_medium busy_status)
     string(REPLACE "_" "-" target_suffix "${kind}")
     set(target "blofeld-nand-${target_suffix}-test")
     add_executable(${target} "test/nand_${kind}_test.cpp" "test/nand_${kind}_native.cpp")
-    target_link_libraries(${target} PRIVATE blofeld_nand_native_fixture blofeld_dsp_native)
+    target_link_libraries(${target} PRIVATE blofeld_nand_native_fixture)
     add_dependencies(quality ${target})
     add_test(NAME nand_${kind} COMMAND ${target})
     set_tests_properties(nand_${kind} PROPERTIES LABELS nand_causal_medium TIMEOUT 300)

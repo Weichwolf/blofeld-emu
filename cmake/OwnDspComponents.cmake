@@ -14,6 +14,9 @@ add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp 
   src/dsp/dsp_run_clock.cpp src/dsp/dsp_run_reset.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
+add_library(blofeld_dsp_peripheral_calendar src/dsp/dsp_peripheral_calendar.cpp)
+target_include_directories(blofeld_dsp_peripheral_calendar PUBLIC src)
+target_link_libraries(blofeld_dsp_peripheral_calendar PUBLIC blofeld_firmware)
 add_library(blofeld_own_dsp_io STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_io.cpp
   src/dsp/own_dsp_interrupts.cpp src/dsp/own_dsp_machine.cpp)
 target_include_directories(blofeld_own_dsp_io PUBLIC src)

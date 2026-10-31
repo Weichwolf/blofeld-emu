@@ -1944,7 +1944,10 @@ Persistent storage               partial  MCU NVM files preserve mutations,
                                           strict array and release boundaries.
                                           Independent cells and own native DSP
                                           GPIO/readback/joint-restore checks are
-                                          scoped in nand-write-medium.txt.
+                                          scoped in nand-write-medium.txt; these
+                                          native cell/status/readback tests now use
+                                          the independent DSP core and actual
+                                          peripheral deadlines with joint restores.
                                           All five NAND time owners accept 64-bit
                                           frequencies with exact ceiling conversion,
                                           counter overflow refusal and copied pending
