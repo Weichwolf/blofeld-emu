@@ -10,6 +10,7 @@
 #include "dsp/own_dsp_io.hpp"
 #include "dsp56300/checkpoint.hpp"
 #include "dsp56300/core.hpp"
+#include "dsp56300/instruction.hpp"
 
 #include <array>
 #include <cstddef>
@@ -45,6 +46,25 @@ DspSpace native_space(const dsp56300::Space space) {
     case dsp56300::Space::y: return DspSpace::y;
     default: throw Fault("Invalid own DSP memory space");
   }
+}
+
+void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
+  const auto effect = pending.effect;
+  if (effect.kind != dsp56300::EffectKind::read && effect.kind != dsp56300::EffectKind::write) {
+    return;
+  }
+  const auto shape = pending.opcode ? dsp56300::inspect_instruction(*pending.opcode) : std::nullopt;
+  if (shape && shape->kind != dsp56300::InstructionKind::bit_memory &&
+      shape->kind != dsp56300::InstructionKind::bit_jump &&
+      shape->kind != dsp56300::InstructionKind::bit_branch) {
+    return;
+  }
+  constexpr std::array names{"P:", "X:", "Y:"};
+  const auto space = native_space(effect.space);
+  const auto *operation = effect.kind == dsp56300::EffectKind::read ? "read " : "write ";
+  throw Fault("Unqualified own DSP DMA/native instruction " + std::string(operation) +
+              names.at(static_cast<unsigned>(space)) + hex(effect.address, 6) +
+              " pc=" + hex(effect.pc, 6) + " omr=" + hex(effect.omr, 6));
 }
 
 std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffect effect) {
@@ -296,6 +316,7 @@ OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const b
   std::array<DspMemoryAccess, 1> access{};
   std::size_t count = 0;
   if (admit_native) {
+    qualify_native_memory(*pending);
     if (const auto footprint = native_footprint(pending->effect)) { access[count++] = *footprint; }
   }
   const EffectGuard guard(advancing_effect_);

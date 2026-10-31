@@ -405,6 +405,37 @@ void native_dma_bit_refusal() {
   throw std::runtime_error("Native bit fixture did not reach its transaction");
 }
 
+void native_dma_memory_bit_refusal() {
+  constexpr Word memory_clear = 0x0a5800;
+  OwnDspMachine machine(clocks);
+  const std::array<Word, 1> rom{memory_clear};
+  boot(machine, rom);
+  machine.bus().write({.space = DspSpace::x, .address = 0, .value = 1});
+  static_cast<void>(machine.begin_fetch());
+  for (unsigned index = 0; index < 8; ++index) {
+    const auto pending = machine.cpu().pending_instruction();
+    if (!pending) { throw std::runtime_error("Native RAM bit fixture lost its effect"); }
+    if (pending->effect.kind == EffectKind::read) {
+      require(pending->opcode == memory_clear, "RAM bit read must retain the actual opcode");
+      try {
+        static_cast<void>(machine.advance_dma_native_cycle(
+            dma_input(0), OwnDspNativeCycleModel::isolated_effect));
+        throw std::runtime_error("Unqualified RAM read-modify-write was accepted");
+      } catch (const blofeld::Fault &error) {
+        const std::string detail(error.what());
+        require(detail.contains("read X:0x000000") && detail.contains("pc=0xff0000") &&
+                    !machine.bus().last_dma_cycle() && machine.clock().native_cycle_units() == 0 &&
+                    !machine.clock().faulted(),
+                "A split RAM bit operation must refuse before DMA or native admission");
+      }
+      return;
+    }
+    require(machine.advance(pending->ticket).fault.kind == FaultKind::none,
+            "Native RAM bit fixture could not reach its read");
+  }
+  throw std::runtime_error("Native RAM bit fixture did not reach its read");
+}
+
 void timer_fault_recovery() {
   OwnDspMachine machine(clocks);
   const std::array<Word, 1> rom{0};
@@ -495,6 +526,7 @@ int main() {
     native_dma_source_conflict();
     native_dma_destination_conflict();
     native_dma_bit_refusal();
+    native_dma_memory_bit_refusal();
     timer_fault_recovery();
     stopped_and_waiting(stop, ProcessingState::stopped);
     stopped_and_waiting(wait, ProcessingState::waiting);

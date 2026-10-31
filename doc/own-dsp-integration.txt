@@ -58,8 +58,11 @@ division, invalid sample sequences and checkpoint restoration. A second explicit
 cycle admits a selected pending native effect after the DMA phase, deriving its
 bus occupancy from the actual own-core effect. The caller explicitly supplies
 an isolated-effect hypothesis: ordinary staged reads and writes do not identify
-whether a containing instruction has an indivisible multi-effect sequence, so
-this interface cannot infer that qualification. DMA source contention defers the
+whether every containing instruction has an indivisible multi-effect sequence.
+The owned opcode now identifies RAM bit instructions even when the core emits
+ordinary reads and writes; their unqualified overlap is refused before a cycle.
+Other multi-effect instructions still require explicit qualification. DMA source
+contention defers the
 DMA read; DMA destination contention holds the same native ticket until the
 write completes. Synthetic tests verify both directions, global wait and an
 independent program fetch. Atomic bit and peripheral reset effects, captured
