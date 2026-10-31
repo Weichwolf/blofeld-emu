@@ -20,7 +20,11 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           inputs directly; format2 rejects ignored old
                                           controls and supports digital POR from tick0.
                                           Standalone configuration omits the legacy
-                                          core; older test harnesses and transitional
+                                          core. The original-MIDI ROM generator also
+                                          links only parser/zlib and retains its full
+                                          private input hash; independent fields and
+                                          bounded image construction are checked.
+                                          Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).
 Own-core AA6 RAM bit branches     partial  own_dsp_ram_bit checks 57,280 cases/profile:

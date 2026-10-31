@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Isolated integration targets; this does not provide the standalone device.
 find_package(Git REQUIRED)
+if(BUILD_TESTING)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+endif()
 include(cmake/Zlib.cmake)
 include(cmake/OwnDsp.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 include(cmake/OwnDspComponents.cmake)
+include(cmake/ReferenceRomFixtures.cmake)
 add_custom_target(blofeld-own-dsp-components ALL DEPENDS blofeld_own_dsp_io
   blofeld_dsp_branch_decode blofeld_dsp_control_decode blofeld_dsp_address_decode
   blofeld_dsp_peripheral_decode blofeld_own_dsp_fetch)

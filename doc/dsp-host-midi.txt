@@ -65,7 +65,10 @@ retired native effect PCs, not speculative fetches or successor register PCs.
 The authored caller finishes copying the complete records before tick4000000.
 The offline correctness harness budgets90 host seconds per native branch, with
 separate allowance for all replay branches; this is not a real-time claim.
-The private generator still uses the legacy assembler pending fixture migration.
+The private generator emits authored instruction words without a DSP executor
+or assembler dependency. Its complete28584-byte image retains the reference
+hash pinned by reference_midi_rom_fixture; no original program data is published.
+Other legacy component fixtures still need migration.
 
 This is an original-component/reference-caller path, not complete original MCU/DSP
 boot, physical DIN/USB wiring, allocated notes/voice/audio, calibrated timing or

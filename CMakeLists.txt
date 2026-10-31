@@ -89,6 +89,7 @@ set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 include(cmake/Hc12Spec.cmake)
 include(cmake/Hcs08Spec.cmake)
 include(cmake/OwnDspComponents.cmake)
+include(cmake/ReferenceRomFixtures.cmake)
 add_library(blofeld_hcs08 src/keyboard/hcs08.cpp src/keyboard/hcs08_interrupts.cpp src/keyboard/hcs08_registers.cpp src/keyboard/hcs08_ccr.cpp)
 target_include_directories(blofeld_hcs08 PUBLIC src)
 target_link_libraries(blofeld_hcs08 PUBLIC blofeld_firmware PRIVATE blofeld_sleigh)
@@ -1698,9 +1699,6 @@ if(BUILD_TESTING)
     test/dsp_external_esai.cpp test/mcu_dsp_external_events.cpp)
   target_link_libraries(blofeld-dsp-external-events-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
   add_test(NAME dsp_external_events COMMAND blofeld-dsp-external-events-test)
-  add_executable(blofeld-reference-original-midi-rom test/reference_original_midi_rom.cpp)
-  target_link_libraries(blofeld-reference-original-midi-rom PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
   add_test(NAME reference_original_midi_cli COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_original_midi_cli.py"
     $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-original-midi-rom>
@@ -3283,7 +3281,8 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-mcu-dsp-runtime-test blofeld-own-dsp-timeline-checkpoint-test
+  DEPENDS blofeld-dsp-rom-program-test blofeld-reference-original-midi-rom
+    blofeld-mcu-dsp-runtime-test blofeld-own-dsp-timeline-checkpoint-test
     blofeld-own-dsp-ram-bit-test blofeld-own-dsp-ram-bit-dma-test
     blofeld-own-dsp-fetch-test blofeld-own-dsp-clock-test
     blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test

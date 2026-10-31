@@ -1,19 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "dsp/dsp_bus.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "common/bus.hpp"
+#include "dsp_rom_program.hpp"
 #include "firmware/firmware.hpp"
 
 #include <array>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <string>
 #include <vector>
 
 namespace {
-using blofeld::test::require;
+using Program = blofeld::test::DspRomProgram;
+using Register = blofeld::test::DspRomRegister;
+
+void require(const bool condition, const char *message) {
+  if (!condition) { throw blofeld::Fault(message); }
+}
+
+constexpr auto x0 = Register::x0;
+constexpr auto x1 = Register::x1;
+constexpr auto r0 = Register::r0;
+constexpr auto r1 = Register::r1;
+constexpr auto r6 = Register::r6;
+constexpr auto sr = Register::sr;
+constexpr auto omr = Register::omr;
 constexpr unsigned producer = 0x2cd9;
 constexpr unsigned vector_address = 0x54;
 constexpr unsigned parameter_program = 0x808;
@@ -21,7 +32,7 @@ constexpr unsigned parser_program = 0x967;
 constexpr unsigned parser_entry = 0xc53;
 constexpr unsigned physical_alias = 0xf000;
 constexpr unsigned memory_mode = 0x600085;
-constexpr unsigned data_base = blofeld::test::boot + 0x1000;
+constexpr unsigned data_base = Program::boot + 0x1000;
 constexpr unsigned word_mask = 0xffffff;
 constexpr unsigned field = 0xab6;
 constexpr unsigned seed = 0x246813;
@@ -35,19 +46,31 @@ constexpr unsigned consumer_cursor = 0x3c;
 constexpr unsigned midi_channel = 0x744;
 constexpr unsigned midi_clock = 0x750;
 
-void initialize_registers(blofeld::test::DspProgram &program) {
-  program.immediate("sr", masked_status);
+void initialize_registers(Program &program) {
+  program.immediate(sr, masked_status);
   for (unsigned index = 0; index < 8; ++index) {
-    program.immediate("m" + std::to_string(index), word_mask);
-    program.immediate("n" + std::to_string(index), 0);
-    program.immediate("r" + std::to_string(index), 0);
+    constexpr unsigned modifier_base = 32;
+    constexpr unsigned offset_base = 24;
+    constexpr unsigned address_base = 16;
+    program.immediate(static_cast<Register>(modifier_base + index), word_mask);
+    program.immediate(static_cast<Register>(offset_base + index), 0);
+    program.immediate(static_cast<Register>(address_base + index), 0);
   }
-  for (const auto *const reg : {"a0", "a1", "a2", "b0", "b1", "b2", "x0", "x1", "y0", "y1"}) {
-    program.immediate(reg, 0);
-  }
+  // FM table12-14: A0/A1/A2, B0/B1/B2, X0/X1/Y0/Y1.
+  constexpr std::array scalar_registers{Register::a0,
+                                        Register::a1,
+                                        Register::a2,
+                                        Register::b0,
+                                        Register::b1,
+                                        Register::b2,
+                                        Register::x0,
+                                        Register::x1,
+                                        Register::y0,
+                                        Register::y1};
+  for (const auto reg : scalar_registers) { program.immediate(reg, 0); }
 }
 
-void load_records(blofeld::test::DspProgram &program,
+void load_records(Program &program,
                   const blofeld::Firmware &firmware,
                   std::vector<std::uint32_t> &data) {
   unsigned programs = 0;
@@ -65,21 +88,27 @@ void load_records(blofeld::test::DspProgram &program,
     require(!record.words.empty(), "Selected original component is nonempty");
     const bool alias = record.space == 0 && record.address == producer;
     const auto address = record.address + (alias ? physical_alias : 0U);
-    program.immediate("r0", data_base + static_cast<unsigned>(data.size()));
-    program.immediate("r1", address);
-    program.immediate("x1", static_cast<unsigned>(record.words.size()));
+    program.immediate(r0, data_base + static_cast<unsigned>(data.size()));
+    program.immediate(r1, address);
+    program.immediate(x1, static_cast<unsigned>(record.words.size()));
     const auto start = program.pc();
-    // The assembler takes the label after both copy instructions, not the LA word.
-    program.emit("do x1," + blofeld::test::number(start + 4));
-    program.emit("move p:(r0)+,x0");
-    char space = 'p';
+    // DO's extension is LA, the final loop word; the source label follows it.
+    constexpr unsigned do_x1 = 0x06c500;
+    constexpr unsigned p_r0_post_to_x0 = 0x07d884;
+    constexpr unsigned x0_to_x_r1_post = 0x445900;
+    constexpr unsigned x0_to_y_r1_post = 0x4c5900;
+    constexpr unsigned x0_to_p_r1_post = 0x075984;
+    program.word(do_x1);
+    program.word(start + 3);
+    program.word(p_r0_post_to_x0);
+    auto destination = x0_to_p_r1_post;
     if (alias || record.space == 1) {
-      space = 'x';
+      destination = x0_to_x_r1_post;
     } else if (record.space == 2) {
-      space = 'y';
+      destination = x0_to_y_r1_post;
     }
-    program.emit(std::string("move x0,") + space + ":(r1)+");
-    require(program.pc() == start + 4, "Own native copy loop has the declared four words");
+    program.word(destination);
+    require(program.pc() == start + 4, "Authored native copy loop has the declared four words");
     data.insert(data.end(), record.words.begin(), record.words.end());
   }
   require(programs == 4, "Four complete original producer/vector/parser components selected");
@@ -90,68 +119,67 @@ struct Store {
   unsigned value;
 };
 
-void put(blofeld::test::DspProgram &program, const Store store) {
-  program.immediate("x0", store.value);
-  program.emit("move x0,x:>" + blofeld::test::number(store.address));
+void put(Program &program, const Store store) {
+  program.immediate(x0, store.value);
+  constexpr unsigned store_x0_absolute = 0x447000;
+  program.word(store_x0_absolute); // MOVE X0,X:ea, absolute extension.
+  program.word(store.address);
 }
 
-void caller(blofeld::test::DspProgram &program) {
+void caller(Program &program) {
   initialize_registers(program);
-  program.immediate("omr", memory_mode);
-  for (unsigned index = 0; index < 3; ++index) { program.emit("nop"); }
+  program.immediate(omr, memory_mode);
+  for (unsigned index = 0; index < 3; ++index) { program.word(0); }
   put(program, {.address = producer_cursor, .value = ring_base});
   put(program, {.address = consumer_cursor, .value = ring_base});
   put(program, {.address = 6, .value = 0});
   put(program, {.address = midi_channel, .value = 0});
   put(program, {.address = midi_clock, .value = 1});
   put(program, {.address = field, .value = seed});
-  program.immediate("r1", ring_base);
-  program.immediate("x0", 0);
-  program.emit("rep #" + std::to_string(ring_words));
-  program.emit("move x0,x:(r1)+");
-  program.immediate("sr", ordinary_status);
-  program.emit("movep #>0,x:<<$ffff90");
-  program.emit("movep #>$200,x:<<$fffffe");
-  program.immediate("r6", producer);
-  program.emit("jsr (r6)");
+  program.immediate(r1, ring_base);
+  program.immediate(x0, 0);
+  constexpr unsigned repeat_immediate = 0x0600a0;
+  constexpr unsigned x0_to_x_r1_post = 0x445900;
+  program.word(repeat_immediate | (ring_words << 8U));
+  program.word(x0_to_x_r1_post);
+  program.immediate(sr, ordinary_status);
+  constexpr std::array shi_reset{0x07f410U, 0U};
+  constexpr std::array timer_priority{0x08f4beU, 0x200U};
+  program.append(shi_reset);
+  program.append(timer_priority);
+  program.immediate(r6, producer);
+  constexpr unsigned jsr_r6 = 0x0be680;
+  program.word(jsr_r6);
   const auto loop = program.pc();
-  program.immediate("r6", parser_entry);
-  program.emit("jsr (r6)");
-  program.immediate("r6", loop);
-  program.emit("move x:>" + blofeld::test::number(field) + ",a");
-  program.emit("tst a");
-  program.emit("jne (r6)");
+  program.immediate(r6, parser_entry);
+  program.word(jsr_r6);
+  program.immediate(r6, loop);
+  constexpr std::array read_field{0x56f000U, field}; // MOVE X:ea,A.
+  constexpr unsigned test_a = 0x200003;
+  constexpr unsigned jne_r6 = 0x0ae6a2;
+  program.append(read_field);
+  program.word(test_a);
+  program.word(jne_r6);
   // Only the guest's observed original center-pitch result enables the marker.
-  program.emit("movep #>$89,x:<<$ffff91");
+  constexpr std::array request_enabled{0x07f411U, 0x89U};
+  program.append(request_enabled);
   program.word(absolute_jump);
   program.word(loop);
 }
 
 void generate(const blofeld::Firmware &firmware, const std::filesystem::path &path) {
-  blofeld::test::DspProgram program;
+  Program program;
   initialize_registers(program);
   std::vector<std::uint32_t> data;
   load_records(program, firmware, data);
   caller(program);
-  require(program.pc() < data_base, "Own caller fits before private original data");
+  require(program.pc() < data_base, "Authored caller fits before private original data");
   while (program.pc() < data_base) { program.word(0); }
   for (const auto value : data) { program.word(value); }
-  require(program.pc() - blofeld::test::boot <= 65536, "Private reference ROM input bound");
-  blofeld::DspBus bus;
-  program.install(bus);
-  std::ofstream stream(path, std::ios::binary);
-  stream.exceptions(std::ios::failbit | std::ios::badbit);
-  for (unsigned address = blofeld::test::boot; address < program.pc(); ++address) {
-    const auto word = bus.inspect_program(address);
-    constexpr unsigned high_shift = 16;
-    const std::array bytes{static_cast<char>(word >> high_shift),
-                           static_cast<char>(word >> 8U),
-                           static_cast<char>(word)};
-    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-  }
-  stream.close();
+  require(program.pc() - Program::boot <= 65536, "Private reference ROM input bound");
+  blofeld::test::write_dsp_rom(path, program);
   std::cout << "private-original-data-words=" << data.size()
-            << " ROM-words=" << program.pc() - blofeld::test::boot << '\n';
+            << " ROM-words=" << program.pc() - Program::boot << '\n';
 }
 }
 

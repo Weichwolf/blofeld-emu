@@ -738,6 +738,25 @@ The runtime and frontend checkpoint tests are required by the quality target.
   BLOFELD_TEST_BINARY=$PWD/build/strict/blofeld-headless python3 -m unittest discover -s test -p test_reference_cli.py -v
   ctest --test-dir build/strict --output-on-failure -R '^(mcu_dsp_runtime|reference_shi_cli|reference_echo_cli)$'
 
+Original MIDI ROM fixture
+The private MIDI loader generator now links only the firmware parser and zlib.
+It emits documented full-word MOVE/MOVEC, DO/copy, REP, branch and MOVEP words;
+the selected original records remain unchanged local inputs. A typed bounded
+word builder refuses unsupported fixture selectors, wide literals and partial
+instructions at the65536-word limit.38 literal immediate encodings follow the
+manual fields and independently assembled authored snippets. The full28584-byte
+ROM is byte-identical to the prior qualified input, with only its hash in tests.
+
+Both normal and isolated configurations build the generator without a DSP
+executor or assembler link. A fresh isolated ASan/UBSan build with an invalid
+legacy SDK environment contains no foreign-core/AsmJit targets. Actual zlib
+hooks, compile flags and generator symbols are checked locally. The unchanged
+ROM and headless identities allow reuse of the original-MIDI runtime evidence;
+this does not qualify remaining legacy fixtures or complete instrument boot.
+
+  cmake --build build/strict --target blofeld-reference-original-midi-rom blofeld-dsp-rom-program-test -j2
+  ctest --test-dir build/strict -R '^(dsp_rom_program|reference_midi_rom_fixture)$' --output-on-failure
+
 Standalone dependency closure
 With BUILD_TESTING=OFF and BLOFELD_FUZZING=OFF, CMake does not configure the
 legacy source, its patches/AsmJit or either legacy execution/scheduler library.
