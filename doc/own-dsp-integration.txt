@@ -176,6 +176,17 @@ Conditional board contracts, each separately controlled and recorded:
   14,974 instructions. Source RAM, erased writable target, upper-bit policy,
   status hypotheses and RE delay remain explicit fixture assumptions. This
   component result does not establish full firmware update or hardware timing.
+  At the first page of a known writable block, the same original entry also
+  performs the actual block erase before program and compare. In both extreme
+  unused-status cases, the other 31 pages become erased, a checked neighboring
+  block cell remains unchanged, and all 528 programmed/read bytes match the
+  source. Reference erase/program durations are independently checked.
+  A separate single-cell program-inhibit case reaches real NAND failure status
+  and changes exactly one readback bit. The original compare returns a raw
+  mismatch count of 010000 while its Z flag is set by the final matching word.
+  These are isolated own-core component runs with explicit initial cell state,
+  pulse model, GPIO/timing and unused-status hypotheses, not a complete update
+  or evidence of physical flash safety.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -234,6 +245,8 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-status-pads/{runtime,audit}.json
   doc/local/own-core-nand-status-variants/{runtime,audit}.json
   doc/local/own-core-nand-program-compare/{runtime,audit}.json
+  doc/local/own-core-nand-erase-program-compare/{runtime,audit}.json
+  doc/local/own-core-nand-program-failure/{runtime,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
