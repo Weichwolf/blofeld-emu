@@ -211,6 +211,18 @@ and update safety remain unqualified. Detailed inputs, traces and audits:
   doc/local/own-core-timeline-shi-reset/{runtime3,audit,frozen-build}.json
   doc/local/own-core-timeline-esai-cold/{runtime3,audit,frozen-build}.json
 
+A separately logged disconnected-register decoder candidate admits only the
+actual native write strobe at documented reserved internal I/O slots. Assigned
+but unimplemented IDR/patch/EFCOP registers and reserved reads stay strict. Its
+256-destination controls log236 writes across118 reserved slots. In the coupled
+conditional run, one reserved native write takes this path; original execution
+then reaches an ESAI generated-clock timing/input refusal during a DMA/F2 cycle.
+All prior NAND values/timestamps still match;43 frozen artifacts and all runtime
+references remain unchanged. No source clock or read result is supplied. This
+is a decoder hypothesis, not physical reserved-access or audio validation.
+Reproducer, qualification and evidence: dsp-io-map.txt;
+  doc/local/own-core-timeline-io-absent/{runtime3,audit,frozen-build}.json
+
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference

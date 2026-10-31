@@ -50,5 +50,17 @@
     "audio_or_full_boot_proven": false,
     "runtime_log_sha256": "a707ca7eaa0a76b0a6c60023657a8eb525024bdb1d653a18d2aedbdea169db24",
     "local_evidence": "doc/local/own-core-timeline-esai-cold/{runtime3,audit,frozen-build}.json"
+  },
+  "reserved_io_decoder_runtime": {
+    "qualification": "Additional explicit disconnected internal reserved-register write-latch hypothesis; no read values or hardware validation.",
+    "matched_native_PDRF_values": 56496,
+    "prior_nand_output_values_and_timestamps_unchanged": true,
+    "logged_reserved_native_writes": 1,
+    "next_refusal": "Missing ESAI generated-clock reset-edge timing/input in a DMA/F2 cycle",
+    "frozen_build_artifacts": 43,
+    "runtime_integrity_verified": true,
+    "audio_or_full_boot_proven": false,
+    "runtime_log_sha256": "ea06a1768b7234a0701a47b48e5348ea294f96b4c7ed45e4e7b02ab81d9957e2",
+    "local_evidence": "doc/local/own-core-timeline-io-absent/{runtime3,audit,frozen-build}.json"
   }
 }

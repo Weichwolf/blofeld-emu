@@ -20,8 +20,12 @@ DSP internal I/O selection        partial  All256 derivative slots distinguish a
                                           Independent manual rows and strict failure
                                           controls pass under ASan/UBSan; assigned
                                           IDR/patch/EFCOP remain unsupported. Reserved
-                                          access effects and complete boot remain open
-                                          (dsp-io-map.txt).
+                                          access effects remain unqualified. A logged
+                                          disconnected-write candidate passes one native
+                                          reserved write, reaching missing ESAI timing
+                                          in a DMA/F2 cycle with unchanged preceding
+                                          NAND values/timestamps. Complete boot/audio
+                                          remain open (dsp-io-map.txt).
 ESAI cold initialization         partial  Explicit cold-unclocked reference contract
                                           supplements the unchanged reset-required
                                           default. Both maps/orders, missing clocks,

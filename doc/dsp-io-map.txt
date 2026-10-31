@@ -25,3 +25,25 @@ Independent per-row expectations cover all256 slots, map boundaries, program-
 space separation, assigned-but-unsupported registers and retained strict bus
 behavior. Local parsing separately compares all256 primary table entries with
 those expectations. No manufacturer instruction bytes are in these tests.
+
+Explicit disconnected-register experiment
+A local candidate models every documented reserved slot as having no selected
+write latch, with mandatory native address/word/PC event records. It never
+returns read data, redirects to another register or accepts active-DMA overlap.
+Directed ASan/UBSan controls cover both payload extremes at all256 destinations,
+236 logged reserved writes, program-space exclusion, unsupported values, DMA
+refusal and retained known neighboring registers. The candidate and its tests
+pass their strict compiler/clang-tidy checks; they are not the default device map.
+
+In a coupled original reset run with the prior SHI/cold-ESAI/conditional-NAND
+hypotheses, one actual native reserved write selects this candidate. The original
+runtime continues to an ESAI generated-clock timing refusal during a DMA/F2
+cycle. No audio source, clock phase, read value or firmware patch is supplied.
+All56,496 actual PDRF values and prior NAND output timestamps match the previous
+candidate. The binary, references and43 frozen artifacts remain unchanged.
+This narrows the next clock/scheduler task; it does not establish physical
+reserved-address semantics, complete boot, audio or update safety. The manual's
+reserved label and the generic simulator's acceptance are insufficient alone.
+Local reproducer and receipts:
+  doc/local/own-core-timeline-io-absent/{build,relink,test-build,run3,audit}.py
+  doc/local/own-core-timeline-io-absent/{runtime3,audit,frozen-build}.json
