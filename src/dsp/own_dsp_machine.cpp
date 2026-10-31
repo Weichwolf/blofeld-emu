@@ -5,6 +5,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_io.hpp"
@@ -49,6 +50,15 @@ DspSpace native_space(const dsp56300::Space space) {
   }
 }
 
+bool readonly_short_ram_branch(const dsp56300::PendingInstruction &pending) {
+  if (!pending.opcode || pending.effect.kind != dsp56300::EffectKind::read) { return false; }
+  const auto form = decode_peripheral_read(*pending.opcode);
+  constexpr unsigned aa6_words = 64;
+  return form && form->relative && form->bit && form->words == 2 &&
+         form->target.address < aa6_words && form->target.address == pending.effect.address &&
+         form->target.space == native_space(pending.effect.space);
+}
+
 void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
   const auto effect = pending.effect;
   if (effect.kind != dsp56300::EffectKind::read && effect.kind != dsp56300::EffectKind::write) {
@@ -58,6 +68,10 @@ void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
   if (shape && shape->kind != dsp56300::InstructionKind::bit_memory &&
       shape->kind != dsp56300::InstructionKind::bit_jump &&
       shape->kind != dsp56300::InstructionKind::bit_branch) {
+    return;
+  }
+  if (shape && shape->kind == dsp56300::InstructionKind::bit_branch &&
+      readonly_short_ram_branch(pending)) {
     return;
   }
   constexpr std::array names{"P:", "X:", "Y:"};

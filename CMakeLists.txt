@@ -3278,7 +3278,8 @@ if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
   DEPENDS blofeld-mcu-dsp-runtime-test blofeld-own-dsp-timeline-checkpoint-test
-    blofeld-own-dsp-ram-bit-test
+    blofeld-own-dsp-ram-bit-test blofeld-own-dsp-ram-bit-dma-test
+    blofeld-own-dsp-fetch-test blofeld-own-dsp-clock-test
     blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test
     blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test
     blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test

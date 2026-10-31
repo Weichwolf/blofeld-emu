@@ -17,15 +17,19 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           omits the legacy core; older test harnesses
                                           and transitional names still need removal
                                           (own-dsp-integration.txt).
-Own-core AA6 RAM bit branches     partial  own_dsp_ram_bit checks57,280 cases/profile:
-                                          independent bit truth,signed PC,all CCR
-                                          corners,whole registers/stack,one actual RAM
-                                          read and manual base cost.40 same-owner and
+Own-core AA6 RAM bit branches     partial  own_dsp_ram_bit checks 57,280 cases/profile:
+                                          independent bit truth, signed PC,all CCR
+                                          corners, whole registers/stack,one actual RAM
+                                          read and manual base cost. 40 same-owner and
                                           40 fresh-owner effect-cut restores pass under
-                                          ASan/UBSan and TSan,without the foreign core.
+                                          ASan/UBSan and TSan, without the foreign core.
                                           Pure operand fields reject reserved bits and
-                                          wide words. DMA/pipeline timing and full
-                                          original instrument operation remain open.
+                                          wide words. 432 DMA/F2 windows with 264
+                                          restores/clones and 48 automatic branch/NOP
+                                          cases pass both sanitizers. RMW/EA guards
+                                          remain. This is reference-cycle evidence;
+                                          calibrated timing and full original
+                                          instrument operation remain open.
 ESAI known-input cold setup       partial  Explicit pre-bit reference allows held inputs
                                           and preserves counted HCKT edges while format
                                           programming remains before the first bit edge.

@@ -1528,6 +1528,115 @@ void changed_memory_context() {
           "Real OMR retirement must discard the stale F1 and reset its context");
 }
 
+struct RamBranch {
+  unsigned address;
+  unsigned bit;
+  Word displacement;
+  bool y;
+  bool set;
+  bool level;
+};
+
+void automatic_ram_branch(const RamBranch sample) {
+  constexpr Word normal_omr = 0x300;
+  constexpr Word seeded_status = 0xc003ff;
+  constexpr Word movec_omr = 0x05f43a;
+  constexpr Word aa6 = 0x0c8080;
+  constexpr Word y_field = 0x40;
+  constexpr Word set_field = 0x20;
+  constexpr Word source_pattern = 0xa55aa5;
+  constexpr unsigned padding = 64;
+  constexpr unsigned branch_cost = 5;
+  const Word opcode = aa6 | (sample.address << 8U) | (sample.y ? y_field : 0U) |
+                      (sample.set ? set_field : 0U) | sample.bit;
+  const Word mask = 1U << sample.bit;
+  const Word data = (source_pattern & ~mask) | (sample.level ? mask : 0U);
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 6> setup{
+      movec_omr, normal_omr, movec_sr, seeded_status, jump_absolute, ram_entry};
+  machine.bus().install_rom({.start = boot_entry, .words = setup});
+  reset(machine);
+  for (unsigned instruction = 0; instruction < 3; ++instruction) {
+    static_cast<void>(machine.begin_fetch());
+    retire(machine);
+  }
+  const auto before = machine.cpu().registers();
+  require(before.pc == ram_entry && before.sr == seeded_status && before.omr == normal_omr,
+          "Actual native setup establishes the automatic AA6 source context");
+  for (unsigned pc = ram_entry - padding; pc < ram_entry + padding; ++pc) {
+    machine.bus().write({.address = pc});
+  }
+  machine.bus().write({.address = ram_entry, .value = opcode});
+  machine.bus().write({.address = ram_entry + 1, .value = sample.displacement});
+  const auto space = sample.y ? DspSpace::y : DspSpace::x;
+  const auto other = sample.y ? DspSpace::x : DspSpace::y;
+  machine.bus().write({.space = space, .address = sample.address, .value = data});
+  machine.bus().write({.space = other, .address = sample.address, .value = data ^ mask});
+  // Active real DMA,with a known low external request,does not invent a transfer.
+  constexpr Word source_register = 0xffffef;
+  constexpr Word destination_register = 0xffffee;
+  constexpr Word counter_register = 0xffffed;
+  constexpr Word control_register = 0xffffec;
+  constexpr Word word_copy = 0x880244;
+  constexpr Word dma_source = 0x800;
+  constexpr Word dma_destination = 0x900;
+  machine.bus().write({.space = DspSpace::x, .address = source_register, .value = dma_source});
+  machine.bus().write(
+      {.space = DspSpace::x, .address = destination_register, .value = dma_destination});
+  machine.bus().write({.space = DspSpace::x, .address = counter_register});
+  machine.bus().write({.space = DspSpace::x, .address = control_register, .value = word_copy});
+  const auto initial = machine.cpu().progress();
+  OwnDspFetch fetch(machine);
+  unsigned retired = 0;
+  constexpr unsigned cycle_bound = 32;
+  for (unsigned cycle = 0; cycle < cycle_bound && retired < 2; ++cycle) {
+    const auto result = fetch.advance_dma_automatic(
+        dma_input(cycle),
+        OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts);
+    require(!result.dma.phase && !result.dma.word && !result.dma.core_stall,
+            "A quiet enabled channel cannot alter the genuine automatic branch execution");
+    if (!result.native || !result.native->retired) { continue; }
+    require(result.native->fault.kind == FaultKind::none, "Automatic native AA6/NOP failed");
+    auto expected = before;
+    expected.pc =
+        sample.level == sample.set ? (ram_entry + sample.displacement) & word_mask : ram_entry + 2;
+    expected.pc += retired;
+    auto progress = initial;
+    progress.instructions += retired + 1;
+    progress.estimated_cycles += branch_cost + retired;
+    require(machine.cpu().registers() == expected && machine.cpu().progress() == progress,
+            "Automatic AA6 and its selected real NOP obey independent CPU/CCR/stack/counter truth");
+    ++retired;
+  }
+  require(retired == 2 && machine.bus().read({.space = space, .address = sample.address}) == data &&
+              machine.bus().read({.space = other, .address = sample.address}) == (data ^ mask),
+          "Both actual retirements must preserve the RAM source and opposite-bank guard");
+}
+
+void automatic_ram_branches() {
+  constexpr std::array endpoints{std::array{0U, 0U}, std::array{6U, 10U}, std::array{63U, 23U}};
+  constexpr Word forward = 32;
+  constexpr Word backward = word_mask - 31;
+  for (const auto endpoint : endpoints) {
+    for (const bool y : {false, true}) {
+      for (const bool set : {false, true}) {
+        for (const bool level : {false, true}) {
+          for (const auto displacement : {forward, backward}) {
+            automatic_ram_branch({.address = endpoint[0],
+                                  .bit = endpoint[1],
+                                  .displacement = displacement,
+                                  .y = y,
+                                  .set = set,
+                                  .level = level});
+          }
+        }
+      }
+    }
+  }
+}
+
 void invalidation() {
   OwnDspMachine machine(clocks);
   const std::array<Word, 1> rom{0};
@@ -1550,6 +1659,7 @@ void invalidation() {
 
 int main() {
   try {
+    automatic_ram_branches();
     actual_fetch();
     continuous_fetch_pipeline();
     automatic_execution();
