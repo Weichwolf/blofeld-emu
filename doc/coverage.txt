@@ -9,6 +9,15 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Own-core decoder hypothesis        partial  Explicit local no-selected-cell experiment
+                                          completes the original clear: all 184,320
+                                          declared writes accounted; six actual MCU IRQ
+                                          entries handled. Next strict GPIO refusal at
+                                          X:FFFFBE. Twenty decoder controls pass under
+                                          ASan/UBSan; silicon behavior remains unknown.
+                                          Z3 proves current peer constraints nonunique.
+                                          No normal boot/audio or regular-map change
+                                          (own-dsp-integration.txt).
 Own-core reset/execution owner     partial  OwnDspMachine joins bus/core/IRQ ownership
                                           with held mode5/PINIT-low reset. own_dsp_reset
                                           passes under ASan/UBSan: literal reset values,

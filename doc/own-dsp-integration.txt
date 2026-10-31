@@ -60,6 +60,24 @@ base cycles for peripheral advance. Those are uncalibrated hypotheses. The
 reserved write's silicon response, physical reset/wiring, complete ROM and
 reset-to-instrument operation remain unqualified. No refusal was bypassed.
 
+Explicit local decoder hypothesis:
+A separately declared no-selected-cell model admits writes to reserved/ROM
+classes in the low 128K X/Y window. Reads, real RAM, other address ranges and
+peripherals retain strict behavior; every hypothesis write records address,
+operation, PC, value and decoder class. Twenty manual-boundary/control cases
+pass under ASan/UBSan, including strict default refusal and unchanged ROM data.
+With unchanged original firmware and decoder, the corrected diagnostic owner
+handles six genuine MCU interrupt entries and completes the original long clear.
+Its trace contains exactly the expected 184,320 distinct hypothesis writes;
+R4 reaches 020000. The next refusal is the reserved-one GPIO direction write at
+X:FFFFBE, value 00FF00, DSP PC 000073. No hardware response is established by
+this conditional execution. The regular memory map remains strict and full
+instrument operation remains open. Local evidence and hashes:
+  doc/local/own-core-memory-decoder/irq-boundary/{runtime,audit}.json
+Z3 also finds both direct and alternative bijective peer maps satisfying the
+bounded software constraints. These constraints do not uniquely recover the
+physical nets; the query and models remain in that directory as peer-ambiguity.*.
+
 Validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
   ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset)$' --output-on-failure
