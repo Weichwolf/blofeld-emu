@@ -4315,6 +4315,12 @@ endif()
 
 # Parallel internal TFR and two-word absolute X/Y reads.
 if(BUILD_TESTING)
+  add_executable(blofeld-parallel-partial-store-test test/dsp_parallel_partial_store_test.cpp)
+  target_link_libraries(blofeld-parallel-partial-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_parallel_partial_store COMMAND blofeld-parallel-partial-store-test)
+  set_tests_properties(dsp_parallel_partial_store PROPERTIES TIMEOUT 300)
+  add_dependencies(quality blofeld-parallel-partial-store-test)
+
   add_executable(blofeld-compatibility-mode-test test/dsp_compatibility_mode_test.cpp)
   target_include_directories(blofeld-compatibility-mode-test PRIVATE src)
   target_link_libraries(blofeld-compatibility-mode-test PRIVATE blofeld_quality)

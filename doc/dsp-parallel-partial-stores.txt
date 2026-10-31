@@ -1,0 +1,34 @@
+Parallel TFR and raw accumulator stores
+
+  cmake --build --preset strict --target blofeld-parallel-partial-store-test
+  ctest --test-dir build/strict -R '^dsp_parallel_partial_store$' --output-on-failure
+
+Internal TFR may accompany A0/A1/A2/B0/B1/B2 -> X/Y:(Rn),
+(Rn)+, (Rn)-, (Rn)+Nn or (Rn)-Nn. FM13-118/122/178 and Tables12-13/14
+define the independent move/source encodings. A0/A1/B0/B1 transfer raw24 bits;
+A2/B2 sign-extend their8 bits. These sources bypass full-accumulator limiting
+and scaling. TFR transfers the opposite accumulator or sign-extended
+X0/X1/Y0/Y1 into full A/B, clearing its low part for a data-register source.
+TFR preserves CCR and uses the old source when its destination also supplies
+the parallel memory write.
+
+Native AG1/AG2 owns R/N/M calculation and pointer publication; E1 performs
+the actual old-part write and E2 retires TFR. FM3.5.2.1/A.2.3 source interlocks
+use only the MOVE source: an adjacent writer of that accumulator adds one
+period. ALU-only opposite-accumulator dependencies retain existing forwarding.
+The reference policy holds F1/F2 and younger stages during that period while
+the older E2 retires. This is not an observed physical fetch trace.
+
+Per sanitizer profile,20080 own windows check complete CPU/CCR/stack/counters,
+exact elapsed periods,F2/data footprint,old-value aliases and untouched cells.
+They cover all six parts,five TFR sources,both destinations/spaces,three scaling
+modes,five addressing modes,all eight Rn and256-word modulo wrap. Ten preceding
+partial/full/ADD writers use0/1/2 gaps. Fifty cuts restore and clone into fresh
+owners; backing program replacement after Decode cannot change captured words.
+Thirty classification guards retain unsupported neighboring forms and REP.
+
+This predicate does not widen standalone partial stores or REP bodies.
+Pre-update/extended addressing,other parallel ALU forms and reserved scaling
+retain separate refusals. Automatic SC=1 and physical timing remain unqualified.
+These are instruction-model checks,not complete original boot,MIDI/audio,
+update/recovery or hardware equivalence.

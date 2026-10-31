@@ -123,7 +123,7 @@ std::uint8_t memory_source_dependency(const DspInstructionDependency instruction
   Type second = dsp56k::Invalid;
   if (opcodes.getInstructionTypes(consumer.value, first, second) == 0) { return 0; }
   const auto move = first == dsp56k::Movel_ea ? first : second;
-  if (move != dsp56k::Movel_ea ||
+  if ((!parallel_partial_tfr_store(consumer.value) && move != dsp56k::Movel_ea) ||
       dsp56k::getFieldValue(move, dsp56k::Field_W, consumer.value) != 0) {
     return 0;
   }

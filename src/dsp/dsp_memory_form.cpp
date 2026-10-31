@@ -240,7 +240,8 @@ std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode)
   const auto access = operation(type, dsp56k::Field_W, opcode);
   if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read) &&
       !data_offset_scalar_store(opcode) && !full_accumulator_scalar_store(opcode) &&
-      !partial_accumulator_scalar_store(opcode) && !accumulator_scalar_load(opcode)) {
+      !partial_accumulator_scalar_store(opcode) && !parallel_partial_tfr_store(opcode) &&
+      !accumulator_scalar_load(opcode)) {
     return std::nullopt;
   }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
@@ -334,6 +335,23 @@ bool partial_accumulator_scalar_store(const std::uint32_t opcode) {
   constexpr unsigned full_accumulator_begin = 6;
   return (opcode & source_mask) == accumulator_store &&
          ((opcode >> source_shift) & source_bits) < full_accumulator_begin;
+}
+
+bool parallel_partial_tfr_store(const std::uint32_t opcode) {
+  constexpr unsigned word_mask = 0xffffff;
+  if (opcode > word_mask) { return false; }
+  static const dsp56k::Opcodes opcodes;
+  auto first = dsp56k::Invalid;
+  auto second = dsp56k::Invalid;
+  if (opcodes.getInstructionTypes(opcode, first, second) == 0 || first != dsp56k::Tfr ||
+      (second != dsp56k::Movex_ea && second != dsp56k::Movey_ea)) {
+    return false;
+  }
+  const auto reg = dsp56k::getRegister(second, dsp56k::Field_ddd, opcode);
+  const bool partial = reg == Reg::A0 || reg == Reg::B0 || reg == Reg::A1 || reg == Reg::B1 ||
+                       reg == Reg::A2 || reg == Reg::B2;
+  return partial && dsp56k::getFieldValue(second, dsp56k::Field_W, opcode) == 0 &&
+         dsp56k::getFieldValue(second, dsp56k::Field_MMM, opcode) <= 4;
 }
 
 bool data_offset_scalar_store(const std::uint32_t opcode) {

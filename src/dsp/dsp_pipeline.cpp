@@ -60,7 +60,8 @@ void check_accumulator_context(const DspMachine &machine,
        full_accumulator_long_store(execute->value) ||
        full_accumulator_scalar_store(execute->value) ||
        full_accumulator_peripheral_store(execute->value) ||
-       partial_accumulator_scalar_store(execute->value)) &&
+       partial_accumulator_scalar_store(execute->value) ||
+       parallel_partial_tfr_store(execute->value)) &&
       (cpu.sr & scaling_mask) == scaling_mask) {
     throw Fault("Unqualified accumulator MOVE scaling read P:" + hex(execute->address, 6) +
                 " pc=" + hex(cpu.pc, 6) + " sr=" + hex(cpu.sr, 6) + " omr=" + hex(cpu.omr, 6));
