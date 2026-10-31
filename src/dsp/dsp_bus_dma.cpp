@@ -28,14 +28,16 @@ bool controller_access(const DspMemoryAccess access) {
 // UM tables3-7/3-8 identify these GPIO data words; their direction/control
 // neighbors are separate registers. APR23 section5.2 locates peripheral
 // contention at the accessed data register, not every active DMA channel.
-bool gpio_data_bit(const DspMemoryAccess access) {
+bool gpio_data_access(const DspMemoryAccess access) {
   constexpr DspAddress port_c{.space = DspSpace::x, .address = 0xffffbd};
   constexpr DspAddress port_e{.space = DspSpace::y, .address = 0xffff9d};
   constexpr DspAddress port_f{.space = DspSpace::y, .address = 0xfffff5};
   constexpr DspAddress port_d{.space = DspSpace::x, .address = 0xffffd5};
   constexpr std::array ports{port_c, port_e, port_f, port_d};
-  return access.phase == DspMemoryPhase::peripheral_bit &&
-         std::ranges::any_of(ports, [&](const auto port) {
+  const bool bit = access.phase == DspMemoryPhase::peripheral_bit;
+  const bool write =
+      access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write;
+  return (bit || write) && std::ranges::any_of(ports, [&](const auto port) {
            return access.target.space == port.space && access.target.address == port.address;
          });
 }
@@ -66,7 +68,7 @@ bool port_f_configuration_write(const DspMemoryAccess access) {
 }
 
 bool independent_peripheral(const DspMemoryAccess access) {
-  return gpio_data_bit(access) || timer_access(access) || port_f_configuration_write(access);
+  return gpio_data_access(access) || timer_access(access) || port_f_configuration_write(access);
 }
 
 DspSpace space(const DspDmaSpace value) {

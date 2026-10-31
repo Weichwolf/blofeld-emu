@@ -71,7 +71,10 @@ void footprints() {
                             .address = port.address},
                  .operation = operation,
                  .phase = DspMemoryPhase::peripheral_bit});
-      rejection({.target = {.space = port.space, .address = port.address}, .operation = operation});
+      rejection({.target = {.space = port.space, .address = port.address},
+                 .operation = operation,
+                 .phase = operation == DspMemoryOperation::write ? DspMemoryPhase::peripheral_sample
+                                                                 : DspMemoryPhase::execute});
     }
     rejection({.target = {.space = port.space, .address = port.address},
                .phase = DspMemoryPhase::peripheral_sample});

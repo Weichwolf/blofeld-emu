@@ -13,7 +13,8 @@ retain visible failures. This is not general external-BIU arbitration.
 
 The resource predicate performs no GPIO transaction. Actual native MOVEP
 stores retain the BCR01ffff gate, upper-bit/pin-function checks and rejection
-state. Other Port-F phases/data-word accesses require separate qualification.
+state. Data-word writes are qualified separately in dsp-gpio-word-dma.txt;
+other Port-F phases remain outside this admission.
 No clocks, padding cycles, register masks or firmware instructions change.
 
 Per ASan/UBSan and separate TSan:104 RAM windows,48 joint cuts/96 suffixes/
@@ -35,3 +36,9 @@ pad timing or physical-device equivalence. Original reset-to-instrument boot,
 live MIDI/audio and complete storage/update/recovery/realtime acceptance remain
 open. The connected original observation retains its separately declared
 partial-ROM, NAND and timing hypotheses; passing these fixtures is not boot.
+
+The conditional original passes the Port-F refusal:973554 DSP instructions
+(+3),2020510 pipeline periods (+4), then an X:ffffbd/PDRC write refuses with
+active DMA. All107 seeded NAND pages still match; no sanitizer findings.
+Terminal:7ed8985de579cbc10079794f800d05a8b4779878dbb288df7acc67ac003b5d0e.
+The CPU store operand, old GPIO/BCR and prospective DMA phase were not captured.

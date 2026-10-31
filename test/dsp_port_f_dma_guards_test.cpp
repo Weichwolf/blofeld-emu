@@ -120,7 +120,7 @@ int main() {
                .operation = DspMemoryOperation::write},
               true);
     }
-    for (const unsigned address : {port_data, port_control + 1, 0xffff9eU, 0xffff9fU}) {
+    for (const unsigned address : {port_data - 1, port_control + 1, 0xffff9eU, 0xffff9fU}) {
       refusal({.target = {.space = DspSpace::y, .address = address},
                .operation = DspMemoryOperation::write});
     }

@@ -1,0 +1,38 @@
+GPIO data-word writes beside internal DMA
+
+  cmake --build --preset strict --target blofeld-gpio-word-dma-test blofeld-gpio-word-dma-guards-test blofeld-gpio-word-dma-accumulators-test blofeld-gpio-word-dma-serial-test
+  ctest --test-dir build/strict -R '^dsp_gpio_word_dma($|_)' --output-on-failure
+
+UM tables3-7/3-8 and APR23sections5.1..5.3 support separate register resources
+for C/X:ffffbd, E/Y:ffff9d, F/Y:fffff5 and D/X:ffffd5 versus the admitted
+internal-memory and ESAI/DAX DMA endpoints. Execute writes join the existing
+data-bit accesses. Whole-word reads, early writes and neighboring C/E/D
+configuration registers remain outside this admission. Other P footprints
+still arbitrate; no global grant or DACT shortcut is introduced.
+
+The predicate performs no transaction. Native MOVEP retains actual operand
+conversion, Port-F BCR validation, reserved-bit/pad checks and rejection state.
+Peripheral-owned data lanes retain their native ignored-write semantics;
+neither ignored writes nor configuration changes invent unknown latch values.
+No firmware, GPIO handler, clock or hardware hypothesis changes.
+
+Per ASan/UBSan and separate TSan:180 immediate windows,96 cuts/192 suffixes/
+96 clones,18 native fault suffixes and46238 assertions;128 full-A/B windows,
+96 cuts/192 suffixes/96 clones and32 limited-word fault suffixes. Independent
+FM13-135/136 literals and whole CPU/CCR/stack expectations check E1 stores and
+E2 retirement. Failed native stores preserve older NOP/DMA effects without
+publishing the failed instruction's limiter flags or fabricated retirement.
+26 footprint guards retain wrong owner/phase/space and P-fetch contention.
+
+32 live serial windows/40 suffixes/20 clones use actual shared DRS22 requests,
+independent ESAI/BMC decoders and C/E/F/D GPIO/peripheral ownership. Unknown
+whole E/D words still fail visibly. Four frames transfer16 words total/eight
+per channel in64-word source rings; these windows do not exercise ring wrap.
+Four new groups and eleven affected regressions pass in each sanitizer profile.
+The actual-MCU closure changes one producer and retains33 provider archives;
+ten Board suffixes and four idle cases/profile preserve complete parent output.
+Qualification:2e94d8e4a9c0c9cabd1f48e76fbf833bb771daf5e21c706376266a83bbacd79b.
+
+These are reference resource/period tests, not calibrated BIU/pad timing.
+Reset-to-instrument operation, live host MIDI/audio, complete storage/update/
+recovery, realtime and physical-device equivalence remain open.

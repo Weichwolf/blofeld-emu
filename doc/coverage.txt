@@ -3387,3 +3387,12 @@ full CPU/CCR/stack, trusted continuations and strict BCR/pin/neighbor failures.
 Twelve ordinary groups/profile and unchanged actual-MCU Board/idle outputs
 support requirements2/3/6. See dsp-port-f-dma.txt; BIU physical timing, other
 Port-F accesses and complete original instrument acceptance remain open.
+
+GPIO data-word/DMA: dsp_gpio_word_dma{,_guards,_accumulators,_serial} checks
+native C/E/F/D execute writes beside internal RAM and actual shared DRS22
+ESAI/DAX phases. Independent literal/whole-state expectations retain native
+GPIO/BCR validation, limited-store faults, older DMA effects and strict unknown
+reads;15 ordinary groups and unchanged actual-MCU Board/idle outputs pass per
+sanitizer profile. See dsp-gpio-word-dma.txt.
+Supports requirements2/3/6; neighboring configuration/read resources, physical
+timing and full original instrument/MIDI/audio acceptance remain open.
