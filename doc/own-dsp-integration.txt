@@ -126,6 +126,16 @@ Conditional board contracts, each separately controlled and recorded:
   it sets reserved data-register bits. No program-confirm command is observed.
   Reserved-bit silicon behavior, physical wiring and timing remain unqualified;
   this component run is not an uninterrupted update or a NAND image.
+- With a separate local hypothesis that PDRF upper data bits have no pin or
+  hidden-storage effect, the same helper emits all 528 data bytes; every byte
+  matches the independently extracted first source page. The reference cell
+  controller accepts the program command and reaches its modeled completion.
+  The next original status-read instruction simultaneously changes CLE and RE;
+  the declared direct-net/timing model refuses the tCLR setup requirement at
+  PC 002ecb. Thirteen single-upper-bit scope controls pass; 67 full firmware
+  writes with upper bits were logged. Physical pin skew, routing and reserved
+  write behavior remain unqualified. No firmware instruction is patched or
+  skipped, and this is still an isolated helper with synthetic timing.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -178,6 +188,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-ram-capture/{runtime,audit}.json
   doc/local/own-core-nand-medium/{validation,audit}.json
   doc/local/own-core-nand-original-helper/{runtime,audit}.json
+  doc/local/own-core-pdrf-word/{runtime,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
