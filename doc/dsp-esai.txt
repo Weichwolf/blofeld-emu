@@ -163,11 +163,16 @@ cases, all six lanes, both mask halves, high-Z gaps, retained-data underruns,
 multi-channel request/error clearing, reset/reprime and strict input failures.
 Own native DSP programs configure both real register maps and pad muxes, read
 status through MOVEP and replace buffered words while a current word is shifting.
+This instruction/partial-word gate uses the independent DSP core from actual
+mode5/PINIT-low reset, with authored literal MOVEP words and no legacy assembler.
 Seven-bit native-owner checkpoints replay each remaining 24-bit stream exactly;
-literal old/new words and 12/18 native-cycle-unit expectations supplement replay.
-External bit clocks do not advance the CPU. These are instruction/peripheral
-reference tests; full original DSP boot, physical timing, MIDI/audio and hardware
-equivalence remain pending.
+literal old/new words, instruction counts and 12/18 documented base-cost units
+supplement replay. Instructions remain explicitly untimed; only reset advances
+the declared clock. Missing-clock reads on both maps latch actual I/O failures;
+retry cannot retire another instruction, and trusted restore retains recovery.
+The gate is also available in the independent component-only build. Generated-
+clock and interrupt helper migration remains separate. Full original DSP boot,
+physical timing, MIDI/audio and hardware equivalence remain pending.
 
   cmake --build --preset strict --target blofeld-esai-clock-test
   ctest --test-dir build/strict -R '^dsp_esai_clock$' --output-on-failure
