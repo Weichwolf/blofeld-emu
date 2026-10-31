@@ -52,6 +52,8 @@ public:
   void begin_step(const DspBus &bus, DspRunContext context);
   void finish_step(DspBus &bus, unsigned native_cycles);
   void finish_step(DspBus &bus, DspClockUnits units);
+  // Completes one already admitted DMA cycle, including shared peripheral delays.
+  void finish_dma_cycle(DspBus &bus, std::uint64_t cycle, bool switch_was_pending);
   // Nominal zero-duration reset boundary; preserve completed lifetime time/units.
   void restart_native_epoch();
   [[nodiscard]] std::uint64_t next_step_ticks(const DspBus &bus, unsigned native_cycles) const;

@@ -2,6 +2,7 @@
 #include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -162,6 +163,71 @@ void dma_refusal() {
           "A refused DMA sample must not consume or fault a reference period");
 }
 
+void held_core_dma() {
+  constexpr Word source_register = 0xffffef;
+  constexpr Word destination_register = 0xffffee;
+  constexpr Word counter_register = 0xffffed;
+  constexpr Word control_register = 0xffffec;
+  constexpr Word source = 0x100;
+  constexpr Word destination = 0x200;
+  constexpr Word sample = 0x5a1234;
+  constexpr Word software_copy = 0x9802d4;
+  OwnDspMachine machine(clocks);
+  const std::array<Word, 1> rom{0};
+  boot(machine, rom);
+  machine.bus().write({.space = DspSpace::x, .address = source, .value = sample});
+  for (const auto write : std::array{
+           DspStore{.space = DspSpace::x, .address = source_register, .value = source},
+           DspStore{.space = DspSpace::x, .address = destination_register, .value = destination},
+           DspStore{.space = DspSpace::x, .address = counter_register, .value = 0},
+           DspStore{.space = DspSpace::x, .address = control_register, .value = software_copy}}) {
+    machine.bus().write(write);
+  }
+  static_cast<void>(machine.begin_fetch());
+  const auto before = machine.cpu().pending_instruction();
+  if (!before) { throw std::runtime_error("Expected a held native fetch"); }
+  const auto saved = machine.checkpoint();
+  unsigned reads = 0;
+  unsigned writes = 0;
+  for (unsigned cycle = 0; cycle < 6; ++cycle) {
+    const auto result =
+        machine.advance_dma_reference_cycle({.cycle = cycle,
+                                             .known_requests = 15,
+                                             .timing = DspDmaTiming::reference_sampled_cycles,
+                                             .grant = DspDmaGrant::available});
+    if (result.phase && result.phase->kind == DspDmaPhaseKind::source_read) { ++reads; }
+    if (result.word) {
+      ++writes;
+      require(result.word->value == sample, "DMA returned a different physical source word");
+    }
+    const auto pending = machine.cpu().pending_instruction();
+    require(pending && pending->effect == before->effect && !result.core_stall,
+            "Held CPU must not execute or claim a bus conflict");
+  }
+  require(reads == 1 && writes == 1 &&
+              machine.bus().read({.space = DspSpace::y, .address = destination}) == sample &&
+              machine.clock().native_cycle_units() == 6 && machine.clock().timer_clk2_edges() == 3,
+          "Real DMA read/write and peripheral clock did not complete together");
+  rejects([&] { static_cast<void>(machine.advance_reference_cycle()); },
+          "DMA observation cannot silently skip later request samples");
+  try {
+    static_cast<void>(
+        machine.advance_dma_reference_cycle({.cycle = 7,
+                                             .known_requests = 15,
+                                             .timing = DspDmaTiming::reference_sampled_cycles,
+                                             .grant = DspDmaGrant::available}));
+    throw std::runtime_error("Skipped DMA sample was accepted");
+  } catch (const blofeld::Fault &error) {
+    const std::string detail(error.what());
+    require(detail.contains("pc=0xff0000") && detail.contains("cycle=7") &&
+                machine.clock().faulted(),
+            "Invalid DMA sequence must fault with the actual cycle and PC");
+  }
+  machine.restore(saved);
+  require(machine.clock().native_cycle_units() == 0 && !machine.bus().last_dma_cycle(),
+          "Checkpoint must restore both DMA sampling and reference time");
+}
+
 void timer_fault_recovery() {
   OwnDspMachine machine(clocks);
   const std::array<Word, 1> rom{0};
@@ -216,10 +282,14 @@ void callback_guard() {
   auto &port = machine.bus().gpio(DspPort::c);
   port.write({.reg = DspGpioRegister::control, .value = pins});
   unsigned calls = 0;
+  const auto checkpoint = machine.checkpoint();
   port.attach_pad_source([&](const std::uint32_t mask) {
     ++calls;
     rejects([&] { static_cast<void>(machine.advance_reference_cycle()); },
             "A callback advanced time during an active effect");
+    rejects([&] { static_cast<void>(machine.checkpoint()); },
+            "A callback captured a partially applied effect");
+    rejects([&] { machine.restore(checkpoint); }, "A callback restored a partially applied effect");
     rejects(
         [&] {
           machine.begin_hardware_reset(
@@ -243,6 +313,7 @@ int main() {
     timer_and_pending();
     pll_contract();
     dma_refusal();
+    held_core_dma();
     timer_fault_recovery();
     stopped_and_waiting(stop, ProcessingState::stopped);
     stopped_and_waiting(wait, ProcessingState::waiting);

@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interrupts.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -11,6 +12,7 @@
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -53,6 +55,7 @@ OwnDspMachine::OwnDspMachine(const DspRunClockInputs clock)
     : io_(bus_), cpu_(io_), interrupts_(bus_, cpu_), clock_(clock), clock_inputs_(clock) {}
 
 OwnDspCheckpoint OwnDspMachine::checkpoint() const {
+  if (advancing_effect_) { throw Fault("Own DSP checkpoint requires an inactive effect"); }
   // The native core rejects capture during an executing callback before any bus copy.
   auto native = cpu_.checkpoint();
   return OwnDspCheckpoint(std::make_shared<const OwnDspCheckpoint::Storage>(
@@ -68,6 +71,7 @@ OwnDspCheckpoint OwnDspMachine::checkpoint() const {
 
 OwnDspCheckpoint OwnDspMachine::candidate_checkpoint(const dsp56300::EffectTicket &ticket) const {
   require_running();
+  if (advancing_effect_) { throw Fault("Own DSP candidate requires an inactive effect"); }
   if (interrupts_.pending()) {
     throw Fault("Own DSP candidate requires completed interrupt vector ownership pc=" +
                 hex(cpu_.registers().pc, 6));
@@ -90,6 +94,7 @@ OwnDspCheckpoint OwnDspMachine::candidate_checkpoint(const dsp56300::EffectTicke
 }
 
 void OwnDspMachine::restore(const OwnDspCheckpoint &checkpoint) {
+  if (advancing_effect_) { throw Fault("Own DSP restore requires an inactive effect"); }
   if (!checkpoint.storage_) { throw std::invalid_argument("Empty own DSP checkpoint"); }
   const auto &state = *checkpoint.storage_;
   if (state.inputs != clock_inputs_) {
@@ -173,6 +178,7 @@ void OwnDspMachine::release_hardware_reset() {
 dsp56300::InstructionProgress
 OwnDspMachine::begin_fetch(const dsp56300::InstructionPublication publication) {
   require_running();
+  if (advancing_effect_) { throw Fault("Own DSP fetch requires an inactive effect"); }
   if (!captured_fetch_owner_.expired()) {
     throw Fault("Own DSP captured fetch already owns execution pc=" + hex(cpu_.registers().pc, 6));
   }
@@ -202,7 +208,7 @@ std::uint64_t OwnDspMachine::advance_reference_cycle() {
       cpu_.processing_state() != dsp56300::ProcessingState::waiting) {
     throw Fault("Own DSP reference cycle requires qualified oscillator state" + context());
   }
-  if (bus_.has_active_dma()) {
+  if (bus_.has_active_dma() || bus_.last_dma_cycle()) {
     throw Fault("Own DSP reference cycle requires DMA arbitration at X:0xfffff4" + context());
   }
   const auto duration = clock_.next_step_ticks(bus_, 1);
@@ -211,8 +217,37 @@ std::uint64_t OwnDspMachine::advance_reference_cycle() {
   return duration;
 }
 
+DspDmaBusResult OwnDspMachine::advance_dma_reference_cycle(const DspDmaInputs inputs) {
+  require_running();
+  const auto regs = cpu_.registers();
+  const auto context = " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
+  if (clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary ||
+      advancing_effect_ || cpu_.fault().kind != dsp56300::FaultKind::none ||
+      (cpu_.processing_state() != dsp56300::ProcessingState::running &&
+       cpu_.processing_state() != dsp56300::ProcessingState::waiting)) {
+    throw Fault("Own DSP DMA cycle requires an inactive healthy cycle clock" + context);
+  }
+  if (!captured_fetch_owner_.expired()) {
+    throw Fault("Own DSP DMA cycle requires an unoccupied captured-fetch bus" + context);
+  }
+  const EffectGuard guard(advancing_effect_);
+  static_cast<void>(clock_.next_step_ticks(bus_, 1));
+  const bool switch_was_pending = bus_.switch_delay_ != 0;
+  clock_.begin_step(bus_, {.pc = regs.pc, .omr = regs.omr});
+  try {
+    const auto result = bus_.advance_dma(
+        inputs, {.accesses = {}, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    clock_.finish_dma_cycle(bus_, inputs.cycle, switch_was_pending);
+    return result;
+  } catch (const std::exception &error) {
+    clock_.fail();
+    throw Fault("Own DSP held-core DMA cycle" + context + ": " + error.what());
+  }
+}
+
 bool OwnDspMachine::admit_interrupt(const dsp56300::InstructionWords foreground) {
   require_running();
+  if (advancing_effect_) { throw Fault("Own DSP interrupt requires an inactive effect"); }
   if (!captured_fetch_owner_.expired()) {
     throw Fault("Own DSP captured fetch cannot admit interrupt pc=" + hex(cpu_.registers().pc, 6));
   }

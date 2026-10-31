@@ -49,8 +49,16 @@ SHI/memory-switch delays and the timer CLK/2 divider; the existing
 reference_instruction_boundary contract does not implicitly select it.
 It does not admit a CPU effect or infer any instruction duration. Active DMA,
 unqualified STOP/debug oscillators, faulted cores and callback reentry refuse
-visibly. The caller still owns effect placement, DMA, ESAI and board scheduling;
-this interface does not establish calibrated pipeline or audio timing.
+visibly. A separate held-core DMA cycle accepts explicit consecutive DMA request
+samples and a grant, executes the real DMA bus phase, and advances the same
+peripheral and timer clocks. Once DMA sampling begins, subsequent cycles must
+continue sampling; skipping a sample fails. A synthetic X-to-Y transfer checks
+real source and destination words while the native fetch remains pending, timer
+division, invalid sample sequences and checkpoint restoration. Concurrent core
+or F1/F2 bus activity remains unqualified: this is a caller-selected held-core
+experiment, not a DMA priority or pipeline timing claim. The caller still owns
+effect placement, ESAI and board scheduling; neither interface establishes
+calibrated pipeline or audio timing.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected

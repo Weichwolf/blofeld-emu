@@ -65,6 +65,9 @@ public:
   // One externally scheduled reference period; does not advance an instruction.
   // DMA arbitration and subcycle effects remain the scheduler's responsibility.
   std::uint64_t advance_reference_cycle();
+  // Explicit DMA-first cycle with the native CPU and captured fetch held.
+  // The caller supplies actual request levels and consecutive cycle numbers.
+  [[nodiscard]] DspDmaBusResult advance_dma_reference_cycle(DspDmaInputs inputs);
   [[nodiscard]] bool admit_interrupt(dsp56300::InstructionWords foreground);
   [[nodiscard]] OwnDspCheckpoint checkpoint() const;
   // An untimed speculative continuation, not a published instruction or
