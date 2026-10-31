@@ -18,10 +18,12 @@ struct OwnDspFetchCycleResult {
   DspDmaBusResult dma;
   bool captured = false;
   std::optional<dsp56300::InstructionProgress> native;
+  std::optional<std::uint32_t> issued_address;
 };
 
-// Untimed F1/F2 owner. The machine must outlive this object. Reset and restore
-// invalidate its identity; a new owner must establish a fresh fetch context.
+// F1/F2 owner with explicit untimed operations and selected reference cycles.
+// The machine must outlive it. Reset and restore invalidate its identity; a new
+// owner must establish a fresh fetch context.
 class OwnDspFetch {
 public:
   explicit OwnDspFetch(OwnDspMachine &machine);
@@ -35,6 +37,10 @@ public:
   // Explicit DMA, F2, native-effect order with a global DMA destination stall.
   [[nodiscard]] OwnDspFetchCycleResult advance_dma_capture_native(DspDmaInputs inputs,
                                                                   OwnDspNativeCycleModel model);
+  // Orders DMA, existing F2, optional selected native effect, then new F1.
+  // Native placement and the isolated-effect hypothesis remain caller-owned.
+  [[nodiscard]] OwnDspFetchCycleResult
+  advance_dma_pipeline(DspDmaInputs inputs, bool admit_native, OwnDspNativeCycleModel model);
   // Admission uses the actual owned foreground F2 words. Vector reads remain
   // native staged bus effects and are acknowledged by the interrupt owner.
   [[nodiscard]] bool admit_interrupt();
@@ -45,7 +51,12 @@ public:
 private:
   void check_owner() const;
   void check_sample_context() const;
-  [[nodiscard]] OwnDspFetchCycleResult capture_cycle(DspDmaInputs inputs, bool admit_native);
+  [[nodiscard]] std::optional<DspMemoryAccess>
+  native_overlap(const DspProgramFetchView &state,
+                 const dsp56300::PendingInstruction &pending) const;
+  void issue_pipeline(OwnDspFetchCycleResult &result, bool requested);
+  [[nodiscard]] OwnDspFetchCycleResult
+  capture_cycle(DspDmaInputs inputs, bool admit_native, bool require_capture, bool issue_next);
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
   [[nodiscard]] dsp56300::InstructionProgress begin_native();
   void finish_interrupt_vector();

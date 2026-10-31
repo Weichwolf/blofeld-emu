@@ -75,8 +75,13 @@ then sample the written word. An additional caller-selected DMA/F2/native order
 admits the actual pending native effect alongside F2 when their memory resources
 are independently qualified. A conflicting DMA destination holds both effects;
 the synthetic test resumes the actual X load and executes the DMA-written opcode.
-Concurrent native P or peripheral access and automatic F1 placement remain
-unqualified. These are reference-order hypotheses, not measured pipeline timing.
+Concurrent native P or peripheral access with F2 remain unqualified. An explicit
+continuous reference-cycle variant places a new F1 after DMA, F2 and any selected
+native effect, respecting queue capacity and DMA destination stalls. The owner
+still selects native effects and synchronizes actual retirement; cache/REP/vector
+transitions are not automatically scheduled. Tests cover queue backpressure,
+resumption and a DMA-written instruction. These are reference-order hypotheses,
+not measured pipeline timing.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected

@@ -121,6 +121,62 @@ DspDmaInputs dma_input(const unsigned cycle, const DspDmaGrant grant = DspDmaGra
           .grant = grant};
 }
 
+void continuous_fetch_pipeline() {
+  constexpr unsigned cycles_before_admission = 10;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 12> rom{};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  const auto before = machine.cpu().registers();
+  OwnDspFetch fetch(machine);
+  for (unsigned cycle = 0; cycle < cycles_before_admission; ++cycle) {
+    const auto result =
+        fetch.advance_dma_pipeline(dma_input(cycle), false, OwnDspNativeCycleModel::unqualified);
+    const auto expected_used = cycle < 8 ? cycle : 8U;
+    require(fetch.view().used == expected_used && !result.native &&
+                machine.cpu().registers() == before,
+            "Automatic F1/F2 must not execute an unselected CPU effect");
+    if (cycle < 8) {
+      require(result.issued_address == boot_entry + cycle && result.captured == (cycle != 0),
+              "F1 must issue sequentially after the previous actual F2 sample");
+    } else {
+      require(!result.issued_address && result.captured == (cycle == 8),
+              "A full owned fetch queue must apply backpressure without another F1");
+    }
+  }
+  require(machine.clock().native_cycle_units() == cycles_before_admission &&
+              machine.clock().timer_clk2_edges() == cycles_before_admission / 2,
+          "Continuous fetch and backpressure cycles must advance the real reference clock");
+  static_cast<void>(fetch.begin());
+  const auto pending = machine.cpu().pending_instruction();
+  const auto issued =
+      fetch.advance_dma_pipeline(dma_input(10), false, OwnDspNativeCycleModel::unqualified);
+  const auto captured =
+      fetch.advance_dma_pipeline(dma_input(11), false, OwnDspNativeCycleModel::unqualified);
+  const auto held = machine.cpu().pending_instruction();
+  require(issued.issued_address == boot_entry + 8 && !issued.captured && captured.captured &&
+              !captured.issued_address && fetch.view().used == 8 && pending && held &&
+              pending->effect == held->effect,
+          "Released queue capacity must resume F1/F2 while preserving the held native effect");
+  bool retired = false;
+  unsigned next_cycle = 12;
+  constexpr unsigned maximum_cycles = 20;
+  for (; next_cycle < maximum_cycles && !retired; ++next_cycle) {
+    const auto result = fetch.advance_dma_pipeline(
+        dma_input(next_cycle), true, OwnDspNativeCycleModel::isolated_effect);
+    if (!result.native) { throw std::runtime_error("Selected native effect was not admitted"); }
+    require(!result.issued_address && !result.captured,
+            "A full queue must hold F1 while selected native effects advance");
+    retired = result.native->retired;
+  }
+  require(retired && machine.cpu().registers().pc == boot_entry + 1 &&
+              machine.clock().native_cycle_units() == next_cycle,
+          "Selected actual CPU effects must eventually retire without fabricated timing");
+  fetch.synchronize();
+}
+
 void dma_fetch_conflict() {
   constexpr Word source_register = 0xffffef;
   constexpr Word destination_register = 0xffffee;
@@ -156,15 +212,20 @@ void dma_fetch_conflict() {
   require(machine.clock().native_cycle_units() == 1 && machine.bus().last_dma_cycle() == 0,
           "Rejected F2 admission must not consume DMA time");
   fetch.issue();
-  const auto waiting = fetch.advance_dma_capture(dma_input(1, DspDmaGrant::wait));
-  const auto written = fetch.advance_dma_capture(dma_input(2));
+  const auto waiting = fetch.advance_dma_pipeline(
+      dma_input(1, DspDmaGrant::wait), false, OwnDspNativeCycleModel::unqualified);
+  const auto written =
+      fetch.advance_dma_pipeline(dma_input(2), false, OwnDspNativeCycleModel::unqualified);
   require(waiting.dma.core_stall && !waiting.dma.word && !waiting.captured &&
               written.dma.core_stall && written.dma.word && !written.captured &&
+              !waiting.issued_address && !written.issued_address &&
               fetch.view().pending_address == ram_entry && fetch.view().used == 0 &&
               machine.bus().read({.address = ram_entry}) == 0,
           "A real DMA wait and write must hold the issued F2 address");
-  const auto captured = fetch.advance_dma_capture(dma_input(3));
-  require(captured.captured && !captured.dma.core_stall && fetch.view().used == 1 &&
+  const auto captured =
+      fetch.advance_dma_pipeline(dma_input(3), false, OwnDspNativeCycleModel::unqualified);
+  require(captured.captured && captured.issued_address == ram_entry + 1 &&
+              !captured.dma.core_stall && fetch.view().used == 1 &&
               fetch.view().words.front() == DspProgramWord{.address = ram_entry, .value = 0} &&
               machine.clock().native_cycle_units() == 4 && machine.clock().timer_clk2_edges() == 2,
           "F2 must sample the actual DMA-written instruction on the next available cycle");
@@ -682,6 +743,7 @@ void invalidation() {
 int main() {
   try {
     actual_fetch();
+    continuous_fetch_pipeline();
     dma_fetch_conflict();
     dma_fetch_native_overlap();
     dma_fetch_native_program_conflict();
