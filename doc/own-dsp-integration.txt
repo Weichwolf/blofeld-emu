@@ -200,6 +200,20 @@ Conditional board contracts, each separately controlled and recorded:
   RE falls. The separate status-read fixture requires RE delay <=2,967 ticks
   for timely sampling. Z3 rejects their joint constraints. This refutes that
   combination of fixture assumptions, not every physical circuit or timing.
+  Three further runs explore explicit digital gating candidates. Suppressing RE
+  while raw WE is low avoids the first overlapping pulse but reaches a read of
+  the unknown PE7 output latch. Initializing that latch low is a separate
+  fixture hypothesis motivated by a conditional startup path; it is not an
+  observed complete boot. With CE tied selected, initialization then violates
+  the reference NAND tCLS constraint. A second candidate gates CE using PE7,
+  raw control signals and PF10. It reaches the actual ID command and address,
+  then detects active contention on data bits ec before the firmware switches
+  Port F to input. In this path the caller lowers raw RE before calling the
+  byte-read routine, so the previous 2,100-tick propagation model publishes
+  NAND data too early. The candidate is disproved for these fixture conditions;
+  neither its gates nor the NAND part and clock are established board facts.
+  The local run's inherited banner incorrectly also says CE is tied low; the
+  candidate implementation and its CE-gate field describe the tested wiring.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -261,6 +275,9 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-erase-program-compare/{runtime,audit}.json
   doc/local/own-core-nand-program-failure/{runtime,audit}.json
   doc/local/own-core-main-updater-constraints/{constant-delay.smt2,audit.json}
+  doc/local/own-core-main-we-gated-re/runtime.json
+  doc/local/own-core-main-we-gated-pe7/runtime.json
+  doc/local/own-core-main-pe-ce-gate/runtime.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
