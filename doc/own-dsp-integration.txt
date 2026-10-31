@@ -137,6 +137,16 @@ refusal, unknown-pad reads and valid direction recovery. Source identities:
 `doc/local/own-core-timeline-reserved-f/{runtime3,audit}.json`. The new public
 GPIO sample classification has separate native tests; this terminal board trace
 predates that change and must not be presented as its runtime validation.
+A new coupled run with GPIO sample classification records actual successful
+Port-F read results. All 528 full PDRF words and protocol outputs match the
+independent first source page, with no unmatched output. A changed CPU value
+fails the audit. The next refusal is a native program-data read overlapping
+an issued F2 read; program-bus arbitration for that case remains unqualified.
+The running binary and runtime references stayed unchanged. One shared static
+build archive changed during execution, so the full build-input receipt fails;
+that mismatch remains recorded rather than being treated as an unchanged build.
+Trace, input identities and the scoped runtime audit remain local in
+`doc/local/own-core-timeline-gpio-sample/{runtime3,audit}.json`.
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
