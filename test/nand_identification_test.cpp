@@ -240,6 +240,23 @@ void routed_owners() {
   require(encode_nand_image(load_nand_image(path)) == before,
           "Cell-file reload must not manufacture an ID observation");
 }
+
+void identification_read_edges() {
+  constexpr unsigned timebase_hz = 1000000000;
+  for (const auto profile : {NandReadContinuation::k9f1208_p, NandReadContinuation::k9f1208_j}) {
+    NandOperationClock clock(Nand{profile}, timebase_hz, NandOperationContract::reference_maximum);
+    clock.observe_identification(identity());
+    clock.observe_power_ready();
+    select(clock);
+    for (const auto expected : own_identity) {
+      require(clock.read() == expected, "ID byte order follows the documented read cycles");
+      clock.observe_read_end(NandReadEnd::re_high);
+      require(clock.device().ready() == true && !clock.next_event() && clock.ticks() == 0,
+              "ID RE release cannot schedule an array transfer or alter readiness");
+    }
+    reject([&] { static_cast<void>(clock.read()); }, "exceeds the supplied");
+  }
+}
 }
 
 int main() {
@@ -249,6 +266,7 @@ int main() {
     immutable_configuration();
     resets_and_array_isolation();
     routed_owners();
+    identification_read_edges();
     std::cout << "NAND ID: 1275 masked-byte cases, 255 address refusals, reset/copy/owner checks\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

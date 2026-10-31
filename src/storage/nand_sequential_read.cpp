@@ -46,8 +46,11 @@ void Nand::observe_read_end(const NandReadEnd edge) {
     phase_ = Phase::idle;
     return;
   }
-  // Status output and ordinary byte release do not start/restart an array read.
-  if (status_mode_ || phase_ == Phase::data || phase_ == Phase::read_pending) { return; }
+  // ID, status and ordinary byte release do not start/restart an array read.
+  if (status_mode_ || phase_ == Phase::identification_data || phase_ == Phase::data ||
+      phase_ == Phase::read_pending) {
+    return;
+  }
   if (phase_ != Phase::end) { fail("read end", "no final array byte awaiting release"); }
   // Only P-package parts automatically select another row (Rev1.1 p26).
   if (continuation_ == NandReadContinuation::k9f1208_j) {
