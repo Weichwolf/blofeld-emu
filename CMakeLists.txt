@@ -72,6 +72,7 @@ if(DEFINED blofeld_dependency_sanitizers)
 endif()
 # Apply clang-tidy to our targets, after the third-party target was created.
 include(cmake/DspCore.cmake)
+include(cmake/OwnDsp.cmake)
 include(cmake/PulseAudio.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
@@ -258,6 +259,9 @@ add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp 
   src/dsp/dsp_run_clock.cpp src/dsp/dsp_run_reset.cpp)
 target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
+add_library(blofeld_own_dsp_io STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_io.cpp)
+target_include_directories(blofeld_own_dsp_io PUBLIC src)
+target_link_libraries(blofeld_own_dsp_io PUBLIC blofeld_dsp_peripherals dsp56300::core)
 add_library(blofeld_dsp
   src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_only.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
@@ -307,6 +311,9 @@ add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-own-dsp-io-test test/own_dsp_io_test.cpp)
+  target_link_libraries(blofeld-own-dsp-io-test PRIVATE blofeld_own_dsp_io)
+  add_test(NAME own_dsp_io COMMAND blofeld-own-dsp-io-test)
   # One checked translation unit for the shared target-memory reference fixture.
   add_library(blofeld_hcs08_programmer_fixture OBJECT test/hcs08_programmer_fixture.cpp)
   target_link_libraries(blofeld_hcs08_programmer_fixture PUBLIC

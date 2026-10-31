@@ -1,0 +1,28 @@
+Independent DSP integration (transitional)
+
+The pinned independent DSP source is built as a separate CMake subproject.
+Set BLOFELD_OWN_DSP_ROOT to its clean pinned checkout when it is not located
+at ~/Git/dsp56300. DSP56300_SANITIZER must match BLOFELD_SANITIZER. The source
+and license are recorded in dependencies.json; reference firmware remains local.
+The adapter target links only the own core and board peripheral libraries.
+During migration, configuration still also requires DSP56300_ROOT to point to
+the separate legacy checkout pinned in dependencies.json for the old runtime.
+
+OwnDspIo forwards genuine DSP reads, writes, bit tests and peripheral reset to
+the strict DspBus. Unsupported atomic read/modify/write operations are refused.
+The first refusal is latched with operation, space, address, PC, value/action and
+any underlying exception; the caller must explicitly clear it before reuse.
+It does not schedule the processor, DMA, interrupts, cache ownership or clocks.
+
+The synthetic test covers known RAM, rejected and latched accesses with retained
+context, actual GPIO bit updates, invalid bit indices, peripheral reset and
+a user-authored NOP executed through the real bus. It contains no firmware bytes.
+
+Validation:
+  cmake --build build/strict --target blofeld-own-dsp-io-test -j2
+  ctest --test-dir build/strict -R '^own_dsp_io$' --output-on-failure
+
+The regular device and reference scheduler still use the legacy core. The new
+adapter and its synthetic test are not evidence of full boot, real timing, audio,
+MIDI or hardware equivalence. Migrating the scheduler and removing that legacy
+dependency remain required.
