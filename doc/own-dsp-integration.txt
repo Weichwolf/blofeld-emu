@@ -656,3 +656,26 @@ that scheduler, full clock/pipeline/DMA ownership and joint board checkpoints,
 removing the legacy dependency and all reset-to-instrument requirements remain
 open. The independent adapter and local hypotheses do not establish full boot,
 real timing, MIDI/audio or hardware equivalence.
+
+Runtime migration: frontend and timeline snapshots
+OwnDspFetchCheckpoint includes the stopped chip, F1/F2 queue, sample/occurrence
+metadata, admitted and repeated instructions, vector continuation and native
+fetch/latch flags. OwnDspTimelineCheckpoint additionally retains its timing,
+epoch, expected clock/DMA boundary, offered horizon/order and held-reset state.
+Construct restored owners against a staged target; its state may change if
+construction fails. Reconnect external pad readers/devices before execution.
+Old frontend/timeline owners become stale after chip restoration. Snapshots are
+trusted process-local objects, not portable files or host-I/O rewinds. Capturing
+an active REP copies its state without authorizing a prohibited prefetch.
+
+The own-only test restores all28 clock cuts of an independently expected native
+REP/ALU/store program, plus a fractional EXTAL hold/recovery. Final X0=7, A=21
+in fractional position and X:$10=7 supplement replay checks. Empty/stale snapshots
+and mismatched clock inputs refuse; a rejected clock mismatch leaves the target
+unchanged. Component coverage does not establish complete board checkpointing,
+original boot, pending-IRQ/DMA checkpoint combinations or migration completion.
+The regular Board/scheduler and legacy build/tests still need replacement.
+Temporary OwnDsp/own_dsp names are removed when that replacement is complete.
+
+  cmake --build build/own-only --target blofeld-own-dsp-timeline-checkpoint-test
+  ctest --test-dir build/own-only -R '^own_dsp_timeline_checkpoint$' --output-on-failure

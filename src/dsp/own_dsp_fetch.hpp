@@ -29,12 +29,29 @@ struct OwnDspFetchCycleResult {
   std::optional<std::uint32_t> issued_address;
 };
 
+// Trusted chip and frontend state; external board devices remain caller-owned.
+class OwnDspFetchCheckpoint {
+public:
+  OwnDspFetchCheckpoint() = default;
+  ~OwnDspFetchCheckpoint();
+  OwnDspFetchCheckpoint(const OwnDspFetchCheckpoint &) = default;
+  OwnDspFetchCheckpoint &operator=(const OwnDspFetchCheckpoint &) = default;
+
+private:
+  friend class OwnDspFetch;
+  struct Storage;
+  explicit OwnDspFetchCheckpoint(std::shared_ptr<const Storage> storage);
+  std::shared_ptr<const Storage> storage_;
+};
+
 // F1/F2 owner with explicit untimed operations and selected reference cycles.
 // The machine must outlive it. Reset and restore invalidate its identity; a new
 // owner must establish a fresh fetch context.
 class OwnDspFetch {
 public:
   explicit OwnDspFetch(OwnDspMachine &machine);
+  // Restore into a staged owner; target state may change if construction fails.
+  OwnDspFetch(OwnDspMachine &machine, const OwnDspFetchCheckpoint &checkpoint);
   OwnDspFetch(const OwnDspFetch &) = delete;
   OwnDspFetch &operator=(const OwnDspFetch &) = delete;
   [[nodiscard]] DspProgramFetchView view() const;
@@ -58,8 +75,11 @@ public:
   [[nodiscard]] dsp56300::InstructionProgress begin();
   // Call only after the admitted instruction's native retirement.
   void synchronize();
+  [[nodiscard]] OwnDspFetchCheckpoint checkpoint() const;
 
 private:
+  [[nodiscard]] static const OwnDspFetchCheckpoint::Storage &
+  saved_state(const OwnDspFetchCheckpoint &checkpoint);
   void check_owner() const;
   void check_sample_context(bool hold_fetch = false) const;
   [[nodiscard]] bool begin_automatic(bool admit_interrupts);

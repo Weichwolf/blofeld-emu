@@ -32,6 +32,9 @@ keep board wiring, device clocks and manufacturer programs in the emulator's
 local reference scope. Commit and push verified increments in each affected
 project to its configured remote. Broader audio-clock experiments follow this
 migration priority; the complete instrument acceptance scope remains unchanged.
+After the old backend is removed, replace transitional OwnDsp/own_dsp names in
+production classes, files and build targets with normal DSP names. No permanent
+parallel implementation or backend-selection option is part of the final device.
 
 Acceptance requirements (current evidence and gaps: coverage.txt):
 Firmware-visible state and timing, including USB, update and recovery behavior,

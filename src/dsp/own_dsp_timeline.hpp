@@ -12,6 +12,20 @@
 namespace blofeld {
 enum class OwnDspBoundary : std::uint8_t { before, through };
 
+class OwnDspTimelineCheckpoint {
+public:
+  OwnDspTimelineCheckpoint() = default;
+  ~OwnDspTimelineCheckpoint();
+  OwnDspTimelineCheckpoint(const OwnDspTimelineCheckpoint &) = default;
+  OwnDspTimelineCheckpoint &operator=(const OwnDspTimelineCheckpoint &) = default;
+
+private:
+  friend class OwnDspTimeline;
+  struct Storage;
+  explicit OwnDspTimelineCheckpoint(std::shared_ptr<const Storage> storage);
+  std::shared_ptr<const Storage> storage_;
+};
+
 // Orders completed reference cycles against a caller-owned common timebase.
 // External events and their ordering at equal timestamps remain board-owned.
 // Reset, checkpoint restoration and direct native execution invalidate the owner.
@@ -21,6 +35,9 @@ public:
                  OwnDspAutomaticTiming timing,
                  std::uint64_t epoch_ticks,
                  std::optional<OwnDspResetInputs> initial_reset = std::nullopt);
+  // Restore chip/frontend/time together into a staged target. Reconnect external
+  // pad readers and board devices before execution; target may change on failure.
+  OwnDspTimeline(OwnDspMachine &machine, const OwnDspTimelineCheckpoint &checkpoint);
   OwnDspTimeline(const OwnDspTimeline &) = delete;
   OwnDspTimeline &operator=(const OwnDspTimeline &) = delete;
   // Reset time uses the same common epoch; execution begins after recovery.
@@ -32,7 +49,11 @@ public:
 
   [[nodiscard]] bool faulted() const { return faulted_; }
 
+  [[nodiscard]] OwnDspTimelineCheckpoint checkpoint() const;
+
 private:
+  [[nodiscard]] static const OwnDspTimelineCheckpoint::Storage &
+  saved_state(const OwnDspTimelineCheckpoint &checkpoint);
   void check_owner() const;
   OwnDspMachine &machine_;
   std::unique_ptr<OwnDspFetch> fetch_;
