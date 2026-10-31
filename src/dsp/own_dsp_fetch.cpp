@@ -69,6 +69,11 @@ void OwnDspFetch::check_sample_context() const {
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
+  if (interrupt_vector_) {
+    throw Fault("Own DSP vector owns program fetch read P:" +
+                hex(state.pending_address.value_or(state.next_address), 6) +
+                " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+  }
 }
 
 DspProgramFetchView OwnDspFetch::view() const {
@@ -88,6 +93,44 @@ void OwnDspFetch::capture() {
   fetch_.capture(machine_.bus_);
 }
 
+bool OwnDspFetch::admit_interrupt() {
+  check_owner();
+  if (in_flight_ || interrupt_vector_ || repeated_) {
+    throw Fault("Own DSP interrupt admission requires a foreground boundary pc=" +
+                hex(machine_.cpu_.registers().pc, 6));
+  }
+  check_eligible();
+  const auto context = machine_.cpu_.instruction_fetch();
+  const auto state = fetch_.view();
+  if (context.latched_opcode || state.consume_address != context.address ||
+      state.omr != machine_.cpu_.registers().omr) {
+    throw Fault("Own DSP interrupt foreground differs from F2 read P:" + hex(context.address, 6) +
+                " pc=" + hex(context.address, 6) + " omr=" + hex(state.omr, 6));
+  }
+  const auto opcode = fetch_.select(context.address);
+  const auto shape = dsp56300::inspect_instruction(opcode.word.value);
+  if (!shape) {
+    throw Fault("Unsupported own DSP interrupt foreground opcode " + hex(opcode.word.value, 6) +
+                " read P:" + hex(context.address, 6) + " pc=" + hex(context.address, 6) +
+                " omr=" + hex(state.omr, 6));
+  }
+  const auto captured = fetch_.instruction(opcode, shape->words);
+  captured.check_front(fetch_);
+  const dsp56300::InstructionWords foreground{
+      .address = captured.opcode.word.address,
+      .opcode = captured.opcode.word.value,
+      .extension =
+          captured.extension ? std::optional(captured.extension->word.value) : std::nullopt};
+  if (!machine_.interrupts_.admit(foreground)) { return false; }
+  const auto vector = machine_.cpu_.instruction_fetch();
+  if (!vector.exception_vector) {
+    throw Fault("Own DSP admitted interrupt without native vector ownership pc=" +
+                hex(machine_.cpu_.registers().pc, 6));
+  }
+  interrupt_vector_ = vector.address;
+  return true;
+}
+
 dsp56300::InstructionProgress OwnDspFetch::begin() {
   check_owner();
   if (in_flight_) { throw Fault("Own DSP F2 instruction awaits retirement"); }
@@ -95,6 +138,14 @@ dsp56300::InstructionProgress OwnDspFetch::begin() {
   if (machine_.cpu_.progress().instructions == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Own DSP F2 instruction counter exhausted pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
+  }
+  if (interrupt_vector_) {
+    auto result = machine_.cpu_.begin_fetch(dsp56300::InstructionPublication::pcu_updates);
+    if (result.fault.kind == dsp56300::FaultKind::none) {
+      instructions_ = machine_.cpu_.progress().instructions;
+      in_flight_ = true;
+    }
+    return result;
   }
   const auto context = machine_.cpu_.instruction_fetch();
   const auto state = fetch_.view();
@@ -157,6 +208,11 @@ void OwnDspFetch::synchronize() {
                 hex(machine_.cpu_.registers().pc, 6));
   }
   check_eligible();
+  if (interrupt_vector_) {
+    finish_interrupt_vector();
+    in_flight_ = false;
+    return;
+  }
   const auto context = machine_.cpu_.instruction_fetch();
   const auto regs = machine_.cpu_.registers();
   const auto state = fetch_.view();
@@ -174,5 +230,26 @@ void OwnDspFetch::synchronize() {
   if (!context.latched_opcode) { repeated_.reset(); }
   admitted_.reset();
   in_flight_ = false;
+}
+
+void OwnDspFetch::finish_interrupt_vector() {
+  const auto vector = interrupt_vector_;
+  if (!vector) { throw Fault("Own DSP interrupt vector ownership is missing"); }
+  const auto context = machine_.cpu_.instruction_fetch();
+  const auto regs = machine_.cpu_.registers();
+  if (machine_.interrupts_.pending()) {
+    constexpr unsigned mask = 0xffffff;
+    if (!context.exception_vector || context.address != ((*vector + 1U) & mask)) {
+      throw Fault("Unqualified DSP interrupt vector continuation read P:" +
+                  hex(context.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+    }
+    return;
+  }
+  if (context.exception_vector) {
+    throw Fault("Own DSP IRQ acknowledged before native vector completion read P:" +
+                hex(context.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+  }
+  fetch_.redirect(context.address, regs.omr);
+  interrupt_vector_.reset();
 }
 }

@@ -22,6 +22,9 @@ public:
   [[nodiscard]] DspProgramFetchView view() const;
   void issue();
   void capture();
+  // Admission uses the actual owned foreground F2 words. Vector reads remain
+  // native staged bus effects and are acknowledged by the interrupt owner.
+  [[nodiscard]] bool admit_interrupt();
   [[nodiscard]] dsp56300::InstructionProgress begin();
   // Call only after the admitted instruction's native retirement.
   void synchronize();
@@ -31,12 +34,14 @@ private:
   void check_eligible() const;
   void check_sample_context() const;
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
+  void finish_interrupt_vector();
   OwnDspMachine &machine_;
   std::shared_ptr<const bool> identity_;
   DspProgramFetch fetch_;
   std::optional<DspFetchedInstruction> admitted_;
   std::optional<DspFetchedInstruction> repeated_;
   std::uint64_t instructions_ = 0;
+  std::optional<std::uint32_t> interrupt_vector_;
   bool in_flight_ = false;
 };
 }

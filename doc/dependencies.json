@@ -1,7 +1,7 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "2e1dde8a0788954dbe3c3523ab651734ffa110f8",
+    "revision": "393e317f761db19a2e59890e7f395c0d2ec75f8c",
     "license": "GPL-3.0-only",
     "integration": "Pinned source subproject, strict board bus adapter and staged interrupt/reset owner. The production scheduler still uses the legacy core; migration remains incomplete."
   },

@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <exception>
+#include <initializer_list>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -24,6 +25,9 @@ constexpr Word boot_entry = 0xff0000;
 constexpr Word ram_entry = 0x100;
 constexpr Word jump_absolute = 0x0af080;
 constexpr Word immediate_x0 = 0x44f400;
+constexpr Word movec_sr = 0x05f439;
+constexpr Word irqa_vector = 0x10;
+constexpr Word priority_register = 0xffffff;
 constexpr unsigned hold_ticks = 90, recovery_ticks = 135;
 
 void require(const bool value, const char *message) {
@@ -110,7 +114,6 @@ void actual_fetch() {
 }
 
 void unqualified_cache() {
-  constexpr Word movec_sr = 0x05f439;
   constexpr Word cache_status = 0xc80300;
   const std::array<Word, 2> rom{movec_sr, cache_status};
   OwnDspMachine machine(clocks);
@@ -129,6 +132,183 @@ void unqualified_cache() {
     require(std::string(error.what()).contains("cache ownership"),
             "Cache-dependent F2 must fail with its real cause");
   }
+}
+
+void vector_read(OwnDspMachine &machine, const Word expected, const bool acknowledged) {
+  const auto pending = machine.cpu().pending_instruction();
+  if (!pending) { throw std::runtime_error("Native vector lost its fetch"); }
+  require(pending->effect.kind == EffectKind::fetch_opcode && pending->effect.address == expected &&
+              pending->effect.pc == expected && pending->effect.space == Space::program,
+          "Native vector must own the actual program-bus access");
+  const auto result = machine.advance(pending->ticket);
+  require(result.fault.kind == FaultKind::none &&
+              machine.bus().interrupt_request(0).has_value() != acknowledged,
+          "Interrupt acknowledgement must follow the second actual vector read");
+}
+
+void interrupt_vector(const bool missing_second) {
+  const std::array<Word, 4> rom{movec_sr, 0, immediate_x0, 7};
+  OwnDspMachine machine(clocks);
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = irqa_vector, .value = 0});
+  if (!missing_second) { machine.bus().write({.address = irqa_vector + 1, .value = 0}); }
+  reset(machine);
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(true);
+  machine.bus().observe_irqa(false);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  require(!fetch.admit_interrupt() && machine.bus().interrupt_request(0).has_value(),
+          "Masked interrupt must remain pending with the actual F2 foreground");
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  read_word(fetch, boot_entry + 2);
+  read_word(fetch, boot_entry + 3);
+  require(fetch.admit_interrupt(), "Unmasked real IRQA was not admitted");
+  rejects([&] { fetch.issue(); }, "F2 prefetch was accepted during native vector ownership");
+  static_cast<void>(fetch.begin());
+  vector_read(machine, irqa_vector, false);
+  retire(machine);
+  fetch.synchronize();
+  static_cast<void>(fetch.begin());
+  if (missing_second) {
+    const auto pending = machine.cpu().pending_instruction();
+    if (!pending) { throw std::runtime_error("Second vector read is missing"); }
+    const auto result = machine.advance(pending->ticket);
+    require(result.fault.kind == FaultKind::memory_read && result.fault.space == Space::program &&
+                result.fault.address == irqa_vector + 1 && result.fault.pc == irqa_vector + 1 &&
+                machine.io().failure() && machine.bus().interrupt_request(0).has_value(),
+            "Unknown vector word must fail with its actual address and retain IRQ ownership");
+    return;
+  }
+  vector_read(machine, irqa_vector + 1, true);
+  retire(machine);
+  fetch.synchronize();
+  require(fetch.view().next_address == boot_entry + 2 &&
+              machine.cpu().registers().pc == boot_entry + 2,
+          "Fast vector must resume the actual foreground PC");
+  read_word(fetch, boot_entry + 2);
+  read_word(fetch, boot_entry + 3);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().x == 7, "Foreground must execute after the actual vector");
+}
+
+void interrupt_call(const bool short_vector) {
+  constexpr Word long_call = 0x0bf080;
+  constexpr Word short_call = 0x0d0011;
+  constexpr Word handler = 0x200;
+  const std::array<Word, 3> rom{movec_sr, 0, 0};
+  OwnDspMachine machine(clocks);
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = irqa_vector, .value = short_vector ? short_call : long_call});
+  machine.bus().write({.address = irqa_vector + 1, .value = handler});
+  machine.bus().write({.address = handler, .value = 0});
+  reset(machine);
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(true);
+  machine.bus().observe_irqa(false);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  read_word(fetch, boot_entry + 2);
+  require(fetch.admit_interrupt(), "Real IRQA call was not admitted");
+  static_cast<void>(fetch.begin());
+  vector_read(machine, irqa_vector, false);
+  if (short_vector) {
+    retire(machine);
+    require(machine.cpu().registers().pc == irqa_vector + 1 && machine.bus().interrupt_request(0),
+            "Short vector must retain its actual unacknowledged source");
+    try {
+      fetch.synchronize();
+      throw std::runtime_error("Unqualified one-word vector was accepted");
+    } catch (const blofeld::Fault &error) {
+      require(std::string(error.what()).contains("interrupt vector continuation"),
+              "Unqualified vector must report its real continuation");
+    }
+    return;
+  }
+  const auto extension = machine.cpu().pending_instruction();
+  if (!extension) { throw std::runtime_error("Long vector extension is missing"); }
+  require(extension->effect.kind == EffectKind::fetch_extension &&
+              extension->effect.address == irqa_vector + 1,
+          "Long vector must read the actual second vector word");
+  const auto result = machine.advance(extension->ticket);
+  require(result.fault.kind == FaultKind::none && !machine.bus().interrupt_request(0),
+          "Real second vector word must acknowledge the source");
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().pc == handler && machine.cpu().registers().sp == 1 &&
+              fetch.view().next_address == handler,
+          "Long interrupt call must install its real frame and handler fetch");
+  read_word(fetch, handler);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().pc == handler + 1,
+          "The native interrupt handler must execute its actual instruction");
+}
+
+void missing_first_vector() {
+  const std::array<Word, 3> rom{movec_sr, 0, 0};
+  OwnDspMachine machine(clocks);
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = irqa_vector + 1, .value = 0});
+  reset(machine);
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(true);
+  machine.bus().observe_irqa(false);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  read_word(fetch, boot_entry + 2);
+  require(fetch.admit_interrupt(), "Real IRQ with unknown vector was not admitted");
+  static_cast<void>(fetch.begin());
+  const auto pending = machine.cpu().pending_instruction();
+  if (!pending) { throw std::runtime_error("First vector read is missing"); }
+  const auto result = machine.advance(pending->ticket);
+  require(result.fault.kind == FaultKind::memory_read && result.fault.space == Space::program &&
+              result.fault.address == irqa_vector && result.fault.pc == irqa_vector &&
+              machine.io().failure() && machine.bus().interrupt_request(0).has_value(),
+          "Unknown first vector must retain IRQ and report its true read and PC");
+}
+
+void software_vector() {
+  constexpr Word trap = 6;
+  constexpr Word trap_vector = 8;
+  const std::array<Word, 2> rom{trap, 0};
+  OwnDspMachine machine(clocks);
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = trap_vector, .value = 0});
+  machine.bus().write({.address = trap_vector + 1, .value = 0});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().instruction_fetch().exception_vector &&
+              fetch.view().next_address == trap_vector,
+          "The native TRAP must redirect to its actual software vector");
+  for (const auto address : {trap_vector, trap_vector + 1}) {
+    read_word(fetch, address);
+    static_cast<void>(fetch.begin());
+    retire(machine);
+    fetch.synchronize();
+  }
+  require(!machine.cpu().instruction_fetch().exception_vector &&
+              machine.cpu().registers().pc == boot_entry + 1 &&
+              fetch.view().next_address == boot_entry + 1,
+          "Software-vector completion must return to the actual foreground");
 }
 
 void repeat_latch() {
@@ -269,6 +449,12 @@ int main() {
     repeat_latch();
     missing_repeat_provenance();
     changed_memory_context();
+    interrupt_vector(false);
+    interrupt_vector(true);
+    interrupt_call(false);
+    interrupt_call(true);
+    missing_first_vector();
+    software_vector();
     std::cout << "Own DSP uses actual owned F1/F2 samples.\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
