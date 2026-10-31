@@ -116,7 +116,17 @@ the preceding 184,320 no-cell writes match the isolated trace hash. Ten native
 MCU interrupts occur before the candidate NAND read refuses its unknown cell.
 Inputs, binaries, limits and the terminal run audit remain local in
 `doc/local/own-core-timeline-mcu/{runtime3,audit}.json`. Physical wiring, DSP
-pipeline timing and full boot remain unqualified. With a locally supplied
+pipeline timing and full boot remain unqualified.
+
+A separate coupled run supplies the existing sparse updater-source NAND image
+and explicit J continuation. An independent codec/CRC/hash check verifies its
+56,238 known bytes and 258 unknown final-page bytes, with no program/block
+history. The same first-stage verification and preceding memory trace pass;
+the NAND model then produces its first source byte. The next native Port-F
+control write refuses a reserved pin function. No reserved-mode or pad resolver
+hypothesis is enabled in this run. Source, binary and terminal trace identities:
+`doc/local/own-core-timeline-nand-source/{runtime3,audit,image-audit}.json`.
+ With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
 cycles; it does not connect the firmware MCU or establish the physical board.
