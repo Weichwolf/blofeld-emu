@@ -6,9 +6,13 @@ include(cmake/OwnDsp.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 include(cmake/OwnDspComponents.cmake)
 add_custom_target(blofeld-own-dsp-components ALL DEPENDS blofeld_own_dsp_io
-  blofeld_dsp_branch_decode blofeld_dsp_control_decode blofeld_dsp_address_decode)
+  blofeld_dsp_branch_decode blofeld_dsp_control_decode blofeld_dsp_address_decode
+  blofeld_dsp_peripheral_decode)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-peripheral-form-own-test test/dsp_peripheral_form_own_test.cpp)
+  target_link_libraries(blofeld-dsp-peripheral-form-own-test PRIVATE blofeld_dsp_peripheral_decode)
+  add_test(NAME dsp_peripheral_form_own COMMAND blofeld-dsp-peripheral-form-own-test)
   add_executable(blofeld-dsp-address-form-own-test test/dsp_address_form_own_test.cpp)
   target_link_libraries(blofeld-dsp-address-form-own-test PRIVATE blofeld_dsp_address_decode)
   add_test(NAME dsp_address_form_own COMMAND blofeld-dsp-address-form-own-test)

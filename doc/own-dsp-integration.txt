@@ -96,6 +96,11 @@ Conditional board contracts, each separately controlled and recorded:
   `BLOFELD_OWN_DSP_ONLY=ON` configures the independent integration targets
   without the legacy source tree or its patches; it does not build the device.
 
+- Peripheral reads and bit branches use the independent instruction and
+  transfer descriptions. Independent assembler-derived cases and exhaustive
+  relative bit/address fields pass; a fixed-family comparison preserves all
+  36,608 previously qualified forms. Call variants remain unqualified.
+
 - The MCU/DSP GPIO fixture now shares an explicit one-to-one candidate-driver
   conversion usable with the own DSP bus. A component test connects the actual
   MCU and DSP GPIO models, checks both directions and refuses opposing drivers.
@@ -403,6 +408,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-region-transition/audit.json
   doc/local/own-core-main-program-ce/final-audit.json
   doc/local/own-branch-migration/audit.json
+  doc/local/own-branch-migration/peripheral-audit.json
   doc/local/we-recovery-rc/{candidate.cir,candidate-82k.cir,audit.py,audit.json}
   doc/local/own-core-main-gate-census/{audit.py,audit.json,events.txt}
   doc/local/own-core-nand-j/validation.json

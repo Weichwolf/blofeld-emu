@@ -265,11 +265,12 @@ add_library(blofeld_dsp
   src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
   src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
   src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
-  src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp src/dsp/dsp_peripheral_read_form.cpp)
+  src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp)
 target_include_directories(blofeld_dsp PUBLIC src)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals
   PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
   "$<LINK_ONLY:blofeld_dsp_address_decode>"
+  "$<LINK_ONLY:blofeld_dsp_peripheral_decode>"
   blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
   add_library(blofeld_dsp_instruction_fixture test/dsp_instruction_fixture.cpp)
@@ -303,6 +304,9 @@ add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-peripheral-form-own-test test/dsp_peripheral_form_own_test.cpp)
+  target_link_libraries(blofeld-dsp-peripheral-form-own-test PRIVATE blofeld_dsp_peripheral_decode)
+  add_test(NAME dsp_peripheral_form_own COMMAND blofeld-dsp-peripheral-form-own-test)
   add_executable(blofeld-dsp-address-form-own-test test/dsp_address_form_own_test.cpp)
   target_link_libraries(blofeld-dsp-address-form-own-test PRIVATE blofeld_dsp_address_decode)
   add_test(NAME dsp_address_form_own COMMAND blofeld-dsp-address-form-own-test)
