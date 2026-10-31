@@ -117,6 +117,15 @@ Conditional board contracts, each separately controlled and recorded:
   match independent erased/programmed expectations. Prior read/conflict
   controls also pass under ASan/UBSan. This is not original updater execution,
   physical timing qualification or evidence of installed NAND contents.
+- A separate isolated original program-helper run uses the own DSP core and
+  that write link. Host-supplied registers, original update payload and an
+  explicitly erased writable target are fixture preconditions. Under a declared
+  1,000-tick instruction spacing, the native helper sends the program setup,
+  four address bytes and eleven data bytes matching an independent source
+  extraction. At DSP PC 002ed9 the next Port-F word write is refused because
+  it sets reserved data-register bits. No program-confirm command is observed.
+  Reserved-bit silicon behavior, physical wiring and timing remain unqualified;
+  this component run is not an uninterrupted update or a NAND image.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -168,6 +177,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-checkpoints/validation.json
   doc/local/own-core-ram-capture/{runtime,audit}.json
   doc/local/own-core-nand-medium/{validation,audit}.json
+  doc/local/own-core-nand-original-helper/{runtime,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 

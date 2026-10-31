@@ -41,6 +41,13 @@ Own-core NAND write link          partial  A local candidate connects resolved G
                                           controls pass under ASan/UBSan. Original
                                           updater execution, fitted part and timing
                                           remain open (own-dsp-integration.txt).
+Own-core original NAND helper     partial  Isolated original helper on own DSP sends
+                                          setup, four addresses and 11 independently
+                                          matched source bytes, then refuses reserved
+                                          Port-F write at PC 002ed9. Host inputs and
+                                          reference timing are explicit; no program
+                                          confirmation or complete update is proven
+                                          (own-dsp-integration.txt).
 Own-core Port-C lane hypothesis    partial  Local projection of two control registers
                                           passes 48 pin/function cases and scope
                                           controls under ASan/UBSan. Original run
