@@ -89,8 +89,12 @@ transitions are not automatically scheduled. Tests cover queue backpressure,
 resumption and a DMA-written instruction. The additional explicit
 one-effect-per-cycle hypothesis automatically admits actual captured instructions,
 advances their effects and synchronizes retirement. Loaded REP iterations reuse
-the actual native opcode latch while F1/F2 are held. Pending interrupts and
-unqualified cache/vector transitions refuse visibly rather than being skipped.
+the actual native opcode latch while F1/F2 are held. Pending interrupts refuse visibly in the original timing profiles. A separate
+write-priority profile admits an interrupt using its captured foreground and
+holds F1/F2 during native vector effects. It acknowledges only after the actual
+second vector fetch. Missing first or second words fault and retain the request;
+a synthetic fast vector returns to its actual foreground. Unqualified cache and
+other vector transitions still refuse rather than being skipped.
 Synthetic tests cover arithmetic, real REP-latch reuse, owner recovery and
 repeated X/Y stores with exact address/count expectations, an actual OnCE write,
 SHI status, active-DMA refusal and interrupt retention. These are reference-order hypotheses, not measured pipeline

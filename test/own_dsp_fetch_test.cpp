@@ -533,6 +533,85 @@ void automatic_interrupt_frontier() {
   }
 }
 
+void automatic_interrupt_vector(const bool missing_second) {
+  constexpr unsigned maximum_cycles = 100;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{movec_sr, 0, immediate_x0, 7, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = irqa_vector, .value = 0});
+  if (!missing_second) { machine.bus().write({.address = irqa_vector + 1, .value = 0}); }
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  unsigned cycle = 0;
+  constexpr auto timing =
+      OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts;
+  while (machine.cpu().progress().instructions == 0 && cycle < maximum_cycles) {
+    static_cast<void>(fetch.advance_dma_automatic(dma_input(cycle++), timing));
+  }
+  require(machine.cpu().registers().sr == 0, "Interrupt must be unmasked by actual MOVEC");
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(true);
+  machine.bus().observe_irqa(false);
+  bool saw_first = false;
+  bool saw_second = false;
+  for (; cycle < maximum_cycles; ++cycle) {
+    const auto result = fetch.advance_dma_automatic(dma_input(cycle), timing);
+    if (result.native && result.native->retired &&
+        machine.cpu().instruction_fetch().exception_vector &&
+        machine.cpu().instruction_fetch().address == irqa_vector + 1) {
+      saw_first = true;
+      require(machine.bus().interrupt_request(0).has_value(),
+              "First actual vector read must not acknowledge the interrupt");
+    }
+    if (saw_first && result.native && result.native->fault.kind == FaultKind::memory_read) {
+      require(missing_second && result.native->fault.address == irqa_vector + 1 &&
+                  machine.bus().interrupt_request(0).has_value(),
+              "Missing second vector word must fault and retain its IRQ");
+      saw_second = true;
+      break;
+    }
+    if (saw_first && !machine.bus().interrupt_request(0)) { saw_second = true; }
+    if (!missing_second && saw_second && machine.cpu().registers().x == 7) { break; }
+  }
+  require(saw_first && saw_second && (missing_second || machine.cpu().registers().x == 7),
+          "Automatic IRQ must execute both actual vector words and resume its foreground");
+}
+
+void automatic_interrupt_missing_first() {
+  constexpr unsigned maximum_cycles = 80;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{movec_sr, 0, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = irqa_vector + 1, .value = 0});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  unsigned cycle = 0;
+  constexpr auto timing =
+      OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts;
+  while (machine.cpu().progress().instructions == 0 && cycle < maximum_cycles) {
+    static_cast<void>(fetch.advance_dma_automatic(dma_input(cycle++), timing));
+  }
+  require(machine.cpu().registers().sr == 0, "Interrupt must be unmasked by actual MOVEC");
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(true);
+  machine.bus().observe_irqa(false);
+  for (; cycle < maximum_cycles; ++cycle) {
+    const auto result = fetch.advance_dma_automatic(dma_input(cycle), timing);
+    if (result.native && result.native->fault.kind == FaultKind::memory_read) {
+      require(result.native->fault.address == irqa_vector &&
+                  result.native->fault.space == Space::program && machine.io().failure() &&
+                  machine.bus().interrupt_request(0).has_value(),
+              "Unknown first vector must fault with its actual address and retain IRQ ownership");
+      return;
+    }
+  }
+  throw std::runtime_error("Automatic IRQ skipped the missing first vector word");
+}
+
 void dma_fetch_conflict() {
   constexpr Word source_register = 0xffffef;
   constexpr Word destination_register = 0xffffee;
@@ -1237,6 +1316,9 @@ int main() {
     automatic_omr_transition();
     shi_status_dma_guard();
     automatic_interrupt_frontier();
+    automatic_interrupt_vector(false);
+    automatic_interrupt_vector(true);
+    automatic_interrupt_missing_first();
     dma_fetch_conflict();
     dma_fetch_native_overlap();
     dma_fetch_native_program_conflict();

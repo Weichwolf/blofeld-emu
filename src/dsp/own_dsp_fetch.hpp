@@ -16,7 +16,8 @@ enum class OwnDspNativeCycleModel : std::uint8_t;
 enum class OwnDspAutomaticTiming : std::uint8_t {
   unqualified,
   one_effect_per_cycle,
-  one_effect_per_cycle_program_write_priority
+  one_effect_per_cycle_program_write_priority,
+  one_effect_per_cycle_write_priority_with_interrupts
 };
 
 struct OwnDspFetchCycleResult {
@@ -60,7 +61,7 @@ public:
 private:
   void check_owner() const;
   void check_sample_context(bool hold_fetch = false) const;
-  [[nodiscard]] bool begin_automatic();
+  [[nodiscard]] bool begin_automatic(bool admit_interrupts);
   [[nodiscard]] bool hold_program_fetch(OwnDspAutomaticTiming timing) const;
   [[nodiscard]] std::optional<DspMemoryAccess>
   native_overlap(const DspProgramFetchView &state,

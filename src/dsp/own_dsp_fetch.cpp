@@ -70,8 +70,9 @@ void OwnDspFetch::check_sample_context(const bool hold_fetch) const {
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
   const bool held_repeat = hold_fetch && in_flight_ && (repeated_ || native_latch_);
-  if ((regs.sr & cache_enable) != 0 || ((native_fetch_ || native_latch_) && !held_repeat) ||
-      (state.omr != regs.omr && !(hold_fetch && in_flight_))) {
+  const bool held_vector = hold_fetch && in_flight_ && native_fetch_ && interrupt_vector_;
+  if ((regs.sr & cache_enable) != 0 || (native_fetch_ && !held_vector && !held_repeat) ||
+      (native_latch_ && !held_repeat) || (state.omr != regs.omr && !(hold_fetch && in_flight_))) {
     throw Fault("Unqualified own DSP F2 memory context read P:" +
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
@@ -81,7 +82,7 @@ void OwnDspFetch::check_sample_context(const bool hold_fetch) const {
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
-  if (interrupt_vector_) {
+  if (interrupt_vector_ && !(hold_fetch && in_flight_ && native_fetch_)) {
     throw Fault("Own DSP vector owns program fetch read P:" +
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
@@ -132,13 +133,16 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inp
                                                           const OwnDspAutomaticTiming timing) {
   check_owner();
   if (timing != OwnDspAutomaticTiming::one_effect_per_cycle &&
-      timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority) {
+      timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
+      timing != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts) {
     throw Fault("Own DSP automatic execution requires an explicit timing hypothesis pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
-  const bool started = begin_automatic();
+  const bool started = begin_automatic(
+      timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts);
   const bool stale_context = in_flight_ && fetch_.view().omr != machine_.cpu_.registers().omr;
-  const bool hold_fetch = hold_program_fetch(timing) || stale_context || repeated_ || native_latch_;
+  const bool hold_fetch = hold_program_fetch(timing) || stale_context || repeated_ ||
+                          native_latch_ || interrupt_vector_;
   auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch);
   result.instruction_started = started;
   if (result.native && result.native->retired) { synchronize(); }
@@ -161,14 +165,22 @@ bool OwnDspFetch::hold_program_fetch(const OwnDspAutomaticTiming timing) const {
     throw Fault("Unqualified own DSP program write to issued/fetched P:" + hex(address, 6) +
                 " pc=" + hex(pending->effect.pc, 6) + " omr=" + hex(pending->effect.omr, 6));
   }
-  return timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
+  return (timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority ||
+          timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts) &&
          state.pending_address.has_value();
 }
 
-bool OwnDspFetch::begin_automatic() {
+bool OwnDspFetch::begin_automatic(const bool admit_interrupts) {
   if (in_flight_) { return false; }
   const auto regs = machine_.cpu_.registers();
   const auto context = machine_.cpu_.instruction_fetch();
+  if (interrupt_vector_ && admit_interrupts) {
+    const auto progress = begin();
+    if (progress.fault.kind != dsp56300::FaultKind::none) {
+      throw Fault("Own DSP automatic vector admission fault pc=" + hex(regs.pc, 6));
+    }
+    return true;
+  }
   if ((regs.sr & cache_enable) != 0 || native_fetch_ || interrupt_vector_ ||
       context.exception_vector || ((repeated_ || native_latch_) && !context.latched_opcode)) {
     throw Fault("Unqualified own DSP automatic cache/REP/vector fetch read P:" +
@@ -177,7 +189,7 @@ bool OwnDspFetch::begin_automatic() {
   constexpr unsigned mask_shift = 8;
   constexpr unsigned mask_bits = 3;
   const auto request = machine_.bus_.interrupt_request((regs.sr >> mask_shift) & mask_bits);
-  if (request) {
+  if (request && !admit_interrupts) {
     throw Fault("Unqualified own DSP automatic interrupt vector=" + hex(request->vector, 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
@@ -197,6 +209,13 @@ bool OwnDspFetch::begin_automatic() {
                 hex(opcode.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
   if (state.used < shape->words) { return false; }
+  if (request && admit_interrupts && admit_interrupt()) {
+    const auto progress = begin();
+    if (progress.fault.kind != dsp56300::FaultKind::none) {
+      throw Fault("Own DSP automatic vector admission fault pc=" + hex(regs.pc, 6));
+    }
+    return true;
+  }
   const auto progress = begin();
   if (progress.fault.kind != dsp56300::FaultKind::none) {
     throw Fault("Own DSP automatic instruction admission fault pc=" + hex(regs.pc, 6) +
