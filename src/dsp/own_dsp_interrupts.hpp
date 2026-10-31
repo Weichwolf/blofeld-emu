@@ -23,6 +23,8 @@ public:
   [[nodiscard]] dsp56300::InstructionProgress advance(const dsp56300::EffectTicket &ticket);
 
 private:
+  friend class OwnDspMachine;
+  void reset_after_cpu_reset() noexcept;
   DspBus &bus_;
   dsp56300::Core &cpu_;
   std::optional<DspInterruptRequest> request_;

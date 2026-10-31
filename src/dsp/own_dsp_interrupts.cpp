@@ -7,6 +7,12 @@
 #include <stdexcept>
 
 namespace blofeld {
+void OwnDspInterrupts::reset_after_cpu_reset() noexcept {
+  request_.reset();
+  vector_ = 0;
+  first_ = false;
+}
+
 bool OwnDspInterrupts::admit(const dsp56300::InstructionWords foreground) {
   if (request_) { throw std::logic_error("DSP interrupt already owns vector acknowledgement"); }
   constexpr unsigned mask_shift = 8;

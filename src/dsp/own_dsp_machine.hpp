@@ -34,6 +34,8 @@ public:
 
   [[nodiscard]] const OwnDspIo &io() const noexcept { return io_; }
 
+  // Assertion discards staged work at the current published effect boundary.
+  // Previously accepted bus writes remain; subcycle assertion timing is unqualified.
   void begin_hardware_reset(OwnDspResetInputs inputs);
   std::uint64_t advance_hardware_reset_ticks(std::uint64_t maximum_ticks);
   void release_hardware_reset();

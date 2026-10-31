@@ -25,8 +25,8 @@ void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
   constexpr unsigned spi_mode = 5;
   if (inputs.mode_known != mode_mask || inputs.mode_levels != spi_mode ||
       !inputs.pinit.has_value() || inputs.pinit.value() || inputs.recovery_cycles < 2 ||
-      clock_.hardware_reset_active() || cpu_.pending_instruction() || interrupts_.pending()) {
-    throw Fault("Own DSP reset requires a completed boundary, stable mode5/PINIT-low and "
+      clock_.hardware_reset_active()) {
+    throw Fault("Own DSP reset requires stable mode5/PINIT-low and "
                 "at least two recovery periods pc=" +
                 hex(cpu_.registers().pc, 6));
   }
@@ -37,6 +37,7 @@ void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
     bus_.pll().observe_pinit(inputs.pinit);
     bus_.reset();
     cpu_.reset();
+    interrupts_.reset_after_cpu_reset();
     // FM figures 5-3/5-4, sections 4.3.4, 5.4.3/5.4.4 and mode5 boot.
     // Retain registers without reset initialization, including EP and SZ.
     constexpr dsp56300::Word reset_status = 0xc00300;

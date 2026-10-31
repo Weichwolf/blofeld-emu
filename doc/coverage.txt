@@ -9,6 +9,15 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Own-core NAND resolved pads       partial  Local connected MCU/own-core run completes
+                                          32 pages: all 16,896 actual CPU PDRF values
+                                          match the original-derived source prefix.
+                                          Conflicts remain unknown; sampling them
+                                          still fails. Next refusal is the P-package
+                                          block-end CE contract. Part/CE recovery,
+                                          source tail, clocks, loader handoff and
+                                          instrument operation remain open
+                                          (own-dsp-integration.txt).
 Own-core Port-C lane hypothesis    partial  Local projection of two control registers
                                           passes 48 pin/function cases and scope
                                           controls under ASan/UBSan. Original run
@@ -31,9 +40,13 @@ Own-core reset/execution owner     partial  OwnDspMachine joins bus/core/IRQ own
                                           passes under ASan/UBSan: literal reset values,
                                           fractional time, gates, RAM/ROM retention,
                                           guest-written EP/SZ warm retention and stale
-                                          ticket refusal. Execution remains untimed;
-                                          regular board/scheduler integration, in-flight
-                                          reset and full checkpoints remain open.
+                                          ticket refusal. Reset now discards staged
+                                          work before/after register publication and
+                                          during vector entry, retaining published
+                                          unaffected registers. Execution remains
+                                          untimed; subcycle assertion, regular board/
+                                          scheduler integration and full checkpoints
+                                          remain open.
                                           Local original-MCU diagnostic receives all
                                           94 stage words over 7,275 SPI writes, then
                                           refuses the known Y:002000 store. Candidate
@@ -44,9 +57,10 @@ Own-core interrupt ownership      partial  Own core executes the actual vector
                                           own_dsp_interrupts passes under ASan/UBSan:
                                           masking, two bases, stale tickets, fast
                                           return and refused second-word read.
-                                          Timing, reset during vector entry,
-                                          checkpoints and integration into the regular
-                                          scheduler remain open
+                                          own_dsp_reset covers reset before/after
+                                          the first vector fetch and fresh IRQ entry.
+                                          Subcycle timing, checkpoints and regular
+                                          scheduler integration remain open
                                           (own-dsp-integration.txt).
 Independent DSP integration       partial  Pinned own-core subproject and strict
                                           synchronous bus adapter build and

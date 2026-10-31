@@ -22,6 +22,12 @@ constexpr Word retained_sz = 0x40;
 constexpr std::uint64_t hold_ticks = 90;
 constexpr std::uint64_t recovery_ticks = 135;
 constexpr std::uint64_t reset_ticks = hold_ticks + recovery_ticks;
+constexpr unsigned extal_hz = 12000000;
+constexpr unsigned timebase_hz = 540000000;
+constexpr Word movec_ep = 0x05f42a;
+constexpr Word movec_sr = 0x05f439;
+constexpr Word irqa_vector = 0x10;
+constexpr Word priority_register = 0xffffff;
 
 void require(const bool condition, const char *message) {
   if (!condition) { throw std::runtime_error(message); }
@@ -73,19 +79,20 @@ void retire(OwnDspMachine &machine, InstructionProgress step, const Word expecte
   for (unsigned effects = 0; effects < 16 && step.pending && !step.retired; ++effects) {
     step = machine.advance(step.pending->ticket);
   }
-  require(step.retired && step.fault.kind == FaultKind::none &&
-              machine.cpu().registers().pc == expected_pc,
-          "Released own core did not fetch and execute its own retained boot ROM instruction");
+  if (!step.retired || step.fault.kind != FaultKind::none ||
+      machine.cpu().registers().pc != expected_pc) {
+    throw std::runtime_error("Own DSP retirement expected-pc=" + blofeld::hex(expected_pc, 6) +
+                             " actual-pc=" + blofeld::hex(machine.cpu().registers().pc, 6) +
+                             " fault=" + blofeld::hex(static_cast<unsigned>(step.fault.kind), 2) +
+                             " retired=" + (step.retired ? "yes" : "no"));
+  }
 }
 
 void run() {
-  constexpr unsigned extal_hz = 12000000;
-  constexpr unsigned timebase_hz = 540000000;
   OwnDspMachine machine({.extal_hz = extal_hz,
                          .timebase_hz = timebase_hz,
                          .switch_timing = DspClockSwitch::reference_instruction_boundary});
   // FM table A-2 register fields and MOVEC immediate extension format.
-  constexpr Word movec_ep = 0x05f42a;
   constexpr Word movec_sz = 0x05f438;
   const std::array<Word, 6> own_program{0, movec_ep, retained_ep, movec_sz, retained_sz, 0};
   machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = own_program});
@@ -101,7 +108,6 @@ void run() {
   auto step = machine.begin_fetch();
   if (!step.pending) { throw std::runtime_error("Boot fetch did not expose its native ticket"); }
   const auto stale = step.pending->ticket;
-  reject([&] { machine.begin_hardware_reset(pins()); });
   retire(machine, step, boot_entry + 1);
   require(machine.clock().elapsed_ticks() == reset_ticks,
           "Untimed execution manufactured elapsed instruction time");
@@ -124,11 +130,102 @@ void run() {
   reject([&] { static_cast<void>(machine.advance(stale)); });
   retire(machine, step, boot_entry + 1);
 }
+
+void reset_during_register_write(const bool published) {
+  OwnDspMachine machine({.extal_hz = extal_hz,
+                         .timebase_hz = timebase_hz,
+                         .switch_timing = DspClockSwitch::reference_instruction_boundary});
+  const std::array<Word, 3> own_program{movec_ep, retained_ep, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = own_program});
+  machine.begin_hardware_reset(pins());
+  finish_reset(machine);
+  const auto initial_ep = machine.cpu().registers().ep;
+  auto step = machine.begin_fetch();
+  for (unsigned effects = 0; effects < 16 && step.pending && !step.pending->effect.move_update;
+       ++effects) {
+    step = machine.advance(step.pending->ticket);
+  }
+  if (!step.pending || !step.pending->effect.move_update) {
+    throw std::runtime_error("Own MOVEC did not expose its real register publication");
+  }
+  const auto move = step.pending->effect.move_update.value();
+  require(move.count == 1 && move.updates[0].storage == RegisterStorage::ep &&
+              move.updates[0].value == retained_ep && machine.cpu().registers().ep == initial_ep,
+          "MOVEC register destination/result differs from the independent immediate encoding");
+  if (published) {
+    step = machine.advance(step.pending->ticket);
+    require(machine.cpu().registers().ep == retained_ep, "Real EP publication was lost");
+  }
+  if (!step.pending) { throw std::runtime_error("MOVEC retired before the selected reset cut"); }
+  const auto stale = step.pending->ticket;
+  machine.begin_hardware_reset(pins());
+  require(!machine.cpu().pending_instruction(), "Reset retained an in-flight instruction");
+  finish_reset(machine);
+  require(machine.cpu().registers().ep == (published ? retained_ep : initial_ep),
+          "Reset retained a speculative value or rolled back a published register");
+  step = machine.begin_fetch();
+  reject([&] { static_cast<void>(machine.advance(stale)); });
+  retire(machine, step, boot_entry + 2);
+  require(machine.cpu().registers().ep == retained_ep &&
+              machine.clock().elapsed_ticks() == 2 * reset_ticks,
+          "Reset lost the boot program or added untimed instruction clocks");
+}
+
+void reset_during_interrupt_entry(const bool fetched) {
+  OwnDspMachine machine({.extal_hz = extal_hz,
+                         .timebase_hz = timebase_hz,
+                         .switch_timing = DspClockSwitch::reference_instruction_boundary});
+  const std::array<Word, 3> own_program{movec_sr, 0, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = own_program});
+  machine.bus().write({.address = irqa_vector, .value = 0});
+  machine.bus().write({.address = irqa_vector + 1, .value = 0});
+  machine.begin_hardware_reset(pins());
+  finish_reset(machine);
+  retire(machine, machine.begin_fetch(), boot_entry + 2);
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(false);
+  const InstructionWords foreground{.address = boot_entry + 2, .opcode = 0};
+  require(machine.admit_interrupt(foreground), "Real IRQA request was not admitted");
+  auto step = machine.begin_fetch();
+  if (!step.pending || step.pending->effect.kind != EffectKind::fetch_opcode ||
+      step.pending->effect.address != irqa_vector) {
+    throw std::runtime_error("Interrupt did not expose its actual first vector fetch");
+  }
+  if (fetched) { step = machine.advance(step.pending->ticket); }
+  if (!step.pending) { throw std::runtime_error("Interrupt entry lost its selected reset cut"); }
+  require(machine.bus().interrupt_request(0).has_value(), "First vector fetch acknowledged IRQA");
+  const auto stale = step.pending->ticket;
+  machine.begin_hardware_reset(pins());
+  finish_reset(machine);
+  require(!machine.bus().interrupt_request(0), "Reset retained an old board interrupt request");
+  step = machine.begin_fetch();
+  reject([&] { static_cast<void>(machine.advance(stale)); });
+  retire(machine, step, boot_entry + 2);
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(false);
+  require(machine.admit_interrupt(foreground), "Old vector ownership blocked a fresh real IRQA");
+  // FM 2.3.2.7/8: fast vectors divert fetches while the foreground PC stays unchanged.
+  step = machine.begin_fetch();
+  if (!step.pending || step.pending->effect.address != irqa_vector) {
+    throw std::runtime_error("Fresh interrupt did not fetch its first real vector word");
+  }
+  retire(machine, step, foreground.address);
+  step = machine.begin_fetch();
+  if (!step.pending || step.pending->effect.address != irqa_vector + 1) {
+    throw std::runtime_error("Fresh interrupt did not fetch its second real vector word");
+  }
+  retire(machine, step, foreground.address);
+  require(!machine.bus().interrupt_request(0), "Fresh interrupt was not genuinely acknowledged");
+}
 }
 
 int main() {
   try {
     run();
+    reset_during_register_write(false);
+    reset_during_register_write(true);
+    reset_during_interrupt_entry(false);
+    reset_during_interrupt_entry(true);
     std::cout << "Own DSP hardware reset and gated execution checks passed\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

@@ -38,10 +38,16 @@ reset values. Other visible registers are retained, including uninitialized EP
 and SZ (FM 4.3.2 and 5.4.3.3). RAM and installed ROM survive the board reset.
 Only reset time advances: subsequent staged execution remains explicitly untimed.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
-scheduler cycles. In-flight assertion and reset during vector entry refuse.
+scheduler cycles. Assertion at a native effect boundary drops staged CPU work
+and vector ownership without acknowledging an old source. Published unaffected
+registers and accepted memory writes retain their reset semantics; speculative
+register values do not survive. This does not model subcycle assertion latency.
 The synthetic reset test covers fractional assertion/recovery, early release,
 execution gates, memory retention, independent reset values, own MOVEC EP/SZ
 instructions, warm register retention and old-ticket refusal across reset.
+It also covers cuts before/after EP publication and the first vector fetch,
+fresh real IRQ admission afterward and both actual vector reads. FM 2.3.2.7/8
+keeps the foreground PC unchanged during those fast-vector fetches.
 No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, full machine
 checkpoint or real-time instrument behavior is established by these fixtures.
 
@@ -78,6 +84,12 @@ Conditional board contracts, each separately controlled and recorded:
   CPU data reads during that mode refuse with context. Controls verify default
   refusal, retained PCR/DDR values, unknown pads and valid input-mode recovery.
   Each conditional write is logged with operation, address, PC and value.
+- The board-owned Port-F resolver combines GPIO, unknown functions and NAND
+  drivers without choosing a winner for contention. CPU sampling still refuses
+  unknown/conflicting pins. Sanitized controls cover both conflict polarities,
+  all-lane disagreement, agreeing drivers, original-order direction changes,
+  access-time uncertainty and explicit ownership. They establish logical pad
+  behavior, not electrical current, damage or calibrated transition timing.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -86,15 +98,20 @@ No erased array or synthetic zero tail is assumed. Source identities and scope:
   doc/own-dsp-nand-reference.json
 
 Current verified boundary:
-The latest own-core run completes 1,584 CPU PDRF reads across three source pages.
-Its 1,585 prepared protocol bytes match the update-derived stream; raw CPU return
-values are not separately traced by this diagnostic. The NAND protocol prepares
-the first byte of row3, then the local resolver refuses pad contention
-before the next CPU data read, DSP PC 000094. RE is already asserted while the
-DSP still drives the data pins. Register retention does not resolve this
-transition. The uncalibrated scheduler and transient pad resolution need work;
-this observation does not prove a conflict on physical hardware. No DSP audio,
-complete loader handoff or normal instrument operation is established.
+The latest own-core run completes 32 pages. All 16,896 actual CPU PDRF return
+values and prepared protocol bytes match the update-derived source prefix.
+Twenty-two conflicting net observations remain explicitly unknown; no CPU read
+consumes such a value. The next refusal is a fresh read command after row31:
+the selected P-package contract requires CE-high termination at a block end,
+but the candidate net stays selected. Recover the CE route or the correct part
+contract; keep that guard. The datasheet distinguishes P sequential reads and
+J command-stepped pages, without proving either fitted identity. Original fixed
+stage-byte equality also flags the loader's self-modifying P8E slot; the final
+patch opcode was not separately captured. Full loader/RAM identity is unproven.
+Clock and physical-net qualifications, DSP audio, loader handoff and normal
+instrument operation remain open.
+NAND write-latch input still uses intended GPIO data; resolved write sampling
+and interleaving output-valid/release deadlines need separate integration.
 Reference artifacts, copied persistent state and the memory/lane traces remain
 unchanged. Z3 also admits distinct peer permutations under bounded software
 constraints; those constraints do not uniquely identify the physical nets.
@@ -107,6 +124,8 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-link/{build,runtime,audit}.json
   doc/local/own-core-nand-source/{source,build,runtime,audit,ce_constraints}.json
   doc/local/own-core-nand-register-mode/{build,runtime,audit}.json
+  doc/local/own-core-nand-resolved-pads/{build,frozen-inputs,runtime,audit}.json
+  doc/local/own-core-reset-abort/validation.json
 
 Public adapter validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
