@@ -20,7 +20,16 @@ zlib:
   Source/notice availability for binary distribution remains governed by zlib's
   own license. No manufacturer assets are part of this dependency.
 
-DSP56300:
+Independent DSP56300 runtime core:
+  https://github.com/Weichwolf/dsp56300
+  GPL-3.0-only (the dependency's LICENSE; the same GPL text is in LICENSE).
+  Built as a pinned source subproject under project warnings and sanitizers.
+  Original source/setup notices remain in that checkout, including its
+  THIRD_PARTY.txt attribution. The core has no dependency on another DSP
+  emulator or JIT library. Corresponding source and its notices must accompany
+  redistributable binaries as required by the GPL.
+
+Legacy DSP test harness only (not the regular runtime):
   https://github.com/dsp56300/dsp56300
   GPL-3.0 (see the dependency's LICENSE.md), pinned in doc/dependencies.json.
   The native interpreter is built from a local checkout, patched only in build/.
@@ -32,7 +41,8 @@ DSP56300:
   accompany any redistributable binary package as required by their licenses.
   The reference data-bus patch also corrects scaled selected-source S growth
   from DSP56300FM 5-13; numeric transfer operations and notices stay intact.
-  The reference core is integrated; combined MCU/DSP board boot remains pending.
+  Remaining component tests use this legacy reference harness during migration.
+  BUILD_TESTING=OFF with fuzzing disabled neither configures nor builds it.
 
 Native session audio client:
   PulseAudio 17.0 client, upstream authors and contributors.

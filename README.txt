@@ -1,4 +1,4 @@
-Blofeld firmware emulator — initial headless bring-up
+Blofeld hardware emulator — initial headless bring-up
 
 License: GPL-3.0-only. Dependency notices are in THIRD_PARTY.txt. Manufacturer
 firmware and reference assets are separate local inputs and are not included.
@@ -12,7 +12,7 @@ replacement-firmware target.
 
 Source layout
 Implementation and headers live together under src/. Project include paths are
-relative to that root, for example "dsp/dsp_core.hpp". The areas are:
+relative to that root, for example "dsp/dsp_bus.hpp". The areas are:
 
   app/       Standalone entry point and command-line MIDI runner
   board/     Device wiring, coupled scheduling and reference-board composition
@@ -38,11 +38,19 @@ sanitizer runtime), CMake >= 3.25, Ninja, Git, GNU patch, Python 3 and Ghidra 12
 including its native SLEIGH sources and compiler. Set GHIDRA_ROOT if it is not
 installed under ~/.local/opt/ghidra_*_PUBLIC. Native SLEIGH does not need Java at
 runtime.
-DSP56300_ROOT must point to a clean checkout of the revision in
-doc/dependencies.json, including asmjit sources (default: ~/Git/dsp56300).
-Initialize its pinned submodule before configuring:
+The regular runtime uses our independent Weichwolf/dsp56300 core, pinned in
+doc/dependencies.json. BLOFELD_OWN_DSP_ROOT selects its clean checkout; the default
+is ~/Git/dsp56300. Its integration names remain transitional during test migration.
+A standalone build without test harnesses requires no foreign DSP checkout:
 
-  git -C "${DSP56300_ROOT:-$HOME/Git/dsp56300}" submodule update --init source/asmjit
+  cmake --preset strict -B build/standalone -DBUILD_TESTING=OFF -DBLOFELD_FUZZING=OFF
+  cmake --build build/standalone --target blofeld-headless -j4
+
+The remaining legacy component tests still require a separate clean checkout
+selected by DSP56300_ROOT, with the legacy revision and asmjit submodule pinned
+in doc/dependencies.json. Set that path explicitly when configuring those tests;
+our ~/Git/dsp56300 repository must not be replaced by the legacy source.
+Full removal of the legacy harness and dependency remains migration work.
 
 Pinned zlib, PulseAudio client and libsndfile sources are built locally; system
 libraries do not replace these instrumented dependencies. Pinned Python Meson
@@ -54,7 +62,7 @@ BLOFELD_ZLIB_ARCHIVE can select another copy of the same verified archive.
   python3 tools/dependencies.py --fetch --component pulseaudio
   python3 tools/dependencies.py --fetch --component libsndfile
   python3 tools/dependencies.py --fetch --component meson
-  cmake --preset strict
+  cmake --preset strict -DDSP56300_ROOT=/path/to/pinned-legacy-checkout
   cmake --build --preset strict
   cmake --build build/strict --target quality
 

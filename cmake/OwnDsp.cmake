@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Transitional integration of the independent DSP core. The existing runtime
-# still uses the legacy core until its scheduler and pipeline are migrated.
+# Pinned independent core used by the regular Board and headless runtime.
+# Transitional integration names are removed with the remaining legacy harness.
 set(BLOFELD_OWN_DSP_ROOT "$ENV{BLOFELD_OWN_DSP_ROOT}" CACHE PATH "Independent DSP core source checkout")
 if(NOT BLOFELD_OWN_DSP_ROOT)
   set(BLOFELD_OWN_DSP_ROOT "$ENV{HOME}/Git/dsp56300")

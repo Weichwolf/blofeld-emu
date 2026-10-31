@@ -76,7 +76,12 @@ if(DEFINED blofeld_dependency_sanitizers)
     "-fsanitize=${blofeld_dependency_sanitizers}" -fno-sanitize-recover=all -fno-omit-frame-pointer -g)
 endif()
 # Apply clang-tidy to our targets, after the third-party target was created.
-include(cmake/DspCore.cmake)
+find_package(Git REQUIRED)
+find_package(Threads REQUIRED)
+# The remaining legacy harness is test-only while its expectations are migrated.
+if(BUILD_TESTING OR BLOFELD_FUZZING)
+  include(cmake/DspCore.cmake)
+endif()
 include(cmake/OwnDsp.cmake)
 include(cmake/PulseAudio.cmake)
 set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
@@ -251,28 +256,28 @@ target_link_libraries(blofeld_audio_runtime PUBLIC blofeld_host_audio blofeld_pc
 add_library(blofeld_mcu_midi src/mcu/mcu_midi.cpp src/mcu/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC src)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
-add_library(blofeld_dsp
-  src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
-  src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
-  src/dsp/dsp_fetch_context.cpp
-  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_reference_cycle.cpp
-  src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
-  src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
-  src/dsp/dsp_fetch_schedule_events.cpp src/dsp/dsp_fetch_peripheral_events.cpp
-  src/dsp/dsp_peripheral_calendar.cpp
-  src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
-  src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
-  src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
-  src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
-  src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
-  src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp)
-target_include_directories(blofeld_dsp PUBLIC src)
-target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals
-  PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
-  "$<LINK_ONLY:blofeld_dsp_address_decode>"
-  "$<LINK_ONLY:blofeld_dsp_peripheral_decode>"
-  blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
+  add_library(blofeld_dsp
+    src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
+    src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
+    src/dsp/dsp_fetch_context.cpp
+    src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_reference_cycle.cpp
+    src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
+    src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
+    src/dsp/dsp_fetch_schedule_events.cpp src/dsp/dsp_fetch_peripheral_events.cpp
+    src/dsp/dsp_peripheral_calendar.cpp
+    src/dsp/dsp_pipeline.cpp src/dsp/dsp_pipeline_decode.cpp src/dsp/dsp_pipeline_transfer.cpp
+    src/dsp/dsp_pipeline_loop.cpp src/dsp/dsp_pipeline_program.cpp src/dsp/dsp_pipeline_control.cpp src/dsp/dsp_loop_source.cpp
+    src/dsp/dsp_pipeline_execute.cpp src/dsp/dsp_interlocks.cpp src/dsp/dsp_interlock_decode.cpp
+    src/dsp/dsp_interrupt_timing.cpp src/dsp/dsp_machine.cpp src/dsp/dsp_scheduled_run.cpp
+    src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
+    src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp)
+  target_include_directories(blofeld_dsp PUBLIC src)
+  target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals
+    PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
+    "$<LINK_ONLY:blofeld_dsp_address_decode>"
+    "$<LINK_ONLY:blofeld_dsp_peripheral_decode>"
+    blofeld_dsp_native)
   add_library(blofeld_dsp_instruction_fixture test/dsp_instruction_fixture.cpp)
   target_link_libraries(blofeld_dsp_instruction_fixture PUBLIC blofeld_dsp PRIVATE blofeld_dsp_native)
 endif()
@@ -281,10 +286,12 @@ target_include_directories(blofeld_core PUBLIC src)
 target_link_libraries(blofeld_core PUBLIC blofeld_mcu PRIVATE blofeld_sleigh blofeld_hc12_cycles)
 target_compile_definitions(blofeld_core PUBLIC
   BLOFELD_DEFAULT_SLA="${CMAKE_CURRENT_BINARY_DIR}/share/HC12.sla")
-add_library(blofeld_mcu_dsp src/board/mcu_dsp_schedule.cpp src/board/mcu_dsp_fetch_schedule.cpp
-  src/board/mcu_dsp_fetch_events.cpp src/board/mcu_dsp_fetch_peripheral.cpp)
-target_include_directories(blofeld_mcu_dsp PUBLIC src)
-target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
+if(BUILD_TESTING)
+  add_library(blofeld_mcu_dsp src/board/mcu_dsp_schedule.cpp src/board/mcu_dsp_fetch_schedule.cpp
+    src/board/mcu_dsp_fetch_events.cpp src/board/mcu_dsp_fetch_peripheral.cpp)
+  target_include_directories(blofeld_mcu_dsp PUBLIC src)
+  target_link_libraries(blofeld_mcu_dsp PUBLIC blofeld_core blofeld_dsp)
+endif()
 add_library(blofeld_host_midi src/midi/host_midi.cpp)
 target_include_directories(blofeld_host_midi PUBLIC src)
 target_link_libraries(blofeld_host_midi PUBLIC blofeld_quality)

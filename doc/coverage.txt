@@ -13,9 +13,10 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           through native MCU periods and joint snapshots.
                                           Directed reset, MIDI, PCM and recovery tests
                                           pass; product/integration binaries contain no
-                                          foreign DSP symbols. Legacy configuration,
-                                          older tests and transitional names still need
-                                          removal (own-dsp-integration.txt).
+                                          foreign DSP symbols. Standalone configuration
+                                          omits the legacy core; older test harnesses
+                                          and transitional names still need removal
+                                          (own-dsp-integration.txt).
 ESAI known-input cold setup       partial  Explicit pre-bit reference allows held inputs
                                           and preserves counted HCKT edges while format
                                           programming remains before the first bit edge.
