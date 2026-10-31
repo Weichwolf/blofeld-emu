@@ -156,6 +156,8 @@ public:
   [[nodiscard]] DspTimers &timers() { return timers_; }
 
   void observe_esai_transmit(DspEsaiInstance instance, DspEsaiInputs inputs);
+  void set_esai_configuration_contract(DspEsaiInstance instance,
+                                       DspEsaiConfigurationContract contract);
   [[nodiscard]] DspEsaiOutputs esai_transmit_outputs(DspEsaiInstance instance) const;
   [[nodiscard]] DspEsaiClockOutputs esai_clock_outputs(DspEsaiInstance instance) const;
   // Explicit standalone reference phases; automatic native DMA bus timing rejects.

@@ -10,6 +10,9 @@ add_custom_target(blofeld-own-dsp-components ALL DEPENDS blofeld_own_dsp_io
   blofeld_dsp_peripheral_decode blofeld_own_dsp_fetch)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-esai-initialization-test test/dsp_esai_initialization_test.cpp)
+  target_link_libraries(blofeld-esai-initialization-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME dsp_esai_initialization COMMAND blofeld-esai-initialization-test)
   add_executable(blofeld-shi-test test/dsp_shi_test.cpp)
   target_link_libraries(blofeld-shi-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_shi COMMAND blofeld-shi-test)

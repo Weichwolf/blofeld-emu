@@ -17,6 +17,17 @@ DspEsai::DspEsai(const DspEsaiInstance instance) : instance_(instance) {
   reset();
 }
 
+void DspEsai::set_configuration_contract(const DspEsaiConfigurationContract contract) {
+  if (active_ || !cold_configuration_ ||
+      (contract != DspEsaiConfigurationContract::documented_reset &&
+       contract != DspEsaiConfigurationContract::cold_unclocked_reference)) {
+    throw Fault(
+        "DSP ESAI configuration contract requires an inactive cold valid configuration at " +
+        address(esai::tcr));
+  }
+  configuration_contract_ = contract;
+}
+
 std::string DspEsai::address(const unsigned offset) const {
   if (offset > esai::rsmb) { return "invalid-offset=" + std::to_string(offset); }
   constexpr unsigned primary_base = 0xffffa0;
@@ -63,6 +74,7 @@ void DspEsai::reset() {
   frames_ = 0;
   slots_ = 0;
   active_ = false;
+  cold_configuration_ = true;
   reset_paths();
 }
 
@@ -70,6 +82,9 @@ void DspEsai::set_active(const bool active) {
   if (active_ && !active) { reset_paths(); }
   const bool activate = active && !active_;
   active_ = active;
+  if (active && (observed_.clock || observed_.frame_sync || observed_.high_clock)) {
+    cold_configuration_ = false;
+  }
   if (activate) { rebaseline(); }
 }
 
@@ -119,6 +134,11 @@ DspEsai::Format DspEsai::format() const {
 
 unsigned DspEsai::enabled() const {
   return (control_ & esai::personal_reset) != 0 ? 0U : control_ & esai::channels;
+}
+
+bool DspEsai::cold_configuration_allowed() const {
+  return configuration_contract_ == DspEsaiConfigurationContract::cold_unclocked_reference &&
+         cold_configuration_ && enabled() == 0 && running_ == 0;
 }
 
 bool DspEsai::needs_transmit_clock() const {
@@ -251,11 +271,13 @@ void DspEsai::write_control(const std::uint32_t value) {
   const auto old = enabled();
   if (active_ && (control_ & esai::personal_reset) == 0 &&
       ((value ^ control_) & ~(esai::channels | esai::personal_reset | esai::data_interrupt |
-                              esai::exception_interrupt)) != 0) {
+                              esai::exception_interrupt)) != 0 &&
+      (!cold_configuration_allowed() || (value & esai::channels) != 0)) {
     throw Fault("DSP ESAI configuration requires individual reset at " + address(esai::tcr));
   }
   control_ = value;
   validate();
+  if (enabled() != 0) { cold_configuration_ = false; }
   if ((control_ & esai::personal_reset) != 0) {
     reset_paths();
   } else {
@@ -281,7 +303,8 @@ void DspEsai::write_configuration(const Configuration kind, const std::uint32_t 
   const auto allowed = common ? common_mask : clock_mask;
   auto &target = common ? common_control_ : clock_control_;
   const bool changed = value != target;
-  if ((value & ~allowed) != 0 || (active_ && (control_ & esai::personal_reset) == 0 && changed)) {
+  if ((value & ~allowed) != 0 || (active_ && (control_ & esai::personal_reset) == 0 && changed &&
+                                  !cold_configuration_allowed())) {
     throw Fault("Unsupported/active DSP ESAI configuration at " + address(offset));
   }
   target = value;

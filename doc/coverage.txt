@@ -15,6 +15,14 @@ User-supplied firmware execution pending  Required in objective.txt: execute cus
                                           assumptions, test storage interruption and
                                           recovery. No physical flash-safety proof
                                           follows from emulator execution alone.
+ESAI cold initialization         partial  Explicit cold-unclocked reference contract
+                                          supplements the unchanged reset-required
+                                          default. Both maps/orders, missing clocks,
+                                          reserved fields, real serial data, reset
+                                          and closed-window lifetime have directed
+                                          ASan/UBSan tests. Software-simulator evidence
+                                          does not establish chip timing, board clocks,
+                                          original boot or audio (dsp-esai.txt).
 Own-core SHI reset contract       partial  Explicit selected-quiescent SPI reset
                                           contract has SHI/fetch/checkpoint tests
                                           under ASan/UBSan; real SS/HBUSY retained,

@@ -9,6 +9,10 @@
 namespace blofeld {
 enum class DspEsaiInstance : std::uint8_t { primary, secondary };
 enum class DspEsaiClockTiming : std::uint8_t { unqualified, reference_reset_edges };
+enum class DspEsaiConfigurationContract : std::uint8_t {
+  documented_reset,
+  cold_unclocked_reference
+};
 
 struct DspEsaiInputs {
   std::optional<bool> clock = std::nullopt;
@@ -39,6 +43,8 @@ class DspEsai {
 public:
   explicit DspEsai(DspEsaiInstance instance);
   void reset();
+  // Explicit software-reference hypothesis, retained through hardware/software reset.
+  void set_configuration_contract(DspEsaiConfigurationContract contract);
   void set_active(bool active);
   [[nodiscard]] static bool handles(unsigned offset);
   [[nodiscard]] std::uint32_t read(unsigned offset);
@@ -70,6 +76,7 @@ private:
   [[nodiscard]] Format format() const;
   [[nodiscard]] unsigned enabled() const;
   [[nodiscard]] unsigned frame_slots() const;
+  [[nodiscard]] bool cold_configuration_allowed() const;
   void validate() const;
   void require_observed_clock() const;
   [[nodiscard]] bool clock_generator() const;
@@ -95,6 +102,8 @@ private:
   void emit_bit();
   [[nodiscard]] unsigned data_bit(unsigned position) const;
   DspEsaiInstance instance_;
+  DspEsaiConfigurationContract configuration_contract_ =
+      DspEsaiConfigurationContract::documented_reset;
   std::array<std::uint32_t, 6> data_{};
   std::array<std::uint32_t, 6> shift_{};
   std::uint32_t control_ = 0;
@@ -124,6 +133,7 @@ private:
   bool frame_clocked_ = false;
   bool previous_sync_ = false;
   bool active_ = false;
+  bool cold_configuration_ = true;
   bool baseline_ = false;
   bool frame_ = false;
   bool pending_frame_ = false;

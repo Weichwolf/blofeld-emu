@@ -78,6 +78,42 @@ invalidated; software must reprime it. Hardware/software reset also resets contr
 and restores all slot-mask bits. Native owner checkpoints retain all transmit
 buffers, shifts, pin phase, pending sync, mask versions and error-clear history.
 
+Cold initialization research contract
+The default DspEsaiConfigurationContract::documented_reset follows sections
+8.4.2/9.4.2: changed active control programming requires reset. The manual's
+requirement is not evidence that silicon traps on a write outside that sequence.
+Four independent Symphony Studio software-simulator controls retained clock and
+format registers with either pin-selection order, in both register maps (188
+native instructions, 28 literal observations; no HCKT/FST supplied). The local
+qualified-observations receipt has SHA-256
+e8a245d1cea864e03d3e57c05811bf2b9408b4e385ba303722e34e0f7d26465d.
+This is software-model evidence, not a physical cold-start or clock guarantee.
+
+An explicit cold_unclocked_reference contract admits changed clock/common/format
+programming only before the first transmitter enable and before any known clock,
+frame-sync or high-clock observation on selected pins. Even a held known input
+closes this conservative research window. A baseline supplied while inactive
+closes it on activation. A format-changing write cannot also enable a transmitter.
+Reserved fields, receiver enables and unsupported formats still reject. Copies
+retain the contract and window independently; TE disable, pin deselection and
+personal reset never reopen the window. Hardware/software reset reopens it while
+retaining the contract; externally observed inputs remain observed. The contract
+can only be changed while inactive and still cold.
+
+DspBus::set_esai_configuration_contract selects this hypothesis per instance
+before activation. No original firmware store is changed, no reset bit or clock
+is injected, and no status/data value is fabricated. Generated-clock outputs and
+observations still require explicit timing and a known HCKT source; enabling TX
+without that source still fails. The regular device does not select this contract.
+
+  cmake --build build/own-only --target blofeld-esai-initialization-test
+  ctest --test-dir build/own-only -R '^dsp_esai_initialization$' --output-on-failure
+
+Directed tests cover both maps, both pin orders, retained registers, literal serial
+data/status under supplied edges, missing clocks, reserved fields, active changes,
+held observations, copies, reset and closed-window lifetime. They do not establish
+original boot, fitted board clocks, audio, USB or update safety.
+
 Receiver enable/configuration, FOSC-derived clocks, external word-length/relative
 frame sync, generated relative frame sync, AC97/on-demand modes, serial flag
 outputs/external buffer controls, receive/last-slot interrupt enables remain

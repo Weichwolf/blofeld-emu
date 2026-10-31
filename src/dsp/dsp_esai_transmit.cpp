@@ -111,6 +111,9 @@ void DspEsai::observe_checked(const DspEsaiInputs inputs) {
   if ((clock_generator() && inputs.clock) || (frame_generator() && inputs.frame_sync)) {
     throw Fault("External drive supplied for DSP ESAI generated clock at " + address(esai::tccr));
   }
+  if (active_ && (inputs.clock || inputs.frame_sync || inputs.high_clock)) {
+    cold_configuration_ = false;
+  }
   if (!generator_running() && !needs_transmit_clock()) {
     observed_ = inputs;
     rebaseline();

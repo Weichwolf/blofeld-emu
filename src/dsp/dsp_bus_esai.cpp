@@ -92,6 +92,11 @@ DspEsai *DspBus::esai_register(const DspAddress access) {
   return &sync_esai(primary ? DspEsaiInstance::primary : DspEsaiInstance::secondary);
 }
 
+void DspBus::set_esai_configuration_contract(const DspEsaiInstance instance,
+                                             const DspEsaiConfigurationContract contract) {
+  sync_esai(instance).set_configuration_contract(contract);
+}
+
 void DspBus::observe_esai_transmit(const DspEsaiInstance instance, const DspEsaiInputs inputs) {
   auto &serial = sync_esai(instance);
   const auto &gpio_port = gpio(port(instance));
