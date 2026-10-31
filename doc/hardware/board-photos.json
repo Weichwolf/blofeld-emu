@@ -80,6 +80,16 @@
       "bytes": 151601,
       "sha256": "dd69a18749f8eddfe4ada4f0e3b1ae058cc800b84b7800629eb56abfc2bbdc23",
       "observation": "Author identifies Desktop PCB revision 2.02; these views show the underside and do not expose readable DSP markings."
+    },
+    {
+      "file": "blofeld-geekraver-2024.jpeg",
+      "source": "https://eu5.dh-cdn.net/uploads/db8181/original/3X/a/5/a59f9e497d9aa112bf29bd4604f7c353c07916ab.jpeg",
+      "source_page": "https://www.elektronauts.com/t/blofeld-anyone-know-what-this-component-is/216973",
+      "author": "geekraver",
+      "license": "No redistribution grant established; local reference only.",
+      "bytes": 580116,
+      "sha256": "df18278c4c12603fabad050cf0981d4cffe7ca4f7e0bf67a2f0536d5600d1b23",
+      "observation": "Original repair photograph shows the power-input/display corner; no NAND part marking or CE/WP continuity is visible."
     }
   ]
 }

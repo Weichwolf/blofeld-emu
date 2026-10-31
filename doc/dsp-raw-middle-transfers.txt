@@ -42,8 +42,9 @@ reference manifest. No test skips or sanitizer/format/tidy findings.
 A conditional connected original1.25 run passes the preceding raw-middle
 Decode refusal:973551 DSP instructions/2020506 pipeline periods, respectively
 76897/102781 beyond the Y0-only run. It then refuses a Port-F-control write
-with active DMA. Exact NAND prefix:107 pages/56496 bytes (56238 original plus
-258 declared synthetic tail); all sealed inputs unchanged, no sanitizer findings.
+with active DMA. Exact NAND prefix:107 pages/56496 bytes (56238 archive-derived,
+including6 transport-padding bytes,plus258 declared synthetic tail); all sealed
+inputs unchanged, no sanitizer findings.
 Terminal native exit2 is not a successful boot. The access value, selected DMA
 phase/channel/endpoints and complete waveform-bank contents were not captured.
 The reference manifest pins its qualification; all hardware hypotheses remain
