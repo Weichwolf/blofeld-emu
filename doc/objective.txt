@@ -23,6 +23,16 @@ assumptions for compatibility assessment; simulation alone does not prove that
 an image is safe on physical hardware. Component fixtures support full-device
 acceptance and cannot replace it.
 
+Immediate engineering priority: finish migrating the regular standalone/GUI
+execution path, build and retained tests to our independent ~/Git/dsp56300 core,
+then remove the foreign-core dependency and obsolete integration. Research runs
+using the own core do not by themselves complete that migration. Extend the
+independent core for general CPU, JIT and checkpoint interfaces when required;
+keep board wiring, device clocks and manufacturer programs in the emulator's
+local reference scope. Commit and push verified increments in each affected
+project to its configured remote. Broader audio-clock experiments follow this
+migration priority; the complete instrument acceptance scope remains unchanged.
+
 Acceptance requirements (current evidence and gaps: coverage.txt):
 Firmware-visible state and timing, including USB, update and recovery behavior,
 are the accuracy criteria. Functional abstractions must preserve those effects;

@@ -20,7 +20,8 @@ DspEsai::DspEsai(const DspEsaiInstance instance) : instance_(instance) {
 void DspEsai::set_configuration_contract(const DspEsaiConfigurationContract contract) {
   if (active_ || !cold_configuration_ ||
       (contract != DspEsaiConfigurationContract::documented_reset &&
-       contract != DspEsaiConfigurationContract::cold_unclocked_reference)) {
+       contract != DspEsaiConfigurationContract::cold_unclocked_reference &&
+       contract != DspEsaiConfigurationContract::cold_before_bit_clock_reference)) {
     throw Fault(
         "DSP ESAI configuration contract requires an inactive cold valid configuration at " +
         address(esai::tcr));
@@ -82,7 +83,9 @@ void DspEsai::set_active(const bool active) {
   if (active_ && !active) { reset_paths(); }
   const bool activate = active && !active_;
   active_ = active;
-  if (active && (observed_.clock || observed_.frame_sync || observed_.high_clock)) {
+  if (active &&
+      configuration_contract_ != DspEsaiConfigurationContract::cold_before_bit_clock_reference &&
+      (observed_.clock || observed_.frame_sync || observed_.high_clock)) {
     cold_configuration_ = false;
   }
   if (activate) { rebaseline(); }
@@ -137,7 +140,7 @@ unsigned DspEsai::enabled() const {
 }
 
 bool DspEsai::cold_configuration_allowed() const {
-  return configuration_contract_ == DspEsaiConfigurationContract::cold_unclocked_reference &&
+  return configuration_contract_ != DspEsaiConfigurationContract::documented_reset &&
          cold_configuration_ && enabled() == 0 && running_ == 0;
 }
 
@@ -306,6 +309,9 @@ void DspEsai::write_configuration(const Configuration kind, const std::uint32_t 
   if ((value & ~allowed) != 0 || (active_ && (control_ & esai::personal_reset) == 0 && changed &&
                                   !cold_configuration_allowed())) {
     throw Fault("Unsupported/active DSP ESAI configuration at " + address(offset));
+  }
+  if (!common && changed && active_ && (control_ & esai::personal_reset) == 0 && high_phase_ != 0) {
+    throw Fault("Unqualified DSP ESAI partial-divider clock reconfiguration at " + address(offset));
   }
   target = value;
   validate();

@@ -9,6 +9,18 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Full own-DSP runtime migration    pending  Immediate priority: replace regular Board
+                                          ownership/scheduling and retained native tests,
+                                          then remove the foreign build/dependency.
+                                          Own-core research binaries alone do not satisfy
+                                          this requirement (objective.txt).
+ESAI known-input cold setup       partial  Explicit pre-bit reference allows held inputs
+                                          and preserves counted HCKT edges while format
+                                          programming remains before the first bit edge.
+                                          Literal divider/frame, copy, reset and refusal
+                                          tests pass under ASan/UBSan. Actual board clock
+                                          and clocked original boot remain unqualified
+                                          (dsp-esai.txt).
 User-supplied firmware execution pending  Required in objective.txt: execute custom
                                           images through modeled boot/update paths,
                                           retain per-image coverage and unresolved

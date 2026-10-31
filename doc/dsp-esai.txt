@@ -117,6 +117,27 @@ data/status under supplied edges, missing clocks, reserved fields, active change
 held observations, copies, reset and closed-window lifetime. They do not establish
 original boot, fitted board clocks, audio, USB or update safety.
 
+The additional cold_before_bit_clock_reference contract permits known held
+inputs before the first actual SCKT transition, including a baseline supplied
+while inactive. HCKT edges counted toward the first bit-clock toggle do not
+close its format/common programming window. Such writes preserve the partial
+divider; changing TCCR mid-divider still rejects. An external SCKT transition,
+a generated SCKT transition or TE enable closes the window. Disabling/mux reset
+and personal reset cannot reopen it; actual hardware/software reset can. The
+strict default and prior unclocked reference contract retain their behavior.
+This is an explicitly selected initial-state hypothesis, not silicon validation
+or permission to change a running format. It still requires independently
+supplied clock levels and the explicit reset-edge timing contract.
+
+  cmake --build build/own-only --target blofeld-esai-cold-clock-test
+  ctest --test-dir build/own-only -R '^dsp_esai_cold_clock$' --output-on-failure
+
+Independent half-divider/bit polarity expectations cover both maps and HCKT
+polarities, repeated held levels, partial-state copies, external edges, reset,
+missing clock/phase and active-change refusals. An opposite-edge receiver checks
+a literal64-bit two-slot data/padding sequence and actual retained-word underrun.
+These component checks do not establish original clocked startup or audio.
+
 Receiver enable/configuration, FOSC-derived clocks, external word-length/relative
 frame sync, generated relative frame sync, AC97/on-demand modes, serial flag
 outputs/external buffer controls, receive/last-slot interrupt enables remain

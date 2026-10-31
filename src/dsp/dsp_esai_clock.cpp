@@ -90,6 +90,7 @@ void DspEsai::update_frame_flag() {
 
 void DspEsai::clock_edge(const bool clock, const std::optional<bool> sync) {
   if (previous_clock_ == clock) { return; }
+  cold_configuration_ = false;
   previous_clock_ = clock;
   const bool launch_edge = clock != ((clock_control_ & esai::clock_polarity) != 0);
   if (launch_edge) {

@@ -11,7 +11,8 @@ enum class DspEsaiInstance : std::uint8_t { primary, secondary };
 enum class DspEsaiClockTiming : std::uint8_t { unqualified, reference_reset_edges };
 enum class DspEsaiConfigurationContract : std::uint8_t {
   documented_reset,
-  cold_unclocked_reference
+  cold_unclocked_reference,
+  cold_before_bit_clock_reference
 };
 
 struct DspEsaiInputs {

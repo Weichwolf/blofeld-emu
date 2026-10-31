@@ -10,6 +10,9 @@ add_custom_target(blofeld-own-dsp-components ALL DEPENDS blofeld_own_dsp_io
   blofeld_dsp_peripheral_decode blofeld_own_dsp_fetch)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-esai-cold-clock-test test/dsp_esai_cold_clock_test.cpp)
+  target_link_libraries(blofeld-esai-cold-clock-test PRIVATE blofeld_dsp_peripherals)
+  add_test(NAME dsp_esai_cold_clock COMMAND blofeld-esai-cold-clock-test)
   add_executable(blofeld-dsp-io-map-test test/dsp_io_map_test.cpp)
   target_link_libraries(blofeld-dsp-io-map-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_io_map COMMAND blofeld-dsp-io-map-test)
