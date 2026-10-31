@@ -9,6 +9,14 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Own-core Port-C lane hypothesis    partial  Local projection of two control registers
+                                          passes 48 pin/function cases and scope
+                                          controls under ASan/UBSan. Original run
+                                          keeps the prior clear trace identical, then
+                                          reaches strict Y:FFFFF7/BIU refusal. Silicon
+                                          masking, BCR/ROM provenance, timing and
+                                          complete device operation remain open
+                                          (own-dsp-integration.txt).
 Own-core decoder hypothesis        partial  Explicit local no-selected-cell experiment
                                           completes the original clear: all 184,320
                                           declared writes accounted; six actual MCU IRQ

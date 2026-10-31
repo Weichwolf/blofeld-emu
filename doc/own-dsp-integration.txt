@@ -78,6 +78,20 @@ Z3 also finds both direct and alternative bijective peer maps satisfying the
 bounded software constraints. These constraints do not uniquely recover the
 physical nets; the query and models remain in that directory as peer-ambiguity.*.
 
+Port-C lane experiment (local only):
+An additional declared hypothesis projects direction/control word writes onto
+Port C's twelve documented lanes. Forty-eight pin/function truth-table cases
+and strict scope controls pass under ASan/UBSan. In the original run, exactly
+one write uses this rule: 00FF00 selects 000F00 and addresses 00F000 outside
+the implemented lanes. The memory-write trace is byte-identical to the prior
+audited clear; artifacts and copied persistent state are unchanged. Twelve more
+DSP instructions retire before the first NAND routine refuses its Port-F PCRF
+write at Y:FFFFF7, DSP PC 0000A3. The modeled family-reset BCR remains unchanged.
+This neither proves reserved-bit masking on silicon nor resolves the documented
+Port-F BIU wait-state prerequisite. No normal instrument operation is established.
+Local code, control results, provenance, full traces and audit:
+  doc/local/own-core-gpio-lanes/{build,runtime,audit}.json
+
 Validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
   ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset)$' --output-on-failure
