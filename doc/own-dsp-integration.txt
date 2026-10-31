@@ -24,7 +24,7 @@ native ticket before updating the state of vector fetches. A stale ticket or ref
 read cannot acknowledge a source. After the second accepted vector read, only
 the admitted source is acknowledged. Core and board must share the same I/O bus;
 the caller must route every staged advance through this owner during entry.
-This supplies functional ownership, not clock timing, reset or checkpoints.
+This supplies functional ownership, not clock timing or reset.
 The synthetic IRQ test covers SR masking, two vector bases, stale tickets,
 fast-vector return and refusal of an unknown second vector word.
 
@@ -48,7 +48,24 @@ instructions, warm register retention and old-ticket refusal across reset.
 It also covers cuts before/after EP publication and the first vector fetch,
 fresh real IRQ admission afterward and both actual vector reads. FM 2.3.2.7/8
 keeps the foreground PC unchanged during those fast-vector fetches.
-No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, full machine
+
+OwnDspMachine also captures immutable trusted in-process chip checkpoints:
+native architectural/hidden state and staged publications, all bus RAM/ROM and
+knowledge bits, memory-map transitions, peripheral state, vector ownership,
+reset clock fractions and the first I/O refusal. Restore prepares allocations
+before committing state and requires identical clock inputs. It supports the
+same owner or a fresh owner; old effect tickets cannot be reused. GPIO readers
+are detached and must be explicitly reconnected before consuming pad inputs.
+External board devices, shared event queues and persistent files are excluded.
+Capture/restore allocate and are not real-time callback operations.
+The synthetic checkpoint test passes under ASan/UBSan and resumes all 32 native
+effect cuts of an own immediate/CLR/REP/ADD/store program against literal final
+register/RAM expectations. It
+also checks knowledge rollback, ROM rollback, reset fractions/gates, empty and
+incompatible handles, both cuts around the first vector read, explicit pad
+reconnection, retained failure context, healthy recovery and rejection of
+capture/restore reentry from a genuine native pad read.
+No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, joint board
 checkpoint or real-time instrument behavior is established by these fixtures.
 
 Connected original-firmware evidence (local only):
@@ -136,15 +153,16 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-register-mode/{build,runtime,audit}.json
   doc/local/own-core-nand-resolved-pads/{build,frozen-inputs,runtime,audit}.json
   doc/local/own-core-reset-abort/validation.json
+  doc/local/own-core-checkpoints/validation.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
 Public adapter validation:
-  cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
-  ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset)$' --output-on-failure
+  cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test -j2
+  ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset|checkpoint)$' --output-on-failure
 
 The regular device and reference scheduler still use the legacy core. Migrating
-that scheduler, full clock/pipeline/DMA ownership and machine checkpoints,
+that scheduler, full clock/pipeline/DMA ownership and joint board checkpoints,
 removing the legacy dependency and all reset-to-instrument requirements remain
 open. The independent adapter and local hypotheses do not establish full boot,
 real timing, MIDI/audio or hardware equivalence.

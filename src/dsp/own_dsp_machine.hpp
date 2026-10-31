@@ -8,6 +8,7 @@
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 
 namespace blofeld {
@@ -16,6 +17,23 @@ struct OwnDspResetInputs {
   std::uint8_t mode_levels = 0;
   std::optional<bool> pinit;
   std::uint32_t recovery_cycles = 0;
+};
+
+// Immutable trusted in-process chip state, excluding external board devices.
+class OwnDspCheckpoint {
+public:
+  OwnDspCheckpoint() = default;
+  OwnDspCheckpoint(const OwnDspCheckpoint &) = default;
+  OwnDspCheckpoint &operator=(const OwnDspCheckpoint &) = default;
+  OwnDspCheckpoint(OwnDspCheckpoint &&) noexcept = default;
+  OwnDspCheckpoint &operator=(OwnDspCheckpoint &&) noexcept = default;
+  ~OwnDspCheckpoint();
+
+private:
+  friend class OwnDspMachine;
+  struct Storage;
+  explicit OwnDspCheckpoint(std::shared_ptr<const Storage> storage);
+  std::shared_ptr<const Storage> storage_;
 };
 
 // Coordinated own-core owner. Only reset time is modeled here; staged execution
@@ -43,6 +61,11 @@ public:
       dsp56300::InstructionPublication publication = dsp56300::InstructionPublication::pcu_updates);
   [[nodiscard]] dsp56300::InstructionProgress advance(const dsp56300::EffectTicket &ticket);
   [[nodiscard]] bool admit_interrupt(dsp56300::InstructionWords foreground);
+  [[nodiscard]] OwnDspCheckpoint checkpoint() const;
+  // Strong exception guarantee. Requires identical clock inputs. External pad
+  // readers are detached, retaining the obligation to reconnect before sampling.
+  // Previously issued effect tickets become invalid, including on the same owner.
+  void restore(const OwnDspCheckpoint &checkpoint);
 
 private:
   void require_running() const;
@@ -51,5 +74,6 @@ private:
   dsp56300::Core cpu_;
   OwnDspInterrupts interrupts_;
   DspRunClock clock_;
+  const DspRunClockInputs clock_inputs_;
 };
 }

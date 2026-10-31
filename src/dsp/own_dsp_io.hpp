@@ -46,6 +46,7 @@ public:
   bool reset_peripherals(dsp56300::Word pc) noexcept override;
 
 private:
+  friend class OwnDspMachine;
   bool fail(Operation operation,
             dsp56300::Space space,
             dsp56300::Word address,

@@ -9,6 +9,17 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Own-core chip checkpoints         partial  Trusted in-process bus/core/clock/IRQ and
+                                          I/O failure snapshots support staged cuts,
+                                          same-owner recovery and fresh-owner restore.
+                                          Literal REP/ALU/store expectations, RAM/ROM
+                                          knowledge, fractional reset, vector ownership,
+                                          pad reconnection and refusal context covered
+                                          by own_dsp_checkpoint under ASan/UBSan at
+                                          all 32 native effect cuts. Callback reentry
+                                          refuses. Joint board devices,
+                                          scheduler and external event/file ownership
+                                          remain open (own-dsp-integration.txt).
 Own-core NAND resolved pads       partial  Explicit J candidate reads all56,238 known
                                           source bytes; all CPU values match. At the
                                           final refill cut,18,276 expected resident
@@ -44,7 +55,7 @@ Own-core reset/execution owner     partial  OwnDspMachine joins bus/core/IRQ own
                                           during vector entry, retaining published
                                           unaffected registers. Execution remains
                                           untimed; subcycle assertion, regular board/
-                                          scheduler integration and full checkpoints
+                                          scheduler integration and joint checkpoints
                                           remain open.
                                           Local original-MCU diagnostic receives all
                                           94 stage words over 7,275 SPI writes, then
@@ -58,7 +69,7 @@ Own-core interrupt ownership      partial  Own core executes the actual vector
                                           return and refused second-word read.
                                           own_dsp_reset covers reset before/after
                                           the first vector fetch and fresh IRQ entry.
-                                          Subcycle timing, checkpoints and regular
+                                          Subcycle timing, joint checkpoints and regular
                                           scheduler integration remain open
                                           (own-dsp-integration.txt).
 Independent DSP integration       partial  Pinned own-core subproject and strict

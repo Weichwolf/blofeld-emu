@@ -321,6 +321,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-own-dsp-reset-test test/own_dsp_reset_test.cpp)
   target_link_libraries(blofeld-own-dsp-reset-test PRIVATE blofeld_own_dsp_io)
   add_test(NAME own_dsp_reset COMMAND blofeld-own-dsp-reset-test)
+  add_executable(blofeld-own-dsp-checkpoint-test test/own_dsp_checkpoint_test.cpp)
+  target_link_libraries(blofeld-own-dsp-checkpoint-test PRIVATE blofeld_own_dsp_io)
+  add_test(NAME own_dsp_checkpoint COMMAND blofeld-own-dsp-checkpoint-test)
   # One checked translation unit for the shared target-memory reference fixture.
   add_library(blofeld_hcs08_programmer_fixture OBJECT test/hcs08_programmer_fixture.cpp)
   target_link_libraries(blofeld_hcs08_programmer_fixture PUBLIC
@@ -3254,7 +3257,9 @@ add_custom_target(format-check
 if(BUILD_TESTING)
 add_custom_target(quality
   COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
-  DEPENDS blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
+  DEPENDS blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test
+    blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test
+    blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
     blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test
     blofeld-hcs08-icg-clocks-test blofeld-hcs08-icg-status-test
     blofeld-hcs08-icg-history-test blofeld-hcs08-known-interrupts-test

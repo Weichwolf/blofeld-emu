@@ -2,15 +2,77 @@
 #include "dsp/own_dsp_machine.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_interrupts.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp56300/checkpoint.hpp"
 #include "dsp56300/core.hpp"
 
 #include <cstdint>
+#include <memory>
+#include <optional>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 namespace blofeld {
+struct OwnDspCheckpoint::Storage {
+  DspRunClockInputs inputs;
+  DspBus bus;
+  dsp56300::Checkpoint cpu;
+  std::optional<DspInterruptRequest> request;
+  dsp56300::Word vector;
+  bool first;
+  DspRunClock clock;
+  std::optional<OwnDspIo::Failure> failure;
+};
+
+OwnDspCheckpoint::OwnDspCheckpoint(std::shared_ptr<const Storage> storage)
+    : storage_(std::move(storage)) {}
+
+OwnDspCheckpoint::~OwnDspCheckpoint() = default;
+
 OwnDspMachine::OwnDspMachine(const DspRunClockInputs clock)
-    : io_(bus_), cpu_(io_), interrupts_(bus_, cpu_), clock_(clock) {}
+    : io_(bus_), cpu_(io_), interrupts_(bus_, cpu_), clock_(clock), clock_inputs_(clock) {}
+
+OwnDspCheckpoint OwnDspMachine::checkpoint() const {
+  // The native core rejects capture during an executing callback before any bus copy.
+  auto native = cpu_.checkpoint();
+  return OwnDspCheckpoint(std::make_shared<const OwnDspCheckpoint::Storage>(
+      OwnDspCheckpoint::Storage{.inputs = clock_inputs_,
+                                .bus = bus_,
+                                .cpu = std::move(native),
+                                .request = interrupts_.request_,
+                                .vector = interrupts_.vector_,
+                                .first = interrupts_.first_,
+                                .clock = clock_,
+                                .failure = io_.failure_}));
+}
+
+void OwnDspMachine::restore(const OwnDspCheckpoint &checkpoint) {
+  if (!checkpoint.storage_) { throw std::invalid_argument("Empty own DSP checkpoint"); }
+  const auto &state = *checkpoint.storage_;
+  if (state.inputs != clock_inputs_) {
+    throw std::invalid_argument("Own DSP checkpoint clock inputs differ");
+  }
+  // Allocate the bus copy before native restore. Native restore prepares its
+  // allocations before committing CPU state; the remaining assignments cannot throw.
+  auto restored_bus = state.bus;
+  auto restored_failure = state.failure;
+  static_assert(std::is_nothrow_move_assignable_v<DspBus>);
+  static_assert(std::is_nothrow_copy_assignable_v<DspRunClock>);
+  static_assert(std::is_nothrow_copy_assignable_v<decltype(interrupts_.request_)>);
+  static_assert(std::is_nothrow_move_assignable_v<decltype(io_.failure_)>);
+  cpu_.restore(state.cpu);
+  bus_ = std::move(restored_bus);
+  clock_ = state.clock;
+  interrupts_.request_ = state.request;
+  interrupts_.vector_ = state.vector;
+  interrupts_.first_ = state.first;
+  io_.failure_ = std::move(restored_failure);
+}
 
 void OwnDspMachine::require_running() const {
   const auto reset = clock_.hardware_reset_state();
