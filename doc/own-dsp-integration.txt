@@ -136,8 +136,13 @@ The prior fixed-selected P candidate still hits the documented block-end CE
 termination requirement. J's command-stepped pages remove that incompatibility
 within the model, without identifying the installed part or physical nets.
 Source analysis locates the missing 258 bytes in 86 DSP RAM words copied past
-the updater's delivered payload. A retained-RAM capture and actual original
-updater programming path are needed before assigning those NAND contents.
+the updater's delivered payload. A separate original-startup run captures all
+86 words immediately after the first-stage clear, before the NAND loader:
+each is known zero, and each remains zero after modeled warm-reset assertion. This
+run uses the same candidate wiring, partial ROM and uncalibrated schedule; it
+does not establish the state after a complete boot or the subsequent updater
+transport. The actual original updater programming path remains necessary
+before assigning the unknown NAND contents.
 Clock qualifications, DSP audio, MIDI and normal instrument operation stay open.
 Reference artifacts, copied persistent state and the memory/lane traces remain
 unchanged. Z3 also admits distinct peer permutations under bounded software
@@ -154,6 +159,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-resolved-pads/{build,frozen-inputs,runtime,audit}.json
   doc/local/own-core-reset-abort/validation.json
   doc/local/own-core-checkpoints/validation.json
+  doc/local/own-core-ram-capture/{runtime,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 

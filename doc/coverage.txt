@@ -28,6 +28,13 @@ Own-core NAND resolved pads       partial  Explicit J candidate reads all56,238 
                                           handoff, part/CE identity, real clocks and
                                           full instrument operation remain open
                                           (own-dsp-integration.txt).
+Own-core update source RAM        partial  Original startup clear leaves all 86
+                                          prospective tail words known zero; a
+                                          checkpoint clone retains them after modeled
+                                          warm-reset assertion. Candidate wiring and timing;
+                                          complete boot, update transport and actual
+                                          NAND programming remain unverified
+                                          (own-dsp-integration.txt).
 Own-core Port-C lane hypothesis    partial  Local projection of two control registers
                                           passes 48 pin/function cases and scope
                                           controls under ASan/UBSan. Original run
