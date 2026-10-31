@@ -16,8 +16,12 @@ Own-core reset/execution owner     partial  OwnDspMachine joins bus/core/IRQ own
                                           guest-written EP/SZ warm retention and stale
                                           ticket refusal. Execution remains untimed;
                                           regular board/scheduler integration, in-flight
-                                          reset and full checkpoints remain open
-                                          (own-dsp-integration.txt).
+                                          reset and full checkpoints remain open.
+                                          Local original-MCU diagnostic receives all
+                                          94 stage words over 7,275 SPI writes, then
+                                          refuses the known Y:002000 store. Candidate
+                                          ROM/wiring and uncalibrated scheduling;
+                                          no full-startup claim (own-dsp-integration.txt).
 Own-core interrupt ownership      partial  Own core executes the actual vector
                                           fetches before board acknowledgement.
                                           own_dsp_interrupts passes under ASan/UBSan:

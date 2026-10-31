@@ -45,6 +45,21 @@ instructions, warm register retention and old-ticket refusal across reset.
 No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, full machine
 checkpoint or real-time instrument behavior is established by these fixtures.
 
+Original-firmware diagnostic evidence:
+A local original MCU/own-core run through this owner received all 94 original
+first-stage words over 7,275 MCU SPI writes. It stopped visibly at the known
+reserved Y:002000 zero write, DSP PC 000072, after 191,073 retired DSP instructions.
+The executable has no dsp56k namespace symbols; its explicit link inputs omit
+the foreign DSP libraries. Pinned input files, program artifacts and copied
+persistent device state were unchanged. Detailed commands, hashes and native results remain local in
+  doc/local/own-core-live-reset/{inputs,build,validators,relink,runtime}.json
+This is evidence for the connected software path up to that strict refusal.
+It uses candidate peer routing, scripted reset/input observations, a documented
+partial boot ROM and one DSP instruction per MCU instruction, with estimated
+base cycles for peripheral advance. Those are uncalibrated hypotheses. The
+reserved write's silicon response, physical reset/wiring, complete ROM and
+reset-to-instrument operation remain unqualified. No refusal was bypassed.
+
 Validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
   ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset)$' --output-on-failure
