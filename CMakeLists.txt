@@ -4324,6 +4324,18 @@ endif()
 
 # Parallel internal TFR and two-word absolute X/Y reads.
 if(BUILD_TESTING)
+  add_executable(blofeld-parallel-eor-store-test test/dsp_parallel_eor_store_test.cpp)
+  target_link_libraries(blofeld-parallel-eor-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_parallel_eor_store COMMAND blofeld-parallel-eor-store-test)
+  set_tests_properties(dsp_parallel_eor_store PROPERTIES TIMEOUT 600)
+  add_dependencies(quality blofeld-parallel-eor-store-test)
+
+  add_executable(blofeld-parallel-eor-producer-test test/dsp_parallel_eor_producer_test.cpp)
+  target_link_libraries(blofeld-parallel-eor-producer-test PRIVATE blofeld_dsp blofeld_dsp_native)
+  add_test(NAME dsp_parallel_eor_producer COMMAND blofeld-parallel-eor-producer-test)
+  set_tests_properties(dsp_parallel_eor_producer PROPERTIES TIMEOUT 600)
+  add_dependencies(quality blofeld-parallel-eor-producer-test)
+
   add_executable(blofeld-address-register-store-test test/dsp_address_register_store_test.cpp)
   target_link_libraries(blofeld-address-register-store-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_address_register_store COMMAND blofeld-address-register-store-test)

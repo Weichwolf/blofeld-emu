@@ -3444,6 +3444,9 @@ See dsp-parallel-partial-stores.txt; standalone/REP admission stays separate.
 Raw R0..R7 scalar stores add13472 own windows/profile,35 restores/35 fresh
 clones and16 form guards,including younger-pointer and explicit producer
 ordering. See dsp-address-register-stores.txt; REP/Tcc remain separate.
+Parallel EOR/raw-R absolute stores add18432 windows/profile,38 restores and
+38 fresh clones;1536 preceding-load/publication cases add28 cuts each.
+See dsp-parallel-eor-stores.txt;other EOR forms and full boot remain separate.
 Independent per-period state/cell/stack expectations and joint continuations
 support acceptance requirements2/3/6; see dsp-boot-instructions.txt for exact
 admission and refusals. This does not establish requirements4/7/8/9 or complete

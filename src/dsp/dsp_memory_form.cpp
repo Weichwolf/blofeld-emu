@@ -4,6 +4,7 @@
 #include "dsp/dsp_address_register_store.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_full_peripheral_store.hpp"
+#include "dsp/dsp_parallel_eor_store.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
 #include "dsp56kEmu/opcodes.h"
 #include "dsp56kEmu/opcodetypes.h"
@@ -198,7 +199,8 @@ std::optional<DspMemoryForm> absolute_long_scalar(const Type type, const unsigne
   constexpr unsigned arithmetic_bits = 0xff;
   if (control) {
     if (reg < Reg::M0 || reg > Reg::M7) { return std::nullopt; }
-  } else if (((opcode & arithmetic_bits) != 0 && !parallel_tfr_load(opcode)) ||
+  } else if (((opcode & arithmetic_bits) != 0 && !parallel_tfr_load(opcode) &&
+              !parallel_eor_address_store(opcode)) ||
              (!data_register(reg) && !address_register(reg) && !accumulator_register(reg))) {
     return std::nullopt;
   }
