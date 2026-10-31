@@ -18,9 +18,19 @@ The synthetic test covers known RAM, rejected and latched accesses with retained
 context, actual GPIO bit updates, invalid bit indices, peripheral reset and
 a user-authored NOP executed through the real bus. It contains no firmware bytes.
 
+OwnDspInterrupts selects requests through the board's interrupt controller and
+admits them to the paired own core. Its advance method executes the genuine
+native ticket before updating the state of vector fetches. A stale ticket or refused
+read cannot acknowledge a source. After the second accepted vector read, only
+the admitted source is acknowledged. Core and board must share the same I/O bus;
+the caller must route every staged advance through this owner during entry.
+This supplies functional ownership, not clock timing, reset or checkpoints.
+The synthetic IRQ test covers SR masking, two vector bases, stale tickets,
+fast-vector return and refusal of an unknown second vector word.
+
 Validation:
-  cmake --build build/strict --target blofeld-own-dsp-io-test -j2
-  ctest --test-dir build/strict -R '^own_dsp_io$' --output-on-failure
+  cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test -j2
+  ctest --test-dir build/strict -R '^own_dsp_(io|interrupts)$' --output-on-failure
 
 The regular device and reference scheduler still use the legacy core. The new
 adapter and its synthetic test are not evidence of full boot, real timing, audio,

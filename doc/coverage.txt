@@ -9,6 +9,14 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Own-core interrupt ownership      partial  Own core executes the actual vector
+                                          fetches before board acknowledgement.
+                                          own_dsp_interrupts passes under ASan/UBSan:
+                                          masking, two bases, stale tickets, fast
+                                          return and refused second-word read.
+                                          Timing, reset, checkpoints and integration
+                                          into the regular scheduler remain open
+                                          (own-dsp-integration.txt).
 Independent DSP integration       partial  Pinned own-core subproject and strict
                                           synchronous bus adapter build and
                                           own_dsp_io pass under ASan/UBSan;
