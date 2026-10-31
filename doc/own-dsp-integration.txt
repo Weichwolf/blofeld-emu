@@ -99,13 +99,31 @@ Port-F wait-state timing law. Instrumented controls exercise real GPIO outputs,
 word and bit accesses, explicitly floating auxiliary-input fixtures, strict
 unknown data inputs and refusal of unobserved BBS after access. Split native
 RMW phases and physical bus timing are not qualified by these controls.
-The original run performs six Port-F control/data writes and reaches the timer0
+The original run performs six Port-F control/data writes and reaches the timer1
 DI bit12 poll at X:FFFF8B, DSP PC 0000BB. That pin is unobserved and refuses;
 no NAND data byte has been supplied. Memory and Port-C traces are byte-identical
 to the prior experiment, and persistent state/artifacts remain unchanged. The
 NAND component now needs GPIO edge inputs and modeled ready outputs.
 Local code, controls and audited results:
   doc/local/own-core-biu-reset-waits/{build,runtime,audit}.json
+
+NAND GPIO connection experiment (local only):
+An explicit candidate pin contract connects the existing NAND protocol,
+write/read setup, output timing and operation clock to actual GPIO effects
+and Timer1 DI. Power readiness and the 15us read duration are declared reference
+observations; initial pad history, physical nets and board timing remain
+unqualified. The parent decoder, lane, reset-BCR and scheduling hypotheses stay
+in force. Instrumented controls verify two explicitly seeded synthetic cells,
+unknown outputs before access time, busy/ready deadlines and unknown-cell refusal.
+The two-byte fixture explicitly selects the P-package continuation contract.
+The unchanged original run issues a read command and four address cycles, waits
+for modeled completion and reaches its first array read. It refuses unknown
+page 0, column 0 contents at DSP PC 000093 after 314,180 retired instructions.
+No NAND byte is supplied to the original run. The 94-word stage still matches;
+memory/lane traces, reference artifacts and persistent state remain unchanged.
+This is conditional connected execution, not proof of physical wiring or boot.
+Local source, strict checks, sanitized controls, provenance and audit:
+  doc/local/own-core-nand-link/{build,runtime,audit}.json
 
 Validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
