@@ -161,6 +161,14 @@ Conditional board contracts, each separately controlled and recorded:
   in steps of two; checked SR, R0, R1, SP and remaining A bits stay equal.
   These are distinct conditional paths, not an observed device status, a full
   CPU-state equivalence proof or a substitute for the full updater caller.
+  A subsequent isolated run calls the secondary helper's original combined
+  program-and-compare entry for row 37. The two extremes of the five unused
+  status bits both produce the original 528-byte write and 528-byte read;
+  independently extracted bytes, all resulting cells and 176 captured words
+  match. The original mismatch register is zero and the helper returns after
+  14,974 instructions. Source RAM, erased writable target, upper-bit policy,
+  status hypotheses and RE delay remain explicit fixture assumptions. This
+  component result does not establish full firmware update or hardware timing.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -217,6 +225,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-read-skew/{window.smt2,audit.json}
   doc/local/own-core-nand-status-pads/{runtime,audit}.json
   doc/local/own-core-nand-status-variants/{runtime,audit}.json
+  doc/local/own-core-nand-program-compare/{runtime,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
