@@ -61,7 +61,7 @@ void OwnDspFetch::check_owner() const {
   if (machine_.advancing_effect_) { throw Fault("Own DSP F2 requires an inactive effect"); }
 }
 
-void OwnDspFetch::check_sample_context(const bool hold_stale) const {
+void OwnDspFetch::check_sample_context(const bool hold_fetch) const {
   const auto regs = machine_.cpu_.registers();
   const auto state = fetch_.view();
   if (in_flight_ && !machine_.cpu_.pending_instruction()) {
@@ -69,13 +69,14 @@ void OwnDspFetch::check_sample_context(const bool hold_stale) const {
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
-  if ((regs.sr & cache_enable) != 0 || native_fetch_ || native_latch_ ||
-      (state.omr != regs.omr && !(hold_stale && in_flight_))) {
+  const bool held_repeat = hold_fetch && in_flight_ && (repeated_ || native_latch_);
+  if ((regs.sr & cache_enable) != 0 || ((native_fetch_ || native_latch_) && !held_repeat) ||
+      (state.omr != regs.omr && !(hold_fetch && in_flight_))) {
     throw Fault("Unqualified own DSP F2 memory context read P:" +
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
-  if (repeated_) {
+  if (repeated_ && !held_repeat) {
     throw Fault("Own DSP REP F2 prefetch is unqualified read P:" +
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
@@ -137,7 +138,7 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inp
   }
   const bool started = begin_automatic();
   const bool stale_context = in_flight_ && fetch_.view().omr != machine_.cpu_.registers().omr;
-  const bool hold_fetch = hold_program_fetch(timing) || stale_context;
+  const bool hold_fetch = hold_program_fetch(timing) || stale_context || repeated_ || native_latch_;
   auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch);
   result.instruction_started = started;
   if (result.native && result.native->retired) { synchronize(); }
@@ -168,8 +169,8 @@ bool OwnDspFetch::begin_automatic() {
   if (in_flight_) { return false; }
   const auto regs = machine_.cpu_.registers();
   const auto context = machine_.cpu_.instruction_fetch();
-  if ((regs.sr & cache_enable) != 0 || native_fetch_ || native_latch_ || repeated_ ||
-      interrupt_vector_ || context.exception_vector || context.latched_opcode) {
+  if ((regs.sr & cache_enable) != 0 || native_fetch_ || interrupt_vector_ ||
+      context.exception_vector || ((repeated_ || native_latch_) && !context.latched_opcode)) {
     throw Fault("Unqualified own DSP automatic cache/REP/vector fetch read P:" +
                 hex(context.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
@@ -179,6 +180,13 @@ bool OwnDspFetch::begin_automatic() {
   if (request) {
     throw Fault("Unqualified own DSP automatic interrupt vector=" + hex(request->vector, 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+  }
+  if (context.latched_opcode) {
+    const auto progress = begin();
+    if (progress.fault.kind != dsp56300::FaultKind::none) {
+      throw Fault("Own DSP automatic REP admission fault pc=" + hex(regs.pc, 6));
+    }
+    return true;
   }
   const auto state = fetch_.view();
   if (state.used == 0) { return false; }

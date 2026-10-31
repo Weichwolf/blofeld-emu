@@ -59,7 +59,7 @@ public:
 
 private:
   void check_owner() const;
-  void check_sample_context(bool hold_stale = false) const;
+  void check_sample_context(bool hold_fetch = false) const;
   [[nodiscard]] bool begin_automatic();
   [[nodiscard]] bool hold_program_fetch(OwnDspAutomaticTiming timing) const;
   [[nodiscard]] std::optional<DspMemoryAccess>

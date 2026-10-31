@@ -85,10 +85,12 @@ still selects native effects and synchronizes actual retirement; cache/REP/vecto
 transitions are not automatically scheduled. Tests cover queue backpressure,
 resumption and a DMA-written instruction. The additional explicit
 one-effect-per-cycle hypothesis automatically admits actual captured instructions,
-advances their effects and synchronizes retirement. Pending interrupts and
-cache/REP/vector transitions refuse visibly rather than being skipped. Synthetic
-tests cover arithmetic, an actual OnCE write, SHI status, active-DMA refusal and
-interrupt retention. These are reference-order hypotheses, not measured pipeline
+advances their effects and synchronizes retirement. Loaded REP iterations reuse
+the actual native opcode latch while F1/F2 are held. Pending interrupts and
+unqualified cache/vector transitions refuse visibly rather than being skipped.
+Synthetic tests cover arithmetic, real REP-latch reuse, owner recovery and
+repeated X/Y stores with exact address/count expectations, an actual OnCE write,
+SHI status, active-DMA refusal and interrupt retention. These are reference-order hypotheses, not measured pipeline
 timing. With a locally supplied inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
 cycles; it does not connect the firmware MCU or establish the physical board.
@@ -97,8 +99,9 @@ the actual native P write executes. Writes to already issued or captured words
 still refuse before mutation. OMR publication holds stale F2 until the native
 instruction retires and redirects the fetch context. With these hypotheses and
 host-driven SPI pin edges, a local run loaded and compared all 94 original
-first-stage words and reached the original REP frontier. This does not run the
-firmware MCU, calibrate timing or establish reset-to-instrument operation.
+first-stage words, executed its REP loop and verified 8,192 cleared X/Y word
+pairs. The next Y:0x002000 write is refused as unqualified. This does not run
+the firmware MCU, calibrate timing or establish reset-to-instrument operation.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected

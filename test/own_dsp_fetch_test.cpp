@@ -954,6 +954,94 @@ void repeat_latch() {
           "All REP iterations must execute the genuine latch despite overwritten RAM");
 }
 
+void automatic_repeat_latch() {
+  constexpr Word repeat_three = 0x0603a0;
+  constexpr Word add_x0 = 0x200040;
+  constexpr unsigned maximum_cycles = 100;
+  constexpr unsigned fractional_shift = 24;
+  constexpr std::uint64_t expected_sum = 21;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 2> rom{jump_absolute, ram_entry};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  for (const auto write : std::array{DspStore{.address = ram_entry, .value = immediate_x0},
+                                     DspStore{.address = ram_entry + 1, .value = 7},
+                                     DspStore{.address = ram_entry + 2, .value = repeat_three},
+                                     DspStore{.address = ram_entry + 3, .value = add_x0},
+                                     DspStore{.address = ram_entry + 4, .value = 0}}) {
+    machine.bus().write(write);
+  }
+  reset(machine);
+  static_cast<void>(machine.begin_fetch());
+  retire(machine);
+  OwnDspFetch fetch(machine);
+  bool replaced = false;
+  unsigned held_cycles = 0;
+  for (unsigned cycle = 0; cycle < maximum_cycles && machine.cpu().progress().instructions < 6;
+       ++cycle) {
+    const auto pending = machine.cpu().pending_instruction();
+    if (!pending && machine.cpu().instruction_fetch().latched_opcode == add_x0 && !replaced) {
+      machine.bus().write({.address = ram_entry + 3, .value = 0});
+      replaced = true;
+    }
+    const bool repeating = replaced && machine.cpu().registers().pc == ram_entry + 3;
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    if (repeating) {
+      ++held_cycles;
+      require(!result.captured && !result.issued_address,
+              "A native latched REP iteration must not fabricate an F1/F2 access");
+    }
+  }
+  require(
+      replaced && held_cycles != 0 && machine.cpu().progress().instructions == 6 &&
+          machine.cpu().registers().a == (expected_sum << fractional_shift) &&
+          machine.cpu().registers().pc == ram_entry + 4,
+      "Automatic REP must execute the real captured opcode three times despite RAM replacement");
+}
+
+void automatic_repeat_dual_memory() {
+  constexpr Word load_r1_absolute = 0x61f400;
+  constexpr Word repeat_three = 0x0603a0;
+  constexpr Word store_a_long_postincrement = 0x485900;
+  constexpr Word target = 0x100;
+  constexpr Word initial = 0x345678;
+  constexpr unsigned maximum_cycles = 120;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{
+      load_r1_absolute, target, repeat_three, store_a_long_postincrement, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  for (unsigned index = 0; index < 4; ++index) {
+    for (const auto space : {DspSpace::x, DspSpace::y}) {
+      machine.bus().write({.space = space, .address = target + index, .value = initial});
+    }
+  }
+  OwnDspFetch fetch(machine);
+  for (unsigned cycle = 0; cycle < maximum_cycles && machine.cpu().progress().instructions < 5;
+       ++cycle) {
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    require(!result.native || result.native->fault.kind == FaultKind::none,
+            "Repeated native long-store effect failed");
+  }
+  require(machine.cpu().progress().instructions == 5 &&
+              machine.cpu().registers().r[1] == target + 3 &&
+              machine.cpu().registers().pc == boot_entry + 4,
+          "Native REP must execute exactly three long stores and address updates");
+  for (const auto space : {DspSpace::x, DspSpace::y}) {
+    for (unsigned index = 0; index < 3; ++index) {
+      require(machine.bus().read({.space = space, .address = target + index}) == 0,
+              "Every X/Y word must be actually written by the repeated native store");
+    }
+    require(machine.bus().read({.space = space, .address = target + 3}) == initial,
+            "REP must not write an extra X/Y pair");
+  }
+}
+
 void native_repeat_recovery() {
   constexpr Word repeat_three = 0x0603a0;
   const std::array<Word, 2> rom{repeat_three, 0};
@@ -984,6 +1072,44 @@ void native_repeat_recovery() {
   resumed.synchronize();
   require(machine.cpu().progress().instructions == 3,
           "Resumed ownership must preserve the actual native REP continuation");
+}
+
+void automatic_native_repeat_recovery() {
+  constexpr Word repeat_three = 0x0603a0;
+  constexpr unsigned maximum_cycles = 30;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 2> rom{repeat_three, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  {
+    OwnDspFetch first(machine);
+    read_word(first, boot_entry);
+    static_cast<void>(first.begin());
+    retire(machine);
+    first.synchronize();
+    read_word(first, boot_entry + 1);
+    static_cast<void>(first.begin());
+    retire(machine);
+    first.synchronize();
+  }
+  require(machine.cpu().instruction_fetch().latched_opcode == 0,
+          "Restored owner must start from the native latched NOP");
+  OwnDspFetch resumed(machine);
+  unsigned cycle = 0;
+  while (machine.cpu().progress().instructions < 4 && cycle < maximum_cycles) {
+    const auto result = resumed.advance_dma_automatic(dma_input(cycle),
+                                                      OwnDspAutomaticTiming::one_effect_per_cycle);
+    require(!result.captured && !result.issued_address,
+            "Native REP continuation must not manufacture program reads");
+    ++cycle;
+  }
+  require(machine.cpu().progress().instructions == 4 &&
+              machine.cpu().registers().pc == boot_entry + 2 &&
+              !machine.cpu().instruction_fetch().latched_opcode &&
+              resumed.view().next_address == boot_entry + 2,
+          "The native latch must complete both actual remaining iterations before F1 resumes");
 }
 
 void changed_memory_context() {
@@ -1060,7 +1186,10 @@ int main() {
     cache_fallback();
     cache_unmapped_program();
     repeat_latch();
+    automatic_repeat_latch();
+    automatic_repeat_dual_memory();
     native_repeat_recovery();
+    automatic_native_repeat_recovery();
     changed_memory_context();
     interrupt_vector(false);
     interrupt_vector(true);
