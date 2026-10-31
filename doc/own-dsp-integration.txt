@@ -86,10 +86,11 @@ physical wiring nor reset-to-instrument operation follows from these runs.
 
 Conditional board contracts, each separately controlled and recorded:
 
-- Branch forms and OMR/SP/SR control-move forms now use the independent DSP
-  instruction and transfer descriptions. Directed encoding checks pass; a
+- Branch forms, address updates and OMR/SP/SR control-move forms now use the
+  independent DSP instruction and transfer descriptions. Directed encoding checks pass; a
   fixed-family comparison retains the previous qualified branch results and
-  809 control forms. The own decoder rejects 24 undocumented register aliases
+  809 control forms. All 8,192 address-update encodings retain their fields.
+  The own decoder rejects 24 undocumented register aliases
   previously accepted for OMR/SR. The scheduler and regular standalone
   runtime still require migration before the legacy dependency can be removed.
   `BLOFELD_OWN_DSP_ONLY=ON` configures the independent integration targets

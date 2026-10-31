@@ -21,6 +21,9 @@ target_link_libraries(blofeld_own_dsp_io PUBLIC blofeld_dsp_peripherals dsp56300
 add_library(blofeld_dsp_branch_decode src/dsp/dsp_branch_form.cpp)
 target_include_directories(blofeld_dsp_branch_decode PUBLIC src)
 target_link_libraries(blofeld_dsp_branch_decode PUBLIC blofeld_firmware dsp56300::core)
+add_library(blofeld_dsp_address_decode src/dsp/dsp_address_only.cpp)
+target_include_directories(blofeld_dsp_address_decode PUBLIC src)
+target_link_libraries(blofeld_dsp_address_decode PUBLIC blofeld_firmware dsp56300::core)
 add_library(blofeld_dsp_control_decode src/dsp/dsp_control_move.cpp src/dsp/dsp_omr_move.cpp
   src/dsp/dsp_sp_move.cpp src/dsp/dsp_sr_move.cpp)
 target_include_directories(blofeld_dsp_control_decode PUBLIC src)

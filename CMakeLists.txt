@@ -252,7 +252,7 @@ add_library(blofeld_mcu_midi src/mcu/mcu_midi.cpp src/mcu/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC src)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
 add_library(blofeld_dsp
-  src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_only.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
+  src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
   src/dsp/dsp_fetch_context.cpp
   src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_reference_cycle.cpp
@@ -269,6 +269,7 @@ add_library(blofeld_dsp
 target_include_directories(blofeld_dsp PUBLIC src)
 target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals
   PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
+  "$<LINK_ONLY:blofeld_dsp_address_decode>"
   blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
   add_library(blofeld_dsp_instruction_fixture test/dsp_instruction_fixture.cpp)
@@ -302,6 +303,9 @@ add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-address-form-own-test test/dsp_address_form_own_test.cpp)
+  target_link_libraries(blofeld-dsp-address-form-own-test PRIVATE blofeld_dsp_address_decode)
+  add_test(NAME dsp_address_form_own COMMAND blofeld-dsp-address-form-own-test)
   add_executable(blofeld-dsp-branch-form-own-test test/dsp_branch_form_own_test.cpp)
   target_link_libraries(blofeld-dsp-branch-form-own-test PRIVATE blofeld_dsp_branch_decode)
   add_test(NAME dsp_branch_form_own COMMAND blofeld-dsp-branch-form-own-test)
