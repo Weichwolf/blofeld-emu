@@ -171,6 +171,30 @@ void test_erase_program_and_status() {
   reject([&] { static_cast<void>(nand.read()); }, "unknown status bits");
 }
 
+void test_program_ce_pause() {
+  for (const auto profile :
+       {blofeld::NandReadContinuation::k9f1208_p, blofeld::NandReadContinuation::k9f1208_j}) {
+    Nand nand(profile);
+    setup(nand);
+    erased(nand);
+    begin_program(nand, {.page = reference_page, .column = 0});
+    nand.observe_read_end(blofeld::NandReadEnd::ce_high);
+    nand.write(pattern_a);
+    nand.observe_read_end(blofeld::NandReadEnd::ce_high);
+    nand.write(pattern_b);
+    nand.observe_read_end(blofeld::NandReadEnd::ce_high);
+    require(nand.column() == 2 && nand.ready() == true,
+            "CE pause must retain the data cursor without starting a program");
+    nand.command(program_confirm);
+    nand.observe_completion(NandOutcome::pass);
+    require(nand.cell({.page = reference_page, .column = 0}) ==
+                    NandByte{.value = pattern_a, .known = byte_mask} &&
+                nand.cell({.page = reference_page, .column = 1}) ==
+                    NandByte{.value = pattern_b, .known = byte_mask},
+            "Programming after CE pauses must preserve both staged bytes");
+  }
+}
+
 void test_partial_program_limits() {
   Nand nand;
   setup(nand);
@@ -290,6 +314,7 @@ int main() {
   try {
     test_program_knowledge();
     test_erase_program_and_status();
+    test_program_ce_pause();
     test_partial_program_limits();
     test_history_buffer_and_pointer();
     test_unknown_permissions_and_failure();
