@@ -153,6 +153,14 @@ Conditional board contracts, each separately controlled and recorded:
   no status values are invented and the helper does not return. The delay,
   direct nets, cell profile, host setup and instruction spacing remain explicit
   experiment inputs, not demonstrated physical hardware or a full update.
+  The candidate NAND's 70h status table marks bits 1..5 as don't-care. In 32
+  separate runs, each possible value was supplied as an explicit hypothesis
+  after the modeled successful program, retaining real known bits C1. Every
+  run programs the same 528 source bytes and returns through the native JSR
+  frame after 9,428 instructions. The returned A1 status varies from C0 to FE
+  in steps of two; checked SR, R0, R1, SP and remaining A bits stay equal.
+  These are distinct conditional paths, not an observed device status, a full
+  CPU-state equivalence proof or a substitute for the full updater caller.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -208,6 +216,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-pdrf-word/{runtime,audit}.json
   doc/local/own-core-nand-read-skew/{window.smt2,audit.json}
   doc/local/own-core-nand-status-pads/{runtime,audit}.json
+  doc/local/own-core-nand-status-variants/{runtime,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
