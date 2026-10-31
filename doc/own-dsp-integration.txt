@@ -85,8 +85,11 @@ IRQ admission uses the captured foreground and the real core's vector reads;
 acknowledgement follows the second accepted read. Tests cover masked and
 missing vector reads, fast/long entry and software exceptions. A one-word
 interrupt call before a second vector read remains explicitly unqualified.
-Cache-enabled fetch and speculative F2 reads during loaded REP are unqualified.
-This is untimed component integration, not
+With CE enabled, the actual native core owns program reads and cache behavior;
+the F2 owner resumes after the real CE-disable retirement. The current board
+map qualifies internal P/ROM only and does not configure an external P cache
+range. IRQ admission with CE enabled and speculative F2 reads during loaded
+REP remain unqualified. This is untimed component integration, not
 the production scheduler or a reset-to-instrument run.
 No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, joint board
 checkpoint or real-time instrument behavior is established by these fixtures.
@@ -428,6 +431,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-branch-migration/peripheral-audit.json
   doc/local/own-branch-migration/own-f2-audit.json
   doc/local/own-branch-migration/own-irq-audit.json
+  doc/local/own-branch-migration/own-cache-audit.json
   doc/local/we-recovery-rc/{candidate.cir,candidate-82k.cir,audit.py,audit.json}
   doc/local/own-core-main-gate-census/{audit.py,audit.json,events.txt}
   doc/local/own-core-nand-j/validation.json

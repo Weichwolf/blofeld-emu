@@ -31,9 +31,9 @@ public:
 
 private:
   void check_owner() const;
-  void check_eligible() const;
   void check_sample_context() const;
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
+  [[nodiscard]] dsp56300::InstructionProgress begin_native();
   void finish_interrupt_vector();
   OwnDspMachine &machine_;
   std::shared_ptr<const bool> identity_;
@@ -43,5 +43,7 @@ private:
   std::uint64_t instructions_ = 0;
   std::optional<std::uint32_t> interrupt_vector_;
   bool in_flight_ = false;
+  bool native_fetch_ = false;
+  bool native_latch_ = false;
 };
 }

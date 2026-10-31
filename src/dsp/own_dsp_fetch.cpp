@@ -25,13 +25,8 @@ OwnDspFetch::OwnDspFetch(OwnDspMachine &machine)
   if (!machine_.captured_fetch_owner_.expired() || machine_.interrupts_.pending()) {
     throw Fault("Own DSP fetch cannot acquire CPU pc=" + hex(machine_.cpu_.registers().pc, 6));
   }
-  check_eligible();
   const auto context = machine_.cpu_.instruction_fetch();
-  if (context.latched_opcode) {
-    throw Fault(
-        "Own DSP F2 owner requires the original REP sample read P:" + hex(context.address, 6) +
-        " pc=" + hex(context.address, 6) + " omr=" + hex(machine_.cpu_.registers().omr, 6));
-  }
+  native_latch_ = context.latched_opcode.has_value();
   fetch_.start(context.address, machine_.cpu_.registers().omr);
   machine_.captured_fetch_owner_ = identity_;
 }
@@ -43,14 +38,6 @@ void OwnDspFetch::check_owner() const {
   machine_.require_running();
 }
 
-void OwnDspFetch::check_eligible() const {
-  const auto regs = machine_.cpu_.registers();
-  if ((regs.sr & cache_enable) != 0) {
-    throw Fault("Own DSP F2 cache ownership is unqualified read P:" + hex(regs.pc, 6) +
-                " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
-  }
-}
-
 void OwnDspFetch::check_sample_context() const {
   const auto regs = machine_.cpu_.registers();
   const auto state = fetch_.view();
@@ -59,7 +46,7 @@ void OwnDspFetch::check_sample_context() const {
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
-  if ((regs.sr & cache_enable) != 0 || state.omr != regs.omr) {
+  if ((regs.sr & cache_enable) != 0 || native_fetch_ || native_latch_ || state.omr != regs.omr) {
     throw Fault("Unqualified own DSP F2 memory context read P:" +
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
@@ -95,11 +82,11 @@ void OwnDspFetch::capture() {
 
 bool OwnDspFetch::admit_interrupt() {
   check_owner();
-  if (in_flight_ || interrupt_vector_ || repeated_) {
+  if (in_flight_ || interrupt_vector_ || repeated_ || native_latch_ ||
+      (machine_.cpu_.registers().sr & cache_enable) != 0) {
     throw Fault("Own DSP interrupt admission requires a foreground boundary pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
-  check_eligible();
   const auto context = machine_.cpu_.instruction_fetch();
   const auto state = fetch_.view();
   if (context.latched_opcode || state.consume_address != context.address ||
@@ -134,18 +121,13 @@ bool OwnDspFetch::admit_interrupt() {
 dsp56300::InstructionProgress OwnDspFetch::begin() {
   check_owner();
   if (in_flight_) { throw Fault("Own DSP F2 instruction awaits retirement"); }
-  check_eligible();
   if (machine_.cpu_.progress().instructions == std::numeric_limits<std::uint64_t>::max()) {
     throw Fault("Own DSP F2 instruction counter exhausted pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
-  if (interrupt_vector_) {
-    auto result = machine_.cpu_.begin_fetch(dsp56300::InstructionPublication::pcu_updates);
-    if (result.fault.kind == dsp56300::FaultKind::none) {
-      instructions_ = machine_.cpu_.progress().instructions;
-      in_flight_ = true;
-    }
-    return result;
+  if (interrupt_vector_) { return begin_native(); }
+  if ((machine_.cpu_.registers().sr & cache_enable) != 0 || native_latch_) {
+    return begin_native();
   }
   const auto context = machine_.cpu_.instruction_fetch();
   const auto state = fetch_.view();
@@ -183,6 +165,16 @@ dsp56300::InstructionProgress OwnDspFetch::begin() {
   return result;
 }
 
+dsp56300::InstructionProgress OwnDspFetch::begin_native() {
+  auto result = machine_.cpu_.begin_fetch(dsp56300::InstructionPublication::pcu_updates);
+  if (result.fault.kind == dsp56300::FaultKind::none) {
+    instructions_ = machine_.cpu_.progress().instructions;
+    in_flight_ = true;
+    native_fetch_ = true;
+  }
+  return result;
+}
+
 dsp56300::InstructionProgress OwnDspFetch::admit(const DspFetchedInstruction &captured) {
   const dsp56300::InstructionWords words{
       .address = captured.opcode.word.address,
@@ -207,15 +199,24 @@ void OwnDspFetch::synchronize() {
     throw Fault("Own DSP F2 synchronization requires its actual retirement pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
-  check_eligible();
   if (interrupt_vector_) {
     finish_interrupt_vector();
+    native_fetch_ = false;
     in_flight_ = false;
     return;
   }
   const auto context = machine_.cpu_.instruction_fetch();
   const auto regs = machine_.cpu_.registers();
   const auto state = fetch_.view();
+  if (native_fetch_ || (regs.sr & cache_enable) != 0) {
+    fetch_.redirect(context.address, regs.omr);
+    native_latch_ = context.latched_opcode.has_value();
+    native_fetch_ = false;
+    repeated_.reset();
+    admitted_.reset();
+    in_flight_ = false;
+    return;
+  }
   if (context.latched_opcode) {
     if (!admitted_ || admitted_->extension || admitted_->opcode.word.address != context.address ||
         admitted_->opcode.word.value != *context.latched_opcode || state.omr != regs.omr ||

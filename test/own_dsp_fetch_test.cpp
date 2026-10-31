@@ -113,9 +113,57 @@ void actual_fetch() {
   }
 }
 
-void unqualified_cache() {
+void cache_fallback() {
   constexpr Word cache_status = 0xc80300;
-  const std::array<Word, 2> rom{movec_sr, cache_status};
+  constexpr Word normal_status = 0xc00300;
+  const std::array<Word, 7> rom{
+      movec_sr, cache_status, immediate_x0, 7, movec_sr, normal_status, 0};
+  OwnDspMachine machine(clocks);
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  const auto ticks = machine.clock().elapsed_ticks();
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  require(machine.cpu().registers().sr == cache_status, "Native cache status did not retire");
+  fetch.synchronize();
+  rejects([&] { fetch.issue(); }, "F2 prefetch bypassed native cache ownership");
+  auto progress = fetch.begin();
+  auto pending = progress.pending;
+  if (!pending) { throw std::runtime_error("Native cache fetch has no effect"); }
+  require(pending->effect.kind == EffectKind::fetch_opcode &&
+              pending->effect.address == boot_entry + 2,
+          "Enabled cache must use the actual native program fetch");
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().x == 7 && machine.cpu().registers().pc == boot_entry + 4,
+          "Native CE-enabled fetch must execute the actual immediate");
+  progress = fetch.begin();
+  pending = progress.pending;
+  if (!pending) { throw std::runtime_error("Native cache fetch has no disable effect"); }
+  require(pending->effect.kind == EffectKind::fetch_opcode &&
+              pending->effect.address == boot_entry + 4,
+          "Native cache owner must fetch the actual CE-disable instruction");
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().sr == normal_status &&
+              fetch.view().next_address == boot_entry + 6,
+          "CE disable must restore the actual F2 address");
+  read_word(fetch, boot_entry + 6);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().pc == boot_entry + 7 &&
+              machine.clock().elapsed_ticks() == ticks,
+          "Captured F2 execution must resume after the real CE transition");
+}
+
+void cache_unmapped_program() {
+  constexpr Word cache_status = 0xc80300;
+  constexpr Word external = 0x200000;
+  const std::array<Word, 4> rom{movec_sr, cache_status, jump_absolute, external};
   OwnDspMachine machine(clocks);
   machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
   reset(machine);
@@ -124,25 +172,35 @@ void unqualified_cache() {
   read_word(fetch, boot_entry + 1);
   static_cast<void>(fetch.begin());
   retire(machine);
-  require(machine.cpu().registers().sr == cache_status, "Native cache status did not retire");
-  try {
-    fetch.synchronize();
-    throw std::runtime_error("Unqualified cache synchronization was accepted");
-  } catch (const blofeld::Fault &error) {
-    require(std::string(error.what()).contains("cache ownership"),
-            "Cache-dependent F2 must fail with its real cause");
-  }
+  fetch.synchronize();
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  const auto started = fetch.begin();
+  const auto pending = started.pending;
+  if (!pending) { throw std::runtime_error("Unmapped native fetch has no effect"); }
+  require(pending->effect.kind == EffectKind::fetch_opcode && pending->effect.address == external,
+          "CE-enabled core must request the actual unmapped P word");
+  const auto result = machine.advance(pending->ticket);
+  require(result.fault.kind == FaultKind::memory_read && result.fault.space == Space::program &&
+              result.fault.address == external && result.fault.pc == external &&
+              machine.io().failure(),
+          "Unknown external P must retain its real operation, address and PC");
 }
 
-void vector_read(OwnDspMachine &machine, const Word expected, const bool acknowledged) {
+enum class Acknowledgement : std::uint8_t { pending, accepted };
+
+void vector_read(OwnDspMachine &machine,
+                 const Word expected,
+                 const Acknowledgement acknowledgement) {
   const auto pending = machine.cpu().pending_instruction();
   if (!pending) { throw std::runtime_error("Native vector lost its fetch"); }
   require(pending->effect.kind == EffectKind::fetch_opcode && pending->effect.address == expected &&
               pending->effect.pc == expected && pending->effect.space == Space::program,
           "Native vector must own the actual program-bus access");
   const auto result = machine.advance(pending->ticket);
-  require(result.fault.kind == FaultKind::none &&
-              machine.bus().interrupt_request(0).has_value() != acknowledged,
+  require(result.fault.kind == FaultKind::none && machine.bus().interrupt_request(0).has_value() ==
+                                                      (acknowledgement == Acknowledgement::pending),
           "Interrupt acknowledgement must follow the second actual vector read");
 }
 
@@ -169,7 +227,7 @@ void interrupt_vector(const bool missing_second) {
   require(fetch.admit_interrupt(), "Unmasked real IRQA was not admitted");
   rejects([&] { fetch.issue(); }, "F2 prefetch was accepted during native vector ownership");
   static_cast<void>(fetch.begin());
-  vector_read(machine, irqa_vector, false);
+  vector_read(machine, irqa_vector, Acknowledgement::pending);
   retire(machine);
   fetch.synchronize();
   static_cast<void>(fetch.begin());
@@ -183,7 +241,7 @@ void interrupt_vector(const bool missing_second) {
             "Unknown vector word must fail with its actual address and retain IRQ ownership");
     return;
   }
-  vector_read(machine, irqa_vector + 1, true);
+  vector_read(machine, irqa_vector + 1, Acknowledgement::accepted);
   retire(machine);
   fetch.synchronize();
   require(fetch.view().next_address == boot_entry + 2 &&
@@ -220,7 +278,7 @@ void interrupt_call(const bool short_vector) {
   read_word(fetch, boot_entry + 2);
   require(fetch.admit_interrupt(), "Real IRQA call was not admitted");
   static_cast<void>(fetch.begin());
-  vector_read(machine, irqa_vector, false);
+  vector_read(machine, irqa_vector, Acknowledgement::pending);
   if (short_vector) {
     retire(machine);
     require(machine.cpu().registers().pc == irqa_vector + 1 && machine.bus().interrupt_request(0),
@@ -360,7 +418,7 @@ void repeat_latch() {
           "All REP iterations must execute the genuine latch despite overwritten RAM");
 }
 
-void missing_repeat_provenance() {
+void native_repeat_recovery() {
   constexpr Word repeat_three = 0x0603a0;
   const std::array<Word, 2> rom{repeat_three, 0};
   OwnDspMachine machine(clocks);
@@ -379,12 +437,17 @@ void missing_repeat_provenance() {
   }
   require(machine.cpu().instruction_fetch().latched_opcode == 0,
           "Native REP must still own the original NOP latch");
-  rejects([&] { const OwnDspFetch unproven(machine); },
-          "A new F2 owner fabricated provenance for a live REP latch");
-  static_cast<void>(machine.begin_fetch());
+  OwnDspFetch resumed(machine);
+  rejects([&] { resumed.issue(); }, "A resumed native REP latch accepted an F2 read");
+  const auto progress = resumed.begin();
+  const auto pending = progress.pending;
+  if (!pending) { throw std::runtime_error("Native REP continuation has no effect"); }
+  require(pending->effect.kind != EffectKind::fetch_opcode,
+          "A native REP latch must not fabricate another opcode fetch");
   retire(machine);
+  resumed.synchronize();
   require(machine.cpu().progress().instructions == 3,
-          "Rejected F2 ownership must preserve the actual native REP continuation");
+          "Resumed ownership must preserve the actual native REP continuation");
 }
 
 void changed_memory_context() {
@@ -445,9 +508,10 @@ int main() {
   try {
     actual_fetch();
     invalidation();
-    unqualified_cache();
+    cache_fallback();
+    cache_unmapped_program();
     repeat_latch();
-    missing_repeat_provenance();
+    native_repeat_recovery();
     changed_memory_context();
     interrupt_vector(false);
     interrupt_vector(true);
