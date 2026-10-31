@@ -101,8 +101,13 @@ SHI status, active-DMA refusal and interrupt retention. These are reference-orde
 timing. OwnDspTimeline exposes one-cycle deadlines on the DSP timebase and
 explicit before/through boundaries for a future MCU scheduler. Synthetic ties
 execute different captured program values according to the external-write order;
-stale owners after restore are rejected. The caller still owns event ordering,
-reset and wiring; this is not yet the live board. With a locally supplied
+stale owners after restore are rejected. An explicit initial-reset input now
+starts the timeline without an executing fetch owner. Supplied hold/recovery
+ticks advance the real reset clock, and recovery stops exactly at completion
+before offering the first native deadline. Tests cover fractional hold time,
+early-release refusal, no ROM access under reset, real execution after recovery
+and stale ownership after a restore during reset. The caller still owns event
+ordering and wiring; this is not yet the live board. With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
 cycles; it does not connect the firmware MCU or establish the physical board.

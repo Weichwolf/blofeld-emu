@@ -703,6 +703,57 @@ void timeline_fault() {
   throw std::runtime_error("Timeline skipped an unknown program extension");
 }
 
+void timeline_initial_reset() {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  constexpr std::uint64_t epoch = 1000;
+  constexpr std::uint64_t partial_hold = 44;
+  constexpr std::uint64_t excess = 100;
+  constexpr std::uint64_t period = 45;
+  const OwnDspResetInputs reset_inputs{
+      .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 3};
+  OwnDspTimeline timeline(
+      machine, OwnDspAutomaticTiming::one_effect_per_cycle, epoch, reset_inputs);
+  rejects([&] { static_cast<void>(timeline.next_deadline()); },
+          "Held reset cannot offer an executing DSP period");
+  require(timeline.advance_reset_to(epoch + partial_hold) == partial_hold,
+          "Reset must retain fractional EXTAL time");
+  rejects([&] { timeline.release_hardware_reset(); }, "Reset released before two EXTAL periods");
+  require(timeline.advance_reset_to(epoch + hold_ticks) == hold_ticks - partial_hold,
+          "Reset hold must advance the remaining supplied ticks");
+  timeline.release_hardware_reset();
+  require(timeline.advance_reset_to(epoch + hold_ticks + recovery_ticks + excess) ==
+                  recovery_ticks &&
+              machine.clock().elapsed_ticks() == hold_ticks + recovery_ticks &&
+              machine.cpu().progress().instructions == 0 && !machine.bus().last_dma_cycle(),
+          "Recovery must stop exactly at completion without reading absent ROM or executing");
+  const std::array<Word, 8> rom{immediate_x0, 7, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  require(timeline.next_deadline() == epoch + hold_ticks + recovery_ticks + period,
+          "First execution deadline must follow actual reset recovery");
+  for (unsigned cycle = 0; cycle < 10 && machine.cpu().registers().x != 7; ++cycle) {
+    static_cast<void>(
+        timeline.advance_one(timeline.next_deadline(), OwnDspBoundary::through, dma_input(cycle)));
+  }
+  require(machine.cpu().registers().x == 7, "Actual reset entry must execute the supplied ROM");
+}
+
+void timeline_reset_stale_owner() {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  OwnDspTimeline timeline(
+      machine,
+      OwnDspAutomaticTiming::one_effect_per_cycle,
+      0,
+      OwnDspResetInputs{.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 3});
+  const auto checkpoint = machine.checkpoint();
+  machine.restore(checkpoint);
+  rejects([&] { static_cast<void>(timeline.advance_reset_to(hold_ticks)); },
+          "Restored held reset must invalidate timeline ownership");
+}
+
 void timeline_stale_owner() {
   auto cycle_clocks = clocks;
   cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
@@ -1429,6 +1480,8 @@ int main() {
     timeline_program_tie(true);
     timeline_fault();
     timeline_stale_owner();
+    timeline_initial_reset();
+    timeline_reset_stale_owner();
     dma_fetch_conflict();
     dma_fetch_native_overlap();
     dma_fetch_native_program_conflict();

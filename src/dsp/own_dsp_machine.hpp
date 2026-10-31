@@ -92,6 +92,7 @@ public:
 
 private:
   friend class OwnDspFetch;
+  friend class OwnDspTimeline;
   void require_running() const;
   [[nodiscard]] static std::optional<DspMemoryAccess>
   dma_native_footprint(const dsp56300::PendingInstruction &pending);

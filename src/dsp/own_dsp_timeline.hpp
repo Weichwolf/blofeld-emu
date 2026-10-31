@@ -3,13 +3,13 @@
 
 #include "dsp/dsp_dma.hpp"
 #include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 
 namespace blofeld {
-class OwnDspMachine;
-
 enum class OwnDspBoundary : std::uint8_t { before, through };
 
 // Orders completed reference cycles against a caller-owned common timebase.
@@ -17,9 +17,15 @@ enum class OwnDspBoundary : std::uint8_t { before, through };
 // Reset, checkpoint restoration and direct native execution invalidate the owner.
 class OwnDspTimeline {
 public:
-  OwnDspTimeline(OwnDspMachine &machine, OwnDspAutomaticTiming timing, std::uint64_t epoch_ticks);
+  OwnDspTimeline(OwnDspMachine &machine,
+                 OwnDspAutomaticTiming timing,
+                 std::uint64_t epoch_ticks,
+                 std::optional<OwnDspResetInputs> initial_reset = std::nullopt);
   OwnDspTimeline(const OwnDspTimeline &) = delete;
   OwnDspTimeline &operator=(const OwnDspTimeline &) = delete;
+  // Reset time uses the same common epoch; execution begins after recovery.
+  std::uint64_t advance_reset_to(std::uint64_t horizon);
+  void release_hardware_reset();
   [[nodiscard]] std::uint64_t next_deadline() const;
   [[nodiscard]] std::optional<OwnDspFetchCycleResult>
   advance_one(std::uint64_t horizon, OwnDspBoundary boundary, DspDmaInputs inputs);
@@ -29,7 +35,8 @@ public:
 private:
   void check_owner() const;
   OwnDspMachine &machine_;
-  OwnDspFetch fetch_;
+  std::unique_ptr<OwnDspFetch> fetch_;
+  std::shared_ptr<const bool> reset_identity_;
   OwnDspAutomaticTiming timing_;
   std::uint64_t epoch_ticks_;
   std::uint64_t expected_ticks_;

@@ -11,14 +11,15 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 
 namespace blofeld {
 OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
                                const OwnDspAutomaticTiming timing,
-                               const std::uint64_t epoch_ticks)
+                               const std::uint64_t epoch_ticks,
+                               const std::optional<OwnDspResetInputs> initial_reset)
     : machine_(machine),
-      fetch_(machine),
       timing_(timing),
       epoch_ticks_(epoch_ticks),
       expected_ticks_(machine.clock().elapsed_ticks()),
@@ -31,8 +32,20 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       expected_ticks_ > std::numeric_limits<std::uint64_t>::max() - epoch_ticks_) {
     throw Fault("Own DSP timeline requires qualified timing and representable epoch");
   }
+  if (initial_reset) {
+    if (!machine_.captured_fetch_owner_.expired()) {
+      throw Fault("Own DSP timeline reset requires an unowned machine");
+    }
+    reset_identity_ = std::make_shared<const bool>(true);
+    machine_.begin_hardware_reset(*initial_reset);
+    machine_.captured_fetch_owner_ = reset_identity_;
+    expected_epoch_ = machine_.clock().native_epoch();
+    expected_dma_ = machine_.bus().last_dma_cycle();
+  } else {
+    fetch_ = std::make_unique<OwnDspFetch>(machine_);
+  }
   horizon_ += expected_ticks_;
-  static_cast<void>(next_deadline());
+  if (fetch_) { static_cast<void>(next_deadline()); }
 }
 
 void OwnDspTimeline::check_owner() const {
@@ -42,11 +55,46 @@ void OwnDspTimeline::check_owner() const {
       machine_.bus().last_dma_cycle() != expected_dma_) {
     throw Fault("Own DSP timeline requires its healthy unchanged native boundary");
   }
-  static_cast<void>(fetch_.view());
+  if (fetch_) {
+    static_cast<void>(fetch_->view());
+  } else if (!reset_identity_ || machine_.captured_fetch_owner_.lock() != reset_identity_) {
+    throw Fault("Own DSP timeline reset ownership is stale");
+  }
+}
+
+std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
+  check_owner();
+  if (fetch_ || horizon < horizon_) {
+    throw Fault("Own DSP timeline reset advance requires held reset and monotonic time");
+  }
+  const auto now = epoch_ticks_ + expected_ticks_;
+  if (horizon == now) { return 0; }
+  try {
+    const auto consumed = machine_.advance_hardware_reset_ticks(horizon - now);
+    expected_ticks_ = machine_.clock().elapsed_ticks();
+    horizon_ = epoch_ticks_ + expected_ticks_;
+    boundary_ = OwnDspBoundary::through;
+    if (!machine_.clock().hardware_reset_active()) {
+      machine_.captured_fetch_owner_.reset();
+      reset_identity_.reset();
+      fetch_ = std::make_unique<OwnDspFetch>(machine_);
+    }
+    return consumed;
+  } catch (...) {
+    faulted_ = true;
+    throw;
+  }
+}
+
+void OwnDspTimeline::release_hardware_reset() {
+  check_owner();
+  if (fetch_) { throw Fault("Own DSP timeline reset is already complete"); }
+  machine_.release_hardware_reset();
 }
 
 std::uint64_t OwnDspTimeline::next_deadline() const {
   check_owner();
+  if (!fetch_) { throw Fault("Own DSP timeline execution awaits completed reset recovery"); }
   const auto duration = machine_.clock().next_step_ticks(machine_.bus(), 1);
   constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
   if (duration > maximum - expected_ticks_ || expected_ticks_ + duration > maximum - epoch_ticks_) {
@@ -72,7 +120,7 @@ std::optional<OwnDspFetchCycleResult> OwnDspTimeline::advance_one(const std::uin
     return std::nullopt;
   }
   try {
-    auto result = fetch_.advance_dma_automatic(inputs, timing_);
+    auto result = fetch_->advance_dma_automatic(inputs, timing_);
     expected_ticks_ = machine_.clock().elapsed_ticks();
     expected_dma_ = machine_.bus().last_dma_cycle();
     horizon_ = deadline;
