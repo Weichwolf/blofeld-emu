@@ -13,10 +13,12 @@
 namespace blofeld {
 class OwnDspMachine;
 enum class OwnDspNativeCycleModel : std::uint8_t;
+enum class OwnDspAutomaticTiming : std::uint8_t { unqualified, one_effect_per_cycle };
 
 struct OwnDspFetchCycleResult {
   DspDmaBusResult dma;
   bool captured = false;
+  bool instruction_started = false;
   std::optional<dsp56300::InstructionProgress> native;
   std::optional<std::uint32_t> issued_address;
 };
@@ -41,6 +43,9 @@ public:
   // Native placement and the isolated-effect hypothesis remain caller-owned.
   [[nodiscard]] OwnDspFetchCycleResult
   advance_dma_pipeline(DspDmaInputs inputs, bool admit_native, OwnDspNativeCycleModel model);
+  // Explicit experimental effect-per-cycle ordering; no calibrated pipeline timing.
+  [[nodiscard]] OwnDspFetchCycleResult advance_dma_automatic(DspDmaInputs inputs,
+                                                             OwnDspAutomaticTiming timing);
   // Admission uses the actual owned foreground F2 words. Vector reads remain
   // native staged bus effects and are acknowledged by the interrupt owner.
   [[nodiscard]] bool admit_interrupt();
@@ -51,6 +56,7 @@ public:
 private:
   void check_owner() const;
   void check_sample_context() const;
+  [[nodiscard]] bool begin_automatic();
   [[nodiscard]] std::optional<DspMemoryAccess>
   native_overlap(const DspProgramFetchView &state,
                  const dsp56300::PendingInstruction &pending) const;

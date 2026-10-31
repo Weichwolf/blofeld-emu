@@ -86,6 +86,12 @@ std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffec
     case unit_update:
     case pcu_update: return std::nullopt;
     case bit: {
+      constexpr unsigned shi_status = 0xffff91;
+      if (effect.action == dsp56300::BitAction::test && effect.space == dsp56300::Space::x &&
+          effect.address == shi_status) {
+        return DspMemoryAccess{.target = {.space = DspSpace::x, .address = shi_status},
+                               .phase = DspMemoryPhase::peripheral_bit};
+      }
       constexpr std::array names{"P:", "X:", "Y:"};
       const auto space = native_space(effect.space);
       throw Fault("Unqualified own DSP DMA/native bit " +

@@ -65,8 +65,8 @@ Other multi-effect instructions still require explicit qualification. DMA source
 contention defers the
 DMA read; DMA destination contention holds the same native ticket until the
 write completes. Synthetic tests verify both directions, global wait and an
-independent program fetch. Atomic bit and peripheral reset effects and automatic pipeline placement
-remain unqualified. This is a caller-selected ordering experiment, not calibrated
+independent program fetch. Modifying bit and peripheral reset effects and
+calibrated automatic pipeline placement remain unqualified. This is a caller-selected ordering experiment, not calibrated
 pipeline or audio timing; the caller still owns effect placement, ESAI and board
 scheduling. A separate explicit F2/DMA cycle derives the P-memory footprint from
 the actual issued F1 address while holding the native CPU. A destination conflict
@@ -75,13 +75,22 @@ then sample the written word. An additional caller-selected DMA/F2/native order
 admits the actual pending native effect alongside F2 when their memory resources
 are independently qualified. A conflicting DMA destination holds both effects;
 the synthetic test resumes the actual X load and executes the DMA-written opcode.
-Concurrent native P or peripheral access with F2 remain unqualified. An explicit
+Concurrent native P accesses with F2 remain unqualified. With DMA inactive,
+actual peripheral writes and SHI status bit tests can share the selected F2
+cycle; unsupported peripheral accesses still fail in the strict bus. An explicit
 continuous reference-cycle variant places a new F1 after DMA, F2 and any selected
 native effect, respecting queue capacity and DMA destination stalls. The owner
 still selects native effects and synchronizes actual retirement; cache/REP/vector
 transitions are not automatically scheduled. Tests cover queue backpressure,
-resumption and a DMA-written instruction. These are reference-order hypotheses,
-not measured pipeline timing.
+resumption and a DMA-written instruction. The additional explicit
+one-effect-per-cycle hypothesis automatically admits actual captured instructions,
+advances their effects and synchronizes retirement. Pending interrupts and
+cache/REP/vector transitions refuse visibly rather than being skipped. Synthetic
+tests cover arithmetic, an actual OnCE write, SHI status, active-DMA refusal and
+interrupt retention. These are reference-order hypotheses, not measured pipeline
+timing. With a locally supplied inactive SPI baseline the private 55-word
+NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
+cycles; it does not connect the firmware MCU or establish the physical board.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected
@@ -128,8 +137,8 @@ With CE enabled, the actual native core owns program reads and cache behavior;
 the F2 owner resumes after the real CE-disable retirement. The current board
 map qualifies internal P/ROM only and does not configure an external P cache
 range. IRQ admission with CE enabled and speculative F2 reads during loaded
-REP remain unqualified. This is untimed component integration, not
-the production scheduler or a reset-to-instrument run.
+REP remain unqualified. This is component integration, not the production
+scheduler or a reset-to-instrument run.
 No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, joint board
 checkpoint or real-time instrument behavior is established by these fixtures.
 

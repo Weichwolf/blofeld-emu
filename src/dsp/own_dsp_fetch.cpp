@@ -126,6 +126,53 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_pipeline(const DspDmaInputs inpu
   return capture_cycle(inputs, admit_native, false, true);
 }
 
+OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inputs,
+                                                          const OwnDspAutomaticTiming timing) {
+  check_owner();
+  if (timing != OwnDspAutomaticTiming::one_effect_per_cycle) {
+    throw Fault("Own DSP automatic execution requires an explicit timing hypothesis pc=" +
+                hex(machine_.cpu_.registers().pc, 6));
+  }
+  const bool started = begin_automatic();
+  auto result = capture_cycle(inputs, in_flight_, false, true);
+  result.instruction_started = started;
+  if (result.native && result.native->retired) { synchronize(); }
+  return result;
+}
+
+bool OwnDspFetch::begin_automatic() {
+  if (in_flight_) { return false; }
+  const auto regs = machine_.cpu_.registers();
+  const auto context = machine_.cpu_.instruction_fetch();
+  if ((regs.sr & cache_enable) != 0 || native_fetch_ || native_latch_ || repeated_ ||
+      interrupt_vector_ || context.exception_vector || context.latched_opcode) {
+    throw Fault("Unqualified own DSP automatic cache/REP/vector fetch read P:" +
+                hex(context.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+  }
+  constexpr unsigned mask_shift = 8;
+  constexpr unsigned mask_bits = 3;
+  const auto request = machine_.bus_.interrupt_request((regs.sr >> mask_shift) & mask_bits);
+  if (request) {
+    throw Fault("Unqualified own DSP automatic interrupt vector=" + hex(request->vector, 6) +
+                " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+  }
+  const auto state = fetch_.view();
+  if (state.used == 0) { return false; }
+  const auto opcode = state.words[0].require_known({.pc = context.address, .omr = regs.omr});
+  const auto shape = dsp56300::inspect_instruction(opcode.value);
+  if (!shape) {
+    throw Fault("Unsupported own DSP automatic opcode " + hex(opcode.value, 6) + " read P:" +
+                hex(opcode.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+  }
+  if (state.used < shape->words) { return false; }
+  const auto progress = begin();
+  if (progress.fault.kind != dsp56300::FaultKind::none) {
+    throw Fault("Own DSP automatic instruction admission fault pc=" + hex(regs.pc, 6) +
+                " opcode=" + hex(opcode.value, 6));
+  }
+  return true;
+}
+
 std::optional<DspMemoryAccess>
 OwnDspFetch::native_overlap(const DspProgramFetchView &state,
                             const dsp56300::PendingInstruction &pending) const {
@@ -133,9 +180,18 @@ OwnDspFetch::native_overlap(const DspProgramFetchView &state,
   if (!access || !state.pending_address) { return access; }
   constexpr unsigned io_base = 0xffff80;
   const DspMemoryAccess program{.target = {.address = *state.pending_address}};
-  if (access->target.space != DspSpace::p && access->target.address < io_base &&
-      machine_.bus_.memory_conflict({.core = program, .dma = *access}) ==
-          DspMemoryConflict::independent) {
+  const bool data = access->target.space != DspSpace::p;
+  const bool peripheral_write = data && access->target.address >= io_base &&
+                                access->operation == DspMemoryOperation::write &&
+                                !machine_.bus_.has_active_dma();
+  constexpr unsigned shi_status = 0xffff91;
+  const bool shi_test =
+      access->target.space == DspSpace::x && access->target.address == shi_status &&
+      access->phase == DspMemoryPhase::peripheral_bit && !machine_.bus_.has_active_dma();
+  if (peripheral_write || shi_test ||
+      (data && access->target.address < io_base &&
+       machine_.bus_.memory_conflict({.core = program, .dma = *access}) ==
+           DspMemoryConflict::independent)) {
     return access;
   }
   constexpr std::array spaces{"P:", "X:", "Y:"};

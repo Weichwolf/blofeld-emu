@@ -177,6 +177,157 @@ void continuous_fetch_pipeline() {
   fetch.synchronize();
 }
 
+void automatic_execution() {
+  constexpr Word add_x0 = 0x200040;
+  constexpr unsigned instruction_count = 3;
+  constexpr unsigned maximum_cycles = 80;
+  constexpr unsigned accumulator_shift = 24;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 16> rom{immediate_x0, 7, add_x0, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  rejects(
+      [&] {
+        static_cast<void>(
+            fetch.advance_dma_automatic(dma_input(0), OwnDspAutomaticTiming::unqualified));
+      },
+      "Automatic execution requires an explicit timing hypothesis");
+  unsigned starts = 0;
+  unsigned retirements = 0;
+  unsigned cycle = 0;
+  for (; cycle < maximum_cycles && retirements < instruction_count; ++cycle) {
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    if (result.instruction_started) { ++starts; }
+    if (result.native && result.native->retired) { ++retirements; }
+    require(machine.clock().native_cycle_units() == cycle + 1,
+            "Each automatic cycle must advance exactly one supplied clock period");
+  }
+  require(
+      starts == instruction_count && retirements == instruction_count &&
+          machine.cpu().progress().instructions == instruction_count &&
+          machine.cpu().registers().pc == boot_entry + 4 && machine.cpu().registers().x == 7 &&
+          machine.cpu().registers().a == (std::uint64_t{7} << accumulator_shift),
+      "Automatic fetch and native effects must execute real immediate, ADD and NOP instructions");
+}
+
+void automatic_peripheral_write() {
+  constexpr Word movep_immediate_once = 0x08f4bc;
+  constexpr Word value = 0x234567;
+  constexpr unsigned maximum_cycles = 30;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{movep_immediate_once, value, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  unsigned cycle = 0;
+  while (machine.cpu().progress().instructions == 0 && cycle < maximum_cycles) {
+    static_cast<void>(
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle));
+    ++cycle;
+  }
+  require(machine.cpu().progress().instructions == 1 && machine.bus().once_latch() == value &&
+              machine.cpu().registers().pc == boot_entry + 2,
+          "Automatic F2 overlap must execute the real immediate OnCE peripheral write");
+}
+
+void automatic_shi_status_test() {
+  constexpr Word jset_status_bit_two = 0x0191a2;
+  constexpr unsigned maximum_cycles = 30;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{jset_status_bit_two, boot_entry + 5, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  unsigned cycle = 0;
+  while (machine.cpu().progress().instructions == 0 && cycle < maximum_cycles) {
+    static_cast<void>(
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle));
+    ++cycle;
+  }
+  require(machine.cpu().progress().instructions == 1 &&
+              machine.cpu().registers().pc == boot_entry + 2,
+          "Real SHI status test must retain the actual clear bit without invented input");
+}
+
+void shi_status_dma_guard() {
+  constexpr Word jset_status_bit_two = 0x0191a2;
+  constexpr Word dma_control = 0xffffec;
+  constexpr Word irq_triggered_copy = 0x880244;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 4> rom{jset_status_bit_two, boot_entry + 3, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  const auto pending = machine.cpu().pending_instruction();
+  if (!pending || pending->effect.kind != EffectKind::bit) {
+    throw std::runtime_error("SHI branch did not reach its actual bit test");
+  }
+  fetch.issue();
+  for (const auto address : {dma_control + 3, dma_control + 2, dma_control + 1}) {
+    machine.bus().write({.space = DspSpace::x, .address = address});
+  }
+  machine.bus().write({.space = DspSpace::x, .address = dma_control, .value = irq_triggered_copy});
+  try {
+    static_cast<void>(
+        fetch.advance_dma_capture_native(dma_input(0), OwnDspNativeCycleModel::isolated_effect));
+    throw std::runtime_error("Unqualified active DMA/SHI overlap was accepted");
+  } catch (const blofeld::Fault &error) {
+    const std::string detail(error.what());
+    const auto held = machine.cpu().pending_instruction();
+    require(detail.contains("native=read X:0xffff91") && detail.contains("pc=0xff0000") && held &&
+                held->effect == pending->effect && !machine.bus().last_dma_cycle() &&
+                machine.clock().native_cycle_units() == 0,
+            "Active DMA/SHI overlap must refuse before the actual bit test or a DMA sample");
+  }
+}
+
+void automatic_interrupt_frontier() {
+  constexpr unsigned maximum_cycles = 40;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{movec_sr, 0, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  unsigned cycle = 0;
+  while (machine.cpu().progress().instructions == 0 && cycle < maximum_cycles) {
+    static_cast<void>(
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle));
+    ++cycle;
+  }
+  require(machine.cpu().progress().instructions == 1 && machine.cpu().registers().sr == 0,
+          "Real MOVEC must unmask the interrupt before the frontier test");
+  machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
+  machine.bus().observe_irqa(true);
+  machine.bus().observe_irqa(false);
+  const auto before = machine.cpu().registers();
+  try {
+    static_cast<void>(
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle));
+    throw std::runtime_error("Automatic execution skipped a real pending interrupt");
+  } catch (const blofeld::Fault &error) {
+    const std::string detail(error.what());
+    require(detail.contains("interrupt vector=0x000010") && detail.contains("pc=0xff0002") &&
+                machine.cpu().registers() == before && machine.bus().interrupt_request(0) &&
+                machine.clock().native_cycle_units() == cycle,
+            "An unqualified IRQ must remain pending without starting an instruction or clock");
+  }
+}
+
 void dma_fetch_conflict() {
   constexpr Word source_register = 0xffffef;
   constexpr Word destination_register = 0xffffee;
@@ -744,6 +895,11 @@ int main() {
   try {
     actual_fetch();
     continuous_fetch_pipeline();
+    automatic_execution();
+    automatic_peripheral_write();
+    automatic_shi_status_test();
+    shi_status_dma_guard();
+    automatic_interrupt_frontier();
     dma_fetch_conflict();
     dma_fetch_native_overlap();
     dma_fetch_native_program_conflict();
