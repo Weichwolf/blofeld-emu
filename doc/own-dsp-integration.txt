@@ -42,7 +42,15 @@ are a caller-supplied stable reset contract, not recovered physical board wiring
 The owner initializes PC/SR/OMR/SP/SC/VBA and all M registers from documented
 reset values. Other visible registers are retained, including uninitialized EP
 and SZ (FM 4.3.2 and 5.4.3.3). RAM and installed ROM survive the board reset.
-Only reset time advances: subsequent staged execution remains explicitly untimed.
+Staged CPU execution itself remains explicitly untimed.
+An explicit advance_reference_cycle call with the separately selected
+reference_cycle_boundary PLL hypothesis advances one caller-scheduled period,
+SHI/memory-switch delays and the timer CLK/2 divider; the existing
+reference_instruction_boundary contract does not implicitly select it.
+It does not admit a CPU effect or infer any instruction duration. Active DMA,
+unqualified STOP/debug oscillators, faulted cores and callback reentry refuse
+visibly. The caller still owns effect placement, DMA, ESAI and board scheduling;
+this interface does not establish calibrated pipeline or audio timing.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected
@@ -432,6 +440,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-branch-migration/own-f2-audit.json
   doc/local/own-branch-migration/own-irq-audit.json
   doc/local/own-branch-migration/own-cache-audit.json
+  doc/local/own-branch-migration/own-clock-audit.json
   doc/local/we-recovery-rc/{candidate.cir,candidate-82k.cir,audit.py,audit.json}
   doc/local/own-core-main-gate-census/{audit.py,audit.json,events.txt}
   doc/local/own-core-nand-j/validation.json

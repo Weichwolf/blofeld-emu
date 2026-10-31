@@ -8,7 +8,11 @@
 
 namespace blofeld {
 
-enum class DspClockSwitch : std::uint8_t { unqualified, reference_instruction_boundary };
+enum class DspClockSwitch : std::uint8_t {
+  unqualified,
+  reference_instruction_boundary,
+  reference_cycle_boundary
+};
 
 struct DspRunClockInputs {
   std::uint32_t extal_hz = 0;
@@ -40,7 +44,8 @@ struct DspClockUnits {
 
 // Explicit instruction-boundary experiment. SDK cycle estimates are supplied by
 // the owner; they are not calibrated DSP56371 instruction/pipeline durations.
-// PLL command changes affect the next step, with no analog lock inference.
+// PLL command changes affect the next explicitly selected instruction or
+// single-cycle boundary, with no analog lock inference.
 class DspRunClock {
 public:
   explicit DspRunClock(DspRunClockInputs inputs);

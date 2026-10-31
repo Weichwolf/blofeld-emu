@@ -18,6 +18,21 @@
 #include <utility>
 
 namespace blofeld {
+namespace {
+class EffectGuard {
+public:
+  explicit EffectGuard(bool &active) : active_(active) { active_ = true; }
+
+  ~EffectGuard() { active_ = false; }
+
+  EffectGuard(const EffectGuard &) = delete;
+  EffectGuard &operator=(const EffectGuard &) = delete;
+
+private:
+  bool &active_;
+};
+}
+
 struct OwnDspCheckpoint::Storage {
   DspRunClockInputs inputs;
   DspBus bus;
@@ -107,6 +122,7 @@ void OwnDspMachine::require_running() const {
 }
 
 void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
+  if (advancing_effect_) { throw Fault("Own DSP reset requires an inactive native effect"); }
   constexpr unsigned mode_mask = 15;
   constexpr unsigned spi_mode = 5;
   if (inputs.mode_known != mode_mask || inputs.mode_levels != spi_mode ||
@@ -165,9 +181,34 @@ OwnDspMachine::begin_fetch(const dsp56300::InstructionPublication publication) {
 
 dsp56300::InstructionProgress OwnDspMachine::advance(const dsp56300::EffectTicket &ticket) {
   require_running();
+  if (advancing_effect_) { throw Fault("Own DSP native effect cannot reenter its owner"); }
+  const EffectGuard guard(advancing_effect_);
   auto result = interrupts_.advance(ticket);
   if (result.fault.kind == dsp56300::FaultKind::none) { bus_.observe_omr(cpu_.registers().omr); }
   return result;
+}
+
+std::uint64_t OwnDspMachine::advance_reference_cycle() {
+  require_running();
+  const auto regs = cpu_.registers();
+  const auto context = [&regs] { return " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6); };
+  if (clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary) {
+    throw Fault("Own DSP reference cycle requires explicit cycle-boundary PLL timing" + context());
+  }
+  if (advancing_effect_ || cpu_.fault().kind != dsp56300::FaultKind::none) {
+    throw Fault("Own DSP reference cycle requires an inactive healthy native effect" + context());
+  }
+  if (cpu_.processing_state() != dsp56300::ProcessingState::running &&
+      cpu_.processing_state() != dsp56300::ProcessingState::waiting) {
+    throw Fault("Own DSP reference cycle requires qualified oscillator state" + context());
+  }
+  if (bus_.has_active_dma()) {
+    throw Fault("Own DSP reference cycle requires DMA arbitration at X:0xfffff4" + context());
+  }
+  const auto duration = clock_.next_step_ticks(bus_, 1);
+  clock_.begin_step(bus_, {.pc = regs.pc, .omr = regs.omr});
+  clock_.finish_step(bus_, 1);
+  return duration;
 }
 
 bool OwnDspMachine::admit_interrupt(const dsp56300::InstructionWords foreground) {

@@ -62,6 +62,9 @@ public:
   [[nodiscard]] dsp56300::InstructionProgress begin_fetch(
       dsp56300::InstructionPublication publication = dsp56300::InstructionPublication::pcu_updates);
   [[nodiscard]] dsp56300::InstructionProgress advance(const dsp56300::EffectTicket &ticket);
+  // One externally scheduled reference period; does not advance an instruction.
+  // DMA arbitration and subcycle effects remain the scheduler's responsibility.
+  std::uint64_t advance_reference_cycle();
   [[nodiscard]] bool admit_interrupt(dsp56300::InstructionWords foreground);
   [[nodiscard]] OwnDspCheckpoint checkpoint() const;
   // An untimed speculative continuation, not a published instruction or
@@ -82,5 +85,6 @@ private:
   DspRunClock clock_;
   const DspRunClockInputs clock_inputs_;
   std::weak_ptr<const bool> captured_fetch_owner_;
+  bool advancing_effect_ = false;
 };
 }

@@ -22,7 +22,8 @@ DspRunClock::DspRunClock(const DspRunClockInputs inputs) : inputs_(inputs) {
   constexpr unsigned minimum_extal = 500000;
   constexpr unsigned maximum_extal = 100000000;
   constexpr std::uint64_t maximum_timebase = 1000000000000;
-  if (inputs.switch_timing != DspClockSwitch::reference_instruction_boundary ||
+  if ((inputs.switch_timing != DspClockSwitch::reference_instruction_boundary &&
+       inputs.switch_timing != DspClockSwitch::reference_cycle_boundary) ||
       inputs.extal_hz < minimum_extal || inputs.extal_hz > maximum_extal ||
       inputs.timebase_hz > maximum_timebase || inputs.timebase_hz < inputs.extal_hz ||
       inputs.timebase_hz % inputs.extal_hz != 0) {
@@ -44,6 +45,10 @@ std::uint64_t DspRunClock::duration_ticks(const DspClockUnits units,
                                           const std::uint64_t period) const {
   constexpr unsigned maximum_step_cycles = 1048576;
   const auto remaining = std::numeric_limits<std::uint64_t>::max() - ticks_;
+  if (inputs_.switch_timing == DspClockSwitch::reference_cycle_boundary &&
+      (units.native != 1 || units.interlocks != 0)) {
+    throw Fault("DSP cycle-boundary PLL contract requires one reference period");
+  }
   if (units.native == 0 || units.native > maximum_step_cycles ||
       units.interlocks > maximum_step_cycles - units.native) {
     throw Fault("Invalid or exhausted DSP reference cycle count");
