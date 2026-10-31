@@ -250,8 +250,9 @@ void identification_read_edges() {
     for (const auto expected : own_identity) {
       require(clock.read() == expected, "ID byte order follows the documented read cycles");
       clock.observe_read_end(NandReadEnd::re_high);
+      clock.observe_read_end(NandReadEnd::ce_high);
       require(clock.device().ready() == true && !clock.next_event() && clock.ticks() == 0,
-              "ID RE release cannot schedule an array transfer or alter readiness");
+              "ID RE/CE release cannot schedule an array transfer or alter readiness");
     }
     reject([&] { static_cast<void>(clock.read()); }, "exceeds the supplied");
   }
