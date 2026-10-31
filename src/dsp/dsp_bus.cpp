@@ -5,6 +5,7 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_interrupts.hpp"
+#include "dsp/dsp_io_map.hpp"
 #include "dsp/dsp_timers.hpp"
 
 #include <algorithm>
@@ -26,7 +27,6 @@ constexpr unsigned program_ram_end = 0x1000;
 constexpr unsigned x_low_end = 0x3000;
 constexpr unsigned y_low_end = 0x2000;
 constexpr unsigned x_switched_end = 0x10000;
-constexpr unsigned io_base = 0xffff80;
 constexpr unsigned esai_offset_mask = 0x1f;
 constexpr unsigned ms = 0x80;
 constexpr unsigned msw_shift = 21;
@@ -329,7 +329,7 @@ DspMemoryResource DspBus::memory_resource(const DspMemoryAccess access) const {
   }
   const auto operation =
       access.operation == DspMemoryOperation::read ? Operation::read : Operation::write;
-  if (target.space != DspSpace::p && target.address >= io_base && target.address <= word_mask) {
+  if (dsp_io_selection(target) != DspIoSelection::outside) {
     throw Fault("Unqualified DSP peripheral memory resource " +
                 std::string(operation == Operation::read ? "read at " : "write at ") +
                 address_text(target));
@@ -408,9 +408,7 @@ DspBus::Location DspBus::locate_data(const DspAddress access, const Operation op
 }
 
 std::uint32_t DspBus::read(const DspAddress access) {
-  if (access.space != DspSpace::p && access.address >= io_base && access.address <= word_mask) {
-    return read_peripheral(access);
-  }
+  if (dsp_io_selection(access) != DspIoSelection::outside) { return read_peripheral(access); }
   const auto location = locate(access);
   const auto &memory = (location.rom ? rom_ : ram_).at(location.bank);
   if (memory.known.at(location.offset) == 0) {
@@ -424,7 +422,7 @@ void DspBus::write(const DspStore access) {
   if (access.value > word_mask) {
     throw Fault("DSP write exceeds 24 bits at " + address_text(target));
   }
-  if (access.space != DspSpace::p && access.address >= io_base && access.address <= word_mask) {
+  if (dsp_io_selection(target) != DspIoSelection::outside) {
     write_peripheral(access);
     return;
   }

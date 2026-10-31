@@ -6,7 +6,7 @@ target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB
 add_library(blofeld_gpio_pads src/board/gpio_pads.cpp)
 target_include_directories(blofeld_gpio_pads PUBLIC src)
 target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
-add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp src/dsp/dsp_bus.cpp src/dsp/dsp_pll.cpp
+add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp src/dsp/dsp_bus.cpp src/dsp/dsp_io_map.cpp src/dsp/dsp_pll.cpp
   src/dsp/dsp_esai.cpp src/dsp/dsp_esai_transmit.cpp src/dsp/dsp_esai_clock.cpp src/dsp/dsp_bus_esai.cpp
   src/dsp/dsp_dma.cpp src/dsp/dsp_dma_address.cpp src/dsp/dsp_dma_cycle.cpp src/dsp/dsp_bus_dma.cpp
   src/dsp/dsp_dax.cpp src/dsp/dsp_dax_clock.cpp src/dsp/dsp_bus_dax.cpp

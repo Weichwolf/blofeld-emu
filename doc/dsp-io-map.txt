@@ -1,0 +1,27 @@
+DSP56371 internal I/O decoder
+
+DSP56371UM Rev2.1 tables3-7/3-8 assign the top128 X/Y data locations.
+The primary PDF identity and URL are in hardware/sources.json. Every slot is
+classified as assigned or reserved; program space and lower data addresses are
+outside this decoder. There are86 assigned X slots and52 assigned Y slots.
+IDR, BIU, instruction-patch and EFCOP registers remain assigned even when their
+semantics are not implemented. An unsupported register is never an empty sink.
+
+DspBus uses this selection for peripheral routing and memory-resource refusals.
+Classification supplies no read value and no write acknowledgement. Reserved
+reads/writes and unimplemented assigned registers keep their strict failures.
+The map does not infer aliases between equal X/Y offsets.
+
+Section3.1.4 explicitly excludes direct external memory access on this derivative.
+The generic family manual's switchable/external regions do not establish an
+external bus on the DSP56371. Section3.1.1 prohibits user accesses to reserved
+memory; a reserved label alone does not specify physical read levels, hidden
+latches, side effects or successful writes. Those semantics remain research.
+
+  cmake --build build/own-only --target blofeld-dsp-io-map-test
+  ctest --test-dir build/own-only --output-on-failure -R '^dsp_io_map$'
+
+Independent per-row expectations cover all256 slots, map boundaries, program-
+space separation, assigned-but-unsupported registers and retained strict bus
+behavior. Local parsing separately compares all256 primary table entries with
+those expectations. No manufacturer instruction bytes are in these tests.

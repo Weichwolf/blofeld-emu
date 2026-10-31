@@ -15,6 +15,13 @@ User-supplied firmware execution pending  Required in objective.txt: execute cus
                                           assumptions, test storage interruption and
                                           recovery. No physical flash-safety proof
                                           follows from emulator execution alone.
+DSP internal I/O selection        partial  All256 derivative slots distinguish assigned,
+                                          reserved and outside-decoder destinations.
+                                          Independent manual rows and strict failure
+                                          controls pass under ASan/UBSan; assigned
+                                          IDR/patch/EFCOP remain unsupported. Reserved
+                                          access effects and complete boot remain open
+                                          (dsp-io-map.txt).
 ESAI cold initialization         partial  Explicit cold-unclocked reference contract
                                           supplements the unchanged reset-required
                                           default. Both maps/orders, missing clocks,
