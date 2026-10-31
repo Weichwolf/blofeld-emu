@@ -95,6 +95,7 @@ void OwnDspMachine::restore(const OwnDspCheckpoint &checkpoint) {
   interrupts_.vector_ = state.vector;
   interrupts_.first_ = state.first;
   io_.failure_ = std::move(restored_failure);
+  captured_fetch_owner_.reset();
 }
 
 void OwnDspMachine::require_running() const {
@@ -117,6 +118,7 @@ void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
   }
   auto regs = cpu_.registers();
   try {
+    captured_fetch_owner_.reset();
     clock_.restart_native_epoch();
     bus_.observe_irqa((inputs.mode_levels & 1U) != 0);
     bus_.pll().observe_pinit(inputs.pinit);
@@ -155,6 +157,9 @@ void OwnDspMachine::release_hardware_reset() {
 dsp56300::InstructionProgress
 OwnDspMachine::begin_fetch(const dsp56300::InstructionPublication publication) {
   require_running();
+  if (!captured_fetch_owner_.expired()) {
+    throw Fault("Own DSP captured fetch already owns execution pc=" + hex(cpu_.registers().pc, 6));
+  }
   return cpu_.begin_fetch(publication);
 }
 
@@ -167,6 +172,9 @@ dsp56300::InstructionProgress OwnDspMachine::advance(const dsp56300::EffectTicke
 
 bool OwnDspMachine::admit_interrupt(const dsp56300::InstructionWords foreground) {
   require_running();
+  if (!captured_fetch_owner_.expired()) {
+    throw Fault("Own DSP captured fetch cannot admit interrupt pc=" + hex(cpu_.registers().pc, 6));
+  }
   return interrupts_.admit(foreground);
 }
 }

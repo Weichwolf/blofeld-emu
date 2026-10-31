@@ -75,6 +75,14 @@ also checks knowledge rollback, ROM rollback, reset fractions/gates, empty and
 incompatible handles, both cuts around the first vector read, explicit pad
 reconnection, retained failure context, healthy recovery and rejection of
 capture/restore reentry from a genuine native pad read.
+OwnDspFetch connects the existing F1/F2 queue to actual captured instruction
+admission in the independent core. It owns its machine exclusively, validates
+the real sampled opcode/extension and memory context, and redirects on actual
+native retirement. Reset and restore invalidate its identity. The focused test
+covers stale/unknown samples, two-word capture, real branch redirection and an
+OMR transition. Cache-enabled fetch, loaded REP opcode latches and interrupt
+entry are explicitly unqualified. This is untimed component integration, not
+the production scheduler or a reset-to-instrument run.
 No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, joint board
 checkpoint or real-time instrument behavior is established by these fixtures.
 
@@ -413,6 +421,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-program-ce/final-audit.json
   doc/local/own-branch-migration/audit.json
   doc/local/own-branch-migration/peripheral-audit.json
+  doc/local/own-branch-migration/own-f2-audit.json
   doc/local/we-recovery-rc/{candidate.cir,candidate-82k.cir,audit.py,audit.json}
   doc/local/own-core-main-gate-census/{audit.py,audit.json,events.txt}
   doc/local/own-core-nand-j/validation.json

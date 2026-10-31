@@ -12,6 +12,8 @@
 #include <optional>
 
 namespace blofeld {
+class OwnDspFetch;
+
 struct OwnDspResetInputs {
   std::uint8_t mode_known = 0;
   std::uint8_t mode_levels = 0;
@@ -71,6 +73,7 @@ public:
   void restore(const OwnDspCheckpoint &checkpoint);
 
 private:
+  friend class OwnDspFetch;
   void require_running() const;
   DspBus bus_;
   OwnDspIo io_;
@@ -78,5 +81,6 @@ private:
   OwnDspInterrupts interrupts_;
   DspRunClock clock_;
   const DspRunClockInputs clock_inputs_;
+  std::weak_ptr<const bool> captured_fetch_owner_;
 };
 }
