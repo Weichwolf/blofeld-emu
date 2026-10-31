@@ -50,8 +50,9 @@ void no_event(NandOperationClock &clock, const std::uint64_t ticks) {
   require(!clock.advance(ticks), "No completion event is due");
 }
 
-Nand observed(const bool erased = false) {
-  Nand nand;
+Nand observed(const bool erased = false,
+              const NandReadContinuation profile = NandReadContinuation::unqualified) {
+  Nand nand(profile);
   nand.observe_power_ready();
   if (erased) {
     nand.observe_wp(true);
@@ -92,6 +93,24 @@ void begin_write(NandOperationClock &clock, const bool erase) {
   }
   require(!clock.next_event() && clock.device().ready() == false,
           "Program/erase success has no fabricated clock event");
+}
+
+void write_busy_ce_pause() {
+  for (const auto profile : {NandReadContinuation::k9f1208_p, NandReadContinuation::k9f1208_j}) {
+    for (const bool erase : {false, true}) {
+      NandOperationClock clock(observed(true, profile), ghz, contract);
+      no_event(clock, started);
+      begin_write(clock, erase);
+      clock.observe_read_end(NandReadEnd::ce_high);
+      require(!clock.faulted() && !clock.next_event() && clock.device().ready() == false &&
+                  clock.device().pending() == (erase ? NandPending::erase : NandPending::program),
+              "CE high during write busy neither cancels the operation nor invents a deadline");
+      no_event(clock, started + erase_reset_ticks);
+      clock.observe_completion(NandOutcome::pass);
+      require(clock.device().ready() == true && clock.device().pending() == NandPending::none,
+              "The explicit completion remains necessary after CE deselection");
+    }
+  }
 }
 
 void independent_read_intervals() {
@@ -244,6 +263,7 @@ int main() {
     independent_reset_intervals();
     cancellation_and_power();
     observations_and_unknown_contents();
+    write_busy_ce_pause();
     rejected_contracts_and_limits();
     std::cout
         << "NAND operation clock: independent read/reset deadlines, polling invariance, "

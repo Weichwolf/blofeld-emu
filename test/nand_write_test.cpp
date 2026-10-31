@@ -176,7 +176,11 @@ void test_program_ce_pause() {
        {blofeld::NandReadContinuation::k9f1208_p, blofeld::NandReadContinuation::k9f1208_j}) {
     Nand nand(profile);
     setup(nand);
-    erased(nand);
+    begin_erase(nand);
+    nand.observe_read_end(blofeld::NandReadEnd::ce_high);
+    require(nand.pending() == blofeld::NandPending::erase && nand.ready() == false,
+            "CE deselection cannot cancel or finish a busy erase");
+    nand.observe_completion(NandOutcome::pass);
     begin_program(nand, {.page = reference_page, .column = 0});
     nand.observe_read_end(blofeld::NandReadEnd::ce_high);
     nand.write(pattern_a);
@@ -186,6 +190,9 @@ void test_program_ce_pause() {
     require(nand.column() == 2 && nand.ready() == true,
             "CE pause must retain the data cursor without starting a program");
     nand.command(program_confirm);
+    nand.observe_read_end(blofeld::NandReadEnd::ce_high);
+    require(nand.pending() == blofeld::NandPending::program && nand.ready() == false,
+            "CE deselection cannot cancel or finish a busy program");
     nand.observe_completion(NandOutcome::pass);
     require(nand.cell({.page = reference_page, .column = 0}) ==
                     NandByte{.value = pattern_a, .known = byte_mask} &&

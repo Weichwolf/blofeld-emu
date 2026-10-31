@@ -31,10 +31,12 @@ void Nand::observe_read_end(const NandReadEnd edge) {
     fail("read end", "invalid observed edge");
   }
   if (edge == NandReadEnd::ce_high) {
-    // K9F1208U0C Rev1.1 p18/Fig5: CE may be inactive during data loading.
-    if (phase_ == Phase::program_data) { return; }
-    // Rev1.1 p33: identification mode persists until another command.
-    if (phase_ == Phase::identification_data) { return; }
+    // K9F1208U0C Rev1.1 p7, p18/Fig5 and p33: CE may be inactive during
+    // write busy/data loading; identification persists until another command.
+    if (phase_ == Phase::program_pending || phase_ == Phase::erase_pending ||
+        phase_ == Phase::program_data || phase_ == Phase::identification_data) {
+      return;
+    }
     if (phase_ == Phase::read_pending) {
       // Rev1.1 p26: P-package CE interrupts tR; J-package CE is don't-care.
       if (continuation_ == NandReadContinuation::k9f1208_p) { phase_ = Phase::read_abort_pending; }
