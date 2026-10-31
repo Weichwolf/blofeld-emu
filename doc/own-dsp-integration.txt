@@ -261,6 +261,11 @@ Conditional board contracts, each separately controlled and recorded:
   neither an RC's startup nor its repeated behavior can be replaced generally
   by the candidate's constant 5,100 ticks. The synthetic pulse history, diode,
   comparator threshold and parts are not established for the actual board.
+  A sanitized snapshot of the digital candidate's observed gate events shows
+  29,630 NAND outputs: the WE recovery deadline alone determines one, the
+  RE delay alone determines 29,571, and the deadlines coincide for 58. A
+  changed output timestamp is rejected by the census. This describes how the
+  tested model behaved; it does not validate either gate or its physical timing.
   A separate snapshot compares the NAND output event sequence with actual
   DSP Port-F read values: 9,336 values match, including status bits under the
   declared unused-bit hypothesis. Eight later NAND output events have no
@@ -357,6 +362,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/main-updater-handoff/{audit.py,audit.json}
   doc/local/main-updater-overlap/{audit.py,audit.json}
   doc/local/we-recovery-rc/{candidate.cir,candidate-82k.cir,audit.py,audit.json}
+  doc/local/own-core-main-gate-census/{audit.py,audit.json,events.txt}
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
