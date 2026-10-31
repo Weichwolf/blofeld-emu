@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_reset.hpp"
@@ -45,23 +42,12 @@ private:
 struct Checkpoint::Storage {
   Storage(std::shared_ptr<const Board::Identity> owner,
           Board::Control state,
-          McuCheckpoint mcu_state,
-          DspCheckpoint dsp_state,
-          std::optional<McuDspScheduleCheckpoint> schedule_state,
-          std::optional<McuDspFetchCheckpoint> fetch_state)
-      : identity(std::move(owner)),
-        control(std::move(state)),
-        mcu(std::move(mcu_state)),
-        dsp(std::move(dsp_state)),
-        schedule(schedule_state),
-        fetch(std::move(fetch_state)) {}
+          const McuDspRuntimeCheckpoint &runtime_state)
+      : identity(std::move(owner)), control(std::move(state)), runtime(runtime_state) {}
 
   const std::shared_ptr<const Board::Identity> identity;
   const Board::Control control;
-  const McuCheckpoint mcu;
-  const DspCheckpoint dsp;
-  const std::optional<McuDspScheduleCheckpoint> schedule;
-  const std::optional<McuDspFetchCheckpoint> fetch;
+  const McuDspRuntimeCheckpoint runtime;
 };
 
 Checkpoint::Checkpoint(std::shared_ptr<const Storage> storage) : storage_(std::move(storage)) {}
@@ -135,19 +121,8 @@ Checkpoint Board::checkpoint() const {
     native_->mcu.validate_run_boundary();
   }
   if (control_.return_boundary) { throw Fault("Reference-board output observation is active"); }
-  const auto schedule =
-      native_->schedule ? std::optional<McuDspScheduleCheckpoint>{native_->schedule->checkpoint()}
-                        : std::nullopt;
-  if (!native_->fetch && static_cast<bool>(schedule) != control_.release_epoch.has_value()) {
-    throw Fault("Reference-board checkpoint has an inconsistent DSP release epoch");
-  }
   return Checkpoint(std::make_shared<const Checkpoint::Storage>(
-      identity_,
-      control_,
-      native_->mcu.checkpoint(),
-      native_->dsp.checkpoint(),
-      schedule,
-      native_->fetch ? std::optional{native_->fetch->checkpoint()} : std::nullopt));
+      identity_, control_, native_->runtime->checkpoint()));
 }
 
 void Board::restore(const Checkpoint &checkpoint) {
@@ -164,21 +139,8 @@ void Board::restore(const Checkpoint &checkpoint) {
   const Busy guard(*this);
   const auto &saved = *checkpoint.storage_;
   auto replacement = std::make_unique<Owners>(config_, execution_);
-  if (saved.fetch) {
-    replacement->fetch = std::make_unique<McuDspFetchSchedule>(
-        *saved.fetch, replacement->mcu, replacement->dsp, fetch_events());
-  } else {
-    replacement->mcu.restore(saved.mcu);
-    replacement->dsp.restore(saved.dsp);
-  }
-  if (saved.schedule) {
-    if (!saved.control.release_epoch) { throw Fault("Missing saved DSP release epoch"); }
-    auto inputs = config_.schedule;
-    inputs.dsp.epoch_ticks = *saved.control.release_epoch;
-    replacement->schedule =
-        std::make_unique<McuDspSchedule>(inputs, replacement->mcu, replacement->dsp);
-    replacement->schedule->restore(*saved.schedule);
-  }
+  replacement->runtime = std::make_unique<McuDspRuntime>(
+      saved.runtime, replacement->mcu, replacement->dsp, runtime_events());
   attach(*replacement);
   static_assert(std::is_nothrow_copy_assignable_v<Control>);
   native_.swap(replacement);
@@ -230,7 +192,7 @@ Status Board::status() const {
   require_idle();
   const bool known = !native_->mcu.system_reset_active();
   return {.mcu = known ? native_->mcu.cpu().state() : CpuState{},
-          .dsp = native_->dsp.cpu().debug_state(),
+          .dsp = native_->dsp.cpu().registers(),
           .mcu_state_known = known,
           .mcu_reset = native_->mcu.system_reset_state(),
           .cold_nvm = encode_flash_image(native_->mcu.bus().power_off_flash_image()),
@@ -240,9 +202,9 @@ Status Board::status() const {
           .oscillator_cycles = native_->mcu.run_clock().oscillator_cycles(),
           .idle_cycles = native_->mcu.idle_bus_cycles(),
           .dsp_ticks = dsp_ticks(),
-          .dsp_units = native_->fetch ? 0 : native_->dsp.run_clock().native_cycle_units(),
+          .dsp_units = native_->dsp.clock().native_cycle_units(),
           .dsp_steps = dsp_steps(),
-          .dsp_cycles = native_->fetch ? native_->fetch->run().completed_cycles() : 0,
+          .dsp_cycles = native_->runtime->completed_cycles(),
           .instructions = control_.instructions,
           .operations = control_.operations,
           .interrupts = control_.interrupts,

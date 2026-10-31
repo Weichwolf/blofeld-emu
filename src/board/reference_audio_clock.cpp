@@ -4,7 +4,6 @@
 #include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
@@ -99,7 +98,7 @@ void Board::observe_audio_clock(const std::uint64_t at) {
   } catch (const Fault &error) {
     throw Fault("Reference audio clock input at=" + std::to_string(at) + " destinations=" +
                 hex(route.destinations, 2) + " mcu-pc=" + mcu_pc_context(native_->mcu) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + error.what());
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
   }
   // A partial fanout fault quarantines the Board; only a joint restore may retry.
   if (!baseline) { source.consume(at); }

@@ -2,11 +2,9 @@
 #include "board/mcu_dsp_schedule.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
-#include "dsp_norm_fixture.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_midi.hpp"
@@ -33,21 +31,23 @@
 #include <vector>
 
 namespace {
-using blofeld::test::require;
+void require(const bool condition, const std::string &message) {
+  if (!condition) { throw blofeld::Fault(message); }
+}
 namespace reference = blofeld::reference;
 constexpr unsigned entry = 0x9000;
+constexpr unsigned dsp_boot = 0xff0000;
 constexpr unsigned nop = 0xa7;
 constexpr unsigned oscillator = 12000000;
 constexpr unsigned timebase = 540000000;
 constexpr unsigned epoch = 450;
 constexpr unsigned absolute_jump = 0x0af080;
-constexpr std::uint64_t nop_ticks = 45;
 constexpr std::uint64_t mcu_period = 90;
 constexpr unsigned extended_load = 0xb6;
 constexpr unsigned unmapped_page = 0x30;
 constexpr unsigned serial_pins = 0x16;
 constexpr unsigned first_cursor = 0x101;
-constexpr unsigned suffix_operations = 20;
+constexpr unsigned suffix_operations = 32;
 constexpr unsigned midi_operations = 12000;
 
 std::string rejects(const auto &operation,
@@ -111,11 +111,18 @@ reference::Config config(const std::uint64_t release,
   return result;
 }
 
+std::vector<std::uint32_t> idle_program() {
+  constexpr unsigned padding = 16;
+  std::vector<std::uint32_t> words{0, absolute_jump, dsp_boot};
+  words.resize(words.size() + padding, 0);
+  return words;
+}
+
 struct Fixture {
   Fixture(const std::filesystem::path &specification,
           const bool fault = true,
           const std::uint64_t release = epoch,
-          std::vector<std::uint32_t> program = {0, absolute_jump, blofeld::test::boot},
+          std::vector<std::uint32_t> program = idle_program(),
           const std::optional<reference::MidiRoute> midi = std::nullopt,
           const std::optional<reference::DspMidiRoute> dsp_midi = std::nullopt)
       : flash(image(fault)),
@@ -141,17 +148,18 @@ void expect_prefix(const reference::Board &board,
                    const unsigned operations,
                    const unsigned dsp_units) {
   const auto state = board.status();
-  require(state.mcu.pc == entry + operations && state.instructions == operations &&
-              state.operations == operations && state.mcu_cycles == 5 + operations &&
-              state.common_ticks == (5 + operations) * mcu_period && state.dsp_units == dsp_units &&
-              state.dsp_ticks == dsp_units * nop_ticks && !state.faulted,
-          "Independent five-reset plus one-cycle MCU NOPs and DSP NOP1/JMP4 expectations");
+  require(
+      state.mcu.pc == entry + operations && state.instructions == operations &&
+          state.operations == operations && state.mcu_cycles == 5 + operations &&
+          state.common_ticks == (5 + operations) * mcu_period && state.dsp_units == dsp_units &&
+          state.dsp_ticks == state.common_ticks && !state.faulted,
+      "Independent MCU reset/NOP clocks, explicit DSP recovery and supplied native cycle count");
 }
 
 void test_pending_deadline_fault_and_joint_restore(const std::filesystem::path &specification) {
   Fixture f(specification);
   f.board.advance();
-  expect_prefix(f.board, 1, 1);
+  expect_prefix(f.board, 1, 0);
   const auto frozen = f.board.checkpoint();
   for (unsigned replay = 0; replay < 2; ++replay) {
     f.board.restore(frozen);
@@ -159,9 +167,9 @@ void test_pending_deadline_fault_and_joint_restore(const std::filesystem::path &
     f.trace.clear();
     f.board.advance();
     f.board.advance();
-    expect_prefix(f.board, 3, 6);
-    require(f.board.status().dsp_steps == 3,
-            "Pending four-unit JMP and next NOP complete exactly twice after the captured NOP");
+    expect_prefix(f.board, 3, 4);
+    require(f.board.status().dsp_steps == 1,
+            "Two fetch periods plus PC publication/retirement complete the first real DSP NOP");
     const auto error = rejects([&] { f.board.advance(); });
     require(error.contains("0x3000") && error.contains("0x9003") && f.board.status().faulted,
             "Actual required unmapped MCU operand fails and quarantines the composed board");
@@ -172,7 +180,7 @@ void test_pending_deadline_fault_and_joint_restore(const std::filesystem::path &
             "A fault cannot silently advance or become a trusted whole-board checkpoint");
   }
   f.board.restore(frozen);
-  expect_prefix(f.board, 1, 1);
+  expect_prefix(f.board, 1, 0);
 }
 
 void test_held_reset_and_foreign_owner(const std::filesystem::path &specification) {
@@ -192,8 +200,12 @@ void test_held_reset_and_foreign_owner(const std::filesystem::path &specificatio
     f.board.advance();
     f.board.advance();
     expect_prefix(f.board, 3, 0);
+    require(f.board.status().held_reset,
+            "Release at720 starts two real recovery periods without a fabricated DSP step");
+    f.board.advance();
+    expect_prefix(f.board, 4, 0);
     require(!f.board.status().held_reset,
-            "Native reset release recurs at720 with a zero-step DSP and fresh schedule");
+            "Recovery completes exactly at810 before any native fetch cycle");
   }
 }
 
@@ -210,9 +222,9 @@ void test_failed_preparation_leaves_live_board_unchanged(
   std::filesystem::rename(backup, specification);
   require(!error.empty() && f.board.status() == unchanged,
           "Replacement preparation failure leaves both live owners and all counters untouched");
-  expect_prefix(f.board, 2, 1);
+  expect_prefix(f.board, 2, 2);
   f.board.restore(frozen);
-  expect_prefix(f.board, 1, 1);
+  expect_prefix(f.board, 1, 0);
 }
 
 class CallbackTrace final : public std::stringbuf {
@@ -250,7 +262,7 @@ private:
 
 void test_active_control_rejections(const std::filesystem::path &specification) {
   const auto flash = image(false);
-  const std::vector<std::uint32_t> rom{0, absolute_jump, blofeld::test::boot};
+  const auto rom = idle_program();
   CallbackTrace buffer;
   std::ostream trace(&buffer);
   trace.exceptions(std::ios::badbit | std::ios::failbit);
@@ -274,12 +286,12 @@ void test_active_control_rejections(const std::filesystem::path &specification) 
   };
   board.advance();
   require(called, "The real native board trace invokes the active-operation observer");
-  expect_prefix(board, 1, 1);
+  expect_prefix(board, 1, 0);
 }
 
 void test_replay_marker_rejections(const std::filesystem::path &specification) {
   const auto flash = image(false);
-  const std::vector<std::uint32_t> rom{0, absolute_jump, blofeld::test::boot};
+  const auto rom = idle_program();
   CallbackTrace buffer;
   buffer.markers_only = true;
   std::ostream trace(&buffer);
@@ -303,12 +315,12 @@ void test_replay_marker_rejections(const std::filesystem::path &specification) {
     static_cast<void>(rejects([&] { static_cast<void>(board.run()); }));
   };
   require(board.run() == 0 && called, "Replay-marker observation cannot reenter board control");
-  expect_prefix(board, 2, 1);
+  expect_prefix(board, 2, 2);
 }
 
 void test_trace_flush_rejections(const std::filesystem::path &specification) {
   const auto flash = image(false);
-  const std::vector<std::uint32_t> rom{0, absolute_jump, blofeld::test::boot};
+  const auto rom = idle_program();
   CallbackTrace buffer;
   buffer.flush_only = true;
   std::ostream trace(&buffer);
@@ -331,39 +343,51 @@ void test_trace_flush_rejections(const std::filesystem::path &specification) {
     static_cast<void>(rejects([&] { static_cast<void>(board.run()); }));
   };
   require(board.run() == 0 && called, "Final trace flush cannot change the completed board");
-  expect_prefix(board, 2, 1);
+  expect_prefix(board, 2, 2);
 }
 
+// User-authored literal instructions; no external assembler or firmware bytes.
 std::vector<std::uint32_t> repeat_program() {
-  blofeld::test::DspProgram program;
-  program.immediate("r0", 0x100);
-  program.immediate("x0", 7);
-  program.emit("rep #5");
-  program.emit("move x0,y:(r0)+");
-  program.emit("move y:>$100,x1");
-  program.immediate("y0", 9);
-  program.emit("move y0,y:>$100");
-  program.emit("move y:>$100,x0");
-  const auto loop = program.pc();
-  program.emit("nop");
-  program.word(absolute_jump);
-  program.word(loop);
-  blofeld::DspBus bus;
-  program.install(bus);
-  std::vector<std::uint32_t> words;
-  for (unsigned address = blofeld::test::boot; address < program.pc(); ++address) {
-    words.push_back(bus.peek_program(address));
-  }
+  constexpr unsigned immediate_r0 = 0x60f400;
+  constexpr unsigned immediate_x0 = 0x44f400;
+  constexpr unsigned repeat_five = 0x0605a0;
+  constexpr unsigned store_x0_y_post = 0x4c5800;
+  constexpr unsigned load_y_absolute_x1 = 0x4df000;
+  constexpr unsigned immediate_y0 = 0x46f400;
+  constexpr unsigned store_y0_y_absolute = 0x4e7000;
+  constexpr unsigned load_y_absolute_x0 = 0x4cf000;
+  constexpr unsigned destination = 0x100;
+  constexpr unsigned loop_offset = 14;
+  constexpr unsigned padding = 16;
+  std::vector<std::uint32_t> words{immediate_r0,
+                                   destination,
+                                   immediate_x0,
+                                   7,
+                                   repeat_five,
+                                   store_x0_y_post,
+                                   load_y_absolute_x1,
+                                   destination,
+                                   immediate_y0,
+                                   9,
+                                   store_y0_y_absolute,
+                                   destination,
+                                   load_y_absolute_x0,
+                                   destination,
+                                   0,
+                                   absolute_jump,
+                                   dsp_boot + loop_offset};
+  words.resize(words.size() + padding, 0);
   return words;
 }
 
 void test_latched_rep_and_written_memory(const std::filesystem::path &specification) {
   Fixture f(specification, false, epoch, repeat_program());
-  for (unsigned i = 0; i < 5; ++i) { f.board.advance(); }
+  constexpr unsigned retired_prefix = 4;
+  while (f.board.status().dsp_steps < retired_prefix && !f.board.finished()) { f.board.advance(); }
   const auto first = f.board.status();
-  require(first.mcu.pc == entry + 5 && first.dsp_units == 10 && first.dsp_steps == 4 &&
-              first.dsp.cpu.r[0] == first_cursor,
-          "Two two-unit immediates, five-unit REP and first one-unit store precede capture");
+  require(first.mcu.pc == entry + first.operations && first.dsp_steps == retired_prefix &&
+              first.dsp.r[0] == first_cursor && first.dsp.x == 7,
+          "Two actual immediates, REP and the first native store precede capture");
   const auto saved = f.board.checkpoint();
   for (unsigned replay = 0; replay < 2; ++replay) {
     f.board.restore(saved);
@@ -371,8 +395,7 @@ void test_latched_rep_and_written_memory(const std::filesystem::path &specificat
     constexpr unsigned completed_cursor = 0x105;
     constexpr std::uint64_t expected_x = (std::uint64_t{7} << 24U) | 9U;
     require(
-        f.board.status().dsp.cpu.r[0] == completed_cursor &&
-            f.board.status().dsp.cpu.x == expected_x,
+        f.board.status().dsp.r[0] == completed_cursor && f.board.status().dsp.x == expected_x,
         "Four remaining native REP stores and real old/new RAM reads survive each joint restore");
   }
 }
@@ -386,7 +409,7 @@ void test_midi_wire_checkpoint_and_capacity(const std::filesystem::path &specifi
     Fixture f(specification,
               false,
               std::numeric_limits<std::uint64_t>::max(),
-              {0, absolute_jump, blofeld::test::boot},
+              idle_program(),
               reference::MidiRoute{.bus_hz = bus_hz, .pin = pin});
     require(rejects([&] { f.board.enqueue_midi({}); }).contains("precedes"),
             "External bytes cannot enter before the configured MIDI source is armed");
@@ -432,7 +455,7 @@ void test_midi_rate_failure(const std::filesystem::path &specification) {
   Fixture f(specification,
             false,
             std::numeric_limits<std::uint64_t>::max(),
-            {0, absolute_jump, blofeld::test::boot},
+            idle_program(),
             reference::MidiRoute{.bus_hz = mismatched_bus_hz});
   f.board.initialize();
   const auto before = f.board.status();
@@ -448,7 +471,7 @@ void test_midi_trace_failure(const std::filesystem::path &specification) {
   Fixture f(specification,
             false,
             std::numeric_limits<std::uint64_t>::max(),
-            {0, absolute_jump, blofeld::test::boot},
+            idle_program(),
             reference::MidiRoute{.bus_hz = bus_hz});
   f.board.initialize();
   const auto saved = f.board.checkpoint();
@@ -471,11 +494,14 @@ void test_dsp_midi_idle_deadline_and_joint_restore(const std::filesystem::path &
   constexpr unsigned idle_operations = 20;
   constexpr unsigned complete = 6000;
   constexpr unsigned bit_ticks = 17280;
-  constexpr unsigned expected_dsp_steps = 4800;
+  // 11998 cycles after recovery: NOP and JMP each publish PC then retire;
+  // their loop redirects F1/F2 every six cycles. Final remainder4 retires one NOP.
+  constexpr unsigned expected_dsp_cycles = 11998;
+  constexpr unsigned expected_dsp_steps = 3999;
   Fixture f(specification,
             false,
             epoch,
-            {0, absolute_jump, blofeld::test::boot},
+            idle_program(),
             std::nullopt,
             reference::DspMidiRoute{.after_ticks = first});
   static_cast<void>(rejects([&] { f.board.enqueue_midi({}); }));
@@ -503,9 +529,9 @@ void test_dsp_midi_idle_deadline_and_joint_restore(const std::filesystem::path &
         observed.midi_bytes == 3 && observed.midi_queued == 0 && observed.midi_dsp_frames == 3 &&
             observed.midi_dsp_events == ((end - first) / bit_ticks) + 1 &&
             observed.mcu_cycles == 5 + complete && observed.common_ticks == end &&
-            observed.dsp_units == std::uint64_t{2} * complete &&
-            observed.dsp_steps == expected_dsp_steps && observed.cold_nvm == initial.cold_nvm,
-        "Independent MCU NOP/DSP NOP1-JMP4 clocks and 31250-baud grid retain all three frames/NVM");
+            observed.dsp_units == expected_dsp_cycles && observed.dsp_steps == expected_dsp_steps &&
+            observed.cold_nvm == initial.cold_nvm,
+        "Independent native recovery/loop cycles and 31250-baud grid retain all three frames/NVM");
     if (expected) {
       require(observed == *expected && f.trace.str() == expected_trace,
               "Partial DSP byte/source/schedule snapshots reproduce actual CPU and full trace");

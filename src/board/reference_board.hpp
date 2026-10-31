@@ -5,6 +5,7 @@
 #include "audio/pcm_sink.hpp"
 #include "audio/serial_pcm.hpp"
 #include "board/mcu_dsp_fetch_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/mcu_dsp_schedule.hpp"
 #include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
@@ -12,6 +13,8 @@
 #include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
 #include "dsp/dsp_shi.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_clocked_midi.hpp"
@@ -166,6 +169,7 @@ struct Config {
   std::optional<DspMidiReference> midi_dsp_reference;
 };
 
+[[nodiscard]] DspRunClockInputs dsp_clock_inputs(const Config &config);
 void validate_returns(const Config &config);
 void validate_midi(const Config &config);
 void validate_dsp_midi(const Config &config);
@@ -218,7 +222,7 @@ private:
 
 struct Status {
   CpuState mcu;
-  DspDebugState dsp;
+  dsp56300::Registers dsp;
   bool mcu_state_known = true;
   std::optional<McuResetState> mcu_reset;
   std::vector<std::uint8_t> cold_nvm;
@@ -293,9 +297,8 @@ private:
   struct Owners {
     Owners(const Config &config, const Execution &execution);
     McuMachine mcu;
-    DspMachine dsp;
-    std::unique_ptr<McuDspSchedule> schedule;
-    std::unique_ptr<McuDspFetchSchedule> fetch;
+    OwnDspMachine dsp;
+    std::unique_ptr<McuDspRuntime> runtime;
   };
   class Busy;
 
@@ -392,10 +395,9 @@ private:
                  SerialPcmPins pins,
                  std::string_view source,
                  const std::optional<SerialPcmFrame> &frame) const;
-  [[nodiscard]] DspExternalEvents dsp_inputs();
-  [[nodiscard]] DspFetchExternalEvents fetch_events();
-  [[nodiscard]] McuDspFetchSchedule::CycleInputs fetch_inputs() const;
-  [[nodiscard]] McuDspFetchSchedule::Observer fetch_observer();
+  [[nodiscard]] DspRuntimeEvents runtime_events();
+  [[nodiscard]] McuDspRuntime::CycleInputs runtime_inputs() const;
+  [[nodiscard]] McuDspRuntime::Observer runtime_observer();
   [[nodiscard]] std::uint64_t common_hz() const;
   [[nodiscard]] std::uint64_t dsp_ticks() const;
   [[nodiscard]] std::uint64_t dsp_steps() const;
@@ -413,16 +415,13 @@ private:
   void release();
   void on_cycle(Hc12BusCycle cycle);
   void on_write(const BusEvent &event);
-  void before_dsp(const DspScheduledStep &step) const;
-  [[nodiscard]] DspCompletionObserver return_observer();
   void report(std::ostream &stream) const;
   void persist() const;
   void save_audio() const;
   const Config config_;
   const Execution execution_;
   std::shared_ptr<const Identity> identity_;
-  const std::shared_ptr<const DspFetchEventIdentity> input_identity_ =
-      std::make_shared<const DspFetchEventIdentity>();
+  const std::shared_ptr<const bool> input_identity_ = std::make_shared<const bool>(true);
   std::unique_ptr<Owners> native_;
   Control control_;
   // External transport epochs must not rewind with a modeled-state restore.

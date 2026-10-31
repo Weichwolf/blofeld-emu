@@ -1,108 +1,163 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/mcu_dsp_fetch_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
+#include "board/mcu_dsp_schedule.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_pipeline.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <ostream>
 
 namespace blofeld::reference {
+namespace {
+McuWriteOrder write_order(const McuDspTieOrder order) {
+  switch (order) {
+    case McuDspTieOrder::dsp_before_mcu: return McuWriteOrder::before_mcu;
+    case McuDspTieOrder::mcu_before_dsp: return McuWriteOrder::after_mcu;
+    case McuDspTieOrder::unqualified: return McuWriteOrder::unqualified;
+    default: throw Fault("Invalid MCU/DSP runtime write order");
+  }
+}
+
+DspPeerOrder event_order(const DspExternalOrder order) {
+  switch (order) {
+    case DspExternalOrder::dsp_before_external: return DspPeerOrder::dsp_first;
+    case DspExternalOrder::external_before_dsp: return DspPeerOrder::peer_first;
+    case DspExternalOrder::unqualified:
+    case DspExternalOrder::reject_tie: return DspPeerOrder::reject_tie;
+    default: throw Fault("Invalid DSP external event order");
+  }
+}
+}
+
+DspRunClockInputs dsp_clock_inputs(const Config &config) {
+  if (config.pipeline) {
+    const auto &clock = config.pipeline->schedule.dsp;
+    return {.extal_hz = clock.extal_hz,
+            .timebase_hz = clock.timebase_hz,
+            .switch_timing = DspClockSwitch::reference_cycle_boundary};
+  }
+  auto result = config.dsp.clock;
+  if (result.switch_timing != DspClockSwitch::reference_instruction_boundary &&
+      result.switch_timing != DspClockSwitch::reference_cycle_boundary) {
+    throw Fault("Regular DSP runtime requires explicit reference clock boundaries");
+  }
+  result.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  return result;
+}
+
 void Board::prepare_dsp() {
   constexpr unsigned bootstrap_base = 0xff0000;
   if (!execution_.rom.empty()) {
     native_->dsp.bus().install_rom({.start = bootstrap_base, .words = execution_.rom});
   }
-  if (!config_.pipeline) {
-    native_->dsp.bus().pll().observe_pinit(config_.pinit);
-    native_->dsp.cpu().reset_spi_boot();
-  }
 }
 
 void Board::connect_pipeline() {
+  McuDspRuntimeInputs inputs;
+  inputs.timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
+  inputs.initial_reset = OwnDspResetInputs{
+      .mode_known = 15, .mode_levels = 5, .pinit = config_.pinit, .recovery_cycles = 2};
+  inputs.maximum_cycles_per_period = config_.schedule.maximum_dsp_steps_per_cycle;
+  inputs.writes = write_order(config_.schedule.shared_write_order);
+  inputs.wait_dsp_first = config_.schedule.wait_order == McuDspWaitOrder::dsp_before_mcu;
+  inputs.reset_dsp_first = true;
   if (config_.pipeline) {
     const auto &timing = *config_.pipeline;
     if (!timing.schedule.initial_reset || timing.schedule.epoch_ticks != 0 ||
         timing.schedule.dsp.pipeline != DspFetchPipeline::automatic_memory) {
-      throw Fault("Reference pipeline requires time-zero held reset and automatic memory");
+      throw Fault("Device pipeline requires time-zero held reset and automatic memory");
     }
-    control_.dsp_initial_pending = true;
-    native_->fetch = std::make_unique<McuDspFetchSchedule>(
-        timing.schedule, native_->mcu, native_->dsp, fetch_events());
-  } else {
-    for (const auto &entry : config_.dsp_initial) { apply_dsp(entry); }
+    const auto &reset = *timing.schedule.initial_reset;
+    inputs.initial_reset = OwnDspResetInputs{.mode_known = reset.mode_known,
+                                             .mode_levels = reset.mode_levels,
+                                             .pinit = reset.pinit,
+                                             .recovery_cycles = reset.recovery_cycles};
+    inputs.maximum_cycles_per_period = timing.schedule.maximum_dsp_cycles_per_period;
+    inputs.writes = write_order(timing.schedule.shared_write_order);
+    inputs.wait_dsp_first = timing.schedule.wait_order == McuDspWaitOrder::dsp_before_mcu;
+    inputs.reset_dsp_first = timing.schedule.reset_order == McuDspResetOrder::dsp_before_mcu;
+    switch (timing.schedule.external_write_order) {
+      case McuExternalWriteOrder::external_before_mcu:
+        inputs.external_writes = McuWriteOrder::before_mcu;
+        break;
+      case McuExternalWriteOrder::mcu_before_external:
+        inputs.external_writes = McuWriteOrder::after_mcu;
+        break;
+      case McuExternalWriteOrder::unqualified: break;
+      default: throw Fault("Invalid runtime external write order");
+    }
   }
+  control_.dsp_initial_pending = true;
+  native_->runtime =
+      std::make_unique<McuDspRuntime>(inputs, native_->mcu, native_->dsp, runtime_events());
 }
 
 std::uint64_t Board::common_hz() const {
-  return config_.pipeline ? config_.pipeline->schedule.dsp.timebase_hz
-                          : native_->dsp.run_clock().timebase_hz();
+  return native_->dsp.clock().timebase_hz();
 }
 
 std::uint64_t Board::dsp_ticks() const {
-  return native_->fetch ? native_->fetch->run().elapsed_ticks()
-                        : native_->dsp.run_clock().elapsed_ticks();
+  return native_->dsp.clock().elapsed_ticks();
 }
 
 std::uint64_t Board::dsp_steps() const {
-  if (native_->fetch) { return control_.dsp_retirements; }
-  return native_->schedule ? native_->schedule->completed_steps() : 0;
+  return native_->dsp.cpu().progress().instructions;
 }
 
 std::uint64_t Board::schedule_ticks() const {
-  if (native_->fetch) { return native_->fetch->end_ticks(); }
-  return native_->schedule ? native_->schedule->end_ticks() : ticks();
+  return native_->runtime ? native_->runtime->end_ticks() : ticks();
 }
 
 std::uint64_t Board::schedule_ties() const {
-  if (native_->fetch) { return native_->fetch->ties(); }
-  return native_->schedule ? native_->schedule->ties() : 0;
+  return native_->runtime ? native_->runtime->ties() : 0;
 }
 
 bool Board::dsp_reset_active() const {
-  return native_->fetch ? native_->fetch->run().hardware_reset_active() : !native_->schedule;
+  return native_->dsp.clock().hardware_reset_active();
 }
 
 bool Board::timing_faulted() const {
-  return control_.faulted || native_->mcu.timing_faulted() || native_->dsp.timing_faulted() ||
-         (native_->schedule && native_->schedule->faulted()) ||
-         (native_->fetch && native_->fetch->faulted());
+  return control_.faulted || native_->mcu.timing_faulted() || native_->dsp.clock().faulted() ||
+         (native_->runtime && native_->runtime->faulted());
 }
 
-McuDspFetchSchedule::CycleInputs Board::fetch_inputs() const {
-  if (!config_.pipeline) { throw Fault("Missing reference pipeline contract"); }
+McuDspRuntime::CycleInputs Board::runtime_inputs() const {
   return [this] {
-    // External IRQA..IRQD DMA requests stay unknown. The bus derives supported
-    // internal DAX/ESAI requests from actual peripheral state.
-    return DspFetchCycleInputs{.grant = config_.pipeline->dma_grant};
+    return DspDmaInputs{.timing = DspDmaTiming::reference_sampled_cycles,
+                        .grant = config_.pipeline ? config_.pipeline->dma_grant
+                                                  : DspDmaGrant::available};
   };
 }
 
-McuDspFetchSchedule::Observer Board::fetch_observer() {
-  return [this](const DspFetchCycleResult &cycle) {
-    if (cycle.pipeline && cycle.pipeline->retirement_published) { ++control_.dsp_retirements; }
+McuDspRuntime::Observer Board::runtime_observer() {
+  return [this](const DspRuntimeCycle &cycle) {
+    if (cycle.result.native && cycle.result.native->retired) { ++control_.dsp_retirements; }
     control_.return_boundary = cycle.completion_ticks;
     update_wiring();
     control_.return_boundary.reset();
     observe_pcm(cycle.completion_ticks, "pipeline");
     if (execution_.trace != nullptr) {
-      const auto &pipeline = cycle.pipeline;
       *execution_.trace << "DSP-PIPELINE start=" << cycle.start_ticks
-                        << " end=" << cycle.completion_ticks << " cycle=" << cycle.completed_cycles
-                        << " f1=" << cycle.issued_address.value_or(0)
-                        << " f1-known=" << cycle.issued_address.has_value()
-                        << " decode=" << (pipeline && pipeline->decode_accepted)
-                        << " e2=" << (pipeline && pipeline->retirement_published) << '\n';
+                        << " end=" << cycle.completion_ticks << " cycle=" << cycle.cycle
+                        << " f1=" << cycle.result.issued_address.value_or(0)
+                        << " f1-known=" << cycle.result.issued_address.has_value()
+                        << " retirement=" << (cycle.result.native && cycle.result.native->retired)
+                        << '\n';
     }
   };
 }
 
-DspFetchExternalEvents Board::fetch_events() {
+DspRuntimeEvents Board::runtime_events() {
   return {.identity = input_identity_,
           .next_ticks = [this]() -> std::optional<std::uint64_t> {
             if (control_.dsp_initial_pending) { return 0; }
@@ -112,17 +167,15 @@ DspFetchExternalEvents Board::fetch_events() {
           .observe =
               [this](const std::uint64_t at) {
                 if (control_.dsp_initial_pending) {
-                  if (at != 0) { throw Fault("Initial pipeline inputs require time zero"); }
+                  if (at != 0) { throw Fault("Initial DSP inputs require time zero"); }
                   for (const auto &input : config_.dsp_initial) { apply_dsp(input); }
                   control_.dsp_initial_pending = false;
-                  // Initial observations precede a timed event at zero, as on the
-                  // legacy Board. A single composite offer avoids duplicate timestamps.
                   const auto next = next_dsp_input();
                   if (!next || next->input.ticks != at) { return; }
                 }
                 observe_dsp_input(at);
               },
-          .order = config_.dsp_input_order,
-          .maximum_events = config_.maximum_dsp_inputs_per_advance};
+          .order = event_order(config_.dsp_input_order),
+          .maximum_events_per_period = std::max(1U, config_.maximum_dsp_inputs_per_advance)};
 }
 }

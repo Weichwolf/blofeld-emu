@@ -651,11 +651,11 @@ Public adapter validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test -j2
   ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset|checkpoint)$' --output-on-failure
 
-The regular device and reference scheduler still use the legacy core. Migrating
-that scheduler, full clock/pipeline/DMA ownership and joint board checkpoints,
-removing the legacy dependency and all reset-to-instrument requirements remain
-open. The independent adapter and local hypotheses do not establish full boot,
-real timing, MIDI/audio or hardware equivalence.
+The regular Board now uses the independent core and a coordinated native
+MCU-period runtime. The legacy build and older component tests still require
+replacement before removing that dependency. The independent adapter and local
+hypotheses do not establish full boot, real timing, MIDI/audio or hardware
+equivalence.
 
 Runtime migration: frontend and timeline snapshots
 OwnDspFetchCheckpoint includes the stopped chip, F1/F2 queue, sample/occurrence
@@ -674,8 +674,40 @@ in fractional position and X:$10=7 supplement replay checks. Empty/stale snapsho
 and mismatched clock inputs refuse; a rejected clock mismatch leaves the target
 unchanged. Component coverage does not establish complete board checkpointing,
 original boot, pending-IRQ/DMA checkpoint combinations or migration completion.
-The regular Board/scheduler and legacy build/tests still need replacement.
-Temporary OwnDsp/own_dsp names are removed when that replacement is complete.
+The regular Board now restores these snapshots through its MCU/DSP runtime.
+Legacy build/tests still need replacement. Temporary OwnDsp/own_dsp names are
+removed when that replacement is complete.
 
   cmake --build build/own-only --target blofeld-own-dsp-timeline-checkpoint-test
   ctest --test-dir build/own-only -R '^own_dsp_timeline_checkpoint$' --output-on-failure
+
+Regular Board runtime
+McuDspRuntime connects native MCU period offers to the independent DSP timeline.
+It retains exact common-time conversion, DSP assertion/recovery, observed shared
+writes, WAI/reset periods and bounded external events. Explicit pairwise orders
+admit all six acyclic DSP/input/MCU-write permutations; cyclic orders, dropped
+writes, callback reentry and stale epochs refuse. Native DSP faults retain the
+operation, space/address, value, DSP/MCU PCs, tick and underlying bus exception.
+Joint Board restore stages fresh MCU/DSP owners and includes frontend/timeline,
+queues, peripherals and modeled input cursors. External audio/USB sessions are
+retired rather than rewound. Status exposes actual independent-core registers.
+
+The regular runtime uses the explicit effect-per-reference-cycle profile with
+program priority and interrupt admission. This replaces legacy instruction cost
+estimates/seven-stage scheduling; it does not establish DSP56371 phase timing.
+Nominal MCU-reset construction also advances the DSP hold/input time to that
+completed boundary, so contradictory initial sources can fail in construction.
+The true-POR profile still executes actual MCU SYSCLK reset edges from tick0.
+
+ASan/UBSan tests cover the ordering matrix, unknown native operand diagnostics,
+POR/recovery and all Board snapshot cuts, a real REP/store/read program,
+partial MIDI bits, SCI reception/WAI, PCM clock/data and USB restore epochs.
+The unchanged original-MCU bootstrap ledger also passes through this Board;
+its DSP remains held reset and it does not prove coupled instrument startup.
+Checkpoint/audio fixtures use authored literal opcodes without a legacy assembler.
+The headless executable and these integration binaries have no dsp56k symbols.
+Legacy CMake configuration, old component tests and transitional names remain
+migration work. Original DSP audio, full boot and calibrated wiring remain open.
+
+  cmake --build build/strict --target blofeld-headless blofeld-mcu-dsp-runtime-test blofeld-reference-pipeline-test blofeld-reference-checkpoint-test blofeld-original-board-power-on-test blofeld-sci-midi-timeline-test blofeld-audio-clock-board-test -j4
+  ctest --test-dir build/strict --output-on-failure -R '^(mcu_dsp_runtime|reference_pipeline|reference_checkpoint|original_board_power_on|sci_midi_timeline|reference_audio_clock_(board|restore|guards))$'

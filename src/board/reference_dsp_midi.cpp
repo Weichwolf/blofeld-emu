@@ -60,7 +60,7 @@ void Board::trace_dsp_midi(const std::uint64_t at) {
   }
   trace << " synchronized=" << config_.midi_dsp->synchronized
         << " mcu-pc=" << mcu_pc_context(native_->mcu)
-        << " dsp-pc=" << hex(native_->dsp.cpu().state().pc, 6) << '\n';
+        << " dsp-pc=" << hex(native_->dsp.cpu().registers().pc, 6) << '\n';
   if (!trace) { throw Fault("Reference DSP MIDI trace output failed"); }
 }
 }

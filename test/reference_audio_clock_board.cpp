@@ -6,8 +6,6 @@
 #include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
 #include "dax_fixture.hpp"
-#include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_fetch_run.hpp"
 #include "dsp/dsp_gpio.hpp"
@@ -16,7 +14,6 @@
 #include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_scheduled_run.hpp"
-#include "dsp_norm_fixture.hpp"
 #include "esai_fixture.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
@@ -63,36 +60,56 @@ blofeld::McuFlashImage image() {
   return blofeld::McuFlashImage::from_known(bytes);
 }
 
+// User-authored MOVEP/JMP words, encoded independently from the execution core.
 std::vector<std::uint32_t> program(const bool prime = true) {
-  blofeld::test::DspProgram code;
-  // Own PLL command:12MHz *9/2=54MHz under the declared boundary convention.
-  code.emit("movep #>$016109,x:<<$fffffd");
-  code.emit("movep #>$7d00,y:<<$ffff95");
-  code.emit("movep #>$640301,y:<<$ffff96");
-  code.emit("movep #>$838,y:<<$ffff9f");
-  code.emit("movep #>$838,y:<<$ffff9e");
-  code.emit("movep #>$800001,y:<<$ffff80");
-  code.emit("movep #>$7d01,y:<<$ffff95");
-  if (prime) { code.emit("movep #>0,x:<<$ffffd1"); }
-  code.emit("movep #>$800001,x:<<$ffffd2");
-  code.emit("movep #>$123456,x:<<$ffffd2");
-  code.emit("movep #>8,x:<<$ffffd0");
-  code.emit("movep #>3,x:<<$ffffd7");
-  code.emit("movep #>3,x:<<$ffffd6");
-  const auto loop = code.pc();
-  code.emit("nop");
+  constexpr unsigned pll = 0x08f4bd;
+  constexpr unsigned esai_common = 0x07b495;
+  constexpr unsigned esai_clock = 0x07b496;
+  constexpr unsigned esai_mask_b = 0x07b49f;
+  constexpr unsigned esai_mask_a = 0x07b49e;
+  constexpr unsigned esai_transmit = 0x07b480;
+  constexpr unsigned dax_non_audio = 0x08f491;
+  constexpr unsigned dax_audio = 0x08f492;
+  constexpr unsigned dax_control = 0x08f490;
+  constexpr unsigned dax_port_control = 0x08f497;
+  constexpr unsigned dax_port_direction = 0x08f496;
   constexpr unsigned absolute_jump = 0x0af080;
-  code.word(absolute_jump);
-  code.word(loop);
-  // Own mapped ROM includes real speculative reads after the loop instruction.
+  constexpr unsigned dsp_boot = 0xff0000;
   constexpr unsigned padding = 16;
-  for (unsigned i = 0; i < padding; ++i) { code.emit("nop"); }
-  blofeld::DspBus memory;
-  code.install(memory);
-  std::vector<std::uint32_t> words;
-  for (unsigned address = blofeld::test::boot; address < code.pc(); ++address) {
-    words.push_back(memory.peek_program(address));
-  }
+  constexpr unsigned pll_setting = 0x016109;
+  constexpr unsigned common_setting = 0x7d00;
+  constexpr unsigned clock_setting = 0x640301;
+  constexpr unsigned mask_setting = 0x838;
+  std::vector<std::uint32_t> words{pll,
+                                   pll_setting,
+                                   esai_common,
+                                   common_setting,
+                                   esai_clock,
+                                   clock_setting,
+                                   esai_mask_b,
+                                   mask_setting,
+                                   esai_mask_a,
+                                   mask_setting,
+                                   esai_transmit,
+                                   dax::first_sample,
+                                   esai_common,
+                                   common_setting | 1U};
+  if (prime) { words.insert(words.end(), {dax_non_audio, 0}); }
+  words.insert(words.end(),
+               {dax_audio,
+                dax::first_sample,
+                dax_audio,
+                dax::other_sample,
+                dax_control,
+                8,
+                dax_port_control,
+                3,
+                dax_port_direction,
+                3});
+  const auto loop = dsp_boot + static_cast<unsigned>(words.size());
+  words.insert(words.end(), {0, absolute_jump, loop});
+  // Include actual speculative program reads beyond the loop instruction.
+  words.resize(words.size() + padding, 0);
   return words;
 }
 
@@ -267,14 +284,14 @@ void replay_difference(const reference::Status &expected,
             << " pcm-equal=" << (expected.pcm == actual.pcm)
             << " stamp-equal=" << (expected.pcm_stamp == actual.pcm_stamp)
             << " frame-equal=" << (expected.last_pcm == actual.last_pcm) << '\n';
-  std::cerr << "expected ticks=" << expected.common_ticks << " dsp-pc=" << expected.dsp.cpu.pc
+  std::cerr << "expected ticks=" << expected.common_ticks << " dsp-pc=" << expected.dsp.pc
             << " dsp-steps=" << expected.dsp_steps << " dsp-cycles=" << expected.dsp_cycles
-            << " native=" << expected.dsp.native_instructions << '/' << expected.dsp.native_cycles
-            << " ties=" << expected.ties << " ordered=" << expected.ordered_pairs << '\n';
-  std::cerr << "actual ticks=" << actual.common_ticks << " dsp-pc=" << actual.dsp.cpu.pc
+            << " units=" << expected.dsp_units << " ties=" << expected.ties
+            << " ordered=" << expected.ordered_pairs << '\n';
+  std::cerr << "actual ticks=" << actual.common_ticks << " dsp-pc=" << actual.dsp.pc
             << " dsp-steps=" << actual.dsp_steps << " dsp-cycles=" << actual.dsp_cycles
-            << " native=" << actual.dsp.native_instructions << '/' << actual.dsp.native_cycles
-            << " ties=" << actual.ties << " ordered=" << actual.ordered_pairs << '\n';
+            << " units=" << actual.dsp_units << " ties=" << actual.ties
+            << " ordered=" << actual.ordered_pairs << '\n';
   std::size_t offset = 0;
   while (offset < expected_trace.size() && offset < actual_trace.size() &&
          expected_trace[offset] == actual_trace[offset]) {
@@ -350,11 +367,10 @@ void guards() {
   }
   auto collision = config(false);
   collision.dsp_events = {{.ticks = release_ticks, .level = false}};
-  Fixture f(collision);
-  const auto error = rejects([&] { f.board.advance(); });
-  require(error.contains("Simultaneous") && f.board.status().faulted &&
-              !f.board.status().audio_clock_started,
-          "Independent same-time inputs are refused before a composite clock observation");
+  const auto error = rejects([&] { const Fixture f(collision); });
+  require(error.contains("Simultaneous") && error.contains("at=176400") &&
+              error.contains("mcu-pc=0x9000") && error.contains("dsp-pc=0xff0000"),
+          "Nominal-reset construction rejects conflicting initial sources with full context");
   auto failed = config(false);
   failed.pcm.reset();
   Fixture g(failed, false);

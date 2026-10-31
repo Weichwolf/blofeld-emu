@@ -2,7 +2,6 @@
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "mcu/mcu_gpio.hpp"
 
@@ -78,7 +77,7 @@ void Board::update_return(const std::optional<ReturnRoute> &route,
   } catch (const Fault &fault) {
     throw Fault("SHI " + std::string(name) +
                 " return pad observation mcu-pc=" + mcu_pc_context(native_->mcu) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + fault.what());
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + fault.what());
   }
   if (execution_.trace != nullptr && (!previous || !same(*previous, output))) {
     constexpr std::string_view ports = "ABETMJPQRSU";
@@ -93,18 +92,6 @@ void Board::update_return(const std::optional<ReturnRoute> &route,
                       << " mask=" << hex(route->mask, 2) << " inverted=" << route->inverted << '\n';
   }
   previous = output;
-}
-
-DspCompletionObserver Board::return_observer() {
-  if (!config_.hreq && !config_.miso && !config_.pcm) { return {}; }
-  return {.observe = [this](const DspScheduledStep &step) {
-    if (config_.hreq || config_.miso) {
-      control_.return_boundary = step.completion_ticks;
-      update_wiring();
-      control_.return_boundary.reset();
-    }
-    observe_pcm(step.completion_ticks, "native");
-  }};
 }
 
 void Board::update_wiring() {

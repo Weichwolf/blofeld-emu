@@ -4,7 +4,6 @@
 #include "audio/pcm_recording.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
@@ -40,8 +39,7 @@ constexpr unsigned decoder_full_speed = 8;
 }
 
 Board::Owners::Owners(const Config &config, const Execution &execution)
-    : mcu(make_mcu(config, execution)),
-      dsp(config.pipeline ? std::nullopt : std::optional{config.dsp}) {
+    : mcu(make_mcu(config, execution)), dsp(dsp_clock_inputs(config)) {
   if (execution.device_state) { mcu.attach_flash_store(execution.device_state); }
 }
 
@@ -100,24 +98,16 @@ Board::Board(const Config &config, const Execution &execution)
 
 void Board::attach(Owners &owners) {
   owners.mcu.set_cycle_observer([this](const auto cycle) { on_cycle(cycle); });
-  if (config_.pipeline) {
-    owners.mcu.set_reset_period_observer([this](const auto period) {
-      observe_midi(period.context);
-      native_->fetch->begin_reset_period(period, fetch_inputs(), fetch_observer());
-      update_wiring();
-    });
-  }
+  owners.mcu.set_reset_period_observer([this](const auto period) {
+    observe_midi(period.context);
+    native_->runtime->begin_reset_period(period, runtime_inputs(), runtime_observer());
+    update_wiring();
+  });
   owners.mcu.set_wait_period_observer([this](const auto period) {
     observe_midi(period.context);
     check_signals();
-    if (native_->fetch) {
-      native_->fetch->begin_wait_period(period, fetch_inputs(), fetch_observer());
-      update_wiring();
-    } else if (native_->schedule) {
-      native_->schedule->begin_wait_period(
-          period, [this](const auto &step) { before_dsp(step); }, return_observer(), dsp_inputs());
-      update_wiring();
-    }
+    native_->runtime->begin_wait_period(period, runtime_inputs(), runtime_observer());
+    update_wiring();
   });
   owners.mcu.bus().set_observer([this](const auto &event) { on_write(event); });
 }
@@ -149,28 +139,15 @@ void Board::apply(const Input &input) {
 }
 
 void Board::release() {
-  const auto next = next_dsp_input();
-  if (!native_->fetch && next && next->input.ticks < ticks()) {
-    throw Fault("Timed DSP input precedes the actual DSP release boundary");
-  }
   control_.previous = sample();
-  if (control_.previous.selected) {
-    throw Fault("Reference-board DSP release requires deasserted SPI SS");
-  }
+  if (control_.previous.selected) { throw Fault("DSP release requires deasserted SPI SS"); }
   native_->dsp.bus().shi().observe_spi(control_.previous);
-  if (native_->fetch) {
-    native_->fetch->release_dsp_reset();
-    control_.release_epoch = ticks();
-  } else {
-    auto inputs = config_.schedule;
-    inputs.dsp.epoch_ticks = ticks();
-    control_.release_epoch = inputs.dsp.epoch_ticks;
-    native_->schedule = std::make_unique<McuDspSchedule>(inputs, native_->mcu, native_->dsp);
-  }
+  native_->runtime->release_dsp_reset();
+  control_.release_epoch = ticks();
   update_wiring();
   if (execution_.trace != nullptr) {
     *execution_.trace << "DSP-RELEASE requested=" << config_.release_ticks << " actual=" << ticks()
-                      << " pc=" << hex(native_->dsp.cpu().state().pc, 6) << '\n';
+                      << " pc=" << hex(native_->dsp.cpu().registers().pc, 6) << '\n';
   }
 }
 
@@ -201,33 +178,11 @@ void Board::on_cycle(const Hc12BusCycle cycle) {
   control_.context = cycle.context;
   observe_midi(cycle.context);
   check_signals();
-  if (!native_->schedule && !native_->fetch) { return; }
   constexpr unsigned port_b = 1;
-  const bool write = cycle.kind == 'w' || cycle.kind == 'W';
-  const bool shared =
-      write && cycle.address && *cycle.address <= port_b && port_b - *cycle.address < cycle.size;
-  if (native_->fetch) {
-    native_->fetch->begin_cycle(cycle, shared, fetch_inputs(), fetch_observer());
-    update_wiring();
-    return;
-  }
-  native_->schedule->begin_cycle(
-      cycle,
-      shared,
-      [this](const auto &step) { before_dsp(step); },
-      return_observer(),
-      dsp_inputs());
+  const bool shared = (cycle.kind == 'w' || cycle.kind == 'W') && cycle.address &&
+                      *cycle.address <= port_b && port_b - *cycle.address < cycle.size;
+  native_->runtime->begin_cycle(cycle, shared, runtime_inputs(), runtime_observer());
   update_wiring();
-}
-
-void Board::before_dsp(const DspScheduledStep &step) const {
-  if (execution_.trace != nullptr) {
-    *execution_.trace << "DSP end=" << step.completion_ticks
-                      << " pc=" << hex(step.plan.before.cpu.pc, 6)
-                      << " start=" << step.plan.start_ticks
-                      << " units=" << step.plan.native_cycle_units
-                      << " ticks=" << step.plan.duration_ticks << '\n';
-  }
 }
 
 void Board::report(std::ostream &stream) const {
@@ -240,13 +195,13 @@ void Board::report(std::ostream &stream) const {
          << " idle=" << native_->mcu.idle_bus_cycles()
          << " ticks=" << native_->mcu.run_clock().elapsed_ticks()
          << " timebase=" << native_->mcu.run_clock().timebase_hz() << '\n';
-  const auto dsp = native_->dsp.cpu().state();
+  const auto dsp = native_->dsp.cpu().registers();
   stream << "DSP pc=" << hex(dsp.pc, 6) << " omr=" << hex(dsp.omr, 6) << " r4=" << dsp.r[4]
          << " lc=" << dsp.lc << " held-reset=" << dsp_reset_active()
          << " completed-steps=" << dsp_steps()
-         << " units=" << (native_->fetch ? 0 : native_->dsp.run_clock().native_cycle_units())
-         << " ticks=" << dsp_ticks() << " timebase=" << common_hz()
-         << " pipeline-cycles=" << (native_->fetch ? native_->fetch->run().completed_cycles() : 0)
+         << " units=" << native_->dsp.clock().native_cycle_units() << " ticks=" << dsp_ticks()
+         << " timebase=" << common_hz()
+         << " pipeline-cycles=" << native_->runtime->completed_cycles()
          << " spi-writes=" << control_.writes << " frames=" << control_.frames
          << " ordered-pairs=" << control_.ordered_pairs << " ties=" << schedule_ties() << '\n';
   if (!config_.dsp_events.empty()) {
@@ -289,19 +244,17 @@ void Board::persist() const {
 
 void Board::step() {
   if (native_->mcu.system_reset_active()) {
-    if (!config_.pipeline || !native_->fetch) { throw Fault("Missing reset pipeline owner"); }
+    if (!config_.pipeline || !native_->runtime) { throw Fault("Missing reset pipeline owner"); }
     static_cast<void>(native_->mcu.advance_system_reset(1, config_.pipeline->reset_pad));
-    if (!native_->mcu.system_reset_active()) { native_->fetch->end_system_reset(); }
+    if (!native_->mcu.system_reset_active()) { native_->runtime->end_system_reset(); }
     return;
   }
   if (native_->mcu.cpu().waiting() && !native_->mcu.cpu().pending_interrupt()) {
     static_cast<void>(native_->mcu.advance_wait(1));
-    if (native_->fetch) { native_->fetch->end_wait(); }
-    if (native_->schedule) { native_->schedule->end_wait(); }
+    native_->runtime->end_wait();
   } else {
     const auto result = native_->mcu.cpu().step();
-    if (native_->fetch) { native_->fetch->end_instruction(); }
-    if (native_->schedule) { native_->schedule->end_instruction(); }
+    native_->runtime->end_instruction();
     if (result.instruction_executed) { ++control_.instructions; }
     if (result.interrupt_vector) {
       ++control_.interrupts;

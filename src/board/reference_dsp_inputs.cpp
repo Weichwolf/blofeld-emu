@@ -2,9 +2,7 @@
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_esai.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
 #include "dsp/dsp_timers.hpp"
 
 #include <cstdint>
@@ -50,7 +48,7 @@ void Board::apply_dsp(const DspInput &input) {
     const auto *const kind = input.kind == DspInputKind::tio ? "TIO" : "ESAI";
     throw Fault("Reference DSP " + std::string(kind) + " input write index=" +
                 std::to_string(input.index) + " mcu-pc=" + mcu_pc_context(native_->mcu) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + error.what());
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
   }
 }
 
@@ -74,20 +72,7 @@ void Board::trace_dsp_input(const DspInput &input, const std::uint64_t at) {
           << " clocks-known=" << hex(clocks.known, 2) << " clocks-levels=" << hex(clocks.levels, 2);
   }
   trace << " mcu-pc=" << mcu_pc_context(native_->mcu)
-        << " dsp-pc=" << hex(native_->dsp.cpu().state().pc, 6) << '\n';
+        << " dsp-pc=" << hex(native_->dsp.cpu().registers().pc, 6) << '\n';
 }
 
-DspExternalEvents Board::dsp_inputs() {
-  if (config_.dsp_events.empty() && config_.dsp_clocks.empty() && !control_.midi_dsp &&
-      !control_.audio_clock) {
-    return {};
-  }
-  return {.next_ticks = [this]() -> std::optional<std::uint64_t> {
-            const auto next = next_dsp_input();
-            return next ? std::optional{next->input.ticks} : std::nullopt;
-          },
-          .observe = [this](const std::uint64_t at) { observe_dsp_input(at); },
-          .order = config_.dsp_input_order,
-          .maximum_events = config_.maximum_dsp_inputs_per_advance};
-}
 }

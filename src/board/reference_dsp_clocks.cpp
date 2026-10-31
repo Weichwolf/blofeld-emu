@@ -2,7 +2,6 @@
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_esai.hpp"
 
 #include <cstdint>
@@ -62,8 +61,9 @@ void Board::observe_dsp_input(const std::uint64_t at) {
   const auto next = next_dsp_input();
   if (!next || at != next->input.ticks) { throw Fault("DSP input source changed its event time"); }
   if (next->collision) {
-    throw Fault("Simultaneous reference DSP input sources at=" + std::to_string(at) + " mcu-pc=" +
-                mcu_pc_context(native_->mcu) + " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+    throw Fault("Simultaneous reference DSP input sources at=" + std::to_string(at) +
+                " mcu-pc=" + mcu_pc_context(native_->mcu) +
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6));
   }
   if (next->audio_clock) {
     observe_audio_clock(at);

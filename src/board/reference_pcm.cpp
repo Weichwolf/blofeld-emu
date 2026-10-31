@@ -5,7 +5,6 @@
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 
@@ -57,7 +56,7 @@ void Board::trace_pcm(const SerialPcmStamp stamp,
   trace << "PCM-PINS end=" << stamp.ticks << " order=" << stamp.order << " source=" << source
         << " clock=" << name(pins.clock) << " fs=" << name(pins.frame_sync)
         << " data=" << name(pins.data) << " mcu-pc=" << mcu_pc_context(native_->mcu)
-        << " dsp-pc=" << hex(native_->dsp.cpu().state().pc, 6) << '\n';
+        << " dsp-pc=" << hex(native_->dsp.cpu().registers().pc, 6) << '\n';
   if (!frame) { return; }
   if (!control_.pcm) { throw Fault("PCM frame has no receiver"); }
   trace << "PCM-FRAME index=" << control_.pcm->completed_frames() << " first=" << frame->first_tick
@@ -100,7 +99,7 @@ void Board::observe_pcm(const std::uint64_t at, const std::string_view source) {
                 hex(base + clock_control, 6) + " data=" + space + hex(base + route.lane, 6) +
                 " at=" + std::to_string(at) + " source=" + std::string(source) +
                 " mcu-pc=" + mcu_pc_context(native_->mcu) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + error.what());
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
   }
 }
 

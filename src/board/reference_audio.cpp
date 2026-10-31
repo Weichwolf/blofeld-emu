@@ -3,7 +3,6 @@
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_core.hpp"
 
 #include <string>
 
@@ -35,7 +34,7 @@ void Board::check_pcm_output() const {
   } catch (const Fault &error) {
     throw Fault("Reference PCM output check at=" + std::to_string(ticks()) +
                 " mcu-pc=" + mcu_pc_context(native_->mcu) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + error.what());
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
   }
 }
 }

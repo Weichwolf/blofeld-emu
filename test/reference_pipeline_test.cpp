@@ -148,21 +148,25 @@ void literal_reset_and_pipeline() {
   Fixture f;
   steps(f.board, reset_edges);
   const auto state = f.board.status();
-  constexpr unsigned pipeline_fill = 6;
+  // Explicit effect-per-cycle reference: two fetch cycles, then each NOP's
+  // PC publication and retirement. This is not measured DSP56371 pipeline timing.
+  constexpr unsigned fetch_fill = 2;
+  constexpr unsigned nop_effects = 2;
   constexpr unsigned expected_cycles = (reset_end - release_tick - recovery_ticks) / sysclk_ticks;
   require(state.mcu_state_known && state.mcu.pc == entry && state.mcu_cycles == 5 &&
               state.common_ticks == reset_end && state.instructions == 0 &&
               state.dsp_cycles == expected_cycles &&
-              state.dsp_steps == expected_cycles - pipeline_fill && state.dsp_units == 0 &&
-              !state.held_reset && !state.faulted,
-          "195 SYSCLK plus VfPPP, two real DSP recovery periods and seven-stage NOP retirement");
+              state.dsp_steps == (expected_cycles - fetch_fill) / nop_effects &&
+              state.dsp_units == expected_cycles && !state.held_reset && !state.faulted,
+          "195 SYSCLK plus VfPPP, two DSP recovery periods and explicit NOP effect timing");
   steps(f.board, suffix);
   const auto after = f.board.status();
   require(after.mcu.pc == entry + suffix && after.mcu_cycles == 5 + suffix &&
               after.common_ticks == reset_end + suffix * bus_ticks &&
               after.dsp_cycles == expected_cycles + 2 * suffix &&
-              after.dsp_steps == expected_cycles - pipeline_fill + 2 * suffix,
-          "One actual MCU NOP period and two DSP pipeline periods share each 90-tick interval");
+              after.dsp_steps == (expected_cycles + 2 * suffix - fetch_fill) / nop_effects &&
+              after.dsp_units == expected_cycles + 2 * suffix,
+          "Each actual MCU NOP period shares two DSP reference cycles and one DSP NOP retirement");
 }
 
 void midi_partial_bit_restore() {

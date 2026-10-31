@@ -23,7 +23,7 @@ SpiInputs Board::sample() const {
   if (pins.known != mask) {
     throw Fault("Unknown reference SPI pad read at 0x0001 mask=" + hex(mask, 2) +
                 " known=" + hex(pins.known, 2) + " mcu-pc=" + mcu_pc_context(native_->mcu) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6));
   }
   return {.selected = (pins.levels & config_.select_n) == 0,
           .clock = (pins.levels & config_.clock) != 0,
@@ -32,8 +32,9 @@ SpiInputs Board::sample() const {
 
 void Board::check_signals() const {
   if (control_.release_epoch && !same(sample(), control_.previous)) {
-    throw Fault("Unobserved reference SPI pad change at 0x0001 mcu-pc=" +
-                mcu_pc_context(native_->mcu) + " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+    throw Fault(
+        "Unobserved reference SPI pad change at 0x0001 mcu-pc=" + mcu_pc_context(native_->mcu) +
+        " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6));
   }
 }
 
@@ -57,7 +58,8 @@ void Board::transition(const SpiInputs pins) {
     switch (config_.pad_order) {
       case PadOrder::reject:
         throw Fault("Unqualified simultaneous SS/SCK transition at 0x0001 mcu-pc=" +
-                    hex(control_.context.pc) + " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6));
+                    hex(control_.context.pc) +
+                    " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6));
       case PadOrder::clock_before_select: {
         auto intermediate = pins;
         intermediate.selected = control_.previous.selected;
@@ -88,23 +90,13 @@ void Board::on_write(const BusEvent &event) {
                       << " address=" << hex(event.address) << " value=" << hex(event.value, 2)
                       << " mcu-pc=" << hex(control_.context.pc) << '\n';
   }
-  if (!native_->schedule && !native_->fetch) { return; }
   constexpr unsigned port_b = 1;
   if (event.address != port_b) {
     check_signals();
     return;
   }
-  if (native_->fetch) {
-    native_->fetch->observe_write(
-        event, [&] { observe_spi_write(event); }, fetch_inputs(), fetch_observer());
-  } else {
-    native_->schedule->observe_write(
-        event,
-        [&] { observe_spi_write(event); },
-        [this](const auto &step) { before_dsp(step); },
-        return_observer(),
-        dsp_inputs());
-  }
+  native_->runtime->observe_write(
+      event, [&] { observe_spi_write(event); }, runtime_inputs(), runtime_observer());
   update_wiring();
 }
 
@@ -114,7 +106,7 @@ void Board::observe_spi_write(const BusEvent &event) {
     transition(sample());
   } catch (const Fault &fault) {
     throw Fault("Reference SPI write at 0x0001 mcu-pc=" + hex(control_.context.pc) +
-                " dsp-pc=" + hex(native_->dsp.cpu().state().pc, 6) + ": " + fault.what());
+                " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + fault.what());
   }
   ++control_.writes;
   if (execution_.trace != nullptr) {

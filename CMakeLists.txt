@@ -298,7 +298,7 @@ add_library(blofeld_reference_board src/board/reference_config.cpp src/board/ref
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
   src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
-target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp blofeld_private_files
+target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp_runtime blofeld_private_files
   blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp)
 add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
@@ -1652,7 +1652,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-dax-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dax COMMAND blofeld-dax-test)
   add_executable(blofeld-reference-checkpoint-test test/reference_checkpoint.cpp)
-  target_link_libraries(blofeld-reference-checkpoint-test PRIVATE blofeld_reference_board blofeld_dsp_native)
+  target_link_libraries(blofeld-reference-checkpoint-test PRIVATE blofeld_reference_board)
   add_test(NAME reference_checkpoint COMMAND blofeld-reference-checkpoint-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-checkpoint")
   add_test(NAME reference_dsp_inputs_cli COMMAND ${Python3_EXECUTABLE}
@@ -4149,7 +4149,7 @@ if(BUILD_TESTING)
     test/reference_audio_clock_test.cpp)
   target_link_libraries(blofeld-square-clock-test PRIVATE blofeld_reference_board)
   add_executable(blofeld-audio-clock-board-test test/reference_audio_clock_board.cpp)
-  target_link_libraries(blofeld-audio-clock-board-test PRIVATE blofeld_reference_board blofeld_dsp_native)
+  target_link_libraries(blofeld-audio-clock-board-test PRIVATE blofeld_reference_board)
   add_dependencies(quality blofeld-square-clock-test blofeld-audio-clock-board-test)
   add_test(NAME reference_square_clock_source COMMAND blofeld-square-clock-test source)
   add_test(NAME reference_square_clock_serial COMMAND blofeld-square-clock-test serial)
