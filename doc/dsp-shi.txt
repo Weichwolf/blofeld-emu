@@ -72,7 +72,8 @@ Verification
 
 The independent-only targets cover the selected reset contract and own-core
 fetch/checkpoint regressions under the same sanitizer configuration. This is
-component evidence; the selected contract still needs a new joined runtime.
+component evidence. A separate explicitly selected coupled run reaches the
+subsequent ESAI configuration; its limits are in own-dsp-integration.txt.
 
   build/strict/blofeld-shi-test
   build/strict/blofeld-mcu-shi-test

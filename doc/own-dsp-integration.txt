@@ -195,6 +195,15 @@ refusals, unknown baseline, CPHA0, active request changes and legacy default
 behavior have directed component checks. The independent-only CMake build now
 provides the SHI test alongside the own-core tests. The above coupled runtime
 predates this selectable contract and is not its integration evidence.
+A new current-ABI coupled candidate explicitly selects this SHI contract.
+All 56,496 actual PDRF values and their preceding NAND output timestamps match
+the earlier conditional-image run. The original runtime passes the SHI stop
+and reaches its native secondary ESAI clock-configuration write, where the
+existing active-configuration guard refuses. Its source, binary and 42 frozen
+build artifacts remain unchanged. No SS edge or HBUSY value is substituted.
+The SHI interpretation and updater-fixture tail remain assumptions; this does
+not establish audio, host USB/MIDI, complete boot or firmware-update safety.
+Evidence: `doc/local/own-core-timeline-shi-reset/{runtime3,audit,frozen-build}.json`.
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference

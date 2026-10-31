@@ -16,11 +16,18 @@ be prerequisites. Investigate explicit hypotheses without a preset experiment
 limit; retain their evidence, contradictions and visible unresolved accesses.
 Missing hardware information is a research task, not a reason to abandon the
 complete instrument objective.
-Alternative-firmware development is a secondary future use, not the primary
-deliverable. Component fixtures support full-device acceptance and cannot replace
-it.
+Executing user-supplied firmware through the modeled boot/update paths is an
+acceptance requirement. Developing a new instrument firmware remains separate
+future work. Emulator results must identify supported behavior and unresolved
+assumptions for compatibility assessment; simulation alone does not prove that
+an image is safe on physical hardware. Component fixtures support full-device
+acceptance and cannot replace it.
 
 Acceptance requirements (current evidence and gaps: coverage.txt):
+Firmware-visible state and timing, including USB, update and recovery behavior,
+are the accuracy criteria. Functional abstractions must preserve those effects;
+unverified simplifications cannot become evidence of hardware compatibility.
+
 
 1. Keep verified official firmware, manuals and the official standard sample
    library as local references. Track download URLs, sizes and hashes, without

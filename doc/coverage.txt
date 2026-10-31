@@ -9,6 +9,22 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+User-supplied firmware execution pending  Required in objective.txt: execute custom
+                                          images through modeled boot/update paths,
+                                          retain per-image coverage and unresolved
+                                          assumptions, test storage interruption and
+                                          recovery. No physical flash-safety proof
+                                          follows from emulator execution alone.
+Own-core SHI reset contract       partial  Explicit selected-quiescent SPI reset
+                                          contract has SHI/fetch/checkpoint tests
+                                          under ASan/UBSan; real SS/HBUSY retained,
+                                          default documented-idle behavior unchanged.
+                                          Coupled conditional-image run passes SHI
+                                          and reaches native ESAI initialization;
+                                          all prior NAND values/timestamps match.
+                                          Chip interpretation, full boot, USB/MIDI
+                                          and audio remain unqualified
+                                          (dsp-shi.txt, own-dsp-integration.txt).
 Own-core chip checkpoints         partial  Trusted in-process bus/core/clock/IRQ and
                                           I/O failure snapshots support staged cuts,
                                           same-owner recovery and fresh-owner restore.
