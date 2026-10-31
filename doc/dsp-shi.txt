@@ -32,6 +32,18 @@ with HEN remaining set are conservatively unsupported. Clearing HEN may also
 change configuration when HBUSY is known zero (sections 7.4.6.1..5); busy/unknown
 configuration changes fail. HRQE changes require idle.
 
+The documented-idle reset contract remains the default. A board may explicitly
+select ShiResetContract::selected_quiescent_reference while the interface is
+inactive. This software-reference interpretation admits a selected CPHA1 port
+only at idle SCK with no started, partial or completed word. HEN clear may also
+clear HRQE; mode changes with HEN set and active request changes still refuse.
+Actual HBUSY continues to reflect SS: no select edge or status value is injected.
+The normal one-cycle reset clears paths and outputs, after which the same quiet
+selection may enable a fresh receiver. The contract survives reset and chip
+copies. Unknown baselines, CPHA0 and nonquiescent transitions remain guarded.
+This selectable interpretation has component/software evidence, not independent
+silicon validation; the board assumption must stay explicit in runtime results.
+
 HCSR reports the specified reset HIDLE/HTDE state; HCKR resets with CPHA set and
 CPOL clear, HSAR with the documented default address. Individual reset and clearing
 interrupt enables require one explicitly supplied DSP instruction cycle. These are
@@ -55,6 +67,13 @@ interrupt delivery and SHI/TIM priority registers use the separate native bridge
 or unsupported; this component alone does not establish CPU exception behavior.
 
 Verification
+  cmake --build build/own-only --target blofeld-shi-test blofeld-own-dsp-fetch-test blofeld-own-dsp-checkpoint-test -j4
+  ctest --test-dir build/own-only --output-on-failure -R '^(dsp_shi|own_dsp_fetch|own_dsp_checkpoint)$'
+
+The independent-only targets cover the selected reset contract and own-core
+fetch/checkpoint regressions under the same sanitizer configuration. This is
+component evidence; the selected contract still needs a new joined runtime.
+
   build/strict/blofeld-shi-test
   build/strict/blofeld-mcu-shi-test
   cmake --build build/strict --target quality

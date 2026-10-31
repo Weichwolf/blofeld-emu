@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <exception>
+#include <initializer_list>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -549,6 +550,68 @@ void test_reset_reconfiguration_rejections() {
           "Rejected unknown-idle reconfiguration preserves the actual control word");
 }
 
+void test_selected_quiescent_reset_contract(const unsigned mode) {
+  blofeld::DspShi shi;
+  shi.set_reset_contract(blofeld::ShiResetContract::selected_quiescent_reference);
+  shi.reset();
+  Peer peer(shi, mode);
+  shi.write({.address = hcsr, .value = fifo24_request});
+  peer.word({.value = inbound});
+  peer.select();
+  require((shi.read(hcsr) & busy) != 0 && shi.read(hrx) == inbound,
+          "Selected quiescence must retain real HBUSY and the received word");
+  reject([&] { shi.set_reset_contract(blofeld::ShiResetContract::documented_idle); },
+         "An active interface cannot change its reset interpretation");
+  constexpr unsigned changed_request = 0x129;
+  reject([&] { shi.write({.address = hcsr, .value = changed_request}); },
+         "A selected active HREQ change must still refuse");
+  reject([&] { shi.write({.address = hcsr, .value = 1}); },
+         "HEN-set mode changes must still refuse");
+  shi.write({.address = hcsr, .value = 0});
+  reject([&] { static_cast<void>(shi.read(hcsr)); },
+         "Selected configuration-changing reset status remains unqualified before completion");
+  auto copied = shi;
+  copied.advance_instruction_cycles(1);
+  copied.write({.address = hcsr, .value = fifo24});
+  require((copied.read(hcsr) & busy) != 0,
+          "A copied pending reset must retain its explicit selected-reset contract");
+  shi.advance_instruction_cycles(1);
+  require(shi.read(hcsr) == idle_empty && !shi.outputs().miso.driven &&
+              !shi.outputs().request.driven,
+          "Completed reset must actually clear paths, busy and request ownership");
+  shi.write({.address = hcsr, .value = fifo24});
+  require((shi.read(hcsr) & busy) != 0,
+          "Selected re-enable must preserve SS and reassert actual busy status");
+  peer.bits({.value = outbound});
+  require(shi.read(hrx) == outbound, "Re-enabled selected SPI must receive a real new word");
+  reject([&] { shi.write({.address = hcsr, .value = 0}); },
+         "A completed selected word is not a fresh quiescent selection");
+  peer.bits({.value = inbound, .bits = 3});
+  const auto before = shi.read(hcsr);
+  reject([&] { shi.write({.address = hcsr, .value = 0}); },
+         "The selected reset contract must refuse an actual partial transfer");
+  require(shi.read(hcsr) == before, "Rejected partial reset must preserve chip state");
+}
+
+void test_selected_reset_contract_rejections() {
+  for (const unsigned mode : {0U, 2U}) {
+    blofeld::DspShi shi;
+    shi.set_reset_contract(blofeld::ShiResetContract::selected_quiescent_reference);
+    Peer peer(shi, mode);
+    shi.write({.address = hcsr, .value = fifo24});
+    peer.select();
+    const auto before = shi.read(hcsr);
+    reject([&] { shi.write({.address = hcsr, .value = 0}); },
+           "CPHA0 selection must not use the CPHA1 reset interpretation");
+    require(shi.read(hcsr) == before, "Rejected CPHA0 reset changed control or busy state");
+  }
+  blofeld::DspShi unknown;
+  unknown.set_reset_contract(blofeld::ShiResetContract::selected_quiescent_reference);
+  unknown.write({.address = hcsr, .value = fifo24});
+  reject([&] { unknown.write({.address = hcsr, .value = 0}); },
+         "Unknown pins cannot establish selected quiescence");
+}
+
 void test_phase_one_continuous_words_and_phase_zero_framing() {
   blofeld::DspShi shi;
   Peer peer(shi, 1);
@@ -635,6 +698,9 @@ int main() {
     test_inactive_shift_bits();
     test_idle_reset_reconfiguration();
     test_reset_reconfiguration_rejections();
+    test_selected_quiescent_reset_contract(1);
+    test_selected_quiescent_reset_contract(3);
+    test_selected_reset_contract_rejections();
     test_phase_one_continuous_words_and_phase_zero_framing();
     test_request_boundary_and_register_rejections();
     test_capture_edge_knowledge_in_all_clock_modes();

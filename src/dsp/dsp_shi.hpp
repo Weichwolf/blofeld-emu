@@ -9,6 +9,8 @@
 
 namespace blofeld {
 
+enum class ShiResetContract : std::uint8_t { documented_idle, selected_quiescent_reference };
+
 struct SpiInputs {
   bool selected = false; // Active-low SS, expressed as logical selection.
   bool clock = false;
@@ -36,6 +38,8 @@ class DspShi {
 public:
   DspShi();
   void reset();
+  // Board-selected interpretation; retained through reset, copied with chip state.
+  void set_reset_contract(ShiResetContract contract);
   [[nodiscard]] std::uint32_t read(std::uint32_t address);
   void write(DspWordWrite access);
   void observe_spi(SpiInputs pins);
@@ -57,6 +61,7 @@ private:
   void set_miso();
   void validate_pins(const SpiInputs &pins) const;
   void clock_edge(const SpiInputs &pins);
+  ShiResetContract reset_contract_ = ShiResetContract::documented_idle;
   std::uint32_t clock_control_ = 1;
   std::uint32_t control_ = 0;
   std::uint32_t slave_address_ = 0;

@@ -13,6 +13,15 @@ DspShi::DspShi() {
   reset();
 }
 
+void DspShi::set_reset_contract(const ShiResetContract contract) {
+  if (active_ || reset_pending_ ||
+      (contract != ShiResetContract::documented_idle &&
+       contract != ShiResetContract::selected_quiescent_reference)) {
+    throw Fault("DSP SHI reset contract requires an inactive valid configuration");
+  }
+  reset_contract_ = contract;
+}
+
 void DspShi::reset() {
   clock_control_ = 1; // DSP56371UM 7.4.5: CPHA=1, CPOL=0 on hardware/software reset.
   control_ = 0;
@@ -155,19 +164,23 @@ void DspShi::write_control(const std::uint32_t value) {
   if (reset_pending_) {
     throw Fault("DSP SHI individual-reset cycle has not elapsed at X:0xffff91");
   }
+  const bool selected_quiet = reset_contract_ == ShiResetContract::selected_quiescent_reference &&
+                              pins_ && pins_->selected && phase() && pins_->clock == polarity() &&
+                              !word_started_ && !first_clock_ && !complete_ && captured_ == 0;
   const bool enabled = (value & shi::hen) != 0;
   const bool changed = ((value ^ control_) & configuration_mask) != 0;
   if (active_ && enabled && changed) {
     throw Fault("DSP SHI mode change requires individual reset at X:0xffff91");
   }
-  if (active_ && changed && (!pins_ || pins_->selected)) {
+  if (active_ && changed && (!pins_ || pins_->selected) && !selected_quiet) {
     throw Fault("DSP SHI reset reconfiguration requires known HBUSY=0 at X:0xffff91");
   }
   constexpr unsigned request_mask = 0x180;
-  if (active_ && pins_ && pins_->selected && ((value ^ control_) & request_mask) != 0) {
+  if (active_ && pins_ && pins_->selected && ((value ^ control_) & request_mask) != 0 &&
+      (!selected_quiet || enabled || (value & request_mask) != 0)) {
     throw Fault("DSP SHI HREQ configuration change requires HBUSY=0 at X:0xffff91");
   }
-  if (!active_ && enabled && pins_ && pins_->selected) {
+  if (!active_ && enabled && pins_ && pins_->selected && !selected_quiet) {
     throw Fault("Unverified DSP SHI enable with SS already asserted at X:0xffff91");
   }
   if (!active_ && enabled) { active_ = true; }

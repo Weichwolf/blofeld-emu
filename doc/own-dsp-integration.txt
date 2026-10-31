@@ -187,6 +187,14 @@ this does not independently verify every resident memory word or full boot.
 All frozen build artifacts and runtime references remain unchanged. Provenance,
 limits and input hashes: `doc/own-dsp-updater-tail-reference.json`; detailed
 trace and audits: `doc/local/own-core-timeline-updater-image/`.
+A subsequent SHI component change exposes an explicit selected-quiescent SPI
+reset contract while retaining the documented-idle default. It preserves real
+SS/HBUSY and performs the actual delayed reset before selected re-enable.
+Both CPHA1 polarities, copied pending reset state, partial/completed transfer
+refusals, unknown baseline, CPHA0, active request changes and legacy default
+behavior have directed component checks. The independent-only CMake build now
+provides the SHI test alongside the own-core tests. The above coupled runtime
+predates this selectable contract and is not its integration evidence.
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
