@@ -72,9 +72,16 @@ std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffec
   switch (effect.kind) {
     case fetch_opcode:
     case fetch_extension:
-    case read:
+    case read: {
+      constexpr unsigned shi_receive = 0xffff94;
+      const auto phase =
+          effect.kind == read && effect.space == dsp56300::Space::x && effect.address == shi_receive
+              ? DspMemoryPhase::peripheral_sample
+              : DspMemoryPhase::execute;
       return DspMemoryAccess{
-          .target = {.space = native_space(effect.space), .address = effect.address}};
+          .target = {.space = native_space(effect.space), .address = effect.address},
+          .phase = phase};
+    }
     case write:
       return DspMemoryAccess{
           .target = {.space = native_space(effect.space), .address = effect.address},

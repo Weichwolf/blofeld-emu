@@ -4,6 +4,7 @@
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_shi.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
@@ -255,6 +256,154 @@ void automatic_shi_status_test() {
   require(machine.cpu().progress().instructions == 1 &&
               machine.cpu().registers().pc == boot_entry + 2,
           "Real SHI status test must retain the actual clear bit without invented input");
+}
+
+void automatic_shi_receive() {
+  constexpr Word movep_hrx_y0 = 0x044694;
+  constexpr Word status_register = 0xffff91;
+  constexpr Word receive_register = 0xffff94;
+  constexpr Word serial_control = 0xa9;
+  constexpr Word received = 0x345678;
+  constexpr unsigned maximum_cycles = 30;
+  constexpr unsigned word_bits = 24;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{movep_hrx_y0, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  auto &shi = machine.bus().shi();
+  shi.observe_spi({.mosi = false});
+  machine.bus().write({.space = DspSpace::x, .address = status_register, .value = serial_control});
+  shi.observe_spi({.selected = true, .mosi = false});
+  for (unsigned bit = word_bits; bit != 0; --bit) {
+    const bool level = ((received >> (bit - 1)) & 1U) != 0;
+    shi.observe_spi({.selected = true, .clock = true, .mosi = level});
+    shi.observe_spi({.selected = true, .clock = false, .mosi = level});
+  }
+  shi.observe_spi({.selected = false, .mosi = false});
+  OwnDspFetch fetch(machine);
+  unsigned cycle = 0;
+  while (machine.cpu().progress().instructions == 0 && cycle < maximum_cycles) {
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    require(!result.native || result.native->fault.kind == FaultKind::none,
+            "The actual SHI FIFO read must not fail");
+    ++cycle;
+  }
+  require(machine.cpu().progress().instructions == 1 && machine.cpu().registers().y == received &&
+              machine.cpu().registers().pc == boot_entry + 1,
+          "The native instruction must read and publish the actual SPI word");
+  rejects(
+      [&] {
+        static_cast<void>(machine.bus().read({.space = DspSpace::x, .address = receive_register}));
+      },
+      "The actual native FIFO read must consume the word exactly once");
+}
+
+void automatic_program_write() {
+  constexpr Word movem_x0_absolute = 0x077084;
+  constexpr Word target = 0x100;
+  constexpr Word value = 0x13579b;
+  constexpr unsigned maximum_cycles = 20;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 12> rom{immediate_x0, value, movem_x0_absolute, target, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  retire(machine);
+  fetch.synchronize();
+  read_word(fetch, boot_entry + 2);
+  read_word(fetch, boot_entry + 3);
+  static_cast<void>(fetch.begin());
+  const auto pending = machine.cpu().pending_instruction();
+  if (!pending || pending->effect.kind != EffectKind::write ||
+      pending->effect.space != Space::program || pending->effect.address != target) {
+    throw std::runtime_error("MOVEM did not reach its actual P write");
+  }
+  fetch.issue();
+  const auto before = fetch.view();
+  const auto first = fetch.advance_dma_automatic(
+      dma_input(0), OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority);
+  require(before.pending_address == boot_entry + 4 && !first.captured && first.native &&
+              fetch.view().pending_address == before.pending_address &&
+              machine.bus().read({.address = target}) == value,
+          "Program write priority must hold F2 and perform the actual native P write");
+  unsigned cycle = 1;
+  for (; cycle < maximum_cycles && machine.cpu().progress().instructions < 2; ++cycle) {
+    static_cast<void>(fetch.advance_dma_automatic(
+        dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority));
+  }
+  require(machine.cpu().progress().instructions == 2 &&
+              machine.cpu().registers().pc == boot_entry + 4,
+          "The actual MOVEM must retire once after its real program-memory write");
+}
+
+void automatic_program_write_fetch_guard() {
+  constexpr Word movem_x0_absolute = 0x077084;
+  constexpr Word target = ram_entry + 2;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 2> rom{jump_absolute, ram_entry};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = ram_entry, .value = movem_x0_absolute});
+  machine.bus().write({.address = ram_entry + 1, .value = target});
+  machine.bus().write({.address = target, .value = 0});
+  reset(machine);
+  static_cast<void>(machine.begin_fetch());
+  retire(machine);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, ram_entry);
+  read_word(fetch, ram_entry + 1);
+  static_cast<void>(fetch.begin());
+  fetch.issue();
+  try {
+    static_cast<void>(fetch.advance_dma_automatic(
+        dma_input(0), OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority));
+    throw std::runtime_error("Write to an issued program word was accepted");
+  } catch (const blofeld::Fault &error) {
+    const std::string detail(error.what());
+    require(detail.contains("write to issued/fetched P:0x000102") &&
+                detail.contains("pc=0x000100") && fetch.view().pending_address == target &&
+                machine.clock().native_cycle_units() == 0 && !machine.bus().last_dma_cycle(),
+            "Unqualified program coherence must refuse before either bus operation or clock");
+  }
+}
+
+void automatic_omr_transition() {
+  constexpr Word movec_omr = 0x05f43a;
+  constexpr Word changed_omr = 0x304;
+  constexpr unsigned maximum_cycles = 30;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{movec_omr, changed_omr, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  bool saw_held_stale = false;
+  for (unsigned cycle = 0; cycle < maximum_cycles && machine.cpu().progress().instructions == 0;
+       ++cycle) {
+    const auto before = fetch.view();
+    const bool stale = before.omr != machine.cpu().registers().omr;
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    if (stale) {
+      saw_held_stale = true;
+      require(!result.captured && !result.issued_address,
+              "A stale F2 context must be held through the real OMR retirement");
+    }
+  }
+  require(saw_held_stale && machine.cpu().progress().instructions == 1 &&
+              machine.cpu().registers().omr == changed_omr && fetch.view().omr == changed_omr &&
+              fetch.view().next_address == boot_entry + 2 && !fetch.view().pending_address,
+          "Actual OMR retirement must replace the stale fetch context before further sampling");
 }
 
 void shi_status_dma_guard() {
@@ -898,6 +1047,10 @@ int main() {
     automatic_execution();
     automatic_peripheral_write();
     automatic_shi_status_test();
+    automatic_shi_receive();
+    automatic_program_write();
+    automatic_program_write_fetch_guard();
+    automatic_omr_transition();
     shi_status_dma_guard();
     automatic_interrupt_frontier();
     dma_fetch_conflict();

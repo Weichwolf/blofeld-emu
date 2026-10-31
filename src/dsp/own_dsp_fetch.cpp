@@ -61,7 +61,7 @@ void OwnDspFetch::check_owner() const {
   if (machine_.advancing_effect_) { throw Fault("Own DSP F2 requires an inactive effect"); }
 }
 
-void OwnDspFetch::check_sample_context() const {
+void OwnDspFetch::check_sample_context(const bool hold_stale) const {
   const auto regs = machine_.cpu_.registers();
   const auto state = fetch_.view();
   if (in_flight_ && !machine_.cpu_.pending_instruction()) {
@@ -69,7 +69,8 @@ void OwnDspFetch::check_sample_context() const {
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
-  if ((regs.sr & cache_enable) != 0 || native_fetch_ || native_latch_ || state.omr != regs.omr) {
+  if ((regs.sr & cache_enable) != 0 || native_fetch_ || native_latch_ ||
+      (state.omr != regs.omr && !(hold_stale && in_flight_))) {
     throw Fault("Unqualified own DSP F2 memory context read P:" +
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
@@ -104,7 +105,7 @@ void OwnDspFetch::capture() {
 }
 
 OwnDspFetchCycleResult OwnDspFetch::advance_dma_capture(const DspDmaInputs inputs) {
-  return capture_cycle(inputs, false, true, false);
+  return capture_cycle(inputs, false, true, false, false);
 }
 
 OwnDspFetchCycleResult OwnDspFetch::advance_dma_capture_native(const DspDmaInputs inputs,
@@ -113,7 +114,7 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_capture_native(const DspDmaInput
     throw Fault("Own DSP DMA/F2/native cycle requires an isolated-effect hypothesis pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
-  return capture_cycle(inputs, true, true, false);
+  return capture_cycle(inputs, true, true, false, false);
 }
 
 OwnDspFetchCycleResult OwnDspFetch::advance_dma_pipeline(const DspDmaInputs inputs,
@@ -123,21 +124,44 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_pipeline(const DspDmaInputs inpu
     throw Fault("Own DSP pipeline requires an isolated-effect hypothesis pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
-  return capture_cycle(inputs, admit_native, false, true);
+  return capture_cycle(inputs, admit_native, false, true, false);
 }
 
 OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inputs,
                                                           const OwnDspAutomaticTiming timing) {
   check_owner();
-  if (timing != OwnDspAutomaticTiming::one_effect_per_cycle) {
+  if (timing != OwnDspAutomaticTiming::one_effect_per_cycle &&
+      timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority) {
     throw Fault("Own DSP automatic execution requires an explicit timing hypothesis pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
   const bool started = begin_automatic();
-  auto result = capture_cycle(inputs, in_flight_, false, true);
+  const bool stale_context = in_flight_ && fetch_.view().omr != machine_.cpu_.registers().omr;
+  const bool hold_fetch = hold_program_fetch(timing) || stale_context;
+  auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch);
   result.instruction_started = started;
   if (result.native && result.native->retired) { synchronize(); }
   return result;
+}
+
+bool OwnDspFetch::hold_program_fetch(const OwnDspAutomaticTiming timing) const {
+  const auto pending = machine_.cpu_.pending_instruction();
+  const auto state = fetch_.view();
+  if (!pending || pending->effect.kind != dsp56300::EffectKind::write ||
+      pending->effect.space != dsp56300::Space::program) {
+    return false;
+  }
+  const auto address = pending->effect.address;
+  bool already_fetched = state.pending_address == address;
+  for (std::size_t index = 0; index < state.used; ++index) {
+    already_fetched = already_fetched || state.words.at(index).address == address;
+  }
+  if (already_fetched) {
+    throw Fault("Unqualified own DSP program write to issued/fetched P:" + hex(address, 6) +
+                " pc=" + hex(pending->effect.pc, 6) + " omr=" + hex(pending->effect.omr, 6));
+  }
+  return timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
+         state.pending_address.has_value();
 }
 
 bool OwnDspFetch::begin_automatic() {
@@ -185,10 +209,14 @@ OwnDspFetch::native_overlap(const DspProgramFetchView &state,
                                 access->operation == DspMemoryOperation::write &&
                                 !machine_.bus_.has_active_dma();
   constexpr unsigned shi_status = 0xffff91;
-  const bool shi_test =
-      access->target.space == DspSpace::x && access->target.address == shi_status &&
-      access->phase == DspMemoryPhase::peripheral_bit && !machine_.bus_.has_active_dma();
-  if (peripheral_write || shi_test ||
+  constexpr unsigned shi_receive = 0xffff94;
+  const bool shi_read =
+      access->target.space == DspSpace::x &&
+      ((access->target.address == shi_status && access->phase == DspMemoryPhase::peripheral_bit) ||
+       (access->target.address == shi_receive &&
+        access->phase == DspMemoryPhase::peripheral_sample)) &&
+      !machine_.bus_.has_active_dma();
+  if (peripheral_write || shi_read ||
       (data && access->target.address < io_base &&
        machine_.bus_.memory_conflict({.core = program, .dma = *access}) ==
            DspMemoryConflict::independent)) {
@@ -220,9 +248,10 @@ void OwnDspFetch::issue_pipeline(OwnDspFetchCycleResult &result, const bool requ
 OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
                                                   const bool admit_native,
                                                   const bool require_capture,
-                                                  const bool issue_next) {
+                                                  const bool issue_next,
+                                                  const bool hold_fetch) {
   check_owner();
-  check_sample_context();
+  check_sample_context(hold_fetch);
   const auto state = fetch_.view();
   const auto regs = machine_.cpu_.registers();
   const auto context = " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
@@ -235,15 +264,17 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
   }
   std::array<DspMemoryAccess, 2> accesses{};
   std::size_t count = 0;
-  if (state.pending_address) {
+  if (state.pending_address && !hold_fetch) {
     accesses[count++] = {.target = {.address = *state.pending_address}};
   }
+  auto native_state = state;
+  if (hold_fetch) { native_state.pending_address.reset(); }
   const auto pending = machine_.cpu_.pending_instruction();
   if (admit_native) {
     if (!in_flight_ || !pending) {
       throw Fault("Own DSP DMA/F2/native cycle requires its pending owned effect" + context);
     }
-    if (const auto access = native_overlap(state, *pending)) { accesses[count++] = *access; }
+    if (const auto access = native_overlap(native_state, *pending)) { accesses[count++] = *access; }
   }
   const CycleGuard guard(machine_.advancing_effect_);
   static_cast<void>(machine_.clock_.next_step_ticks(machine_.bus_, 1));
@@ -256,7 +287,7 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
                                   {.accesses = std::span(accesses).first(count),
                                    .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
     if (!result.dma.core_stall) {
-      if (state.pending_address) {
+      if (state.pending_address && !hold_fetch) {
         fetch_.capture(machine_.bus_);
         result.captured = true;
       }

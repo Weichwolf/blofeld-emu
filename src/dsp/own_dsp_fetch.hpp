@@ -13,7 +13,11 @@
 namespace blofeld {
 class OwnDspMachine;
 enum class OwnDspNativeCycleModel : std::uint8_t;
-enum class OwnDspAutomaticTiming : std::uint8_t { unqualified, one_effect_per_cycle };
+enum class OwnDspAutomaticTiming : std::uint8_t {
+  unqualified,
+  one_effect_per_cycle,
+  one_effect_per_cycle_program_write_priority
+};
 
 struct OwnDspFetchCycleResult {
   DspDmaBusResult dma;
@@ -55,14 +59,18 @@ public:
 
 private:
   void check_owner() const;
-  void check_sample_context() const;
+  void check_sample_context(bool hold_stale = false) const;
   [[nodiscard]] bool begin_automatic();
+  [[nodiscard]] bool hold_program_fetch(OwnDspAutomaticTiming timing) const;
   [[nodiscard]] std::optional<DspMemoryAccess>
   native_overlap(const DspProgramFetchView &state,
                  const dsp56300::PendingInstruction &pending) const;
   void issue_pipeline(OwnDspFetchCycleResult &result, bool requested);
-  [[nodiscard]] OwnDspFetchCycleResult
-  capture_cycle(DspDmaInputs inputs, bool admit_native, bool require_capture, bool issue_next);
+  [[nodiscard]] OwnDspFetchCycleResult capture_cycle(DspDmaInputs inputs,
+                                                     bool admit_native,
+                                                     bool require_capture,
+                                                     bool issue_next,
+                                                     bool hold_fetch);
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
   [[nodiscard]] dsp56300::InstructionProgress begin_native();
   void finish_interrupt_vector();

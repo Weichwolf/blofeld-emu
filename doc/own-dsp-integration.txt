@@ -76,8 +76,9 @@ admits the actual pending native effect alongside F2 when their memory resources
 are independently qualified. A conflicting DMA destination holds both effects;
 the synthetic test resumes the actual X load and executes the DMA-written opcode.
 Concurrent native P accesses with F2 remain unqualified. With DMA inactive,
-actual peripheral writes and SHI status bit tests can share the selected F2
-cycle; unsupported peripheral accesses still fail in the strict bus. An explicit
+actual peripheral writes, SHI status bit tests and the real SHI receive FIFO
+read can share the selected F2 cycle; unsupported peripheral accesses still fail
+in the strict bus. An explicit
 continuous reference-cycle variant places a new F1 after DMA, F2 and any selected
 native effect, respecting queue capacity and DMA destination stalls. The owner
 still selects native effects and synchronizes actual retirement; cache/REP/vector
@@ -91,6 +92,13 @@ interrupt retention. These are reference-order hypotheses, not measured pipeline
 timing. With a locally supplied inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
 cycles; it does not connect the firmware MCU or establish the physical board.
+A separately selected program-write-priority hypothesis holds an issued F2 while
+the actual native P write executes. Writes to already issued or captured words
+still refuse before mutation. OMR publication holds stale F2 until the native
+instruction retires and redirects the fetch context. With these hypotheses and
+host-driven SPI pin edges, a local run loaded and compared all 94 original
+first-stage words and reached the original REP frontier. This does not run the
+firmware MCU, calibrate timing or establish reset-to-instrument operation.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected
