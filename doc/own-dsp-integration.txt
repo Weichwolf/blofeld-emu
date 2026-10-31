@@ -244,6 +244,13 @@ Conditional board contracts, each separately controlled and recorded:
   or a real board. One earlier run
   pinned a mutable build archive which was later rebuilt; later runs retain
   frozen library inputs.
+  A later frozen snapshot covers 33 complete pages and the transition across
+  the first 32-page block boundary. The original firmware issues erases at
+  rows 0 and 32; the modeled erase completes before each block's first program.
+  An omitted second completion is rejected by the trace audit. The initial
+  address audit needed a correction because it misclassified the next erase's
+  address cycles as part of the previous read; the boundary snapshot uses the
+  corrected audit. These remain modeled outcomes under the same assumptions.
   A separate snapshot compares the NAND output event sequence with actual
   DSP Port-F read values: 9,336 values match, including status bits under the
   declared unused-bit hypothesis. Eight later NAND output events have no
@@ -329,6 +336,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-preserved-pointer/runtime.json
   doc/local/own-core-main-program-ce/{audit_pages.py,snapshot-pages.json}
   doc/local/own-core-main-program-ce/{audit_addresses.py,snapshot-addresses.json}
+  doc/local/own-core-main-program-ce/{audit_addresses_v2.py,audit_erases.py,snapshot-block-boundary.json}
   doc/local/own-core-main-program-ce/cpu-read-audit/{audit.py,audit.json}
   doc/local/main-updater-handoff/{audit.py,audit.json}
   doc/local/own-core-nand-j/validation.json
