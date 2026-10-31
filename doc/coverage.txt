@@ -51,6 +51,13 @@ Own-core original NAND helper     partial  Isolated original helper on own DSP s
                                           Host inputs, projection, routing and timing
                                           are hypotheses; full update remains open
                                           (own-dsp-integration.txt).
+Own-core main updater entry       partial  Original marker/checksum reaches NAND
+                                          configuration using host-loaded transfer and
+                                          a separate startup RAM capture. A candidate
+                                          fixed-RE-delay/direct-net model conflicts
+                                          with observed initial WE timing and status
+                                          sampling constraints. No NAND command or
+                                          complete update (own-dsp-integration.txt).
 Own-core Port-C lane hypothesis    partial  Local projection of two control registers
                                           passes 48 pin/function cases and scope
                                           controls under ASan/UBSan. Original run

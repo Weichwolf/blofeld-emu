@@ -187,6 +187,19 @@ Conditional board contracts, each separately controlled and recorded:
   These are isolated own-core component runs with explicit initial cell state,
   pulse model, GPIO/timing and unused-status hypotheses, not a complete update
   or evidence of physical flash safety.
+  A larger isolated own-core run starts the original main updater with its
+  host-loaded complete transfer, actual transport padding and the 86 words
+  captured in a separate startup run. It executes the marker/checksum path and
+  reaches the original NAND configuration without a NAND command latch. The
+  strict run stops on the Port-C upper direction bits; with the previously
+  scoped Port-C projection enabled, the fixed 2,100-tick RE delay asserts RE
+  during an active WE pulse at PC 002e91. The 86-word capture predates a full
+  boot and this input setup is not an uninterrupted MIDI update.
+  Under the same direct-net, fixed-delay and 1,000-tick-per-instruction model,
+  this observed initialization keeps WE low for at least 3,000 ticks after raw
+  RE falls. The separate status-read fixture requires RE delay <=2,967 ticks
+  for timely sampling. Z3 rejects their joint constraints. This refutes that
+  combination of fixture assumptions, not every physical circuit or timing.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -247,6 +260,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-program-compare/{runtime,audit}.json
   doc/local/own-core-nand-erase-program-compare/{runtime,audit}.json
   doc/local/own-core-nand-program-failure/{runtime,audit}.json
+  doc/local/own-core-main-updater-constraints/{constant-delay.smt2,audit.json}
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
