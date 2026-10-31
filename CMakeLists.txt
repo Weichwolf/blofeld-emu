@@ -18,6 +18,11 @@ endforeach()
 include(cmake/Quality.cmake)
 find_program(BLOFELD_CLANG_TIDY NAMES clang-tidy-19 REQUIRED)
 find_program(BLOFELD_CLANG_FORMAT NAMES clang-format-19 REQUIRED)
+option(BLOFELD_OWN_DSP_ONLY "Build independent DSP integration components without the legacy core" OFF)
+if(BLOFELD_OWN_DSP_ONLY)
+  include(cmake/OwnDspOnly.cmake)
+  return()
+endif()
 set(GHIDRA_ROOT "$ENV{GHIDRA_ROOT}" CACHE PATH "Ghidra distribution with native SLEIGH sources")
 if(NOT GHIDRA_ROOT)
   file(GLOB GHIDRA_CANDIDATES "$ENV{HOME}/.local/opt/ghidra_*_PUBLIC")
@@ -78,9 +83,7 @@ set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
 
 include(cmake/Hc12Spec.cmake)
 include(cmake/Hcs08Spec.cmake)
-add_library(blofeld_firmware src/firmware/firmware.cpp src/firmware/archive.cpp src/firmware/midi_file.cpp src/common/diagnostic.cpp src/common/bus.cpp)
-target_include_directories(blofeld_firmware PUBLIC src)
-target_link_libraries(blofeld_firmware PUBLIC blofeld_quality PRIVATE ZLIB::ZLIB)
+include(cmake/OwnDspComponents.cmake)
 add_library(blofeld_hcs08 src/keyboard/hcs08.cpp src/keyboard/hcs08_interrupts.cpp src/keyboard/hcs08_registers.cpp src/keyboard/hcs08_ccr.cpp)
 target_include_directories(blofeld_hcs08 PUBLIC src)
 target_link_libraries(blofeld_hcs08 PUBLIC blofeld_firmware PRIVATE blofeld_sleigh)
@@ -133,9 +136,6 @@ target_link_libraries(blofeld_hcs08_run_clock PUBLIC blofeld_hcs08_bdc)
 add_library(blofeld_hcs08_spi_run_clock src/keyboard/hcs08_spi_run_clock.cpp)
 target_include_directories(blofeld_hcs08_spi_run_clock PUBLIC src)
 target_link_libraries(blofeld_hcs08_spi_run_clock PUBLIC blofeld_hcs08_bdc blofeld_hcs08_spi_clock blofeld_hcs08_run_clock)
-add_library(blofeld_gpio_pads src/board/gpio_pads.cpp)
-target_include_directories(blofeld_gpio_pads PUBLIC src)
-target_link_libraries(blofeld_gpio_pads PUBLIC blofeld_firmware)
 add_library(blofeld_hcs08_gpio src/keyboard/hcs08_gpio.cpp)
 target_include_directories(blofeld_hcs08_gpio PUBLIC src)
 target_link_libraries(blofeld_hcs08_gpio PUBLIC blofeld_gpio_pads)
@@ -251,23 +251,11 @@ target_link_libraries(blofeld_audio_runtime PUBLIC blofeld_host_audio blofeld_pc
 add_library(blofeld_mcu_midi src/mcu/mcu_midi.cpp src/mcu/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC src)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
-add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp src/dsp/dsp_bus.cpp src/dsp/dsp_pll.cpp
-  src/dsp/dsp_esai.cpp src/dsp/dsp_esai_transmit.cpp src/dsp/dsp_esai_clock.cpp src/dsp/dsp_bus_esai.cpp
-  src/dsp/dsp_dma.cpp src/dsp/dsp_dma_address.cpp src/dsp/dsp_dma_cycle.cpp src/dsp/dsp_bus_dma.cpp
-  src/dsp/dsp_dax.cpp src/dsp/dsp_dax_clock.cpp src/dsp/dsp_bus_dax.cpp
-  src/dsp/dsp_gpio.cpp src/dsp/dsp_timers.cpp src/dsp/dsp_timer_clock.cpp src/dsp/dsp_timer_capture.cpp src/dsp/dsp_interrupts.cpp
-  src/dsp/dsp_run_clock.cpp src/dsp/dsp_run_reset.cpp)
-target_include_directories(blofeld_dsp_peripherals PUBLIC src)
-target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
-add_library(blofeld_own_dsp_io STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_io.cpp
-  src/dsp/own_dsp_interrupts.cpp src/dsp/own_dsp_machine.cpp)
-target_include_directories(blofeld_own_dsp_io PUBLIC src)
-target_link_libraries(blofeld_own_dsp_io PUBLIC blofeld_dsp_peripherals dsp56300::core)
 add_library(blofeld_dsp
   src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_only.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
   src/dsp/dsp_move_writeback.cpp src/dsp/dsp_address_phase.cpp src/dsp/dsp_native_access.cpp
-  src/dsp/dsp_omr_move.cpp src/dsp/dsp_sr_move.cpp src/dsp/dsp_sp_move.cpp src/dsp/dsp_fetch_context.cpp
-  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_branch_form.cpp src/dsp/dsp_reference_cycle.cpp
+  src/dsp/dsp_fetch_context.cpp
+  src/dsp/dsp_reference_execution.cpp src/dsp/dsp_program_fetch.cpp src/dsp/dsp_loop_fetch.cpp src/dsp/dsp_pipeline_words.cpp src/dsp/dsp_reference_cycle.cpp
   src/dsp/dsp_fetch_run.cpp src/dsp/dsp_fetch_state.cpp src/dsp/dsp_fetch_checkpoint.cpp
   src/dsp/dsp_fetch_reset.cpp src/dsp/dsp_fetch_schedule.cpp
   src/dsp/dsp_fetch_schedule_events.cpp src/dsp/dsp_fetch_peripheral_events.cpp
@@ -279,7 +267,9 @@ add_library(blofeld_dsp
   src/dsp/dsp_scheduled_events.cpp src/dsp/dsp_agu_interlocks.cpp src/dsp/dsp_machine_reference_dma.cpp
   src/dsp/dsp_scheduled_reset.cpp src/dsp/dsp_peripheral_read.cpp src/dsp/dsp_peripheral_read_form.cpp)
 target_include_directories(blofeld_dsp PUBLIC src)
-target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals PRIVATE blofeld_dsp_native)
+target_link_libraries(blofeld_dsp PUBLIC blofeld_dsp_peripherals
+  PRIVATE "$<LINK_ONLY:blofeld_dsp_branch_decode>" "$<LINK_ONLY:blofeld_dsp_control_decode>"
+  blofeld_dsp_native)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
   add_library(blofeld_dsp_instruction_fixture test/dsp_instruction_fixture.cpp)
   target_link_libraries(blofeld_dsp_instruction_fixture PUBLIC blofeld_dsp PRIVATE blofeld_dsp_native)
@@ -312,6 +302,12 @@ add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
+  add_executable(blofeld-dsp-branch-form-own-test test/dsp_branch_form_own_test.cpp)
+  target_link_libraries(blofeld-dsp-branch-form-own-test PRIVATE blofeld_dsp_branch_decode)
+  add_test(NAME dsp_branch_form_own COMMAND blofeld-dsp-branch-form-own-test)
+  add_executable(blofeld-dsp-control-move-own-test test/dsp_control_move_own_test.cpp)
+  target_link_libraries(blofeld-dsp-control-move-own-test PRIVATE blofeld_dsp_control_decode)
+  add_test(NAME dsp_control_move_own COMMAND blofeld-dsp-control-move-own-test)
   add_executable(blofeld-own-dsp-io-test test/own_dsp_io_test.cpp)
   target_link_libraries(blofeld-own-dsp-io-test PRIVATE blofeld_own_dsp_io)
   add_test(NAME own_dsp_io COMMAND blofeld-own-dsp-io-test)

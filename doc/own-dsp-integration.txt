@@ -5,8 +5,14 @@ Set BLOFELD_OWN_DSP_ROOT to its clean pinned checkout when it is not located
 at ~/Git/dsp56300. DSP56300_SANITIZER must match BLOFELD_SANITIZER. The source
 and license are recorded in dependencies.json; reference firmware remains local.
 The adapter target links only the own core and board peripheral libraries.
-During migration, configuration still also requires DSP56300_ROOT to point to
-the separate legacy checkout pinned in dependencies.json for the old runtime.
+The regular standalone build still requires DSP56300_ROOT to point to the
+separate legacy checkout pinned in dependencies.json. The component-only build
+does not build a device and needs no legacy source tree:
+
+  cmake -S . -B build/own-only -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 \
+    -DBLOFELD_SANITIZER=address-undefined -DBLOFELD_OWN_DSP_ONLY=ON
+  cmake --build build/own-only --target blofeld-own-dsp-components
 
 OwnDspIo forwards genuine DSP reads, writes, bit tests and peripheral reset to
 the strict DspBus. Unsupported atomic read/modify/write operations are refused.
@@ -79,6 +85,15 @@ cycles and instruction-boundary GPIO observation are uncalibrated; neither
 physical wiring nor reset-to-instrument operation follows from these runs.
 
 Conditional board contracts, each separately controlled and recorded:
+
+- Branch forms and OMR/SP/SR control-move forms now use the independent DSP
+  instruction and transfer descriptions. Directed encoding checks pass; a
+  fixed-family comparison retains the previous qualified branch results and
+  809 control forms. The own decoder rejects 24 undocumented register aliases
+  previously accepted for OMR/SR. The scheduler and regular standalone
+  runtime still require migration before the legacy dependency can be removed.
+  `BLOFELD_OWN_DSP_ONLY=ON` configures the independent integration targets
+  without the legacy source tree or its patches; it does not build the device.
 
 - The MCU/DSP GPIO fixture now shares an explicit one-to-one candidate-driver
   conversion usable with the own DSP bus. A component test connects the actual
@@ -302,6 +317,13 @@ Conditional board contracts, each separately controlled and recorded:
   matches 57,669 NAND output and DSP-read values; one trailing output was not
   yet present in the independently captured CPU trace. This remains an
   isolated host-loaded updater with explicit board and timing hypotheses.
+  The completed experimental trace contains 171 page cycles and six modeled
+  block erases; all 90,469 recorded NAND outputs match DSP Port-F reads. It
+  stops at PC 002e53 during the subsequent port reconfiguration because the
+  candidate NAND gate rejects the transition. The original runner receipt is
+  missing; a prior snapshot's pinned inputs and the final trace were checked,
+  but not every initial input has a final runner integrity receipt. This does
+  not establish the MCU handoff, full firmware update or physical flash safety.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -378,6 +400,8 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/main-updater-handoff/{audit.py,audit.json}
   doc/local/main-updater-overlap/{audit.py,audit.json}
   doc/local/own-core-main-region-transition/audit.json
+  doc/local/own-core-main-program-ce/final-audit.json
+  doc/local/own-branch-migration/audit.json
   doc/local/we-recovery-rc/{candidate.cir,candidate-82k.cir,audit.py,audit.json}
   doc/local/own-core-main-gate-census/{audit.py,audit.json,events.txt}
   doc/local/own-core-nand-j/validation.json

@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Isolated integration targets; this does not provide the standalone device.
+find_package(Git REQUIRED)
+include(cmake/Zlib.cmake)
+include(cmake/OwnDsp.cmake)
+set(CMAKE_CXX_CLANG_TIDY "${BLOFELD_CLANG_TIDY};--warnings-as-errors=*")
+include(cmake/OwnDspComponents.cmake)
+add_custom_target(blofeld-own-dsp-components ALL DEPENDS blofeld_own_dsp_io
+  blofeld_dsp_branch_decode blofeld_dsp_control_decode)
+
+if(BUILD_TESTING)
+  add_executable(blofeld-dsp-branch-form-own-test test/dsp_branch_form_own_test.cpp)
+  target_link_libraries(blofeld-dsp-branch-form-own-test PRIVATE blofeld_dsp_branch_decode)
+  add_test(NAME dsp_branch_form_own COMMAND blofeld-dsp-branch-form-own-test)
+  add_executable(blofeld-dsp-control-move-own-test test/dsp_control_move_own_test.cpp)
+  target_link_libraries(blofeld-dsp-control-move-own-test PRIVATE blofeld_dsp_control_decode)
+  add_test(NAME dsp_control_move_own COMMAND blofeld-dsp-control-move-own-test)
+  foreach(scope io interrupts reset checkpoint)
+    add_executable(blofeld-own-dsp-${scope}-test test/own_dsp_${scope}_test.cpp)
+    target_link_libraries(blofeld-own-dsp-${scope}-test PRIVATE blofeld_own_dsp_io)
+    add_test(NAME own_dsp_${scope} COMMAND blofeld-own-dsp-${scope}-test)
+  endforeach()
+endif()
