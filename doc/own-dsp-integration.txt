@@ -113,6 +113,15 @@ explicit physical driver. These hypotheses are not enabled in the strict model
 and do not qualify silicon, the MCU connection or a complete boot. Reproduction
 identities and trace hashes are local in
 `doc/local/own-branch-migration/no-cell-gpio-biu-experiment/audit.json`.
+A further local run adds a direct PF10 chip-enable and NAND ready-to-TIO1
+candidate, with reference power/read timing and the same effect scheduling.
+It observes a read command, four address latches and timed completion before
+refusing the first unknown NAND cell. The preceding memory/GPIO/BIU trace
+hashes are unchanged; independent synthetic link controls cover ready/busy,
+data settling and unknown-cell refusal. The direct chip-enable candidate
+conflicts with separate programming evidence and is not physical validation.
+Run identities and assumptions are recorded in
+`doc/local/own-branch-migration/no-cell-gpio-biu-nand-experiment/audit.json`.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected
