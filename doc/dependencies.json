@@ -3,7 +3,7 @@
     "source": "https://github.com/Weichwolf/dsp56300",
     "revision": "4218d8d439117f0a612b9b42609ccbbca4c47b66",
     "license": "GPL-3.0-only",
-    "integration": "Pinned source subproject and strict board bus adapter. The production scheduler still uses the legacy core; migration remains incomplete."
+    "integration": "Pinned source subproject, strict board bus adapter and staged interrupt/reset owner. The production scheduler still uses the legacy core; migration remains incomplete."
   },
   "zlib": {
     "version": "1.3.2",

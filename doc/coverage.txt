@@ -9,20 +9,30 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
+Own-core reset/execution owner     partial  OwnDspMachine joins bus/core/IRQ ownership
+                                          with held mode5/PINIT-low reset. own_dsp_reset
+                                          passes under ASan/UBSan: literal reset values,
+                                          fractional time, gates, RAM/ROM retention,
+                                          guest-written EP/SZ warm retention and stale
+                                          ticket refusal. Execution remains untimed;
+                                          regular board/scheduler integration, in-flight
+                                          reset and full checkpoints remain open
+                                          (own-dsp-integration.txt).
 Own-core interrupt ownership      partial  Own core executes the actual vector
                                           fetches before board acknowledgement.
                                           own_dsp_interrupts passes under ASan/UBSan:
                                           masking, two bases, stale tickets, fast
                                           return and refused second-word read.
-                                          Timing, reset, checkpoints and integration
-                                          into the regular scheduler remain open
+                                          Timing, reset during vector entry,
+                                          checkpoints and integration into the regular
+                                          scheduler remain open
                                           (own-dsp-integration.txt).
 Independent DSP integration       partial  Pinned own-core subproject and strict
                                           synchronous bus adapter build and
                                           own_dsp_io pass under ASan/UBSan;
                                           RAM, GPIO, reset and fault context checked.
-                                          Runtime, scheduler, clocks and IRQs still
-                                          use the legacy core. Full migration,
+                                          Regular runtime, scheduler, clocks and
+                                          IRQs still use the legacy core. Full migration,
                                           original boot and device tests remain open
                                           (own-dsp-integration.txt).
 Documented GPIO passive bias      partial  Explicitly floating PC/PD/PE/PF inputs

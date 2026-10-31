@@ -260,7 +260,7 @@ add_library(blofeld_dsp_peripherals src/dsp/dsp_shi.cpp src/dsp/dsp_shi_spi.cpp 
 target_include_directories(blofeld_dsp_peripherals PUBLIC src)
 target_link_libraries(blofeld_dsp_peripherals PUBLIC blofeld_firmware blofeld_gpio_pads)
 add_library(blofeld_own_dsp_io STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_io.cpp
-  src/dsp/own_dsp_interrupts.cpp)
+  src/dsp/own_dsp_interrupts.cpp src/dsp/own_dsp_machine.cpp)
 target_include_directories(blofeld_own_dsp_io PUBLIC src)
 target_link_libraries(blofeld_own_dsp_io PUBLIC blofeld_dsp_peripherals dsp56300::core)
 add_library(blofeld_dsp
@@ -318,6 +318,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-own-dsp-interrupts-test test/own_dsp_interrupts_test.cpp)
   target_link_libraries(blofeld-own-dsp-interrupts-test PRIVATE blofeld_own_dsp_io)
   add_test(NAME own_dsp_interrupts COMMAND blofeld-own-dsp-interrupts-test)
+  add_executable(blofeld-own-dsp-reset-test test/own_dsp_reset_test.cpp)
+  target_link_libraries(blofeld-own-dsp-reset-test PRIVATE blofeld_own_dsp_io)
+  add_test(NAME own_dsp_reset COMMAND blofeld-own-dsp-reset-test)
   # One checked translation unit for the shared target-memory reference fixture.
   add_library(blofeld_hcs08_programmer_fixture OBJECT test/hcs08_programmer_fixture.cpp)
   target_link_libraries(blofeld_hcs08_programmer_fixture PUBLIC

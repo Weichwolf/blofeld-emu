@@ -28,9 +28,26 @@ This supplies functional ownership, not clock timing, reset or checkpoints.
 The synthetic IRQ test covers SR masking, two vector bases, stale tickets,
 fast-vector return and refusal of an unknown second vector word.
 
+OwnDspMachine pairs the bus, adapter, own core and interrupt owner. It requires
+explicit mode5/PINIT-low observations and at least two supplied recovery periods.
+The existing DspRunClock holds execution closed through assertion and recovery;
+partial reference periods and the exact recovery endpoint are retained. Inputs
+are a caller-supplied stable reset contract, not recovered physical board wiring.
+The owner initializes PC/SR/OMR/SP/SC/VBA and all M registers from documented
+reset values. Other visible registers are retained, including uninitialized EP
+and SZ (FM 4.3.2 and 5.4.3.3). RAM and installed ROM survive the board reset.
+Only reset time advances: subsequent staged execution remains explicitly untimed.
+Published OMR changes reach the real bus, whose switch delay still needs explicit
+scheduler cycles. In-flight assertion and reset during vector entry refuse.
+The synthetic reset test covers fractional assertion/recovery, early release,
+execution gates, memory retention, independent reset values, own MOVEC EP/SZ
+instructions, warm register retention and old-ticket refusal across reset.
+No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, full machine
+checkpoint or real-time instrument behavior is established by these fixtures.
+
 Validation:
-  cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test -j2
-  ctest --test-dir build/strict -R '^own_dsp_(io|interrupts)$' --output-on-failure
+  cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
+  ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset)$' --output-on-failure
 
 The regular device and reference scheduler still use the legacy core. The new
 adapter and its synthetic test are not evidence of full boot, real timing, audio,
