@@ -187,7 +187,6 @@ void resets_and_array_isolation() {
                 device.cell({.page = row, .column = column + 1}) == NandByte{},
             "ID/reset/copies retain observed cells and neighboring unknownness");
     device.observe_wp(true);
-    reject([&] { device.command(0x80); }, "pointer");
     device.command(0);
     device.address(0);
     device.address(row);
@@ -257,6 +256,37 @@ void identification_read_edges() {
     reject([&] { static_cast<void>(clock.read()); }, "exceeds the supplied");
   }
 }
+
+void identification_preserves_area() {
+  // K9F1208U0C Rev1.1 p21: 00h, 01h and 50h select the program area.
+  constexpr std::array<std::uint8_t, 3> selectors{0x00, 0x01, 0x50};
+  constexpr std::array<unsigned, 3> offsets{0, 256, 512};
+  for (std::size_t index = 0; index < selectors.size(); ++index) {
+    Nand device;
+    device.observe_identification(identity());
+    device.observe_wp(true);
+    device.observe_power_ready();
+    device.command(selectors[index]);
+    select(device);
+    compare(device);
+    device.command(0x80);
+    device.address(3);
+    device.address(0);
+    device.address(0);
+    device.address(0);
+    require(device.column() == offsets[index] + 3,
+            "Read-ID must retain the explicitly selected program area");
+  }
+  Nand unknown;
+  unknown.observe_identification(identity());
+  unknown.observe_wp(true);
+  unknown.observe_power_ready();
+  unknown.command(reset);
+  unknown.observe_completion();
+  select(unknown);
+  compare(unknown);
+  reject([&] { unknown.command(0x80); }, "unknown area pointer");
+}
 }
 
 int main() {
@@ -267,6 +297,7 @@ int main() {
     resets_and_array_isolation();
     routed_owners();
     identification_read_edges();
+    identification_preserves_area();
     std::cout << "NAND ID: 1275 masked-byte cases, 255 address refusals, reset/copy/owner checks\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

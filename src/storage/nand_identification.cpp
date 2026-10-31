@@ -37,7 +37,7 @@ void Nand::begin_identification() {
   address_cycles_ = 0;
   status_mode_ = false;
   identification_index_ = 0;
-  pointer_.reset(); // Read-ID does not establish an array-area pointer.
+  // Read-ID is not an area-pointer command and does not establish an unknown pointer.
 }
 
 void Nand::address_identification(const std::uint8_t value) {
