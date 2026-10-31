@@ -92,6 +92,21 @@ Port-F BIU wait-state prerequisite. No normal instrument operation is establishe
 Local code, control results, provenance, full traces and audit:
   doc/local/own-core-gpio-lanes/{build,runtime,audit}.json
 
+Retained-reset-BCR experiment (local only):
+A declared functional Port-F contract admits the family reset wait-state value
+1FFFFF without writing 01FFFF or changing the reset image. This is not a derived
+Port-F wait-state timing law. Instrumented controls exercise real GPIO outputs,
+word and bit accesses, explicitly floating auxiliary-input fixtures, strict
+unknown data inputs and refusal of unobserved BBS after access. Split native
+RMW phases and physical bus timing are not qualified by these controls.
+The original run performs six Port-F control/data writes and reaches the timer0
+DI bit12 poll at X:FFFF8B, DSP PC 0000BB. That pin is unobserved and refuses;
+no NAND data byte has been supplied. Memory and Port-C traces are byte-identical
+to the prior experiment, and persistent state/artifacts remain unchanged. The
+NAND component now needs GPIO edge inputs and modeled ready outputs.
+Local code, controls and audited results:
+  doc/local/own-core-biu-reset-waits/{build,runtime,audit}.json
+
 Validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
   ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset)$' --output-on-failure
