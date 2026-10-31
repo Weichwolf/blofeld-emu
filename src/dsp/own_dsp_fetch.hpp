@@ -17,7 +17,8 @@ enum class OwnDspAutomaticTiming : std::uint8_t {
   unqualified,
   one_effect_per_cycle,
   one_effect_per_cycle_program_write_priority,
-  one_effect_per_cycle_write_priority_with_interrupts
+  one_effect_per_cycle_write_priority_with_interrupts,
+  one_effect_per_cycle_program_priority_with_interrupts
 };
 
 struct OwnDspFetchCycleResult {

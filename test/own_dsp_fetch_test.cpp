@@ -435,7 +435,65 @@ void automatic_program_write() {
           "The actual MOVEM must retire once after its real program-memory write");
 }
 
-void automatic_program_write_fetch_guard() {
+void automatic_program_read(const bool known_source) {
+  constexpr Word movem_x0_absolute = 0x07f084;
+  constexpr Word source = 0x200;
+  constexpr Word value = 0x13579b;
+  constexpr unsigned maximum_cycles = 20;
+  constexpr auto timing =
+      OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 12> rom{movem_x0_absolute, source, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  if (known_source) { machine.bus().write({.address = source, .value = value}); }
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  read_word(fetch, boot_entry);
+  read_word(fetch, boot_entry + 1);
+  static_cast<void>(fetch.begin());
+  const auto pending = machine.cpu().pending_instruction();
+  require(pending && pending->effect.kind == EffectKind::read &&
+              pending->effect.space == Space::program && pending->effect.address == source,
+          "Native MOVEM must own its actual program-data read");
+  fetch.issue();
+  const auto before = fetch.view();
+  rejects(
+      [&] {
+        static_cast<void>(fetch.advance_dma_automatic(
+            dma_input(0),
+            OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts));
+      },
+      "Write-only timing profile admitted a concurrent program read");
+  require(machine.clock().native_cycle_units() == 0 && !machine.bus().last_dma_cycle(),
+          "Rejected program-read overlap consumed a clock or DMA cycle");
+  const auto first = fetch.advance_dma_automatic(dma_input(0), timing);
+  require(!first.captured && first.native && fetch.view().pending_address == before.pending_address,
+          "Program-data priority must retain the actual issued F2 read");
+  if (!known_source) {
+    require(first.native && first.native->fault.kind == FaultKind::memory_read &&
+                first.native->fault.address == source && machine.io().failure(),
+            "Unknown program source must fault at its true address without advancing F2");
+    return;
+  }
+  bool captured = false;
+  for (unsigned cycle = 1; cycle < maximum_cycles && machine.cpu().progress().instructions < 2;
+       ++cycle) {
+    const auto result = fetch.advance_dma_automatic(dma_input(cycle), timing);
+    captured = captured || result.captured;
+    require(!result.native || result.native->fault.kind == FaultKind::none,
+            "Program-read priority failed after its actual native sample");
+  }
+  require(captured && machine.cpu().progress().instructions == 2 &&
+              machine.cpu().registers().x == value &&
+              machine.cpu().registers().pc == boot_entry + 3,
+          "Native program data and the held following opcode must both execute exactly once");
+}
+
+void automatic_program_write_fetch_guard(
+    const OwnDspAutomaticTiming timing =
+        OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority) {
   constexpr Word movem_x0_absolute = 0x077084;
   constexpr Word target = ram_entry + 2;
   auto cycle_clocks = clocks;
@@ -455,8 +513,7 @@ void automatic_program_write_fetch_guard() {
   static_cast<void>(fetch.begin());
   fetch.issue();
   try {
-    static_cast<void>(fetch.advance_dma_automatic(
-        dma_input(0), OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority));
+    static_cast<void>(fetch.advance_dma_automatic(dma_input(0), timing));
     throw std::runtime_error("Write to an issued program word was accepted");
   } catch (const blofeld::Fault &error) {
     const std::string detail(error.what());
@@ -1504,7 +1561,11 @@ int main() {
     automatic_gpio_bit();
     automatic_gpio_unknown_input();
     automatic_program_write();
+    automatic_program_read(true);
+    automatic_program_read(false);
     automatic_program_write_fetch_guard();
+    automatic_program_write_fetch_guard(
+        OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts);
     automatic_omr_transition();
     shi_status_dma_guard();
     automatic_interrupt_frontier();

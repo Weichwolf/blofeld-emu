@@ -147,6 +147,18 @@ build archive changed during execution, so the full build-input receipt fails;
 that mismatch remains recorded rather than being treated as an unchanged build.
 Trace, input identities and the scoped runtime audit remain local in
 `doc/local/own-core-timeline-gpio-sample/{runtime3,audit}.json`.
+An additional explicit program-access-priority profile serializes native
+program-data reads against F2, retaining the issued fetch while the real native
+sample executes. Synthetic MOVEM tests check the actual source, following
+opcode, unknown-memory refusal and unchanged protection of fetched-word writes;
+older timing profiles still refuse the read overlap. In the new coupled run,
+all 1,584 actual full PDRF values match the first three source pages. One further
+NAND output matches the next source byte but has no successful CPU sample:
+the direct pad candidate detects DSP/NAND contention during the direction
+transition. No data or register transition is skipped. All 50 static build
+artifacts were frozen before linking; their hashes, the binary and runtime
+inputs remain unchanged. This does not qualify physical nets or DSP timing.
+Evidence: `doc/local/own-core-timeline-program-read/{runtime3,audit,frozen-build}.json`.
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference

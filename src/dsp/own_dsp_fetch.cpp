@@ -134,12 +134,14 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inp
   check_owner();
   if (timing != OwnDspAutomaticTiming::one_effect_per_cycle &&
       timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
-      timing != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts) {
+      timing != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts &&
+      timing != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) {
     throw Fault("Own DSP automatic execution requires an explicit timing hypothesis pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
   }
   const bool started = begin_automatic(
-      timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts);
+      timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts ||
+      timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts);
   const bool stale_context = in_flight_ && fetch_.view().omr != machine_.cpu_.registers().omr;
   const bool hold_fetch = hold_program_fetch(timing) || stale_context || repeated_ ||
                           native_latch_ || interrupt_vector_;
@@ -152,6 +154,11 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inp
 bool OwnDspFetch::hold_program_fetch(const OwnDspAutomaticTiming timing) const {
   const auto pending = machine_.cpu_.pending_instruction();
   const auto state = fetch_.view();
+  if (pending && pending->effect.kind == dsp56300::EffectKind::read &&
+      pending->effect.space == dsp56300::Space::program &&
+      timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) {
+    return state.pending_address.has_value();
+  }
   if (!pending || pending->effect.kind != dsp56300::EffectKind::write ||
       pending->effect.space != dsp56300::Space::program) {
     return false;
@@ -166,7 +173,8 @@ bool OwnDspFetch::hold_program_fetch(const OwnDspAutomaticTiming timing) const {
                 " pc=" + hex(pending->effect.pc, 6) + " omr=" + hex(pending->effect.omr, 6));
   }
   return (timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority ||
-          timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts) &&
+          timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts ||
+          timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) &&
          state.pending_address.has_value();
 }
 

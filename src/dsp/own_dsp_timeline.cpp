@@ -28,7 +28,8 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       horizon_(epoch_ticks) {
   if ((timing_ != OwnDspAutomaticTiming::one_effect_per_cycle &&
        timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
-       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts) ||
+       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts &&
+       timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) ||
       expected_ticks_ > std::numeric_limits<std::uint64_t>::max() - epoch_ticks_) {
     throw Fault("Own DSP timeline requires qualified timing and representable epoch");
   }
