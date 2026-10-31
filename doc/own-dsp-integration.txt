@@ -159,6 +159,22 @@ transition. No data or register transition is skipped. All 50 static build
 artifacts were frozen before linking; their hashes, the binary and runtime
 inputs remain unchanged. This does not qualify physical nets or DSP timing.
 Evidence: `doc/local/own-core-timeline-program-read/{runtime3,audit,frozen-build}.json`.
+The next private run attaches the existing resolved-pad interface to the
+NAND/DSP data bus while retaining direct PF10 CE and J continuation. Opposing
+drivers remain unknown/conflicting; controls reject their CPU reads, preserve
+reserved-function uncertainty and recover only after the real direction change.
+A separate control verifies PF10 deassertion releases NAND data. The coupled
+MCU-cycle run reads all 56,238 supplied bytes: 106 complete pages and 270 bytes
+of the last page. Every actual full PDRF value and protocol output matches the
+source; there are no unconsumed outputs. The first unknown byte still refuses,
+leaving 258 final-page bytes unspecified. All 50 frozen build artifacts, the
+binary and runtime inputs remain unchanged. Sixty-seven conflicting net
+observations are logged; this does not qualify physical contention or timing.
+The terminal fixed-stage check detects a changed self-modifying store location;
+its final template was not independently captured, so that obsolete equality
+check is not a boot or corruption verdict. NAND write latches still use intended
+GPIO outputs, limiting bidirectional pad evidence. Detailed inputs and audit:
+`doc/local/own-core-timeline-resolved-pads/{runtime3,audit,frozen-build}.json`.
 With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
