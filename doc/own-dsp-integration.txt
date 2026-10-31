@@ -65,8 +65,8 @@ Other multi-effect instructions still require explicit qualification. DMA source
 contention defers the
 DMA read; DMA destination contention holds the same native ticket until the
 write completes. Synthetic tests verify both directions, global wait and an
-independent program fetch. Modifying bit and peripheral reset effects and
-calibrated automatic pipeline placement remain unqualified. This is a caller-selected ordering experiment, not calibrated
+independent program fetch. Peripheral reset effects and calibrated automatic
+pipeline placement remain unqualified. This is a caller-selected ordering experiment, not calibrated
 pipeline or audio timing; the caller still owns effect placement, ESAI and board
 scheduling. A separate explicit F2/DMA cycle derives the P-memory footprint from
 the actual issued F1 address while holding the native CPU. A destination conflict
@@ -76,9 +76,12 @@ admits the actual pending native effect alongside F2 when their memory resources
 are independently qualified. A conflicting DMA destination holds both effects;
 the synthetic test resumes the actual X load and executes the DMA-written opcode.
 Concurrent native P accesses with F2 remain unqualified. With DMA inactive,
-actual peripheral writes, SHI status bit tests and the real SHI receive FIFO
-read can share the selected F2 cycle; unsupported peripheral accesses still fail
-in the strict bus. An explicit
+actual peripheral writes, supported native peripheral bit operations, SHI status
+bit tests and the real SHI receive FIFO read can share the selected F2 cycle;
+unsupported peripheral accesses still fail in the strict bus. The one-effect
+ordering executes the real atomic GPIO handler and does not establish subcycle
+read/modify/write timing. Synthetic cases check both a driven output and an
+unknown input fault. An explicit
 continuous reference-cycle variant places a new F1 after DMA, F2 and any selected
 native effect, respecting queue capacity and DMA destination stalls. The owner
 still selects native effects and synchronizes actual retirement; cache/REP/vector
@@ -102,6 +105,14 @@ host-driven SPI pin edges, a local run loaded and compared all 94 original
 first-stage words, executed its REP loop and verified 8,192 cleared X/Y word
 pairs. The next Y:0x002000 write is refused as unqualified. This does not run
 the firmware MCU, calibrate timing or establish reset-to-instrument operation.
+A private counterfactual run combines separately logged no-cell, Port-C lane and
+Port-F reset-BCR hypotheses. It retains the same 184,320 distinct no-cell writes,
+one Port-C lane event and six Port-F accesses, then stops on unknown Timer-DI.
+Scoped decoder/GPIO/Port-F controls pass; the input remains unknown without an
+explicit physical driver. These hypotheses are not enabled in the strict model
+and do not qualify silicon, the MCU connection or a complete boot. Reproduction
+identities and trace hashes are local in
+`doc/local/own-branch-migration/no-cell-gpio-biu-experiment/audit.json`.
 Published OMR changes reach the real bus, whose switch delay still needs explicit
 scheduler cycles. Assertion at a native effect boundary drops staged CPU work
 and vector ownership without acknowledging an old source. Published unaffected

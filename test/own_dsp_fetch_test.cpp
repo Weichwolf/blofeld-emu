@@ -2,6 +2,7 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
@@ -256,6 +257,61 @@ void automatic_shi_status_test() {
   require(machine.cpu().progress().instructions == 1 &&
               machine.cpu().registers().pc == boot_entry + 2,
           "Real SHI status test must retain the actual clear bit without invented input");
+}
+
+void automatic_gpio_bit() {
+  constexpr Word bset_port_c_bit_three = 0x013d23;
+  constexpr Word selected_pin = 1U << 3U;
+  constexpr unsigned maximum_cycles = 30;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{bset_port_c_bit_three, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  auto &port = machine.bus().gpio(DspPort::c);
+  port.write({.reg = DspGpioRegister::direction, .value = selected_pin});
+  port.write({.reg = DspGpioRegister::data, .value = 0});
+  OwnDspFetch fetch(machine);
+  unsigned cycle = 0;
+  while (machine.cpu().progress().instructions == 0 && cycle < maximum_cycles) {
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    require(!result.native || result.native->fault.kind == FaultKind::none,
+            "Actual native GPIO bit operation failed");
+    ++cycle;
+  }
+  const auto output = port.outputs();
+  require(machine.cpu().progress().instructions == 1 &&
+              machine.cpu().registers().pc == boot_entry + 1 &&
+              (output.known & selected_pin) != 0 && (output.levels & selected_pin) != 0,
+          "Native BSET must change the actual configured GPIO output");
+}
+
+void automatic_gpio_unknown_input() {
+  constexpr Word bset_port_c_bit_three = 0x013d23;
+  constexpr Word port_data = 0xffffbd;
+  constexpr unsigned maximum_cycles = 30;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{bset_port_c_bit_three, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  OwnDspFetch fetch(machine);
+  for (unsigned cycle = 0; cycle < maximum_cycles; ++cycle) {
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    if (result.native && result.native->fault.kind != FaultKind::none) {
+      const auto failure = machine.io().failure();
+      require(result.native->fault.kind == FaultKind::io_bit && failure &&
+                  failure->address == port_data && failure->pc == boot_entry && failure->cause &&
+                  machine.cpu().progress().instructions == 0,
+              "Unknown GPIO input must retain the real bit fault and remain unretired");
+      return;
+    }
+  }
+  throw std::runtime_error("Unknown GPIO input was silently accepted");
 }
 
 void automatic_shi_receive() {
@@ -1174,6 +1230,8 @@ int main() {
     automatic_peripheral_write();
     automatic_shi_status_test();
     automatic_shi_receive();
+    automatic_gpio_bit();
+    automatic_gpio_unknown_input();
     automatic_program_write();
     automatic_program_write_fetch_guard();
     automatic_omr_transition();

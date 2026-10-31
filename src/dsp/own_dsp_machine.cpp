@@ -94,10 +94,11 @@ std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffec
     case pcu_update: return std::nullopt;
     case bit: {
       constexpr unsigned shi_status = 0xffff91;
-      if (effect.action == dsp56300::BitAction::test && effect.space == dsp56300::Space::x &&
-          effect.address == shi_status) {
-        return DspMemoryAccess{.target = {.space = DspSpace::x, .address = shi_status},
-                               .phase = DspMemoryPhase::peripheral_bit};
+      const DspAddress target{.space = native_space(effect.space), .address = effect.address};
+      const bool shi_test = effect.action == dsp56300::BitAction::test &&
+                            effect.space == dsp56300::Space::x && effect.address == shi_status;
+      if (shi_test || DspBus::handles_peripheral_bit(target)) {
+        return DspMemoryAccess{.target = target, .phase = DspMemoryPhase::peripheral_bit};
       }
       constexpr std::array names{"P:", "X:", "Y:"};
       const auto space = native_space(effect.space);
