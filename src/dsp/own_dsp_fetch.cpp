@@ -243,10 +243,13 @@ OwnDspFetch::native_overlap(const DspProgramFetchView &state,
        (access->target.address == shi_receive &&
         access->phase == DspMemoryPhase::peripheral_sample)) &&
       !machine_.bus_.has_active_dma();
+  const bool gpio_read = access->phase == DspMemoryPhase::peripheral_sample &&
+                         DspBus::handles_peripheral_bit(access->target) &&
+                         !machine_.bus_.has_active_dma();
   const bool peripheral_bit = access->phase == DspMemoryPhase::peripheral_bit &&
                               DspBus::handles_peripheral_bit(access->target) &&
                               !machine_.bus_.has_active_dma();
-  if (peripheral_write || shi_read || peripheral_bit ||
+  if (peripheral_write || shi_read || gpio_read || peripheral_bit ||
       (data && access->target.address < io_base &&
        machine_.bus_.memory_conflict({.core = program, .dma = *access}) ==
            DspMemoryConflict::independent)) {

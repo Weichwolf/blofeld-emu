@@ -36,7 +36,9 @@ bool gpio_data_access(const DspMemoryAccess access) {
   const bool bit = access.phase == DspMemoryPhase::peripheral_bit;
   const bool write =
       access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write;
-  return (bit || write) && std::ranges::any_of(gpio_data_registers, [&](const auto port) {
+  const bool read = access.phase == DspMemoryPhase::peripheral_sample &&
+                    access.operation == DspMemoryOperation::read;
+  return (bit || write || read) && std::ranges::any_of(gpio_data_registers, [&](const auto port) {
            return access.target.space == port.space && access.target.address == port.address;
          });
 }

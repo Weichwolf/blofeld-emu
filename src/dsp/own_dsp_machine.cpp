@@ -12,6 +12,7 @@
 #include "dsp56300/core.hpp"
 #include "dsp56300/instruction.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -67,6 +68,17 @@ void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
               " pc=" + hex(effect.pc, 6) + " omr=" + hex(effect.omr, 6));
 }
 
+bool gpio_data_read(const dsp56300::InstructionEffect effect) {
+  constexpr std::array ports{DspAddress{.space = DspSpace::x, .address = 0xffffbd},
+                             DspAddress{.space = DspSpace::y, .address = 0xffff9d},
+                             DspAddress{.space = DspSpace::y, .address = 0xfffff5},
+                             DspAddress{.space = DspSpace::x, .address = 0xffffd5}};
+  if (effect.kind != dsp56300::EffectKind::read) { return false; }
+  return std::ranges::any_of(ports, [&](const auto port) {
+    return port.space == native_space(effect.space) && port.address == effect.address;
+  });
+}
+
 std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffect effect) {
   using enum dsp56300::EffectKind;
   switch (effect.kind) {
@@ -74,10 +86,11 @@ std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffec
     case fetch_extension:
     case read: {
       constexpr unsigned shi_receive = 0xffff94;
-      const auto phase =
-          effect.kind == read && effect.space == dsp56300::Space::x && effect.address == shi_receive
-              ? DspMemoryPhase::peripheral_sample
-              : DspMemoryPhase::execute;
+      const auto phase = ((effect.kind == read && effect.space == dsp56300::Space::x &&
+                           effect.address == shi_receive) ||
+                          gpio_data_read(effect))
+                             ? DspMemoryPhase::peripheral_sample
+                             : DspMemoryPhase::execute;
       return DspMemoryAccess{
           .target = {.space = native_space(effect.space), .address = effect.address},
           .phase = phase};

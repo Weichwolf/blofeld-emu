@@ -77,11 +77,13 @@ are independently qualified. A conflicting DMA destination holds both effects;
 the synthetic test resumes the actual X load and executes the DMA-written opcode.
 Concurrent native P accesses with F2 remain unqualified. With DMA inactive,
 actual peripheral writes, supported native peripheral bit operations, SHI status
-bit tests and the real SHI receive FIFO read can share the selected F2 cycle;
+bit tests, GPIO data samples and the real SHI receive FIFO read can share the selected F2 cycle;
 unsupported peripheral accesses still fail in the strict bus. The one-effect
 ordering executes the real atomic GPIO handler and does not establish subcycle
 read/modify/write timing. Synthetic cases check both a driven output and an
-unknown input fault. An explicit
+unknown input fault. GPIO data reads now use the peripheral-sample resource
+instead of RAM; native MOVEP tests verify a real driven value and an unknown
+input fault. No native GPIO handler or pin validation is replaced. An explicit
 continuous reference-cycle variant places a new F1 after DMA, F2 and any selected
 native effect, respecting queue capacity and DMA destination stalls. The owner
 still selects native effects and synchronizes actual retirement; cache/REP/vector
@@ -126,7 +128,16 @@ the NAND model then produces its first source byte. The next native Port-F
 control write refuses a reserved pin function. No reserved-mode or pad resolver
 hypothesis is enabled in this run. Source, binary and terminal trace identities:
 `doc/local/own-core-timeline-nand-source/{runtime3,audit,image-audit}.json`.
- With a locally supplied
+A further coupled candidate retains reserved-F registers while leaving their
+pin functions unknown. The original code reaches its actual GPIO data read,
+where the then-current adapter rejects its RAM resource classification. The
+preceding memory trace is unchanged; one protocol byte matches the supplied
+source, but no successful CPU byte value is claimed. Controls retain default
+refusal, unknown-pad reads and valid direction recovery. Source identities:
+`doc/local/own-core-timeline-reserved-f/{runtime3,audit}.json`. The new public
+GPIO sample classification has separate native tests; this terminal board trace
+predates that change and must not be presented as its runtime validation.
+With a locally supplied
 inactive SPI baseline the private 55-word
 NXP-document-derived prefix reaches its actual receive wait for 1,000 reference
 cycles; it does not connect the firmware MCU or establish the physical board.

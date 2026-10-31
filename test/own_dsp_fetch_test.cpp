@@ -315,6 +315,40 @@ void automatic_gpio_unknown_input() {
   throw std::runtime_error("Unknown GPIO input was silently accepted");
 }
 
+void automatic_gpio_read(const bool known_input) {
+  constexpr Word movep_port_c_y0 = 0x0446dd;
+  constexpr Word data_register = 0xffffbd;
+  constexpr unsigned port_mask = 0xfff;
+  constexpr unsigned input = 0xa5;
+  constexpr unsigned maximum_cycles = 30;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{movep_port_c_y0, 0};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  reset(machine);
+  auto &port = machine.bus().gpio(DspPort::c);
+  port.write({.reg = DspGpioRegister::control, .value = port_mask});
+  if (known_input) { port.set_drive({.mask = port_mask, .levels = input}); }
+  OwnDspFetch fetch(machine);
+  for (unsigned cycle = 0; cycle < maximum_cycles; ++cycle) {
+    const auto result =
+        fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
+    if (result.native && result.native->fault.kind != FaultKind::none) {
+      require(!known_input && result.native->fault.kind == FaultKind::memory_read &&
+                  result.native->fault.address == data_register && machine.io().failure(),
+              "GPIO sample must preserve the actual unknown-input fault");
+      return;
+    }
+    if (machine.cpu().progress().instructions == 1) {
+      require(known_input && machine.cpu().registers().y == input,
+              "Native MOVEP must publish the actual GPIO input");
+      return;
+    }
+  }
+  throw std::runtime_error("Native GPIO sample failed to finish within its bound");
+}
+
 void automatic_shi_receive() {
   constexpr Word movep_hrx_y0 = 0x044694;
   constexpr Word status_register = 0xffff91;
@@ -1465,6 +1499,8 @@ int main() {
     automatic_peripheral_write();
     automatic_shi_status_test();
     automatic_shi_receive();
+    automatic_gpio_read(true);
+    automatic_gpio_read(false);
     automatic_gpio_bit();
     automatic_gpio_unknown_input();
     automatic_program_write();
