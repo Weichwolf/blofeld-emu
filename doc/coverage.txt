@@ -35,6 +35,12 @@ Own-core update source RAM        partial  Original startup clear leaves all 86
                                           complete boot, update transport and actual
                                           NAND programming remain unverified
                                           (own-dsp-integration.txt).
+Own-core NAND write link          partial  A local candidate connects resolved GPIO
+                                          strobes to reference cell physics and timed
+                                          Busy. Synthetic erase/program and read
+                                          controls pass under ASan/UBSan. Original
+                                          updater execution, fitted part and timing
+                                          remain open (own-dsp-integration.txt).
 Own-core Port-C lane hypothesis    partial  Local projection of two control registers
                                           passes 48 pin/function cases and scope
                                           controls under ASan/UBSan. Original run

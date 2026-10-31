@@ -110,6 +110,13 @@ Conditional board contracts, each separately controlled and recorded:
   The latest controller also samples resolved NAND inputs and interleaves
   output-valid/release deadlines; same-tick feedback creates no extra pin edge.
   Independent 17/33-tick hold/release cases pass at the 1.08GHz reference.
+- A local extension joins the same resolved GPIO link to NandWriteMedium under
+  an explicit reference cell profile. With a known writable block and WP high,
+  synthetic GPIO strobes erase the block and program one byte. Busy stays low
+  until 3,240,000/540,000 reference ticks respectively; actual cell contents
+  match independent erased/programmed expectations. Prior read/conflict
+  controls also pass under ASan/UBSan. This is not original updater execution,
+  physical timing qualification or evidence of installed NAND contents.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -160,6 +167,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-reset-abort/validation.json
   doc/local/own-core-checkpoints/validation.json
   doc/local/own-core-ram-capture/{runtime,audit}.json
+  doc/local/own-core-nand-medium/{validation,audit}.json
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
