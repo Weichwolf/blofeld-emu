@@ -173,6 +173,7 @@ private:
   friend class DspFetchRun;
   friend class DspRunClock;
   friend class OwnDspMachine;
+  friend class OwnDspFetch;
   void advance_reference_cycle_delays(std::uint64_t admitted_dma_cycle, bool switch_was_pending);
   void advance_core_delays(unsigned cycles);
   void advance_memory_switch(unsigned cycles);

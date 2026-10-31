@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_fetch.hpp"
@@ -111,6 +112,67 @@ void actual_fetch() {
     require(detail.contains("read P:0x000102") && detail.contains("pc=0x000102"),
             "Unknown F2 sample lost its operation, address or PC");
   }
+}
+
+DspDmaInputs dma_input(const unsigned cycle, const DspDmaGrant grant = DspDmaGrant::available) {
+  return {.cycle = cycle,
+          .known_requests = 15,
+          .timing = DspDmaTiming::reference_sampled_cycles,
+          .grant = grant};
+}
+
+void dma_fetch_conflict() {
+  constexpr Word source_register = 0xffffef;
+  constexpr Word destination_register = 0xffffee;
+  constexpr Word counter_register = 0xffffed;
+  constexpr Word control_register = 0xffffec;
+  constexpr Word source = 0x120;
+  constexpr Word program_copy = 0x9802da;
+  constexpr Word original_opcode = 0x200000;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 2> rom{jump_absolute, ram_entry};
+  machine.bus().install_rom({.space = DspSpace::p, .start = boot_entry, .words = rom});
+  machine.bus().write({.address = source, .value = 0});
+  machine.bus().write({.address = ram_entry, .value = original_opcode});
+  reset(machine);
+  static_cast<void>(machine.begin_fetch());
+  retire(machine);
+  require(machine.cpu().registers().pc == ram_entry, "Native jump did not reach RAM");
+  for (const auto write : std::array{
+           DspStore{.space = DspSpace::x, .address = source_register, .value = source},
+           DspStore{.space = DspSpace::x, .address = destination_register, .value = ram_entry},
+           DspStore{.space = DspSpace::x, .address = counter_register},
+           DspStore{.space = DspSpace::x, .address = control_register, .value = program_copy}}) {
+    machine.bus().write(write);
+  }
+  const auto source_read = machine.advance_dma_reference_cycle(dma_input(0));
+  require(source_read.phase && source_read.phase->kind == DspDmaPhaseKind::source_read,
+          "The genuine DMA P source must be captured before F2");
+  OwnDspFetch fetch(machine);
+  rejects([&] { static_cast<void>(fetch.advance_dma_capture(dma_input(1))); },
+          "F2 cycle without an issued address was accepted");
+  require(machine.clock().native_cycle_units() == 1 && machine.bus().last_dma_cycle() == 0,
+          "Rejected F2 admission must not consume DMA time");
+  fetch.issue();
+  const auto waiting = fetch.advance_dma_capture(dma_input(1, DspDmaGrant::wait));
+  const auto written = fetch.advance_dma_capture(dma_input(2));
+  require(waiting.dma.core_stall && !waiting.dma.word && !waiting.captured &&
+              written.dma.core_stall && written.dma.word && !written.captured &&
+              fetch.view().pending_address == ram_entry && fetch.view().used == 0 &&
+              machine.bus().read({.address = ram_entry}) == 0,
+          "A real DMA wait and write must hold the issued F2 address");
+  const auto captured = fetch.advance_dma_capture(dma_input(3));
+  require(captured.captured && !captured.dma.core_stall && fetch.view().used == 1 &&
+              fetch.view().words.front() == DspProgramWord{.address = ram_entry, .value = 0} &&
+              machine.clock().native_cycle_units() == 4 && machine.clock().timer_clk2_edges() == 2,
+          "F2 must sample the actual DMA-written instruction on the next available cycle");
+  require(fetch.begin().fault.kind == FaultKind::none, "DMA-written F2 opcode was not admitted");
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().registers().pc == ram_entry + 1,
+          "The actual sampled DMA-written opcode must retire on the own core");
 }
 
 void cache_fallback() {
@@ -507,6 +569,7 @@ void invalidation() {
 int main() {
   try {
     actual_fetch();
+    dma_fetch_conflict();
     invalidation();
     cache_fallback();
     cache_unmapped_program();

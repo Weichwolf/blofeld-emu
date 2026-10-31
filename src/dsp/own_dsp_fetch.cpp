@@ -3,26 +3,46 @@
 
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_program_fetch.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp56300/instruction.hpp"
 
+#include <array>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <utility>
 
 namespace blofeld {
 namespace {
 constexpr unsigned cache_enable = 1U << 19U;
+
+class CycleGuard {
+public:
+  explicit CycleGuard(bool &active) : active_(active) { active_ = true; }
+
+  ~CycleGuard() { active_ = false; }
+
+  CycleGuard(const CycleGuard &) = delete;
+  CycleGuard &operator=(const CycleGuard &) = delete;
+
+private:
+  bool &active_;
+};
 }
 
 OwnDspFetch::OwnDspFetch(OwnDspMachine &machine)
     : machine_(machine), identity_(std::make_shared<const bool>(false)) {
   machine_.require_running();
-  if (!machine_.captured_fetch_owner_.expired() || machine_.interrupts_.pending()) {
+  if (machine_.advancing_effect_ || !machine_.captured_fetch_owner_.expired() ||
+      machine_.interrupts_.pending()) {
     throw Fault("Own DSP fetch cannot acquire CPU pc=" + hex(machine_.cpu_.registers().pc, 6));
   }
   const auto context = machine_.cpu_.instruction_fetch();
@@ -36,6 +56,7 @@ void OwnDspFetch::check_owner() const {
     throw Fault("Stale own DSP captured fetch pc=" + hex(machine_.cpu_.registers().pc, 6));
   }
   machine_.require_running();
+  if (machine_.advancing_effect_) { throw Fault("Own DSP F2 requires an inactive effect"); }
 }
 
 void OwnDspFetch::check_sample_context() const {
@@ -78,6 +99,42 @@ void OwnDspFetch::capture() {
   check_owner();
   check_sample_context();
   fetch_.capture(machine_.bus_);
+}
+
+OwnDspFetchCycleResult OwnDspFetch::advance_dma_capture(const DspDmaInputs inputs) {
+  check_owner();
+  check_sample_context();
+  const auto state = fetch_.view();
+  const auto regs = machine_.cpu_.registers();
+  const auto context = " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
+  if (machine_.clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary ||
+      machine_.cpu_.fault().kind != dsp56300::FaultKind::none ||
+      machine_.cpu_.processing_state() != dsp56300::ProcessingState::running || !state.active ||
+      !state.pending_address || state.used == state.words.size()) {
+    throw Fault("Own DSP DMA/F2 cycle requires a real pending F2 read" + context);
+  }
+  const std::array accesses{DspMemoryAccess{.target = {.address = *state.pending_address}}};
+  const CycleGuard guard(machine_.advancing_effect_);
+  static_cast<void>(machine_.clock_.next_step_ticks(machine_.bus_, 1));
+  const bool switch_was_pending = machine_.bus_.switch_delay_ != 0;
+  machine_.clock_.begin_step(machine_.bus_, {.pc = regs.pc, .omr = regs.omr});
+  try {
+    OwnDspFetchCycleResult result;
+    result.dma =
+        machine_.bus_.advance_dma(inputs,
+                                  {.accesses = std::span(accesses),
+                                   .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    if (!result.dma.core_stall) {
+      fetch_.capture(machine_.bus_);
+      result.captured = true;
+    }
+    machine_.clock_.finish_dma_cycle(machine_.bus_, inputs.cycle, switch_was_pending);
+    return result;
+  } catch (const std::exception &error) {
+    machine_.clock_.fail();
+    throw Fault("Own DSP DMA/F2 cycle read P:" + hex(*state.pending_address, 6) + context + ": " +
+                error.what());
+  }
 }
 
 bool OwnDspFetch::admit_interrupt() {

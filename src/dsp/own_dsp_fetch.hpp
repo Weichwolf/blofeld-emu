@@ -2,6 +2,7 @@
 #pragma once
 
 #include "dsp/detail/dsp_program_fetch.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp56300/core.hpp"
 
@@ -11,6 +12,11 @@
 
 namespace blofeld {
 class OwnDspMachine;
+
+struct OwnDspFetchCycleResult {
+  DspDmaBusResult dma;
+  bool captured = false;
+};
 
 // Untimed F1/F2 owner. The machine must outlive this object. Reset and restore
 // invalidate its identity; a new owner must establish a fresh fetch context.
@@ -22,6 +28,8 @@ public:
   [[nodiscard]] DspProgramFetchView view() const;
   void issue();
   void capture();
+  // Explicit DMA-first cycle for the actual issued F2 read; the CPU is held.
+  [[nodiscard]] OwnDspFetchCycleResult advance_dma_capture(DspDmaInputs inputs);
   // Admission uses the actual owned foreground F2 words. Vector reads remain
   // native staged bus effects and are acknowledged by the interrupt owner.
   [[nodiscard]] bool admit_interrupt();
