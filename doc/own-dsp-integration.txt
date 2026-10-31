@@ -244,6 +244,12 @@ Conditional board contracts, each separately controlled and recorded:
   or a real board. One earlier run
   pinned a mutable build archive which was later rebuilt; later runs retain
   frozen library inputs.
+  A separate snapshot compares the NAND output event sequence with actual
+  DSP Port-F read values: 9,336 values match, including status bits under the
+  declared unused-bit hypothesis. Eight later NAND output events have no
+  corresponding CPU trace in that snapshot and are not included. A modified
+  CPU value is rejected by the audit. This is still the isolated candidate
+  setup, not a complete update or a hardware timing measurement.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -315,6 +321,7 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-main-preserved-pointer/runtime.json
   doc/local/own-core-main-program-ce/{audit_pages.py,snapshot-pages.json}
   doc/local/own-core-main-program-ce/{audit_addresses.py,snapshot-addresses.json}
+  doc/local/own-core-main-program-ce/cpu-read-audit/{audit.py,audit.json}
   doc/local/own-core-nand-j/validation.json
   doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
