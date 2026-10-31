@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_pipeline.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
 #include "firmware/firmware.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
@@ -34,19 +33,21 @@ reference::Config config() {
   c.mcu = {.clock = {.oscillator_hz = oscillator,
                      .switch_timing = McuRunClockSwitch::reference_cycle_boundary},
            .memory_timing = McuRunMemory::unstretched_internal};
-  c.pipeline = reference::PipelineTiming{
-      .power_on = {3},
-      .reset_pad = McuResetPad::high,
-      .schedule = {.dsp = {.extal_hz = oscillator,
-                           .timebase_hz = timebase,
-                           .timing = DspFetchTiming::reference_cycle_order,
-                           .execution = DspReferenceExecution::staged_register_boundaries,
-                           .pipeline = DspFetchPipeline::automatic_memory,
-                           .resets = DspFetchResetTiming::reference_cycle_boundary},
-                   .maximum_dsp_cycles_per_period = 16,
-                   .reset_order = McuDspResetOrder::dsp_before_mcu,
-                   .initial_reset = McuDspFetchInitialReset{
-                       .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}}};
+  c.dsp_clock = {.extal_hz = oscillator,
+                 .timebase_hz = timebase,
+                 .switch_timing = blofeld::DspClockSwitch::reference_cycle_boundary};
+  c.dsp = {
+      .timing =
+          blofeld::OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts,
+      .maximum_cycles_per_period = 16,
+      .writes = blofeld::McuWriteOrder::unqualified,
+      .external_writes = blofeld::McuWriteOrder::unqualified,
+      .wait_dsp_first = false,
+      .reset_dsp_first = true,
+      .initial_reset = blofeld::OwnDspResetInputs{
+          .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}};
+  c.dma_grant = blofeld::DspDmaGrant::unknown;
+  c.power_on = reference::PowerOnTiming{.inputs = {3}, .reset_pad = blofeld::McuResetPad::high};
   c.operations = budget;
   c.release_ticks = std::numeric_limits<std::uint64_t>::max();
   c.initial = {{.port = McuPort::e, .drive = {.mask = initial_e, .levels = 3}},
@@ -57,7 +58,7 @@ reference::Config config() {
   // Same explicit reference PHY input, shifted by the newly executed 195 SYSCLK edges.
   c.events = {
       {.ticks = phy_tick, .kind = reference::InputKind::phy_window, .drive = {}, .value = 15}};
-  c.dsp_input_order = DspExternalOrder::external_before_dsp;
+  c.dsp_input_order = DspPeerOrder::peer_first;
   c.maximum_dsp_inputs_per_advance = 1;
   return c;
 }

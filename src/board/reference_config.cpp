@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/serial_pcm.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
-#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
 #include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_midi.hpp"
+#include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "storage/private_file.hpp"
 
@@ -130,12 +132,11 @@ void clocks(Config &config, std::istringstream &line) {
                       .initial_oscillator_phase_ticks = phase,
                       .switch_timing = McuRunClockSwitch::reference_cycle_boundary};
   config.mcu.memory_timing = McuRunMemory::internal_flash_reads;
-  config.dsp.clock = {.extal_hz = extal,
+  config.dsp_clock = {.extal_hz = extal,
                       .timebase_hz = timebase,
-                      .switch_timing = DspClockSwitch::reference_instruction_boundary};
-  config.dsp.timing = DspRunTiming::native_internal_estimates;
+                      .switch_timing = DspClockSwitch::reference_cycle_boundary};
   const McuRunClock mcu(config.mcu.clock);
-  const DspRunClock dsp(config.dsp.clock);
+  const DspRunClock dsp(config.dsp_clock);
   if (dsp.timebase_hz() < mcu.timebase_hz() || timebase % mcu.timebase_hz() != 0) {
     throw Fault("Reference-board common timebase must be an integer MCU multiple");
   }
@@ -168,20 +169,20 @@ void flash_timing(Config &config, std::istringstream &line) {
 void ordering(Config &config, std::istringstream &line) {
   const auto tie = token(line);
   if (tie == "dsp-before-mcu") {
-    config.schedule.shared_write_order = McuDspTieOrder::dsp_before_mcu;
+    config.dsp.writes = McuWriteOrder::before_mcu;
   } else if (tie == "mcu-before-dsp") {
-    config.schedule.shared_write_order = McuDspTieOrder::mcu_before_dsp;
+    config.dsp.writes = McuWriteOrder::after_mcu;
   } else if (tie == "reject") {
-    config.schedule.shared_write_order = McuDspTieOrder::unqualified;
+    config.dsp.writes = McuWriteOrder::reject_tie;
   } else {
     throw Fault("Unknown reference-board shared-write order");
   }
   literal(line, "dsp-before-mcu");
-  config.schedule.wait_order = McuDspWaitOrder::dsp_before_mcu;
-  config.schedule.maximum_dsp_steps_per_cycle =
+  config.dsp.wait_dsp_first = true;
+  config.dsp.maximum_cycles_per_period =
       static_cast<unsigned>(number(line, std::numeric_limits<unsigned>::max()));
-  if (config.schedule.maximum_dsp_steps_per_cycle == 0) {
-    throw Fault("Reference-board DSP step budget must be positive");
+  if (config.dsp.maximum_cycles_per_period == 0) {
+    throw Fault("Reference-board DSP cycle budget must be positive");
   }
 }
 
@@ -279,27 +280,53 @@ AudioClockRoute audio_clock(std::istringstream &line) {
           .initial_level = *level};
 }
 
-void dsp_interrupts(Config &config, std::istringstream &line) {
-  literal(line, "native-vector-estimates");
-  config.dsp.interrupts = DspInterruptTiming::native_vector_estimates;
-  const auto admission = token(line);
-  if (admission == "prepare-boundary") {
-    config.schedule.dsp.irq_admission = DspIrqAdmission::reference_prepare_boundary;
-  } else if (admission == "reject-changes") {
-    config.schedule.dsp.irq_admission = DspIrqAdmission::reject_changes;
+void dsp_execution(Config &config, std::istringstream &line) {
+  literal(line, "reference-effects");
+  config.dsp.timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
+  config.dsp.reset_dsp_first = true;
+  config.dma_grant = DspDmaGrant::available;
+}
+
+void power_on(Config &config, std::istringstream &line) {
+  constexpr unsigned minimum = 3;
+  constexpr unsigned maximum = 6;
+  const auto synchronization = static_cast<unsigned>(number(line, maximum));
+  if (synchronization < minimum) {
+    throw Fault("MCU power-on synchronization must be three through six cycles");
+  }
+  const auto pad = token(line);
+  auto observed = McuResetPad::unknown;
+  if (pad == "high") {
+    observed = McuResetPad::high;
+  } else if (pad == "low") {
+    observed = McuResetPad::low;
+  } else if (pad != "unknown") {
+    throw Fault("MCU power-on RESET pad must be high, low or unknown");
+  }
+  config.power_on = {.inputs = {.synchronization_cycles = synchronization}, .reset_pad = observed};
+}
+
+void input_write_order(Config &config, std::istringstream &line) {
+  const auto order = token(line);
+  if (order == "input-before-mcu") {
+    config.dsp.external_writes = McuWriteOrder::before_mcu;
+  } else if (order == "mcu-before-input") {
+    config.dsp.external_writes = McuWriteOrder::after_mcu;
+  } else if (order == "reject") {
+    config.dsp.external_writes = McuWriteOrder::reject_tie;
   } else {
-    throw Fault("Unknown reference-board DSP interrupt admission");
+    throw Fault("Unknown DSP input/MCU write order");
   }
 }
 
 void dsp_order(Config &config, std::istringstream &line) {
   const auto order = token(line);
   if (order == "dsp-before-input") {
-    config.dsp_input_order = DspExternalOrder::dsp_before_external;
+    config.dsp_input_order = DspPeerOrder::dsp_first;
   } else if (order == "input-before-dsp") {
-    config.dsp_input_order = DspExternalOrder::external_before_dsp;
+    config.dsp_input_order = DspPeerOrder::peer_first;
   } else if (order == "reject") {
-    config.dsp_input_order = DspExternalOrder::reject_tie;
+    config.dsp_input_order = DspPeerOrder::reject_tie;
   } else {
     throw Fault("Unknown reference-board DSP input order");
   }
@@ -386,6 +413,12 @@ bool timing_setting(Config &config, const std::string_view key, std::istringstre
     flash_timing(config, line);
   } else if (key == "ordering") {
     ordering(config, line);
+  } else if (key == "dsp-execution") {
+    dsp_execution(config, line);
+  } else if (key == "mcu-power-on") {
+    power_on(config, line);
+  } else if (key == "dsp-input-write-order") {
+    input_write_order(config, line);
   } else {
     return false;
   }
@@ -394,9 +427,7 @@ bool timing_setting(Config &config, const std::string_view key, std::istringstre
 
 void setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (midi_setting(config, key, line) || timing_setting(config, key, line)) { return; }
-  if (key == "dsp-interrupts") {
-    dsp_interrupts(config, line);
-  } else if (key == "dsp-input-order") {
+  if (key == "dsp-input-order") {
     dsp_order(config, line);
   } else if (key == "dsp-audio-clock") {
     config.audio_clock = audio_clock(line);
@@ -408,8 +439,8 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
     config.release_ticks = number(line, UINT64_MAX);
     const auto pinit = token(line);
     if (pinit != "low" && pinit != "high") { throw Fault("DSP PINIT must be low or high"); }
-    config.pinit = pinit == "high";
-    config.schedule.dsp.observation = DspStepObservation::reference_completion_boundary;
+    config.dsp.initial_reset = OwnDspResetInputs{
+        .mode_known = 15, .mode_levels = 5, .pinit = pinit == "high", .recovery_cycles = 2};
   } else if (key == "operations") {
     config.operations = number(line, UINT64_MAX);
     if (config.operations == 0) {
@@ -448,7 +479,11 @@ struct Parser {
   void row(const std::string &key, std::istringstream &line) {
     if (!header) {
       if (key != "blofeld-reference-board") { throw Fault("Missing reference-board header"); }
-      literal(line, "1");
+      const auto version = token(line);
+      if (version != "2") {
+        throw Fault("Reference-board format2 requires explicit dsp-execution reference-effects; "
+                    "legacy interrupt estimates are unsupported");
+      }
       header = true;
     } else if (key == "initial") {
       result.initial.push_back(input(line));
@@ -489,25 +524,27 @@ struct Parser {
   }
 
   void complete() const {
-    for (const auto *required : {"clock", "ordering", "spi-b", "dsp-release", "operations"}) {
+    for (const auto *required :
+         {"clock", "dsp-execution", "ordering", "spi-b", "dsp-release", "operations"}) {
       if (std::ranges::find(settings, required) == settings.end()) {
         throw Fault("Missing reference-board setting: " + std::string(required));
       }
     }
     if (!result.dsp_events.empty() || !result.dsp_clocks.empty() || result.audio_clock) {
-      if (result.dsp_input_order == DspExternalOrder::unqualified) {
+      if (result.dsp_input_order == DspPeerOrder::unqualified) {
         throw Fault("Timed DSP inputs require an explicit dsp-input-order");
       }
-      if (!result.dsp_events.empty() && result.dsp_events.front().ticks < result.release_ticks) {
+      if (!result.power_on && !result.dsp_events.empty() &&
+          result.dsp_events.front().ticks < result.release_ticks) {
         throw Fault("Timed DSP inputs precede the requested DSP release");
       }
     }
     for (const auto &clock : result.dsp_clocks) {
-      if (clock.start_ticks < result.release_ticks) {
+      if (!result.power_on && clock.start_ticks < result.release_ticks) {
         throw Fault("DSP ESAI periodic clock precedes the requested DSP release");
       }
     }
-    if (result.pcm && result.pcm->after_ticks < result.release_ticks) {
+    if (!result.power_on && result.pcm && result.pcm->after_ticks < result.release_ticks) {
       throw Fault("PCM observation threshold precedes the requested DSP release");
     }
   }

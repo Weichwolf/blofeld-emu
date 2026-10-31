@@ -110,7 +110,7 @@ void expected_frames(const Probe &probe, const unsigned count = 2) {
 AudioRuntimeOptions output_options(const reference::Config &config, const std::string &server) {
   if (!config.pcm) { throw Fault("Audio board fixture lacks a PCM route"); }
   return {.output = {.pcm = config.pcm->format,
-                     .timebase_hz = config.dsp.clock.timebase_hz,
+                     .timebase_hz = config.dsp_clock.timebase_hz,
                      .sample_rate = sample_rate,
                      .server = server}};
 }

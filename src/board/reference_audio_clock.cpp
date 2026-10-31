@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "board/reference_square_clock.hpp"
@@ -8,7 +9,6 @@
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_pll.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
 
 #include <cstdint>
 #include <ostream>
@@ -22,12 +22,12 @@ void Board::prepare_audio_clock() {
   if (route.destinations == 0 || (route.destinations & ~destinations) != 0) {
     throw Fault("Invalid reference audio clock destinations");
   }
-  if (config_.dsp_input_order == DspExternalOrder::unqualified ||
+  if (config_.dsp_input_order == DspPeerOrder::unqualified ||
       config_.maximum_dsp_inputs_per_advance == 0) {
     throw Fault("Reference audio clock requires explicit DSP input ordering/budget");
   }
-  if (!config_.pipeline && route.epoch_ticks < config_.release_ticks) {
-    throw Fault("Reference audio clock precedes the legacy DSP release");
+  if (!config_.power_on && route.epoch_ticks < config_.release_ticks) {
+    throw Fault("Reference audio clock precedes the nominal DSP release");
   }
   for (const auto &clock : config_.dsp_clocks) {
     if (clock.index > 1 || (route.destinations & (1U << clock.index)) != 0) {
@@ -52,8 +52,7 @@ std::uint64_t Board::audio_core_hz() const {
   // The clock is supplied even during reset, when the core rate is unknown.
   // Inactive DAX observations retain that explicit unknown without emitting data.
   if (dsp_reset_active()) { return 0; }
-  const auto extal =
-      config_.pipeline ? config_.pipeline->schedule.dsp.extal_hz : config_.dsp.clock.extal_hz;
+  const auto extal = config_.dsp_clock.extal_hz;
   const auto ratio = native_->dsp.bus().pll().target_ratio();
   const auto numerator = std::uint64_t{extal} * ratio.numerator;
   if (ratio.denominator == 0 || numerator == 0 || numerator % ratio.denominator != 0) {

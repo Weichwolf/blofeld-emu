@@ -76,7 +76,8 @@ def board_inputs(directory, generator, index, frames=2):
     config, rom, nvm = (directory / name for name in ("board.bfboard", "own-rom.bin", "own.bfnvm"))
     subprocess.run([str(generator), f"esai{index}-refill", str(rom)], check=True,
                    capture_output=True, timeout=20)
-    config.write_text(f"""blofeld-reference-board 1
+    config.write_text(f"""blofeld-reference-board 2
+dsp-execution reference-effects
 clock 12000000 0 12000000 138240000000 reference-boundaries
 ordering dsp-before-mcu dsp-before-mcu 16
 spi-b 02 04 10 clock-before-select

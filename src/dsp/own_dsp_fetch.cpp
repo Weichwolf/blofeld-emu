@@ -333,6 +333,7 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
         result.captured = true;
       }
       if (admit_native) {
+        result.native_pc = pending->effect.pc;
         result.native = machine_.interrupts_.advance(pending->ticket);
         if (result.native->fault.kind == dsp56300::FaultKind::none) {
           machine_.bus_.observe_omr(machine_.cpu_.registers().omr);

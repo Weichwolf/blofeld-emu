@@ -26,8 +26,8 @@ McuMachine make_mcu(const Config &config, const Execution &execution) {
   if (execution.device_state && (!execution.flash_out.empty() || config.checkpoint)) {
     throw Fault("A live device state excludes cold export and automatic RAM checkpoint replay");
   }
-  if (config.pipeline) {
-    return {execution.image, execution.specification, config.mcu, config.pipeline->power_on};
+  if (config.power_on) {
+    return {execution.image, execution.specification, config.mcu, config.power_on->inputs};
   }
   return {execution.image, execution.specification, config.mcu};
 }
@@ -91,7 +91,7 @@ Board::Board(const Config &config, const Execution &execution)
     control_.recording = PcmRecording(config.pcm->format, execution.audio->maximum_frames);
   }
   for (const auto &entry : config.initial) { apply(entry); }
-  connect_pipeline();
+  connect_runtime();
   update_wiring();
   attach(*native_);
 }
@@ -244,8 +244,8 @@ void Board::persist() const {
 
 void Board::step() {
   if (native_->mcu.system_reset_active()) {
-    if (!config_.pipeline || !native_->runtime) { throw Fault("Missing reset pipeline owner"); }
-    static_cast<void>(native_->mcu.advance_system_reset(1, config_.pipeline->reset_pad));
+    if (!config_.power_on || !native_->runtime) { throw Fault("Missing reset runtime owner"); }
+    static_cast<void>(native_->mcu.advance_system_reset(1, config_.power_on->reset_pad));
     if (!native_->mcu.system_reset_active()) { native_->runtime->end_system_reset(); }
     return;
   }

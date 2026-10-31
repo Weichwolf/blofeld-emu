@@ -6,16 +6,22 @@ only its named behavior. Physical disassembly/measurement is unavailable; its
 absence does not block acceptance. Reconstruct unresolved behavior through
 independent offline evidence and whole-firmware experiments. Hardware comparison
 statuses are informative, not acceptance gates. No measured hardware equivalence
-or physical brick-safety claim is made.
+or physical brick-safety claim is made. Legacy-core component fixtures below
+remain supporting evidence for their original harness; they do not qualify the
+current dsp56300 runtime unless regular Board/independent-core execution is
+explicitly identified.
 
 Requirement                       State    Evidence / remaining work
 Full own-DSP runtime migration    partial  Regular Board/headless now execute dsp56300
                                           through native MCU periods and joint snapshots.
                                           Directed reset, MIDI, PCM and recovery tests
                                           pass; product/integration binaries contain no
-                                          foreign DSP symbols. Standalone configuration
-                                          omits the legacy core; older test harnesses
-                                          and transitional names still need removal
+                                          foreign DSP symbols. Config uses native runtime
+                                          inputs directly; format2 rejects ignored old
+                                          controls and supports digital POR from tick0.
+                                          Standalone configuration omits the legacy
+                                          core; older test harnesses and transitional
+                                          names still need removal
                                           (own-dsp-integration.txt).
 Own-core AA6 RAM bit branches     partial  own_dsp_ram_bit checks 57,280 cases/profile:
                                           independent bit truth, signed PC,all CCR
@@ -83,8 +89,10 @@ DSP frontend/timeline snapshots   partial  Migration support captures chip, queu
                                           independently checked REP/ALU/store program;
                                           fractional reset, empty/stale snapshots and
                                           clock mismatches are covered under ASan/UBSan.
-                                          Whole-board restore and regular runtime wiring
-                                          remain pending (own-dsp-integration.txt).
+                                          Regular Board wiring and joint MCU/DSP restore
+                                          have directed reset, MIDI and PCM tests.
+                                          Full original instrument runtime remains open
+                                          (own-dsp-integration.txt).
 Own-core chip checkpoints         partial  Trusted in-process bus/core/clock/IRQ and
                                           I/O failure snapshots support staged cuts,
                                           same-owner recovery and fresh-owner restore.
@@ -1435,7 +1443,7 @@ MCU–DSP communication             partial  Local MCU output masks/knownness ar
                                           both owners with explicit clock/reset/
                                           pin inputs and bounded native WAI time
                                           (reference-board.txt). Exact DSP TIO
-                                          inputs and optional nominal IRQ
+                                          inputs and explicit native IRQ
                                           admission now reach native capture,
                                           vectors and actual MCU GPIO reads;
                                           both completion/shared-write orders,
@@ -1685,8 +1693,9 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           The reference_original_midi_cli case
                                           now runs original receiver, ring consumer
                                           and pitch callback through the actual
-                                          headless common-time driver. Own native
-                                          preload/caller and MCU GPIO poll test
+                                          headless common-time driver on dsp56300.
+                                          Authored native preload/caller and MCU
+                                          GPIO poll test
                                           center/noncenter inputs, all 27 receiver
                                           returns, joint mid-byte replay and an
                                           exact original unknown-DI failure.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_midi.hpp"
 #include "mcu/mcu_sci.hpp"
@@ -40,13 +40,12 @@ void validate_midi(const Config &config) {
     validator.set_receive_reference(config.midi_reference);
   }
   if (config.midi_sci_timed) {
-    if (!config.pipeline || config.midi ||
-        config.dsp_input_order == DspExternalOrder::unqualified ||
+    if (!config.power_on || config.midi || config.dsp_input_order == DspPeerOrder::unqualified ||
         config.maximum_dsp_inputs_per_advance == 0) {
       throw Fault(
-          "Timed SCI MIDI requires pipeline ownership, exclusive route and event order/budget");
+          "Timed SCI MIDI requires power-on timing, exclusive route and event order/budget");
     }
-    static_cast<void>(MidiTimedInput({.timebase_hz = config.pipeline->schedule.dsp.timebase_hz,
+    static_cast<void>(MidiTimedInput({.timebase_hz = config.dsp_clock.timebase_hz,
                                       .start_ticks = config.midi_sci_timed->after_ticks}));
   }
   if (!config.midi && !config.midi_sci_timed) { return; }

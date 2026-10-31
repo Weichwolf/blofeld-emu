@@ -18,7 +18,8 @@ PAYLOAD = bytes.fromhex("009fc3a5 00563412 00563412 00563412")
 
 
 def config(index=1, edges=1032, half=5625, lane=0):
-    return f"""blofeld-reference-board 1
+    return f"""blofeld-reference-board 2
+dsp-execution reference-effects
 clock 12000000 0 12000000 138240000000 reference-boundaries
 ordering dsp-before-mcu dsp-before-mcu 16
 spi-b 02 04 10 clock-before-select

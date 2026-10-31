@@ -15,8 +15,11 @@ from test_reference_cli import CONFIG, image, replay_sections
 BINARY, GENERATOR, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
 ROOT = Path(__file__).resolve().parents[1]
 BIT_TICKS = 3249 * 2 * 45
-START = 10000000
-OPERATIONS = 120000
+# The authored loader copies complete original records before receiver setup.
+# Four million ticks leave it configured; retain every original bit interval.
+START = 4000000
+OPERATIONS = 65000
+BRANCH_SECONDS = 90
 # Own MCU: LDS; enable PU0 pull; LDAA PORTU/CMPA/BNE poll; LDD #beef; WAI.
 # BNE at900d targets9008. Only an actual low GPIO read reaches the marker.
 MCU = bytes.fromhex("cf2000 8601 7a027c b60278 8100 26f9 ccbeef 3e")
@@ -33,8 +36,7 @@ def events(msb=0x40):
 
 def config(msb=0x40, unknown=False):
     text = CONFIG.replace("operations 23", f"operations {OPERATIONS}")
-    text += ("dsp-interrupts native-vector-estimates prepare-boundary\n"
-             "dsp-input-order input-before-dsp 4\n"
+    text += ("dsp-input-order input-before-dsp 4\n"
              "dsp-initial tio 0 high synchronized\n"
              "shi-hreq U 01 direct\ninitial drive U 3e 00 00\n")
     for index, (ticks, level) in enumerate(events(msb)):
@@ -71,10 +73,12 @@ class OriginalMidiCli(unittest.TestCase):
         board.write_text(text)
         flash.write_bytes(image(MCU))
         trace.unlink(missing_ok=True)
+        plan = re.search(r"^checkpoint \d+ (\d+)$", text, re.M)
+        branches = 1 + int(plan[1]) if plan else 1
         result = subprocess.run([BINARY, "--firmware", FIRMWARE, "--reference-board", board,
                                  "--dsp-rom", self.rom, "--flash-in", flash, "--trace", trace,
                                  "--instructions", str(OPERATIONS)], capture_output=True,
-                                text=True, timeout=40, check=False)
+                                text=True, timeout=BRANCH_SECONDS * branches, check=False)
         (folder / "run.log").write_text(result.stdout + result.stderr)
         self.assertTrue(trace.is_file(), result.stderr)
         return result, trace.read_text()
@@ -93,7 +97,8 @@ class OriginalMidiCli(unittest.TestCase):
         # Per byte: one capture return, seven ordinary samples, one final sample.
         for pc, count in (("002d03", 3), ("002cf8", 21), ("002d10", 3),
                           ("000cbb", 1), ("000c05", 1)):
-            self.assertEqual(len(re.findall(r"^DSP end=\d+ pc=0x" + pc + " ", trace, re.M)), count)
+            retired = r"^DSP-PIPELINE .*native-pc=0x" + pc + r" native-pc-known=1 retirement=1$"
+            self.assertEqual(len(re.findall(retired, trace, re.M)), count)
 
     def verify_center(self, result, trace):
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -117,7 +122,9 @@ class OriginalMidiCli(unittest.TestCase):
     def test_noncenter_pitch_must_not_reach_the_center_marker(self):
         result, trace = self.invoke("noncenter", config(0x41))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("MCU pc=0x9008 d=0x0100", result.stdout)
+        # Three setup instructions precede the LDAA/CMPA/BNE polling triplet.
+        poll_pc = (0x9008, 0x900b, 0x900d)[(OPERATIONS - 3) % 3]
+        self.assertIn(f"MCU pc=0x{poll_pc:04x} d=0x0100", result.stdout)
         self.assertIn("sp=0x2000", result.stdout)
         self.assertIn("idle=0", result.stdout)
         self.assertNotIn("signal=hreq driven=1", trace)
@@ -126,7 +133,7 @@ class OriginalMidiCli(unittest.TestCase):
         self.verify_original_returns(trace)
 
     def test_joint_snapshot_mid_byte_repeats_the_original_result(self):
-        result, trace = self.invoke("mid-byte-replay", config() + "checkpoint 50000 2\n")
+        result, trace = self.invoke("mid-byte-replay", config() + "checkpoint 21000 2\n")
         prefix, suffixes = replay_sections(trace)
         self.assertEqual(len(suffixes), 3)
         self.assertTrue(all(suffix == suffixes[0] for suffix in suffixes))
@@ -134,13 +141,13 @@ class OriginalMidiCli(unittest.TestCase):
         self.verify_events(suffixes[0], events()[2:])
         self.assertNotIn("signal=hreq driven=1", prefix)
         self.verify_center(result, prefix + suffixes[0])
-        boundary = re.findall(r"^MCU end=(\d+).*operations=50000 ", prefix, re.M)
+        boundary = re.findall(r"^MCU end=(\d+).*operations=21000 ", prefix, re.M)
         self.assertEqual(len(boundary), 1)
         self.assertGreater(int(boundary[0]), events()[1][0])
         self.assertLess(int(boundary[0]), events()[2][0])
 
     def test_joint_restore_repeats_the_original_unknown_di_fault(self):
-        result, trace = self.invoke("unknown-replay", config(unknown=True) + "checkpoint 50000 2\n")
+        result, trace = self.invoke("unknown-replay", config(unknown=True) + "checkpoint 21000 2\n")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("Unknown DSP timer DI read at X:0xffff8f", result.stderr)
         self.assertIn("pc=0x002ce4 omr=0x600085", result.stderr)
@@ -159,4 +166,4 @@ if __name__ == "__main__":
     if not FIRMWARE.is_file():
         print("SKIP original MIDI reference CLI: private firmware absent")
         sys.exit(77)
-    unittest.main(argv=[sys.argv[0]], verbosity=2)
+    unittest.main(argv=[sys.argv[0], *sys.argv[5:]], verbosity=2)

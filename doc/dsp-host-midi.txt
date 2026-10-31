@@ -8,7 +8,7 @@ of midi-sci (host-midi.txt):
 
   dsp-input-order input-before-dsp 4
   dsp-initial tio 0 high synchronized
-  midi-dsp-tio 0 after 10000000 synchronized
+  midi-dsp-tio 0 after 4000000 synchronized
 
 Timer 0 or 1, common start tick and raw/synchronized observation are explicit.
 Start must not precede DSP release. Initial idle-high observations remain caller
@@ -52,15 +52,20 @@ test captures a partly transmitted frame after an empty interval and independent
 checks MCU/DSP clock totals, complete replay traces, queue state and unchanged NVM.
 
 The CLI test uses the existing private ROM generator with four complete unchanged
-original producer/vector/parser components and original low data. An own native
+original producer/vector/parser components and original low data. An authored native
 caller supplies the declared setup; no host writes supply executed original code.
 Three file bytes take 27 genuine receive returns, the real ring consumer and pitch
-callback under the explicit legacy timing contract. Center pitch reaches a guest
+callback under the explicit native effect/fetch reference profile. Center pitch reaches a guest
 SHI marker and an actual MCU GPIO-poll/WAI endpoint; noncenter input cannot reach
 that marker. A separate normal-baud case checks actual 31250-baud wire timestamps,
 not correct decoding under the artificial reset-clock setup. Unknown/static input
 and collision contracts remain strict. Original record/archive hashes are pinned
-by dsp-voice-reference.json; generated ROM/traces remain local.
+by dsp-voice-reference.json; generated ROM/traces remain local. Trace counts use
+retired native effect PCs, not speculative fetches or successor register PCs.
+The authored caller finishes copying the complete records before tick4000000.
+The offline correctness harness budgets90 host seconds per native branch, with
+separate allowance for all replay branches; this is not a real-time claim.
+The private generator still uses the legacy assembler pending fixture migration.
 
 This is an original-component/reference-caller path, not complete original MCU/DSP
 boot, physical DIN/USB wiring, allocated notes/voice/audio, calibrated timing or

@@ -47,7 +47,7 @@ class PcmCli(unittest.TestCase):
             self.assertEqual(result.stdout.replace("PCM frames=1 started=1 locked=1 faulted=0\n", ""),
                              plain.stdout)
             pins = records(trace, "PCM-PINS")
-            self.assertTrue(any(row["source"] == "native" for row in pins))
+            self.assertTrue(any(row["source"] == "pipeline" for row in pins))
             self.assertEqual(sum(row["source"] == "external" for row in pins), 516)
             self.assertEqual((pins[0]["end"], pins[0]["clock"], pins[0]["fs"]), ("1215", "0", "0"))
 
@@ -74,15 +74,16 @@ class PcmCli(unittest.TestCase):
 
     def test_refill_ties_preserve_actual_payload_and_causal_order(self):
         for order, new in (("input-before-dsp", False), ("dsp-before-input", True)):
-            text = esai.periodic(start=1984).replace("input-before-dsp", order) + route()
+            text = esai.periodic(start=esai.TIED_START).replace(
+                "operations 200", "operations 250").replace("input-before-dsp", order) + route()
             result, trace = self.invoke("pcm-tie-" + order, text, "esai1-tied-refill")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.check_frame(trace, samples=(-5913697, 1193046 if new else -5913697),
-                             first=2214, end=13806)
-            tied = [row for row in records(trace, "PCM-PINS") if row["end"] == "8010"]
+                             first=esai.TIED_START + 230, end=esai.TIED_START + 11822)
+            tied = [row for row in records(trace, "PCM-PINS") if int(row["end"]) == esai.TIED_REFILL]
             self.assertEqual([row["order"] for row in tied], ["0", "1"])
             self.assertEqual([row["source"] for row in tied],
-                             ["native", "external"] if new else ["external", "native"])
+                             ["pipeline", "external"] if new else ["external", "pipeline"])
 
     def test_external_clock_and_generated_frame_use_actual_resolved_levels(self):
         text = esai.config(cycles=0).replace("unknown unknown low reference-reset-edges",
@@ -105,7 +106,12 @@ class PcmCli(unittest.TestCase):
                                     "esai1-external-word")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("Unqualified DSP ESAI word-length frame sync at Y:0xffff95", result.stderr)
-        self.assertEqual(records(trace, "PCM-PINS"), [])
+        pins = records(trace, "PCM-PINS")
+        self.assertTrue(pins)
+        self.assertTrue(all(row["clock"] == "0" and row["fs"] == "0" and
+                            row["data"] == "unknown" for row in pins))
+        self.assertTrue(all(row["source"] == "pipeline" and int(row["end"]) < 1395
+                            for row in pins))
         self.assertEqual(records(trace, "PCM-FRAME"), [])
 
     def test_late_join_and_known_underrun_never_fill_a_partial_frame(self):
@@ -135,13 +141,15 @@ class PcmCli(unittest.TestCase):
         self.assertEqual(records(prefix + suffixes[0], "PCM-FRAME"), [])
 
     def test_native_mux_change_is_observed_before_the_next_external_edge(self):
-        result, trace = self.invoke("pcm-native-drop-clock", esai.periodic() + route(),
+        result, trace = self.invoke("pcm-native-drop-clock", esai.periodic(start=2001) + route(),
                                     "esai1-drop-sckt")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("PCM SCKT/FST peripheral mux is absent", result.stderr)
-        self.assertIn("at=3960 source=native", result.stderr)
-        self.assertIn("DSP end=3960 ", trace)
-        self.assertLess(int(records(trace, "DSP-ESAI")[-1]["actual"]), 3960)
+        # Six setup MOVEPs +64 native two-period NOPs +the mux store.
+        changed = 450 + 2 * 45 + (6 + 5 * 3 + 64 * 2 + 1) * 45
+        self.assertIn(f"at={changed} source=pipeline", result.stderr)
+        self.assertIn(f"DSP-PIPELINE start={changed - 90} end={changed - 45} ", trace)
+        self.assertLess(int(records(trace, "DSP-ESAI")[-1]["actual"]), changed)
         self.assertEqual(records(trace, "PCM-FRAME"), [])
 
     def test_truncated_or_future_capture_has_no_manufactured_frame(self):

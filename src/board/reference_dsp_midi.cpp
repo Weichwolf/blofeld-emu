@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "board/reference_context.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
 #include "midi/midi_timed.hpp"
 
 #include <cstdint>
@@ -19,13 +19,12 @@ void validate_dsp_midi(const Config &config) {
     throw Fault("Host MIDI routes must be exclusive");
   }
   if (route.index > 1 || route.after_ticks < config.release_ticks ||
-      config.dsp_input_order == DspExternalOrder::unqualified ||
+      config.dsp_input_order == DspPeerOrder::unqualified ||
       config.maximum_dsp_inputs_per_advance == 0) {
     throw Fault(
         "DSP MIDI requires a valid timer, post-release start and explicit event order/budget");
   }
-  MidiWireTiming timing{.timebase_hz = config.pipeline ? config.pipeline->schedule.dsp.timebase_hz
-                                                       : config.dsp.clock.timebase_hz,
+  MidiWireTiming timing{.timebase_hz = config.dsp_clock.timebase_hz,
                         .start_ticks = route.after_ticks};
   if (config.midi_dsp_reference) {
     timing.reference_bit_ticks = config.midi_dsp_reference->bit_ticks;

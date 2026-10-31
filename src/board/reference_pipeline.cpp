@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_fetch_schedule.hpp"
 #include "board/mcu_dsp_runtime.hpp"
-#include "board/mcu_dsp_schedule.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_pipeline.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
-#include "dsp/own_dsp_fetch.hpp"
-#include "dsp/own_dsp_machine.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -18,41 +12,11 @@
 #include <ostream>
 
 namespace blofeld::reference {
-namespace {
-McuWriteOrder write_order(const McuDspTieOrder order) {
-  switch (order) {
-    case McuDspTieOrder::dsp_before_mcu: return McuWriteOrder::before_mcu;
-    case McuDspTieOrder::mcu_before_dsp: return McuWriteOrder::after_mcu;
-    case McuDspTieOrder::unqualified: return McuWriteOrder::unqualified;
-    default: throw Fault("Invalid MCU/DSP runtime write order");
-  }
-}
-
-DspPeerOrder event_order(const DspExternalOrder order) {
-  switch (order) {
-    case DspExternalOrder::dsp_before_external: return DspPeerOrder::dsp_first;
-    case DspExternalOrder::external_before_dsp: return DspPeerOrder::peer_first;
-    case DspExternalOrder::unqualified:
-    case DspExternalOrder::reject_tie: return DspPeerOrder::reject_tie;
-    default: throw Fault("Invalid DSP external event order");
-  }
-}
-}
-
 DspRunClockInputs dsp_clock_inputs(const Config &config) {
-  if (config.pipeline) {
-    const auto &clock = config.pipeline->schedule.dsp;
-    return {.extal_hz = clock.extal_hz,
-            .timebase_hz = clock.timebase_hz,
-            .switch_timing = DspClockSwitch::reference_cycle_boundary};
+  if (config.dsp_clock.switch_timing != DspClockSwitch::reference_cycle_boundary) {
+    throw Fault("Regular DSP runtime requires explicit reference cycle boundaries");
   }
-  auto result = config.dsp.clock;
-  if (result.switch_timing != DspClockSwitch::reference_instruction_boundary &&
-      result.switch_timing != DspClockSwitch::reference_cycle_boundary) {
-    throw Fault("Regular DSP runtime requires explicit reference clock boundaries");
-  }
-  result.switch_timing = DspClockSwitch::reference_cycle_boundary;
-  return result;
+  return config.dsp_clock;
 }
 
 void Board::prepare_dsp() {
@@ -62,44 +26,10 @@ void Board::prepare_dsp() {
   }
 }
 
-void Board::connect_pipeline() {
-  McuDspRuntimeInputs inputs;
-  inputs.timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
-  inputs.initial_reset = OwnDspResetInputs{
-      .mode_known = 15, .mode_levels = 5, .pinit = config_.pinit, .recovery_cycles = 2};
-  inputs.maximum_cycles_per_period = config_.schedule.maximum_dsp_steps_per_cycle;
-  inputs.writes = write_order(config_.schedule.shared_write_order);
-  inputs.wait_dsp_first = config_.schedule.wait_order == McuDspWaitOrder::dsp_before_mcu;
-  inputs.reset_dsp_first = true;
-  if (config_.pipeline) {
-    const auto &timing = *config_.pipeline;
-    if (!timing.schedule.initial_reset || timing.schedule.epoch_ticks != 0 ||
-        timing.schedule.dsp.pipeline != DspFetchPipeline::automatic_memory) {
-      throw Fault("Device pipeline requires time-zero held reset and automatic memory");
-    }
-    const auto &reset = *timing.schedule.initial_reset;
-    inputs.initial_reset = OwnDspResetInputs{.mode_known = reset.mode_known,
-                                             .mode_levels = reset.mode_levels,
-                                             .pinit = reset.pinit,
-                                             .recovery_cycles = reset.recovery_cycles};
-    inputs.maximum_cycles_per_period = timing.schedule.maximum_dsp_cycles_per_period;
-    inputs.writes = write_order(timing.schedule.shared_write_order);
-    inputs.wait_dsp_first = timing.schedule.wait_order == McuDspWaitOrder::dsp_before_mcu;
-    inputs.reset_dsp_first = timing.schedule.reset_order == McuDspResetOrder::dsp_before_mcu;
-    switch (timing.schedule.external_write_order) {
-      case McuExternalWriteOrder::external_before_mcu:
-        inputs.external_writes = McuWriteOrder::before_mcu;
-        break;
-      case McuExternalWriteOrder::mcu_before_external:
-        inputs.external_writes = McuWriteOrder::after_mcu;
-        break;
-      case McuExternalWriteOrder::unqualified: break;
-      default: throw Fault("Invalid runtime external write order");
-    }
-  }
+void Board::connect_runtime() {
   control_.dsp_initial_pending = true;
   native_->runtime =
-      std::make_unique<McuDspRuntime>(inputs, native_->mcu, native_->dsp, runtime_events());
+      std::make_unique<McuDspRuntime>(config_.dsp, native_->mcu, native_->dsp, runtime_events());
 }
 
 std::uint64_t Board::common_hz() const {
@@ -134,8 +64,7 @@ bool Board::timing_faulted() const {
 McuDspRuntime::CycleInputs Board::runtime_inputs() const {
   return [this] {
     return DspDmaInputs{.timing = DspDmaTiming::reference_sampled_cycles,
-                        .grant = config_.pipeline ? config_.pipeline->dma_grant
-                                                  : DspDmaGrant::available};
+                        .grant = config_.dma_grant};
   };
 }
 
@@ -151,6 +80,8 @@ McuDspRuntime::Observer Board::runtime_observer() {
                         << " end=" << cycle.completion_ticks << " cycle=" << cycle.cycle
                         << " f1=" << cycle.result.issued_address.value_or(0)
                         << " f1-known=" << cycle.result.issued_address.has_value()
+                        << " native-pc=" << hex(cycle.result.native_pc.value_or(0), 6)
+                        << " native-pc-known=" << cycle.result.native_pc.has_value()
                         << " retirement=" << (cycle.result.native && cycle.result.native->retired)
                         << '\n';
     }
@@ -175,7 +106,8 @@ DspRuntimeEvents Board::runtime_events() {
                 }
                 observe_dsp_input(at);
               },
-          .order = event_order(config_.dsp_input_order),
+          .order = config_.dsp_input_order == DspPeerOrder::unqualified ? DspPeerOrder::reject_tie
+                                                                        : config_.dsp_input_order,
           .maximum_events_per_period = std::max(1U, config_.maximum_dsp_inputs_per_advance)};
 }
 }

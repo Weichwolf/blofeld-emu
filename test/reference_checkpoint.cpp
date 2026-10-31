@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_midi.hpp"
@@ -86,20 +87,25 @@ reference::Config config(const std::uint64_t release,
   result.mcu = {.clock = {.oscillator_hz = oscillator,
                           .switch_timing = blofeld::McuRunClockSwitch::reference_cycle_boundary},
                 .memory_timing = blofeld::McuRunMemory::internal_flash_reads};
-  result.dsp = {.clock = {.extal_hz = oscillator,
-                          .timebase_hz = timebase,
-                          .switch_timing = blofeld::DspClockSwitch::reference_instruction_boundary},
-                .timing = blofeld::DspRunTiming::native_internal_estimates};
-  result.schedule = {
-      .dsp = {.observation = blofeld::DspStepObservation::reference_completion_boundary},
-      .shared_write_order = blofeld::McuDspTieOrder::dsp_before_mcu,
-      .maximum_dsp_steps_per_cycle = 16,
-      .wait_order = blofeld::McuDspWaitOrder::dsp_before_mcu};
+  result.dsp_clock = {.extal_hz = oscillator,
+                      .timebase_hz = timebase,
+                      .switch_timing = blofeld::DspClockSwitch::reference_cycle_boundary};
+  result.dsp = {
+      .timing =
+          blofeld::OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts,
+      .maximum_cycles_per_period = 16,
+      .writes = blofeld::McuWriteOrder::before_mcu,
+      .external_writes = blofeld::McuWriteOrder::unqualified,
+      .wait_dsp_first = true,
+      .reset_dsp_first = true,
+      .initial_reset = blofeld::OwnDspResetInputs{
+          .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}};
+  result.dma_grant = blofeld::DspDmaGrant::available;
   result.release_ticks = release;
   result.operations = (midi || dsp_midi) ? midi_operations : 32;
   result.midi_dsp = dsp_midi;
   if (dsp_midi) {
-    result.dsp_input_order = blofeld::DspExternalOrder::external_before_dsp;
+    result.dsp_input_order = blofeld::DspPeerOrder::peer_first;
     result.maximum_dsp_inputs_per_advance = 4;
   }
   result.midi = midi;

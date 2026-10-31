@@ -205,7 +205,14 @@ void automatic_execution() {
     const auto result =
         fetch.advance_dma_automatic(dma_input(cycle), OwnDspAutomaticTiming::one_effect_per_cycle);
     if (result.instruction_started) { ++starts; }
-    if (result.native && result.native->retired) { ++retirements; }
+    require(result.native.has_value() == result.native_pc.has_value(),
+            "Only an actual advanced native effect exposes an instruction PC");
+    if (result.native && result.native->retired) {
+      constexpr std::array expected{boot_entry, boot_entry + 2, boot_entry + 3};
+      require(result.native_pc == expected.at(retirements),
+              "Retirement PC must name the actual immediate/ADD/NOP opcode, not its successor");
+      ++retirements;
+    }
     require(machine.clock().native_cycle_units() == cycle + 1,
             "Each automatic cycle must advance exactly one supplied clock period");
   }

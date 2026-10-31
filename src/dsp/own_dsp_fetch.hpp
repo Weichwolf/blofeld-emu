@@ -26,6 +26,7 @@ struct OwnDspFetchCycleResult {
   bool captured = false;
   bool instruction_started = false;
   std::optional<dsp56300::InstructionProgress> native;
+  std::optional<std::uint32_t> native_pc;
   std::optional<std::uint32_t> issued_address;
 };
 

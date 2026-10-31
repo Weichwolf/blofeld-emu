@@ -19,6 +19,10 @@ HALF = 23
 CYCLES = 258
 FIRST = "10100101110000111001111111111111"
 SECOND = "00010010001101000101011000000000"
+# Six immediate MOVEPs: first6 reference periods, then five3-period forms.
+#154 NOPs publish PC/retirement in two periods each; the refill store is next.
+TIED_REFILL = 450 + 2 * 45 + (6 + 5 * 3 + 154 * 2 + 1) * 45
+TIED_START = TIED_REFILL - 131 * 2 * HALF
 
 
 def config(index=1, start=START, cycles=CYCLES, unknown=None):
@@ -227,11 +231,14 @@ class EsaiCli(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(f"DSP-ESAI-CLOCK instance=1 observed={observed} configured=" +
                           ("1" if observed == 0 else "2"), result.stdout)
+        # The first authored LDS takes two periods after the five reset periods.
         text = periodic(start=500, edges=2).replace("dsp-release 450", "dsp-release 451")
         result, trace = self.invoke("late-periodic", text)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("actual DSP release", result.stderr)
-        self.assertNotIn("DSP-ESAI requested=", trace)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("DSP-ESAI requested=500 actual=500", trace)
+        self.assertIn("DSP-ESAI requested=523 actual=523", trace)
+        self.assertIn("DSP-RELEASE requested=451 actual=630", trace)
+        self.assertLess(trace.index("DSP-ESAI requested=523"), trace.index("DSP-RELEASE"))
 
     def test_unknown_hckt_repeats_strict_failure_after_restore(self):
         result, trace = self.invoke("unknown-replay", config(unknown=150) + "checkpoint 35 2\n")
@@ -250,7 +257,7 @@ class EsaiCli(unittest.TestCase):
             result, trace = self.invoke("tie-" + order, text, "esai1")
             self.assertEqual(result.returncode, 0, result.stderr)
             source = trace.index("DSP-ESAI requested=2115 actual=2115")
-            completed = trace.index("DSP end=2115 ")
+            completed = trace.index("DSP-PIPELINE start=2070 end=2115 ")
             self.assertEqual(source < completed, before)
         text = config(start=2115, cycles=2).replace("input-before-dsp", "reject")
         result, trace = self.invoke("tie-reject", text, "esai1")
@@ -259,32 +266,35 @@ class EsaiCli(unittest.TestCase):
         self.assertNotIn("DSP-ESAI requested=2115", trace)
 
     def test_refill_tied_to_slot_start_changes_actual_serial_payload(self):
-        # Six MOVEPs cost12 native units,154 NOPs cost154 and refill costs2.
-        # Epoch450 +168*45 =8010. HCKT cycle132 starts slot1 at1984+131*46.
+        # The actual refill write and HCKT cycle132 coincide at TIED_REFILL.
+        # Both orders must change the genuinely shifted second slot's payload.
         for order, new_word in (("dsp-before-input", True), ("input-before-dsp", False)):
-            text = config(start=1984).replace("input-before-dsp", order)
+            text = config(start=TIED_START).replace("operations 200", "operations 250").replace(
+                "input-before-dsp", order)
             result, trace = self.invoke("payload-tie-" + order, text, "esai1-tied-refill")
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.verify_frame(trace, refill=new_word, start=1984)
-            source = trace.index("DSP-ESAI requested=8010 actual=8010")
-            refill = trace.index("DSP end=8010 ")
+            self.verify_frame(trace, refill=new_word, start=TIED_START)
+            source = trace.index(f"DSP-ESAI requested={TIED_REFILL} actual={TIED_REFILL}")
+            refill = trace.index(f"DSP-PIPELINE start={TIED_REFILL - 45} end={TIED_REFILL} ")
             self.assertEqual(refill < source, new_word)
 
     def test_shared_mcu_write_and_mixed_tio_cursor(self):
         code = store(0x27c, 1) + check_pin(1) + store(1, 2) + check_pin(1)
         text = config(start=1710, cycles=1) + "dsp-at 1760 tio 0 high raw\n"
         text += "shi-hreq U 01 direct\ninitial drive U 3e 00 00\n"
-        for order, before in (("dsp-before-mcu", True), ("mcu-before-dsp", False)):
-            result, trace = self.invoke("shared-" + order, text.replace(
-                "ordering dsp-before-mcu", "ordering " + order), "esai1", code, 10)
+        for order, before in (("input-before-mcu", True), ("mcu-before-input", False)):
+            scenario = text + "dsp-input-write-order " + order + "\n"
+            if not before:
+                scenario = scenario.replace("ordering dsp-before-mcu", "ordering mcu-before-dsp")
+            result, trace = self.invoke("shared-" + order, scenario, "esai1", code, 10)
             self.assertEqual(result.returncode, 0, result.stderr)
             source = trace.index("DSP-ESAI requested=1710 actual=1710")
             write = trace.index("WRITE cycle=19 address=0x0001")
             self.assertEqual(source < write, before)
             self.assertIn("DSP-INPUT requested=1760 actual=1760 tio=0 level=high", trace)
             self.assertIn("DSP-INPUTS observed=3 configured=3", result.stdout)
-        result, trace = self.invoke("shared-reject", text.replace(
-            "ordering dsp-before-mcu", "ordering reject"), "esai1", code, 10)
+        result, trace = self.invoke("shared-reject", text + "dsp-input-write-order reject\n",
+                                    "esai1", code, 10)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("simultaneous", result.stderr)
         self.assertNotIn("DSP-ESAI requested=1710", trace)
@@ -294,7 +304,7 @@ class EsaiCli(unittest.TestCase):
                  (config(), "esai1-missing-hckt", "requires HCKT/FST peripheral mux"),
                  (config().replace("reference-reset-edges", "raw"), "esai1", "timing"),
                  (config().replace("input-before-dsp 16", "input-before-dsp 1"),
-                  "esai1", "event budget exhausted")]
+                  "esai1", "external source exceeded its period budget")]
         for index, (text, mode, reason) in enumerate(cases):
             result, _ = self.invoke("guard-" + str(index), text, mode)
             self.assertEqual(result.returncode, 2, result.stderr)

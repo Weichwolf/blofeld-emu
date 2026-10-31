@@ -416,7 +416,7 @@ int run_reference(const Options &config,
     input = std::make_unique<blofeld::reference::HostMidiPump>(
         raw ? config.midi_device : config.midi_file,
         raw ? blofeld::MidiInputKind::linux_rawmidi : blofeld::MidiInputKind::bytes,
-        board.dsp.clock.timebase_hz);
+        board.dsp_clock.timebase_hz);
   }
   if (config.usbip_port && config.usbip_after && config.usbip_period &&
       config.usbip_probe_timeout) {

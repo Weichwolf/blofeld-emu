@@ -1,21 +1,21 @@
-Standalone MCU/DSP reference experiment
+Standalone board execution and explicit reference inputs
 
-blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip \
-  --reference-board scenario.bfboard --dsp-rom private-rom.bin \
-  --instructions 2000000 --trace doc/local/reference.trace
+  blofeld-headless --firmware doc/Blofeld_Firmware_V1.25.zip \
+    --reference-board scenario.bfboard --dsp-rom private-rom.bin \
+    --instructions 2000000 --trace doc/local/reference.trace
 
-The reference mode executes the existing native MCU and DSP owners through
-McuDspSchedule. It is a caller-supplied timing/wiring experiment, not a verified
-Desktop/Keyboard profile. The default invocation retains its untimed MCU behavior.
-No firmware PC selects external inputs, bypasses instructions or copies DSP code.
-DSP execution uses the interpreter and a supplied ROM starting at P:ff0000.
-The ROM file contains 1..65536 packed big-endian 24-bit words. Missing words stay
-unknown. Manufacturer ROM and firmware remain private local inputs.
+The Board uses the independent dsp56300 core and McuDspRuntime, not the legacy
+scheduler. Its supplied wiring/timing remains an experiment, not a verified
+Desktop/Keyboard profile. The complete instrument objective is in objective.txt.
+No firmware PC selects inputs, bypasses an instruction or supplies a result.
+ROM inputs contain1..65536 big-endian24-bit words starting at P:ff0000. Missing
+values remain unknown. Manufacturer firmware/ROM and generated extracts stay local.
 
-Configuration format (ASCII tokens, decimal numbers except hexadecimal bytes):
+Format2 uses ASCII tokens and decimal numbers except hexadecimal pin bytes:
 
-blofeld-reference-board 1
+blofeld-reference-board 2
 clock 12000000 0 12000000 540000000 reference-boundaries
+dsp-execution reference-effects
 ordering dsp-before-mcu dsp-before-mcu 16
 spi-b 02 04 10 clock-before-select
 dsp-release 450 low
@@ -23,375 +23,167 @@ operations 23
 initial drive B 16 02 00
 initial drive E 03 03 00
 
-This example only declares a reference clock and initial SPI signals; it does not
-provide the other inputs required by original firmware. It can accompany own
-MCU NVM/DSP ROM programs. Never interpret it as a physical board preset.
+All six settings are required exactly once:
+- clock: MCU OSC Hz, initial MCU oscillator phase, DSP EXTAL Hz and common Hz,
+  followed by reference-boundaries. Both owners use explicit cycle boundaries;
+  the common timebase must be an exact positive MCU-timebase multiple.
+- dsp-execution reference-effects: explicit DMA/F2/native-effect/F1 ordering,
+  program-access priority and real native interrupt/vector effects. Each admitted
+  effect consumes a reference period. This is not calibrated DSP56371 timing,
+  legacy instruction-cost estimation or permission to skip an unsupported effect.
+- ordering: DSP versus MCU shared-write order (dsp-before-mcu, mcu-before-dsp or
+  reject), committed WAI order (dsp-before-mcu), positive DSP-cycle budget per MCU
+  period. Reset periods also use the explicit DSP-before-MCU runtime contract.
+- spi-b: distinct one-bit PORTB masks for active-low SS, SCK and MOSI, then
+  clock-before-select, select-before-clock or reject for simultaneous pad edges.
+  Only actual byte PORTB data writes qualify as shared transfers. A control
+  register changing these pads without a qualified transfer fails visibly.
+- dsp-release: requested common tick and observed PINIT level. Format2 declares
+  mode5 and two reference recovery periods. The supported reset requires PINIT
+  low; high is retained as an unsupported observation and fails. Release requires
+  known SPI pads and deasserted SS. The DSP clock includes hold/recovery time;
+  it is not rebased to an artificial instruction epoch at release.
+- operations: positive budget including MCU instructions, IRQ entries, WAI periods
+  and, when selected below, real reset edges. --instructions separately bounds
+  retired MCU instructions. A reached budget does not establish instrument boot.
 
-All five settings are required exactly once:
-- clock: MCU OSC Hz, initial phase in the MCU timebase, DSP EXTAL Hz, common Hz,
-  and the literal reference-boundaries. This selects normal MCU bus-cycle
-  switching/internal Flash byte timing and nominal native DSP cycle estimates
-  with instruction-boundary switching and completion-boundary observations.
-  The common timebase must be an exact positive integer multiple of the MCU
-  timebase. These contracts do not establish physical PLL/pipeline timing.
-- ordering: shared-write tie order (dsp-before-mcu, mcu-before-dsp or reject),
-  committed WAI-period order (dsp-before-mcu), maximum DSP steps per MCU period.
-  A reject tie policy fails at an actual coincident shared write.
-- spi-b: distinct one-bit masks on MCU port B for active-low SS, SCK and MOSI,
-  followed by clock-before-select, select-before-clock or reject. Simultaneous
-  SS/SCK changes use that explicit order; incompatible SHI transitions fail.
-  Only native one-byte port-B data writes are qualified shared transfers.
-  A different GPIO control register changing these pads fails visibly.
-- dsp-release: requested common tick and observed PINIT level (low or high).
-  The DSP remains unexecuted until release, with native SPI-reset PC ff0000.
-  Release requires known MCU SPI pads and deasserted SS; its actual boundary
-  becomes the DSP epoch. This is a supplied reset experiment, not reset routing.
-- operations: positive owner-operation budget, including IRQ entries and single
-  native WAI idle periods. --instructions additionally limits retired MCU
-  instructions; either budget can stop execution without establishing boot.
+Format1 and dsp-interrupts/native-vector-estimates are rejected. They describe
+obsolete planning controls; the new owner does not silently accept ignored options.
+The C++ Config stores DspRunClockInputs and McuDspRuntimeInputs directly. It has no
+DspRunContract, legacy scheduler input or alternative execution backend.
 
-Optional loopback setting (one directional logical route):
-loopback E 04 E 08
+Actual MCU power-on
 
-It samples the declared source pad after every native MCU write and external
-input change, then updates only the destination external bit. An unknown source
-leaves the destination unknown: high impedance is not inferred, and a receiver
-pull cannot validate an unknown source driver. A required unresolved input fails.
-This is explicit test wiring, not a physical circuit model.
+  mcu-power-on 3 high
 
-Optional native SHI return routes:
-shi-hreq U 01 inverted
-shi-miso P 01 direct
+This selects digital POR from tick0, with an explicitly supplied3..6 SYSCLK
+synchronization delay and observed RESET pad (high, low or unknown). Real reset
+edges and vector-fetch periods execute before guest MCU instructions; unknown
+RESET fails when sampled. Power rails/oscillator quality are not inferred.
+Without this setting, the nominal MCU reset/vector fetch has already completed
+when the Board is constructed. That profile is an isolated reference convenience,
+not evidence of full power-on. initial inputs apply at the chosen start boundary.
+DSP clocks/input observations can progress while the MCU remains held in reset.
 
-These declare destination port/one-bit mask and polarity (direct or inverted).
-They are logical caller experiments, not a physical HREQ/PU0/MISO pin map.
-Known driven levels propagate with the selected polarity. Disabled drivers are
-high impedance and permit actual MCU receiver pulls to resolve the pad. Driven
-unknown levels stay unknown even with a receiver pull. Polarity affects known
-driven levels; high impedance stays high impedance. External board pull circuits,
-open-drain buffers, propagation delay and synchronizers are not inferred.
+External MCU inputs and logical routes
 
-Each completed native DSP instruction supplies its outputs at the declared DSP
-completion tick, before any later DSP instruction or MCU endpoint. Every completed
-SPI pin transition also supplies outputs in the selected shared-write order.
-Native IRQ edge history therefore sees pulses entirely within one MCU period;
-WAI still consumes a committed period when that period's DSP execution supplies
-an IRQ. MCU TIM sampling retains its existing run/wait gates and sampling order.
-Initial reset-disabled outputs are observed after the completed MCU reset.
+  initial drive E fb 03 00
+  at 10000 drive U 3f 01 00
+  at 11000 phy-window 15
+  at 12000 usb-decoder 08
+  at 13000 timer-inputs 01
+  loopback E 04 E 08
+  shi-hreq U 01 inverted
+  shi-miso P 01 direct
 
-Routes own only their destination bit. Other explicit external drive bits survive
-all updates. An explicit initial/timed drive or floating declaration on the same
-bit rejects; duplicate return destinations and loopback destination conflicts
-reject. Return destinations cannot feed SS/SCK/MOSI; SPI input loopbacks together
-with return routes are unqualified. MCU output contention fails with both PCs.
-An unconnected unknown SHI output does not become a required MCU input.
-A loopback may forward a return destination to a distinct non-SPI destination.
+at inputs apply at the first completed owner operation at/after the requested
+tick, preserving equal-tick file order. Due inputs precede a due DSP release.
+They never backdate a native bus access. Trace rows retain requested/actual ticks.
+- drive: port A/B/E/T/M/J/P/Q/R/S/U, driven mask, levels, floating mask. Unlisted
+  bits stay unknown; masks may not overlap and levels must fit the driven mask.
+- phy-window: observed PHY edges over three oscillator periods, not guessed LOCK.
+- usb-decoder: post-decoder reset/suspended/enumerated/full-speed bits0..3. This
+  does not add analog USB wire decoding or an automatic host enumeration.
+- timer-inputs: MCU timer pad mask sampled by the native owner, including WAI.
 
-External inputs:
-initial drive E fb 03 00
-at 10000 drive U 3f 01 00
-at 11000 phy-window 15
-at 12000 usb-decoder 08
-at 13000 timer-inputs 01
+Loopback forwards only its declared bit; an unknown source remains unknown.
+SHI routes expose actual HREQ/MISO driven levels with direct/inverted polarity.
+Disabled outputs are high impedance; driven unknowns are not receiver-pull values.
+Unknown required reads and electrical contention fail with execution context.
+Return routes cannot feed SPI input pins or overlap another external driver.
+Physical nets, buffering, propagation delays and board pull resistors are not
+established by these logical route declarations.
 
-initial applies at the completed native MCU reset boundary, before the first
-instruction. at applies at the first completed MCU instruction/IRQ/idle-period
-boundary at or after the requested common tick. Equal requested ticks preserve
-file order. All due inputs apply before a due DSP release at that boundary.
-Events/release before completed MCU reset reject. Events are never applied
-retroactively inside an already executed instruction. A DSP completion already
-consumed at the boundary sees the preceding inputs. Trace records requested
-and actual times. No external input or ready/HREQ routing is inferred from PCs.
+Exact DSP inputs and shared-write ordering
 
-- drive: port A/B/E/T/M/J/P/Q/R/S/U, drive mask, levels, floating mask. Replaces
-  that port's external drive; unlisted bits remain unknown. Levels must fit the
-  mask and driven/floating masks must not overlap. Loopback updates its own bit.
-- phy-window: explicitly observed PHY edges over three oscillator periods; it
-  does not fabricate a LOCK register or infer analog startup.
-- usb-decoder: post-decoder flags, bit0 reset, bit1 suspended, bit2 enumerated,
-  bit3 full-speed. Raw USB wire decoding is not supplied by this experiment.
-- timer-inputs: mask sampled by the native MCU owner, including during WAI.
+  dsp-input-order input-before-dsp 4
+  dsp-input-write-order input-before-mcu
+  dsp-initial tio 0 high synchronized
+  dsp-at 1200 tio 0 low synchronized
 
-Optional DSP interrupt timing and exact common-time TIO inputs:
-dsp-interrupts native-vector-estimates prepare-boundary
-dsp-input-order input-before-dsp 4
-dsp-initial tio 0 high synchronized
-dsp-at 1200 tio 0 low synchronized
+TIO indices are0/1; levels are high/low/unknown. raw changes the observed pad;
+synchronized also supplies a qualified synchronized level and requires known
+input. No pull, synchronized sample or timer result is invented.
 
-dsp-interrupts explicitly selects nominal native vector costs and either
-prepare-boundary admission or reject-changes. Its position relative to clock
-does not change the contract. Without this setting, interrupt timing remains
-unqualified and prepared-plan changes still reject. Recognition, pipeline and
-physical interrupt latency are not inferred (dsp-irq-admission.txt).
+dsp-at timestamps increase strictly and execute at exact common ticks, including
+inside MCU periods. dsp-input-order selects input-before-dsp, dsp-before-input or
+reject plus a positive event budget per MCU period. dsp-input-write-order selects
+input-before-mcu, mcu-before-input or reject for a simultaneous actual shared MCU
+write. Unqualified ties and cyclic three-way orders fail before consuming them.
+All six acyclic orders execute the actual native effects. Exhausted sources remain
+bound; snapshots retain their cursors. Simultaneous independent external sources
+remain unsupported even when their order relative to a DSP cycle is qualified.
 
-dsp-initial applies after both native resets and before DSP release. TIO indices
-are 0 or 1. Levels are high, low or unknown. raw sets only the observed pad level;
-synchronized additionally supplies an explicit synchronized observation. Unknown
-levels require raw and remain unknown until a later observation. They do not
-invent a pull or a synchronized sample; a required native read/capture fails.
+With actual POR, declared observations may start at tick0 under reset. The nominal
+MCU-start profile retains the post-release timestamp restrictions. Static initial
+levels remain available before release in either profile. An actual release is
+quantized to a completed MCU operation; native input clocks are not host clocks.
 
-dsp-at uses exact common ticks through the existing DSP external-event scheduler,
-including within an MCU bus period or a pending DSP instruction. Its timestamps
-must increase strictly; simultaneous DSP input batches are not qualified.
-These events require dsp-input-order: input-before-dsp, dsp-before-input or
-reject, followed by a positive event budget per DSP scheduler advance. This is
-separate from ordering against a native MCU shared write. A shared cycle can
-make separate exclusive/inclusive advances with their own event budgets.
-
-The first timed input cannot precede requested or actual DSP release. A release
-delayed to a completed MCU boundary must reject an already-past DSP input instead
-of backdating or dropping it. Use dsp-initial for a level held before release.
-All configured sources remain bound after exhaustion. MCU shared-write and
-committed WAI paths forward the same source; cancelled WAI offers dispatch none.
-Existing MCU at inputs retain their operation-boundary timing and file ordering.
-
-DSP-INPUT trace rows record exact requested/observed ticks, index, raw level,
-synchronization choice and both PCs. DSP-INPUTS reports the observed input prefix,
-which can survive a later schedule/native fault; it is not completed CPU work.
-Native capture sees the last completed DSP clock prefix, not subdivided physical
-CLK/2 phases. The checkpoint also retains this separate input cursor, actual
-pad/synchronization state and pending event deadlines. Identical future and
-exhausted sources replay; native unknown-input failures still require joint
-restoration. No host MIDI port or calibrated physical input is supplied here.
-
-ESAI clock snapshots and compact periodic HCKT
+ESAI and common audio-clock sources
 
   dsp-initial esai 1 unknown unknown low reference-reset-edges
   dsp-at 2000 esai 1 unknown unknown high reference-reset-edges
-  dsp-at 2023 esai 1 unknown unknown low reference-reset-edges
-
-ESAI index 0 selects the primary X-space block; index 1 selects secondary ESAI_1.
-The three levels are SCKT, FST and HCKT, in that order. Each is high, low or
-unknown. One row is an atomic complete snapshot; unspecified pins do not inherit
-a known value. Timing is raw for ordinary external SCKT/FST, or the explicit
-reference-reset-edges convention required by the existing generated-clock model.
-Native reset/configuration, mux, clock-source and unknown-input checks apply.
-No TPR, control register, DMA phase, data register or firmware result is supplied.
-
-  dsp-initial esai 1 unknown unknown low reference-reset-edges
   dsp-clock esai 1 hckt 2000 23 516 reference-reset-edges
+  dsp-audio-clock 11289600 2000 low 6 reference-reset-edges
 
-The second example replaces the listed timed observations with a compact finite
-source: start tick, positive half-period in common ticks and positive observation
-count. The first HCKT observation is high; following levels alternate. SCKT/FST
-remain unknown and the reference-reset-edges convention is explicit. Initial
-low baseline is declared separately, not manufactured by the source. No oscillator
-or audio rate is inferred. The last timestamp must fit uint64; spans ending
-exactly at UINT64_MAX are accepted. Future observations are generated on demand,
-not expanded into the configuration or a host event array.
+The dsp-at, dsp-clock and dsp-audio-clock rows above are alternative sources,
+not simultaneous declarations for the same instance.
+An ESAI snapshot supplies SCKT/FST/HCKT together. Index0 is primary X-space,
+index1 secondary Y-space. Each level is high/low/unknown. raw selects ordinary
+external observations; reference-reset-edges qualifies generated-clock timing.
+Missing levels do not inherit known inputs. Configuration, mux, clock-source and
+unknown-input checks stay strict.
 
-At most one periodic HCKT source per ESAI instance is allowed. Both sources and
-the static TIO/ESAI list share the existing input order and per-advance budget.
-Simultaneous observations from different sources reject at their due boundary;
-dsp-input-order only qualifies source versus native completion, not an ordering
-between external sources. Requested/actual release checks cover periodic sources.
-Coordinated snapshots retain both periodic indices, future/exhausted static
-cursor, native divider/shift state and pending CPU completion. DSP-ESAI-CLOCK
-reports each source's observed prefix and configured count; DSP-INPUTS retains
-its existing static-list meaning. Neither count proves completed CPU work.
+dsp-clock declares start tick, positive half-period and positive observation
+count; HCKT begins high then alternates, with an independently declared low
+baseline. Sources are compact, not expanded event arrays. Final ticks must fit
+uint64. At most one source per ESAI instance is supported.
+dsp-audio-clock declares frequency, epoch, initial level and destinations mask:
+bits0/1 select ESAI0/1 HCKT; bit2 selects DAX ACI. It is a supplied net hypothesis,
+not a recovered physical clock or sample-rate claim. Conflicting sources fail.
 
-DSP-ESAI trace rows retain requested/actual ticks, all input levels/timing, both
-PCs and actual post-observation output snapshots. tx-driven/known/levels use
-logical TX0..TX5 bits 0..5; clocks-driven/known/levels use SCKT/FST bits 0/1.
-Unknown or undriven bits are not zero samples. Rows observe actual mux-qualified
-signals after each external input; they do not enumerate every native pin change
-or provide host PCM. Decoder tests use known bits and explicit sample edges.
+PCM, MIDI and state
 
-  ctest --test-dir build/strict -R '^reference_esai_cli$' --output-on-failure
+  pcm-receive esai 1 tx 0 after 2000 rising 32 24 2 high
+  midi-sci PR2 6000000 after 2000
+  midi-transfer-reference 12 1
+  midi-dsp-tio 0 after 2000 synchronized
 
-Own native programs check both maps, nonzero old/refill words, retained-data
-underrun, literal divider/sample ticks and external SCKT/FST snapshots. A refill
-tied to a real slot launch must change the serial payload according to the two
-explicit orders. Mid-word/future/exhausted replay, native WAI/shared-write paths,
-mixed TIO/two-clock sources, missing clocks/mux, active reconfiguration, input
-budgets, collisions, representable spans and late release are checked. A large
-configured count with a bounded executed prefix proves compact scheduling, not
-sustained real-time operation. Full original boot, DMA/voice integration, host
-MIDI/audio and physical clock/pad/rate validation remain open.
+PCM selects instance, TX lane, threshold, edge, slot/payload bits, slots/frame and
+active frame-sync polarity. It observes actual mux-qualified clock/FS/data after
+native DSP periods and external inputs. Partial words/frames are never padded.
+Samples retain actual ticks and causal ordinals. Native I/O failures keep both
+PCs, addresses, time and source. See serial-pcm.txt and pcm-wave.txt for bounded
+recording via --audio-out/--audio-rate/--audio-max-frames.
 
-Standalone serial PCM observation
+MIDI routes are exclusive. SCI uses PR2 or PS4 and a declared bus rate; its optional
+transfer reference is experimental. DSP MIDI uses an explicit31250-baud timer-pin
+wire, order/budget and source timing; see dsp-host-midi.txt. These route fixtures
+are not proof that the original complete instrument receives or plays notes.
 
-  pcm-receive esai 1 tx 0 after 1200 rising 32 24 2 high
+  checkpoint 10 2
 
-This optional setting selects one actual ESAI instance (0/1), TX wire (0..5),
-observation threshold in common ticks, sample edge (rising/falling), slot bits,
-signed payload bits, slots per frame and active word-length-FS level (high/low).
-The receiver contract and unsupported formats are in serial-pcm.txt. These
-fields do not program hardware registers or infer a physical audio format/rate.
-The threshold must not precede the requested DSP release. The first actual DSP
-completion or external input at/after it establishes the baseline; no event is
-inserted at that threshold. Capturing a stream with active FS waits for inactive
-FS and the following frame; partial input is never padded or delivered.
+At the requested completed operation, retain the trusted in-process state and
+repeat its suffix twice. Native failures remain failures. Snapshots include real
+MCU/DSP/frontend/timeline state, peripherals, modeled event cursors, wire/PCM
+partials and wiring. Restore stages fresh owners before publishing; preparation
+failure preserves the live Board. Reentry/foreign identities are rejected.
+Host audio/USB sessions are retired, not rewound. This is not a portable state file
+or a rewind of physical devices. A .bfnvm export contains MCU NVM only.
 
-Signals are sampled after each committed native DSP instruction and external
-DSP input. Both SCKT/FST pads must remain selected for their peripheral function.
-Generated clocks use actual mux-qualified known output levels. Input directions
-use the latest explicitly supplied complete ESAI input snapshot; there is no
-default pull, inherited missing level or implicit external clock. TX data comes
-only from the selected actual mux-qualified transmitter output. Unknown clock/FS,
-unknown sampled payload, missing mux and malformed frames fail with operation,
-ESAI addresses, both PCs, time and source. No data register, TPR or DMA grant is
-supplied by the receiver.
+Unknown/duplicate fields, malformed numbers, extra tokens, NUL bytes, nonregular
+files and inputs over65536 bytes fail. ROM/config paths participate in hardlink/
+symlink output-collision checks before outputs open. Reference-board/ROM arguments
+are paired and exclude inspect/port-E injection. Exit0 means budget reached,
+exit1 setup/input/output failure, exit2 a visible execution fault.
 
-Every observation gets its real absolute tick and a causal ordinal starting at 0
-within that tick. Native/external ties follow the existing qualified scheduler
-order. Unqualified ties continue to reject before observation. No synthetic
-sub-tick duration is assigned. Native writes that remove a clock mux are observed
-at completion, before the next external edge. Observation leaves native CPU
-state, cycle accounting and the non-PCM trace unchanged.
+  ctest --test-dir build/strict --output-on-failure -R '^(reference_pipeline|reference_checkpoint|reference_shi_cli|reference_echo_cli)$'
 
-PCM-PINS rows show end/order/source, resolved clock/FS/data and both PCs.
-PCM-FRAME rows contain the completed-frame index, first/end ticks and ordinals,
-channel count and comma-separated signed samples at the declared payload width.
-PCM summary counts only complete frames; zero frames does not prove audio output.
-These rows form a diagnostic PCM event stream. Optional bounded recording and
-separate WAV publication use --audio-out/--audio-rate/--audio-max-frames; see
-pcm-wave.txt. No host audio port is supplied.
-The joint board snapshot retains partial receiver state, external clock levels,
-last observation and last completed frame. Replay sections repeat their own trace
-suffixes under the existing REPLAY markers; consumers must select one branch,
-not concatenate duplicate suffixes as new audio. The emulator does not internally
-retain an unbounded sample queue. With audio recording enabled, its final-state
-comparison additionally checks the entire recorded frame history. Without it,
-the diagnostic-only comparison checks receiver state and the last frame. CLI
-regression tests compare the full replay suffix in both cases.
+DSP-PIPELINE rows expose real cycle start/end, optional F1 and advanced native
+instruction PC, each with its own known flag. retirement=1 marks a genuinely
+retired native instruction; prefetch and successor PCs are not execution counts.
 
-  ctest --test-dir build/strict -R '^reference_pcm_cli$' --output-on-failure
-
-Own native tests check both maps, exact signed samples/ticks, unchanged CPU traces,
-known retained-data underrun, late joining, external SCKT with generated FST, qualified payload
-ties, partial/completed-frame copies and strict failures. Full original voice
-audio, host audio ports, codec routing and physical sample-rate qualification
-remain open. Fully external word-length FST remains unqualified in the ESAI
-model and rejects before a PCM frame; this binding does not relax that check.
-
-Blank lines and # comments are allowed. Unknown/duplicate settings, extra tokens,
-invalid/overflowing numbers, unsorted events, NUL bytes and configuration files
-larger than 65536 bytes reject. Inputs must be bounded regular files. Config/ROM
-paths participate in trace/NVM output collision checks, including hardlinks and
-symlinks, before outputs open. --reference-board and --dsp-rom are paired and
-conflict with --inspect/--port-e-input. Existing .bfnvm input/output remains MCU
-nonvolatile memory only: no DSP, clocks, wiring or whole-board snapshot is saved.
-
-Optional trusted in-process replay:
-checkpoint 10 2
-
-After exactly ten completed owner operations, retain a checkpoint, execute the
-remaining budget, then restore and repeat that suffix twice. Operation zero
-captures after initial boundary inputs/release. A positive replay count is
-required; an unreachable checkpoint fails visibly. Native failures remain
-failures, including after successful replay. Visible CPU/register, cold NVM,
-clock, counter and fault outcomes must agree; this comparison alone does not
-prove equality of every RAM cell. The trace appends REPLAY begin/end markers
-around each suffix. Output streams/files are not rewound; final NVM is saved once.
-
-The private Board API composes immutable native MCU/DSP/schedule checkpoints with
-the actual DSP release epoch, pending deadlines, next external-event cursor,
-previous SPI pads, HREQ/MISO observations, wiring context and owner counters.
-Capture requires an inactive healthy operation boundary. Restore prepares both
-native owners, schedule and callbacks separately before a no-throw commit;
-preparation failure leaves the live board unchanged. An earlier checkpoint can
-recover a quarantined board. Foreign board identities and control reentry from
-trace observations reject. Restore does not resample pins or synthesize IRQ edges.
-These checkpoints cover the currently modeled reference experiment, not absent
-physical peripherals, a portable state file, host MIDI/audio or external devices.
-
-Exit 0 means a budget ended, 1 means setup/input/output failure, and 2 means a
-visible native/reference execution fault. Final diagnostics include both PCs,
-completed clocks/steps, MCU idle periods, SPI writes/frames and ordering counts.
-A trace's DSP row is an attempted step observation; a failing step is not added
-to completed counters. Partial fault effects are retained, never silently fixed.
-
-  cmake --build --preset strict --target blofeld-headless blofeld-reference-rom-fixture
-  ctest --test-dir build/strict -R '^reference_dsp_inputs_cli$' --output-on-failure
-
-The own native capture/vector/SHI diagnostic changes a real MCU GPIO read.
-Independent manual costs check output ticks, including HCS12 STAA's PwO write
-slot before instruction completion. Both input/completion and MCU-write/input
-orders, default rejection, WAI, budgets, late release, invalid configurations,
-future/exhausted cursor snapshots and repeated native unknown-input faults are
-checked. It does not replace the original-firmware regressions or establish
-whole original boot, physical clocks, device profiles, MIDI ports or audio.
-
-  cmake --build --preset strict --target blofeld-headless blofeld-reference-original-midi-rom
-  ctest --test-dir build/strict -R '^reference_original_midi_cli$' --output-on-failure
-
-This directed component regression pins the original 1.25 archive and all 127 DSP
-records. Its own diagnostic ROM copies four complete unchanged original program
-records and bounded low X/Y data with native DSP instructions, then declares an
-explicit caller/ring setup for the original_dsp_clocked_wire_pitch components.
-Original serial input, IRQ/RTI, queue consumer and pitch callback execute under
-both CPU owners through the real CLI. No host writes ring messages, timer counters
-or parsed results.
-The ROM enables actual SHI HREQ only when the original pitch result equals center;
-own MCU code polls the routed pad, writes a register marker and executes WAI.
-A changed pitch-byte control must complete the original callback without this
-marker. Every input timestamp and all 27 original receiver returns are checked.
-A joint snapshot inside the first byte repeats the complete trace suffix and
-result three times; an unknown last-data input repeats the original DI fault.
-
-The generated ROM contains local original data and stays in ignored build output.
-It is an explicit test caller, not a recovered chip ROM, original MCU application
-or complete original boot. Bit period 3249*2*45 and the 12 MHz/540 MHz time contract
-are nominal test inputs, not physical 31250-baud or device-clock qualification.
-Host MIDI ports, original note allocation/audio and board validation remain open.
-
-Coverage: test_reference_cli.py runs the actual CLI with own native MCU/DSP code,
-independent clock/step expectations, WAI/RTI, quantized inputs, shared-write/pad
-order rejections, strict missing pads/ROM and output-alias checks.
-original_reference_cli.py pins private original 1.25/ROM inputs, supplies explicit
-boundary observations, and verifies native cold reset through all 7275 serial GPIO
-writes/97 frames into the same strict Y:002000 write fault as the library fixture.
-An independent Python GPIO decoder compares every transmitted word with the
-original MCU image. The fault occurs in the MCU's real final boot delay after
-59286 completed DSP steps; no loop is skipped or memory silently extended.
-This baseline scenario uses reference input/ready times, not measured signals.
-reference_shi_cli.py additionally verifies actual native transmit/receive-ready
-signals, 24 individual MCU MISO reads, both HTX/select tie orders,
-driven-unknown/Hi-Z/pull distinctions,
-output contention and native WAI/IRQ entry/RTI, including an 18-common-tick HREQ
-pulse wholly inside one 90-tick MCU idle period.
-reference_checkpoint.cpp independently checks pending DSP completion, held reset,
-native REP continuation, old/new RAM reads, fault quarantine, failed preparation,
-owner identity and reentry guards. CLI replays additionally cover native WAI/IRQ,
-delayed release and a future external input. original_checkpoint_cli.py captures
-original firmware inside a selected, partly clocked SPI word and compares three
-complete suffix traces through the unchanged reserved-Y failure. Rejoining the
-prefix and first suffix must preserve the pinned original baseline trace hash;
-the independent word decoder still checks all 97 frames against the MCU image.
-reference_echo_cli runs a separate own DSP polling program: real HRX reads store
-three received words in DSP RAM and supply HTX for subsequent MCU frames. The
-MCU checks all 72 returned bits, receive/transmit readiness and a later external
-input. Two input patterns and six checkpoints cover both SCK levels, before/after
-a native MISO load, and all three words; each produces three identical suffixes.
-A changed MOSI bit changes the next native DSP reply and repeats the actual MCU
-unmapped-read failure. Independent GPIO decoding and a manual cycle ledger check
-545 MCU operations/1174 cycles and 593 DSP steps/2337 nominal units. HREQ requires
-both receive capacity and fresh transmit data in this explicit logical fixture.
-Run: ctest --test-dir build/strict -R '^reference_(shi|echo)_cli$' --output-on-failure
-original_shi_routes.py constrains three simple HREQ-to-PU0 hypotheses under the
-same explicitly supplied clocks: an earlier inverted release contends with the
-MCU's still-low PU0 output; a release at its first poll leaves a required input
-unknown; the earlier direct route stays not-ready until the explicit budget.
-No forced ready event occurs in these cases. These are reference observations,
-not proof of physical pin roles or the missing electrical/reset topology.
-Physical reset/pad/HREQ routing, complete DSP ROM, original DSP main boot,
-MIDI/audio and hardware equivalence remain pending.
-
-Optional host MIDI/SCI route
-  midi-sci PR2 6000000 after 54000
-  midi-transfer-reference 12 0
-
-The second setting is optional and explicitly experimental; the default retains
-the strict unresolved SCI transfer edge. --midi-file/--midi-device reject
-automatic checkpoint replay. See host-midi.txt for source
-formats, native clock ownership, snapshots, polling and untested live timing.
-
-Alternative DSP MIDI route
-  midi-dsp-tio 0 after 10000000 synchronized
-
-This selects the fixed 31250-baud bit grid on DSP TIO0; TIO1 and raw observation
-are also explicit options. Require dsp-input-order and its event budget. The
-SCI route must be absent. dsp-host-midi.txt describes independent wire timing,
-the separate optional midi-dsp-reference experiment and remaining original
-boot/physical MIDI/audio limits.
+Directed authored programs check native words, GPIO/IRQ behavior and joint replay;
+original component tests retain separate qualification. See coverage.txt for
+current evidence and unresolved boot, clocks, storage, USB/MIDI/audio and complete
+Desktop/Keyboard instrument requirements. No component result proves brick safety.

@@ -15,7 +15,8 @@ if not firmware.is_file():
 manifest = json.loads((Path(__file__).resolve().parents[1] / 'doc/downloads.json').read_text())
 expected = next(row['sha256'] for row in manifest['files'] if row['file'] == firmware.name)
 assert hashlib.sha256(firmware.read_bytes()).hexdigest() == expected
-config = '''blofeld-reference-board 1
+config = '''blofeld-reference-board 2
+dsp-execution reference-effects
 mcu-flash-timing uf32-formula 1 zero-gap words
 clock 12000000 0 12000000 540000000 reference-boundaries
 ordering dsp-before-mcu dsp-before-mcu 16

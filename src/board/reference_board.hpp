@@ -4,14 +4,12 @@
 #include "audio/pcm_recording.hpp"
 #include "audio/pcm_sink.hpp"
 #include "audio/serial_pcm.hpp"
-#include "board/mcu_dsp_fetch_schedule.hpp"
 #include "board/mcu_dsp_runtime.hpp"
-#include "board/mcu_dsp_schedule.hpp"
 #include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
@@ -20,6 +18,7 @@
 #include "mcu/mcu_clocked_midi.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_sci.hpp"
 #include "midi/midi_timed.hpp"
 #include "storage/flash_image.hpp"
@@ -130,21 +129,19 @@ struct DspMidiReference {
 };
 
 // Explicit development timing, not a hardware-verified device profile.
-struct PipelineTiming {
-  McuPowerOnInputs power_on;
+struct PowerOnTiming {
+  McuPowerOnInputs inputs;
   McuResetPad reset_pad = McuResetPad::unknown;
-  McuDspFetchInputs schedule;
-  DspDmaGrant dma_grant = DspDmaGrant::unknown;
 };
 
 struct Config {
   McuRunContract mcu;
-  DspRunContract dsp;
-  McuDspScheduleInputs schedule;
-  std::optional<PipelineTiming> pipeline;
+  DspRunClockInputs dsp_clock;
+  McuDspRuntimeInputs dsp;
+  DspDmaGrant dma_grant = DspDmaGrant::unknown;
+  std::optional<PowerOnTiming> power_on;
   std::uint64_t release_ticks = 0;
   std::uint64_t operations = 0;
-  bool pinit = false;
   std::uint8_t select_n = 0;
   std::uint8_t clock = 0;
   std::uint8_t mosi = 0;
@@ -155,7 +152,7 @@ struct Config {
   std::optional<ReplayPlan> checkpoint;
   std::vector<Input> initial;
   std::vector<Input> events;
-  DspExternalOrder dsp_input_order = DspExternalOrder::unqualified;
+  DspPeerOrder dsp_input_order = DspPeerOrder::unqualified;
   unsigned maximum_dsp_inputs_per_advance = 0;
   std::vector<DspInput> dsp_initial;
   std::vector<DspInput> dsp_events;
@@ -346,7 +343,7 @@ private:
   void require_healthy() const;
   void attach(Owners &owners);
   void prepare_dsp();
-  void connect_pipeline();
+  void connect_runtime();
   [[nodiscard]] Outcome finish_branch(const std::function<void(Board &)> &input = {});
   [[nodiscard]] Outcome run_replays();
   void replay_marker(std::string_view phase, unsigned index);

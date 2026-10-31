@@ -10,17 +10,19 @@ import sys
 import unittest
 
 from original_dsp_voice import original_records
-from reference_original_midi_cli import BIT_TICKS, MCU, OPERATIONS, START, events
+from reference_original_midi_cli import BIT_TICKS, BRANCH_SECONDS, MCU, START, events
 from test_reference_cli import CONFIG
 
-BINARY, GENERATOR, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:])
+BINARY, GENERATOR, FIRMWARE, ARTIFACTS = map(Path, sys.argv[1:5])
 ROOT = Path(__file__).resolve().parents[1]
+# The queue owns the final stop/idle interval even after the guest acknowledges
+# its data. Retain enough genuine WAI periods to complete all33 source intervals.
+OPERATIONS = 72000
 
 
 def configuration(reference=True):
     text = CONFIG.replace("operations 23", f"operations {OPERATIONS}")
-    text += ("dsp-interrupts native-vector-estimates prepare-boundary\n"
-             "dsp-input-order input-before-dsp 4\n"
+    text += ("dsp-input-order input-before-dsp 4\n"
              "dsp-initial tio 0 high synchronized\n"
              "shi-hreq U 01 direct\ninitial drive U 3e 00 00\n"
              f"midi-dsp-tio 0 after {START} synchronized\n")
@@ -58,7 +60,7 @@ class DspHostMidiCli(unittest.TestCase):
         result = subprocess.run([BINARY, "--firmware", FIRMWARE, "--reference-board", board,
                                  "--dsp-rom", self.rom, "--flash-in", flash, "--trace", trace,
                                  "--instructions", str(OPERATIONS), "--midi-file", source],
-                                capture_output=True, text=True, timeout=40, check=False)
+                                capture_output=True, text=True, timeout=BRANCH_SECONDS, check=False)
         (folder / "run.log").write_text(result.stdout + result.stderr)
         for path, digest in before.items():
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)
@@ -73,7 +75,8 @@ class DspHostMidiCli(unittest.TestCase):
         self.assertTrue(all(wanted == actual for wanted, actual, _, _ in bits))
         for pc, count in (("002d03", 3), ("002cf8", 21), ("002d10", 3),
                           ("000cbb", 1), ("000c05", 1)):
-            self.assertEqual(len(re.findall(r"^DSP end=\d+ pc=0x" + pc + " ", trace, re.M)), count)
+            retired = r"^DSP-PIPELINE .*native-pc=0x" + pc + r" native-pc-known=1 retirement=1$"
+            self.assertEqual(len(re.findall(retired, trace, re.M)), count)
         self.assertIn(f"DSP-MIDI-SOURCE first={START} baud=0 "
                       f"reference-bit-ticks={BIT_TICKS} reference-idle-bits=1", trace)
 
@@ -116,7 +119,7 @@ class DspHostMidiCli(unittest.TestCase):
         for index, text in enumerate((
                 configuration() + "midi-sci PR2 6000000 after 0\n",
                 configuration() + f"dsp-at {START + 1} tio 0 high synchronized\n",
-                configuration().replace("after 10000000", "after 0"),
+                configuration().replace(f"after {START}", "after 0"),
                 configuration().replace("dsp-input-order input-before-dsp 4\n", ""),
                 configuration().replace(f"midi-dsp-reference {BIT_TICKS} 1", "midi-dsp-reference 0 1"))):
             result, trace, _ = self.invoke(f"invalid-{index}", text=text)
@@ -136,4 +139,4 @@ if __name__ == "__main__":
     if not FIRMWARE.is_file():
         print("SKIP original DSP host MIDI: private original firmware absent")
         sys.exit(77)
-    unittest.main(argv=[sys.argv[0]], verbosity=2)
+    unittest.main(argv=[sys.argv[0], *sys.argv[5:]], verbosity=2)

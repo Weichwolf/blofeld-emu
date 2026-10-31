@@ -13,7 +13,8 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = """blofeld-reference-board 1
+CONFIG = """blofeld-reference-board 2
+dsp-execution reference-effects
 clock 12000000 0 12000000 540000000 reference-boundaries
 ordering dsp-before-mcu dsp-before-mcu 16
 spi-b 02 04 10 clock-before-select
@@ -116,14 +117,22 @@ class ReferenceCli(unittest.TestCase):
                         link.unlink()
 
     def test_bounded_config_and_rom_fail_before_output_creation(self):
-        cases = ["", CONFIG.replace(" 1\n", " 2\n", 1), CONFIG + "clock 1 0 1 1 x\n",
+        cases = ["", CONFIG.replace("blofeld-reference-board 2", "blofeld-reference-board 1"),
+                 CONFIG.replace("blofeld-reference-board 2", "blofeld-reference-board 3", 1),
+                 CONFIG + "clock 1 0 1 1 x\n",
                  CONFIG.replace("operations 23", "operations 0"),
                  CONFIG.replace("initial drive B 16 02", "initial drive B 16 ff"),
                  CONFIG.replace("spi-b 02 04", "spi-b 02 02"),
                  CONFIG + "at 900 drive U 01 00 00\nat 800 drive U 01 01 00\n",
                  CONFIG + "at -1 phy-window 15\n", CONFIG + "initial usb-decoder ff\n",
                  CONFIG + "initial drive Z ff 00 00\n", CONFIG + "unknown 0\n",
-                 CONFIG + "operations 2 surplus\n", CONFIG + "\0", "#" * 65537]
+                 CONFIG + "operations 2 surplus\n", CONFIG + "\0", "#" * 65537,
+                 CONFIG.replace("dsp-execution reference-effects\n", ""),
+                 CONFIG + "dsp-execution reference-effects\n",
+                 CONFIG + "dsp-interrupts native-vector-estimates prepare-boundary\n",
+                 CONFIG + "dsp-input-write-order guess\n",
+                 CONFIG + "mcu-power-on 2 high\n", CONFIG + "mcu-power-on 7 high\n",
+                 CONFIG + "mcu-power-on 3 guess\n"]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             board, rom, _ = self.prepared(root)
@@ -166,19 +175,68 @@ class ReferenceCli(unittest.TestCase):
         self.assertIn("DSP-RELEASE requested=450 actual=450 pc=0xff0000", trace)
         cycles = re.findall(
             r"^DSP-PIPELINE start=(\d+) end=(\d+) cycle=(\d+) f1=(\d+) "
-            r"f1-known=([01]) retirement=([01])$", trace, re.M)
+            r"f1-known=([01]) native-pc=0x([0-9a-f]+) native-pc-known=([01]) "
+            r"retirement=([01])$", trace, re.M)
         # Recovery450..540;64 actual45-tick periods through3420. This pins the
         # chosen reference order, not measured DSP56371 instruction timing.
         self.assertEqual(len(cycles), 64)
         expected = ((0, 0), (1, 0), (2, 0), (None, 1), (3, 0), (None, 1))
-        for index, (start, end, cycle, issued, known, retired) in enumerate(cycles):
+        for index, (start, end, cycle, issued, known, native_pc, native_known, retired) in enumerate(cycles):
             self.assertEqual((int(start), int(end), int(cycle)),
                              (540 + index * 45, 585 + index * 45, index))
             offset, retirement = expected[index % 6]
             self.assertEqual((int(issued), int(known), int(retired)),
                              (0 if offset is None else 0xff0000 + offset,
                               int(offset is not None), retirement))
+            instruction = (None, None, 0, 0, 1, 1)[index % 6]
+            self.assertEqual((int(native_pc, 16), int(native_known)),
+                             (0 if instruction is None else 0xff0000 + instruction,
+                              int(instruction is not None)))
         self.assertEqual(saved, image(WAIT))
+
+    def test_power_on_executes_reset_edges_before_native_mcu_steps(self):
+        config = CONFIG.replace("operations 23", "operations 215") + "mcu-power-on 3 high\n"
+        result, trace, saved = self.run_native(config)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # 195 actual SYSCLK edges and five reset-vector bus periods end at9225.
+        # Six guest instructions then use16 bus periods;14 WAI periods give11925.
+        self.assertEqual(trace.count("held-reset=1 reset-edges="), 194)
+        self.assertIn("MCU end=9225 pc=0x9000 instructions=0 operations=195", trace)
+        self.assertIn("instructions=6 operations=215 interrupts=0 cycles=35 idle=14 ticks=1325",
+                      result.stdout)
+        self.assertIn("completed-steps=84 units=253 ticks=11925", result.stdout)
+        self.assertEqual(saved, image(WAIT))
+
+    def test_three_way_input_native_and_actual_mcu_write_order(self):
+        cases = (("dsp-before-mcu", "input-before-mcu", "input-before-dsp", "IDW"),
+                 ("dsp-before-mcu", "input-before-mcu", "dsp-before-input", "DIW"),
+                 ("dsp-before-mcu", "mcu-before-input", "dsp-before-input", "DWI"),
+                 ("mcu-before-dsp", "input-before-mcu", "input-before-dsp", "IWD"),
+                 ("mcu-before-dsp", "mcu-before-input", "input-before-dsp", "WID"),
+                 ("mcu-before-dsp", "mcu-before-input", "dsp-before-input", "WDI"),
+                 ("dsp-before-mcu", "mcu-before-input", "input-before-dsp", None),
+                 ("mcu-before-dsp", "input-before-mcu", "dsp-before-input", None))
+        # Authored LDAA #2; STAA PORTB. PwO publishes the actual store at720.
+        # DSP recovery ends540; its fourth45-tick cycle and the input share720.
+        for native, write, peer, expected in cases:
+            with self.subTest(native=native, write=write, peer=peer):
+                config = CONFIG.replace("ordering dsp-before-mcu", "ordering " + native)
+                config += (f"dsp-input-order {peer} 4\n"
+                           f"dsp-input-write-order {write}\n"
+                           "dsp-at 720 tio 0 high synchronized\n")
+                result, trace, _ = self.run_native(config, code=bytes.fromhex("8602 7a0001"),
+                                                  instructions=2)
+                if expected is None:
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("Cyclic MCU/DSP/external shared-write ordering at 0x0001",
+                                  result.stderr)
+                    self.assertNotIn("DSP-INPUT requested=720", trace)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    positions = ((trace.index("DSP-PIPELINE start=675 end=720"), "D"),
+                                 (trace.index("DSP-INPUT requested=720 actual=720"), "I"),
+                                 (trace.index("SPI end=720"), "W"))
+                    self.assertEqual("".join(value for _, value in sorted(positions)), expected)
 
     def test_quantized_release_and_external_events_are_visible(self):
         config = CONFIG.replace("dsp-release 450", "dsp-release 451")

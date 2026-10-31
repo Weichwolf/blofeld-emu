@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_pipeline.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
 #include "mcu/mcu_flash_timing_state.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_reset.hpp"
@@ -40,19 +39,22 @@ constexpr unsigned active_instructions = 100;
 reference::Config config() {
   reference::Config result;
   result.mcu = live::contract();
-  result.pipeline = reference::PipelineTiming{
-      .power_on = {3},
-      .reset_pad = McuResetPad::high,
-      .schedule = {.dsp = {.extal_hz = live::oscillator_hz,
-                           .timebase_hz = common_hz,
-                           .timing = DspFetchTiming::reference_cycle_order,
-                           .execution = DspReferenceExecution::staged_register_boundaries,
-                           .pipeline = DspFetchPipeline::automatic_memory,
-                           .resets = DspFetchResetTiming::reference_cycle_boundary},
-                   .maximum_dsp_cycles_per_period = 16,
-                   .reset_order = McuDspResetOrder::dsp_before_mcu,
-                   .initial_reset = McuDspFetchInitialReset{
-                       .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}}};
+  result.dsp_clock = {.extal_hz = live::oscillator_hz,
+                      .timebase_hz = common_hz,
+                      .switch_timing = blofeld::DspClockSwitch::reference_cycle_boundary};
+  result.dsp = {
+      .timing =
+          blofeld::OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts,
+      .maximum_cycles_per_period = 16,
+      .writes = blofeld::McuWriteOrder::unqualified,
+      .external_writes = blofeld::McuWriteOrder::unqualified,
+      .wait_dsp_first = false,
+      .reset_dsp_first = true,
+      .initial_reset = blofeld::OwnDspResetInputs{
+          .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}};
+  result.dma_grant = blofeld::DspDmaGrant::unknown;
+  result.power_on =
+      reference::PowerOnTiming{.inputs = {3}, .reset_pad = blofeld::McuResetPad::high};
   result.release_ticks = std::numeric_limits<std::uint64_t>::max();
   result.operations = maximum_operations;
   result.select_n = 2;
@@ -61,7 +63,7 @@ reference::Config config() {
   constexpr unsigned serial_pins = 0x16;
   result.initial = {{.port = McuPort::b, .drive = {.mask = serial_pins, .levels = 2}},
                     {.port = McuPort::e, .drive = {.mask = 3, .levels = 3}}};
-  result.dsp_input_order = DspExternalOrder::external_before_dsp;
+  result.dsp_input_order = DspPeerOrder::peer_first;
   result.maximum_dsp_inputs_per_advance = 1;
   return result;
 }
@@ -154,7 +156,7 @@ void write_text(const std::filesystem::path &path, const std::string &text) {
 }
 
 void parser(const std::filesystem::path &path) {
-  const std::string header = "blofeld-reference-board 1\n";
+  const std::string header = "blofeld-reference-board 2\ndsp-execution reference-effects\n";
   const std::string body = "clock 12000000 0 12000000 540000000 reference-boundaries\n"
                            "ordering dsp-before-mcu dsp-before-mcu 16\nspi-b 02 04 10 reject\n"
                            "dsp-release 18446744073709551615 low\noperations 10000\n";

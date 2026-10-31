@@ -696,6 +696,12 @@ retired rather than rewound. Status exposes actual independent-core registers.
 The regular runtime uses the explicit effect-per-reference-cycle profile with
 program priority and interrupt admission. This replaces legacy instruction cost
 estimates/seven-stage scheduling; it does not establish DSP56371 phase timing.
+Config now contains native runtime/reset/clock inputs directly, with no legacy
+scheduler or machine-header dependency. File format2 requires reference-effects;
+obsolete interrupt estimates reject instead of becoming ignored controls.
+Optional digital MCU POR and the independent input/shared-write order are explicit
+(reference-board.txt). Pipeline traces retain the actual advanced native effect PC;
+a retired instruction is distinct from a speculative F1 or a successor register PC.
 Nominal MCU-reset construction also advances the DSP hold/input time to that
 completed boundary, so contradictory initial sources can fail in construction.
 The true-POR profile still executes actual MCU SYSCLK reset edges from tick0.
@@ -720,6 +726,10 @@ The basic CLI and SHI/echo suites use independently specified MCU bus periods
 and the selected DSP effect/fetch order, replacing legacy instruction estimates.
 They verify actual SPI words and GPIO reads, input-bit perturbation, shared HTX/
 select order, partial serial checkpoints, WAI/IRQ entry and persistent MCU NVM.
+The native fast-vector path also executes genuine timer capture and a MOVEP
+request-output store after original DSP vector fetches. File-driven original
+MIDI components retain exact input bits, native receive/parser counts and an
+actual MCU GPIO response under the declared reference timing (dsp-host-midi.txt).
 IRQ pulse fixtures select a real INTCR edge mode explicitly; they do not qualify
 persistent-level release sampling or measured device latency. Tied-write refusal
 messages include the actual address, both PCs and the common-time boundary.

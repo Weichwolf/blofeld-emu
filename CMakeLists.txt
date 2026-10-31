@@ -1395,7 +1395,8 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-original-midi-rom>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-dsp-host-midi")
-  set_tests_properties(reference_dsp_host_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+  # Three native message runs, bounded setup and a refused collision prefix.
+  set_tests_properties(reference_dsp_host_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 360)
   add_executable(blofeld-sequence-codec-test test/sequence_codec_test.cpp)
   target_link_libraries(blofeld-sequence-codec-test PRIVATE blofeld_host_midi_port)
   add_test(NAME sequence_codec COMMAND blofeld-sequence-codec-test)
@@ -1705,7 +1706,8 @@ if(BUILD_TESTING)
     $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-original-midi-rom>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-original-midi")
-  set_tests_properties(reference_original_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  # Two baseline runs plus two three-branch replays;90 seconds per native branch.
+  set_tests_properties(reference_original_midi_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 800)
   add_executable(blofeld-reference-rom-fixture test/reference_rom.cpp)
   target_link_libraries(blofeld-reference-rom-fixture PRIVATE blofeld_firmware)
   add_test(NAME reference_shi_cli COMMAND ${Python3_EXECUTABLE}
