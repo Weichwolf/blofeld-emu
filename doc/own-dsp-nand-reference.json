@@ -17,5 +17,18 @@
   "synthetic_zero_bytes": 0,
   "block_or_program_history_assumed": false,
   "full_boot_proven": false,
-  "sparse_image_bytes": 113884
+  "sparse_image_bytes": 113884,
+  "connected_j_candidate": {
+    "cpu_bytes_matched": 56238,
+    "complete_pages": 106,
+    "partial_page_bytes": 270,
+    "unknown_remaining_bytes": 258,
+    "returned_source_words": 18656,
+    "resident_unique_words_matched": 18276,
+    "resident_mismatches": 0,
+    "store_template_matches": true,
+    "physical_part_qualified": false,
+    "timing_qualified": false,
+    "loader_handoff_proven": false
+  }
 }

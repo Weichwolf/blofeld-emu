@@ -9,14 +9,13 @@ statuses are informative, not acceptance gates. No measured hardware equivalence
 or physical brick-safety claim is made.
 
 Requirement                       State    Evidence / remaining work
-Own-core NAND resolved pads       partial  Local connected MCU/own-core run completes
-                                          32 pages: all 16,896 actual CPU PDRF values
-                                          match the original-derived source prefix.
-                                          Conflicts remain unknown; sampling them
-                                          still fails. Next refusal is the P-package
-                                          block-end CE contract. Part/CE recovery,
-                                          source tail, clocks, loader handoff and
-                                          instrument operation remain open
+Own-core NAND resolved pads       partial  Explicit J candidate reads all56,238 known
+                                          source bytes; all CPU values match. At the
+                                          final refill cut,18,276 expected resident
+                                          P/X/Y words and its store template match.
+                                          Unknown258-byte tail still refuses; loader
+                                          handoff, part/CE identity, real clocks and
+                                          full instrument operation remain open
                                           (own-dsp-integration.txt).
 Own-core Port-C lane hypothesis    partial  Local projection of two control registers
                                           passes 48 pin/function cases and scope

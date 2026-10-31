@@ -74,7 +74,7 @@ Conditional board contracts, each separately controlled and recorded:
   after access still refuses. This supplies no BIU wait-state timing law.
 - The NAND contract composes the existing protocol, write/setup/output timing
   and operation clock with actual GPIO and Timer1 DI. It declares reference
-  power readiness and 15us reads, P-package continuation, fixed-selected CE and
+  power readiness and 15us reads, explicit P/J contracts, fixed-selected CE and
   floating auxiliary inputs. Initial pad history and physical nets stay open.
   Tests cover two synthetic cells, access-time uncertainty, busy/ready deadlines,
   unknown cells and PF10 independence. Simple direct/inverted PF10 CE candidates
@@ -90,6 +90,9 @@ Conditional board contracts, each separately controlled and recorded:
   all-lane disagreement, agreeing drivers, original-order direction changes,
   access-time uncertainty and explicit ownership. They establish logical pad
   behavior, not electrical current, damage or calibrated transition timing.
+  The latest controller also samples resolved NAND inputs and interleaves
+  output-valid/release deadlines; same-tick feedback creates no extra pin edge.
+  Independent 17/33-tick hold/release cases pass at the 1.08GHz reference.
 
 The sparse NAND source candidate contains 56,238 original-derived bytes;
 258 final-page bytes, other pages and program/protection history stay unknown.
@@ -98,20 +101,27 @@ No erased array or synthetic zero tail is assumed. Source identities and scope:
   doc/own-dsp-nand-reference.json
 
 Current verified boundary:
-The latest own-core run completes 32 pages. All 16,896 actual CPU PDRF return
-values and prepared protocol bytes match the update-derived source prefix.
-Twenty-two conflicting net observations remain explicitly unknown; no CPU read
-consumes such a value. The next refusal is a fresh read command after row31:
-the selected P-package contract requires CE-high termination at a block end,
-but the candidate net stays selected. Recover the CE route or the correct part
-contract; keep that guard. The datasheet distinguishes P sequential reads and
-J command-stepped pages, without proving either fitted identity. Original fixed
-stage-byte equality also flags the loader's self-modifying P8E slot; the final
-patch opcode was not separately captured. Full loader/RAM identity is unproven.
-Clock and physical-net qualifications, DSP audio, loader handoff and normal
-instrument operation remain open.
-NAND write-latch input still uses intended GPIO data; resolved write sampling
-and interleaving output-valid/release deadlines need separate integration.
+The explicit J candidate completes all 56,238 known source bytes across 106 full
+pages and 270 bytes of the last page. Every raw CPU PDRF value matches the
+original-derived source. All 107 address requests have their own reference read
+deadline. The first unknown byte at row106/column270 still refuses; 258 final
+bytes remain unassigned. No CE pulse or zero-filled tail is introduced.
+
+At this active-refill cut, the loader has returned 18,656 source words. An
+independent ordered-record expectation finds 18,276 distinct resident P/X/Y
+words: every word is known and matches, with zero mismatches. The current
+self-modified P8E matches the selected original P-store template, and the other
+93 first-stage words remain unchanged. That template-family check is scoped
+to this refill: the terminal header later patches P8E from P190 before the
+handoff. No complete loader handoff or post-entry behavior is established.
+
+The prior fixed-selected P candidate still hits the documented block-end CE
+termination requirement. J's command-stepped pages remove that incompatibility
+within the model, without identifying the installed part or physical nets.
+Source analysis locates the missing 258 bytes in 86 DSP RAM words copied past
+the updater's delivered payload. A retained-RAM capture and actual original
+updater programming path are needed before assigning those NAND contents.
+Clock qualifications, DSP audio, MIDI and normal instrument operation stay open.
 Reference artifacts, copied persistent state and the memory/lane traces remain
 unchanged. Z3 also admits distinct peer permutations under bounded software
 constraints; those constraints do not uniquely identify the physical nets.
@@ -126,6 +136,8 @@ Local source, commands, sanitized controls, pinned artifacts and native audits:
   doc/local/own-core-nand-register-mode/{build,runtime,audit}.json
   doc/local/own-core-nand-resolved-pads/{build,frozen-inputs,runtime,audit}.json
   doc/local/own-core-reset-abort/validation.json
+  doc/local/own-core-nand-j/validation.json
+  doc/local/own-core-nand-j-runtime/{build,frozen-inputs,runtime,audit}.json
 
 Public adapter validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
