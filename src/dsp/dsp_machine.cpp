@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/detail/dsp_reference_cycle.hpp"
+#include "dsp/dsp_address_register_store.hpp"
 #include "dsp/dsp_address_stage.hpp"
 #include "dsp/dsp_agu_interlocks.hpp"
 #include "dsp/dsp_branch_form.hpp"
@@ -256,7 +257,8 @@ struct DspMachine::State {
     // This is a selected reference phase order, not a silicon sampling claim.
     if (inputs.memory) {
       const auto view = cpu.address_stage(*inputs.memory);
-      if (view.kind == DspAddressStageKind::peripheral_register) {
+      if (view.kind == DspAddressStageKind::peripheral_register ||
+          address_register_scalar_store(view.word.value)) {
         result.memory = cpu.execute_reference_memory(*inputs.memory);
       }
     }

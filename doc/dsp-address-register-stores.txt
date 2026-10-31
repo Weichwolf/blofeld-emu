@@ -1,0 +1,33 @@
+Raw address-register stores
+
+  cmake --build --preset strict --target blofeld-address-register-store-test
+  ctest --test-dir build/strict -R '^dsp_address_register_store$' --output-on-failure
+
+Standalone R0..R7 -> X/Y stores retain all24 source bits and preserve CCR.
+FM13-118/122 and Table12-14 define the independently encoded source fields.
+Register-indirect modes0..5/7 use native AG1/AG2,including indexed addressing,
+predecrement and256-word modulo wrap. Modes5/7 retain their extra E1 period;
+native instruction-cycle counters remain distinct from elapsed reference time.
+
+The native source is read before a younger AG2 changes that register. Existing
+peripheral-register stores use the same reference ordering. For a source that
+also supplies this instruction's address,the native captured AG1 inputs retain
+its old value. A preceding register MOVE remains visible at E1;address-set
+dependencies still hold Decode for their existing3/2/1/0 periods. No host
+register-value substitution or address evaluator is added. These are reference
+phases,not measured silicon sampling edges.
+
+Per sanitizer profile,13472 own windows comprise7840 base/raw-value cases,
+1792 younger-pointer cases,3584 modulo cases and256 preceding Y0-to-R moves.
+All eight source/address registers,both spaces,seven modes,raw high bits,CCR
+patterns and scaling fields are covered within that matrix shape. Complete
+CPU/stack/counters,actual E1 cells,neighbor canaries,F2 footprint and elapsed
+periods have independent expectations.35 cuts restore and clone into fresh
+owners. Captured producer/consumer words survive backing P-memory replacement.
+
+Sixteen form guards keep REP and parallel ALU admission separate. The initial
+classifier-only counterexample passed7840 cases,then stored the younger
+incremented R value;the phase change corrects that ordering without changing
+the expected data. Automatic SC=1,Tcc-source timing and other instruction
+families remain separate qualifications. Full original boot,MIDI/audio,
+storage/update/recovery,realtime and hardware equivalence remain open.

@@ -3441,6 +3441,9 @@ dsp-sc-moves.txt. Exact transition sampling and automatic SC=1 remain unqualifie
 Parallel TFR/raw-part X/Y stores add20080 own windows/profile,50 restores/50
 fresh clones and30 form guards,including producer interlocks and modulo wrap.
 See dsp-parallel-partial-stores.txt; standalone/REP admission stays separate.
+Raw R0..R7 scalar stores add13472 own windows/profile,35 restores/35 fresh
+clones and16 form guards,including younger-pointer and explicit producer
+ordering. See dsp-address-register-stores.txt; REP/Tcc remain separate.
 Independent per-period state/cell/stack expectations and joint continuations
 support acceptance requirements2/3/6; see dsp-boot-instructions.txt for exact
 admission and refusals. This does not establish requirements4/7/8/9 or complete

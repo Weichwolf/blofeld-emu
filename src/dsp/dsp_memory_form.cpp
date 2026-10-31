@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dsp/dsp_memory_form.hpp"
 
+#include "dsp/dsp_address_register_store.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_full_peripheral_store.hpp"
 #include "dsp56kEmu/opcodeanalysis.h"
@@ -239,9 +240,9 @@ std::optional<DspMemoryForm> single(const Type type, const std::uint32_t opcode)
       dsp56k::getRegister(type, control ? dsp56k::Field_DDDDD : dsp56k::Field_ddd, opcode);
   const auto access = operation(type, dsp56k::Field_W, opcode);
   if (!data_register(reg) && (!address_register(reg) || access != DspMemoryOperation::read) &&
-      !data_offset_scalar_store(opcode) && !full_accumulator_scalar_store(opcode) &&
-      !partial_accumulator_scalar_store(opcode) && !parallel_partial_tfr_store(opcode) &&
-      !accumulator_scalar_load(opcode)) {
+      !data_offset_scalar_store(opcode) && !address_register_scalar_store(opcode) &&
+      !full_accumulator_scalar_store(opcode) && !partial_accumulator_scalar_store(opcode) &&
+      !parallel_partial_tfr_store(opcode) && !accumulator_scalar_load(opcode)) {
     return std::nullopt;
   }
   const auto mode = dsp56k::getFieldValue(type, dsp56k::Field_MMM, opcode);
