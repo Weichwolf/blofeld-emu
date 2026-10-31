@@ -45,91 +45,75 @@ instructions, warm register retention and old-ticket refusal across reset.
 No original-ROM boot, MCU wiring, calibrated pipeline, DMA timing, full machine
 checkpoint or real-time instrument behavior is established by these fixtures.
 
-Original-firmware diagnostic evidence:
-A local original MCU/own-core run through this owner received all 94 original
-first-stage words over 7,275 MCU SPI writes. It stopped visibly at the known
-reserved Y:002000 zero write, DSP PC 000072, after 191,073 retired DSP instructions.
-The executable has no dsp56k namespace symbols; its explicit link inputs omit
-the foreign DSP libraries. Pinned input files, program artifacts and copied
-persistent device state were unchanged. Detailed commands, hashes and native results remain local in
-  doc/local/own-core-live-reset/{inputs,build,validators,relink,runtime}.json
-This is evidence for the connected software path up to that strict refusal.
-It uses candidate peer routing, scripted reset/input observations, a documented
-partial boot ROM and one DSP instruction per MCU instruction, with estimated
-base cycles for peripheral advance. Those are uncalibrated hypotheses. The
-reserved write's silicon response, physical reset/wiring, complete ROM and
-reset-to-instrument operation remain unqualified. No refusal was bypassed.
+Connected original-firmware evidence (local only):
+The strict diagnostic receives all 94 original first-stage words through 7,275
+MCU SPI writes and refuses the reserved Y:002000 clear at DSP PC 000072. Its
+explicit link inputs omit foreign DSP libraries; no dsp56k symbols occur.
+The owner handles actual MCU interrupt entries and WAI boundaries. It uses
+scripted reset/input observations, candidate peer routing, a document-derived
+partial boot ROM and one DSP instruction per MCU boundary. Estimated peripheral
+cycles and instruction-boundary GPIO observation are uncalibrated; neither
+physical wiring nor reset-to-instrument operation follows from these runs.
 
-Explicit local decoder hypothesis:
-A separately declared no-selected-cell model admits writes to reserved/ROM
-classes in the low 128K X/Y window. Reads, real RAM, other address ranges and
-peripherals retain strict behavior; every hypothesis write records address,
-operation, PC, value and decoder class. Twenty manual-boundary/control cases
-pass under ASan/UBSan, including strict default refusal and unchanged ROM data.
-With unchanged original firmware and decoder, the corrected diagnostic owner
-handles six genuine MCU interrupt entries and completes the original long clear.
-Its trace contains exactly the expected 184,320 distinct hypothesis writes;
-R4 reaches 020000. The next refusal is the reserved-one GPIO direction write at
-X:FFFFBE, value 00FF00, DSP PC 000073. No hardware response is established by
-this conditional execution. The regular memory map remains strict and full
-instrument operation remains open. Local evidence and hashes:
-  doc/local/own-core-memory-decoder/irq-boundary/{runtime,audit}.json
-Z3 also finds both direct and alternative bijective peer maps satisfying the
-bounded software constraints. These constraints do not uniquely recover the
-physical nets; the query and models remain in that directory as peer-ambiguity.*.
+Conditional board contracts, each separately controlled and recorded:
+- A no-selected-cell hypothesis admits only reserved/ROM writes in the low
+  128K X/Y window. It creates no cells/read values; real RAM and peripherals
+  remain strict. Twenty controls pass, including unchanged ROM and default
+  refusal. The original clear produces exactly 184,320 distinct logged writes.
+- A Port-C lane hypothesis projects direction/control writes onto twelve pins.
+  Forty-eight pin/function cases and scope controls pass. The original 00FF00
+  write selects 000F00; its outside-lane silicon response remains unqualified.
+- A functional Port-F contract retains reset BCR=1FFFFF rather than writing a
+  fitted 01FFFF. Real word/bit accesses and unknown-input controls pass; BBS
+  after access still refuses. This supplies no BIU wait-state timing law.
+- The NAND contract composes the existing protocol, write/setup/output timing
+  and operation clock with actual GPIO and Timer1 DI. It declares reference
+  power readiness and 15us reads, P-package continuation, fixed-selected CE and
+  floating auxiliary inputs. Initial pad history and physical nets stay open.
+  Tests cover two synthetic cells, access-time uncertainty, busy/ready deadlines,
+  unknown cells and PF10 independence. Simple direct/inverted PF10 CE candidates
+  conflict with reconstructed programming constraints under the NAND contract.
+- A register-retention hypothesis permits the transient reserved Port-F mode
+  while retaining unknown pin functions. It invents no high-Z input or data:
+  CPU data reads during that mode refuse with context. Controls verify default
+  refusal, retained PCR/DDR values, unknown pads and valid input-mode recovery.
+  Each conditional write is logged with operation, address, PC and value.
 
-Port-C lane experiment (local only):
-An additional declared hypothesis projects direction/control word writes onto
-Port C's twelve documented lanes. Forty-eight pin/function truth-table cases
-and strict scope controls pass under ASan/UBSan. In the original run, exactly
-one write uses this rule: 00FF00 selects 000F00 and addresses 00F000 outside
-the implemented lanes. The memory-write trace is byte-identical to the prior
-audited clear; artifacts and copied persistent state are unchanged. Twelve more
-DSP instructions retire before the first NAND routine refuses its Port-F PCRF
-write at Y:FFFFF7, DSP PC 0000A3. The modeled family-reset BCR remains unchanged.
-This neither proves reserved-bit masking on silicon nor resolves the documented
-Port-F BIU wait-state prerequisite. No normal instrument operation is established.
-Local code, control results, provenance, full traces and audit:
+The sparse NAND source candidate contains 56,238 original-derived bytes;
+258 final-page bytes, other pages and program/protection history stay unknown.
+It is an updater-source projection, not a physical dump or proof of programming.
+No erased array or synthetic zero tail is assumed. Source identities and scope:
+  doc/own-dsp-nand-reference.json
+
+Current verified boundary:
+The latest own-core run completes 1,584 CPU PDRF reads across three source pages.
+Its 1,585 prepared protocol bytes match the update-derived stream; raw CPU return
+values are not separately traced by this diagnostic. The NAND protocol prepares
+the first byte of row3, then the local resolver refuses pad contention
+before the next CPU data read, DSP PC 000094. RE is already asserted while the
+DSP still drives the data pins. Register retention does not resolve this
+transition. The uncalibrated scheduler and transient pad resolution need work;
+this observation does not prove a conflict on physical hardware. No DSP audio,
+complete loader handoff or normal instrument operation is established.
+Reference artifacts, copied persistent state and the memory/lane traces remain
+unchanged. Z3 also admits distinct peer permutations under bounded software
+constraints; those constraints do not uniquely identify the physical nets.
+
+Local source, commands, sanitized controls, pinned artifacts and native audits:
+  doc/local/own-core-live-reset/{relink,runtime}.json
+  doc/local/own-core-memory-decoder/irq-boundary/{runtime,audit,peer-ambiguity}.json
   doc/local/own-core-gpio-lanes/{build,runtime,audit}.json
-
-Retained-reset-BCR experiment (local only):
-A declared functional Port-F contract admits the family reset wait-state value
-1FFFFF without writing 01FFFF or changing the reset image. This is not a derived
-Port-F wait-state timing law. Instrumented controls exercise real GPIO outputs,
-word and bit accesses, explicitly floating auxiliary-input fixtures, strict
-unknown data inputs and refusal of unobserved BBS after access. Split native
-RMW phases and physical bus timing are not qualified by these controls.
-The original run performs six Port-F control/data writes and reaches the timer1
-DI bit12 poll at X:FFFF8B, DSP PC 0000BB. That pin is unobserved and refuses;
-no NAND data byte has been supplied. Memory and Port-C traces are byte-identical
-to the prior experiment, and persistent state/artifacts remain unchanged. The
-NAND component now needs GPIO edge inputs and modeled ready outputs.
-Local code, controls and audited results:
   doc/local/own-core-biu-reset-waits/{build,runtime,audit}.json
-
-NAND GPIO connection experiment (local only):
-An explicit candidate pin contract connects the existing NAND protocol,
-write/read setup, output timing and operation clock to actual GPIO effects
-and Timer1 DI. Power readiness and the 15us read duration are declared reference
-observations; initial pad history, physical nets and board timing remain
-unqualified. The parent decoder, lane, reset-BCR and scheduling hypotheses stay
-in force. Instrumented controls verify two explicitly seeded synthetic cells,
-unknown outputs before access time, busy/ready deadlines and unknown-cell refusal.
-The two-byte fixture explicitly selects the P-package continuation contract.
-The unchanged original run issues a read command and four address cycles, waits
-for modeled completion and reaches its first array read. It refuses unknown
-page 0, column 0 contents at DSP PC 000093 after 314,180 retired instructions.
-No NAND byte is supplied to the original run. The 94-word stage still matches;
-memory/lane traces, reference artifacts and persistent state remain unchanged.
-This is conditional connected execution, not proof of physical wiring or boot.
-Local source, strict checks, sanitized controls, provenance and audit:
   doc/local/own-core-nand-link/{build,runtime,audit}.json
+  doc/local/own-core-nand-source/{source,build,runtime,audit,ce_constraints}.json
+  doc/local/own-core-nand-register-mode/{build,runtime,audit}.json
 
-Validation:
+Public adapter validation:
   cmake --build build/strict --target blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-own-dsp-reset-test -j2
   ctest --test-dir build/strict -R '^own_dsp_(io|interrupts|reset)$' --output-on-failure
 
-The regular device and reference scheduler still use the legacy core. The new
-adapter and its synthetic test are not evidence of full boot, real timing, audio,
-MIDI or hardware equivalence. Migrating the scheduler and removing that legacy
-dependency remain required.
+The regular device and reference scheduler still use the legacy core. Migrating
+that scheduler, full clock/pipeline/DMA ownership and machine checkpoints,
+removing the legacy dependency and all reset-to-instrument requirements remain
+open. The independent adapter and local hypotheses do not establish full boot,
+real timing, MIDI/audio or hardware equivalence.

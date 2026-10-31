@@ -1,0 +1,21 @@
+{
+  "qualification": "Hypothetical logical updater result; physical NAND contents, programming and wiring unqualified",
+  "firmware_archive_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "firmware_midi_sha256": "447f7ec928b5b4144fad2193351f0604011f2ab8ed9b9dbe3d1bb7c594e813c0",
+  "main_block_runtime_offset": 33411,
+  "runtime_bytes": 56022,
+  "validation_and_error_object_bytes": 210,
+  "transport_padding_bytes": 6,
+  "source_bytes": 56238,
+  "source_sha256": "cadd0873304467a701174afc196997e1d199dfff216201c216c3bc729f9e213c",
+  "candidate_page_bytes": 528,
+  "candidate_page_count": 107,
+  "known_last_page_bytes": 270,
+  "unknown_last_page_bytes": 258,
+  "sparse_image_format": 1,
+  "sparse_image_sha256": "08dc77f1ee973c71c0d22d955c5f1b76cb6fc4c617be08bdd5532598c6a66bd8",
+  "synthetic_zero_bytes": 0,
+  "block_or_program_history_assumed": false,
+  "full_boot_proven": false,
+  "sparse_image_bytes": 113884
+}
