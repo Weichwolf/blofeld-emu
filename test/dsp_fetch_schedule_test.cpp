@@ -15,7 +15,15 @@ namespace {
 void ordered(const DspPeerOrder order) {
   constexpr auto second = first_cycle + period;
   constexpr auto third = second + period;
-  Fixture fixture(order, {0, 1, first_cycle, first_cycle + 1, second, second + 2, third, horizon});
+  Fixture fixture(order,
+                  {initial_ticks,
+                   initial_ticks + 1,
+                   first_cycle,
+                   first_cycle + 1,
+                   second,
+                   second + 2,
+                   third,
+                   horizon});
   unsigned retired = 0;
   fixture.on_cycle = [&](const DspRuntimeCycle &cycle) {
     require(cycle.completion_ticks == reset_end + ((cycle.cycle + 1) * period) &&
@@ -26,7 +34,7 @@ void ordered(const DspPeerOrder order) {
     if (cycle.result.native && cycle.result.native->retired) { ++retired; }
   };
   fixture.run(mcu_instructions);
-  std::vector<std::string> expected{"E0", "E1"};
+  std::vector<std::string> expected{"E450", "E451"};
   if (order == DspPeerOrder::peer_first) {
     expected.insert(expected.end(),
                     {"E630", "D630", "E631", "E675", "D675", "E677", "E720", "D720"});

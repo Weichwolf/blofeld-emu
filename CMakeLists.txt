@@ -1715,7 +1715,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-dsp-fetch-events-test test/mcu_dsp_fetch_events_test.cpp
     test/mcu_dsp_fetch_events_fixture.cpp test/mcu_dsp_fetch_events_orders.cpp
     test/mcu_dsp_fetch_events_guards.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-events-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-mcu-dsp-fetch-events-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME mcu_dsp_fetch_external_events COMMAND blofeld-mcu-dsp-fetch-events-test)
   add_executable(blofeld-mcu-dsp-fetch-external-wait-test test/mcu_dsp_fetch_external_wait_test.cpp)
   target_link_libraries(blofeld-mcu-dsp-fetch-external-wait-test PRIVATE blofeld_mcu_dsp_runtime)

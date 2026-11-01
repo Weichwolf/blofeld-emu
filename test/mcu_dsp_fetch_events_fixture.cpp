@@ -1,18 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "mcu_dsp_fetch_events_fixture.hpp"
 
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_pipeline.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp_fetch_run_fixture.hpp"
-#include "dsp_memory_pipeline_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
@@ -23,8 +19,8 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -52,39 +48,71 @@ McuRunContract mcu_contract() {
           .memory_timing = McuRunMemory::unstretched_internal};
 }
 
-McuDspFetchInputs settings(const Case order, const std::uint64_t start) {
-  return {.dsp = {.extal_hz = oscillator,
-                  .timebase_hz = common,
-                  .timing = DspFetchTiming::reference_cycle_order,
-                  .execution = DspReferenceExecution::staged_register_boundaries,
-                  .pipeline = DspFetchPipeline::automatic_memory,
-                  .resets = DspFetchResetTiming::reference_cycle_boundary},
-          .epoch_ticks = start,
-          .shared_write_order = order.native,
-          .maximum_dsp_cycles_per_period = 16,
-          .external_write_order = order.external,
-          .wait_order = McuDspWaitOrder::dsp_before_mcu,
-          .reset_order = McuDspResetOrder::dsp_before_mcu};
+McuDspRuntimeInputs settings(const Case order) {
+  return {.timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts,
+          .maximum_cycles_per_period = 16,
+          .writes = order.native,
+          .external_writes = order.external,
+          .wait_dsp_first = true,
+          .reset_dsp_first = true,
+          .initial_reset = OwnDspResetInputs{
+              .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 3}};
 }
 
-DspMachine &prepare(McuMachine &mcu, DspMachine &dsp) {
+DspDmaInputs cycle_inputs() {
+  return {.known_requests = 15,
+          .timing = DspDmaTiming::reference_sampled_cycles,
+          .grant = DspDmaGrant::available};
+}
+
+dsp56300::Registers reset_registers() {
+  constexpr unsigned boot = 0xff0000;
+  constexpr unsigned status = 0xc00300;
+  constexpr unsigned mode = 0x305;
+  dsp56300::Registers expected{};
+  expected.pc = boot;
+  expected.sr = status;
+  expected.omr = mode;
+  expected.m.fill(dsp56300::word_mask);
+  return expected;
+}
+
+void prepare(McuMachine &mcu, OwnDspMachine &dsp) {
   mcu.bus().set_pin_drive(McuPort::e, {.mask = 3, .levels = 3});
   mcu.bus().write(hc12::portb, 0);
   mcu.bus().write(hc12::ddrb, byte_mask);
   mcu.bus().write(marker_address, marker);
-  const std::array<std::string, 2> code{"movep x:<<$ffffbd,x0", "movep x:<<$ffffbd,y0"};
-  memory_pipeline::prepare(dsp, code);
-  dsp.bus().gpio(DspPort::c).write({.reg = DspGpioRegister::control, .value = pins});
-  dsp.bus().gpio(DspPort::c).set_drive({.mask = pins, .levels = 0});
-  return dsp;
+  // Authored register MOVEP X:<<$ffffbd,X0; MOVEP X:<<$ffffbd,Y0; NOPs.
+  constexpr unsigned boot = 0xff0000;
+  constexpr unsigned words = 128;
+  constexpr unsigned read_x0 = 0x0444dd;
+  constexpr unsigned read_y0 = 0x0446dd;
+  std::array<std::uint32_t, words> program{read_x0, read_y0};
+  dsp.bus().install_rom({.space = DspSpace::p, .start = boot, .words = program});
 }
 
 Fixture::Fixture(const Case policy, const std::uint64_t at, std::vector<std::uint64_t> observations)
     : mcu(image(), BLOFELD_DEFAULT_SLA, mcu_contract()),
       ticks(std::move(observations)),
       order(policy),
-      start(at),
-      schedule(settings(policy, at), mcu, prepare(mcu, dsp), events()) {
+      start(at) {
+  prepare(mcu, dsp);
+  runtime = std::make_unique<McuDspRuntime>(settings(policy), mcu, dsp, events());
+  require(runtime->end_ticks() == initial_time &&
+              dsp.clock().hardware_reset_ticks() == initial_time,
+          "Actual five MCU reset-vector periods preserve DSP hold from zero");
+  dsp.bus().gpio(DspPort::c).write({.reg = DspGpioRegister::control, .value = pins});
+  drive();
+  if (at == initial_time) { runtime->release_dsp_reset(); }
+  attach();
+}
+
+void Fixture::restore(const McuDspRuntimeCheckpoint &saved, const SourceState source) {
+  runtime.reset();
+  cursor = source.cursor;
+  levels = source.levels;
+  trace.clear();
+  runtime = std::make_unique<McuDspRuntime>(saved, mcu, dsp, events());
   attach();
 }
 
@@ -97,7 +125,7 @@ void Fixture::drive() {
   dsp.bus().gpio(DspPort::c).set_drive({.mask = pins, .levels = levels});
 }
 
-DspFetchExternalEvents Fixture::events() {
+DspRuntimeEvents Fixture::events() {
   return {.identity = identity,
           .next_ticks = [this]() -> std::optional<std::uint64_t> {
             return cursor < ticks.size() ? std::optional{ticks.at(cursor)} : std::nullopt;
@@ -113,23 +141,23 @@ DspFetchExternalEvents Fixture::events() {
                 if (after_event) { after_event(); }
               },
           .order = order.peers,
-          .maximum_events = 64};
+          .maximum_events_per_period = 64};
 }
 
 void Fixture::attach() {
-  const auto input = [] { return fetch_clock::input(); };
-  const auto observed = [this](const DspFetchCycleResult &cycle) {
-    require(cycle.period_ticks == period &&
-                cycle.completion_ticks == cycle.completed_cycles * period,
-            "Actual native periods retain independent bypass timing");
-    trace.push_back({.actor = 'D', .time = start + cycle.completion_ticks});
+  const auto observed = [this](const DspRuntimeCycle &cycle) {
+    constexpr unsigned recovery_clocks = 3;
+    require(cycle.completion_ticks - cycle.start_ticks == period &&
+                cycle.completion_ticks == start + ((cycle.cycle + 1 + recovery_clocks) * period),
+            "Actual native periods retain independent held/recovery/EXTAL timing");
+    trace.push_back({.actor = 'D', .time = cycle.completion_ticks});
   };
-  mcu.set_cycle_observer([this, input, observed](const auto cycle) {
-    schedule.begin_cycle(cycle, cycle.kind == 'w' && cycle.address == 1, input, observed);
+  mcu.set_cycle_observer([this, observed](const auto cycle) {
+    runtime->begin_cycle(cycle, cycle.kind == 'w' && cycle.address == 1, cycle_inputs, observed);
   });
-  mcu.bus().set_observer([this, input, observed](const auto &event) {
+  mcu.bus().set_observer([this, observed](const auto &event) {
     if (!event.write || event.address != 1) { return; }
-    schedule.observe_write(
+    runtime->observe_write(
         event,
         [this] {
           const auto pads = mcu.bus().observe_pads(McuPort::b, byte_mask);
@@ -137,9 +165,9 @@ void Fixture::attach() {
                   "Actual native STAB precedes its explicit laboratory pin connection");
           levels |= 1U;
           drive();
-          trace.push_back({.actor = 'M', .time = schedule.end_ticks()});
+          trace.push_back({.actor = 'M', .time = runtime->end_ticks()});
         },
-        input,
+        cycle_inputs,
         observed);
   });
 }
@@ -147,7 +175,7 @@ void Fixture::attach() {
 void Fixture::step(const unsigned instructions) {
   for (unsigned i = 0; i < instructions; ++i) {
     require(mcu.cpu().step().instruction_executed, "Actual native MCU instruction executes");
-    schedule.end_instruction();
+    runtime->end_instruction();
   }
 }
 } // namespace blofeld::test::joint_events

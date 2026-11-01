@@ -48,7 +48,7 @@ void malformed_sources() {
 }
 
 void retained_source() {
-  Fixture fixture(DspPeerOrder::peer_first, {1});
+  Fixture fixture(DspPeerOrder::peer_first, {initial_ticks});
   const auto saved = fixture.runtime->checkpoint();
   const std::array<std::function<void(DspRuntimeEvents &)>, 4> corrupt{
       [](auto &events) { events = {}; },

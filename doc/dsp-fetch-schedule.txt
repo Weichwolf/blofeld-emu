@@ -137,12 +137,15 @@ Desktop/Keyboard equivalence remain unverified; see objective.txt and coverage.t
 
 Twenty directed joint cases include six real LDAB/STAB/MOVEP causal orders,
 complete CPU/capture endpoints, twelve positive and ten refusal suffix replays,
-cyclic/unknown policy, newborn-event causality, callback and future-epoch controls.
-Two timed WAI IRQ orders retain four native stack/IRQ/RTI suffixes with independent
-2+1+7 setup, six-period wake and eight-period return expectations. Four reset
-release/recovery-event combinations retain eight held suffixes and literal
-60-tick MCU, 45-tick DSP and 90-tick recovery accounting. These are declared
-reference connections and timing contracts, not measured physical board routes.
+cyclic/unknown policy, newborn-event causality, callback and delayed-start controls.
+These now use dsp56300 and the regular McuDspRuntime, with actual held reset
+replacing future-epoch setup. Captured GPIO samples, full native state and
+literal clocks accompany replay checks; see dsp-fetch-events.txt. Twelve timed
+WAI IRQ profiles retain24 native stack/IRQ/RTI suffixes with independent2+1+7
+setup, six-period wake and eight-period return expectations. Four reset-release/
+recovery-event profiles retain eight suffixes; see mcu-dsp-external-control.txt.
+These are declared reference connections and timing contracts, not measured
+physical board routes.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-power-on-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_power_on$'

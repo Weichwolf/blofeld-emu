@@ -145,6 +145,15 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           state and zero/one/two idle-period
                                           expectations are checked independently
                                           (mcu-dsp-external-control.txt).
+                                          Joint write/DSP/input tests now use
+                                          that core too:all6 causal permutations,
+                                          12 captured-read replay suffixes and10
+                                          restored refusal suffixes retain full
+                                          native state. Past initial input and
+                                          unqualified DSP-born events refuse
+                                          before observation/extra MCU stores;
+                                          delayed start retains real held reset
+                                          (dsp-fetch-events.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are

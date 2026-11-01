@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "common/bus.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/dsp_dma.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "storage/flash_image.hpp"
 
@@ -20,8 +19,8 @@
 
 namespace blofeld::test::joint_events {
 inline constexpr unsigned oscillator = 12000000, common = 540000000, entry = 0x8000;
-inline constexpr std::uint64_t initial_time = 450, epoch = 540, period = 45, collision = 720,
-                               finish = 900;
+inline constexpr std::uint64_t initial_time = 450, recovery_end = 585, period = 45, collision = 720,
+                               finish = 1080;
 inline constexpr unsigned pins = 0xfff, byte_mask = 0xff, marker_address = 0x1200, marker = 0x5a;
 
 struct Event {
@@ -31,17 +30,28 @@ struct Event {
 };
 
 struct Case {
-  McuDspTieOrder native;
-  McuExternalWriteOrder external;
-  DspExternalOrder peers;
+  McuWriteOrder native;
+  McuWriteOrder external;
+  DspPeerOrder peers;
   unsigned sample;
   std::array<char, 3> order;
 };
 
+struct SourceState {
+  unsigned cursor;
+  unsigned levels;
+};
+
 McuFlashImage image();
 McuRunContract mcu_contract();
-McuDspFetchInputs settings(Case order, std::uint64_t start);
-DspMachine &prepare(McuMachine &mcu, DspMachine &dsp);
+McuDspRuntimeInputs settings(Case order);
+void prepare(McuMachine &mcu, OwnDspMachine &dsp);
+DspDmaInputs cycle_inputs();
+dsp56300::Registers reset_registers();
+
+inline void require(const bool condition, const char *message) {
+  if (!condition) { throw Fault(message); }
+}
 
 inline std::string rejects(const auto &operation) {
   try {
@@ -52,26 +62,28 @@ inline std::string rejects(const auto &operation) {
 
 struct Fixture {
   explicit Fixture(Case policy,
-                   std::uint64_t at = epoch,
+                   std::uint64_t at = initial_time,
                    std::vector<std::uint64_t> observations = {collision, collision + 1});
   ~Fixture();
   Fixture(const Fixture &) = delete;
   Fixture &operator=(const Fixture &) = delete;
-  DspFetchExternalEvents events();
+  DspRuntimeEvents events();
+  void restore(const McuDspRuntimeCheckpoint &saved, SourceState source);
   void attach();
   void step(unsigned instructions);
   void drive();
   McuMachine mcu;
-  DspMachine dsp;
+  OwnDspMachine dsp{{.extal_hz = oscillator,
+                     .timebase_hz = common,
+                     .switch_timing = DspClockSwitch::reference_cycle_boundary}};
   std::vector<Event> trace;
   std::vector<std::uint64_t> ticks;
-  std::shared_ptr<const DspFetchEventIdentity> identity =
-      std::make_shared<const DspFetchEventIdentity>();
+  std::shared_ptr<const bool> identity = std::make_shared<const bool>(true);
   unsigned cursor = 0, levels = 0;
   const Case order;
   const std::uint64_t start;
   std::function<void()> after_event;
-  McuDspFetchSchedule schedule;
+  std::unique_ptr<McuDspRuntime> runtime;
 };
 
 void order_cases();

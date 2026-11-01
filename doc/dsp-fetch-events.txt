@@ -51,3 +51,39 @@ DSP permutations and both cyclic refusals using a genuine MCU GPIO store.
 These are explicit reference-effect timing checks, not measured seven-stage
 silicon placement or complete original Desktop/Keyboard boot, MIDI/audio,
 USB, persistence, update/recovery or real-time acceptance.
+
+Joint MCU write, DSP sample and external input
+
+mcu_dsp_fetch_external_events likewise uses McuDspRuntime without the legacy
+executor or assembler. Actual MCU reset-vector periods end at450; three DSP
+recovery clocks end at585. Native F1/F2 complete at630/675. Authored register
+MOVEP instructions read GPIO at720 and900; their samples publish later.
+At720 a real MCU STAB drives bit0 and an external input drives bit1. Independent
+expectations enumerate all six admitted orders and first captured words:
+
+  E/D/M   E/M/D   D/E/M   D/M/E   M/E/D   M/D/E
+  2       3       0       0       3       1
+
+The external bit clears at721. Twelve fresh-owner continuations retain the
+accepted first read, capture1 on the second read and finish at1080 with11 native
+periods, five CLK2 edges, two retirements, literal full CPU/register/flag/cost
+expectations and retained MCU SRAM. Ten restored refusal suffixes cover two
+cyclic and three unqualified/rejected collision policies before tied effects.
+Together with callback, causality and held-reset cases this group has20 cases.
+
+Initial source deadlines older than the consumed MCU reset boundary refuse
+before observation, reporting both PCs and the requested/initial times. A new
+same-tick input caused by DSP completion requires an MCU ordering before the
+actual MCU write proceeds; refusing it afterwards would retain an extra store.
+MCU-caused inputs require after-MCU ordering; their actual cause store remains
+committed when invalid new input refuses. Pinned-deadline and consumed-timeline
+checks retain their original priority. Callback mutation/reentry remains guarded.
+A delayed release at900 retains real held reset and135 recovery ticks before F1
+at1080; no future
+execution epoch or prepared DSP continuation substitutes for those intervals.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-events-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_external_events$'
+
+Repeat with the separate thread preset. These are reference timing/connection
+contracts, without a physical wiring, native JIT or full instrument claim.

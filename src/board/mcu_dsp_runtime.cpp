@@ -156,6 +156,13 @@ McuDspRuntime::McuDspRuntime(const McuDspRuntimeInputs inputs,
   timeline_ = std::make_unique<OwnDspTimeline>(
       dsp_, inputs_.timing, inputs_.epoch_ticks, inputs_.initial_reset);
   const Guard guard(*this);
+  const auto first = next_external();
+  if (first && *first < state_.end_ticks) {
+    throw Fault("MCU/DSP external event predates its initial native MCU boundary tick=" +
+                std::to_string(*first) + " initial-tick=" + std::to_string(state_.end_ticks) +
+                " mcu-pc=" + hex(mcu_.cpu().state().pc) +
+                " dsp-pc=" + hex(dsp_.cpu().registers().pc, 6));
+  }
   advance(true, true, {}, {});
 }
 
@@ -379,6 +386,12 @@ void McuDspRuntime::prepare_write(const CycleInputs &inputs, const Observer &obs
     reject("Cyclic MCU/DSP/external shared-write ordering");
   }
   advance(native_first, external_first, inputs, observer);
+  const auto pending = next_external();
+  if (pending && *pending == state_.end_ticks &&
+      inputs_.external_writes != McuWriteOrder::before_mcu &&
+      inputs_.external_writes != McuWriteOrder::after_mcu) {
+    reject("Unqualified newborn external event at MCU shared write");
+  }
 }
 
 void McuDspRuntime::begin_cycle(const Hc12BusCycle cycle,
