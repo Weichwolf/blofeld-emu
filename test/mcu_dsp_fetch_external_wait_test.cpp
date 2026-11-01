@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
+#include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_pipeline.hpp"
-#include "dsp/dsp_pll.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
-#include "dsp_fetch_run_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
@@ -30,15 +25,37 @@
 
 namespace {
 using namespace blofeld;
-using namespace blofeld::test;
 constexpr unsigned oscillator = 12000000, common = 540000000, entry = 0x8000, handler = 0x9000;
 constexpr unsigned flags = 0xc0, stack = 0x2000, wait_stack = 0x1ff7, vector = 0xfff2,
                    byte_mask = 0xff;
-constexpr std::uint64_t epoch = 450, period = 45, waiting = 1350, irq = 1395, idle_end = 1440,
-                        wake_end = 1980;
-constexpr std::uint64_t deassert = 2000, final_end = 2700;
-constexpr unsigned idle_native_periods = 22, final_mcu_periods = 30, final_native_periods = 50,
-                   final_timer_edges = 25;
+constexpr std::uint64_t initial_ticks = 450, recovery_end = 540, period = 45;
+constexpr std::uint64_t waiting = 1350, irq = 1395, idle_end = 1440, deassert = 2000;
+constexpr std::uint64_t mcu_period = 90;
+constexpr unsigned return_periods = 29;
+
+constexpr unsigned boot = 0xff0000;
+
+void require(const bool condition, const char *message) {
+  if (!condition) { throw Fault(message); }
+}
+
+DspDmaInputs cycle_inputs() {
+  return {.known_requests = 15,
+          .timing = DspDmaTiming::reference_sampled_cycles,
+          .grant = DspDmaGrant::available};
+}
+
+dsp56300::Registers nop_registers(const std::uint64_t cycles) {
+  constexpr unsigned reset_status = 0xc00300;
+  constexpr unsigned reset_omr = 0x305;
+  dsp56300::Registers expected{};
+  expected.pc = boot;
+  expected.sr = reset_status;
+  expected.omr = reset_omr;
+  expected.m.fill(dsp56300::word_mask);
+  if (cycles >= 3) { expected.pc += static_cast<unsigned>((cycles - 1) / 2); }
+  return expected;
+}
 
 struct Event {
   char actor;
@@ -73,34 +90,30 @@ McuRunContract mcu_inputs() {
           .memory_timing = McuRunMemory::unstretched_internal};
 }
 
-McuDspFetchInputs inputs() {
-  return {.dsp = {.extal_hz = oscillator,
-                  .timebase_hz = common,
-                  .timing = DspFetchTiming::reference_cycle_order,
-                  .execution = DspReferenceExecution::staged_register_boundaries,
-                  .pipeline = DspFetchPipeline::automatic_memory},
-          .epoch_ticks = epoch,
-          .shared_write_order = McuDspTieOrder::dsp_before_mcu,
-          .maximum_dsp_cycles_per_period = 16,
-          .wait_order = McuDspWaitOrder::dsp_before_mcu,
-          .reset_order = McuDspResetOrder::dsp_before_mcu};
+McuDspRuntimeInputs inputs() {
+  return {.timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts,
+          .maximum_cycles_per_period = 16,
+          .writes = McuWriteOrder::before_mcu,
+          .wait_dsp_first = true,
+          .reset_dsp_first = true,
+          .initial_reset = OwnDspResetInputs{
+              .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}};
 }
 
-DspMachine &prepare(DspMachine &dsp) {
-  DspProgram program;
+void prepare(OwnDspMachine &dsp) {
   constexpr unsigned nops = 128;
-  for (unsigned i = 0; i < nops; ++i) { program.emit("nop"); }
-  program.install(dsp.bus());
-  dsp.bus().pll().observe_pinit(false);
-  dsp.cpu().reset_spi_boot();
-  static_cast<void>(
-      dsp.begin_reference_instruction(DspReferenceExecution::staged_register_boundaries));
-  return dsp;
+  const std::array<std::uint32_t, nops> program{};
+  dsp.bus().install_rom({.space = DspSpace::p, .start = boot, .words = program});
 }
 
 struct Fixture {
-  explicit Fixture(DspExternalOrder policy)
-      : order(policy), schedule(inputs(), mcu, prepare(dsp), events()) {
+  Fixture(const DspPeerOrder policy, const std::uint64_t at) : irq_tick(at), order(policy) {
+    prepare(dsp);
+    runtime = std::make_unique<McuDspRuntime>(inputs(), mcu, dsp, events());
+    require(runtime->end_ticks() == initial_ticks &&
+                dsp.clock().hardware_reset_ticks() == initial_ticks,
+            "Five actual MCU reset-vector periods retain DSP hold from zero");
+    runtime->release_dsp_reset();
     mcu.bus().set_pin_drive(McuPort::e, {.mask = 3, .levels = 3});
     attach();
   }
@@ -113,16 +126,16 @@ struct Fixture {
   Fixture(const Fixture &) = delete;
   Fixture &operator=(const Fixture &) = delete;
 
-  DspFetchExternalEvents events() {
+  DspRuntimeEvents events() {
     return {.identity = identity,
             .next_ticks = [this]() -> std::optional<std::uint64_t> {
-              if (cursor == 0) { return irq; }
+              if (cursor == 0) { return irq_tick; }
               if (cursor == 1) { return deassert; }
               return std::nullopt;
             },
             .observe =
                 [this](const std::uint64_t at) {
-                  require(at == (cursor == 0 ? irq : deassert),
+                  require(at == (cursor == 0 ? irq_tick : deassert),
                           "Actual IRQ input time and cursor match");
                   mcu.bus().set_pin_drive(
                       McuPort::e,
@@ -131,27 +144,41 @@ struct Fixture {
                   ++cursor;
                 },
             .order = order,
-            .maximum_events = 2};
+            .maximum_events_per_period = 2};
+  }
+
+  void restore(const McuDspRuntimeCheckpoint &saved) {
+    runtime.reset();
+    cursor = saved_cursor;
+    trace.clear();
+    runtime = std::make_unique<McuDspRuntime>(saved, mcu, dsp, events());
+    attach();
   }
 
   void attach() {
-    const auto observed = [this](const DspFetchCycleResult &cycle) {
-      require(cycle.period_ticks == period &&
-                  cycle.completion_ticks == cycle.completed_cycles * period,
-              "Native DSP period census retains independent bypass timing");
-      trace.push_back({.actor = 'D', .ticks = epoch + cycle.completion_ticks});
+    const auto observed = [this](const DspRuntimeCycle &cycle) {
+      const auto count = cycle.cycle + 1;
+      const auto retired = count < 2 ? 0 : (count - 2) / 2;
+      require(cycle.completion_ticks - cycle.start_ticks == period &&
+                  cycle.completion_ticks == recovery_end + (count * period) &&
+                  runtime->completed_cycles() == count &&
+                  dsp.cpu().registers() == nop_registers(count) &&
+                  dsp.cpu().progress() ==
+                      dsp56300::Progress{.instructions = retired, .estimated_cycles = retired},
+              "Native NOP periods,PCU,flags and full registers retain independent expectations");
+      trace.push_back({.actor = 'D', .ticks = cycle.completion_ticks});
     };
     mcu.set_cycle_observer([this, observed](const auto cycle) {
-      schedule.begin_cycle(cycle, false, [] { return fetch_clock::input(); }, observed);
+      runtime->begin_cycle(cycle, false, cycle_inputs, observed);
     });
     mcu.set_wait_period_observer([this, observed](const auto slice) {
-      schedule.begin_wait_period(slice, [] { return fetch_clock::input(); }, observed);
+      runtime->begin_wait_period(slice, cycle_inputs, observed);
     });
   }
 
   CpuStep step() {
     const auto result = mcu.cpu().step();
-    schedule.end_instruction();
+    runtime->end_instruction();
     return result;
   }
 
@@ -164,70 +191,85 @@ struct Fixture {
   }
 
   McuMachine mcu{image(), BLOFELD_DEFAULT_SLA, mcu_inputs()};
-  DspMachine dsp;
-  std::shared_ptr<const DspFetchEventIdentity> identity =
-      std::make_shared<const DspFetchEventIdentity>();
+  OwnDspMachine dsp{{.extal_hz = oscillator,
+                     .timebase_hz = common,
+                     .switch_timing = DspClockSwitch::reference_cycle_boundary}};
+  std::shared_ptr<const bool> identity = std::make_shared<const bool>(true);
   unsigned cursor = 0;
-  const DspExternalOrder order;
+  unsigned saved_cursor = 0;
+  const std::uint64_t irq_tick;
+  const DspPeerOrder order;
   std::vector<Event> trace;
-  McuDspFetchSchedule schedule;
+  std::unique_ptr<McuDspRuntime> runtime;
 };
 
-void run(const DspExternalOrder order) {
-  Fixture f(order);
-  auto expected = f.dsp.cpu().debug_state();
+void run(const DspPeerOrder order, const std::uint64_t irq_tick) {
+  Fixture f(order, irq_tick);
   for (unsigned i = 0; i < 3; ++i) {
     require(f.step().instruction_executed, "Native setup reaches actual WAI");
   }
   require(f.mcu.cpu().waiting() && f.mcu.cpu().state().pc == entry + 6 &&
-              f.mcu.cpu().state().sp == wait_stack && f.schedule.end_ticks() == waiting &&
-              f.mcu.run_clock().bus_cycles() == 15 && f.cursor == 0,
+              f.mcu.cpu().state().sp == wait_stack && f.runtime->end_ticks() == waiting &&
+              f.mcu.run_clock().bus_cycles() == 15 && f.cursor == (irq_tick == waiting ? 1U : 0U),
           "Independent2+1+7 instruction periods and genuine reset establish the WAI cut");
   f.frame();
-  const auto saved = f.schedule.checkpoint();
-  // A seven-stage NOP stream publishes44 results in50 genuine periods.
-  constexpr unsigned native_results = 44;
-  expected.cpu.pc = boot + native_results;
-  expected.native_instructions += native_results;
-  expected.native_cycles += native_results;
+  const auto saved = f.runtime->checkpoint();
+  f.saved_cursor = f.cursor;
+  const auto prefix = f.trace;
+  const auto idle_periods = (irq_tick - waiting + mcu_period - 1) / mcu_period;
+  const auto wait_end = waiting + (idle_periods * mcu_period);
+  const auto wake_end = wait_end + (6 * mcu_period);
+  const auto final_end = wake_end + (8 * mcu_period);
+  const auto native_periods = (final_end - recovery_end) / period;
+  const auto retired = (native_periods - 2) / 2;
   std::vector<Event> suffix;
   for (unsigned replay = 0; replay < 2; ++replay) {
-    f.schedule.restore(saved);
-    f.cursor = 0;
-    f.attach();
+    f.restore(saved);
     const auto first = f.trace.size();
-    require(f.mcu.advance_wait(10) == 1, "Timed IRQ stops after its already committed idle period");
-    f.schedule.end_wait();
+    require(f.mcu.advance_wait(10) == idle_periods,
+            "Timed IRQ stops after its already committed idle period");
+    f.runtime->end_wait();
     f.frame();
     require(f.cursor == 1 && f.mcu.cpu().waiting() && f.mcu.cpu().pending_interrupt() &&
-                f.mcu.idle_bus_cycles() == 1 && f.mcu.run_clock().bus_cycles() == 16 &&
-                f.schedule.end_ticks() == idle_end &&
-                f.schedule.run().completed_cycles() == idle_native_periods,
+                f.mcu.idle_bus_cycles() == idle_periods &&
+                f.mcu.run_clock().bus_cycles() == 15 + idle_periods &&
+                f.runtime->end_ticks() == wait_end &&
+                f.runtime->completed_cycles() == (wait_end - recovery_end) / period,
             "Asynchronous input preserves real idle completion and continuing native DSP clocks");
     const auto wake = f.step();
     require(!wake.instruction_executed && wake.stack_reused && wake.interrupt_vector == vector &&
                 f.mcu.cpu().state().sp == wait_stack && f.mcu.cpu().state().pc == handler &&
-                f.schedule.end_ticks() == wake_end,
+                f.runtime->end_ticks() == wake_end,
             "Native six-period IRQ wake reuses the genuine WAI frame");
     f.frame();
     require(f.step().instruction_executed, "Actual eight-period RTI executes");
     const auto cpu = f.mcu.cpu().state();
     require(cpu.pc == entry + 6 && cpu.sp == stack && cpu.d == 0 && cpu.x == 0 && cpu.y == 0 &&
                 cpu.ccr == flags && !f.mcu.cpu().waiting() && !f.mcu.cpu().pending_interrupt() &&
-                f.mcu.run_clock().bus_cycles() == final_mcu_periods &&
-                f.schedule.end_ticks() == final_end &&
-                f.schedule.run().completed_cycles() == final_native_periods &&
-                f.schedule.run().timer_clk2_edges() == final_timer_edges && f.cursor == 2 &&
-                f.dsp.cpu().debug_state() == expected,
+                f.mcu.run_clock().bus_cycles() == return_periods + idle_periods &&
+                f.runtime->end_ticks() == final_end &&
+                f.runtime->completed_cycles() == native_periods &&
+                f.dsp.clock().timer_clk2_edges() == native_periods / 2 && f.cursor == 2 &&
+                f.dsp.cpu().registers() == nop_registers(native_periods) &&
+                f.dsp.cpu().progress() ==
+                    dsp56300::Progress{.instructions = retired, .estimated_cycles = retired} &&
+                f.dsp.clock().hardware_reset_ticks() == recovery_end &&
+                f.dsp.clock().elapsed_ticks() == final_end,
             "Literal CPU/stack/flags/time endpoints and actual native NOP publications agree");
     std::vector<Event> tied;
-    for (const auto event : f.trace) {
-      if (event.ticks == irq) { tied.push_back(event); }
+    const auto &at_irq = irq_tick == waiting ? prefix : f.trace;
+    for (const auto event : at_irq) {
+      if (event.ticks == irq_tick) { tied.push_back(event); }
     }
-    const std::vector<Event> wanted =
-        order == DspExternalOrder::external_before_dsp
-            ? std::vector<Event>{{.actor = 'E', .ticks = irq}, {.actor = 'D', .ticks = irq}}
-            : std::vector<Event>{{.actor = 'D', .ticks = irq}, {.actor = 'E', .ticks = irq}};
+    std::vector<Event> wanted{{.actor = 'E', .ticks = irq_tick}};
+    if ((irq_tick - recovery_end) % period == 0) {
+      const Event native{.actor = 'D', .ticks = irq_tick};
+      if (order == DspPeerOrder::peer_first) {
+        wanted.push_back(native);
+      } else {
+        wanted.insert(wanted.begin(), native);
+      }
+    }
     require(tied == wanted,
             "Exact IRQ/DSP tie retains declared ordering inside the committed idle period");
     const std::vector<Event> actual(f.trace.begin() + static_cast<std::ptrdiff_t>(first),
@@ -242,9 +284,12 @@ void run(const DspExternalOrder order) {
 
 int main() {
   try {
-    run(DspExternalOrder::external_before_dsp);
-    run(DspExternalOrder::dsp_before_external);
-    std::cout << "Timed native WAI/IRQ/RTI event ordering passed.\n";
+    for (const auto at : {waiting, waiting + 1, irq, idle_end - 1, idle_end, idle_end + 1}) {
+      run(DspPeerOrder::peer_first, at);
+      run(DspPeerOrder::dsp_first, at);
+    }
+    std::cout
+        << "Native MCU/dsp56300 WAI events:12 profiles,24 restored IRQ/RTI suffixes passed.\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

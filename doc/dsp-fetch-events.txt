@@ -14,6 +14,10 @@ refusal. Recovery participates in this arbitration without inventing a CPU,
 DMA or CLK2 cycle. A peer-first callback at recovery completion still sees
 held reset one integer tick before the release edge.
 
+The external WAI/IRQ/RTI and MCU-driven DSP-reset-release groups now use the
+same native runtime. Their actual reset-vector clocks, zero/one/two idle-period
+boundaries and32 restored continuations are detailed in mcu-dsp-external-control.txt.
+
 The source contract is fixed at construction: shared identity, pure next_ticks,
 observation callback, explicit order and positive per-MCU-period budget.
 Exhaustion retains the contract. A pending deadline cannot move or disappear.

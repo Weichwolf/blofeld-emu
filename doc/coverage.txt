@@ -137,6 +137,14 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           Y:$2000 rejection; silicon behavior and
                                           full boot remain open
                                           (mcu-dsp-original-reset.txt).
+                                          External WAI/reset-release tests also
+                                          use that runtime:12 IRQ profiles retain
+                                          24 restored WAI/IRQ/RTI suffixes; four
+                                          reset-order profiles retain8 suffixes.
+                                          Real reset-vector,stack,F1/F2,full native
+                                          state and zero/one/two idle-period
+                                          expectations are checked independently
+                                          (mcu-dsp-external-control.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are
