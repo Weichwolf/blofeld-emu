@@ -143,7 +143,7 @@
     "actual_reset_completion_tick": 52744004348,
     "identical_functional_suffixes": 2,
     "diagnostic_decoder_control_reproduced": true,
-    "next_runtime_limit": "Read-only RAM bit-control instruction admission in the native frontend",
+    "next_runtime_limit": "RAM BSET read/modify/write admission in the native frontend; first refused at its read",
     "local_audit": "doc/local/connected-nand/audio-functional/audit.json",
     "local_audit_sha256": "abf9b6b160ab672bf4bab1c95d87ac4c97495cbe17ef65736f2d3fd29bf908b5",
     "physical_clock_or_wiring_claim": false,
