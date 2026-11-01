@@ -470,7 +470,12 @@ void McuDspRuntime::begin_wait_period(const McuWaitPeriod period,
 void McuDspRuntime::end_wait() {
   healthy();
   const Guard guard(*this);
-  if (!state_.waiting || !mcu_.cpu().waiting()) { throw Fault("MCU/DSP idle boundary is missing"); }
+  // A pending or pre-observed IRQ can cancel advance_wait before any native
+  // period is offered. Its empty boundary still closes, without owning time.
+  if (!inputs_.wait_dsp_first || state_.resetting || !mcu_.cpu().waiting() ||
+      (!state_.waiting && state_.offered)) {
+    throw Fault("MCU/DSP idle boundary is missing");
+  }
   finish_boundary();
   state_.waiting = false;
 }

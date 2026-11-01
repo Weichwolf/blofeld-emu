@@ -68,17 +68,12 @@ it does not establish concurrent MCU/DSP execution.
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-wait-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_wait$'
 
-Thirteen further native cases check literal WAI stack bytes and RTI register
-restoration, OSC/PHY clock routes and TIM gates, cancelled/pending/input IRQs,
-a pin IRQ raised inside a committed DSP period, malformed idle contexts and
-unqualified entry. At the declared 12MHz OSC, the 1024-edge RTI endpoint is
-47970 common ticks after 512 OSC or 2560 PHY idle periods. Actual DSP ADD/BRA
-retirements and full accumulator results continue throughout those intervals.
-A native reserved-Y store during WAI preserves only consumed peer periods;
-faulted native execution and new capture reject;trusted joint recovery is below.
-The standard WAI fixture uses the independently checked short BRA loop.
-Long absolute JMP now has separate native/ownership coverage
-(dsp-absolute-control.txt); its coupled WAI precursor is retained locally.
+Fifteen WAI/RTI cases now use dsp56300 through McuDspRuntime. Literal stack,
+interrupt/frame reuse,TIM gate and original OSC/PHY wake expectations remain.
+DSP hold/recovery precedes actual F1/F2 and native ADD/BRA retirement. Four
+RTI profiles each retain two joint idle-checkpoint suffixes, including full
+register/flag,pending-effect and fetch traces. See mcu-dsp-wait.txt for exact
+clocks, strict failed-store/cancelled-offer controls and acceptance limits.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-reset-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_reset$'

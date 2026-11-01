@@ -114,6 +114,13 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           original MCU POR retains both complete
                                           bootstrap/RAM/NVM suffixes through this
                                           runtime (mcu-dsp-power-on.txt).
+                                          WAI/RTI integration now uses the same
+                                          core:15 cases retain literal stack,
+                                          OSC/PHY wake,TIM gating,cancelled IRQ
+                                          offers and reserved-Y failure. Four
+                                          RTI profiles retain8 idle-checkpoint
+                                          suffixes with full native state/effect
+                                          and fetch traces (mcu-dsp-wait.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are

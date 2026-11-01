@@ -87,6 +87,7 @@ public:
   void end_instruction();
   void
   begin_wait_period(McuWaitPeriod period, const CycleInputs &inputs, const Observer &observer = {});
+  // Also closes a zero-period slice cancelled by an IRQ before the peer hook.
   void end_wait();
   void begin_reset_period(McuResetPeriod period,
                           const CycleInputs &inputs,
