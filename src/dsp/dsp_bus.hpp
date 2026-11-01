@@ -34,6 +34,7 @@ struct DspStore {
 };
 
 enum class DspMemoryOperation : std::uint8_t { read, write };
+enum class DspWriteContract : std::uint8_t { strict, internal_writable_storage };
 enum class DspMemoryPhase : std::uint8_t { execute, peripheral_sample, peripheral_bit };
 enum class DspMemoryConflict : std::uint8_t { independent, protected_partition, unqualified };
 enum class DspCoreBusKnowledge : std::uint8_t { unqualified, reference_cycle_occupancy };
@@ -56,6 +57,8 @@ struct DspMemoryResource {
   bool rom = false;
   std::uint32_t word = 0;
   unsigned block_words = 0;
+  // An explicitly decoded write with no writable cell has no storage resource.
+  bool selected = true;
   bool operator==(const DspMemoryResource &) const = default;
 };
 
@@ -115,6 +118,14 @@ public:
   void reset_peripherals();
   [[nodiscard]] std::uint32_t read(DspAddress access);
   void write(DspStore access);
+  // Functional internal X/Y decoder: writes to ROM or vacant low-128K data
+  // addresses select no writable storage. Reads and P/I/O remain unchanged.
+  void set_write_contract(DspWriteContract contract);
+
+  [[nodiscard]] DspWriteContract write_contract() const noexcept { return write_contract_; }
+
+  [[nodiscard]] std::uint64_t unselected_writes() const noexcept { return unselected_writes_; }
+
   [[nodiscard]] std::optional<bool> access_peripheral_bit(DspBitAccess access);
   [[nodiscard]] static bool handles_peripheral_bit(DspAddress access);
   [[nodiscard]] DspMemoryResource memory_resource(DspMemoryAccess access) const;
@@ -205,6 +216,7 @@ private:
   [[nodiscard]] Location locate(DspAddress access, Operation operation = Operation::read) const;
   [[nodiscard]] Location locate_program(std::uint32_t address, Operation operation) const;
   [[nodiscard]] Location locate_data(DspAddress access, Operation operation) const;
+  [[nodiscard]] bool unselected_write(DspAddress access) const;
   [[nodiscard]] std::uint32_t read_peripheral(DspAddress access);
   void write_peripheral(DspStore access);
   [[nodiscard]] DspEsai *esai_register(DspAddress access);
@@ -230,6 +242,8 @@ private:
   unsigned memory_mode_ = 0;
   unsigned requested_memory_mode_ = 0;
   unsigned switch_delay_ = 0;
+  DspWriteContract write_contract_ = DspWriteContract::strict;
+  std::uint64_t unselected_writes_ = 0;
   std::optional<std::uint32_t> once_latch_;
 };
 

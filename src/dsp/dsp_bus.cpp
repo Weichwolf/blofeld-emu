@@ -12,6 +12,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -117,6 +118,7 @@ DspBus::DspBus() {
 }
 
 void DspBus::reset() {
+  unselected_writes_ = 0;
   memory_mode_ = 0;
   requested_memory_mode_ = 0;
   switch_delay_ = 0;
@@ -334,6 +336,9 @@ DspMemoryResource DspBus::memory_resource(const DspMemoryAccess access) const {
                 std::string(operation == Operation::read ? "read at " : "write at ") +
                 address_text(target));
   }
+  if (operation == Operation::write && unselected_write(target)) {
+    return {.bank = target.space, .word = target.address, .selected = false};
+  }
   const auto location = locate(target, operation);
   if (location.rom && operation == Operation::write) {
     throw Fault("Protected DSP ROM write at " + address_text(target));
@@ -360,6 +365,7 @@ DspMemoryResource DspBus::memory_resource(const DspMemoryAccess access) const {
 DspMemoryConflict DspBus::memory_conflict(const DspMemoryPair pair) const {
   const auto a = memory_resource(pair.core);
   const auto b = memory_resource(pair.dma);
+  if (!a.selected || !b.selected) { return DspMemoryConflict::independent; }
   if (a.bank != b.bank || a.rom != b.rom) { return DspMemoryConflict::independent; }
   if (a.block_words == 0 || b.block_words == 0) { return DspMemoryConflict::unqualified; }
   if (a.block_words != b.block_words || a.word / a.block_words != b.word / b.block_words) {
@@ -417,6 +423,31 @@ std::uint32_t DspBus::read(const DspAddress access) {
   return memory.words.at(location.offset);
 }
 
+void DspBus::set_write_contract(const DspWriteContract contract) {
+  if (contract != DspWriteContract::strict &&
+      contract != DspWriteContract::internal_writable_storage) {
+    throw Fault("Invalid DSP memory write contract");
+  }
+  write_contract_ = contract;
+}
+
+bool DspBus::unselected_write(const DspAddress access) const {
+  constexpr unsigned internal_end = 0x20000;
+  if (write_contract_ != DspWriteContract::internal_writable_storage ||
+      access.space == DspSpace::p || access.address >= internal_end) {
+    return false;
+  }
+  if (switch_delay_ != 0 && switching_address(access)) {
+    throw Fault("DSP memory access requires elapsed switch cycles: " + address_text(access));
+  }
+  const auto layout = memory_layout(memory_mode_);
+  const bool x = access.space == DspSpace::x;
+  const auto lower_end = x ? x_low_end : y_low_end;
+  const auto upper_end = x ? layout.x_end : layout.y_end;
+  return access.address >= lower_end &&
+         (access.address < data_rom_end || access.address >= upper_end);
+}
+
 void DspBus::write(const DspStore access) {
   const DspAddress target{.space = access.space, .address = access.address};
   if (access.value > word_mask) {
@@ -424,6 +455,13 @@ void DspBus::write(const DspStore access) {
   }
   if (dsp_io_selection(target) != DspIoSelection::outside) {
     write_peripheral(access);
+    return;
+  }
+  if (unselected_write(target)) {
+    if (unselected_writes_ == std::numeric_limits<std::uint64_t>::max()) {
+      throw Fault("DSP unselected-write observation count exhausted at " + address_text(target));
+    }
+    ++unselected_writes_;
     return;
   }
   const auto location = locate(target, Operation::write);

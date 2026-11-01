@@ -55,11 +55,14 @@ remain recorded and force every board qualification to fail. This is evidence
 for the original component protocol, not healthy startup or electrical safety.
 The explicit caller/RAM/clock setup and missing boot path remain in gpio-pair.txt.
 
-The reset-to-runtime path separately stops at the original first-stage reserved
-Y:002000 store. The documented map does not establish discard/alias behavior.
-No loop shortening, RAM enlargement, ignored store or host PC continuation is
-admitted. Matching mask ROM, complete flash/NAND mapping and device identity
-remain explicit missing inputs; see dsp-core.txt and coupled-boot.txt.
+The strict reset-to-runtime diagnostic stops at the original first-stage
+Y:002000 store. The separate functional internal write decoder models vacant/
+data-ROM writes without writable storage; its original full-clear regression
+is in dsp-write-decoder.txt. The original loop and every instruction remain
+unchanged, with no RAM enlargement or host PC continuation. Required boot/table
+functions, flash/NAND mapping, device identity and the connected runtime remain
+open. Instrument equivalence, not identical internal silicon phases, is the
+acceptance criterion; see objective.txt and coupled-boot.txt.
 
   ctest --test-dir build/strict --output-on-failure -R '^(original_dsp_boot|original_scheduled_coupling|original_dsp_gpio_request)$'
 

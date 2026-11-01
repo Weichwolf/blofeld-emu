@@ -57,10 +57,13 @@ actual refused target fetch. Stale timeline owners reject without effects.
 These tests verify the emulator model against the tabulated requirements;
 no manufacturer code bytes are embedded and no physical-device equivalence is claimed.
 
-Original 1.25 requests MS/MSW=111. Its reserved Y:002000 clear remains unresolved
-and unchanged, as do matching stock ROM, later Port-F setup, NAND, full boot,
-host MIDI/audio and Desktop/Keyboard hardware comparisons. See dsp-core.txt
-and startup-dsp.txt. No write-discard policy, firmware patch or loop skip is added.
+Original 1.25 requests MS/MSW=111. Strict diagnostics retain the Y:002000
+refusal. The explicit functional write decoder in dsp-write-decoder.txt models
+vacant/data-ROM writes without writable storage; it preserves these RAM windows,
+unknown reads and physical backing. Its complete original-clear regression
+supports instrument bring-up without claiming the silicon decoder is identical.
+Later GPIO/NAND setup, required ROM/table functions, full boot and original
+MIDI/audio remain separate requirements. No firmware patch or loop skip is used.
 
 Additional startup references are pinned in dsp-startup-reference.json.
 A community copy of the Freescale SoundBite demo uses bounded X/Y buffers

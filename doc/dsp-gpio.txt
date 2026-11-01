@@ -117,8 +117,9 @@ Limits and original-firmware execution
 No board pin wiring, NAND device, original ESAI stream, electrical/synchronizer
 latency or stock-device equivalence is established. Mode-zero TIO
 GPIO and timer clocks have separate coverage in dsp-timers.txt.
-The original DSP still stops before reserved Y:002000 during its RAM-clear loop;
-no loop is skipped or reserved memory write discarded to reach these GPIOs.
-NXP section 3.1.1 warns against reserved-memory access and does not establish its
-write effects. The GPIO tests are independent chip-model evidence, not evidence
-that the original NAND loader or full board now boots.
+Strict original-reset diagnostics stop at Y:002000 in the RAM-clear loop. The
+explicit functional write decoder executes the entire unchanged clear and reaches
+the original Port-C direction write, whose nonzero reserved bits still reject;
+see dsp-write-decoder.txt. NXP section3.1.1 does not establish vacant write effects.
+The GPIO tests are independent chip-model evidence, not evidence that the original
+NAND loader or full board now boots.

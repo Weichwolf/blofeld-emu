@@ -8,6 +8,7 @@
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_io.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
@@ -35,6 +36,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <tuple>
 
 namespace blofeld::test::reset_source {
 namespace {
@@ -344,11 +346,9 @@ std::array<std::uint8_t, ram_size> ram(const McuMachine &mcu) {
   return result;
 }
 
-void verify_payload(OwnDspMachine &dsp, const Firmware &firmware, const Link &link) {
-  require(
-      link.counts().frames == coupled::stage_words + 3 &&
-          link.counts().writes == coupled::expected_port_writes && link.counts().ordered_pairs == 1,
-      "Original native stores retain97 frames,7275 writes and the declared pad-order transition");
+void verify_stage(OwnDspMachine &dsp, const Firmware &firmware, const Link &link) {
+  require(link.counts().frames == coupled::stage_words + 3 && link.counts().ordered_pairs == 1,
+          "Original native stores retain97 frames and the declared pad-order transition");
   const std::span<const std::uint8_t> image(firmware.mcu);
   for (unsigned n = 0; n < coupled::stage_words; ++n) {
     const auto offset = coupled::frame_offset + ((static_cast<std::size_t>(n) + 2) * word_bytes);
@@ -357,6 +357,21 @@ void verify_payload(OwnDspMachine &dsp, const Firmware &firmware, const Link &li
                     std::span<const std::uint8_t, word_bytes>(image.subspan(offset, word_bytes))),
             "Actual ROM execution receives every original stage word from native SPI stores");
   }
+  auto copy = dsp.bus();
+  const auto trailing =
+      coupled::frame_offset + ((static_cast<std::size_t>(coupled::stage_words) + 2) * word_bytes);
+  require((copy.shi().read(coupled::hcsr) & (rx_not_empty | rx_overrun)) == rx_not_empty &&
+              copy.shi().read(coupled::hrx) ==
+                  dsp_boot_word(std::span<const std::uint8_t, word_bytes>(
+                      image.subspan(trailing, word_bytes))) &&
+              (copy.shi().read(coupled::hcsr) & rx_not_empty) == 0,
+          "Only the genuine trailing UI word remains in the copied native FIFO, without overrun");
+}
+
+void verify_payload(OwnDspMachine &dsp, const Firmware &firmware, const Link &link) {
+  require(link.counts().writes == coupled::expected_port_writes,
+          "Strict reset frontier retains the original7275 Port-B writes");
+  verify_stage(dsp, firmware, link);
   require(dsp.bus().read({.space = DspSpace::x, .address = coupled::long_ram_end}) == 0,
           "The genuine X write preceding the reserved Y rejection remains published");
   const auto pending = dsp.cpu().pending_instruction();
@@ -373,15 +388,6 @@ void verify_payload(OwnDspMachine &dsp, const Firmware &firmware, const Link &li
               "Every preceding mapped clear pair is zero");
     }
   }
-  auto copy = dsp.bus();
-  const auto trailing =
-      coupled::frame_offset + ((static_cast<std::size_t>(coupled::stage_words) + 2) * word_bytes);
-  require((copy.shi().read(coupled::hcsr) & (rx_not_empty | rx_overrun)) == rx_not_empty &&
-              copy.shi().read(coupled::hrx) ==
-                  dsp_boot_word(std::span<const std::uint8_t, word_bytes>(
-                      image.subspan(trailing, word_bytes))) &&
-              (copy.shi().read(coupled::hcsr) & rx_not_empty) == 0,
-          "Only the genuine trailing UI word remains in the copied native FIFO, without overrun");
 }
 
 void record(const unsigned replay,
@@ -408,13 +414,13 @@ void record(const unsigned replay,
           << " nvm=1 fault=" << error << '\n';
 }
 
-void require_quarantined(OwnDspMachine &dsp) {
+void require_quarantined(OwnDspMachine &dsp, const bool clock_fault = true) {
   const auto before = dsp.cpu().registers();
   try {
     static_cast<void>(dsp.begin_fetch());
   } catch (const Fault &error) {
     require(std::string(error.what()).contains("clocked timeline owns operation=begin-fetch") &&
-                dsp.cpu().registers() == before && dsp.clock().faulted(),
+                dsp.cpu().registers() == before && dsp.clock().faulted() == clock_fault,
             "The failed native clock owner rejects execution before any state mutation");
     return;
   }
@@ -494,10 +500,105 @@ void exercise(Lab &lab,
   summary << "REPLAY native=1 ram=1 events=1\n";
 }
 
+void require_runtime_quarantined(Lab &lab, OwnDspMachine &dsp, Link &link) {
+  const auto observation = [&] {
+    return std::tuple{dsp.cpu().registers(),
+                      dsp.cpu().progress(),
+                      dsp.cpu().fault(),
+                      dsp.clock().elapsed_ticks(),
+                      dsp.bus().unselected_writes(),
+                      lab.mcu.run_clock().bus_cycles(),
+                      lab.mcu.run_clock().elapsed_ticks(),
+                      ram(lab.mcu)};
+  };
+  const auto before = observation();
+  const auto mcu = lab.mcu.cpu().state();
+  std::string error;
+  try {
+    link.schedule().end_instruction();
+  } catch (const Fault &fault) { error = fault.what(); }
+  require(error == "MCU/DSP runtime requires its healthy inactive native epoch" &&
+              observation() == before && owned_clock::same_cpu(lab.mcu.cpu().state(), mcu),
+          "The actual failed runtime refuses continuation without any CPU, time or RAM change");
+  require_quarantined(dsp, false);
+}
+
+void exercise_decoder(Lab &lab,
+                      OwnDspMachine &dsp,
+                      Link &link,
+                      const Firmware &firmware,
+                      std::ostringstream &trace,
+                      const std::string &path,
+                      std::ostream &summary) {
+  std::string error;
+  try {
+    for (unsigned count = 0; count < limit; ++count) { link.step(); }
+    throw Fault("Functional decoder source exceeded its execution bound");
+  } catch (const Fault &fault) { error = fault.what(); }
+  const auto state = dsp.cpu().registers();
+  const auto pending = dsp.cpu().pending_instruction();
+  const auto fault = dsp.cpu().fault();
+  const auto &failure = dsp.io().failure();
+  constexpr unsigned completed_pairs = 0x20000;
+  constexpr unsigned gpio_pc = 0x73;
+  constexpr unsigned direction_c = 0xffffbe;
+  constexpr unsigned direction_value = 0xff00;
+  constexpr unsigned selected_words = 0x3000 + 0x4000 + 0x2000 + 0xa000;
+  constexpr unsigned vacant_writes = (2 * completed_pairs) - selected_words;
+  constexpr unsigned later_port_writes = 71;
+  std::cerr << "Original functional decoder mcu=" << hex(lab.mcu.cpu().state().pc)
+            << " dsp=" << hex(state.pc, 6) << " reason=" << error << '\n';
+  record(0, lab, dsp, link, summary, error);
+  summary << "DECODER pairs=" << state.r[4] << " selected=" << selected_words
+          << " unselected=" << dsp.bus().unselected_writes()
+          << " policy=internal-writable-storage\n";
+  summary.flush();
+  write_text(path + ".0.trace", trace.str());
+  lab.progress.census.write(path + ".0.mcu.jsonl");
+  lab.progress.phases.write(path + ".0.phases.json");
+  require(error.contains("Unqualified DSP GPIO reserved-bit write") &&
+              error.contains("pc=0x000073") && lab.mcu.timing_faulted() &&
+              link.schedule().faulted() && !dsp.clock().faulted(),
+          "The actual completed native I/O period faults the shared runtime, not its clock");
+  require(state.pc == gpio_pc && state.omr == stage_mode && state.r[4] == completed_pairs &&
+              state.lc == 0 && state.a == 0 && !pending &&
+              fault.kind == dsp56300::FaultKind::memory_write &&
+              fault.space == dsp56300::Space::x && fault.pc == gpio_pc &&
+              fault.address == direction_c && fault.value == direction_value && failure &&
+              failure->operation == OwnDspIo::Operation::write &&
+              failure->space == dsp56300::Space::x && failure->address == direction_c &&
+              failure->pc == gpio_pc && failure->value == direction_value && failure->cause,
+          "Original REP finishes every long store before its unchanged Port-C write");
+  require(dsp.bus().write_contract() == DspWriteContract::internal_writable_storage &&
+              dsp.bus().unselected_writes() == vacant_writes &&
+              link.counts().writes == coupled::expected_port_writes + later_port_writes,
+          "Only vacant/ROM writes lack storage; their actual native commits are counted");
+
+  struct Window {
+    DspSpace space;
+    unsigned first, last;
+  };
+
+  constexpr std::array windows{Window{.space = DspSpace::x, .first = 0, .last = 0x3000},
+                               Window{.space = DspSpace::x, .first = 0xc000, .last = 0x10000},
+                               Window{.space = DspSpace::y, .first = 0, .last = 0x2000},
+                               Window{.space = DspSpace::y, .first = 0xc000, .last = 0x16000}};
+  for (const auto window : windows) {
+    for (unsigned address = window.first; address < window.last; ++address) {
+      require(dsp.bus().read({.space = window.space, .address = address}) == 0,
+              "Every selected X/Y cell is cleared by the actual original instruction");
+    }
+  }
+  verify_stage(dsp, firmware, link);
+  owned_clock::check_nvm(lab.mcu, McuFlashImage::from_known(firmware.mcu));
+  require_runtime_quarantined(lab, dsp, link);
+}
+
 struct Paths {
   std::filesystem::path firmware;
   std::filesystem::path rom;
   std::filesystem::path trace;
+  bool functional_decoder = false;
 };
 
 void run(const Paths &paths) {
@@ -523,6 +624,9 @@ void run(const Paths &paths) {
   OwnDspMachine dsp({.extal_hz = source::oscillator_hz,
                      .timebase_hz = common,
                      .switch_timing = DspClockSwitch::reference_cycle_boundary});
+  if (paths.functional_decoder) {
+    dsp.bus().set_write_contract(DspWriteContract::internal_writable_storage);
+  }
   dsp.bus().install_rom({.start = coupled::bootstrap_base, .words = rom});
   Link link(lab, dsp);
   lab.bind_u();
@@ -546,16 +650,25 @@ void run(const Paths &paths) {
   write_text(std::string(trace_path) + ".prefix.trace", trace.str());
   progress.census.write(std::string(trace_path) + ".held.mcu.jsonl");
   progress.phases.write(std::string(trace_path) + ".held.phases.json");
-  exercise(lab, dsp, link, firmware, trace, trace_path, summary);
+  if (paths.functional_decoder) {
+    exercise_decoder(lab, dsp, link, firmware, trace, trace_path, summary);
+  } else {
+    exercise(lab, dsp, link, firmware, trace, trace_path, summary);
+  }
 }
 
 }
 
 int main(int count, char **args) {
   try {
-    if (count != 4) { throw blofeld::Fault("firmware.zip private-rom private.trace"); }
-    run({.firmware = args[1], .rom = args[2], .trace = args[3]});
-    std::cout << "Original reset-net source, dsp56300 runtime, SPI and held replay passed.\n";
+    if (count != 4 && (count != 5 || std::string_view(args[4]) != "writable-storage")) {
+      throw blofeld::Fault("firmware.zip private-rom private.trace [writable-storage]");
+    }
+    run({.firmware = args[1], .rom = args[2], .trace = args[3], .functional_decoder = count == 5});
+    std::cout
+        << (count == 5
+                ? "Original reset-net source, functional decoder and complete clear passed.\n"
+                : "Original reset-net source, dsp56300 runtime, SPI and held replay passed.\n");
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

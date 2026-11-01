@@ -390,6 +390,15 @@ Independent DSP integration       partial  Pinned own-core subproject and strict
                                           remaining legacy fixtures, complete
                                           original boot and device tests remain open
                                           (own-dsp-integration.txt).
+Functional DSP write decoder      partial  Explicit low128K X/Y writable-cell model
+                                          preserves RAM and never supplies missing
+                                          reads. Exhaustive five-layout/native tests;
+                                          original reset/SPI executes131072 long stores,
+                                          checks77824 RAM words and184320 no-storage
+                                          writes under ASan/UBSan and separate TSan.
+                                          Strict reset replay retained. GPIO/NAND,
+                                          full boot and audio remain open
+                                          (dsp-write-decoder.txt).
 Documented GPIO passive bias      partial  Explicitly floating PC/PD/PE/PF inputs
                                           resolve through internal pull-downs
                                           (dsp-gpio-pulls.txt). Unknown connections,
