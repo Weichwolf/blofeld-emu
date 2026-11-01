@@ -65,6 +65,10 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           reset/setup and complete register/stack
                                           oracles:6 contexts,24 same/fresh-owner
                                           continuations; physical IRQ latency is open.
+                                          IRQA edge/level/mask service adds4
+                                          native contexts,16 same/fresh-owner
+                                          continuations and retained-edge
+                                          recovery after second-vector failure.
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).

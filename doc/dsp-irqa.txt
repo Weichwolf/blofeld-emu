@@ -1,6 +1,7 @@
 DSP56371 logical external IRQA input
 
-  ctest --test-dir build/strict -R '^(dsp_irqa|dsp_interrupts|original_dsp_gpio_input)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-dsp-irqa-test
+  ctest --test-dir build/strict -R '^dsp_irqa$' --output-on-failure
 
 Primary references: DSP56300FM Rev5 sections 2.3.2.1/2.3.2.3, figure 2-2,
 tables 2-3..2-6; DSP56371UM Rev2.1 chapter 4 and table 2-3. The PDFs remain local,
@@ -29,7 +30,7 @@ Unknown level or edge history fails when needed. A known captured edge remains
 serviceable after input withdrawal, but its acknowledgement does not fabricate
 later observations. Changing trigger mode while priority remains enabled is
 unqualified and rejects without mutation; disable before changing mode.
-The existing conservative admitted/reference-interrupt contract requires the
+The conservative admitted-source contract requires the
 selected source and priority to remain valid until acknowledgement. Withdrawal
 within a suspended vector access rejects; it does not assert silicon cancels an
 already fetched level interrupt. Physical synchronization, recognition/fetch
@@ -42,3 +43,14 @@ disabled detection, withdrawal/history, reset, unsupported fields/live-mode
 changes, native two-word fast and long JSR/RTI entry, missing second-vector
 rejection before acknowledgement, and pending-edge checkpoint replay. These are
 fixed offline cases; no fuzz campaign or physical device traffic is run.
+
+Native cases use actual mode5/PINIT-low reset and literal MOVEC/MOVEP/MOVE/
+JSR/NOP/RTI programs on the independent core. Four contexts each execute three
+continuations on the original owner and one on a fresh owner, checking registers/stack and
+independent retirement counts. Both real vector reads precede acknowledgement.
+A held-low source survives fast service; an explicit normal-stream NOP releases
+the core's conservative post-vector hold before another admission. These untimed
+calls do not qualify physical arbitration latency.
+An unknown second word faults at P000011 without acknowledgement or retirement;
+trusted restore plus two actual vector reads recovers the retained edge. The
+real SR-unmask, handler and foreground instructions remain part of the checks.

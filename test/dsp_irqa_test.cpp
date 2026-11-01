@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_interrupts.hpp"
-#include "dsp/dsp_machine.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp_checkpoint_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 
 #include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
 #include <optional>
-#include <span>
+#include <string>
+#include <string_view>
 
 namespace {
 using namespace blofeld;
-using blofeld::test::DspProgram;
-using blofeld::test::require;
-using namespace blofeld::test::checkpoint;
+using namespace blofeld::test::dma_test;
 constexpr unsigned iprc = 0xffffff;
 constexpr unsigned irqa_vector = 0x10;
 constexpr unsigned shi_vector = 0x44;
@@ -26,6 +26,23 @@ constexpr unsigned irq_mask = 3;
 constexpr unsigned handler_address = 0x300;
 constexpr unsigned absolute_jsr = 0x0bf080;
 constexpr unsigned timer_ipl2 = 0x300;
+
+constexpr unsigned iprp = 0xfffffe, csr0 = 0xffff8f, timer_vector = 0x54;
+constexpr unsigned ordinary_status = 0xc00000, mask_bits = 0x300;
+// FM MOVEC immediate SR, MOVE immediate X0/Y0 and RTI.
+constexpr unsigned move_sr = 0x05f439, move_x0 = 0x44f400, move_y0 = 0x46f400;
+constexpr unsigned rti = 4, word_bits = 24, effect_bound = 32;
+
+void require(const bool condition, const std::string_view message) {
+  if (!condition) { throw Fault(std::string(message)); }
+}
+
+std::string rejects(const auto &operation, const char *message) {
+  try {
+    operation();
+  } catch (const Fault &error) { return error.what(); }
+  throw Fault(message);
+}
 
 void check_priorities(const DspInterrupts &controller,
                       const unsigned external,
@@ -208,110 +225,268 @@ void test_admitted_source_contract() {
           "An unqualified source-hold change must retain its actual vector context");
 }
 
-unsigned prepare(DspMachine &machine, const unsigned setting, const bool long_vector) {
-  DspProgram program;
-  program.immediate("sr", ordinary_status);
-  program.emit("movep #>" + blofeld::test::number(setting) + ",x:<<$ffffff");
-  const auto foreground = program.pc();
-  program.immediate("y0", 9);
-  program.emit("nop");
-  program.install(machine.bus());
-  machine.bus().observe_irqa(true);
-  if (long_vector) {
-    // DSP56300FM JSR absolute extension: independent own diagnostic encoding.
-    constexpr std::array call{absolute_jsr, handler_address};
-    ram(machine.bus(), irqa_vector, call);
-    ram(machine.bus(), handler_address, assemble("move #>7,x0"));
-    ram(machine.bus(), handler_address + 2, assemble("rti"));
-  } else {
-    ram(machine.bus(), irqa_vector, assemble("nop"));
-    ram(machine.bus(), irqa_vector + 1, assemble("nop"));
+struct Setup {
+  unsigned priority;
+  bool long_vector = false;
+  bool foreground_nop = false;
+  bool complete_vector = true;
+};
+
+void vectors(OwnDspMachine &machine, const Setup setup) {
+  auto &bus = machine.bus();
+  bus.write({.address = irqa_vector, .value = setup.long_vector ? absolute_jsr : 0});
+  if (setup.complete_vector) {
+    bus.write({.address = irqa_vector + 1, .value = setup.long_vector ? handler_address : 0});
   }
-  until(machine, foreground);
+  if (setup.long_vector) {
+    bus.write({.address = handler_address, .value = move_x0});
+    bus.write({.address = handler_address + 1, .value = 7});
+    bus.write({.address = handler_address + 2, .value = rti});
+  }
+}
+
+unsigned prepare(OwnDspMachine &machine, const Setup setup) {
+  NativeProgram program;
+  program.word(move_sr);
+  program.word(ordinary_status);
+  program.write({.space = DspSpace::x, .address = iprc, .value = setup.priority});
+  const auto foreground = program.pc();
+  if (setup.foreground_nop) { program.word(0); }
+  program.word(move_y0);
+  program.word(9);
+  program.word(0);
+  reset_native(machine, program);
+  vectors(machine, setup);
+  step_native(machine);
+  step_native(machine);
+  require(machine.cpu().registers().pc == foreground &&
+              machine.cpu().registers().sr == ordinary_status &&
+              machine.cpu().progress().instructions == 2,
+          "Real reset and two literal MOVEC/MOVEP instructions establish the IRQA foreground");
   return foreground;
 }
 
-void test_native_long_entry_and_checkpoint() {
-  DspMachine machine;
-  const auto foreground = prepare(machine, edge_ipl1, true);
-  const auto before = machine.cpu().state();
-  machine.bus().observe_irqa(false);
-  const auto captured = machine.checkpoint();
-  for (unsigned replay = 0; replay < 2; ++replay) {
-    if (replay != 0) { machine.restore(captured); }
-    machine.cpu().step();
-    const auto entry = machine.cpu().state();
-    require(entry.pc == handler_address && entry.sp == 1 && entry.stack_pc == foreground &&
-                entry.stack_sr == before.sr && entry.sr == (ordinary_status | 0x200U),
-            "IRQA uses its real vector JSR/frame and raises IPL1 to native mask2");
-    require(!machine.bus().interrupt_request(0), "Vector acknowledgement consumes the edge once");
-    machine.cpu().step();
-    machine.cpu().step();
-    const auto returned = machine.cpu().state();
-    require(returned.pc == foreground && returned.sp == 0 && returned.sr == before.sr &&
-                (returned.x & blofeld::test::word_mask) == 7,
-            "Actual native handler and RTI restore foreground state without a host return");
-    machine.cpu().step();
-    require((machine.cpu().state().y & blofeld::test::word_mask) == 9,
-            "Original foreground continuation runs after the real return");
+void service(OwnDspMachine &machine,
+             const dsp56300::InstructionWords foreground,
+             const DspInterruptRequest request,
+             const bool long_vector) {
+  const auto before = machine.cpu().progress();
+  const auto ticks = machine.clock().elapsed_ticks();
+  require(machine.bus().interrupt_request(0) == request && machine.admit_interrupt(foreground),
+          "The actual eligible IRQA source admits the installed foreground instruction");
+  unsigned reads = 0;
+  for (unsigned instruction = 0; instruction < 2 && machine.interrupt_pending(); ++instruction) {
+    auto progress = machine.begin_fetch();
+    for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired;
+         ++effect) {
+      const auto pending = progress.pending.value();
+      const bool fetch = pending.effect.kind == dsp56300::EffectKind::fetch_opcode ||
+                         pending.effect.kind == dsp56300::EffectKind::fetch_extension;
+      if (fetch) {
+        require(reads < 2 && pending.effect.space == dsp56300::Space::program &&
+                    pending.effect.address == irqa_vector + reads && machine.interrupt_pending() &&
+                    machine.bus().interrupt_request(0) == request,
+                "Both actual vector reads precede acknowledgement of the selected IRQA source");
+      }
+      progress = machine.advance(pending.ticket);
+      require(progress.fault.kind == dsp56300::FaultKind::none,
+              "Actual IRQA vector remains healthy");
+      if (fetch) {
+        ++reads;
+        require(machine.interrupt_pending() == (reads == 1),
+                "IRQA acknowledgement ownership ends only after the second actual vector read");
+      }
+    }
+    require(progress.retired, "Each genuine IRQA vector instruction retires within its bound");
   }
+  require(reads == 2 && !machine.interrupt_pending() &&
+              machine.cpu().progress().instructions ==
+                  before.instructions + (long_vector ? 1U : 2U) &&
+              machine.clock().elapsed_ticks() == ticks,
+          "Real JSR or both fast NOPs retire without inventing physical clock periods");
+}
+
+void long_service(OwnDspMachine &machine, const dsp56300::InstructionWords foreground) {
+  auto expected = machine.cpu().registers();
+  service(machine, foreground, {.vector = irqa_vector, .level = 1}, true);
+  expected.stack[1] = (std::uint64_t{expected.pc} << word_bits) | expected.sr;
+  auto entry = expected;
+  entry.pc = handler_address;
+  entry.sp = 1;
+  entry.sc = 1;
+  entry.sr |= 0x200U; // FM IPL1 entry executes at mask2.
+  require(machine.cpu().registers() == entry && !machine.bus().interrupt_request(0),
+          "Real IRQA JSR stacks literal PC/SR and changes only PC/SP/SC/frame/mask");
+  step_native(machine);
+  entry.pc += 2;
+  entry.x = 7;
+  require(machine.cpu().registers() == entry,
+          "The actual handler MOVE changes only X0 and its instruction PC");
+  step_native(machine);
+  expected.x = 7;
+  require(machine.cpu().registers() == expected,
+          "Actual RTI restores complete foreground state and retains the genuine stack frame");
+}
+
+struct NativeResult {
+  dsp56300::Registers registers;
+  dsp56300::Progress progress;
+  std::uint64_t ticks;
+  bool operator==(const NativeResult &) const = default;
+};
+
+void replay(OwnDspMachine &machine, const auto &continuation) {
+  const auto saved = machine.checkpoint();
+  std::optional<NativeResult> completed;
+  for (unsigned iteration = 0; iteration < 4; ++iteration) {
+    OwnDspMachine fresh(native_clocks);
+    auto &owner = iteration == 3 ? fresh : machine;
+    owner.restore(saved);
+    const auto ticks = owner.clock().elapsed_ticks();
+    continuation(owner);
+    const NativeResult result{.registers = owner.cpu().registers(),
+                              .progress = owner.cpu().progress(),
+                              .ticks = owner.clock().elapsed_ticks()};
+    require(result.ticks == ticks, "Untimed native IRQA service cannot manufacture board time");
+    if (completed) { require(result == *completed, "Same/fresh owners replay all native state"); }
+    completed = result;
+  }
+}
+
+void test_native_long_entry_and_checkpoint() {
+  OwnDspMachine machine(native_clocks);
+  const auto foreground = prepare(machine, {.priority = edge_ipl1, .long_vector = true});
+  machine.bus().observe_irqa(false);
+  machine.bus().observe_irqa(true); // The captured edge must survive actual pin release.
+  replay(machine, [foreground](OwnDspMachine &owner) {
+    auto expected = owner.cpu().registers();
+    const auto before = owner.cpu().progress();
+    long_service(owner, {.address = foreground, .opcode = move_y0, .extension = 9});
+    expected.stack[1] = (std::uint64_t{foreground} << word_bits) | expected.sr;
+    expected.x = 7;
+    expected.y = 9;
+    expected.pc += 2;
+    step_native(owner);
+    require(owner.cpu().registers() == expected &&
+                owner.cpu().progress().instructions == before.instructions + 4,
+            "Real vector/handler/RTI/foreground execution preserves every other register");
+  });
 }
 
 void test_native_masked_edge_release() {
-  DspMachine machine;
-  DspProgram program;
-  program.immediate("sr", ordinary_status | mask_bits);
-  program.emit("movep #>6,x:<<$ffffff");
+  OwnDspMachine machine(native_clocks);
+  NativeProgram program;
+  program.word(move_sr);
+  program.word(ordinary_status | mask_bits);
+  program.write({.space = DspSpace::x, .address = iprc, .value = edge_ipl1});
   const auto unmask = program.pc();
-  program.immediate("sr", ordinary_status);
+  program.word(move_sr);
+  program.word(ordinary_status);
   const auto foreground = program.pc();
-  program.emit("nop");
-  program.install(machine.bus());
-  constexpr std::array call{absolute_jsr, handler_address};
-  ram(machine.bus(), irqa_vector, call);
-  machine.bus().observe_irqa(true);
-  until(machine, unmask);
+  program.word(0);
+  reset_native(machine, program);
+  vectors(machine, {.priority = edge_ipl1, .long_vector = true});
+  step_native(machine);
+  step_native(machine);
   machine.bus().observe_irqa(false);
   machine.bus().observe_irqa(true);
-  machine.cpu().step();
-  require(machine.cpu().state().pc == foreground && machine.cpu().state().sp == 0,
-          "A masked edge cannot bypass the actual native SR-unmask instruction");
-  machine.cpu().step();
-  require(machine.cpu().state().pc == handler_address && machine.cpu().state().sp == 1 &&
-              machine.cpu().state().stack_pc == foreground,
-          "The retained edge enters its real vector at the following logical boundary");
+  replay(machine, [unmask, foreground](OwnDspMachine &owner) {
+    auto expected = owner.cpu().registers();
+    const auto before = owner.cpu().progress();
+    require(!owner.admit_interrupt(
+                {.address = unmask, .opcode = move_sr, .extension = ordinary_status}) &&
+                owner.cpu().registers() == expected,
+            "Masked IRQA cannot bypass or mutate the actual SR-unmask instruction");
+    step_native(owner);
+    expected.pc = foreground;
+    expected.sr = ordinary_status;
+    require(owner.cpu().registers() == expected, "Actual MOVEC changes only PC/SR before entry");
+    long_service(owner, {.address = foreground, .opcode = 0});
+    expected.stack[1] = (std::uint64_t{foreground} << word_bits) | expected.sr;
+    expected.x = 7;
+    ++expected.pc;
+    step_native(owner);
+    require(owner.cpu().registers() == expected &&
+                owner.cpu().progress().instructions == before.instructions + 5,
+            "Released masked edge executes actual unmask/JSR/MOVE/RTI/foreground NOP");
+  });
+}
+
+void test_native_level_repeat() {
+  OwnDspMachine machine(native_clocks);
+  const auto foreground = prepare(machine, {.priority = 1, .foreground_nop = true});
+  machine.bus().observe_irqa(false);
+  replay(machine, [foreground](OwnDspMachine &owner) {
+    auto expected = owner.cpu().registers();
+    const auto before = owner.cpu().progress();
+    const DspInterruptRequest request{.vector = irqa_vector};
+    service(owner, {.address = foreground, .opcode = 0}, request, false);
+    require(
+        owner.cpu().registers() == expected && owner.bus().interrupt_request(0) == request &&
+            !owner.admit_interrupt({.address = foreground, .opcode = 0}),
+        "Service retains a held low level; the conservative post-vector hold consumes no event");
+    step_native(
+        owner); // Explicit normal-stream NOP; physical arbitration latency remains unqualified.
+    ++expected.pc;
+    service(owner, {.address = foreground + 1, .opcode = move_y0, .extension = 9}, request, false);
+    require(
+        owner.cpu().registers() == expected && owner.bus().interrupt_request(0) == request,
+        "The same held level drives a second genuine fast vector without a fabricated new edge");
+    owner.bus().observe_irqa(true);
+    require(!owner.bus().interrupt_request(0), "Actual pin release removes the level request");
+    step_native(owner);
+    expected.pc += 2;
+    expected.y = 9;
+    require(owner.cpu().registers() == expected &&
+                owner.cpu().progress().instructions == before.instructions + 6 &&
+                owner.cpu().progress().estimated_cycles == before.estimated_cycles + 7,
+            "Released foreground changes only Y0/PC after four fast NOPs and two real foreground "
+            "instructions");
+  });
+}
+
+void test_native_missing_vector() {
+  OwnDspMachine machine(native_clocks);
+  const auto foreground = prepare(machine, {.priority = edge_ipl1, .complete_vector = false});
+  machine.bus().observe_irqa(false);
+  replay(machine, [foreground](OwnDspMachine &owner) {
+    auto expected = owner.cpu().registers();
+    const auto before = owner.cpu().progress();
+    const auto trusted = owner.checkpoint();
+    const DspInterruptRequest request{.vector = irqa_vector, .level = 1};
+    require(owner.admit_interrupt({.address = foreground, .opcode = move_y0, .extension = 9}),
+            "Actual pending edge admits the known foreground before vector reads");
+    step_native(owner);
+    auto progress = owner.begin_fetch();
+    if (!progress.pending) { throw Fault("Missing actual second-vector fetch"); }
+    progress = owner.advance(progress.pending->ticket);
+    require(progress.fault.kind == dsp56300::FaultKind::memory_read &&
+                progress.fault.space == dsp56300::Space::program &&
+                progress.fault.address == irqa_vector + 1 && progress.fault.pc == irqa_vector + 1 &&
+                owner.cpu().registers() == expected &&
+                owner.cpu().progress().instructions == before.instructions + 1 &&
+                owner.interrupt_pending() && owner.bus().interrupt_request(0) == request &&
+                owner.io().failure() && !owner.cpu().instruction_outcome(),
+            "Refused second read reports its actual address/PC without acknowledging the edge or "
+            "retiring");
+    owner.restore(trusted);
+    owner.bus().write({.address = irqa_vector + 1, .value = 0});
+    service(owner, {.address = foreground, .opcode = move_y0, .extension = 9}, request, false);
+    require(owner.cpu().registers() == expected && !owner.bus().interrupt_request(0),
+            "Trusted recovery needs both actual reads before clearing the captured edge");
+    step_native(owner);
+    expected.pc += 2;
+    expected.y = 9;
+    require(owner.cpu().registers() == expected &&
+                owner.cpu().progress().instructions == before.instructions + 3,
+            "Recovered fast vector permits the real foreground continuation");
+  });
 }
 
 void test_native_level_and_missing_vector() {
-  DspMachine level;
-  const auto foreground = prepare(level, 1, false);
-  level.bus().observe_irqa(false);
-  for (unsigned count = 0; count < 2; ++count) {
-    level.cpu().step();
-    require(level.cpu().state().pc == foreground && level.cpu().state().sp == 0,
-            "Held-level IRQA repeats its two-word fast vector before foreground executes");
-  }
-  level.bus().observe_irqa(true);
-  level.cpu().step();
-  require((level.cpu().state().y & blofeld::test::word_mask) == 9,
-          "Releasing the level permits the real foreground instruction");
-
-  DspMachine missing;
-  DspProgram program;
-  program.immediate("sr", ordinary_status);
-  program.emit("movep #>6,x:<<$ffffff");
-  const auto waiting = program.pc();
-  program.emit("nop");
-  program.install(missing.bus());
-  missing.bus().observe_irqa(true);
-  ram(missing.bus(), irqa_vector, assemble("nop"));
-  until(missing, waiting);
-  missing.bus().observe_irqa(false);
-  const auto before = missing.cpu().state();
-  const auto fault = rejects([&] { missing.cpu().step(); }, "Missing second vector word must fail");
-  require(fault.contains("000011") && missing.cpu().state() == before &&
-              missing.bus().interrupt_request(0).has_value(),
-          "Both vector words must exist before IRQA is acknowledged or CPU/frame state changes");
+  test_native_level_repeat();
+  test_native_missing_vector();
+  std::cout << "PASS IRQA_NATIVE contexts=4 continuations=16 missing-vector=4\n";
 }
 }
 
