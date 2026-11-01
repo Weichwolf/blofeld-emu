@@ -40,6 +40,9 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           DAX MMIO/fault and two/three-register
                                           DMA-line tests likewise omit the old core
                                           and assembler (dsp-dax.txt).
+                                          Program-word latches now use actual F2
+                                          samples with independent DMA-time/length
+                                          checks and unknown-value quarantine/replay.
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).
