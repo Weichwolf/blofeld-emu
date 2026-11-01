@@ -5,6 +5,7 @@
 #include "audio/pcm_sink.hpp"
 #include "audio/serial_pcm.hpp"
 #include "board/mcu_dsp_runtime.hpp"
+#include "board/nand_peer.hpp"
 #include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_dma.hpp"
@@ -22,6 +23,8 @@
 #include "mcu/mcu_sci.hpp"
 #include "midi/midi_timed.hpp"
 #include "storage/flash_image.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_image.hpp"
 
 #include <array>
 #include <cstddef>
@@ -134,12 +137,18 @@ struct PowerOnTiming {
   McuResetPad reset_pad = McuResetPad::unknown;
 };
 
+struct NandConnection {
+  NandImage image;
+  NandReadContinuation continuation = NandReadContinuation::unqualified;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunClockInputs dsp_clock;
   McuDspRuntimeInputs dsp;
   DspDmaGrant dma_grant = DspDmaGrant::unknown;
   std::optional<PowerOnTiming> power_on;
+  std::optional<NandConnection> nand;
   std::uint64_t release_ticks = 0;
   std::uint64_t operations = 0;
   std::uint8_t select_n = 0;
@@ -276,6 +285,8 @@ public:
   void advance();
   [[nodiscard]] bool finished() const;
   [[nodiscard]] Status status() const;
+  [[nodiscard]] std::optional<NandPeerDetailed> nand_status() const;
+  [[nodiscard]] std::optional<NandImage> nand_image() const;
   [[nodiscard]] MidiInputWindow midi_window() const;
   void enqueue_midi(std::span<const std::uint8_t> bytes);
   // Explicit external binding; a restored model requires a fresh sink session.
@@ -295,6 +306,7 @@ private:
     Owners(const Config &config, const Execution &execution);
     McuMachine mcu;
     OwnDspMachine dsp;
+    std::unique_ptr<NandPeer> nand;
     std::unique_ptr<McuDspRuntime> runtime;
   };
   class Busy;
@@ -393,6 +405,8 @@ private:
                  std::string_view source,
                  const std::optional<SerialPcmFrame> &frame) const;
   [[nodiscard]] DspRuntimeEvents runtime_events();
+  [[nodiscard]] DspRuntimePeripheralEvents nand_events(Owners &owners) const;
+  [[nodiscard]] unsigned runtime_event_budget() const;
   [[nodiscard]] McuDspRuntime::CycleInputs runtime_inputs() const;
   [[nodiscard]] McuDspRuntime::Observer runtime_observer();
   [[nodiscard]] std::uint64_t common_hz() const;

@@ -14,6 +14,8 @@
 #include "mcu/mcu_midi.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_file.hpp"
 #include "storage/private_file.hpp"
 
 #include <algorithm>
@@ -23,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <iomanip>
 #include <limits>
 #include <optional>
 #include <sstream>
@@ -406,6 +409,21 @@ bool midi_setting(Config &config, const std::string_view key, std::istringstream
   return true;
 }
 
+NandConnection nand_connection(std::istringstream &line) {
+  const auto kind = token(line);
+  NandReadContinuation continuation = NandReadContinuation::unqualified;
+  if (kind == "j") {
+    continuation = NandReadContinuation::k9f1208_j;
+  } else if (kind == "p") {
+    continuation = NandReadContinuation::k9f1208_p;
+  } else {
+    throw Fault("NAND connection requires the explicit j or p read-continuation profile");
+  }
+  std::string path;
+  if (!(line >> std::quoted(path)) || path.empty()) { throw Fault("Missing cold NAND image path"); }
+  return {.image = load_nand_image(path), .continuation = continuation};
+}
+
 bool timing_setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "clock") {
     clocks(config, line);
@@ -419,6 +437,8 @@ bool timing_setting(Config &config, const std::string_view key, std::istringstre
     power_on(config, line);
   } else if (key == "dsp-input-write-order") {
     input_write_order(config, line);
+  } else if (key == "nand-image") {
+    config.nand = nand_connection(line);
   } else {
     return false;
   }

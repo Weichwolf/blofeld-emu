@@ -44,3 +44,42 @@ connection and its native component continuations. Connected original reset/NAND
 loading is being investigated separately; complete boot, original audio,
 MIDI/USB, reset/update/recovery and all instrument functions are not qualified
 by these component results. No fuzzing or physical-device traffic was used.
+
+Regular headless Board connection
+
+The optional reference-board setting imports a private cold image:
+
+  nand-image j "/absolute/path/to/device.bfnand"
+
+Use j or p to select the explicit read-continuation contract. Paths follow the
+process working directory; quoted paths may contain spaces. The Board connects
+the same causal NAND peer to its MCU/DSP scheduler, with logical GPIO/writable
+storage, selected-quiescent SHI reset and secondary cold-unclocked ESAI setup.
+These configuration interpretations supply neither an SS edge nor audio clocks.
+Timer1 Ready belongs exclusively to NAND; conflicting pinned TIO1 inputs fail.
+Inherited inputs, NAND events and DSP periods use the supported combined order.
+The default shared event budget is eight when NAND is attached; an explicitly
+configured input budget is retained. Other input orders remain subject to the
+runtime's visible combined-source guard.
+
+Board checkpoints retain NAND protocol, cells and pending deadlines with both
+native owners. Restoration creates a fresh NAND binding before execution resumes.
+Board::nand_image returns an explicit cold power-loss projection of a copy;
+exporting it preserves the live device, including Ready and pending work.
+This connection imports RAM state. Durable NAND publication through the live
+VirtualDeviceState store is still pending; that combination explicitly fails.
+
+  cmake --build --preset strict --target blofeld-reference-nand-test \
+    blofeld-reference-pipeline-test blofeld-reference-checkpoint-test blofeld-headless
+  ctest --preset strict -j1 --output-on-failure \
+    -R '^(reference_nand|reference_pipeline|reference_checkpoint)$'
+
+reference_nand uses authored MCU/DSP instructions and sparse cells at both
+540/1080MHz timebases. It checks independent 100us Ready deadlines, quoted-image
+imports, source collisions, joint restoration before/after power, actual native
+callbacks after restoration and nonmutating cold export. This is Board connection
+evidence, not a completed original-instrument boot or durable-update proof.
+
+The three Board groups pass under ASan/UBSan and separate TSan. The rebuilt
+headless executable and these tests link only the independent native DSP core.
+Full original instrument operation and durable NAND publication remain open.

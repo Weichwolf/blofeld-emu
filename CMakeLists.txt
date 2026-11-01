@@ -309,7 +309,8 @@ add_library(blofeld_reference_board src/board/reference_config.cpp src/board/ref
   src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
 target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp_runtime blofeld_private_files
-  blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp)
+  blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp
+  blofeld_nand_peer blofeld_nand_store)
 add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
@@ -3407,6 +3408,12 @@ add_custom_target(quality
   add_executable(blofeld-reference-pipeline-test test/reference_pipeline_test.cpp)
   target_link_libraries(blofeld-reference-pipeline-test PRIVATE blofeld_reference_board)
   add_test(NAME reference_pipeline COMMAND blofeld-reference-pipeline-test)
+  add_executable(blofeld-reference-nand-test test/reference_nand_test.cpp)
+  target_link_libraries(blofeld-reference-nand-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_nand COMMAND blofeld-reference-nand-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-nand")
+  set_tests_properties(reference_nand PROPERTIES TIMEOUT 60)
+  add_dependencies(quality blofeld-reference-nand-test)
   add_executable(blofeld-original-board-power-on-test test/original_board_power_on_test.cpp)
   target_link_libraries(blofeld-original-board-power-on-test PRIVATE blofeld_reference_board)
   add_test(NAME original_board_power_on COMMAND ${Python3_EXECUTABLE}

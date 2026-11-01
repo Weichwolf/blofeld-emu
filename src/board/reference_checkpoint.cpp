@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/mcu_dsp_runtime.hpp"
+#include "board/nand_peer.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
 #include "mcu/hc12.hpp"
@@ -42,12 +43,17 @@ private:
 struct Checkpoint::Storage {
   Storage(std::shared_ptr<const Board::Identity> owner,
           Board::Control state,
-          const McuDspRuntimeCheckpoint &runtime_state)
-      : identity(std::move(owner)), control(std::move(state)), runtime(runtime_state) {}
+          const McuDspRuntimeCheckpoint &runtime_state,
+          std::optional<NandPeerSnapshot> nand_state)
+      : identity(std::move(owner)),
+        control(std::move(state)),
+        runtime(runtime_state),
+        nand(std::move(nand_state)) {}
 
   const std::shared_ptr<const Board::Identity> identity;
   const Board::Control control;
   const McuDspRuntimeCheckpoint runtime;
+  const std::optional<NandPeerSnapshot> nand;
 };
 
 Checkpoint::Checkpoint(std::shared_ptr<const Storage> storage) : storage_(std::move(storage)) {}
@@ -122,7 +128,10 @@ Checkpoint Board::checkpoint() const {
   }
   if (control_.return_boundary) { throw Fault("Reference-board output observation is active"); }
   return Checkpoint(std::make_shared<const Checkpoint::Storage>(
-      identity_, control_, native_->runtime->checkpoint()));
+      identity_,
+      control_,
+      native_->runtime->checkpoint(),
+      native_->nand ? std::optional{native_->nand->checkpoint()} : std::nullopt));
 }
 
 void Board::restore(const Checkpoint &checkpoint) {
@@ -139,8 +148,12 @@ void Board::restore(const Checkpoint &checkpoint) {
   const Busy guard(*this);
   const auto &saved = *checkpoint.storage_;
   auto replacement = std::make_unique<Owners>(config_, execution_);
-  replacement->runtime = std::make_unique<McuDspRuntime>(
-      saved.runtime, replacement->mcu, replacement->dsp, runtime_events());
+  if (saved.nand) { replacement->nand = std::make_unique<NandPeer>(*saved.nand, replacement->dsp); }
+  replacement->runtime = std::make_unique<McuDspRuntime>(saved.runtime,
+                                                         replacement->mcu,
+                                                         replacement->dsp,
+                                                         runtime_events(),
+                                                         nand_events(*replacement));
   attach(*replacement);
   static_assert(std::is_nothrow_copy_assignable_v<Control>);
   native_.swap(replacement);

@@ -3922,3 +3922,12 @@ retains transient reserved Port-F register configurations while actual unknown
 samples and unsupported function drivers still fail. See nand-board.txt and
 dsp-gpio-write-decoder.txt. These support the storage/connection requirements;
 complete original reset-to-instrument execution remains pending.
+
+Regular Board NAND: optional cold-image import now connects the causal NAND peer
+to the ordinary headless MCU/DSP runtime. Authored 540/1080MHz fixtures check
+100us Ready, pinned-source conflicts, native callbacks, joint owner restoration
+and nonmutating cold export. reference_nand, reference_pipeline and
+reference_checkpoint pass under ASan/UBSan and separate TSan; the current
+headless binary has no foreign-core symbols. See nand-board.txt. Durable NAND
+publication, original normal-instrument startup and all instrument acceptance
+requirements remain pending; this connection does not complete those claims.

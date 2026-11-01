@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/mcu_dsp_runtime.hpp"
+#include "board/nand_peer.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_esai.hpp"
+#include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_shi.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_image.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -24,12 +31,60 @@ void Board::prepare_dsp() {
   if (!execution_.rom.empty()) {
     native_->dsp.bus().install_rom({.start = bootstrap_base, .words = execution_.rom});
   }
+  if (config_.nand) {
+    const auto ready = [](const DspInput &input) {
+      return input.kind == DspInputKind::tio && input.index == 1;
+    };
+    if (std::ranges::any_of(config_.dsp_initial, ready) ||
+        std::ranges::any_of(config_.dsp_events, ready)) {
+      throw Fault("NAND Ready owns DSP timer1 input; a second input source is unsupported");
+    }
+    native_->dsp.bus().set_write_contract(DspWriteContract::internal_writable_storage);
+    native_->dsp.bus().shi().set_reset_contract(ShiResetContract::selected_quiescent_reference);
+    native_->dsp.bus().set_esai_configuration_contract(
+        DspEsaiInstance::secondary, DspEsaiConfigurationContract::cold_unclocked_reference);
+    for (const auto port : {DspPort::c, DspPort::e, DspPort::f, DspPort::d}) {
+      native_->dsp.bus().gpio(port).set_contract(DspGpioContract::logical_pins);
+    }
+    native_->nand = std::make_unique<NandPeer>(
+        native_->dsp, Nand(config_.nand->image, config_.nand->continuation));
+  }
 }
 
 void Board::connect_runtime() {
   control_.dsp_initial_pending = true;
-  native_->runtime =
-      std::make_unique<McuDspRuntime>(config_.dsp, native_->mcu, native_->dsp, runtime_events());
+  native_->runtime = std::make_unique<McuDspRuntime>(
+      config_.dsp, native_->mcu, native_->dsp, runtime_events(), nand_events(*native_));
+}
+
+unsigned Board::runtime_event_budget() const {
+  if (config_.maximum_dsp_inputs_per_advance != 0) {
+    return config_.maximum_dsp_inputs_per_advance;
+  }
+  return config_.nand ? 8U : 1U;
+}
+
+DspRuntimePeripheralEvents Board::nand_events(Owners &owners) const {
+  if (!owners.nand) { return {}; }
+  const auto events = owners.nand->events();
+  return {.identity = events.identity,
+          .next_ticks = events.next_ticks,
+          .observe = events.observe,
+          .order = DspPeerOrder::peer_first,
+          .maximum_events_per_period = runtime_event_budget()};
+}
+
+std::optional<NandPeerDetailed> Board::nand_status() const {
+  require_idle();
+  return native_->nand ? std::optional{native_->nand->detailed()} : std::nullopt;
+}
+
+std::optional<NandImage> Board::nand_image() const {
+  require_idle();
+  if (!native_->nand) { return std::nullopt; }
+  auto cold = native_->nand->protocol_copy();
+  cold.power_loss();
+  return cold.persistent_image();
 }
 
 std::uint64_t Board::common_hz() const {
@@ -63,6 +118,7 @@ bool Board::timing_faulted() const {
 
 McuDspRuntime::CycleInputs Board::runtime_inputs() const {
   return [this] {
+    if (native_->nand) { native_->nand->before_native(native_->dsp.clock().elapsed_ticks()); }
     return DspDmaInputs{.timing = DspDmaTiming::reference_sampled_cycles,
                         .grant = config_.dma_grant};
   };
@@ -70,6 +126,9 @@ McuDspRuntime::CycleInputs Board::runtime_inputs() const {
 
 McuDspRuntime::Observer Board::runtime_observer() {
   return [this](const DspRuntimeCycle &cycle) {
+    if (native_->nand) {
+      native_->nand->after_native(cycle.completion_ticks, cycle.result.native_pc);
+    }
     if (cycle.result.native && cycle.result.native->retired) { ++control_.dsp_retirements; }
     control_.return_boundary = cycle.completion_ticks;
     update_wiring();
@@ -89,6 +148,10 @@ McuDspRuntime::Observer Board::runtime_observer() {
 }
 
 DspRuntimeEvents Board::runtime_events() {
+  auto order = config_.dsp_input_order;
+  if (order == DspPeerOrder::unqualified) {
+    order = config_.nand ? DspPeerOrder::peer_first : DspPeerOrder::reject_tie;
+  }
   return {.identity = input_identity_,
           .next_ticks = [this]() -> std::optional<std::uint64_t> {
             if (control_.dsp_initial_pending) { return ticks(); }
@@ -108,8 +171,7 @@ DspRuntimeEvents Board::runtime_events() {
                 }
                 observe_dsp_input(at);
               },
-          .order = config_.dsp_input_order == DspPeerOrder::unqualified ? DspPeerOrder::reject_tie
-                                                                        : config_.dsp_input_order,
-          .maximum_events_per_period = std::max(1U, config_.maximum_dsp_inputs_per_advance)};
+          .order = order,
+          .maximum_events_per_period = runtime_event_budget()};
 }
 }
