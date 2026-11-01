@@ -3985,3 +3985,13 @@ the diagnostic decoder still reproduces its earlier refusal. The next halt
 is shared request-bus initialization against the held-selected NAND pin model.
 This is serial output evidence, not a sounding or fully booted instrument.
 Hashes and limitations: own-dsp-nand-reference.json/connected_serial_pcm_candidate.
+
+Regular Board MCU-driven cold release: dsp-release mcu-u0 low uses a functional
+passive pull-up and actual MCU register-write boundaries. Fourteen authored
+cases cover both high-output/input release, three delays, digital POR from zero
+and two timebases, with independent CPU12 write times and fresh-owner replay.
+A defined zero reset latch asserts correctly; unrelated U inputs remain intact.
+Opposing pulls, conflicting sources and post-release reassertion fail visibly.
+Eight affected Board/reset/NAND/audio groups pass under ASan/UBSan and separate
+TSan, with zero clang-tidy findings. Full original boot, repeated live reset,
+durable NAND and instrument behavior remain pending. See reference-board.txt.

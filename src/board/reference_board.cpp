@@ -52,6 +52,7 @@ Board::Board(const Config &config, const Execution &execution)
       identity_(std::make_shared<const Identity>()),
       native_(std::make_unique<Owners>(config_, execution_)) {
   validate_midi(config_);
+  validate_u0_release();
   const auto common = common_hz();
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
@@ -76,12 +77,7 @@ Board::Board(const Config &config, const Execution &execution)
                         << " reference-idle-bits=" << timing.reference_idle_bits << '\n';
     }
   }
-  const auto first_dsp = next_dsp_input();
-  if (config.release_ticks < ticks() ||
-      (!config.events.empty() && config.events.front().ticks < ticks()) ||
-      (first_dsp && first_dsp->input.ticks < ticks())) {
-    throw Fault("Reference-board release/events precede the completed native MCU reset");
-  }
+  validate_initial_schedule();
   prepare_dsp();
   if (config.pcm) {
     if (config.pcm->instance > 1 || config.pcm->lane > 5) {
@@ -97,6 +93,15 @@ Board::Board(const Config &config, const Execution &execution)
   connect_runtime();
   update_wiring();
   attach(*native_);
+}
+
+void Board::validate_initial_schedule() const {
+  const auto first_dsp = next_dsp_input();
+  if ((!config_.mcu_u0_release && config_.release_ticks < ticks()) ||
+      (!config_.events.empty() && config_.events.front().ticks < ticks()) ||
+      (first_dsp && first_dsp->input.ticks < ticks())) {
+    throw Fault("Reference-board release/events precede the completed native MCU reset");
+  }
 }
 
 void Board::attach(Owners &owners) {
@@ -141,15 +146,15 @@ void Board::apply(const Input &input) {
   }
 }
 
-void Board::release() {
+void Board::release(const std::uint64_t at) {
   control_.previous = sample();
   if (control_.previous.selected) { throw Fault("DSP release requires deasserted SPI SS"); }
   native_->dsp.bus().shi().observe_spi(control_.previous);
   native_->runtime->release_dsp_reset();
-  control_.release_epoch = ticks();
+  control_.release_epoch = at;
   update_wiring();
   if (execution_.trace != nullptr) {
-    *execution_.trace << "DSP-RELEASE requested=" << config_.release_ticks << " actual=" << ticks()
+    *execution_.trace << "DSP-RELEASE requested=" << config_.release_ticks << " actual=" << at
                       << " pc=" << hex(native_->dsp.cpu().registers().pc, 6) << '\n';
   }
 }
@@ -172,7 +177,11 @@ void Board::boundary() {
     if (control_.release_epoch) { transition(sample()); }
     ++control_.next_event;
   }
-  if (!control_.release_epoch && ticks() >= config_.release_ticks) { release(); }
+  if (config_.mcu_u0_release) {
+    observe_u0_release();
+  } else if (!control_.release_epoch && ticks() >= config_.release_ticks) {
+    release(ticks());
+  }
   start_midi();
   check_signals();
 }
@@ -183,7 +192,8 @@ void Board::on_cycle(const Hc12BusCycle cycle) {
   check_signals();
   constexpr unsigned port_b = 1;
   const bool shared = (cycle.kind == 'w' || cycle.kind == 'W') && cycle.address &&
-                      *cycle.address <= port_b && port_b - *cycle.address < cycle.size;
+                      ((*cycle.address <= port_b && port_b - *cycle.address < cycle.size) ||
+                       u0_release_write(*cycle.address, cycle.size));
   native_->runtime->begin_cycle(cycle, shared, runtime_inputs(), runtime_observer());
   update_wiring();
 }

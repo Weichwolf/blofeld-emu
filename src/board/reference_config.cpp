@@ -48,10 +48,8 @@ std::string token(std::istringstream &line) {
 
 enum class NumberBase : std::uint8_t { decimal = 10, hexadecimal = 16 };
 
-std::uint64_t number(std::istringstream &line,
-                     const std::uint64_t maximum,
-                     const NumberBase base = NumberBase::decimal) {
-  const auto value = token(line);
+std::uint64_t
+numeric_value(const std::string &value, const std::uint64_t maximum, const NumberBase base) {
   std::uint64_t result = 0;
   const auto parsed =
       std::from_chars(value.data(), value.data() + value.size(), result, static_cast<int>(base));
@@ -59,6 +57,12 @@ std::uint64_t number(std::istringstream &line,
     throw Fault("Invalid reference-board number: " + value);
   }
   return result;
+}
+
+std::uint64_t number(std::istringstream &line,
+                     const std::uint64_t maximum,
+                     const NumberBase base = NumberBase::decimal) {
+  return numeric_value(token(line), maximum, base);
 }
 
 std::uint8_t byte(std::istringstream &line) {
@@ -456,7 +460,10 @@ void setting(Config &config, const std::string_view key, std::istringstream &lin
   } else if (key == "spi-b") {
     serial(config, line);
   } else if (key == "dsp-release") {
-    config.release_ticks = number(line, UINT64_MAX);
+    const auto source = token(line);
+    config.mcu_u0_release = source == "mcu-u0";
+    config.release_ticks =
+        config.mcu_u0_release ? 0 : numeric_value(source, UINT64_MAX, NumberBase::decimal);
     const auto pinit = token(line);
     if (pinit != "low" && pinit != "high") { throw Fault("DSP PINIT must be low or high"); }
     config.dsp.initial_reset = OwnDspResetInputs{

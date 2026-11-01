@@ -38,8 +38,14 @@ All six settings are required exactly once:
   clock-before-select, select-before-clock or reject for simultaneous pad edges.
   Only actual byte PORTB data writes qualify as shared transfers. A control
   register changing these pads without a qualified transfer fails visibly.
-- dsp-release: requested common tick and observed PINIT level. Format2 declares
-  mode5 and two reference recovery periods. The supported reset requires PINIT
+- dsp-release: requested common tick, or mcu-u0 for a release caused by the MCU,
+  followed by observed PINIT level. The functional U0 source supplies a passive
+  pull-up and preserves other U inputs. An actual known MCU low must precede
+  its release to input or high output; an initial high does not release reset.
+  Configuration/data writes use their actual MCU bus boundary. Conflicting
+  sources, unknown levels and reset reassertion after release fail explicitly;
+  this option currently covers cold release only. Format2 declares mode5 and
+  two reference recovery periods. The supported reset requires PINIT
   low; high is retained as an unsupported observation and fails. Release requires
   known SPI pads and deasserted SS. The DSP clock includes hold/recovery time;
   it is not rebased to an artificial instruction epoch at release.
@@ -187,3 +193,12 @@ Directed authored programs check native words, GPIO/IRQ behavior and joint repla
 original component tests retain separate qualification. See coverage.txt for
 current evidence and unresolved boot, clocks, storage, USB/MIDI/audio and complete
 Desktop/Keyboard instrument requirements. No component result proves brick safety.
+
+MCU-driven cold release regression:
+  cmake --build --preset strict --target blofeld-reference-reset-release-test
+  ctest --preset strict -R '^reference_reset_release$' --output-on-failure
+Use the thread preset for the separate TSan run. Authored native fixtures check
+14 release/POR cases over two timebases, exact CPU12 bus times, unknown pull
+conflicts, reset-latch initialization, source ownership and fresh-owner replay.
+These qualify the functional source; complete original boot and live reset
+reassertion are separate remaining requirements.

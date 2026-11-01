@@ -305,6 +305,7 @@ target_include_directories(blofeld_host_midi_port PUBLIC src)
 target_link_libraries(blofeld_host_midi_port PUBLIC blofeld_quality)
 add_library(blofeld_reference_board src/board/reference_config.cpp src/board/reference_square_clock.cpp src/board/reference_audio_clock.cpp
   src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
+  src/board/reference_reset_source.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
   src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
@@ -3285,7 +3286,7 @@ add_custom_target(quality
     blofeld-parallel-accumulator-add-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test
     blofeld-dax-test
-    blofeld-reference-checkpoint-test blofeld-reference-rom-fixture blofeld-reference-pipeline-test blofeld-original-board-power-on-test
+    blofeld-reference-checkpoint-test blofeld-reference-rom-fixture blofeld-reference-pipeline-test blofeld-reference-reset-release-test blofeld-original-board-power-on-test
     blofeld-reference-original-midi-rom
     blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test
     blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
@@ -3410,6 +3411,11 @@ add_custom_target(quality
   add_executable(blofeld-reference-pipeline-test test/reference_pipeline_test.cpp)
   target_link_libraries(blofeld-reference-pipeline-test PRIVATE blofeld_reference_board)
   add_test(NAME reference_pipeline COMMAND blofeld-reference-pipeline-test)
+  add_executable(blofeld-reference-reset-release-test test/reference_reset_release_test.cpp)
+  target_link_libraries(blofeld-reference-reset-release-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_reset_release COMMAND blofeld-reference-reset-release-test
+    "${CMAKE_CURRENT_BINARY_DIR}/reference-reset-release-test")
+  set_tests_properties(reference_reset_release PROPERTIES TIMEOUT 60)
   add_executable(blofeld-reference-nand-test test/reference_nand_test.cpp)
   target_link_libraries(blofeld-reference-nand-test PRIVATE blofeld_reference_board)
   add_test(NAME reference_nand COMMAND blofeld-reference-nand-test

@@ -91,12 +91,21 @@ void Board::on_write(const BusEvent &event) {
                       << " mcu-pc=" << hex(control_.context.pc) << '\n';
   }
   constexpr unsigned port_b = 1;
-  if (event.address != port_b) {
+  if (event.address != port_b && !u0_release_write(event.address)) {
     check_signals();
     return;
   }
   native_->runtime->observe_write(
-      event, [&] { observe_spi_write(event); }, runtime_inputs(), runtime_observer());
+      event,
+      [&] {
+        if (event.address == port_b) {
+          observe_spi_write(event);
+        } else {
+          observe_u0_release();
+        }
+      },
+      runtime_inputs(),
+      runtime_observer());
   update_wiring();
 }
 

@@ -149,6 +149,7 @@ struct Config {
   DspDmaGrant dma_grant = DspDmaGrant::unknown;
   std::optional<PowerOnTiming> power_on;
   std::optional<NandConnection> nand;
+  bool mcu_u0_release = false;
   std::uint64_t release_ticks = 0;
   std::uint64_t operations = 0;
   std::uint8_t select_n = 0;
@@ -342,6 +343,7 @@ private:
     std::uint64_t midi_bytes = 0;
     bool started = false;
     bool dsp_initial_pending = false;
+    bool u0_asserted = false;
     bool faulted = false;
   };
 
@@ -366,6 +368,11 @@ private:
   void transition(SpiInputs pins);
   void update_loopback();
   void update_wiring();
+  void validate_u0_release() const;
+  void validate_initial_schedule() const;
+  void update_u0_drive();
+  void observe_u0_release();
+  [[nodiscard]] bool u0_release_write(unsigned address, unsigned size = 1) const;
   void update_return(const std::optional<ReturnRoute> &route,
                      ShiOutput output,
                      std::optional<ShiOutput> &previous,
@@ -423,7 +430,7 @@ private:
   void synchronize_midi();
   [[nodiscard]] std::size_t midi_queue_size() const;
   void step();
-  void release();
+  void release(std::uint64_t at);
   void on_cycle(Hc12BusCycle cycle);
   void on_write(const BusEvent &event);
   void report(std::ostream &stream) const;
