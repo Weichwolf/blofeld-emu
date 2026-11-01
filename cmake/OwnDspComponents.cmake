@@ -81,6 +81,16 @@ if(BUILD_TESTING)
   add_test(NAME dsp_esai COMMAND blofeld-esai-test)
   add_library(blofeld_dma_fixture STATIC test/dma_native_fixture.cpp)
   target_link_libraries(blofeld_dma_fixture PUBLIC blofeld_own_dsp_io)
+  add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp
+    test/original_dsp_reference.cpp)
+  target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dma_fixture)
+  add_test(NAME original_dsp_boot COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_boot.py"
+    $<TARGET_FILE:blofeld-dsp-boot-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-boot.trace")
+  set_tests_properties(original_dsp_boot PROPERTIES SKIP_RETURN_CODE 77)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp test/dsp_core_fixture.cpp
     test/dsp_core_pinit.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dma_fixture blofeld_own_dsp_fetch)

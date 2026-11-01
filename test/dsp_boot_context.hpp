@@ -3,9 +3,9 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_reference_execution.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 
 #include <algorithm>
 #include <array>
@@ -17,6 +17,20 @@
 
 namespace blofeld::test::boot_context {
 enum class Phase : std::uint8_t { reset, loaded, clear, frontier };
+
+struct State {
+  dsp56300::Registers cpu;
+  dsp56300::Progress progress;
+  std::uint64_t elapsed_ticks = 0;
+  bool operator==(const State &) const = default;
+};
+
+inline State capture(const OwnDspMachine &machine) {
+  return {.cpu = machine.cpu().registers(),
+          .progress = machine.cpu().progress(),
+          .elapsed_ticks = machine.clock().elapsed_ticks()};
+}
+
 inline constexpr unsigned word_mask = 0xffffff;
 inline constexpr unsigned bootstrap_entry = 0xff0000;
 inline constexpr unsigned clear_pc = 0x72;
@@ -39,9 +53,9 @@ inline void require(const bool condition, const std::string &message) {
 // DSP56300FM 4.3.4, 5.4.1.2, 5.4.3 and CLR/MOVE/REP definitions; the
 // document-derived SPI prefix never writes Mn or the upper SR mode bytes.
 // Undefined reset data/offset/address registers are deliberately not an oracle.
-inline bool valid(const Phase phase, const DspDebugState &state) {
+inline bool valid(const Phase phase, const State &state) {
   const auto &cpu = state.cpu;
-  if (cpu.sp != 0 || state.sc != 0 || cpu.vba != 0 ||
+  if (cpu.sp != 0 || cpu.sc != 0 || cpu.vba != 0 ||
       !std::ranges::all_of(cpu.m, [](const auto value) { return value == word_mask; })) {
     return false;
   }
@@ -63,7 +77,7 @@ inline bool valid(const Phase phase, const DspDebugState &state) {
   }
 }
 
-inline void negative_controls(const Phase phase, const DspDebugState &state) {
+inline void negative_controls(const Phase phase, const State &state) {
   auto changed = state;
   changed.cpu.m[4] = ram_end - 1;
   require(!valid(phase, changed), "A guessed modulo M4 must fail the boot-context oracle");
@@ -100,16 +114,17 @@ inline void negative_controls(const Phase phase, const DspDebugState &state) {
   }
 }
 
-inline void record(const Phase phase, const DspDebugState &state, std::ostream &trace) {
+inline void record(const Phase phase, const State &state, std::ostream &trace) {
   const auto &cpu = state.cpu;
   constexpr std::array names{"reset", "loaded-stage", "clear-entry", "strict-frontier"};
   trace << names.at(static_cast<std::size_t>(phase)) << " pc=" << hex(cpu.pc, 6)
         << " sr=" << hex(cpu.sr, 6) << " omr=" << hex(cpu.omr, 6) << " sp=" << hex(cpu.sp, 6)
-        << " sc=" << hex(state.sc, 6) << " vba=" << hex(cpu.vba, 6) << " a=" << hex(cpu.a, 14)
+        << " sc=" << hex(cpu.sc, 6) << " vba=" << hex(cpu.vba, 6) << " a=" << hex(cpu.a, 14)
         << " b=" << hex(cpu.b, 14) << " x=" << hex(cpu.x, 12) << " y=" << hex(cpu.y, 12)
-        << " lc=" << hex(cpu.lc, 6) << " la=" << hex(cpu.la, 6) << " ep=" << hex(state.ep, 6)
-        << " sz=" << hex(state.sz, 6) << " native-instructions=" << state.native_instructions
-        << " native-cycles=" << state.native_cycles << '\n';
+        << " lc=" << hex(cpu.lc, 6) << " la=" << hex(cpu.la, 6) << " ep=" << hex(cpu.ep, 6)
+        << " sz=" << hex(cpu.sz, 6) << " native-instructions=" << state.progress.instructions
+        << " estimated-core-cycles=" << state.progress.estimated_cycles
+        << " elapsed-reference-ticks=" << state.elapsed_ticks << '\n';
   for (std::size_t index = 0; index < cpu.m.size(); ++index) {
     trace << " r" << index << '=' << hex(cpu.r[index], 6) << " n" << index << '='
           << hex(cpu.n[index], 6) << " m" << index << '=' << hex(cpu.m[index], 6) << '\n';
@@ -125,55 +140,6 @@ inline std::string rejected(const auto &operation) {
   throw Fault("Expected a visible original bootstrap rejection");
 }
 
-inline DspReferenceTicket pending_ticket(const DspReferenceProgress &progress) {
-  if (!progress.pending || progress.retired) { throw Fault("Original REP lost its pending store"); }
-  return progress.pending->ticket;
-}
-
-// These are explicitly supplied reference switch cycles, not elapsed chip time.
-// They change only the saved branch's bus map, never its CPU/register state.
-inline void check_switch(const DspMachine &frontier, std::ostream &trace) {
-  const auto saved = frontier.checkpoint();
-  const auto state = frontier.cpu().debug_state();
-  DspMachine branch;
-  constexpr unsigned switched_program = 0x1000;
-  constexpr unsigned switch_cycles = 3;
-  for (const auto elapsed : {0U, 2U, switch_cycles}) {
-    branch.restore(saved);
-    branch.bus().advance_instruction_cycles(elapsed);
-    const DspMemoryAccess target{.target = {.address = switched_program},
-                                 .operation = DspMemoryOperation::write};
-    if (elapsed < switch_cycles) {
-      const auto error = rejected([&] { static_cast<void>(branch.bus().memory_resource(target)); });
-      require(error.find("requires elapsed switch cycles: P:" + hex(switched_program, 6)) !=
-                  std::string::npos,
-              "The affected program window must still reject before the switch deadline");
-    } else {
-      const auto resource = branch.bus().memory_resource(target);
-      require(resource.bank == DspSpace::x && !resource.rom && resource.word == 0x10000,
-              "The supplied three-cycle boundary really commits the documented X-to-P switch");
-    }
-    require(branch.cpu().debug_state() == state,
-            "Advancing reference map time cannot replace a CPU instruction or register");
-    auto progress = branch.begin_reference_instruction(DspReferenceExecution::access_boundaries);
-    require(progress.pending && !progress.retired, "The original REP has a pending X store");
-    progress = branch.advance_reference_access(pending_ticket(progress));
-    require(progress.pending && !progress.retired,
-            "The original X store completes before the pending Y store");
-    require(branch.cpu().debug_state() == state &&
-                branch.bus().read({.space = DspSpace::x, .address = ram_end}) == 0,
-            "Only the actual X zero store commits before the reserved Y access");
-    const auto error = rejected(
-        [&] { static_cast<void>(branch.advance_reference_access(pending_ticket(progress))); });
-    require(
-        error.find("write at Y:" + hex(ram_end, 6)) != std::string::npos &&
-            error.find("pc=" + hex(clear_pc, 6)) != std::string::npos &&
-            error.find("omr=" + hex(memory_mode, 6)) != std::string::npos &&
-            branch.cpu().debug_state() == state,
-        "Original reserved-Y failure persists before and after the actual reference map switch");
-    trace << "switch-reference-cycles=" << elapsed << " error=" << error << '\n';
-  }
-  require(frontier.cpu().debug_state() == state,
-          "Boot-context branches leave the original frontier owner unchanged");
-}
+// Supplied model switch periods only, not calibrated elapsed PLL time.
+void check_switch(const OwnDspMachine &frontier, std::ostream &trace);
 }

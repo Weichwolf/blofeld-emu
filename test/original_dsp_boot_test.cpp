@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_reference_execution.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "dsp_boot_context.hpp"
 #include "dsp_boot_reference.hpp"
 #include "firmware/firmware.hpp"
@@ -42,30 +42,32 @@ void require(const bool condition, const std::string &message) {
 
 class Runner {
 public:
-  Runner(blofeld::DspMachine &machine, std::ostream &trace, const Execution execution)
+  Runner(blofeld::OwnDspMachine &machine, std::ostream &trace, const Execution execution)
       : machine_(machine), trace_(trace), execution_(execution) {}
 
   void step() {
     require(completed_ < instruction_limit, "DSP bootstrap instruction budget exhausted");
-    const auto before = machine_.cpu().state();
+    const auto before = machine_.cpu().registers();
     trace_ << completed_ << " pc=" << blofeld::hex(before.pc, 6)
            << " sr=" << blofeld::hex(before.sr, 6) << " omr=" << blofeld::hex(before.omr, 6)
            << " r0=" << blofeld::hex(before.r[0], 6) << " r1=" << blofeld::hex(before.r[1], 6)
            << " lc=" << blofeld::hex(before.lc, 6) << '\n';
     if (execution_ == Execution::instruction) {
-      machine_.cpu().step();
+      blofeld::test::dma_test::step_native(machine_);
     } else {
-      auto progress =
-          machine_.begin_reference_instruction(blofeld::DspReferenceExecution::access_boundaries);
-      constexpr unsigned maximum_accesses = 16;
-      for (unsigned accesses = 0; !progress.retired && accesses < maximum_accesses; ++accesses) {
+      auto progress = machine_.begin_fetch(dsp56300::InstructionPublication::retirement);
+      constexpr unsigned maximum_effects = 64;
+      for (unsigned effect = 0; !progress.retired && effect < maximum_effects; ++effect) {
+        blofeld::test::require_original_native(machine_, progress);
         if (!progress.pending) {
-          throw blofeld::Fault("Original instruction lost its pending access");
+          throw blofeld::Fault("Original instruction lost its pending native effect");
         }
-        progress = machine_.advance_reference_access(progress.pending->ticket);
+        progress = machine_.advance(progress.pending->ticket);
       }
-      require(progress.retired && !progress.pending,
-              "Each original reference instruction retires within its access bound");
+      blofeld::test::require_original_native(machine_, progress);
+      require(progress.retired && !progress.pending &&
+                  progress.fault.kind == dsp56300::FaultKind::none,
+              "Each original native instruction retires within its actual effect bound");
     }
     ++completed_;
   }
@@ -88,7 +90,7 @@ public:
   [[nodiscard]] unsigned completed() const { return completed_; }
 
 private:
-  blofeld::DspMachine &machine_;
+  blofeld::OwnDspMachine &machine_;
   std::ostream &trace_;
   Execution execution_;
   unsigned completed_ = 0;
@@ -100,19 +102,27 @@ struct Inputs {
   std::filesystem::path trace;
 };
 
-blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
+blofeld::test::boot_context::State run(const Inputs &inputs, const Execution execution) {
   const auto firmware = blofeld::Firmware::load(inputs.firmware);
   const auto rom = blofeld::test::read_spi_boot_prefix(inputs.rom);
-  blofeld::DspMachine machine;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
   auto &bus = machine.bus();
   bus.install_rom({.start = bootstrap_base, .words = rom});
   bus.shi().observe_spi({.mosi = false});
-  auto &cpu = machine.cpu();
-  cpu.reset_spi_boot();
+  const auto &cpu = machine.cpu();
+  constexpr std::uint64_t reset_hold = 90;
+  constexpr std::uint64_t reset_recovery = 90;
+  machine.begin_hardware_reset(
+      {.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2});
+  require(machine.advance_hardware_reset_ticks(reset_hold) == reset_hold, "Actual reset hold");
+  machine.release_hardware_reset();
+  require(machine.advance_hardware_reset_ticks(reset_recovery) == reset_recovery,
+          "Actual reset recovery");
   std::ofstream context(inputs.trace.string() + ".boot-context.trace");
   context.exceptions(std::ios::failbit | std::ios::badbit);
-  blofeld::test::boot_context::record(
-      blofeld::test::boot_context::Phase::reset, cpu.debug_state(), context);
+  blofeld::test::boot_context::record(blofeld::test::boot_context::Phase::reset,
+                                      blofeld::test::boot_context::capture(machine),
+                                      context);
   std::ofstream trace(inputs.trace);
   require(trace.is_open(), "Cannot create private DSP bootstrap trace");
   trace.exceptions(std::ios::failbit | std::ios::badbit);
@@ -129,13 +139,14 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
     runner.send(
         blofeld::test::dsp_boot_word(std::span<const std::uint8_t, 3>(frame.subspan(offset, 3))));
   }
-  while (cpu.state().pc != stage_base) { runner.step(); }
+  while (cpu.registers().pc != stage_base) { runner.step(); }
   require(bus.read({.space = blofeld::DspSpace::x, .address = bcr}) == bcr_reset,
           "The executed published SPI prefix supplies no Port F BIU setup");
-  blofeld::test::boot_context::record(
-      blofeld::test::boot_context::Phase::loaded, cpu.debug_state(), context);
-  require(cpu.state().sp == 0 && cpu.state().r[0] == stage_base + stage_words &&
-              cpu.state().r[1] == stage_base,
+  blofeld::test::boot_context::record(blofeld::test::boot_context::Phase::loaded,
+                                      blofeld::test::boot_context::capture(machine),
+                                      context);
+  require(cpu.registers().sp == 0 && cpu.registers().r[0] == stage_base + stage_words &&
+              cpu.registers().r[1] == stage_base,
           "Native ROM DO loop, stack and jump complete without host PC patching");
   for (std::size_t index = 0; index < stage_words; ++index) {
     const auto expected = blofeld::test::dsp_boot_word(
@@ -143,28 +154,30 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
     require(bus.read({.address = static_cast<std::uint32_t>(stage_base + index)}) == expected,
             "Every original first-stage word was written by executed DSP MOVEP instructions");
   }
-  while (cpu.state().pc != pll_pc) { runner.step(); }
+  while (cpu.registers().pc != pll_pc) { runner.step(); }
   constexpr unsigned original_memory_mode = 0x600389;
   require(
-      cpu.state().omr == original_memory_mode && cpu.state().r[4] == 0,
+      cpu.registers().omr == original_memory_mode && cpu.registers().r[4] == 0,
       "Unmodified first-stage instructions select their own memory mode and clear their pointer");
   runner.step();
   require(bus.pll().read() == bus.read({.address = pll_pc + 1}),
           "Original MOVEP writes its own unmodified PCTL operand");
   runner.step();
-  require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count,
+  require(cpu.registers().pc == clear_pc && cpu.registers().lc == clear_count,
           "Fractional short immediate X0 supplies the full 24-bit REP count, not integer two");
-  blofeld::test::boot_context::record(
-      blofeld::test::boot_context::Phase::clear, cpu.debug_state(), context);
-  while (cpu.state().r[4] != known_long_ram_end - 1) { runner.step(); }
+  blofeld::test::boot_context::record(blofeld::test::boot_context::Phase::clear,
+                                      blofeld::test::boot_context::capture(machine),
+                                      context);
+  while (cpu.registers().r[4] != known_long_ram_end - 1) { runner.step(); }
   const auto last_pair = machine.checkpoint();
   runner.step();
-  require(cpu.state().pc == clear_pc && cpu.state().lc == clear_count - known_long_ram_end,
+  require(cpu.registers().pc == clear_pc && cpu.registers().lc == clear_count - known_long_ram_end,
           "Bounded native REP yields at the first reserved Y address without skipping iterations");
   require(bus.read({.space = blofeld::DspSpace::x, .address = bcr}) == bcr_reset,
           "The unchanged original stage still retains the unqualified reset BIU control");
-  blofeld::test::boot_context::record(
-      blofeld::test::boot_context::Phase::frontier, cpu.debug_state(), context);
+  blofeld::test::boot_context::record(blofeld::test::boot_context::Phase::frontier,
+                                      blofeld::test::boot_context::capture(machine),
+                                      context);
   for (const auto space : {blofeld::DspSpace::x, blofeld::DspSpace::y}) {
     for (unsigned address = 0; address < known_long_ram_end; ++address) {
       require(bus.read({.space = space, .address = address}) == 0,
@@ -183,7 +196,7 @@ blofeld::DspDebugState run(const Inputs &inputs, const Execution execution) {
             << "PCTL and cleared 8192 X/Y word pairs; reserved-address write behavior remains "
             << "unverified. "
             << "No complete DSP/board boot is proven.\n";
-  return cpu.debug_state();
+  return blofeld::test::boot_context::capture(machine);
 }
 
 void compare_traces(const Inputs &legacy, const Inputs &reference) {
@@ -211,7 +224,8 @@ int main(const int count, char **arguments) {
     const auto legacy_state = run(legacy, Execution::instruction);
     const auto reference_state = run(reference, Execution::access);
     require(legacy_state == reference_state,
-            "Both complete original prefixes retain identical native counters/registers/stack");
+            "Both complete original prefixes retain identical native "
+            "progress/registers/stack/reset time");
     compare_traces(legacy, reference);
     return 0;
   } catch (const std::exception &error) {

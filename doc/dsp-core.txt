@@ -134,7 +134,7 @@ an invalid bit-24 encoding. Unknown selected bits and whole PDR reads still fail
 
 Document-derived SPI bootstrap reference
 DSP56371UM Appendix A publishes the SPI path, but references a separate EEPROM
-file and other ROM content is not supplied here. The optional fixture assembles
+file and other ROM content is not supplied here. The optional extraction tool assembles
 only the 55-word prefix at P:ff0000..ff0036. Page headers are removed and equivalent
 label-colon syntax is used; instruction text is retained. The omitted EEPROM entry
 uses the separately published address, and the following burn-in entry retains
@@ -171,51 +171,41 @@ the reserved map but does not establish that a write there is safely discarded o
 cannot alias another block. Actual reserved/ROM write behavior requires stronger
 evidence; the normal implementation uses no broad RAM allocation, dropped-write
 shortcut or loop skip.
-The main regression trace stops before that access. Additional isolated checkpoint
-branches exercise native access continuation on the last mapped long store and
-the next current strict-map boundary. They admit X, capture pending Y and restore
-twice. A deliberate outside X mutation survives Y admission without a repeated X
-write; a successful pair retires R4/LC once and matches the legacy native state.
-At Y:002000, actual admission fails with PC/OMR/ordinal, preserves the completed
-prefix and rejects further execution/capture until trusted restore. This qualifies
-the implemented strict-map failure, not the chip's reserved-write behavior; future
-hardware evidence may change that map contract. The private sidecar is
-Testing/original-dsp-boot.trace.reference-access.trace; the original main trace
-must match between execution profiles. GPIO/NAND startup has not yet been reached natively.
+The retained original_dsp_boot gate uses the independent core, with no SDK
+executor/assembler dependency. Actual mode5/PINIT-low assertion and supplied
+recovery precede the first ROM fetch. Both whole-instruction and staged
+retirement-publication paths execute all 13,015 reached instructions; their
+main traces and full registers/progress/reset-time observations match.
 
-Private counterfactual continuation experiments retain the unchanged broad clear
-and identify later GPIO/BIU boundaries. They do not qualify reserved/ROM writes,
-physical reset/clock behavior or a successful stock boot. Strict defaults remain.
+Four independent phase oracles retain reset, stage-entry, clear-entry and frontier
+expectations. All eight modifiers stay linear; undefined reset GPRs are not
+specified zeros. 34 fixed oracle corruptions per execution profile reject changed
+M4, modes, cursor, count, source and memory mode. Separate branches supply zero,
+two and three model switch periods: X-to-P commits at the selected deadline,
+while the original reserved Y write still fails. These supplied model periods
+are not calibrated elapsed PLL time.
 
-The same fixture also executes all 13,015 currently reached ROM/stage instructions
-through the explicit access-continuation profile. Its separate
-Testing/original-dsp-boot.trace.continuation.trace is byte-identical to the
-ordinary main trace, and the complete final native debug state matches. Each
-declared SPI edge still follows one retired instruction; this is an untimed
-interleaving, not a physical pipeline or clock comparison. Internal attempt
-rollback now uses fixed raw state instead of full native cache copies; actual
-bus effects, loaded REP and strict failures retain their existing contracts
-(dsp-reference-execution.txt).
+The original last mapped pair and strict frontier also run through real pending
+X/Y effects. Retirement publication preserves the retained access-only CPU view:
+X commits first, trusted restore resumes Y, outside X writes survive and R4/LC
+retire once. Diagnostic fault checkpoints retain the Y fault and committed X prefix; restoring them keeps execution blocked. A previous healthy checkpoint
+restores executable state. Data-write ordinals describe actual accepted writes;
+native ticket identities remain opaque.
 
-The same regression checks independent register expectations at reset, stage
-entry, clear entry and the strict frontier. All eight modifiers remain linear;
-the prefix preserves reset arithmetic/scaling modes and clears CCR before entry.
-The original stage defines its own accumulator, cursor, OMR and fractional count.
-Thirty-four fixed oracle corruptions per execution profile reject changed M4, modes,
-cursor, count, source and memory mode. Separate checkpoint branches supply zero,
-two and three reference switch cycles: the affected X-to-P mapping really changes,
-but the original Y:002000 write still fails with its PC/OMR context. Additional
-private .boot-context.trace sidecars retain the register observations; undefined
-reset fields are not treated as specified zeros. These constraints apply to the
-published prefix, not an unidentified stock mask-ROM variant; reserved-write
-semantics remain unresolved.
+The normal PCU publication path is checked separately on the same loaded opcode.
+The actual address ticket publishes R4 before X. Two pending-Y snapshots and four
+same/fresh continuations retain that published register and the committed X word.
+A mapped Y retires once; reserved Y faults without retirement or an R4 rollback.
+These checks qualify native publication/checkpoint contracts, not physical
+sub-instruction timing. No host register rewrite supplies either behavior.
 
-The host supplies pin events with explicit instruction interleaving. The original
-MCU is not the sender in this fixture, no elapsed DSP/MCU clock ratio is
-inferred, and no physical Blofeld has validated the route/timing. Native dispatch/
-cycle caches retain 24-bit address coverage through bounded paged storage
-(dsp-cycle-cache.txt). These diagnostic runs provide no real-time audio
-performance claim.
+Private .boot-context.trace and .reference-access.trace sidecars retain phase,
+pending-store and fault observations. Only supplied reset time advances the chip
+clock in this fixture; native cycle counts are estimates. The sender is a host
+pin fixture, not the original MCU. Stock mask-ROM identity, GPIO/BIU/NAND startup,
+reserved-write behavior, clock/routing calibration, full boot and realtime audio
+remain unqualified. Counterfactual continuation experiments remain separate from
+this strict-map gate and do not establish stock hardware behavior.
 
 A separate original-MCU regression now executes reset/application and captures
 its complete 97-word GPIO transfer, including the trailing word, under explicit

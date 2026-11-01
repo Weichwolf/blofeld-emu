@@ -46,6 +46,11 @@ Its unchanged five-window/25-transition expectations are joined by 16 clocked
 switch checkpoints and 32 same/fresh continuations, preserving actual MOVEC/JMP
 effects, the three-period model delay and strict unresolved-target fetches.
 
+The retained original_dsp_boot gate loads the private documented SPI prefix and
+unchanged 94-word original stage through this core. Four independent phase oracles,
+8192 mapped X/Y pairs, retirement-access branches and two PCU checkpoints/four
+same/fresh continuations retain strict reserved-Y failure. See dsp-core.txt.
+
 The retained native_dsp gate uses authored instruction fields and this core,
 without the SDK assembler/backend: 18 groups retain 69 independent comparison
 conditions. See dsp-core.txt for its reset/memory/ALU/code/GPIO/TIO/FIFO/loop scope.
