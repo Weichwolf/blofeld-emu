@@ -1727,7 +1727,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-mcu-dsp-fetch-wait-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME mcu_dsp_fetch_wait COMMAND blofeld-mcu-dsp-fetch-wait-test)
   add_executable(blofeld-mcu-dsp-fetch-reset-test test/mcu_dsp_fetch_reset_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-reset-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-mcu-dsp-fetch-reset-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME mcu_dsp_fetch_reset COMMAND blofeld-mcu-dsp-fetch-reset-test)
   set_tests_properties(mcu_dsp_fetch_reset PROPERTIES TIMEOUT 180)
   add_executable(blofeld-mcu-dsp-fetch-dsp-reset-test test/mcu_dsp_fetch_dsp_reset_test.cpp

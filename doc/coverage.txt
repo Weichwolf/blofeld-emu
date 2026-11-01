@@ -121,6 +121,13 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           RTI profiles retain8 idle-checkpoint
                                           suffixes with full native state/effect
                                           and fetch traces (mcu-dsp-wait.txt).
+                                          MCU-reset/COP integration uses that core
+                                          too:31 cases cover all5 OSC phases,
+                                          OSC/PHY run/WAI,20 complete watchdog
+                                          resets,40 restored reset suffixes and
+                                          strict failure prefixes. MCU-only faults
+                                          are reported; explicit reset preserves
+                                          healthy DSP work (mcu-dsp-cop-reset.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are

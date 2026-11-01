@@ -78,23 +78,13 @@ clocks, strict failed-store/cancelled-offer controls and acceptance limits.
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-reset-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_reset$'
 
-Thirty-one native cases cover all5OSC phases across OSC/PHY and run/WAI,
-20whole COP timeouts/recoveries,four external synchronization variants and
-seven strict failures. Independent period counts,distinct native reset vectors,
-SRAM retention and full DSP ADD/BRA results are checked. Unknown source pads,
-unconsumed/wrong reset offers,default unqualified contracts and an actual
-reserved-Y failure preserve their visible context and quarantine. No DSP PC,
-firmware state or physical reset-pad result is supplied by the scheduler.
-
-DSP reset hold/recovery uses dsp.resets=reference_cycle_boundary and explicit
-observed mode5/PINIT-low inputs. initial_reset starts held at epoch_ticks,including
-an already consumed MCU instruction tail. begin_dsp_reset/release_dsp_reset admit
-only exact consumed peer-time boundaries;no asynchronous assertion is inferred.
-Held and recovery time consumes native MCU offers without DSP execution/DMA/CLK2.
-Release may be observed inside the owning native shared-write callback. Recovery
-clamps before the first genuine pipeline period;the new divider phase is retained
-in joint checkpoints. Restore drops external GPIO callbacks;reattach them after
-the joint restore,along with observers and caller-owned transport cursors.
+Thirty-one MCU-reset/COP cases now use McuDspRuntime and dsp56300. All five
+OSC phases, OSC/PHY run/WAI routes,20 full watchdog timeouts/recoveries, four
+external synchronization variants and seven strict controls remain. Forty
+actual COP-reset checkpoint suffixes compare full native DSP state/effects,
+fetch clocks and CLK2. MCU-only timing faults are visible to the coordinator;
+explicit reset admission retains the independently healthy DSP. See
+mcu-dsp-cop-reset.txt for literal time/vector oracles and acceptance limits.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-dsp-reset-test blofeld-original-fetch-reset-start-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^(mcu_dsp_fetch_dsp_reset|original_fetch_reset_start)$'

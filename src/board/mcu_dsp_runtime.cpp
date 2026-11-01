@@ -173,11 +173,12 @@ std::uint64_t McuDspRuntime::mcu_ticks() const {
 }
 
 bool McuDspRuntime::faulted() const {
-  return faulted_ || timeline_->faulted() || dsp_.clock().faulted();
+  return faulted_ || timeline_->faulted() || dsp_.clock().faulted() || mcu_.timing_faulted() ||
+         mcu_.run_clock().native_epoch() != state_.epoch;
 }
 
 void McuDspRuntime::healthy() const {
-  if (active_ || faulted() || mcu_.run_clock().native_epoch() != state_.epoch) {
+  if (active_ || faulted()) {
     throw Fault("MCU/DSP runtime requires its healthy inactive native epoch");
   }
   timeline_->validate_boundary();
@@ -515,7 +516,13 @@ void McuDspRuntime::end_system_reset() {
 
 void McuDspRuntime::begin_system_reset(const McuResetSource source,
                                        const unsigned synchronization_cycles) {
-  healthy();
+  // The MCU can have latched an owned COP timeout. Only its explicit reset
+  // entry may recover that timing failure; the DSP owner must remain healthy.
+  if (active_ || faulted_ || timeline_->faulted() || dsp_.clock().faulted() ||
+      mcu_.run_clock().native_epoch() != state_.epoch) {
+    throw Fault("MCU/DSP reset requires its healthy inactive DSP/native epoch");
+  }
+  timeline_->validate_boundary();
   const Guard guard(*this);
   consumed();
   if (!inputs_.reset_dsp_first || state_.resetting || state_.shared_write ||
