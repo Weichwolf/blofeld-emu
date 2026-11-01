@@ -1,0 +1,51 @@
+Original MCU reset/SPI on dsp56300
+
+original_fetch_reset_start uses McuDspRuntime and the independent DSP core only.
+The unchanged1.25 MCU starts at its real reset vector, with its initial five
+bus periods retained. The native DSP is explicitly held from common tick zero;
+its coordinator is connected before the first firmware instruction. This is
+an initial-held laboratory profile, not a claim about actual power-on behavior,
+physical reset wiring, an authentic complete chip ROM or complete device boot.
+The private document-derived192-word ROM remains pinned, local and undistributed.
+
+Actual U0 assertion occurs at4213296, with its MCU instruction ending18 ticks
+later. The held snapshot is at87317118; its total DSP hold is that absolute time
+and its retained EXTAL residue is18 modulo45. Actual U0 release stays87317154.
+Two45-tick recovery periods end at87317244. No injected opcode, offset clock
+restart or prepared native CPU continuation replaces those intervals.
+
+Original GPIO/SPI stores retain97 frames and7275 PORTB writes. Every one of the
+94 received program words matches the private firmware input. The trailing UI
+word remains in a copied SHI FIFO without overrun. The declared simultaneous
+clock/select pad transition still uses explicit clock-before-select ordering;
+unused U pads stay unknown in one replay and independently pulled low in two.
+
+Three held-state restorations compare full DSP registers/progress, all5120 MCU
+SRAM bytes, NVM knowledge/history, both CPU outcomes and complete event/census/
+phase sidecars. Independent MCU instruction costs and the literal OSC/PHY clock
+ledger remain unchanged. The native effect profile has253284 completed periods:
+204125 at45 ticks,49159 at10 ticks,42289 retirements and126642 CLK2 edges. PCTL
+changes affect the next period under the declared reference-boundary policy;
+these are reference effects, not measured silicon instruction/pipeline clocks.
+
+The validator checks each of8192 complete long-clear iterations: automatic R4
+writeback, X write, Y write, normal PCU, REP PCU and retirement. Their pending
+kinds, PC, R4 and LC have independent per-phase expectations. The next pair
+retains its accepted AGU/X prefix before Y:$2000 refuses at PC $72/OMR $600389.
+R4=$2001 and LC=$20000-$2000; X:$2000 is already zero. No successful reserved
+write response is supplied. The last completed native tick96994459 lies inside
+an offered MCU period; MCU consumed time is96994458, attempted DSP failure is
+96994469. Both owners quarantine without charging the failed reference period.
+
+Each suffix retires1864555 unchanged MCU instructions over5388249 bus periods;
+its manual clock sum is10777162 local ticks/96994458 common ticks. Native
+register, peripheral and timing differences from the removed executor are
+checked against these explicit oracles, not accepted through trace equality alone.
+
+  cmake --build --preset strict --target blofeld-original-fetch-reset-start-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^original_fetch_reset_start$'
+
+Repeat with the separate thread preset. The wrapper rejects missing/changed
+private inputs, unexpected diagnostics, unmatched native phases and partial
+replay results. Artifacts remain ignored. Actual reserved-write silicon behavior,
+full firmware boot, MIDI/audio/USB and full instrument acceptance remain open.

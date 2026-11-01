@@ -128,6 +128,15 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           strict failure prefixes. MCU-only faults
                                           are reported; explicit reset preserves
                                           healthy DSP work (mcu-dsp-cop-reset.txt).
+                                          The original MCU reset/SPI gate now uses
+                                          the native runtime from initial hold:
+                                          all94 stage words,97 frames,7275 writes,
+                                          three full-state/RAM/NVM replays and
+                                          independent six-effect clear/PLL ledgers.
+                                          The real AGU/X prefix survives reserved
+                                          Y:$2000 rejection; silicon behavior and
+                                          full boot remain open
+                                          (mcu-dsp-original-reset.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are
