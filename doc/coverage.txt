@@ -3973,6 +3973,15 @@ Six true I/O failures remain visible;
 the identical object rejects the previous fetch archive at Xffff83. Five affected
 groups pass under ASan/UBSan and separate TSan. See dsp-independent-io-fetch.txt.
 Frozen original reset with an explicit audio oscillator advances both native
-audio DMA channels (12 zero words); decoded original PCM and complete instrument
-operation remain unproven. The next connected continuation includes a serial
-PCM receiver and an explicit idle MIDI source.
+audio DMA channels. The connected serial continuation below adds a serial
+PCM receiver and an explicit idle MIDI source; instrument operation remains open.
+
+Connected original serial PCM: after actual reset, 107 NAND page reads and the
+unchanged original DSP handoff, a separate serial receiver decodes 98 stereo
+frames at 44100 Hz, all zero initialization samples. Its exact 75000-tick bit
+periods and 398 native DMA words are checked on the declared 211680000000 Hz
+functional timebase. Two fresh joint restores reproduce the full suffix;
+the diagnostic decoder still reproduces its earlier refusal. The next halt
+is shared request-bus initialization against the held-selected NAND pin model.
+This is serial output evidence, not a sounding or fully booted instrument.
+Hashes and limitations: own-dsp-nand-reference.json/connected_serial_pcm_candidate.

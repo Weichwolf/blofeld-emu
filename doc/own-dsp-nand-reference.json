@@ -81,5 +81,41 @@
     "decoded_original_pcm_proven": false,
     "full_instrument_boot_proven": false,
     "original_instrument_audio_proven": false
+  },
+  "connected_serial_pcm_candidate": {
+    "qualification": "Unmodified original reset/NAND continuation under ASan/UBSan with explicit functional audio clock and MIDI idle input; initialization silence only",
+    "initial_image_sha256": "de64537c1c33b10ec94ab13ae2570dabc27a94ccb1afab5c734871c5443900f7",
+    "original_source_bytes_preserved_and_read": 56238,
+    "explicit_virtual_unused_ff_bytes": 258,
+    "protocol_and_retired_cpu_bytes_matched": 56496,
+    "resident_unique_words_matched": 18287,
+    "timebase_hz": 211680000000,
+    "declared_shared_hckt_aci_hz": 11289600,
+    "declared_audio_epoch_ticks": 51747920000,
+    "independently_checked_audio_events": 106132,
+    "actual_native_dma_words": 398,
+    "decoded_pcm": {
+      "frames": 98,
+      "nonzero_frames": 0,
+      "rate_hz": 44100,
+      "bit_ticks": 75000,
+      "first_frame_tick": 52271804375,
+      "last_frame_first_tick": 52737404375
+    },
+    "dma_channels": [
+      0,
+      3
+    ],
+    "dma_payloads": "Initialization words, all zero",
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "refusal_in_frozen_run": "Simultaneous request-bus strobe changes rejected by the held-selected NAND pin model; functional bus selection remains unresolved",
+    "local_audit": "doc/local/connected-nand/audio-pcm/audit.json",
+    "local_audit_sha256": "c30a179b0878c7b9902d9c77d62ffb73a0ed0aaa3ada7147ad44c67c119e32c8",
+    "physical_clock_or_wiring_claim": false,
+    "decoded_original_pcm_proven": true,
+    "nonzero_original_audio_proven": false,
+    "full_instrument_boot_proven": false,
+    "original_instrument_audio_proven": false
   }
 }
