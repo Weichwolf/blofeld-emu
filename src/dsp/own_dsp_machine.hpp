@@ -78,6 +78,11 @@ public:
   // Requires completed reset and no timeline, captured fetch, pending effect or
   // vector acknowledgement owner. The observer borrows actual committed stores.
   [[nodiscard]] dsp56300::RunResult run_unclocked(DspIoWriteObserver observer = {});
+  // Advance one actual staged effect with borrowed post-access observations.
+  // Retains interrupt vector acknowledgement; no clock/fetch owner may be active.
+  [[nodiscard]] dsp56300::InstructionProgress advance_observed(const dsp56300::EffectTicket &ticket,
+                                                               DspIoReadObserver reads,
+                                                               DspIoWriteObserver writes = {});
   // One externally scheduled reference period; does not advance an instruction.
   // DMA arbitration and subcycle effects remain the scheduler's responsibility.
   std::uint64_t advance_reference_cycle();

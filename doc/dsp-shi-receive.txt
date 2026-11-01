@@ -9,6 +9,9 @@ The wrapper validates the archive and all original record hashes against
 dsp-voice-reference.json. Only complete original P records 96, 97 and 100 are
 loaded, in source order. No manufacturer program bytes are embedded in tests.
 Detailed native traces and their hash summaries remain ignored build artifacts.
+The target uses the independent dsp56300 core in both normal and isolated builds;
+its closure contains no legacy executor or assembler. ASan/UBSan and separate
+TSan pass all eighteen cases/thirty-six replays within unchanged TIMEOUT180.
 
 An explicit project-owned ROM caller selects the declared memory mode, calls the
 unchanged original initializer, enables native SHI interrupt priority and supplies
@@ -37,14 +40,24 @@ Neither that ordering nor FIFO loss is repaired by a host queue.
 All eighteen cases run twice from the trusted pre-unmask checkpoint: 396 wire
 words, 392 accepted, four overrun losses, 362 processed, 22 nested resets and 30
 FIFO words discarded by reset; 324 tagged words published, sixteen tagged idle
-words and 256 pending HTX replacements. Every previously qualified tagged setup,
-case and I/O observation remains byte-identical to its prior trace prefix.
+words and 256 pending HTX replacements. All 1301 setup/case/I/O/result lines match
+the archived legacy trace; that comparison supplements the independent oracles.
 Independent source-path counts are 18 steps/38 nominal units per tagged interrupt
 and 17/36 per zero-payload path, including native vector entry. A nested initializer
 adds 265 steps/278 nominal units: 256 NOPs, seven two-unit MOVEs, a five-unit REP
 and three-unit RTS. BSCLR already has a fixed five-unit nominal estimate on either
-conditional path. The full matrix has 12322 steps/19824 units. Caller unmasking
-instructions are counted separately. These estimates do not qualify silicon timing.
+conditional path. The full matrix has 12322 original steps/19824 units. The pinned
+core fixes absolute-short X/Y MOVE stores to two base units (reads remain one),
+per DSP56300FM Rev.5 table A-1, A-6.
+
+The core's post-RTI foreground exclusion is an explicit provisional library
+policy, not hardware pipeline evidence. Between buffered interrupts the actual
+authored caller masks, jumps and unmasks. Each three-instruction trip has exact
+PC and independent 2/4/2 base-cost checks; all 78 bursts contribute 852 additional
+caller steps/2272 units, excluded from the unchanged original-handler ledger.
+Initial unmasking and between-burst caller work are also outside that ledger.
+No PC/SR/frame is patched to avoid the policy. These estimates do not qualify
+silicon interrupt admission, pipeline timing or a complete scheduler.
 
 DSP56371UM Rev. 2.1 sections 7.4.1/2/3 and 7.4.5.1 specify the separate HTX/IOSR
 buffers, replacement of pending HTX data, FIFO and clock phase semantics. Original

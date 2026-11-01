@@ -84,6 +84,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-unclocked-test test/dsp_unclocked_test.cpp)
   target_link_libraries(blofeld-dsp-unclocked-test PRIVATE blofeld_dma_fixture blofeld_own_dsp_fetch)
   add_test(NAME dsp_unclocked COMMAND blofeld-dsp-unclocked-test)
+  add_executable(blofeld-dsp-observed-test test/dsp_observed_test.cpp)
+  target_link_libraries(blofeld-dsp-observed-test PRIVATE blofeld_dma_fixture blofeld_own_dsp_fetch)
+  add_test(NAME dsp_observed COMMAND blofeld-dsp-observed-test)
   add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp
     test/original_dsp_reference.cpp)
   target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dma_fixture)
@@ -103,6 +106,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-midi.trace")
   set_tests_properties(original_dsp_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-original-dsp-shi-receive-test test/original_dsp_shi_receive_test.cpp)
+  target_link_libraries(blofeld-original-dsp-shi-receive-test PRIVATE
+    blofeld_dma_fixture)
+  add_test(NAME original_dsp_shi_receive COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_shi_receive.py"
+    $<TARGET_FILE:blofeld-original-dsp-shi-receive-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-shi-receive.trace")
+  set_tests_properties(original_dsp_shi_receive PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp test/dsp_core_fixture.cpp
     test/dsp_core_pinit.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dma_fixture blofeld_own_dsp_fetch)

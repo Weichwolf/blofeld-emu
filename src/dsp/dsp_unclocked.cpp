@@ -26,6 +26,27 @@ private:
   bool &active_;
   DspIoWriteObserver &slot_;
 };
+
+class ObservedEffectGuard {
+public:
+  ObservedEffectGuard(bool &active,
+                      DspIoReadObserver &reads,
+                      DspIoWriteObserver &writes,
+                      const DspIoReadObserver read_observer,
+                      const DspIoWriteObserver write_observer)
+      : instruction_(active, writes, write_observer), reads_(reads) {
+    reads_ = read_observer;
+  }
+
+  ~ObservedEffectGuard() { reads_ = {}; }
+
+  ObservedEffectGuard(const ObservedEffectGuard &) = delete;
+  ObservedEffectGuard &operator=(const ObservedEffectGuard &) = delete;
+
+private:
+  InstructionGuard instruction_;
+  DspIoReadObserver &reads_;
+};
 }
 
 dsp56300::RunResult OwnDspMachine::run_unclocked(const DspIoWriteObserver observer) {
@@ -42,6 +63,23 @@ dsp56300::RunResult OwnDspMachine::run_unclocked(const DspIoWriteObserver observ
   if (result.fault.kind == dsp56300::FaultKind::none && result.dispatches == 1) {
     bus_.observe_omr(cpu_.registers().omr);
   }
+  return result;
+}
+
+dsp56300::InstructionProgress OwnDspMachine::advance_observed(const dsp56300::EffectTicket &ticket,
+                                                              const DspIoReadObserver reads,
+                                                              const DspIoWriteObserver writes) {
+  require_unclocked("observed-native-effect");
+  require_running();
+  if (advancing_effect_ || !captured_fetch_owner_.expired()) {
+    const auto state = cpu_.registers();
+    throw Fault("Own DSP observed effect requires an inactive unclocked owner pc=" +
+                hex(state.pc, 6) + " omr=" + hex(state.omr, 6));
+  }
+  const ObservedEffectGuard guard(
+      advancing_effect_, io_.read_observer_, io_.write_observer_, reads, writes);
+  auto result = interrupts_.advance(ticket);
+  if (result.fault.kind == dsp56300::FaultKind::none) { bus_.observe_omr(cpu_.registers().omr); }
   return result;
 }
 }

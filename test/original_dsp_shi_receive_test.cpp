@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp56300/instruction.hpp"
+#include "dsp_rom_program.hpp"
+#include "esai_fixture.hpp"
 #include "firmware/firmware.hpp"
 
 #include <algorithm>
@@ -22,8 +25,11 @@
 
 namespace {
 using enum blofeld::DspSpace;
-using blofeld::test::require;
-using Kind = blofeld::DspNativeAccessKind;
+using blofeld::test::DspRomRegister;
+using blofeld::test::esai::require;
+enum class Kind : std::uint8_t { read = 2, write = 3 };
+constexpr unsigned call_r6 = 0x0be680; // FM JSR (R6).
+constexpr unsigned maximum_effects = 64;
 constexpr unsigned route_record = 0x23df;
 constexpr unsigned route_words = 189;
 constexpr unsigned idle_steps = 17;
@@ -43,8 +49,13 @@ constexpr unsigned memory_mode = 0x600389;
 constexpr unsigned masked_status = 0xc00300;
 constexpr unsigned ordinary_status = 0xc00000;
 constexpr unsigned priority_register = 0xfffffe;
+constexpr unsigned peripheral_offset_mask = 0x3f;
+constexpr unsigned priority_movep = 0x08f480 | (priority_register & peripheral_offset_mask);
+// FM MOVEP #imm,X:pp. The documented pp field selects the actual SHI priority register.
 constexpr unsigned extal = 12000000;
 constexpr unsigned timebase = 540000000;
+static_assert(blofeld::test::dma_test::native_clocks.extal_hz == extal &&
+              blofeld::test::dma_test::native_clocks.timebase_hz == timebase);
 constexpr unsigned step_limit = 2048;
 constexpr unsigned word_bits = 24;
 constexpr unsigned word_mask = 0xffffff;
@@ -111,14 +122,6 @@ std::vector<std::uint32_t> wrapped_reset_words() {
   return words;
 }
 
-blofeld::DspRunContract contract() {
-  return {.clock = {.extal_hz = extal,
-                    .timebase_hz = timebase,
-                    .switch_timing = blofeld::DspClockSwitch::reference_instruction_boundary},
-          .timing = blofeld::DspRunTiming::native_internal_estimates,
-          .interrupts = blofeld::DspInterruptTiming::native_vector_estimates};
-}
-
 void install(blofeld::DspBus &bus, const blofeld::Firmware &firmware) {
   bus.observe_omr(memory_mode);
   bus.advance_instruction_cycles(3);
@@ -145,6 +148,11 @@ struct Event {
   unsigned pc;
 };
 
+struct CallerStep {
+  unsigned pc;
+  std::uint64_t units;
+};
+
 struct Counts {
   unsigned runs = 0;
   unsigned wire = 0;
@@ -163,46 +171,54 @@ struct Counts {
 struct Experiment {
   const blofeld::Firmware &firmware;
   std::ostream &trace;
-  blofeld::DspMachine machine{contract()};
+  blofeld::OwnDspMachine machine{blofeld::test::dma_test::native_clocks};
   unsigned unmask = 0;
   unsigned foreground = 0;
   std::vector<Event> events;
+  std::vector<CallerStep> caller_steps;
   std::vector<unsigned> vectors;
+  bool vector_read = false;
 
   Experiment(const blofeld::Firmware &input, std::ostream &output)
       : firmware(input), trace(output) {
     install(machine.bus(), firmware);
-    blofeld::test::DspProgram caller;
-    caller.immediate("omr", memory_mode);
-    for (unsigned index = 0; index < 3; ++index) { caller.emit("nop"); }
-    caller.immediate("sr", masked_status);
-    caller.immediate("r6", initializer);
-    caller.emit("jsr (r6)");
-    caller.emit("movep #>$4,x:<<" + blofeld::test::number(priority_register));
+    blofeld::test::DspRomProgram caller;
+    caller.immediate(DspRomRegister::omr, memory_mode);
+    for (unsigned index = 0; index < 3; ++index) { caller.word(0); }
+    caller.immediate(DspRomRegister::sr, masked_status);
+    caller.immediate(DspRomRegister::r6, initializer);
+    caller.word(call_r6);
+    caller.word(priority_movep);
+    caller.word(4);
     for (unsigned index = 0; index < 8; ++index) {
-      const auto suffix = std::to_string(index);
-      caller.immediate("r" + suffix, address_seed + index);
-      caller.immediate("n" + suffix, offset_seed + index);
-      caller.immediate("m" + suffix, word_mask);
+      caller.immediate(
+          static_cast<DspRomRegister>(static_cast<unsigned>(DspRomRegister::r0) + index),
+          address_seed + index);
+      caller.immediate(
+          static_cast<DspRomRegister>(static_cast<unsigned>(DspRomRegister::n0) + index),
+          offset_seed + index);
+      caller.immediate(
+          static_cast<DspRomRegister>(static_cast<unsigned>(DspRomRegister::m0) + index),
+          word_mask);
     }
-    caller.immediate("a0", a_low);
-    caller.immediate("a1", a_high);
-    caller.immediate("a2", 1);
-    caller.immediate("b0", b_low);
-    caller.immediate("b1", b_high);
-    caller.immediate("b2", b_extension);
+    caller.immediate(DspRomRegister::a0, a_low);
+    caller.immediate(DspRomRegister::a1, a_high);
+    caller.immediate(DspRomRegister::a2, 1);
+    caller.immediate(DspRomRegister::b0, b_low);
+    caller.immediate(DspRomRegister::b1, b_high);
+    caller.immediate(DspRomRegister::b2, b_extension);
     unmask = caller.pc();
-    caller.immediate("sr", ordinary_status);
+    caller.immediate(DspRomRegister::sr, ordinary_status);
     foreground = caller.pc();
-    caller.immediate("sr", masked_status);
+    caller.immediate(DspRomRegister::sr, masked_status);
     caller.word(absolute_jmp);
     caller.word(unmask);
-    caller.install(machine.bus());
-    machine.bus().pll().observe_pinit(false);
-    machine.cpu().reset_spi_boot();
+    blofeld::test::dma_test::NativeProgram program;
+    for (const auto word : caller.words()) { program.word(word); }
+    blofeld::test::dma_test::reset_native(machine, program);
     machine.bus().shi().observe_spi({.mosi = false});
     unsigned steps = 0;
-    while (machine.cpu().state().pc != unmask) {
+    while (machine.cpu().registers().pc != unmask) {
       require(steps++ < step_limit, "Bounded own caller and unchanged original initializer");
       step();
     }
@@ -217,28 +233,102 @@ struct Experiment {
     events.clear();
   }
 
-  void observe(const blofeld::DspNativeAccess &access) {
-    if (access.stage != blofeld::DspNativeAccessStage::after) { return; }
-    if (access.kind == Kind::vector) {
-      vectors.push_back(access.target.address);
+  void observe(const Kind kind,
+               const blofeld::DspAddress target,
+               const unsigned value,
+               const unsigned pc) {
+    if (target.space == p && vector_read) {
+      vectors.push_back(target.address);
       return;
     }
-    if (access.target.space != x ||
-        (access.target.address != hcsr && access.target.address != hrx &&
-         access.target.address != htx)) {
+    if (target.space != x ||
+        (target.address != hcsr && target.address != hrx && target.address != htx)) {
       return;
     }
-    if (!access.value) { throw blofeld::Fault("Completed SHI access lacks its actual value"); }
-    events.push_back({.kind = access.kind,
-                      .address = access.target.address,
-                      .value = *access.value,
-                      .pc = access.pc});
-    trace << "IO pc=" << std::hex << access.pc << " address=" << access.target.address
-          << " kind=" << static_cast<unsigned>(access.kind) << " value=" << *access.value << '\n';
+    events.push_back({.kind = kind, .address = target.address, .value = value, .pc = pc});
+    trace << "IO pc=" << std::hex << pc << " address=" << target.address
+          << " kind=" << static_cast<unsigned>(kind) << " value=" << value << '\n';
+  }
+
+  void admit() {
+    const auto state = machine.cpu().registers();
+    if (!machine.bus().interrupt_request((state.sr >> 8) & 3U) ||
+        machine.cpu().instruction_fetch().exception_vector) {
+      return;
+    }
+    try {
+      const auto opcode = machine.bus().inspect_program(state.pc);
+      dsp56300::InstructionWords foreground_word{.address = state.pc, .opcode = opcode};
+      const auto shape = dsp56300::inspect_instruction(opcode);
+      if (!shape) {
+        throw blofeld::Fault("Interrupt eligibility lacks a documented foreground encoding");
+      }
+      if (shape.value().words == 2) {
+        foreground_word.extension = machine.bus().inspect_program(state.pc + 1);
+        require(foreground_word.extension.has_value(), "Actual foreground extension is known");
+      }
+      static_cast<void>(machine.admit_interrupt(foreground_word));
+    } catch (const blofeld::Fault &error) {
+      throw blofeld::Fault(std::string(error.what()) + " eligibility-pc=" +
+                           blofeld::hex(state.pc, 6) + " omr=" + blofeld::hex(state.omr, 6));
+    }
+  }
+
+  void healthy(const dsp56300::InstructionProgress &progress) const {
+    if (progress.fault.kind == dsp56300::FaultKind::none) { return; }
+    std::string cause = "Original SHI native instruction fault";
+    const auto &failure = machine.io().failure();
+    if (failure && failure->cause) {
+      try {
+        std::rethrow_exception(failure->cause);
+      } catch (const std::exception &error) { cause = error.what(); }
+    }
+    throw blofeld::Fault(cause + " pc=" + blofeld::hex(progress.fault.pc, 6) +
+                         " omr=" + blofeld::hex(machine.cpu().registers().omr, 6) +
+                         " address=" + blofeld::hex(progress.fault.address, 6));
   }
 
   void step() {
-    machine.cpu().step({.observe = [this](const auto &access) { observe(access); }});
+    admit();
+    const auto before = machine.cpu().progress();
+    const auto ticks = machine.clock().elapsed_ticks();
+    auto progress = machine.begin_fetch(dsp56300::InstructionPublication::retirement);
+    for (unsigned effect = 0; effect < maximum_effects && progress.pending && !progress.retired;
+         ++effect) {
+      const auto pending = progress.pending.value();
+      vector_read = machine.interrupt_pending() &&
+                    (pending.effect.kind == dsp56300::EffectKind::fetch_opcode ||
+                     pending.effect.kind == dsp56300::EffectKind::fetch_extension);
+      progress = machine.advance_observed(
+          pending.ticket,
+          {.context = this,
+           .completed =
+               [](void *context, const blofeld::DspIoReadAccess &access) {
+                 static_cast<Experiment *>(context)->observe(
+                     Kind::read, access.address, access.value, access.pc);
+               }},
+          {.context = this,
+           .completed = [](void *context, const blofeld::DspStore &store, const unsigned pc) {
+             static_cast<Experiment *>(context)->observe(
+                 Kind::write, {.space = store.space, .address = store.address}, store.value, pc);
+           }});
+    }
+    vector_read = false;
+    healthy(progress);
+    require(progress.retired && machine.cpu().progress().instructions == before.instructions + 1 &&
+                machine.clock().elapsed_ticks() == ticks,
+            "One genuine staged instruction retires without implicit time");
+    const auto cycles = machine.cpu().progress().estimated_cycles - before.estimated_cycles;
+    const auto outcome = machine.cpu().instruction_outcome();
+    if (!outcome) { throw blofeld::Fault("Retired SHI instruction lacks its actual outcome"); }
+    trace << "NATIVE pc=" << std::hex << outcome->address << " units=" << std::dec << cycles
+          << '\n';
+    if (outcome->address >= blofeld::test::DspRomProgram::boot) {
+      caller_steps.push_back({.pc = outcome->address, .units = cycles});
+    }
+    for (std::uint64_t cycle = 0; cycle < cycles; ++cycle) {
+      static_cast<void>(machine.advance_reference_cycle());
+    }
   }
 
   unsigned inject(const unsigned word) {
@@ -257,8 +347,8 @@ struct Experiment {
     return received;
   }
 
-  void verify_cpu(const blofeld::DspState &before) const {
-    const auto after = machine.cpu().state();
+  void verify_cpu(const dsp56300::Registers &before) const {
+    const auto after = machine.cpu().registers();
     require(after.pc == foreground && after.sp == before.sp && after.sr == ordinary_status &&
                 after.omr == before.omr && after.vba == before.vba && after.la == before.la &&
                 after.lc == before.lc && after.x == before.x && after.y == before.y &&
@@ -312,8 +402,28 @@ struct Experiment {
     }
   }
 
+  [[nodiscard]] std::uint64_t verify_caller(const std::size_t processed) const {
+    // The library excludes IRQ admission until one foreground retirement after RTI.
+    // That is a declared boundary policy, not calibrated hardware pipeline timing.
+    // Our caller then masks, jumps and unmasks; none belongs to the original handler.
+    constexpr unsigned caller_stride = 3;
+    constexpr std::array caller_units{2U, 4U, 2U}; // FM MOVEC #imm,SR; JMP ea; MOVEC.
+    const std::array caller_pc{foreground, foreground + 2, unmask};
+    require(processed != 0 && caller_steps.size() == (processed - 1) * caller_stride,
+            "Every inter-handler caller trip has three independently specified instructions");
+    std::uint64_t units = 0;
+    for (std::size_t index = 0; index < caller_steps.size(); ++index) {
+      const auto phase = index % caller_stride;
+      const auto &actual = caller_steps[index];
+      require(actual.pc == caller_pc[phase] && actual.units == caller_units[phase],
+              "Actual authored mask/jump/unmask sequence and nominal costs remain separate");
+      units += actual.units;
+    }
+    return units;
+  }
+
   void burst(const std::span<const std::uint32_t> words, Counts &counts) {
-    require(machine.cpu().state().pc == unmask && machine.cpu().state().sr == masked_status,
+    require(machine.cpu().registers().pc == unmask && machine.cpu().registers().sr == masked_status,
             "An explicit own native caller masks interrupts while buffering SPI words");
     events.clear();
     vectors.clear();
@@ -323,14 +433,16 @@ struct Experiment {
               "Two primed words precede the independently expected retained-IOSR echo");
       ++counts.wire;
     }
-    const auto before = machine.cpu().state();
+    const auto before = machine.cpu().registers();
     step(); // Actual own MOVE unmasks; no host SR/PC or interrupt-frame writes.
-    const auto start = machine.run_clock().native_cycle_units();
+    caller_steps.clear();
+    const auto start = machine.clock().native_cycle_units();
     unsigned steps = 0;
     do {
       require(steps++ < step_limit, "Bounded unchanged receive interrupt and actual RTI");
       step();
-    } while (machine.cpu().state().pc != foreground || machine.cpu().state().sp != before.sp ||
+    } while (machine.cpu().registers().pc != foreground ||
+             machine.cpu().registers().sp != before.sp ||
              machine.bus().interrupt_request(0).has_value());
     verify_cpu(before);
     verify_events(words, counts);
@@ -346,15 +458,18 @@ struct Experiment {
         expected_units += initializer_units;
       }
     }
-    const auto units = machine.run_clock().native_cycle_units() - start;
-    require(steps == expected_steps && units == expected_units,
+    const auto caller_units = verify_caller(processed_words(words).size());
+    const auto units = machine.clock().native_cycle_units() - start;
+    require(steps == expected_steps + caller_steps.size() && units == expected_units + caller_units,
             "Original IRQ ledger steps=" + std::to_string(steps) + " expected=" +
                 std::to_string(expected_steps) + " nominal-units=" + std::to_string(units) +
                 " expected=" + std::to_string(expected_units));
     require(machine.bus().read({.space = x, .address = hcsr}) == (config | idle_flag),
             "Original reads/writes empty RX, clear errors and leave HTX pending");
-    counts.handler_steps += steps;
-    counts.units += units;
+    trace << "CALLER steps=" << std::dec << caller_steps.size() << " units=" << caller_units
+          << '\n';
+    counts.handler_steps += steps - static_cast<unsigned>(caller_steps.size());
+    counts.units += units - caller_units;
   }
 
   void verify_program() {

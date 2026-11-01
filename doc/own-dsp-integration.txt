@@ -810,6 +810,24 @@ observer lifetime/reentry and reset/fetch/timeline/staged/vector ownership under
 both sanitizer profiles. The seven affected integration groups pass per profile;
 remaining legacy fixtures and full-device acceptance remain open.
 
+Observed staged effects and original SHI reception
+OwnDspMachine::advance_observed borrows post-read/write observers for one actual
+staged effect through the existing interrupt owner, preserving real vector-pair
+acknowledgement. Reset must be complete; clock/fetch/reentrant owners are refused.
+It advances no time. Observers cover ordinary reads/writes, not bit/reset effects.
+Read callback failure retains destructive FIFO consumption, the contextual fault
+and the unretired destination; callbacks never survive return or restoration.
+dsp_observed checks these boundaries, stale tickets, diagnostic/healthy restore,
+and second-vector-read rejection without a false peripheral acknowledgement.
+
+Original SHI uses this interface with unchanged records, cases and wrapper.
+All nine affected groups pass ASan/UBSan and separate TSan. Its 18 cases/36 replays
+retain 12322 handler steps/19824 nominal units and all 1301 prior original
+observations. Authored inter-handler work is checked separately because the core's
+post-RTI admission exclusion remains a provisional library policy. The pinned
+core also corrects short X/Y store base costs. See dsp-shi-receive.txt; full native
+boot, calibrated interrupt timing and instrument MIDI/audio remain unqualified.
+
 Standalone dependency closure
 With BUILD_TESTING=OFF and BLOFELD_FUZZING=OFF, CMake does not configure the
 legacy source, its patches/AsmJit or either legacy execution/scheduler library.

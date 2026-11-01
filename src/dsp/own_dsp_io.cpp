@@ -53,7 +53,12 @@ bool OwnDspIo::read(const dsp56300::Space space,
                     dsp56300::Word &value) noexcept {
   if (failure_) { return false; }
   try {
-    value = bus_.read({.space = board_space(space), .address = address});
+    const DspAddress target{.space = board_space(space), .address = address};
+    value = bus_.read(target);
+    if (read_observer_.completed != nullptr) {
+      const DspIoReadAccess access{.address = target, .value = value, .pc = pc};
+      read_observer_.completed(read_observer_.context, access);
+    }
     return true;
   } catch (...) { return fail(Operation::read, space, address, pc); }
 }

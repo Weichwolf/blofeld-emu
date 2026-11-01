@@ -2809,15 +2809,6 @@ if(BUILD_TESTING)
   add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_corpus_bounds.py"
     $<TARGET_FILE:blofeld-dsp-corpus-test>)
-  add_executable(blofeld-original-dsp-shi-receive-test test/original_dsp_shi_receive_test.cpp)
-  target_link_libraries(blofeld-original-dsp-shi-receive-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_shi_receive COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_shi_receive.py"
-    $<TARGET_FILE:blofeld-original-dsp-shi-receive-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-shi-receive.trace")
-  set_tests_properties(original_dsp_shi_receive PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_executable(blofeld-original-dsp-note-test test/original_dsp_note_test.cpp)
   target_link_libraries(blofeld-original-dsp-note-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
@@ -3197,6 +3188,7 @@ add_custom_target(quality
     blofeld-own-dsp-ram-bit-test blofeld-own-dsp-ram-bit-dma-test
     blofeld-own-dsp-fetch-test blofeld-own-dsp-clock-test
     blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-dsp-unclocked-test
+    blofeld-dsp-observed-test
     blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test
     blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
     blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test

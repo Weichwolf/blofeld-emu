@@ -9,7 +9,20 @@
 #include <optional>
 
 namespace blofeld {
-// Borrowed for one synchronous instruction. Observe only; references expire on return.
+struct DspIoReadAccess {
+  DspAddress address;
+  unsigned value;
+  unsigned pc;
+};
+
+// Observe actual completed reads, including their destructive peripheral effects.
+// Borrowed for one effect; an exception retains that access and quarantines execution.
+struct DspIoReadObserver {
+  void *context = nullptr;
+  void (*completed)(void *context, const DspIoReadAccess &access) = nullptr;
+};
+
+// Borrowed for one execution call. Observe only; references expire on return.
 // Callback errors quarantine execution after the already committed physical write.
 struct DspIoWriteObserver {
   void *context = nullptr;
@@ -63,6 +76,7 @@ private:
 
   DspBus &bus_;
   std::optional<Failure> failure_;
+  DspIoReadObserver read_observer_;
   DspIoWriteObserver write_observer_;
 };
 } // namespace blofeld
