@@ -42,8 +42,9 @@ add_library(blofeld_own_dsp_fetch STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_fetch.
 target_include_directories(blofeld_own_dsp_fetch PUBLIC src)
 target_link_libraries(blofeld_own_dsp_fetch PUBLIC blofeld_own_dsp_io blofeld_dsp_branch_decode
   blofeld_dsp_control_decode)
-add_library(blofeld_mcu_dsp_runtime STATIC EXCLUDE_FROM_ALL src/board/mcu_dsp_runtime.cpp)
-target_link_libraries(blofeld_mcu_dsp_runtime PUBLIC blofeld_own_dsp_fetch)
+add_library(blofeld_mcu_dsp_runtime STATIC EXCLUDE_FROM_ALL src/board/mcu_dsp_runtime.cpp
+  src/board/mcu_dsp_runtime_peripheral.cpp)
+target_link_libraries(blofeld_mcu_dsp_runtime PUBLIC blofeld_own_dsp_fetch blofeld_dsp_peripheral_calendar)
 if(NOT BLOFELD_OWN_DSP_ONLY)
   target_link_libraries(blofeld_mcu_dsp_runtime PUBLIC blofeld_core)
   if(BUILD_TESTING)

@@ -4,6 +4,7 @@
 #include "board/detail/mcu_dsp_boundary.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_io.hpp"
 #include "dsp/own_dsp_machine.hpp"
@@ -115,6 +116,10 @@ struct McuDspRuntimeCheckpoint::Storage {
   std::shared_ptr<const bool> external_identity;
   DspPeerOrder external_order;
   unsigned external_budget;
+  std::optional<PeripheralCalendarCheckpoint> peripheral;
+  std::optional<PeripheralCalendarState> peripheral_state;
+  DspPeerOrder peripheral_order;
+  unsigned peripheral_budget;
 };
 
 McuDspRuntimeCheckpoint::McuDspRuntimeCheckpoint(std::shared_ptr<const Storage> storage)
@@ -125,8 +130,13 @@ McuDspRuntimeCheckpoint::~McuDspRuntimeCheckpoint() = default;
 McuDspRuntime::McuDspRuntime(const McuDspRuntimeInputs inputs,
                              McuMachine &mcu,
                              OwnDspMachine &dsp,
-                             DspRuntimeEvents external)
-    : inputs_(inputs), mcu_(mcu), dsp_(dsp), external_(std::move(external)) {
+                             DspRuntimeEvents external,
+                             DspRuntimePeripheralEvents peripheral)
+    : inputs_(inputs),
+      mcu_(mcu),
+      dsp_(dsp),
+      external_(std::move(external)),
+      peripheral_events_(std::move(peripheral)) {
   const bool has_external = external_.identity != nullptr;
   const bool ordered = external_.order == DspPeerOrder::dsp_first ||
                        external_.order == DspPeerOrder::peer_first ||
@@ -141,6 +151,7 @@ McuDspRuntime::McuDspRuntime(const McuDspRuntimeInputs inputs,
     throw Fault(
         "MCU/DSP runtime requires held reset, explicit budgets and coherent event ownership");
   }
+  check_peripheral_contract();
   state_.end_ticks = mcu_ticks();
   state_.cycles = mcu_.run_clock().bus_cycles();
   state_.epoch = mcu_.run_clock().native_epoch();
@@ -156,6 +167,11 @@ McuDspRuntime::McuDspRuntime(const McuDspRuntimeInputs inputs,
   timeline_ = std::make_unique<OwnDspTimeline>(
       dsp_, inputs_.timing, inputs_.epoch_ticks, inputs_.initial_reset);
   const Guard guard(*this);
+  if (peripheral_events_.identity) {
+    peripheral_ =
+        std::make_unique<PeripheralCalendar>(PeripheralCalendarBoundary{.ticks = state_.end_ticks});
+    peripheral_->bind(peripheral_events_.identity, query_peripheral());
+  }
   const auto first = next_external();
   if (first && *first < state_.end_ticks) {
     throw Fault("MCU/DSP external event predates its initial native MCU boundary tick=" +
@@ -248,9 +264,7 @@ std::optional<std::uint64_t> McuDspRuntime::next_external() {
 }
 
 void McuDspRuntime::observe_external(const std::uint64_t ticks) {
-  if (++period_events_ > external_.maximum_events_per_period) {
-    throw Fault("MCU/DSP external source exceeded its period budget");
-  }
+  count_input_event();
   const auto before = detail::mcu_boundary(mcu_);
   const auto registers = dsp_.cpu().registers();
   const auto elapsed = dsp_.clock().elapsed_ticks();
@@ -262,6 +276,7 @@ void McuDspRuntime::observe_external(const std::uint64_t ticks) {
   timeline_->validate_boundary();
   state_.last_external = ticks;
   state_.pending_external.reset();
+  peripheral_cause(PeripheralCalendarCause::external, ticks);
 }
 
 void McuDspRuntime::advance_native(const std::uint64_t ticks,
@@ -304,6 +319,7 @@ void McuDspRuntime::advance_native(const std::uint64_t ticks,
       throw Fault("MCU/DSP cycle observer changed CPU state or time");
     }
   }
+  peripheral_cause(PeripheralCalendarCause::native, ticks);
 }
 
 void McuDspRuntime::advance_reset(const std::uint64_t ticks, const bool through) {
@@ -317,27 +333,33 @@ void McuDspRuntime::advance(const bool native_through,
                             const CycleInputs &inputs,
                             const Observer &observer) {
   while (true) {
-    const auto event = next_external();
+    const auto input = next_event();
+    const auto event = input.ticks;
+    const auto order = input.order;
     const auto native = deadline();
     const bool external_due =
         event && (*event < state_.end_ticks || (*event == state_.end_ticks && external_through));
     const bool native_due =
         native < state_.end_ticks || (native == state_.end_ticks && native_through);
     if (!external_due && !native_due) { break; }
-    if (external_due && native_due && *event == native &&
-        external_.order == DspPeerOrder::reject_tie) {
+    if (external_due && native_due && *event == native && order == DspPeerOrder::reject_tie) {
       throw Fault("Unqualified simultaneous MCU/DSP external and native event");
     }
     if (external_due && (!native_due || *event < native ||
-                         (*event == native && external_.order == DspPeerOrder::peer_first))) {
+                         (*event == native && order == DspPeerOrder::peer_first))) {
       advance_reset(*event, false);
-      observe_external(*event);
+      if (input.peripheral) {
+        observe_peripheral(*event);
+      } else {
+        observe_external(*event);
+      }
     } else {
       advance_native(native, inputs, observer);
     }
   }
   advance_reset(state_.end_ticks, native_through);
   if (external_through) { state_.closed_external = state_.end_ticks; }
+  finish_peripheral(native_through, external_through);
 }
 
 void McuDspRuntime::offer_period(const bool waiting) {
@@ -365,7 +387,7 @@ void McuDspRuntime::prepare_write(const CycleInputs &inputs, const Observer &obs
         " tick=" + std::to_string(state_.end_ticks));
   };
   const bool native = deadline() == state_.end_ticks;
-  const auto input = next_external();
+  const auto input = next_input();
   const bool external = input && *input == state_.end_ticks;
   if (native) {
     ++state_.ties;
@@ -380,13 +402,13 @@ void McuDspRuntime::prepare_write(const CycleInputs &inputs, const Observer &obs
   const bool native_first = inputs_.writes == McuWriteOrder::before_mcu;
   const bool external_first = inputs_.external_writes == McuWriteOrder::before_mcu;
   if (native && external &&
-      (external_.order == DspPeerOrder::reject_tie ||
+      (input_order(state_.end_ticks) == DspPeerOrder::reject_tie ||
        (native_first != external_first &&
-        (external_.order == DspPeerOrder::peer_first) != external_first))) {
+        (input_order(state_.end_ticks) == DspPeerOrder::peer_first) != external_first))) {
     reject("Cyclic MCU/DSP/external shared-write ordering");
   }
   advance(native_first, external_first, inputs, observer);
-  const auto pending = next_external();
+  const auto pending = next_input();
   if (pending && *pending == state_.end_ticks &&
       inputs_.external_writes != McuWriteOrder::before_mcu &&
       inputs_.external_writes != McuWriteOrder::after_mcu) {
@@ -434,9 +456,15 @@ void McuDspRuntime::observe_write(const BusEvent &event,
     throw Fault("MCU/DSP signal observation changed MCU ownership or faulted its runtime");
   }
   consumed();
+  peripheral_cause(PeripheralCalendarCause::peer, state_.end_ticks);
   const auto next = next_external();
   if (next && *next == state_.end_ticks && inputs_.external_writes != McuWriteOrder::after_mcu) {
     throw Fault("Newborn external event cannot precede its MCU write cause");
+  }
+  const auto peripheral = next_peripheral();
+  if (peripheral && *peripheral == state_.end_ticks &&
+      inputs_.external_writes != McuWriteOrder::after_mcu) {
+    throw Fault("Newborn peripheral event cannot precede its MCU write cause");
   }
   advance(true, true, inputs, observer);
   state_.shared_write = false;
@@ -448,7 +476,7 @@ void McuDspRuntime::finish_boundary() {
   if (state_.shared_write || state_.cop_deadline || deadline() <= state_.end_ticks) {
     throw Fault("MCU/DSP completion lost a shared write, reset or native deadline");
   }
-  const auto event = next_external();
+  const auto event = next_input();
   if (event && *event <= state_.end_ticks) {
     throw Fault("MCU/DSP completion lost an external event");
   }
@@ -603,19 +631,25 @@ McuDspRuntimeCheckpoint McuDspRuntime::checkpoint() const {
   } else {
     mcu_.validate_run_boundary();
   }
-  return McuDspRuntimeCheckpoint(std::make_shared<const McuDspRuntimeCheckpoint::Storage>(
-      McuDspRuntimeCheckpoint::Storage{.mcu = mcu_.checkpoint(),
-                                       .dsp = timeline_->checkpoint(),
-                                       .inputs = inputs_,
-                                       .state = state_,
-                                       .external_identity = external_.identity,
-                                       .external_order = external_.order,
-                                       .external_budget = external_.maximum_events_per_period}));
+  return McuDspRuntimeCheckpoint(
+      std::make_shared<const McuDspRuntimeCheckpoint::Storage>(McuDspRuntimeCheckpoint::Storage{
+          .mcu = mcu_.checkpoint(),
+          .dsp = timeline_->checkpoint(),
+          .inputs = inputs_,
+          .state = state_,
+          .external_identity = external_.identity,
+          .external_order = external_.order,
+          .external_budget = external_.maximum_events_per_period,
+          .peripheral = peripheral_ ? std::optional{peripheral_->checkpoint()} : std::nullopt,
+          .peripheral_state = peripheral_state(),
+          .peripheral_order = peripheral_events_.order,
+          .peripheral_budget = peripheral_events_.maximum_events_per_period}));
 }
 
 const McuDspRuntimeCheckpoint::Storage &
 McuDspRuntime::saved_state(const McuDspRuntimeCheckpoint &checkpoint,
-                           const DspRuntimeEvents &external) {
+                           const DspRuntimeEvents &external,
+                           const DspRuntimePeripheralEvents &peripheral) {
   if (!checkpoint.storage_) { throw std::invalid_argument("Empty MCU/DSP runtime checkpoint"); }
   const auto &saved = *checkpoint.storage_;
   if (saved.external_identity != external.identity || saved.external_order != external.order ||
@@ -624,21 +658,39 @@ McuDspRuntime::saved_state(const McuDspRuntimeCheckpoint &checkpoint,
       static_cast<bool>(external.identity) != static_cast<bool>(external.observe)) {
     throw Fault("MCU/DSP clone requires its matching external identity and contract");
   }
+  const auto identity = saved.peripheral_state ? saved.peripheral_state->identity : nullptr;
+  if (identity != peripheral.identity || saved.peripheral_order != peripheral.order ||
+      saved.peripheral_budget != peripheral.maximum_events_per_period ||
+      static_cast<bool>(peripheral.identity) != static_cast<bool>(peripheral.next_ticks) ||
+      static_cast<bool>(peripheral.identity) != static_cast<bool>(peripheral.observe)) {
+    throw Fault("MCU/DSP clone requires its matching peripheral identity and contract");
+  }
   return saved;
 }
 
 McuDspRuntime::McuDspRuntime(const McuDspRuntimeCheckpoint &checkpoint,
                              McuMachine &mcu,
                              OwnDspMachine &dsp,
-                             DspRuntimeEvents external)
-    : inputs_(saved_state(checkpoint, external).inputs),
+                             DspRuntimeEvents external,
+                             DspRuntimePeripheralEvents peripheral)
+    : inputs_(saved_state(checkpoint, external, peripheral).inputs),
       mcu_(mcu),
       dsp_(dsp),
       external_(std::move(external)),
-      state_(saved_state(checkpoint, external_).state) {
-  const auto &saved = saved_state(checkpoint, external_);
+      peripheral_events_(std::move(peripheral)),
+      state_(saved_state(checkpoint, external_, peripheral_events_).state) {
+  const auto &saved = saved_state(checkpoint, external_, peripheral_events_);
   mcu_.restore(saved.mcu);
   timeline_ = std::make_unique<OwnDspTimeline>(dsp_, saved.dsp);
+  if (saved.peripheral) {
+    if (!saved.peripheral_state) {
+      throw Fault("MCU/DSP peripheral checkpoint lost its value state");
+    }
+    peripheral_ = std::make_unique<PeripheralCalendar>(*saved.peripheral,
+                                                       peripheral_events_.identity,
+                                                       saved.peripheral_state->pending,
+                                                       saved.peripheral_state->horizon);
+  }
   consumed();
   // The board commits its matching source cursor after these staged owners.
   // Validate the retained pending deadline on the next offer, before any event.

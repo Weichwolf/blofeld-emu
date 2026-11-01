@@ -174,6 +174,40 @@ void peer_causes() {
           "Peer-before-input preserves an already offered exact input and full four-actor state");
 }
 
+void peer_input_phase() {
+  const auto id = std::make_shared<const PeripheralEventIdentity>();
+  PeripheralCalendar open;
+  open.bind(id, std::nullopt);
+  open.finish({.ticks = event, .native_through = false, .events_through = false});
+  open.caused(PeripheralCalendarCause::peer, event, event);
+  open.verify(id, event);
+  open.caused(PeripheralCalendarCause::peripheral, event, std::nullopt);
+  open.caused(PeripheralCalendarCause::native, event, std::nullopt);
+  open.finish({.ticks = event});
+  const PeripheralCalendarState expected{.horizon = {.ticks = event},
+                                         .identity = id,
+                                         .last_native = event,
+                                         .last_peripheral = event,
+                                         .last_peer = event,
+                                         .causes = 3,
+                                         .peripheral_events = 1,
+                                         .advanced = true};
+  require(open.state() == expected,
+          "Open input boundary admits a new exact peer event before peripheral and native work");
+  PeripheralCalendar closed;
+  closed.bind(id, std::nullopt);
+  closed.finish({.ticks = event, .native_through = false, .events_through = true});
+  rejects(closed, [&]() { closed.caused(PeripheralCalendarCause::peer, event, event); });
+  PeripheralCalendar native;
+  native.bind(id, std::nullopt);
+  native.finish({.ticks = event, .native_through = false, .events_through = false});
+  native.caused(PeripheralCalendarCause::native, event, std::nullopt);
+  rejects(native, [&]() { native.caused(PeripheralCalendarCause::peer, event, event); });
+  PeripheralCalendar unspecified;
+  unspecified.bind(id, std::nullopt);
+  rejects(unspecified, [&]() { unspecified.caused(PeripheralCalendarCause::peer, event, event); });
+}
+
 void actual_NAND_state() {
   const auto id = std::make_shared<const PeripheralEventIdentity>();
   NandReadTiming model(gigahertz);
@@ -225,6 +259,7 @@ int main() {
     literal_history();
     boundary_guards();
     peer_causes();
+    peer_input_phase();
     actual_NAND_state();
     std::cout << "PASS owned generic peripheral calendar:independent literal actor order,"
                  "causality/refusal guards,complete owned snapshots,distinct clone,"

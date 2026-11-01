@@ -3,8 +3,10 @@ Legacy MCU-period / automatic DSP-pipeline fixtures
 The regular Board now uses McuDspRuntime and the independent DSP timeline.
 Its migrated external-event regression is described in dsp-fetch-events.txt.
 The basic shared-write and DSP-reset groups also use McuDspRuntime now;
-see mcu-dsp-reset-control.txt. Other records below concern remaining legacy
-McuDspFetchSchedule fixtures and do not establish native-runtime coverage.
+see mcu-dsp-reset-control.txt. Causal peripheral sources and their ten native
+MCU/DSP groups are described in dsp-peripheral-events.txt. Other records below
+concern remaining legacy McuDspFetchSchedule fixtures and do not establish
+native-runtime coverage.
 
 McuDspFetchSchedule orders DspFetchRun pipeline periods against actual native
 MCU period offers. It is separate from the instruction-completion reference

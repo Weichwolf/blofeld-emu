@@ -50,6 +50,8 @@ private:
 // Peripheral payload/protocol state is restored separately by the board owner.
 // Peer causes are actual accepted bus writes, ordered by the peer owner. They
 // may follow DSP/input work at the same tick but cannot invent an earlier event.
+// New same-tick events require an explicitly open input boundary and no completed
+// native cycle at that tick. Otherwise only an already pending event may remain.
 class PeripheralCalendar {
 public:
   explicit PeripheralCalendar(PeripheralCalendarBoundary initial = {});

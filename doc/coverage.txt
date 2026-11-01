@@ -398,7 +398,11 @@ MCU/DSP pipeline time ordering    partial  Explicit native-period/pipeline owner
                                           peripheral calendar handles held-reset
                                           deadlines, shared input budgets and
                                           native peer-write ordering with trusted
-                                          restore/clone (dsp-peripheral-events.txt).
+                                          restore/clone. Ten native MCU/DSP groups
+                                          retain independent inherited deadlines,
+                                          peer/native births, open/closed exact
+                                          boundaries, shared budget and deferred
+                                          payload checks (dsp-peripheral-events.txt).
                                           Actual board payload/wiring and whole
                                           firmware integration remain open. The optional Board
                                           pipeline executes POR and stages native

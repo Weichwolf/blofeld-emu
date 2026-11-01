@@ -3,6 +3,7 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp/own_dsp_timeline.hpp"
 #include "mcu/hc12_cycles.hpp"
@@ -39,6 +40,16 @@ struct DspRuntimeEvents {
   unsigned maximum_events_per_period = 0;
 };
 
+// Board-owned causal deadlines are separate from the pinned input cursor.
+// The supported combined order is inherited input, peripheral, then DSP.
+struct DspRuntimePeripheralEvents {
+  std::shared_ptr<const PeripheralEventIdentity> identity;
+  std::function<std::optional<std::uint64_t>()> next_ticks;
+  std::function<void(std::uint64_t)> observe;
+  DspPeerOrder order = DspPeerOrder::unqualified;
+  unsigned maximum_events_per_period = 0;
+};
+
 struct DspRuntimeCycle {
   std::uint64_t start_ticks;
   std::uint64_t completion_ticks;
@@ -69,11 +80,13 @@ public:
   McuDspRuntime(McuDspRuntimeInputs inputs,
                 McuMachine &mcu,
                 OwnDspMachine &dsp,
-                DspRuntimeEvents external = {});
+                DspRuntimeEvents external = {},
+                DspRuntimePeripheralEvents peripheral = {});
   McuDspRuntime(const McuDspRuntimeCheckpoint &checkpoint,
                 McuMachine &mcu,
                 OwnDspMachine &dsp,
-                DspRuntimeEvents external = {});
+                DspRuntimeEvents external = {},
+                DspRuntimePeripheralEvents peripheral = {});
   McuDspRuntime(const McuDspRuntime &) = delete;
   McuDspRuntime &operator=(const McuDspRuntime &) = delete;
   void begin_cycle(Hc12BusCycle cycle,
@@ -106,6 +119,7 @@ public:
   [[nodiscard]] std::uint64_t ties() const { return state_.ties; }
 
   [[nodiscard]] std::uint64_t completed_cycles() const;
+  [[nodiscard]] std::optional<PeripheralCalendarState> peripheral_state() const;
 
 private:
   friend class McuDspRuntimeCheckpoint;
@@ -129,10 +143,26 @@ private:
     bool cop_deadline = false;
   };
 
+  struct InputEvent {
+    std::optional<std::uint64_t> ticks;
+    DspPeerOrder order;
+    bool peripheral;
+  };
+
   [[nodiscard]] std::uint64_t mcu_ticks() const;
   [[nodiscard]] std::uint64_t deadline() const;
   [[nodiscard]] std::optional<std::uint64_t> query_external() const;
   [[nodiscard]] std::optional<std::uint64_t> next_external();
+  void check_peripheral_contract() const;
+  [[nodiscard]] std::optional<std::uint64_t> query_peripheral() const;
+  [[nodiscard]] std::optional<std::uint64_t> next_peripheral() const;
+  [[nodiscard]] std::optional<std::uint64_t> next_input();
+  [[nodiscard]] InputEvent next_event();
+  [[nodiscard]] DspPeerOrder input_order(std::uint64_t ticks) const;
+  void count_input_event();
+  void peripheral_cause(PeripheralCalendarCause cause, std::uint64_t ticks);
+  void finish_peripheral(bool native_through, bool events_through);
+  void observe_peripheral(std::uint64_t ticks);
   void healthy() const;
   void consumed() const;
   void validate_dsp_reset_observation() const;
@@ -148,12 +178,16 @@ private:
   void prepare_write(const CycleInputs &inputs, const Observer &observer);
   [[noreturn]] void reject_native(const dsp56300::Fault &fault) const;
   [[nodiscard]] static const McuDspRuntimeCheckpoint::Storage &
-  saved_state(const McuDspRuntimeCheckpoint &checkpoint, const DspRuntimeEvents &external);
+  saved_state(const McuDspRuntimeCheckpoint &checkpoint,
+              const DspRuntimeEvents &external,
+              const DspRuntimePeripheralEvents &peripheral);
   McuDspRuntimeInputs inputs_;
   McuMachine &mcu_;
   OwnDspMachine &dsp_;
   std::unique_ptr<OwnDspTimeline> timeline_;
   DspRuntimeEvents external_;
+  DspRuntimePeripheralEvents peripheral_events_;
+  std::unique_ptr<PeripheralCalendar> peripheral_;
   State state_;
   Hc12BusCycle cycle_;
   unsigned period_cycles_ = 0;

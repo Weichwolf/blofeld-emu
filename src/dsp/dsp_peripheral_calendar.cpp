@@ -156,7 +156,11 @@ void PeripheralCalendar::caused(const PeripheralCalendarCause cause,
   record_cause(staged, cause, ticks);
   const bool existing_peer_event =
       observed.has_value() && cause == PeripheralCalendarCause::peer && state_.pending == observed;
-  const bool same_time_allowed = cause == PeripheralCalendarCause::external || existing_peer_event;
+  const bool peer_before_inputs = cause == PeripheralCalendarCause::peer &&
+                                  state_.horizon.ticks == ticks && !state_.horizon.events_through &&
+                                  (!state_.last_native || *state_.last_native < ticks);
+  const bool same_time_allowed =
+      cause == PeripheralCalendarCause::external || existing_peer_event || peer_before_inputs;
   if (observed && (*observed < ticks || (*observed == ticks && !same_time_allowed))) {
     fail("new deadline precedes its actual cause");
   }
