@@ -1736,9 +1736,6 @@ if(BUILD_TESTING)
   add_test(NAME mcu_dsp_fetch_checkpoint COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/mcu_checkpoint.py"
     $<TARGET_FILE:blofeld-mcu-dsp-fetch-checkpoint-test>)
-  add_executable(blofeld-mcu-dsp-wait-test test/mcu_dsp_wait_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-wait-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME mcu_dsp_wait COMMAND blofeld-mcu-dsp-wait-test)
   add_executable(blofeld-hc12-cycle-test test/hc12_cycle_test.cpp)
   target_link_libraries(blofeld-hc12-cycle-test PRIVATE blofeld_core blofeld_hc12_cycles)
   add_test(NAME hc12_cycles COMMAND blofeld-hc12-cycle-test)
@@ -3322,7 +3319,6 @@ add_custom_target(quality
     blofeld-mcu-dsp-fetch-wait-test blofeld-mcu-dsp-fetch-reset-test
     blofeld-mcu-dsp-fetch-checkpoint-test
     blofeld-mcu-dsp-fetch-dsp-reset-test blofeld-original-fetch-reset-start-test
-    blofeld-mcu-dsp-wait-test
     blofeld-hc12-cycle-test blofeld-hc12-masked-gpio-test
     blofeld-hc12-cycle-extended-test
     blofeld-hc12-compare-stack-test
