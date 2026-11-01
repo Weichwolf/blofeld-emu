@@ -63,3 +63,6 @@ contracts; physical bus/pipeline identity is not an instrument acceptance gate.
 The decoder, memory-map, block-map compatibility, DMA, reference-cycle and observer checks
 plus both original-reset paths pass under ASan/UBSan and separate TSan. Functional
 reports and full event/census/phase records match across instrumentation.
+
+The separate logical-GPIO continuation in dsp-gpio-write-decoder.txt reaches the
+first original NAND-ready input without changing this storage contract.

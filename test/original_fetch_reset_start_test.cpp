@@ -4,6 +4,7 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
@@ -523,6 +524,24 @@ void require_runtime_quarantined(Lab &lab, OwnDspMachine &dsp, Link &link) {
   require_quarantined(dsp, false);
 }
 
+void verify_selected_clear(OwnDspMachine &dsp) {
+  struct Window {
+    DspSpace space;
+    unsigned first, last;
+  };
+
+  constexpr std::array windows{Window{.space = DspSpace::x, .first = 0, .last = 0x3000},
+                               Window{.space = DspSpace::x, .first = 0xc000, .last = 0x10000},
+                               Window{.space = DspSpace::y, .first = 0, .last = 0x2000},
+                               Window{.space = DspSpace::y, .first = 0xc000, .last = 0x16000}};
+  for (const auto window : windows) {
+    for (unsigned address = window.first; address < window.last; ++address) {
+      require(dsp.bus().read({.space = window.space, .address = address}) == 0,
+              "Every selected X/Y cell is cleared by the actual original instruction");
+    }
+  }
+}
+
 void exercise_decoder(Lab &lab,
                       OwnDspMachine &dsp,
                       Link &link,
@@ -574,31 +593,92 @@ void exercise_decoder(Lab &lab,
               link.counts().writes == coupled::expected_port_writes + later_port_writes,
           "Only vacant/ROM writes lack storage; their actual native commits are counted");
 
-  struct Window {
-    DspSpace space;
-    unsigned first, last;
-  };
-
-  constexpr std::array windows{Window{.space = DspSpace::x, .first = 0, .last = 0x3000},
-                               Window{.space = DspSpace::x, .first = 0xc000, .last = 0x10000},
-                               Window{.space = DspSpace::y, .first = 0, .last = 0x2000},
-                               Window{.space = DspSpace::y, .first = 0xc000, .last = 0x16000}};
-  for (const auto window : windows) {
-    for (unsigned address = window.first; address < window.last; ++address) {
-      require(dsp.bus().read({.space = window.space, .address = address}) == 0,
-              "Every selected X/Y cell is cleared by the actual original instruction");
-    }
-  }
+  verify_selected_clear(dsp);
   verify_stage(dsp, firmware, link);
   owned_clock::check_nvm(lab.mcu, McuFlashImage::from_known(firmware.mcu));
   require_runtime_quarantined(lab, dsp, link);
 }
 
+void exercise_pins(Lab &lab,
+                   OwnDspMachine &dsp,
+                   Link &link,
+                   const Firmware &firmware,
+                   std::ostringstream &trace,
+                   const std::string &path,
+                   std::ostream &summary) {
+  std::string error;
+  try {
+    for (unsigned count = 0; count < limit; ++count) { link.step(); }
+    throw Fault("Functional GPIO source exceeded its execution bound");
+  } catch (const Fault &fault) { error = fault.what(); }
+  std::cerr << "Original logical GPIO mcu=" << hex(lab.mcu.cpu().state().pc)
+            << " dsp=" << hex(dsp.cpu().registers().pc, 6) << " reason=" << error << '\n';
+  record(0, lab, dsp, link, summary, error);
+  for (const auto port : {DspPort::c, DspPort::e, DspPort::f, DspPort::d}) {
+    const auto &gpio = dsp.bus().gpio(port);
+    summary << "GPIO port=" << static_cast<unsigned>(port)
+            << " contract=" << static_cast<unsigned>(gpio.contract())
+            << " control=" << hex(gpio.read(DspGpioRegister::control), 6)
+            << " direction=" << hex(gpio.read(DspGpioRegister::direction), 6) << '\n';
+  }
+  constexpr unsigned bcr = 0xfffffb;
+  constexpr unsigned bcr_reset = 0x1fffff;
+  const auto c = dsp.bus().gpio(DspPort::c).outputs();
+  const auto f = dsp.bus().gpio(DspPort::f).outputs();
+  const auto bus_control = dsp.bus().read({.space = DspSpace::x, .address = bcr});
+  summary << "PINS unselected=" << dsp.bus().unselected_writes() << " bcr=" << hex(bus_control, 6)
+          << " c_mask=" << hex(c.mask, 6) << " c_known=" << hex(c.known, 6)
+          << " c_levels=" << hex(c.levels, 6) << " f_mask=" << hex(f.mask, 6)
+          << " f_known=" << hex(f.known, 6) << " f_levels=" << hex(f.levels, 6) << '\n';
+  summary.flush();
+  write_text(path + ".0.trace", trace.str());
+  lab.progress.census.write(path + ".0.mcu.jsonl");
+  lab.progress.phases.write(path + ".0.phases.json");
+  constexpr unsigned ready_pc = 0xbb;
+  constexpr unsigned timer_control = 0xffff8b;
+  constexpr unsigned ready_bit = 12;
+  constexpr unsigned pairs = 0x20000;
+  constexpr unsigned buffer = 0xc000;
+  constexpr unsigned no_storage_writes = 184320;
+  constexpr unsigned original_port_writes = 7346;
+  const auto state = dsp.cpu().registers();
+  const auto fault = dsp.cpu().fault();
+  const auto &failure = dsp.io().failure();
+  require(error.contains("Unknown DSP timer DI read at X:0xffff8b") &&
+              error.contains("pc=0x0000bb") && lab.mcu.timing_faulted() &&
+              link.schedule().faulted() && !dsp.clock().faulted() &&
+              fault.kind == dsp56300::FaultKind::io_bit && fault.space == dsp56300::Space::x &&
+              fault.pc == ready_pc && fault.address == timer_control && fault.value == ready_bit &&
+              failure && failure->operation == OwnDspIo::Operation::bit &&
+              failure->space == dsp56300::Space::x && failure->pc == ready_pc &&
+              failure->address == timer_control && failure->action == dsp56300::BitAction::test &&
+              failure->value == ready_bit && failure->cause && !dsp.cpu().pending_instruction(),
+          "Actual original NAND-ready sampling fails visibly without fabricated external input");
+  require(state.pc == ready_pc && state.r[4] == pairs && state.lc == 0 && state.r[0] == buffer &&
+              state.r[2] == buffer && state.r[5] == 1 && state.omr == stage_mode &&
+              dsp.bus().write_contract() == DspWriteContract::internal_writable_storage &&
+              dsp.bus().unselected_writes() == no_storage_writes && bus_control == bcr_reset &&
+              link.counts().writes == original_port_writes,
+          "The original first refill follows the complete clear without a substituted BCR write");
+  constexpr unsigned c_pins = 0xf00;
+  constexpr unsigned idle = 0x300;
+  constexpr unsigned f_pins = 0x4ff;
+  require(c.mask == c_pins && c.known == c_pins && c.levels == idle && c.peripheral == 0 &&
+              f.mask == f_pins && f.known == f_pins && f.levels == 0 && f.peripheral == 0,
+          "Actual original stores drive NAND idle controls and the first row's zero output data");
+  verify_selected_clear(dsp);
+  verify_stage(dsp, firmware, link);
+  owned_clock::check_nvm(lab.mcu, McuFlashImage::from_known(firmware.mcu));
+  require_runtime_quarantined(lab, dsp, link);
+}
+
+enum class StartupContract : std::uint8_t { strict, writable_storage, existing_pins };
+
 struct Paths {
   std::filesystem::path firmware;
   std::filesystem::path rom;
   std::filesystem::path trace;
-  bool functional_decoder = false;
+  StartupContract contract = StartupContract::strict;
 };
 
 void run(const Paths &paths) {
@@ -624,8 +704,13 @@ void run(const Paths &paths) {
   OwnDspMachine dsp({.extal_hz = source::oscillator_hz,
                      .timebase_hz = common,
                      .switch_timing = DspClockSwitch::reference_cycle_boundary});
-  if (paths.functional_decoder) {
+  if (paths.contract != StartupContract::strict) {
     dsp.bus().set_write_contract(DspWriteContract::internal_writable_storage);
+  }
+  if (paths.contract == StartupContract::existing_pins) {
+    for (const auto port : {DspPort::c, DspPort::e, DspPort::f, DspPort::d}) {
+      dsp.bus().gpio(port).set_contract(DspGpioContract::logical_pins);
+    }
   }
   dsp.bus().install_rom({.start = coupled::bootstrap_base, .words = rom});
   Link link(lab, dsp);
@@ -650,7 +735,9 @@ void run(const Paths &paths) {
   write_text(std::string(trace_path) + ".prefix.trace", trace.str());
   progress.census.write(std::string(trace_path) + ".held.mcu.jsonl");
   progress.phases.write(std::string(trace_path) + ".held.phases.json");
-  if (paths.functional_decoder) {
+  if (paths.contract == StartupContract::existing_pins) {
+    exercise_pins(lab, dsp, link, firmware, trace, trace_path, summary);
+  } else if (paths.contract == StartupContract::writable_storage) {
     exercise_decoder(lab, dsp, link, firmware, trace, trace_path, summary);
   } else {
     exercise(lab, dsp, link, firmware, trace, trace_path, summary);
@@ -661,14 +748,31 @@ void run(const Paths &paths) {
 
 int main(int count, char **args) {
   try {
-    if (count != 4 && (count != 5 || std::string_view(args[4]) != "writable-storage")) {
-      throw blofeld::Fault("firmware.zip private-rom private.trace [writable-storage]");
+    if (count != 4 && count != 5) {
+      throw blofeld::Fault(
+          "firmware.zip private-rom private.trace [writable-storage|writable-pins]");
     }
-    run({.firmware = args[1], .rom = args[2], .trace = args[3], .functional_decoder = count == 5});
-    std::cout
-        << (count == 5
-                ? "Original reset-net source, functional decoder and complete clear passed.\n"
-                : "Original reset-net source, dsp56300 runtime, SPI and held replay passed.\n");
+    auto contract = StartupContract::strict;
+    if (count == 5) {
+      const std::string_view name(args[4]);
+      if (name == "writable-storage") {
+        contract = StartupContract::writable_storage;
+      } else if (name == "writable-pins") {
+        contract = StartupContract::existing_pins;
+      } else {
+        throw blofeld::Fault("Unknown original startup contract");
+      }
+    }
+    run({.firmware = args[1], .rom = args[2], .trace = args[3], .contract = contract});
+    std::string_view message =
+        "Original reset-net source, dsp56300 runtime, SPI and held replay passed.\n";
+    if (contract == StartupContract::writable_storage) {
+      message = "Original reset-net source, functional decoder and complete clear passed.\n";
+    }
+    if (contract == StartupContract::existing_pins) {
+      message = "Original reset-net source, logical GPIO and NAND-ready frontier passed.\n";
+    }
+    std::cout << message;
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

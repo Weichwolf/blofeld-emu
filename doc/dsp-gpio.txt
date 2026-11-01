@@ -67,9 +67,11 @@ side effects and
 retain normal word accesses. A SHI FIFO bit test performs exactly one destructive
 read; no preliminary read is used to construct a masked writeback.
 
-Reserved upper register bits read zero; nonzero writes are conservatively
-rejected pending hardware qualification. This does not establish harmless
-reserved-bit write masking. F rejects simultaneous PCR/PRR selection per pin.
+Reserved upper register bits read zero. Strict diagnostics reject nonzero
+writes to those bits. The explicit logical-pins contract masks unimplemented
+bits and decouples Port-F register access from BIU wait-state qualification;
+see dsp-gpio-write-decoder.txt. F still rejects simultaneous PCR/PRR selection
+of an existing pin.
 The F pin count and PD10 follow the register diagrams and signal table; section
 6.2.4.3's prose says PD(9:0), inconsistent with its own PD10 diagram.
 

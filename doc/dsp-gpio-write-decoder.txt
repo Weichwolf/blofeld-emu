@@ -1,0 +1,44 @@
+Functional DSP GPIO pin decoder
+
+DspGpio defaults to DspGpioContract::strict. The explicit logical_pins
+contract masks register values and write masks to the port's implemented pins:
+12 each for C/E, 11 for F and 2 for D. Upper bits have no register storage,
+output driver or peripheral ownership. This is a functional instrument model,
+not a measured response of reserved silicon fields.
+
+Validate the original 24-bit word/mask before pin decoding. Invalid host words,
+values outside the supplied mask, unknown input samples, opposing drivers,
+reserved actual Port-F functions and strict BIU diagnostics still fail.
+Port F uses logical register/bit access independently of BIU wait-state
+qualification. BCR command/read state remains unchanged; no BCR write, bus-master
+status or NAND response is fabricated. Strict mode retains its BCR prerequisite.
+Reads never acquire guessed external data. Reset clears real configuration and
+retains the chosen contract; port-specific latch behavior is unchanged. Trusted
+chip/bus copies preserve the contract, with normal borrowed-pad lifetime rules.
+
+  cmake --build --preset strict --target blofeld-dsp-gpio-write-decoder-test \
+    blofeld-dsp-gpio-test blofeld-original-fetch-reset-start-test
+  ctest --preset strict -j1 --output-on-failure \
+    -R '^(dsp_gpio|dsp_gpio_write_decoder|original_fetch_gpio_start)$'
+
+Repeat with the thread preset for separate TSan instrumentation. Directed tests
+check all 24 bit positions of all three registers on all four ports, mixed and
+reserved-only masks, guards, copies and resets. Authored MOVEP instructions
+execute synchronously and through the clock owner; native BSET checks real Carry
+and existing/absent pin effects. Independent PC/flag/pin expectations and fresh
+continuations are checked. Firmware programs and private traces remain local.
+
+original_fetch_gpio_start selects both contracts before the original reset. It
+executes the full clear, seven immediate GPIO setup instructions and the first
+NAND control sequence. All selected RAM, original SPI-loaded words and MCU NVM
+are checked. BCR retains its reset value; the original timer1 DI bit test at
+PC 0xbb visibly rejects the absent NAND-ready input. Both owners refuse further
+execution without CPU/RAM/time changes. Independent instruction, wire, PLL/REP
+and endpoint oracles include twelve fixed corruption controls.
+
+Component and connected GPIO checks pass under ASan/UBSan and separate TSan.
+The existing strict GPIO component checks also pass, and the original
+storage-only reset regression passes again under ASan/UBSan. No fuzzing or
+physical traffic is involved. Original NAND loading, instrument boot, MIDI/audio
+and every documented function remain open. See dsp-write-decoder.txt for the
+separate storage contract and its strict GPIO frontier.

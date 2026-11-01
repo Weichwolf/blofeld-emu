@@ -2889,6 +2889,13 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-write-decoder.json")
   set_tests_properties(original_fetch_write_decoder PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+  add_test(NAME original_fetch_gpio_start COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_gpio_start.py"
+    $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-gpio-start.json")
+  set_tests_properties(original_fetch_gpio_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
   add_test(NAME original_shi_routes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_shi_routes.py"
     $<TARGET_FILE:blofeld-headless>
@@ -3168,6 +3175,7 @@ add_custom_target(quality
     blofeld-own-dsp-fetch-test blofeld-own-dsp-clock-test
     blofeld-own-dsp-io-test blofeld-own-dsp-interrupts-test blofeld-dsp-unclocked-test
     blofeld-dsp-observed-test blofeld-dsp-timer-sample-test blofeld-dsp-write-decoder-test
+    blofeld-dsp-gpio-write-decoder-test
     blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test
     blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
     blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test

@@ -95,8 +95,10 @@ DSP56371 memory and peripheral scope
 - PCTL command/reset state and requested EXTAL ratios follow DSP56371UM chapter 5;
   see dsp-pll.txt. Hardware reset samples observed PINIT, while the DSP RESET
   instruction resets SHI/interrupt state without resetting CPU OMR or PLL control.
-- C/D/E/F GPIO modes, data/pads, Port D's reset latch and Port F's required BIU setup
-  are modeled (dsp-gpio.txt). BCR accepts only its documented Port F setup.
+- C/D/E/F GPIO modes, data/pads and Port D's reset latch are modeled
+  (dsp-gpio.txt). Strict diagnostics require the documented Port-F BIU setup;
+  functional logical-pin access is described in dsp-gpio-write-decoder.txt.
+  BCR commands retain their existing checks.
 - Mode-zero timers and mode-six TRM=0 capture use explicit CLK/2 events and
   qualified synchronized samples (dsp-timers.txt). Native TIO1 polling, capture
   IRQ and TCSR W1C writeback are tested. No CPU/IRQ clock schedule is implied.

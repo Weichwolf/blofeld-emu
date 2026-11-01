@@ -399,6 +399,14 @@ Functional DSP write decoder      partial  Explicit low128K X/Y writable-cell mo
                                           Strict reset replay retained. GPIO/NAND,
                                           full boot and audio remain open
                                           (dsp-write-decoder.txt).
+Functional DSP GPIO startup       partial  Explicit pin masks and logical Port-F access
+                                          preserve real GPIO/CPU state without BIU
+                                          wait-state qualification. Directed register,
+                                          native MOVEP/BSET and restore checks; original
+                                          reset/SPI/clear reaches the genuine missing
+                                          NAND-ready input. ASan/UBSan and separate TSan;
+                                          no completed NAND load, boot or audio claim
+                                          (dsp-gpio-write-decoder.txt).
 Documented GPIO passive bias      partial  Explicitly floating PC/PD/PE/PF inputs
                                           resolve through internal pull-downs
                                           (dsp-gpio-pulls.txt). Unknown connections,

@@ -193,7 +193,8 @@ std::optional<bool> DspBus::access_peripheral_bit(const DspBitAccess access) {
   }
   const auto mapping = gpio_register(target);
   if (!mapping.has_value()) { return std::nullopt; }
-  if (mapping->port == DspPort::f && bus_control_ != port_f_bus_control) {
+  if (mapping->port == DspPort::f && gpio(mapping->port).contract() == DspGpioContract::strict &&
+      bus_control_ != port_f_bus_control) {
     throw Fault("Unqualified DSP GPIO bit access at " + address_text(target) +
                 ": Port F requires BCR=0x01ffff");
   }
@@ -234,7 +235,9 @@ DspPeripheralBitSample DspBus::capture_peripheral_bit(const DspBitAccess access)
     sample.source_ = timers_.read(access.address, read_mask);
   } else {
     const auto mapping = gpio_register(target);
-    if (!mapping || (mapping->port == DspPort::f && bus_control_ != port_f_bus_control)) {
+    if (!mapping ||
+        (mapping->port == DspPort::f && gpio(mapping->port).contract() == DspGpioContract::strict &&
+         bus_control_ != port_f_bus_control)) {
       throw Fault("Unsupported owned GPIO RMW read at " + address_text(target));
     }
     sample.port_ = mapping->port;
@@ -684,7 +687,8 @@ std::uint32_t DspBus::read_peripheral(const DspAddress access) {
     return timers_.read(access.address);
   }
   if (const auto target = gpio_register(access)) {
-    if (target->port == DspPort::f && bus_control_ != port_f_bus_control) {
+    if (target->port == DspPort::f && gpio(target->port).contract() == DspGpioContract::strict &&
+        bus_control_ != port_f_bus_control) {
       throw Fault("Unqualified DSP GPIO read at " + address_text(access) +
                   ": Port F requires BCR=0x01ffff");
     }
@@ -730,7 +734,8 @@ void DspBus::write_peripheral(const DspStore access) {
     return;
   }
   if (const auto target = gpio_register({.space = access.space, .address = access.address})) {
-    if (target->port == DspPort::f && bus_control_ != port_f_bus_control) {
+    if (target->port == DspPort::f && gpio(target->port).contract() == DspGpioContract::strict &&
+        bus_control_ != port_f_bus_control) {
       throw Fault("Unqualified DSP GPIO write at " +
                   address_text({.space = access.space, .address = access.address}) +
                   ": Port F requires BCR=0x01ffff");

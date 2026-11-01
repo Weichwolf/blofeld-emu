@@ -130,17 +130,19 @@ void DspGpio::write_checked(const DspGpioWrite access) {
   if ((access.mask & ~DspGpioWrite::word_mask) != 0 || (access.value & ~access.mask) != 0) {
     throw Fault("Invalid DSP GPIO masked write at " + address(access.reg));
   }
-  if ((access.value & ~pin_mask()) != 0) {
+  if (contract_ == DspGpioContract::strict && (access.value & ~pin_mask()) != 0) {
     throw Fault("Unqualified DSP GPIO reserved-bit write at " + address(access.reg) +
                 " value=" + hex(access.value, 6));
   }
+  const auto mask = access.mask & pin_mask();
+  const auto value = access.value & pin_mask();
   switch (access.reg) {
-    case DspGpioRegister::control: control_ = (control_ & ~access.mask) | access.value; break;
-    case DspGpioRegister::direction: direction_ = (direction_ & ~access.mask) | access.value; break;
+    case DspGpioRegister::control: control_ = (control_ & ~mask) | value; break;
+    case DspGpioRegister::direction: direction_ = (direction_ & ~mask) | value; break;
     case DspGpioRegister::data: {
       const auto outputs = direction_ & ~control_;
-      const auto selected = outputs & access.mask;
-      latch_ = (latch_ & ~selected) | (access.value & selected);
+      const auto selected = outputs & mask;
+      latch_ = (latch_ & ~selected) | (value & selected);
       // Input/disconnected/peripheral writes do not qualify a later output latch.
       latch_known_ = (latch_known_ | selected) & outputs;
       break;
@@ -154,6 +156,13 @@ void DspGpio::write_checked(const DspGpioWrite access) {
   // pad resolution/audit; no pad value is consumed by this write. Keep the
   // existing immediate legacy-peer contention check otherwise unchanged.
   static_cast<void>(resolve_local(pin_mask()));
+}
+
+void DspGpio::set_contract(const DspGpioContract contract) {
+  if (contract != DspGpioContract::strict && contract != DspGpioContract::logical_pins) {
+    throw Fault("Invalid DSP GPIO write contract");
+  }
+  contract_ = contract;
 }
 
 void DspGpio::write(const DspGpioWrite access) {
