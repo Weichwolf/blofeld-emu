@@ -53,6 +53,9 @@ public:
 
   [[nodiscard]] bool faulted() const { return faulted_; }
 
+  // Read-only ownership check, including held reset and chip-only restoration.
+  void validate_boundary() const { check_owner(); }
+
   [[nodiscard]] OwnDspTimelineCheckpoint checkpoint() const;
 
 private:

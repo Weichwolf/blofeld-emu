@@ -115,6 +115,9 @@ private:
     std::uint64_t reset_edges = 0;
     std::uint64_t ties = 0;
     std::optional<std::uint64_t> last_external;
+    std::optional<std::uint64_t> pending_external;
+    std::optional<std::uint64_t> last_native;
+    std::optional<std::uint64_t> closed_external;
     bool resetting = false;
     bool waiting = false;
     bool offered = false;
@@ -124,7 +127,8 @@ private:
 
   [[nodiscard]] std::uint64_t mcu_ticks() const;
   [[nodiscard]] std::uint64_t deadline() const;
-  [[nodiscard]] std::optional<std::uint64_t> next_external() const;
+  [[nodiscard]] std::optional<std::uint64_t> query_external() const;
+  [[nodiscard]] std::optional<std::uint64_t> next_external();
   void healthy() const;
   void consumed() const;
   void finish_boundary();
@@ -133,10 +137,8 @@ private:
                bool external_through,
                const CycleInputs &inputs,
                const Observer &observer);
-  void advance_native(std::uint64_t ticks,
-                      bool through,
-                      const CycleInputs &inputs,
-                      const Observer &observer);
+  void advance_native(std::uint64_t ticks, const CycleInputs &inputs, const Observer &observer);
+  void advance_reset(std::uint64_t ticks, bool through);
   void observe_external(std::uint64_t ticks);
   void prepare_write(const CycleInputs &inputs, const Observer &observer);
   [[noreturn]] void reject_native(const dsp56300::Fault &fault) const;

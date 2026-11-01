@@ -1446,8 +1446,9 @@ if(BUILD_TESTING)
     add_test(NAME dsp_fetch_peripheral_${scope} COMMAND blofeld-fetch-peripheral-test ${scope})
   endforeach()
   add_executable(blofeld-fetch-schedule-test test/dsp_fetch_schedule_test.cpp
-    test/dsp_fetch_schedule_guards.cpp test/dsp_fetch_schedule_pins.cpp)
-  target_link_libraries(blofeld-fetch-schedule-test PRIVATE blofeld_dsp blofeld_dsp_native)
+    test/dsp_fetch_schedule_fixture.cpp test/dsp_fetch_schedule_guards.cpp
+    test/dsp_fetch_schedule_checkpoints.cpp test/dsp_fetch_schedule_pins.cpp)
+  target_link_libraries(blofeld-fetch-schedule-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME dsp_fetch_external_events COMMAND blofeld-fetch-schedule-test)
   add_executable(blofeld-retirement-test test/dsp_retirement_test.cpp test/dsp_retirement_fetch.cpp)
   target_link_libraries(blofeld-retirement-test PRIVATE blofeld_dsp blofeld_dsp_native)

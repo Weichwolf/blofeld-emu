@@ -1,58 +1,49 @@
-Automatic DSP pipeline and external event timeline
+Native MCU/DSP external event timeline
 
-DspFetchScheduledRun orders actual DspFetchRun periods and timestamped peripheral
-observations in one explicit integer timebase. Native periods are not replaced
-with atomic instruction estimates. epoch_ticks offsets absolute event time;
-DspFetchCycleResult and the native clock retain relative elapsed ticks. An
-explicit initial_horizon_ticks may precede epoch_ticks, retaining genuine early
-peripheral input without advancing native periods. It cannot skip native work.
+The regular Board uses McuDspRuntime with the independent dsp56300 core and
+OwnDspTimeline. The dsp_fetch_external_events group now uses that same owner,
+actual HCS12 NOP periods and authored literal DSP instructions, without the
+legacy DSP executor or assembler. Remaining DspFetchScheduledRun callers are
+legacy fixtures; this group no longer qualifies that implementation.
 
-This is a single-threaded reference ordering contract. It neither establishes
-physical input timing nor connects the complete device runtime. Normal Board
-runtime integration, MIDI/ESAI transport and automatic IRQ entry remain open.
+Each native cycle or reset-recovery completion re-queries the external source
+before another native event. An asynchronous edge created by a DSP completion
+must be observed before the next DSP cycle, including two DSP cycles within
+one MCU bus period. Simultaneous events require DSP-first, peer-first or strict
+refusal. Recovery participates in this arbitration without inventing a CPU,
+DMA or CLK2 cycle. A peer-first callback at recovery completion still sees
+held reset one integer tick before the release edge.
 
-Bind an event source on the first advance, with a retained shared identity,
-pure next_ticks query, observation callback, positive per-advance event budget
-and explicit external-before-DSP, DSP-before-external or reject-tie policy.
-Observations may change peripheral inputs, never the native CPU/front end/DMA
-clock owner. Queries must be pure; boundary checks detect changes to the native
-owner, not every possible side effect in arbitrary user callbacks.
+The source contract is fixed at construction: shared identity, pure next_ticks,
+observation callback, explicit order and positive per-MCU-period budget.
+Exhaustion retains the contract. A pending deadline cannot move or disappear.
+Finite same-timestamp bursts preserve source order; backwards/retroactive edges
+and newborn same-tick events preceding their actual DSP cause refuse.
+Observations may change peripheral inputs, never CPU/time/frontend ownership.
+Callback guards also detect chip-only restoration with identical visible state,
+including held reset. They do not prove purity of every arbitrary callback side
+effect. Entered failures quarantine the runtime and retain its committed prefix.
 
-Keep the identity and policy even after exhaustion. A pending deadline is pinned
-until observed. An exhausted source may append future events. A completion may
-cause a same-tick event only with DSP-before-external order; retroactive events
-and changes to pinned deadlines refuse. Same-timestamp bursts retain source order
-and are bounded by the explicit event budget. No physical phase is inferred.
+Joint snapshots retain pending/consumed boundaries and both native machines.
+The caller restores its event cursor and reattaches observers; callback closures
+are not serialized. A fresh compatible owner can continue a trusted snapshot.
+Identity/order/budget mismatch refuses before native restoration; a mismatching
+pending source refuses on the first offer after the caller restores its cursor.
+Use a staged target because restored
+native state and external effects are not rolled back after an entered failure.
+Snapshots require consumed MCU operation boundaries, never half an operation.
 
-Each horizon separately includes or excludes native and external work at its
-exact tick. Inconsistent mixed boundaries refuse. Advancing cannot rewind time
-or an already consumed boundary. Reset hold advances exact fractional EXTAL time;
-recovery completion participates in the same event arbitration. External events
-can precede an excluded recovery edge without silently releasing native work.
-Reset assertion/release require an inactive, exactly consumed native-clock
-boundary. An explicitly excluded same-time external event remains pending and
-must still be delivered in its declared order; reset never consumes that event.
-Recursive reset requests from an active callback refuse.
+  cmake --build --preset strict --target blofeld-fetch-schedule-test blofeld-mcu-dsp-runtime-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(dsp_fetch_external_events|mcu_dsp_runtime)$'
 
-A trusted in-process snapshot captures the same native owner, pipeline, clocks,
-peripherals and timeline state. Restore the caller-owned event cursor separately.
-Callbacks are not serialized. Foreign-owner or changed-contract restore refuses;
-execution/callback errors quarantine the timeline until trusted restore. Failed
-advances retain their actually executed native/event prefix and contextual error.
-No rollback of external effects or general serialized device state is promised.
+Independent expectations use 450 common reset ticks,135 recovery ticks,45 ticks
+per DSP cycle and90 per MCU bus period.18 MCU NOPs reach2070 ticks:33 native
+cycles,15 retired DSP NOPs and16 CLK2 edges. Actual MOVEP reads capture GPIO
+at separate read effects, retaining values across later pin changes before
+PCU/retirement. Replays cover both source orders, same and fresh owners and
+held recovery. Existing mcu_dsp_runtime checks all six causal MCU-write/input/
+DSP permutations and both cyclic refusals using a genuine MCU GPIO store.
 
-  cmake --build --preset strict --target blofeld-fetch-schedule-test
-  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_fetch_external_events$'
-
-Own instruction checks use literal 45-tick bypass periods, sequential NOP
-retirements, both event orders, mixed-boundary and held-reset suffix replays,
-nonzero epochs and explicit failure controls. Two real MOVEP GPIO reads sample
-at AG1 and publish captured values at E2: an exact-tick change affects the first
-read only in its declared order; a later change cannot rewrite either capture.
-Complete native debug state, timer edges and event counts are checked. Fixed
-malformed contracts, callback reentry/mutation, pinned/decreasing/newborn-past
-inputs and finite budgets refuse. These are supporting component checks, not
-full original firmware boot, physical equivalence or real-time qualification.
-
-A separate causal peripheral-event lane is described in dsp-peripheral-events.txt.
-Its additional source does not relax the inherited-source rules above.
+These are explicit reference-effect timing checks, not measured seven-stage
+silicon placement or complete original Desktop/Keyboard boot, MIDI/audio,
+USB, persistence, update/recovery or real-time acceptance.

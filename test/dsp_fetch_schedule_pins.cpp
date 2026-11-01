@@ -1,54 +1,51 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/mcu_dsp_runtime.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp56300/core.hpp"
 #include "dsp_fetch_schedule_fixture.hpp"
-#include "dsp_memory_pipeline_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
 
 #include <array>
 #include <cstdint>
-#include <string>
 
 namespace blofeld::test::fetch_events {
 void pin_capture() {
   constexpr unsigned pins = 0xfff;
   constexpr unsigned driven_word = 0xa5b;
-  constexpr auto sample_tick = 4 * period;
-  const std::array<std::string, 2> code{"movep x:<<$ffffbd,x0", "movep x:<<$ffffbd,y0"};
-  for (const auto order :
-       {DspExternalOrder::external_before_dsp, DspExternalOrder::dsp_before_external}) {
-    DspMachine machine;
-    memory_pipeline::prepare(machine, code);
-    auto &port = machine.bus().gpio(DspPort::c);
+  // DSP56371 register MOVEP: X:<<$ffffbd -> X0, then Y0 (register codes4/6).
+  constexpr std::array<std::uint32_t, 2> code{0x0444dd, 0x0446dd};
+  // F1,F2 then the actual read; register publication,PCU and retirement are
+  // separate effects. The next MOVEP reads four reference cycles later.
+  constexpr auto sample_tick = reset_end + (3 * period);
+  constexpr auto second_sample = sample_tick + (4 * period);
+  for (const auto order : {DspPeerOrder::peer_first, DspPeerOrder::dsp_first}) {
+    Fixture fixture(order, {sample_tick, second_sample + 1}, code);
+    auto expected = fixture.dsp.cpu().registers();
+    expected.pc = boot + 3;
+    expected.x = order == DspPeerOrder::peer_first ? driven_word : 0;
+    expected.y = driven_word;
+    auto &port = fixture.dsp.bus().gpio(DspPort::c);
     port.write({.reg = DspGpioRegister::control, .value = pins});
     port.set_drive({.mask = pins, .levels = 0});
-    auto expected = machine.cpu().debug_state();
-    DspFetchScheduledRun schedule(inputs(), machine);
-    Source source{.ticks = {sample_tick, (5 * period) + 1}, .order = order};
-    auto events = source.events();
-    events.observe = [&](const std::uint64_t tick) {
-      require(source.ticks.at(source.cursor) == tick, "Actual pin event cursor matches its time");
-      port.set_drive({.mask = pins, .levels = source.cursor == 0 ? driven_word : 0});
-      ++source.cursor;
+    fixture.source.on_observe = [&](std::uint64_t) {
+      port.set_drive({.mask = pins, .levels = fixture.source.cursor == 0 ? driven_word : 0});
     };
-    require(
-        schedule.advance_to(
-            {.horizon = {.ticks = 8 * period}, .maximum_cycles = 8}, cycle_inputs, {}, events) == 8,
-        "Both native peripheral readers execute through real pipeline periods");
-    expected.cpu.pc = memory_pipeline::body + 2;
-    expected.cpu.x = (expected.cpu.x & ~std::uint64_t{word_mask}) |
-                     (order == DspExternalOrder::external_before_dsp ? driven_word : 0);
-    expected.cpu.y = (expected.cpu.y & ~std::uint64_t{word_mask}) | driven_word;
-    expected.native_instructions += 2;
-    expected.native_cycles += 2;
-    require(machine.cpu().debug_state() == expected && source.cursor == 2 &&
-                schedule.state().external_events == 2 && port.read(DspGpioRegister::data) == 0,
-            "Native AG1 samples exact tie-ordered GPIO inputs; later pin changes cannot rewrite "
-            "captured values before actual E2 publication");
+    fixture.on_cycle = [&](const DspRuntimeCycle &cycle) {
+      if (cycle.completion_ticks == sample_tick) {
+        require(fixture.dsp.cpu().registers().x == 0,
+                "Actual GPIO read prematurely published its destination register");
+      }
+      if (cycle.completion_ticks == second_sample + period) {
+        require(fixture.dsp.cpu().registers().y == driven_word &&
+                    port.read(DspGpioRegister::data) == 0,
+                "Native register publication reread the pins instead of its captured word");
+      }
+    };
+    fixture.run(7);
+    require(fixture.dsp.cpu().registers() == expected && fixture.source.cursor == 2 &&
+                port.read(DspGpioRegister::data) == 0 &&
+                fixture.dsp.cpu().progress().instructions == 2,
+            "Native MOVEP did not retain tie-ordered samples across subsequent pin changes");
   }
 }
-} // namespace blofeld::test::fetch_events
+}

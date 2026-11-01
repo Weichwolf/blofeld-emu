@@ -1,4 +1,9 @@
-MCU-period / automatic DSP-pipeline ordering
+Legacy MCU-period / automatic DSP-pipeline fixtures
+
+The regular Board now uses McuDspRuntime and the independent DSP timeline.
+Its migrated external-event regression is described in dsp-fetch-events.txt.
+The following records concern remaining legacy McuDspFetchSchedule fixtures;
+they do not establish current native-runtime coverage by themselves.
 
 McuDspFetchSchedule orders DspFetchRun pipeline periods against actual native
 MCU period offers. It is separate from the instruction-completion reference

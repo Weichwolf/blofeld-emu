@@ -118,7 +118,9 @@ McuDspRuntime::McuDspRuntime(const McuDspRuntimeInputs inputs,
       inputs_.maximum_cycles_per_period == 0 ||
       has_external != static_cast<bool>(external_.next_ticks) ||
       has_external != static_cast<bool>(external_.observe) ||
-      (has_external && (!ordered || external_.maximum_events_per_period == 0))) {
+      (has_external && (!ordered || external_.maximum_events_per_period == 0)) ||
+      (!has_external && (external_.order != DspPeerOrder::unqualified ||
+                         external_.maximum_events_per_period != 0))) {
     throw Fault(
         "MCU/DSP runtime requires held reset, explicit budgets and coherent event ownership");
   }
@@ -161,6 +163,7 @@ void McuDspRuntime::healthy() const {
   if (active_ || faulted() || mcu_.run_clock().native_epoch() != state_.epoch) {
     throw Fault("MCU/DSP runtime requires its healthy inactive native epoch");
   }
+  timeline_->validate_boundary();
 }
 
 void McuDspRuntime::consumed() const {
@@ -187,7 +190,7 @@ std::uint64_t McuDspRuntime::deadline() const {
   return inputs_.epoch_ticks + elapsed + *remaining;
 }
 
-std::optional<std::uint64_t> McuDspRuntime::next_external() const {
+std::optional<std::uint64_t> McuDspRuntime::query_external() const {
   if (!external_.identity) { return std::nullopt; }
   const auto before = detail::mcu_boundary(mcu_);
   const auto registers = dsp_.cpu().registers();
@@ -197,9 +200,25 @@ std::optional<std::uint64_t> McuDspRuntime::next_external() const {
       dsp_.clock().elapsed_ticks() != elapsed) {
     throw Fault("MCU/DSP event query changed CPU state or time");
   }
-  if (result && state_.last_external && *result <= *state_.last_external) {
-    throw Fault("MCU/DSP external source repeated or rewound its event");
+  timeline_->validate_boundary();
+  return result;
+}
+
+std::optional<std::uint64_t> McuDspRuntime::next_external() {
+  const auto result = query_external();
+  if (state_.pending_external && result != state_.pending_external) {
+    throw Fault("MCU/DSP source changed its pinned pending deadline");
   }
+  if (result && !state_.pending_external) {
+    if ((state_.last_external && *result < *state_.last_external) ||
+        (state_.closed_external && *result <= *state_.closed_external) ||
+        (state_.last_native &&
+         (*result < *state_.last_native ||
+          (*result == *state_.last_native && external_.order != DspPeerOrder::dsp_first)))) {
+      throw Fault("MCU/DSP external source moved backwards into a consumed timeline");
+    }
+  }
+  state_.pending_external = result;
   return result;
 }
 
@@ -215,42 +234,57 @@ void McuDspRuntime::observe_external(const std::uint64_t ticks) {
       dsp_.clock().elapsed_ticks() != elapsed) {
     throw Fault("MCU/DSP external observation changed CPU state or time");
   }
+  timeline_->validate_boundary();
   state_.last_external = ticks;
+  state_.pending_external.reset();
 }
 
 void McuDspRuntime::advance_native(const std::uint64_t ticks,
-                                   const bool through,
                                    const CycleInputs &inputs,
                                    const Observer &observer) {
   if (dsp_.clock().hardware_reset_active()) {
     static_cast<void>(timeline_->advance_reset_to(ticks));
-    if (dsp_.clock().hardware_reset_active()) { return; }
+    state_.last_native = ticks;
+    return;
   }
-  while (true) {
-    const auto at = timeline_->next_deadline();
-    if (at > ticks || (at == ticks && !through)) { return; }
-    if (!inputs || ++period_cycles_ > inputs_.maximum_cycles_per_period) {
-      throw Fault("MCU/DSP runtime lacks native cycle inputs or exceeded its period budget");
-    }
-    auto request = inputs();
-    const auto last = dsp_.bus().last_dma_cycle();
-    request.cycle = last ? *last + 1 : 0;
-    const auto start = inputs_.epoch_ticks + dsp_.clock().elapsed_ticks();
-    const auto result = timeline_->advance_one(at, OwnDspBoundary::through, request);
-    if (!result) {
-      throw Fault("MCU/DSP native cycle missed its deadline pc=" +
-                  hex(dsp_.cpu().registers().pc, 6));
-    }
-    if (result->native && result->native->fault.kind != dsp56300::FaultKind::none) {
-      reject_native(result->native->fault);
-    }
-    if (observer) {
-      observer({.start_ticks = start,
-                .completion_ticks = at,
-                .cycle = request.cycle,
-                .result = *result});
+  if (!inputs || ++period_cycles_ > inputs_.maximum_cycles_per_period) {
+    throw Fault("MCU/DSP runtime lacks native cycle inputs or exceeded its period budget");
+  }
+  const auto before = detail::mcu_boundary(mcu_);
+  const auto registers = dsp_.cpu().registers();
+  auto request = inputs();
+  timeline_->validate_boundary();
+  if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != registers) {
+    throw Fault("MCU/DSP cycle input provider changed CPU state or time");
+  }
+  const auto last = dsp_.bus().last_dma_cycle();
+  request.cycle = last ? *last + 1 : 0;
+  const auto start = inputs_.epoch_ticks + dsp_.clock().elapsed_ticks();
+  const auto result = timeline_->advance_one(ticks, OwnDspBoundary::through, request);
+  if (!result) {
+    throw Fault("MCU/DSP native cycle missed its deadline pc=" + hex(dsp_.cpu().registers().pc, 6));
+  }
+  if (result->native && result->native->fault.kind != dsp56300::FaultKind::none) {
+    reject_native(result->native->fault);
+  }
+  state_.last_native = ticks;
+  if (observer) {
+    const auto after = dsp_.cpu().registers();
+    observer({.start_ticks = start,
+              .completion_ticks = ticks,
+              .cycle = request.cycle,
+              .result = *result});
+    timeline_->validate_boundary();
+    if (detail::mcu_boundary(mcu_) != before || dsp_.cpu().registers() != after) {
+      throw Fault("MCU/DSP cycle observer changed CPU state or time");
     }
   }
+}
+
+void McuDspRuntime::advance_reset(const std::uint64_t ticks, const bool through) {
+  if (!dsp_.clock().hardware_reset_active()) { return; }
+  const auto until = !through && deadline() == ticks ? ticks - 1 : ticks;
+  static_cast<void>(timeline_->advance_reset_to(until));
 }
 
 void McuDspRuntime::advance(const bool native_through,
@@ -259,18 +293,26 @@ void McuDspRuntime::advance(const bool native_through,
                             const Observer &observer) {
   while (true) {
     const auto event = next_external();
-    if (!event || *event > state_.end_ticks || (*event == state_.end_ticks && !external_through)) {
-      break;
-    }
     const auto native = deadline();
-    if (*event == native && external_.order == DspPeerOrder::reject_tie) {
+    const bool external_due =
+        event && (*event < state_.end_ticks || (*event == state_.end_ticks && external_through));
+    const bool native_due =
+        native < state_.end_ticks || (native == state_.end_ticks && native_through);
+    if (!external_due && !native_due) { break; }
+    if (external_due && native_due && *event == native &&
+        external_.order == DspPeerOrder::reject_tie) {
       throw Fault("Unqualified simultaneous MCU/DSP external and native event");
     }
-    const bool native_first = external_.order == DspPeerOrder::dsp_first;
-    advance_native(*event, native_first, inputs, observer);
-    observe_external(*event);
+    if (external_due && (!native_due || *event < native ||
+                         (*event == native && external_.order == DspPeerOrder::peer_first))) {
+      advance_reset(*event, false);
+      observe_external(*event);
+    } else {
+      advance_native(native, inputs, observer);
+    }
   }
-  advance_native(state_.end_ticks, native_through, inputs, observer);
+  advance_reset(state_.end_ticks, native_through);
+  if (external_through) { state_.closed_external = state_.end_ticks; }
 }
 
 void McuDspRuntime::offer_period(const bool waiting) {
@@ -517,5 +559,7 @@ McuDspRuntime::McuDspRuntime(const McuDspRuntimeCheckpoint &checkpoint,
   mcu_.restore(saved.mcu);
   timeline_ = std::make_unique<OwnDspTimeline>(dsp_, saved.dsp);
   consumed();
+  // The board commits its matching source cursor after these staged owners.
+  // Validate the retained pending deadline on the next offer, before any event.
 }
 }
