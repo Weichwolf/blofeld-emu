@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "audio/serial_pcm.hpp"
 #include "board/mcu_dsp_runtime.hpp"
+#include "board/nand_peer.hpp"
 #include "board/reference_board.hpp"
 #include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
@@ -16,6 +17,7 @@
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "storage/flash_image.hpp"
+#include "storage/nand.hpp"
 
 #include <array>
 #include <cstddef>
@@ -57,7 +59,10 @@ blofeld::McuFlashImage image() {
 }
 
 // User-authored MOVEP/JMP words, encoded independently from the execution core.
-std::vector<std::uint32_t> program(const bool prime = true) {
+enum class ProgramOrder : std::uint8_t { configuration_first, selection_first };
+
+std::vector<std::uint32_t> program(const bool prime = true,
+                                   const ProgramOrder order = ProgramOrder::configuration_first) {
   constexpr unsigned pll = 0x08f4bd;
   constexpr unsigned esai_common = 0x07b495;
   constexpr unsigned esai_clock = 0x07b496;
@@ -90,6 +95,22 @@ std::vector<std::uint32_t> program(const bool prime = true) {
                                    dax::first_sample,
                                    esai_common,
                                    common_setting | 1U};
+  if (order == ProgramOrder::selection_first) {
+    words = {pll,
+             pll_setting,
+             esai_mask_b,
+             mask_setting,
+             esai_mask_a,
+             mask_setting,
+             esai_clock,
+             clock_setting,
+             esai_common,
+             common_setting,
+             esai_transmit,
+             dax::first_sample,
+             esai_common,
+             common_setting | 1U};
+  }
   if (prime) { words.insert(words.end(), {dax_non_audio, 0}); }
   words.insert(words.end(),
                {dax_audio,
@@ -155,9 +176,11 @@ reference::Config config(const bool pipeline) {
 }
 
 struct Fixture {
-  explicit Fixture(const reference::Config &configuration, const bool prime = true)
+  explicit Fixture(const reference::Config &configuration,
+                   const bool prime = true,
+                   const ProgramOrder order = ProgramOrder::configuration_first)
       : flash(image()),
-        rom(program(prime)),
+        rom(program(prime, order)),
         execution{.image = flash,
                   .rom = rom,
                   .specification = BLOFELD_DEFAULT_SLA,
@@ -325,6 +348,47 @@ void restore() {
   std::cout << "16 native Board cuts;32 restored suffixes\n";
 }
 
+void nand_audio() {
+  constexpr std::array cuts{0U, 100U};
+  constexpr unsigned suffix = 1000;
+  for (const bool pipeline : {false, true}) {
+    for (const auto cut : cuts) {
+      auto configuration = config(pipeline);
+      configuration.nand = reference::NandConnection{
+          .image = {}, .continuation = blofeld::NandReadContinuation::k9f1208_j};
+      Fixture f(configuration, true, ProgramOrder::selection_first);
+      f.board.initialize();
+      steps(f.board, cut);
+      const auto saved = f.board.checkpoint();
+      const auto before = f.board.status();
+      const auto peer_before = f.board.nand_status();
+      f.trace.str({});
+      steps(f.board, suffix);
+      const auto expected = f.board.status();
+      const auto peer_expected = f.board.nand_status();
+      const auto trace = f.trace.str();
+      if (!expected.pcm || !expected.last_pcm || !peer_expected) {
+        throw blofeld::Fault("Expected joint native PCM and NAND state");
+      }
+      constexpr std::int32_t signed_sample = -8388607;
+      require(!expected.faulted && expected.pcm->completed_frames() >= 2 &&
+                  expected.last_pcm->samples[0] == signed_sample &&
+                  expected.last_pcm->samples[1] == signed_sample &&
+                  expected.last_pcm->bit_ticks == half_period * 8 &&
+                  peer_expected->base.ready == true && peer_expected->power_ready,
+              "Preselected ESAI initializes while causal NAND power and real PCM advance");
+      f.board.restore(saved);
+      require(f.board.status() == before && f.board.nand_status() == peer_before,
+              "Joint restoration retains both source phases and the native NAND owner");
+      f.trace.str({});
+      steps(f.board, suffix);
+      require(f.board.status() == expected && f.board.nand_status() == peer_expected &&
+                  f.trace.str() == trace,
+              "NAND, oscillator, native execution and PCM replay identically together");
+    }
+  }
+}
+
 void guards() {
   blofeld::DspGpio port(blofeld::DspPort::e);
   constexpr unsigned hckt = 0x20;
@@ -387,12 +451,14 @@ void guards() {
 
 int main(const int argc, char **argv) {
   try {
-    if (argc != 2) { throw blofeld::Fault("Expected runtime, restore or guards"); }
+    if (argc != 2) { throw blofeld::Fault("Expected runtime, restore, nand or guards"); }
     const std::string_view mode(argv[1]);
     if (mode == "runtime") {
       runtime();
     } else if (mode == "restore") {
       restore();
+    } else if (mode == "nand") {
+      nand_audio();
     } else if (mode == "guards") {
       guards();
     } else {

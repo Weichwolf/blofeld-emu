@@ -54,8 +54,10 @@ The optional reference-board setting imports a private cold image:
 Use j or p to select the explicit read-continuation contract. Paths follow the
 process working directory; quoted paths may contain spaces. The Board connects
 the same causal NAND peer to its MCU/DSP scheduler, with logical GPIO/writable
-storage, selected-quiescent SHI reset and secondary cold-unclocked ESAI setup.
-These configuration interpretations supply neither an SS edge nor audio clocks.
+storage and selected-quiescent SHI reset. Secondary ESAI setup uses the
+cold-before-bit-clock contract when a declared audio source routes HCKT_1;
+otherwise it retains the cold-unclocked contract. These interpretations supply
+neither an SS edge nor an implicit audio clock.
 Timer1 Ready belongs exclusively to NAND; conflicting pinned TIO1 inputs fail.
 Inherited inputs, NAND events and DSP periods use the supported combined order.
 The default shared event budget is eight when NAND is attached; an explicitly
@@ -83,3 +85,13 @@ evidence, not a completed original-instrument boot or durable-update proof.
 The three Board groups pass under ASan/UBSan and separate TSan. The rebuilt
 headless executable and these tests link only the independent native DSP core.
 Full original instrument operation and durable NAND publication remain open.
+
+reference_nand_audio_clock connects the causal NAND peer and explicit shared
+HCKT/ACI source in the regular Board. Authored native MOVEP instructions select
+ESAI pads before clock/format programming. Both initial MCU schedules produce
+independently expected signed stereo PCM and exact bit periods while NAND power
+completes. Four joint cuts reproduce native, source, NAND and PCM state and full
+suffix traces with fresh owners. This group and existing audio runtime/restore/
+guards, reference_nand and reference_pipeline pass under ASan/UBSan and separate
+TSan. See reference-audio-clock.txt; this is integration evidence from authored
+programs, not original instrument audio.

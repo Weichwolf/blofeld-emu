@@ -4074,9 +4074,11 @@ if(BUILD_TESTING)
   add_test(NAME reference_audio_clock_board COMMAND blofeld-audio-clock-board-test runtime)
   add_test(NAME reference_audio_clock_restore COMMAND blofeld-audio-clock-board-test restore)
   add_test(NAME reference_audio_clock_guards COMMAND blofeld-audio-clock-board-test guards)
+  add_test(NAME reference_nand_audio_clock COMMAND blofeld-audio-clock-board-test nand)
   set_tests_properties(reference_square_clock_source reference_square_clock_serial
     reference_square_clock_snapshots reference_audio_clock_board reference_audio_clock_restore
-    reference_audio_clock_guards PROPERTIES LABELS reference_audio_clock TIMEOUT 300)
+    reference_audio_clock_guards reference_nand_audio_clock
+    PROPERTIES LABELS reference_audio_clock TIMEOUT 300)
 endif()
 
 if(BUILD_TESTING)

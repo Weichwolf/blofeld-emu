@@ -41,8 +41,12 @@ void Board::prepare_dsp() {
     }
     native_->dsp.bus().set_write_contract(DspWriteContract::functional_decode);
     native_->dsp.bus().shi().set_reset_contract(ShiResetContract::selected_quiescent_reference);
-    native_->dsp.bus().set_esai_configuration_contract(
-        DspEsaiInstance::secondary, DspEsaiConfigurationContract::cold_unclocked_reference);
+    constexpr unsigned secondary_clock = 2;
+    const auto configuration =
+        config_.audio_clock && (config_.audio_clock->destinations & secondary_clock) != 0
+            ? DspEsaiConfigurationContract::cold_before_bit_clock_reference
+            : DspEsaiConfigurationContract::cold_unclocked_reference;
+    native_->dsp.bus().set_esai_configuration_contract(DspEsaiInstance::secondary, configuration);
     for (const auto port : {DspPort::c, DspPort::e, DspPort::f, DspPort::d}) {
       native_->dsp.bus().gpio(port).set_contract(DspGpioContract::logical_pins);
     }

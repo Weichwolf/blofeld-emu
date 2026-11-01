@@ -35,3 +35,13 @@ physical clock gating, original instrument audio or realtime performance.
   cmake --build --preset strict --target blofeld-square-clock-test \
     blofeld-audio-clock-board-test blofeld-headless blofeld-reference-rom-fixture
   ctest --test-dir build/strict -L '^reference_audio_clock$' --output-on-failure
+
+With a cold NAND connection, an explicit HCKT_1 route selects the existing
+cold-before-bit-clock ESAI initialization contract. Observing the high-frequency
+source alone does not close the initial programming window; an actual bit-clock
+edge or enabled transmitter does. Later active reconfiguration remains guarded.
+The reference_nand_audio_clock group exercises pad selection before native
+clock/format programming, causal NAND power, literal signed PCM/bit periods and
+joint fresh-owner replay in both initial MCU schedules. All six affected Board/
+NAND/audio groups pass under ASan/UBSan and separate TSan. Original connected
+instrument audio, voice operation and realtime performance remain unqualified.

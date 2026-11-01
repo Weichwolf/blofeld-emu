@@ -3950,3 +3950,11 @@ commits, then original audio DMA enable visibly rejects the absent ESAI HCKT
 source at Yffff96. A diagnostic-decoder replay reproduces the prior failure.
 See own-dsp-nand-reference.json and dsp-reserved-write-decoder.txt. This is
 connected startup evidence, not complete instrument boot, audio or persistence.
+
+Joint NAND/audio Board integration: a declared secondary HCKT route selects the
+existing pre-bit-clock initialization contract. Authored native pad-first setup
+produces independent signed PCM samples and exact bit periods alongside causal
+NAND power. Four joint cuts reproduce native, clock, NAND and PCM state and full
+suffix traces with fresh owners. The six affected Board/NAND/audio groups pass
+under ASan/UBSan and separate TSan. See nand-board.txt and reference-audio-clock.txt.
+Original instrument audio and complete function acceptance remain pending.
