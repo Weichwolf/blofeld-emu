@@ -49,6 +49,14 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           Actual core outcomes distinguish taken
                                           same-cursor branches from fallthrough;
                                           no host condition reevaluation is used.
+                                          Queued FIFO/DMA tests also use native
+                                          F1/F2 and 27 restored continuations,
+                                          full register/stack/cost expectations,
+                                          independent P-data and accepted RAM-bit
+                                          input retention. REP/WAIT/RESET execute
+                                          their real CPU/peripheral effects;
+                                          reset and timeline ownership remain
+                                          guarded (dsp-program-fetch.txt).
                                           DMA IRQ service uses actual native
                                           vectors/RTI on all six channels,48
                                           same/fresh-owner continuations and

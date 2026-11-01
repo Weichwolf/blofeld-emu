@@ -59,63 +59,45 @@ No calibrated DMA timing, complete ROM, reserved Y:002000 behavior, full Desktop
 Keyboard reset-to-instrument boot, real-time callback bound or silicon
 equivalence is established. Manufacturer assets remain local.
 
-Legacy queued frontend (migration pending)
+Native queued frontend
 
-start_reference_fetch(ticket) enables the frontend at a genuine pending ordinary
-opcode. No caller supplies an address or replacement word. Explicit
-advance_reference_fetch(address) generates the next sequential 24-bit address;
-advance_reference_fetch(read) samples that issued address on the strict P bus.
-These are owner-selected F1/F2 transitions, not calibrated ticks. Fetches can
-continue while the current native instruction waits at a data effect. The fixed
-eight-word host bound supplies backpressure; it is not a silicon queue-depth claim.
-reference_fetch() returns a copy of this state, not a restore or injection interface.
+The fixed eight-word continuation bound supplies backpressure; it is not a claim
+about silicon queue depth. F1/F2 can continue while a native data access waits.
+An empty queue cannot fall back to another program read. A full queue, duplicate
+F1, missing F1 or competing CPU/vector owner rejects without replacing samples.
+The queue view is an observation, not a restore or word-injection interface.
+Hardware reset invalidates frontend and native tickets; a fresh owner must read
+the retained boot ROM after actual reset hold/recovery.
 
-Actual opcode/extension admissions consume the queue head once. An empty queue
-refuses admission without fallback reads or native effects. Decoder lookahead
-uses a matching ready word if available but never consumes it. P-space data
-operands still perform their ordinary actual bus read. Retirement preserves
-unconsumed words; real RAM/code-cache invalidation cannot replace their values.
-Checkpoints retain both sampled words and the separately issued F1 address.
-Reset clears the entire frontend and invalidates old native tickets.
-
-The native attempt reports whether execution actually wrote the PC through its
-control-transfer path. Sequential opcode/extension fetch increments do not set
-this result. A taken JMP/JSR/BRA/BSR, conditional transfer or return discards
-all younger samples and an issued F1 address even when its destination equals
-the sequential cursor. Without an early owned prediction, a false condition
-retains these real samples. The automatic profile uses its separately declared
-branch refill (dsp-branch-pipeline.txt). A PC that
-differs from the consumed cursor without a native redirect rejects contextually;
-resulting-PC comparison cannot substitute for an actual branch decision.
-The adapter does not reevaluate conditions from later RAM or status values.
-
-The fixed native result is cleared before each attempt, on yield/failure,
-hardware reset and both trusted restore paths. It is derived completion output,
-not serialized architectural history. A resumed attempt recomputes it from its
-retained actual bus reads and native base. Rebuild matching SDK headers/archives;
-the SDK's full and bounded architectural checkpoint layouts remain unchanged.
-This result supplies no physical branch-stage timestamp. IRQ insertion, loops/
-REP, hardware cache, WAIT/STOP, traps/debug and software-reset pipeline behavior
-remain strict frontiers. Atomic native execution cannot bypass an enabled
-frontend. Per-effect reference and completion-clock contracts remain separate.
+A captured two-word instruction consumes both owned words before executing its
+native data effects. MOVEM P-data reads and SHI FIFO reads remain actual bus
+operations. They cannot be relabeled as F2 samples. A pending FIFO read can
+therefore coexist with later queued opcodes/extensions and DMA overwrites.
+A later code write cannot replace their older samples.
 
   cmake --build --preset strict --target blofeld-prefetch-queue-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_prefetch_queue$'
 
-Own native-configured DMA tests distinguish F1 from actual F2 sampling, preserve
-later opcodes/extensions and zero words through real code overwrites, and replay
-both ready and issued-address snapshots. Native literal register/PC/flag/length
-and nominal-cost expectations cover their later consumption. Separate P-data
-reads see the newer RAM value while the same address's queued opcode stays old.
-JMP redirects invalidate ready and issued words, including a fallthrough target.
-Capacity, starvation, competing APIs, reset and unknown-value consumption/recovery
-remain explicit. Full seven-stage scheduling and physical bus timing are open.
+The native queue test covers four FIFO/DMA overwrite windows and 27 restored
+frontend continuations. Independent full-register, PC, stack, flag, retirement
+and MOVE base-cost expectations distinguish before/after F2 and separate P-data
+from an older opcode at the same address. JMP/JSR/RTS and conditional calls
+exercise real push/pop and target refill, including sequential targets. RAM-bit
+cases change the operand after its accepted native read: only the retained input
+may determine the branch. Unknown samples survive later RAM writes and restores;
+only a fresh F2 can resolve initialized memory.
 
-Separate native-configured DMA cases pause an actual memory-bit operand or
-conditional call, replay two joint snapshots and distinguish the following
-queued NOP from the DMA-written instruction. Existing distinct-target branches,
-JMP/JSR/RTS, zero/extension captures and strict failure cases remain covered.
-These finite ISA cases are deterministic instruction tests, not parser fuzzing.
+REP executes three actual latched bodies despite later code changes. WAIT
+retires into the real waiting state and refuses another instruction. Guest RESET
+offers its actual native peripheral action, clears programmed DMA/SHI registers
+and retains CPU state, RAM and the queued NOP. These checks replace the legacy
+fixture's blanket refusal of those controls. A pending native fetch rejects a
+competing frontend/timeline; subsequent live timeline execution uses explicit
+before/through boundaries and independent 45-tick reference periods. Untimed
+native retirement itself advances no clock. Physical control stages, full
+pipeline overlap and original instrument acceptance remain open.
+
+Remaining legacy pipeline experiments
 
 The selected automatic_memory OMR bit-branch profile owns an early fetch segment
 while preserving older opcode/extension samples. Actual native confirmation
