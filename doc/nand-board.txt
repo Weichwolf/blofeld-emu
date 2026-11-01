@@ -95,3 +95,35 @@ suffix traces with fresh owners. This group and existing audio runtime/restore/
 guards, reference_nand and reference_pipeline pass under ASan/UBSan and separate
 TSan. See reference-audio-clock.txt; this is integration evidence from authored
 programs, not original instrument audio.
+
+Functional shared-bus transactions
+
+The regular Board selects NandBusContract::functional_transactions. Both-low
+RE/WE encodes a neutral shared-bus phase, interpreted as inactive strobes by
+the NAND transaction model. Raw GPIO values remain unchanged. Entry requires
+both strobes inactive, or the initial complete observation; exit requires
+both inactive again. Interrupted active pulses and unknown controls still fail.
+CLE/ALE and data retain their values. Neutral creates no read, write latch,
+reset, Ready response or cell change. Single-strobe transfers use the existing
+real command/address/data protocol, cells, Busy deadlines and timing checks.
+The ordered_pins contract remains the default for direct peer fixtures.
+This is a functional board abstraction, not a claim about CE wiring or physical
+edge ordering. It leaves unsupported commands and unknown cells explicit.
+
+nand_bus_decode checks 512 directed transitions, real FF-reset Busy, cell/pointer
+preservation, a fresh owner restored during neutral, and the ordered-contract
+refusal. nand_write_medium runs native program/erase, computed status, GPIO
+readback and pending-job restores in both contracts. Its functional sequence
+actually executes neutral, FF reset and main-area selection before program.
+Fourteen affected groups are qualified with the d03de44 SDK under ASan/UBSan
+and separate TSan; the corrected write fixture alone was rerun after its
+missing post-reset area-selection command was fixed. The other test binaries
+retain their hashes. No fuzzing or physical traffic is part of these checks.
+
+A separately frozen 94d4a30 original-firmware run preserves the complete cold
+load and repeats its actual connected suffix twice: real FF reset completes,
+642 audio-DMA words and 159 silent stereo PCM frames reach the next native RAM
+instruction-admission limit. See own-dsp-nand-reference.json. This does not
+qualify original startup on the newer SDK or a complete sounding instrument.
+The live durable NAND store, complete original boot, MIDI/audio operation and
+update/recovery acceptance remain outstanding.

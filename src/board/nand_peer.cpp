@@ -2,6 +2,7 @@
 #include "board/nand_peer.hpp"
 
 #include "board/gpio_pads.hpp"
+#include "board/nand_bus_decode.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
@@ -45,8 +46,9 @@ std::uint64_t power_deadline(const std::uint64_t timebase) {
 }
 
 struct PeerState {
-  PeerState(NandWriteMedium clock, const std::uint64_t timebase)
+  PeerState(NandWriteMedium clock, const std::uint64_t timebase, const NandBusContract contract)
       : device(std::move(clock)),
+        decoder(contract),
         write(timebase),
         setup(timebase),
         output(timebase),
@@ -56,6 +58,7 @@ struct PeerState {
   bool power_ready = false;
   bool faulted = false;
   NandWriteMedium device;
+  NandBusDecode decoder;
   NandWriteTiming write;
   NandReadSetup setup;
   NandReadTiming output;
@@ -71,14 +74,16 @@ struct PeerState {
 }
 
 struct NandPeer::Impl {
-  Impl(OwnDspMachine &machine, Nand device, NandCellProfile profile)
+  Impl(OwnDspMachine &machine, Nand device, NandCellProfile profile, const NandBusContract contract)
       : machine_(machine),
         state_(std::make_unique<PeerState>(
             NandWriteMedium(std::move(device), machine.clock().timebase_hz(), std::move(profile)),
-            machine.clock().timebase_hz())) {
+            machine.clock().timebase_hz(),
+            contract)) {
     std::cerr << "NAND_BOARD_MODEL CE=held-selected power=100us-reference "
                  "part=explicit-device-contract GPIO=logical sample=period-completion "
-                 "board-qualified=0\n";
+                 "board-qualified=0 contract="
+              << static_cast<unsigned>(contract) << '\n';
     drive(0);
   }
 
@@ -102,7 +107,9 @@ struct NandPeer::Impl {
             .connected = state_->connected,
             .last_pc = state_->context.pc,
             .last_omr = state_->context.omr,
-            .trace_access = state_->trace_access};
+            .trace_access = state_->trace_access,
+            .bus_contract = state_->decoder.contract(),
+            .neutral_bus = state_->decoder.neutral()};
   }
 
   void bind(const std::weak_ptr<const bool> &owner) {
@@ -290,10 +297,17 @@ struct NandPeer::Impl {
                 << " controls=" << hex(controls.levels, 3) << " CE=held-selected-lab\n";
       state_->connected = true;
     }
-    const bool re_n = (controls.levels & re_pin) != 0;
-    const bool we_n = (controls.levels & we_pin) != 0;
-    const bool cle = (controls.levels & cle_pin) != 0;
-    const bool ale = (controls.levels & ale_pin) != 0;
+    const bool was_neutral = state_->decoder.neutral();
+    const auto logical = state_->decoder.observe(controls.levels);
+    if (was_neutral != state_->decoder.neutral()) {
+      std::cerr << "NAND_FUNCTIONAL_BUS ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
+                << " raw=" << hex(controls.levels, 3) << " logical=" << hex(logical, 3)
+                << " neutral=" << state_->decoder.neutral() << '\n';
+    }
+    const bool re_n = (logical & re_pin) != 0;
+    const bool we_n = (logical & we_pin) != 0;
+    const bool cle = (logical & cle_pin) != 0;
+    const bool ale = (logical & ale_pin) != 0;
     const auto data = machine_.bus().gpio(DspPort::f).observe_pads(data_mask);
     const auto input = state_->write.observe(
         ticks,
@@ -366,7 +380,13 @@ NandPeer::NandPeer(OwnDspMachine &machine, Nand device)
     : NandPeer(machine, std::move(device), NandCellProfile{}) {}
 
 NandPeer::NandPeer(OwnDspMachine &machine, Nand device, NandCellProfile profile)
-    : impl_(std::make_unique<Impl>(machine, std::move(device), std::move(profile))) {
+    : NandPeer(machine, std::move(device), std::move(profile), NandBusContract::ordered_pins) {}
+
+NandPeer::NandPeer(OwnDspMachine &machine,
+                   Nand device,
+                   NandCellProfile profile,
+                   const NandBusContract contract)
+    : impl_(std::make_unique<Impl>(machine, std::move(device), std::move(profile), contract)) {
   impl_->bind(lifetime_);
   impl_->publish();
 }

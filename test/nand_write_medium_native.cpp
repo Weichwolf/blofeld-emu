@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "board/nand_bus_decode.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
@@ -132,7 +133,9 @@ public:
     unsigned busy = 0, ready = 0, status = 0, stop = 0;
   };
 
-  NativeProgram(DspBus &bus, const NativeCase &test) { install(bus, test); }
+  NativeProgram(DspBus &bus, const NativeCase &test, const NandBusContract contract) {
+    install(bus, test, contract);
+  }
 
   [[nodiscard]] const Markers &markers() const { return markers_; }
 
@@ -171,12 +174,22 @@ public:
     emit(write_direction_f, output_direction);
   }
 
-  void install(DspBus &bus, const NativeCase &test) {
+  void install(DspBus &bus, const NativeCase &test, const NandBusContract contract) {
     emit(write_bus_control, port_f_bus_control);
     emit(write_direction_c, control_directions);
     emit(write_function_c, control_functions);
     x(command_controls);
     output();
+    if (contract == NandBusContract::functional_transactions) {
+      x(data_controls);
+      x(0);
+      constexpr unsigned neutral_qualifiers = 0xc00;
+      x(neutral_qualifiers);
+      x(command_controls);
+      latch(NandWriteKind::command, byte_mask);
+      nops(read_nops);
+      if (!test.erase) { latch(NandWriteKind::command, 0); }
+    }
     if (test.erase) {
       constexpr unsigned setup = 0x60;
       constexpr unsigned confirm = 0xd0;
@@ -235,9 +248,9 @@ private:
 };
 
 struct NativeFixture {
-  explicit NativeFixture(const NativeCase &test)
-      : program(machine.bus(), test),
-        peer(machine, native_device(test), native_physics(test)),
+  NativeFixture(const NativeCase &test, const NandBusContract contract)
+      : program(machine.bus(), test, contract),
+        peer(machine, native_device(test), native_physics(test), contract),
         schedule(
             machine,
             peer,
@@ -300,9 +313,10 @@ void native_endpoint(NativeFixture &f, const NativeCase &test) {
          "No pending write remains at the native endpoint");
 }
 
-void execute_native(const NativeCase &test) {
-  std::cout << "CASE NATIVE_MEDIUM name=" << test.name << '\n';
-  NativeFixture f(test);
+void execute_native(const NativeCase &test, const NandBusContract contract) {
+  std::cout << "CASE NATIVE_MEDIUM name=" << test.name
+            << " contract=" << static_cast<unsigned>(contract) << '\n';
+  NativeFixture f(test, contract);
   const auto kind = test.erase ? NandPending::erase : NandPending::program;
   unsigned count = 0;
   while (f.peer.detailed().base.pending != kind) {
@@ -346,6 +360,9 @@ void execute_native(const NativeCase &test) {
 }
 
 void native_medium_tests() {
-  for (const auto &test : native_cases) { execute_native(test); }
+  for (const auto contract :
+       {NandBusContract::ordered_pins, NandBusContract::functional_transactions}) {
+    for (const auto &test : native_cases) { execute_native(test, contract); }
+  }
 }
 }

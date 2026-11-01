@@ -117,5 +117,38 @@
     "nonzero_original_audio_proven": false,
     "full_instrument_boot_proven": false,
     "original_instrument_audio_proven": false
+  },
+  "functional_bus_candidate": {
+    "qualification": "Connected unmodified original startup on frozen prior SDK; current SDK component integration qualified separately; initialization silence only",
+    "original_run_core_revision": "94d4a301da1f8253c80472ac26a37832e8bf5fd4",
+    "component_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+    "initial_image_sha256": "de64537c1c33b10ec94ab13ae2570dabc27a94ccb1afab5c734871c5443900f7",
+    "original_source_bytes_preserved_and_read": 56238,
+    "explicit_virtual_unused_ff_bytes": 258,
+    "protocol_and_retired_cpu_bytes_matched": 56496,
+    "resident_unique_words_matched": 18287,
+    "timebase_hz": 211680000000,
+    "independently_checked_audio_events": 137512,
+    "actual_native_dma_words": 642,
+    "decoded_pcm": {
+      "frames": 159,
+      "nonzero_frames": 0,
+      "rate_hz": 44100,
+      "bit_ticks": 75000,
+      "first_frame_tick": 52271804375,
+      "last_frame_first_tick": 53030204375
+    },
+    "logical_bus_contract": "Both-low neutral between complete inactive transfers; raw GPIO unchanged",
+    "actual_reset_latch_tick": 52742945948,
+    "actual_reset_completion_tick": 52744004348,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "next_runtime_limit": "Read-only RAM bit-control instruction admission in the native frontend",
+    "local_audit": "doc/local/connected-nand/audio-functional/audit.json",
+    "local_audit_sha256": "abf9b6b160ab672bf4bab1c95d87ac4c97495cbe17ef65736f2d3fd29bf908b5",
+    "physical_clock_or_wiring_claim": false,
+    "full_instrument_boot_proven": false,
+    "original_instrument_audio_proven": false,
+    "original_new_sdk_boot_proven": false
   }
 }

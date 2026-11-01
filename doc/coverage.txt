@@ -3943,7 +3943,7 @@ durable update/recovery remain pending.
 
 Connected original NAND/runtime continuation: the declared FF-tail initial image
 preserves all56238 source bytes. Actual protocol and retired CPU reads match all
-56496 cells;107 independent read deadlines and all18287 unique resident DSP words
+56496 cells;107 independent read deadlines and all 18287 unique resident DSP words
 are checked before the loader handoff. A genuine joint MCU/DSP/NAND checkpoint
 reproduces identical suffixes twice under ASan/UBSan. The reserved original store
 commits, then original audio DMA enable visibly rejects the absent ESAI HCKT
@@ -3995,3 +3995,15 @@ Opposing pulls, conflicting sources and post-release reassertion fail visibly.
 Eight affected Board/reset/NAND/audio groups pass under ASan/UBSan and separate
 TSan, with zero clang-tidy findings. Full original boot, repeated live reset,
 durable NAND and instrument behavior remain pending. See reference-board.txt.
+
+Functional NAND shared bus: the ordinary Board decodes a both-low shared-bus
+neutral phase without storage operations. Both strobes must be inactive at
+entry/exit; unknown controls and interrupted transfers remain errors. Raw GPIO
+is preserved. The real subsequent FF pulse creates reset Busy and preserves
+cells. Directed 512-state tests, fresh-owner restoration and native program/
+erase/status/readback cases support requirements 2/3/6 in 14 affected groups under
+ASan/UBSan and separate TSan on SDK d03de44. A frozen 94d4a30 original run passes
+this startup boundary twice, retains all 18287 loaded words and emits 159 silent
+PCM frames. The next limit is native admission of a RAM bit-control instruction.
+See nand-board.txt and own-dsp-nand-reference.json. Full original instrument
+operation on either profile, durable NAND and update/recovery remain pending.

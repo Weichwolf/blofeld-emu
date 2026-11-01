@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/mcu_dsp_runtime.hpp"
+#include "board/nand_bus_decode.hpp"
 #include "board/nand_peer.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
@@ -10,6 +11,7 @@
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "storage/nand.hpp"
+#include "storage/nand_cell_model.hpp"
 #include "storage/nand_image.hpp"
 
 #include <algorithm>
@@ -50,8 +52,11 @@ void Board::prepare_dsp() {
     for (const auto port : {DspPort::c, DspPort::e, DspPort::f, DspPort::d}) {
       native_->dsp.bus().gpio(port).set_contract(DspGpioContract::logical_pins);
     }
-    native_->nand = std::make_unique<NandPeer>(
-        native_->dsp, Nand(config_.nand->image, config_.nand->continuation));
+    native_->nand =
+        std::make_unique<NandPeer>(native_->dsp,
+                                   Nand(config_.nand->image, config_.nand->continuation),
+                                   NandCellProfile{},
+                                   NandBusContract::functional_transactions);
   }
 }
 

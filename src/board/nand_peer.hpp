@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
+#include "board/nand_bus_decode.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "storage/nand.hpp"
@@ -39,6 +40,8 @@ struct NandPeerDetailed {
   std::uint32_t last_pc;
   std::uint32_t last_omr;
   bool trace_access;
+  NandBusContract bus_contract;
+  bool neutral_bus;
   bool operator==(const NandPeerDetailed &) const = default;
 };
 
@@ -69,6 +72,10 @@ class NandPeer {
 public:
   NandPeer(blofeld::OwnDspMachine &machine, blofeld::Nand device);
   NandPeer(blofeld::OwnDspMachine &machine, blofeld::Nand device, NandCellProfile profile);
+  NandPeer(blofeld::OwnDspMachine &machine,
+           blofeld::Nand device,
+           NandCellProfile profile,
+           NandBusContract contract);
   NandPeer(const NandPeerSnapshot &snapshot, blofeld::OwnDspMachine &target);
   ~NandPeer();
   NandPeer(const NandPeer &) = delete;
