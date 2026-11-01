@@ -31,6 +31,8 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           Generated-clock ESAI tests likewise use
                                           native reset/F1/F2, both tie orders and
                                           actual status/refill side effects.
+                                          Bank/DMA tests retain genuine pending
+                                          access tickets and held-word replay.
                                           Native DMA tests now use that core for
                                           144 status-bit programs, both 66-word ESAI
                                           streams and a granted F1/F2 memory copy;
