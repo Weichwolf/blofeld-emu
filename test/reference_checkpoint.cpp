@@ -3,12 +3,14 @@
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_midi.hpp"
+#include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "midi/midi_serial.hpp"
 #include "storage/flash_image.hpp"
@@ -122,6 +124,80 @@ std::vector<std::uint32_t> idle_program() {
   std::vector<std::uint32_t> words{0, absolute_jump, dsp_boot};
   words.resize(words.size() + padding, 0);
   return words;
+}
+
+void test_initial_input_boundary(const std::filesystem::path &specification) {
+  for (const bool power_on : {false, true}) {
+    const auto attachment = power_on ? 0U : epoch;
+    auto settings = config(epoch);
+    settings.dsp_input_order = blofeld::DspPeerOrder::peer_first;
+    settings.maximum_dsp_inputs_per_advance = 4;
+    if (power_on) {
+      settings.power_on =
+          reference::PowerOnTiming{.inputs = {3}, .reset_pad = blofeld::McuResetPad::high};
+    }
+    settings.dsp_initial = {
+        {.kind = reference::DspInputKind::esai,
+         .esai = {.clock = false,
+                  .frame_sync = true,
+                  .timing = blofeld::DspEsaiClockTiming::reference_reset_edges}}};
+    settings.dsp_events = {
+        {.ticks = attachment,
+         .kind = reference::DspInputKind::esai,
+         .esai = {.clock = true,
+                  .frame_sync = false,
+                  .timing = blofeld::DspEsaiClockTiming::reference_reset_edges}},
+        {.ticks = attachment + 1,
+         .kind = reference::DspInputKind::esai,
+         .esai = {.clock = false,
+                  .frame_sync = true,
+                  .timing = blofeld::DspEsaiClockTiming::reference_reset_edges}}};
+    const auto flash = image(false);
+    const auto rom = idle_program();
+    std::ostringstream trace;
+    const reference::Execution execution{.image = flash,
+                                         .rom = rom,
+                                         .specification = specification,
+                                         .flash_out = {},
+                                         .trace = &trace,
+                                         .instructions = settings.operations};
+    reference::Board board(settings, execution);
+    const auto initial = board.status();
+    require(initial.common_ticks == attachment && initial.dsp_ticks == attachment &&
+                initial.mcu_cycles == (power_on ? 0U : 5U) && initial.mcu_state_known != power_on &&
+                initial.held_reset && initial.dsp_units == 0 && initial.dsp_steps == 0 &&
+                !initial.started && initial.next_dsp_event == 1 &&
+                initial.esai_inputs[0].clock == true && initial.esai_inputs[0].frame_sync == false,
+            "Initial DSP pads precede the exact-boundary edge at actual zero/450 attachment");
+    const auto saved = board.checkpoint();
+    std::optional<reference::Status> suffix;
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      board.restore(saved);
+      require(board.status() == initial, "Staged restore preserves the consumed initial input");
+      board.advance();
+      const auto observed = board.status();
+      constexpr unsigned reset_period = 45;
+      require(observed.common_ticks == (power_on ? reset_period : epoch + mcu_period) &&
+                  observed.dsp_ticks == observed.common_ticks && observed.dsp_units == 0 &&
+                  observed.dsp_steps == 0 && observed.held_reset == power_on &&
+                  observed.mcu_cycles == (power_on ? 0U : 6U) && observed.operations == 1 &&
+                  observed.instructions == (power_on ? 0U : 1U) && observed.next_dsp_event == 2 &&
+                  observed.esai_inputs[0].clock == false &&
+                  observed.esai_inputs[0].frame_sync == true && !observed.faulted,
+              "Only the next real edge changes pads over the literal first MCU/reset period");
+      if (!suffix) { suffix = observed; }
+      require(observed == *suffix, "Both restored next-edge continuations retain complete state");
+    }
+    if (!power_on) {
+      settings.dsp_events.front().ticks = attachment - 1;
+      require(rejects([&] {
+                const reference::Board rejected(settings, execution);
+              }).contains("release/events precede the completed native MCU reset"),
+              "A genuinely earlier timed input still refuses instead of being shifted forward");
+    }
+  }
+  std::cout << "Initial DSP pads:2 attachment profiles,4 restored edge suffixes and strict "
+               "past-input refusal passed.\n";
 }
 
 struct Fixture {
@@ -582,6 +658,7 @@ int main(const int argc, char **argv) {
     const auto specification = root / "checkpoint-HC12.sla";
     std::filesystem::copy_file(
         BLOFELD_DEFAULT_SLA, specification, std::filesystem::copy_options::overwrite_existing);
+    test_initial_input_boundary(specification);
     test_pending_deadline_fault_and_joint_restore(specification);
     test_held_reset_and_foreign_owner(specification);
     test_failed_preparation_leaves_live_board_unchanged(specification);

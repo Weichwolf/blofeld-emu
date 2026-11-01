@@ -91,14 +91,16 @@ McuDspRuntime::Observer Board::runtime_observer() {
 DspRuntimeEvents Board::runtime_events() {
   return {.identity = input_identity_,
           .next_ticks = [this]() -> std::optional<std::uint64_t> {
-            if (control_.dsp_initial_pending) { return 0; }
+            if (control_.dsp_initial_pending) { return ticks(); }
             const auto next = next_dsp_input();
             return next ? std::optional{next->input.ticks} : std::nullopt;
           },
           .observe =
               [this](const std::uint64_t at) {
                 if (control_.dsp_initial_pending) {
-                  if (at != 0) { throw Fault("Initial DSP inputs require time zero"); }
+                  if (at != ticks()) {
+                    throw Fault("Initial DSP inputs require the native attachment boundary");
+                  }
                   for (const auto &input : config_.dsp_initial) { apply_dsp(input); }
                   control_.dsp_initial_pending = false;
                   const auto next = next_dsp_input();

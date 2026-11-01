@@ -154,6 +154,13 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           before observation/extra MCU stores;
                                           delayed start retains real held reset
                                           (dsp-fetch-events.txt).
+                                          Regular Board initial DSP pads now
+                                          bind at its real zero/post-vector
+                                          attachment boundary. Two profiles and
+                                          four restored ESAI-edge suffixes retain
+                                          exact-boundary ordering; genuinely
+                                          earlier timed inputs still refuse
+                                          (reference-pipeline.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are
