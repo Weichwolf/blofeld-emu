@@ -828,6 +828,18 @@ post-RTI admission exclusion remains a provisional library policy. The pinned
 core also corrects short X/Y store base costs. See dsp-shi-receive.txt; full native
 boot, calibrated interrupt timing and instrument MIDI/audio remain unqualified.
 
+Native timer word-read resources
+Timer X-register reads now use the peripheral-sample footprint, rather than RAM
+bank arbitration. UM Rev.2.1 table3-7/figure11-20 identify the register resources;
+section11.4.5 specifies first-clock loading. Actual DspTimers reads still own
+values and permissions. No register value, callback or time is fabricated.
+dsp_timer_sample checks all three running nonzero counters and compare words,
+three write-only load refusals and two unknown-DI refusals. Both sanitizer
+profiles pass these eleven directed cases and five affected integration groups;
+the identical new test object fails with the pre-fix I/O archive. F2 read order
+is explicit reference timing, not measured pipeline or active-DMA equivalence.
+The original continuous-clock wire migration remains incomplete.
+
 Standalone dependency closure
 With BUILD_TESTING=OFF and BLOFELD_FUZZING=OFF, CMake does not configure the
 legacy source, its patches/AsmJit or either legacy execution/scheduler library.

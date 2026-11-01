@@ -65,6 +65,13 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           status RMW and unqualified peripheral
                                           sharing still refuse before sampling
                                           (dsp-reference-cycle.txt).
+                                          Native timer word reads now use the
+                                          peripheral-sample resource. Eleven
+                                          counter/compare/strict-fault cases and
+                                          five affected groups pass both sanitizer
+                                          profiles; old I/O archives reject the
+                                          same new test object. Physical timing
+                                          and active-DMA sampling remain partial.
                                           Fetch-run tests use native F1/F2 and
                                           actual register/PC/retirement boundaries,
                                           DMA waits, timer compare/odd CLK2 phase,

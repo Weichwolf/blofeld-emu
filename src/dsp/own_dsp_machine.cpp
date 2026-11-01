@@ -8,6 +8,7 @@
 #include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_timers.hpp"
 #include "dsp/own_dsp_io.hpp"
 #include "dsp56300/checkpoint.hpp"
 #include "dsp56300/core.hpp"
@@ -111,7 +112,9 @@ std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffec
       constexpr unsigned shi_receive = 0xffff94;
       const auto phase = ((effect.kind == read && effect.space == dsp56300::Space::x &&
                            effect.address == shi_receive) ||
-                          gpio_data_read(effect) || esai_status_read(effect))
+                          gpio_data_read(effect) || esai_status_read(effect) ||
+                          (effect.kind == read && effect.space == dsp56300::Space::x &&
+                           DspTimers::handles(effect.address)))
                              ? DspMemoryPhase::peripheral_sample
                              : DspMemoryPhase::execute;
       return DspMemoryAccess{
