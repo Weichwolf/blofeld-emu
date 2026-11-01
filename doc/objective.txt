@@ -1,14 +1,20 @@
 Complete acceptance objective
 
-Build a complete Blofeld Desktop and Keyboard hardware emulator, initially
+Build a complete Blofeld Desktop and Keyboard instrument emulator, initially
 headless and standalone. Unmodified original 1.25 firmware is the known-working
 compatibility reference: tests verify and correct our emulator, not the
 manufacturer's firmware. Emulate the MCU, DSP, Keyboard controller, ROM/RAM/
 flash/NAND, clocks, interrupts, buses and required peripherals so that actual
 reset, loading and initialization lead to normal instrument operation with
 original DSP audio, bidirectional MIDI and complete persistent device state.
-No firmware patches, skipped routines, fabricated success responses, host
-synthesizer or silently successful peripheral stubs satisfy this objective.
+Correctness means equivalent behavior as an instrument, including sound, MIDI/
+SysEx, voice management, musical timing, controls, display, persistence and update/
+recovery. Identical electrical wiring, internal bus phases and silicon pipeline
+timing are not acceptance requirements. Functional models of chip-internal boot,
+peripheral state machines and coarser scheduling are allowed when their tested
+contracts preserve those observable results. Execute the original Blofeld firmware
+and DSP synthesis; firmware patches, skipped firmware routines, fabricated
+instrument results and a host synthesizer do not satisfy this objective.
 Reconstruct missing hardware properties independently from primary documentation,
 actual firmware accesses, available PCB photographs and reproducible offline
 experiments. Physical disassembly and measurement are unavailable and must not
@@ -16,6 +22,13 @@ be prerequisites. Investigate explicit hypotheses without a preset experiment
 limit; retain their evidence, contradictions and visible unresolved accesses.
 Missing hardware information is a research task, not a reason to abandon the
 complete instrument objective.
+The working original firmware may contain bugs, accidental accesses and tolerated
+initialization sequences. Preserve their device-visible behavior. An executed
+access constrains the model; it does not prove intent, implemented storage or
+any particular undocumented feature. Documentation conflicts are research inputs,
+not a reason to patch firmware or freeze one chip/decoder hypothesis. Compare
+explicit alternatives across connected startup, operation and update paths;
+advancing past one refusal alone does not establish correct instrument behavior.
 Executing user-supplied firmware through the modeled boot/update paths is an
 acceptance requirement. Developing a new instrument firmware remains separate
 future work. Emulator results must identify supported behavior and unresolved
@@ -26,8 +39,8 @@ acceptance and cannot replace it.
 Immediate engineering priority: finish migrating the regular standalone/GUI
 execution path, build and retained tests to our independent ~/Git/dsp56300 core,
 then remove the foreign-core dependency and obsolete integration. Research runs
-using the own core do not by themselves complete that migration. Extend the
-independent core for general CPU, JIT and checkpoint interfaces when required;
+using the independent core do not by themselves complete that migration. Extend
+the independent core for general CPU, JIT and checkpoint interfaces when required;
 keep board wiring, device clocks and manufacturer programs in the emulator's
 local reference scope. Commit and push verified increments in each affected
 project to its configured remote. Broader audio-clock experiments follow this
@@ -38,9 +51,11 @@ names. No permanent parallel implementation or backend-selection option is part
 of the final device.
 
 Acceptance requirements (current evidence and gaps: coverage.txt):
-Firmware-visible state and timing, including USB, update and recovery behavior,
-are the accuracy criteria. Functional abstractions must preserve those effects;
-unverified simplifications cannot become evidence of hardware compatibility.
+Instrument-visible results and musical timing, including USB, storage, update
+and recovery behavior, are the accuracy criteria. Internal abstractions must
+preserve those effects. Validate implementation contracts and every documented
+instrument function; internal timing/decoder hypotheses are not extra acceptance
+gates merely because they differ from a possible physical implementation.
 
 
 1. Keep verified official firmware, manuals and the official standard sample
@@ -48,11 +63,12 @@ unverified simplifications cannot become evidence of hardware compatibility.
    publishing proprietary assets. Establish required wavetables, internal ROM
    and external flash contents from actual firmware accesses; identify missing
    data explicitly rather than supplying guessed values.
-2. Implement faithful CPU/DSP execution, board memory/peripherals and both device
-   profiles. Separate cores, board model, host transport and time-critical audio.
+2. Implement correct CPU/DSP execution, functional memory/peripherals and both
+   device profiles. Separate cores, board model, host transport and time-critical audio.
    Unknown/unsupported accesses fail with address, operation, PC and context;
    observed behavior, hypotheses and hardware-proven facts remain distinct.
-   Reconstruct board behavior from firmware accesses and supporting PCB images;
+   Reconstruct the behavior needed by the firmware from its accesses and available
+   evidence. Keep simplifications and their instrument-level qualification explicit;
    obtaining a schematic is not a prerequisite for this work.
 3. Provide reproducible tests for CPU/DSP instructions, flags/addressing/state,
    memory maps, interrupts, timers, interprocessor communication, cold start,

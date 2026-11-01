@@ -1,0 +1,69 @@
+{
+  "purpose": "Read-only implementation/design references; no source copied into this project or the independent DSP core; no build/runtime dependency.",
+  "sources": [
+    {
+      "repository": "dsp56300/gearmulator",
+      "revision": "7f9a9806b7b3326379a39a2008c6dc92519191df",
+      "path": "source/axel/virusLib/dspSingle.cpp",
+      "url": "https://raw.githubusercontent.com/dsp56300/gearmulator/7f9a9806b7b3326379a39a2008c6dc92519191df/source/axel/virusLib/dspSingle.cpp",
+      "bytes": 6931,
+      "sha256": "ea377e9033507c4c887ea3b435d48228cba32eb1d78b62804929759564468ece"
+    },
+    {
+      "repository": "dsp56300/gearmulator",
+      "revision": "7f9a9806b7b3326379a39a2008c6dc92519191df",
+      "path": "source/axel/virusLib/microcontroller.cpp",
+      "url": "https://raw.githubusercontent.com/dsp56300/gearmulator/7f9a9806b7b3326379a39a2008c6dc92519191df/source/axel/virusLib/microcontroller.cpp",
+      "bytes": 56888,
+      "sha256": "091bff584d9090fc9751d9ab18887e531b76fc83798b749250adef572f9ad3ac"
+    },
+    {
+      "repository": "dsp56300/gearmulator",
+      "revision": "7f9a9806b7b3326379a39a2008c6dc92519191df",
+      "path": "source/claudia/n2x/n2xLib/n2xdsp.cpp",
+      "url": "https://raw.githubusercontent.com/dsp56300/gearmulator/7f9a9806b7b3326379a39a2008c6dc92519191df/source/claudia/n2x/n2xLib/n2xdsp.cpp",
+      "bytes": 5903,
+      "sha256": "b2d40c8fc464ba7cf97caa050c7791033182ec717560439aad4702743ed825e6"
+    },
+    {
+      "repository": "dsp56300/gearmulator",
+      "revision": "7f9a9806b7b3326379a39a2008c6dc92519191df",
+      "path": "source/claudia/n2x/n2xLib/n2xhardware.cpp",
+      "url": "https://raw.githubusercontent.com/dsp56300/gearmulator/7f9a9806b7b3326379a39a2008c6dc92519191df/source/claudia/n2x/n2xLib/n2xhardware.cpp",
+      "bytes": 11697,
+      "sha256": "4835d289b33bead9dd7f8706aaca4a6566f3cf2c51f0abaea35e443cff7db58a"
+    },
+    {
+      "repository": "dsp56300/gearmulator",
+      "revision": "7f9a9806b7b3326379a39a2008c6dc92519191df",
+      "path": "source/waldi/common/mqLib/mqdsp.cpp",
+      "url": "https://raw.githubusercontent.com/dsp56300/gearmulator/7f9a9806b7b3326379a39a2008c6dc92519191df/source/waldi/common/mqLib/mqdsp.cpp",
+      "bytes": 12738,
+      "sha256": "213da688ce80316d3ad545712523850d0996b1b4c5589f5531574d64a06ec3e5"
+    },
+    {
+      "repository": "dsp56300/dsp56300",
+      "revision": "8b731966f9792789adc39fe180a8cf68508f816a",
+      "path": "source/dsp56kEmu/dspBootCode.cpp",
+      "url": "https://raw.githubusercontent.com/dsp56300/dsp56300/8b731966f9792789adc39fe180a8cf68508f816a/source/dsp56kEmu/dspBootCode.cpp",
+      "bytes": 2043,
+      "sha256": "ce18cd6be787c65abc9c69729a101688d5302ee51858b6aff2fd442826567270"
+    },
+    {
+      "repository": "dsp56300/dsp56300",
+      "revision": "8b731966f9792789adc39fe180a8cf68508f816a",
+      "path": "source/dsp56kEmu/memory.cpp",
+      "url": "https://raw.githubusercontent.com/dsp56300/dsp56300/8b731966f9792789adc39fe180a8cf68508f816a/source/dsp56kEmu/memory.cpp",
+      "bytes": 9434,
+      "sha256": "7191f83344740cedee0f760518424d21b70fd178254354ad1be08152985a8402"
+    },
+    {
+      "repository": "dsp56300/dsp56300",
+      "revision": "8b731966f9792789adc39fe180a8cf68508f816a",
+      "path": "source/dsp56kEmu/memory.h",
+      "url": "https://raw.githubusercontent.com/dsp56300/dsp56300/8b731966f9792789adc39fe180a8cf68508f816a/source/dsp56kEmu/memory.h",
+      "bytes": 5948,
+      "sha256": "89730b4dc6ef98c2252b8e27bf5c352e3879f5269480cb40fa64c734ff8b0671"
+    }
+  ]
+}

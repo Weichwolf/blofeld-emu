@@ -1,10 +1,12 @@
 # Project context
 
 - Speak German with the user. Code, comments, documentation and commit messages are English.
-- The primary objective is a complete Blofeld Desktop and Keyboard hardware emulator, initially headless and standalone. Unmodified original 1.25 firmware is the known-working compatibility reference; tests verify our emulator, not the manufacturer's firmware.
+- The primary objective is a complete Blofeld Desktop and Keyboard instrument emulator, initially headless and standalone. Unmodified original 1.25 firmware is the known-working compatibility reference; tests verify our emulator, not the manufacturer's firmware.
+- The original firmware is known to run on the real device, not assumed bug-free. Its executed accesses constrain the hardware model but do not prove that every access is intentional or selects a device. Resolve documentation/firmware conflicts through explicit decoder, timing and chip-profile hypotheses, retaining firmware quirks and checking multiple connected paths.
+- Correctness means equivalent instrument behavior: original DSP sound, MIDI/SysEx, voice management, musical timing, controls, storage and updates. Functional bootstrap/peripheral models and coarser internal scheduling are allowed; identical electrical wiring, bus phases and silicon pipeline timing are not acceptance requirements. Preserve instrument-visible effects and document each simplification and its tests.
 - Implement the connected device from actual reset through normal instrument operation with original DSP audio, MIDI and persistent storage. Isolated routine fixtures are supporting evidence, never a substitute for that runtime. Alternative-firmware development is a secondary future use.
 - Physical disassembly and measurement are unavailable and are not acceptance prerequisites. Independently reconstruct missing hardware through documented constraints and reproducible offline hypotheses/experiments without a preset attempt limit. Missing information remains a research task; completion requires correctly running original firmware and every documented function on both profiles.
-- Do not replace original MCU or DSP behavior with a host synthesizer, firmware patches, skipped routines, fabricated success responses or silently successful peripheral stubs.
+- Execute the original Blofeld firmware and its DSP synthesis. Do not substitute a host synthesizer, patch the firmware, skip its routines or fabricate successful instrument results. Chip-internal bootstrap and peripheral functions may use explicit, tested functional models.
 - Unknown or unsupported hardware accesses must fail visibly with address, operation, PC and execution context. Keep observed behavior, hypotheses and hardware-verified facts distinct.
 - Device detection is not hardware validation. Hardware update/programming tests require a separately established recovery procedure; never flash experimental firmware as a routine test.
 - Keep the emulator, board model, transport and time-critical audio processing separate. Run as a regular user.
@@ -26,6 +28,7 @@
 # References and records
 
 - Official firmware, samples, product images, extracted assets and disassemblies remain local references and must not be committed or redistributed with the implementation.
+- ~/Git/gearmulator is a read-only comparison reference. Do not copy its implementation into this project or our independent dsp56300 core.
 - Keep download URLs, sizes and hashes in tracked manifests. Private analysis and run artifacts belong in ignored `doc/local/`.
 - Keep documentation concise: reproducible commands, protocol facts, evidence, material limitations and outstanding requirements. Do not maintain an activity diary.
 - Maintain the complete objective and a requirement-by-requirement coverage record. Passing parser tests does not establish boot, MIDI/audio, flash safety or real-device equivalence.

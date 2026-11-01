@@ -1,6 +1,11 @@
 Acceptance coverage for the headless Blofeld emulator
 
 The complete acceptance objective is in objective.txt.
+Correctness is instrument equivalence, not identical internal electrical/bus/
+pipeline behavior. Functional boot/peripheral models and coarser scheduling are
+permitted when original firmware, sound, musical timing and every documented
+function remain correct. Existing timing tests qualify their implementation
+contracts; they are not additional physical-fidelity acceptance requirements.
 Evidence categories: implemented / partial / pending. A passing check covers
 only its named behavior. Physical disassembly/measurement is unavailable; its
 absence does not block acceptance. Reconstruct unresolved behavior through
