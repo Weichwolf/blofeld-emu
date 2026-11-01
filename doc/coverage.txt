@@ -938,10 +938,12 @@ Original DSP runtime              partial  127 checked records extracted; DSP563
                                           release through 96 foreground bodies,
                                           1536 DMA/ESAI frames and a direct 192-frame
                                           private monitor (dsp-sustain-ring.txt).
-                                          REP targets reject extended/flow words
-                                          before effects; legal one-word latch,
-                                          per-iteration data reads and preview
-                                          repair checked (dsp-repeat.txt).
+                                          Independent-core REP fetch rejects
+                                          extended/flow words before extension
+                                          or body effects. Legal opcode latching,
+                                          per-iteration reads, checkpoint replay,
+                                          ordinary refetch and pure inspection
+                                          repair are checked (dsp-repeat.txt).
                                           NORM no-shift result flags corrected;
                                           4608 independent scalar/scaling/register/
                                           compatibility vectors checked.
