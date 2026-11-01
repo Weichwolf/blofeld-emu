@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dax_fixture.hpp"
 #include "dma_fixture.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 
 #include <array>
 #include <cstddef>
@@ -33,10 +33,10 @@ constexpr unsigned triple_count = 0x1002;
 constexpr unsigned back_pair = 0xffffff;
 constexpr unsigned back_triple = 0xfffffe;
 
-unsigned program(DspProgram &code, const bool with_non_audio) {
+unsigned program(transfer::NativeProgram &code, const bool with_non_audio) {
   unsigned count = 0;
   const auto put = [&](const DspStore access) {
-    code.emit("movep #>" + number(access.value) + ",x:<<" + number(access.address));
+    code.write({.space = DspSpace::x, .address = access.address, .value = access.value});
     ++count;
   };
   put({.address = non_audio, .value = initial_non_audio});
@@ -50,10 +50,16 @@ unsigned program(DspProgram &code, const bool with_non_audio) {
   put({.address = transfer::destination0, .value = with_non_audio ? non_audio : audio_a});
   put({.address = transfer::counter0, .value = with_non_audio ? triple_count : pair_count});
   put({.address = transfer::control0, .value = line_control});
-  code.emit("nop");
-  code.emit("movep x:<<$ffffef,x0");
-  code.emit("movep x:<<$ffffed,y0");
-  code.emit("jset #0,x:<<$ffffd4," + number(code.pc()));
+  // FM high-pp MOVEP DSAR0->X0/DCO0->Y0 and JSET XSTR.XADE back to itself.
+  constexpr unsigned source_x0 = 0x08442f;
+  constexpr unsigned count_y0 = 0x08462d;
+  constexpr unsigned poll_xade = 0x0a94a0;
+  code.word(0);
+  code.word(source_x0);
+  code.word(count_y0);
+  const auto poll = code.pc();
+  code.word(poll_xade);
+  code.word(poll);
   return count;
 }
 
@@ -62,17 +68,18 @@ struct Stream {
   std::string wire;
   std::vector<DspDmaWord> writes;
 
-  void tick(DspMachine &machine) {
-    machine.observe_dax(inputs(edge % 2 != 0, 1));
+  void tick(OwnDspMachine &machine) {
+    machine.bus().observe_dax(inputs(edge % 2 != 0, 1));
     if (edge % 4 == 3) {
       const auto pin = machine.bus().dax_output();
       require(pin.driven, "Native Port D mux connects the real DAX output");
       wire.push_back(pin.level ? '1' : '0');
     }
     const std::array declared_fetch{
-        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}},
+        DspMemoryAccess{.target = {.address = machine.cpu().registers().pc}},
         DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::source0}}};
-    const auto progress = machine.advance_dma(
+    const auto progress = transfer::dma(
+        machine,
         {.cycle = edge,
          .timing = DspDmaTiming::reference_sampled_cycles,
          .grant = DspDmaGrant::available},
@@ -106,31 +113,33 @@ void native_line_stream(const bool with_non_audio) {
   constexpr std::array pairs{a1, b1, a2, b2};
   const auto values =
       with_non_audio ? std::span<const unsigned>{triples} : std::span<const unsigned>{pairs};
-  DspMachine machine;
-  DspProgram code;
+  OwnDspMachine machine(transfer::native_clocks);
+  transfer::NativeProgram code;
   const auto instructions = program(code, with_non_audio);
-  code.install(machine.bus());
+  transfer::reset_native(machine, code);
   for (std::size_t i = 0; i < values.size(); ++i) {
     machine.bus().write(
         {.space = DspSpace::x, .address = source + static_cast<unsigned>(i), .value = values[i]});
   }
-  machine.cpu().reset_spi_boot();
-  machine.observe_dax(inputs(false, 1));
-  static_cast<void>(machine.advance_dma({.cycle = 0,
-                                         .timing = DspDmaTiming::reference_sampled_cycles,
-                                         .grant = DspDmaGrant::available}));
-  for (unsigned i = 0; i < instructions; ++i) { machine.cpu().step(); }
+  machine.bus().observe_dax(inputs(false, 1));
+  static_cast<void>(transfer::dma(machine,
+                                  {.cycle = 0,
+                                   .timing = DspDmaTiming::reference_sampled_cycles,
+                                   .grant = DspDmaGrant::available}));
+  for (unsigned i = 0; i < instructions; ++i) { transfer::step_native(machine); }
   Stream stream;
   while (stream.edge < 4) { stream.tick(machine); }
   require(stream.wire == "0" && stream.writes.empty() &&
               machine.bus().read({.space = DspSpace::x, .address = transfer::status}) ==
                   transfer::zero_active,
           "The first real XADE captured a DMA source but has not stored its destination");
-  machine.cpu().step();
+  transfer::step_native(machine);
   machine.bus().write({.space = DspSpace::x, .address = source, .value = 0});
   const auto frozen = machine.checkpoint();
   const auto saved = stream;
-  const auto cpu = machine.cpu().debug_state();
+  const auto cpu = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto ticks = machine.clock().elapsed_ticks();
   for (unsigned replay = 0; replay < 2; ++replay) {
     machine.restore(frozen);
     stream = saved;
@@ -152,18 +161,20 @@ void native_line_stream(const bool with_non_audio) {
               "Every actual source/write matches the manual2/3-register line and held read value");
     }
     constexpr unsigned native_prefix = 23;
-    require(machine.cpu().debug_state() == cpu && cpu.native_cycles == native_prefix,
+    require(machine.cpu().registers() == cpu && machine.cpu().progress() == progress &&
+                progress.estimated_cycles == native_prefix && progress.instructions == 12 &&
+                machine.clock().elapsed_ticks() == ticks,
             "Clock observations and DMA phases execute no hidden native instructions");
-    machine.cpu().step();
-    machine.cpu().step();
-    require(machine.cpu().state().x == source + values.size() &&
-                machine.cpu().state().y == (with_non_audio ? triple_count : pair_count) &&
+    transfer::step_native(machine);
+    transfer::step_native(machine);
+    require(machine.cpu().registers().x == source + values.size() &&
+                machine.cpu().registers().y == (with_non_audio ? triple_count : pair_count) &&
                 machine.bus().read({.space = DspSpace::x, .address = transfer::status}) ==
                     transfer::all_done,
             "Native pointer/count reads see the completed block and its exact reload");
-    const auto polling = machine.cpu().state().pc;
-    machine.cpu().step();
-    require(machine.cpu().state().pc == polling,
+    const auto polling = machine.cpu().registers().pc;
+    transfer::step_native(machine);
+    require(machine.cpu().registers().pc == polling,
             "Native masked XADE polling excludes the slave XAUR erratum bit");
   }
 }

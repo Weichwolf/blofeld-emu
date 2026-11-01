@@ -35,6 +35,9 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           144 status-bit programs, both 66-word ESAI
                                           streams and a granted F1/F2 memory copy;
                                           standalone phases remain explicit.
+                                          DAX MMIO/fault and two/three-register
+                                          DMA-line tests likewise omit the old core
+                                          and assembler (dsp-dax.txt).
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).

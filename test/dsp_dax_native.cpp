@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "dax_fixture.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 
 #include <utility>
 
@@ -97,30 +98,43 @@ void pad_contract() {
 }
 
 void native_clock_failure() {
-  DspMachine machine;
-  DspProgram code;
+  OwnDspMachine machine(dma_test::native_clocks);
+  dma_test::NativeProgram code;
   for (const auto [address, value] : {std::pair{control, 0U},
                                       std::pair{non_audio, 0U},
                                       std::pair{audio_a, first_sample},
                                       std::pair{audio_b, other_sample},
                                       std::pair{port_direction, 2U},
                                       std::pair{port_control, 2U}}) {
-    code.emit("movep #>" + number(value) + ",x:<<" + number(address));
+    code.write({.space = DspSpace::x, .address = address, .value = value});
   }
-  code.emit("movep x:<<$ffffd4,x0");
-  code.install(machine.bus());
-  machine.cpu().reset_spi_boot();
-  for (unsigned i = 0; i < 6; ++i) { machine.cpu().step(); }
+  // FM MOVEP high-pp XSTR->X0; the literal read must reach the actual DAX.
+  constexpr unsigned read_status_x0 = 0x084414;
+  code.word(read_status_x0);
+  dma_test::reset_native(machine, code);
+  for (unsigned i = 0; i < 6; ++i) { dma_test::step_native(machine); }
   const auto checkpoint = machine.checkpoint();
-  const auto error = rejects([&] { machine.cpu().step(); });
+  const auto error = rejects([&] { dma_test::step_native(machine); });
   require(error.contains("0xff000c") && error.contains("register read at X:0xffffd4") &&
               error.contains("clock"),
           "Actual native status access reports the PC, operation/address and missing clock");
-  static_cast<void>(rejects([&] { machine.observe_dax(inputs(false)); }));
+  const auto failure = machine.io().failure();
+  require(failure && failure->operation == OwnDspIo::Operation::read && failure->address == status,
+          "The real XSTR read latches its exact native I/O failure");
+  const auto stopped = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  // The external device may keep observing clocks; a native I/O fault cannot resume.
+  machine.bus().observe_dax(inputs(false));
+  static_cast<void>(rejects([&] { dma_test::step_native(machine); }));
+  require(machine.cpu().registers() == stopped && machine.cpu().progress() == progress &&
+              machine.io().failure(),
+          "A genuine later clock observation cannot clear a latched native fault");
   machine.restore(checkpoint);
-  machine.observe_dax(inputs(false));
-  machine.cpu().step();
-  require(machine.cpu().state().x == 0 && machine.cpu().debug_state().native_cycles == 13,
+  require(!machine.io().failure(), "Trusted restore retains the pre-fault native owner");
+  machine.bus().observe_dax(inputs(false));
+  dma_test::step_native(machine);
+  require(machine.cpu().registers().x == 0 && machine.cpu().progress().estimated_cycles == 13 &&
+              machine.cpu().progress().instructions == 7,
           "Trusted recovery and a frozen real input return reset flags after literal12+1 units");
 }
 }
