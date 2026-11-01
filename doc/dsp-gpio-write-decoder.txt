@@ -7,8 +7,13 @@ output driver or peripheral ownership. This is a functional instrument model,
 not a measured response of reserved silicon fields.
 
 Validate the original 24-bit word/mask before pin decoding. Invalid host words,
-values outside the supplied mask, unknown input samples, opposing drivers,
-reserved actual Port-F functions and strict BIU diagnostics still fail.
+values outside the supplied mask, unknown input samples and strict BIU
+diagnostics still fail. Strict mode rejects reserved Port-F configurations.
+The logical contract retains transient PCRF/PRRF overlap while firmware changes
+the mux in separate instructions; reserved functions supply unknown pads, never
+a fabricated peripheral driver. Reading their data or driving an unmodeled
+Port-F function still fails. Board-owned pad sources resolve opposing drivers
+as unknown; sampling conflicting data fails rather than selecting a winner.
 Port F uses logical register/bit access independently of BIU wait-state
 qualification. BCR command/read state remains unchanged; no BCR write, bus-master
 status or NAND response is fabricated. Strict mode retains its BCR prerequisite.
@@ -25,7 +30,9 @@ Repeat with the thread preset for separate TSan instrumentation. Directed tests
 check all 24 bit positions of all three registers on all four ports, mixed and
 reserved-only masks, guards, copies and resets. Authored MOVEP instructions
 execute synchronously and through the clock owner; native BSET checks real Carry
-and existing/absent pin effects. Independent PC/flag/pin expectations and fresh
+and existing/absent pin effects. Additional checks cover transient reserved mux
+state, unknown data, unsupported drivers and subsequent defined input/output
+operation. Independent PC/flag/pin expectations and fresh
 continuations are checked. Firmware programs and private traces remain local.
 
 original_fetch_gpio_start selects both contracts before the original reset. It

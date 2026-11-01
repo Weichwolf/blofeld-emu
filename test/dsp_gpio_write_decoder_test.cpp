@@ -107,13 +107,45 @@ void reset_and_guards() {
   require(rejects([&] { static_cast<void>(input.read(Register::data)); }).contains("Unknown"),
           "Pin masking never fabricates external input data");
   DspGpio dedicated(DspPort::f);
-  dedicated.set_contract(functional);
-  dedicated.write({.reg = Register::control, .value = word_mask});
+  dedicated.write({.reg = Register::control, .value = 1});
   require(rejects([&] {
-            dedicated.write({.reg = Register::direction, .value = word_mask});
+            dedicated.write({.reg = Register::direction, .value = 1});
           }).contains("Reserved DSP Port F pin function") &&
               dedicated.read(Register::direction) == 0,
-          "Actual reserved Port-F functions still reject atomically");
+          "Strict reserved Port-F functions still reject atomically");
+}
+
+void transient_mux() {
+  constexpr unsigned pins = 0x7ff;
+  DspGpio gpio(DspPort::f);
+  gpio.set_contract(functional);
+  gpio.write({.reg = Register::direction, .value = pins});
+  gpio.write({.value = pattern & pins});
+  gpio.write({.reg = Register::control, .value = pins});
+  gpio.set_drive({.mask = pins, .levels = pins});
+  require(gpio.read(Register::control) == pins && gpio.read(Register::direction) == pins &&
+              gpio.outputs().mask == 0 && gpio.outputs().peripheral == pins &&
+              gpio.observe_pads(pins).known == 0,
+          "A transient reserved mux retains register state without inventing an active function");
+  require(rejects([&] { static_cast<void>(gpio.read(Register::data)); }).contains("Unknown") &&
+              rejects([&] {
+                gpio.validate_peripheral_drive({.mask = 1, .levels = 1});
+              }).contains("Unmodeled DSP Port F"),
+          "Reserved mux data and internal drivers remain visibly unsupported");
+  gpio.write({.value = pins});
+  gpio.write({.reg = Register::direction});
+  require(gpio.read(Register::data) == pins,
+          "The next defined input mode reads actual external data");
+  gpio.set_drive({});
+  require(rejects([&] { static_cast<void>(gpio.read(Register::data)); }).contains("Unknown"),
+          "Withdrawing the input cannot turn the transient mode into known data");
+  gpio.write({.reg = Register::direction, .value = 1});
+  gpio.write({.reg = Register::control});
+  require(gpio.outputs().mask == 1 && gpio.outputs().known == 0,
+          "A write in the reserved mode cannot initialize a later output latch");
+  gpio.write({.value = 1});
+  require(gpio.read(Register::data, 1) == 1,
+          "An explicit output write restores normal defined GPIO behavior");
 }
 
 void logical_bus() {
@@ -233,6 +265,7 @@ int main() {
   try {
     every_bit();
     reset_and_guards();
+    transient_mux();
     logical_bus();
     for (const unsigned bit : {0U, 1U, 23U}) { native_bit(bit); }
     for (const auto port : ports) {

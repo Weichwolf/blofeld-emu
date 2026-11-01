@@ -96,6 +96,9 @@ void DspGpio::validate_peripheral_drive(const DspGpioDrive drive) const {
       drive.floating != 0 || drive.unknown != 0) {
     throw Fault("Invalid DSP peripheral output mask at " + address(DspGpioRegister::data));
   }
+  if (port_ == DspPort::f && drive.mask != 0) {
+    throw Fault("Unmodeled DSP Port F pin function drive at " + address(DspGpioRegister::data));
+  }
   if ((drive.mask & external_.mask & (drive.levels ^ external_.levels)) != 0) {
     throw Fault("DSP peripheral pad contention at " + address(DspGpioRegister::data));
   }
@@ -149,7 +152,7 @@ void DspGpio::write_checked(const DspGpioWrite access) {
     }
     default: throw Fault("Invalid DSP GPIO register write");
   }
-  if (port_ == DspPort::f && (control_ & direction_) != 0) {
+  if (port_ == DspPort::f && contract_ == DspGpioContract::strict && (control_ & direction_) != 0) {
     throw Fault("Reserved DSP Port F pin function selected by write at " + address(access.reg));
   }
   // A register write updates intended drivers. An attached board owns actual

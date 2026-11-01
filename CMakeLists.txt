@@ -200,6 +200,11 @@ target_link_libraries(blofeld_nand_read_setup PUBLIC blofeld_nand)
 add_library(blofeld_nand_store src/storage/nand_file.cpp src/storage/nand_store.cpp)
 target_include_directories(blofeld_nand_store PUBLIC src)
 target_link_libraries(blofeld_nand_store PUBLIC blofeld_nand PRIVATE blofeld_private_files)
+add_library(blofeld_nand_peer src/board/nand_peer.cpp)
+target_include_directories(blofeld_nand_peer PUBLIC src)
+target_link_libraries(blofeld_nand_peer PUBLIC blofeld_own_dsp_io
+  blofeld_nand_write_medium blofeld_nand_read_timing blofeld_nand_write_timing
+  blofeld_nand_read_setup blofeld_dsp_peripheral_calendar)
 add_library(blofeld_mcu src/mcu/mcu_bus.cpp src/mcu/mcu_bus_clone.cpp src/mcu/mcu_bus_usb.cpp src/mcu/mcu_code_cache.cpp src/mcu/mcu_memory.cpp src/mcu/mcu_gpio.cpp
   src/mcu/mcu_flash_config.cpp src/mcu/mcu_flash.cpp src/mcu/mcu_flash_clock.cpp
   src/mcu/mcu_flash_timing.cpp src/mcu/mcu_flash_persistence.cpp
@@ -4121,15 +4126,19 @@ endif()
 
 # Causal cell verification and actual native GPIO status/write/readback paths.
 if(BUILD_TESTING)
-  add_library(blofeld_nand_native_fixture STATIC test/nand_native_peer.cpp test/nand_native_run.cpp)
-  target_link_libraries(blofeld_nand_native_fixture PUBLIC blofeld_nand_write_medium
-    blofeld_nand_read_timing blofeld_nand_write_timing blofeld_nand_read_setup
-    blofeld_own_dsp_fetch blofeld_dsp_peripheral_calendar)
+  add_library(blofeld_nand_native_fixture STATIC test/nand_native_run.cpp)
+  target_link_libraries(blofeld_nand_native_fixture PUBLIC blofeld_nand_peer
+    blofeld_own_dsp_fetch)
   add_executable(blofeld-nand-native-runtime-test test/nand_native_runtime_test.cpp)
   target_link_libraries(blofeld-nand-native-runtime-test PRIVATE blofeld_nand_native_fixture)
   add_test(NAME nand_native_runtime COMMAND blofeld-nand-native-runtime-test)
   set_tests_properties(nand_native_runtime PROPERTIES TIMEOUT 30)
   add_dependencies(quality blofeld-nand-native-runtime-test)
+  add_executable(blofeld-nand-peer-timebase-test test/nand_peer_timebase_test.cpp)
+  target_link_libraries(blofeld-nand-peer-timebase-test PRIVATE blofeld_nand_peer)
+  add_test(NAME nand_peer_timebase COMMAND blofeld-nand-peer-timebase-test)
+  set_tests_properties(nand_peer_timebase PROPERTIES TIMEOUT 30)
+  add_dependencies(quality blofeld-nand-peer-timebase-test)
   foreach(kind write_medium busy_status)
     string(REPLACE "_" "-" target_suffix "${kind}")
     set(target "blofeld-nand-${target_suffix}-test")

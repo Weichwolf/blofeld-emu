@@ -3913,3 +3913,12 @@ groups plus5 closed-evidence reuses;1136 standby/2795 read-exit assertions.
 All11 existing read-setup header consumers are rebuilt/profile. See nand-standby.txt.
 Supports requirements2/3/6; read-to-input turnaround,generic write tCSD,unknown
 initial read history,CE/WP/latch identification and complete boot remain open.
+
+Reusable NAND board peer: the native fixture now shares src/board/nand_peer
+with connected-runtime consumers. Owner-scaled power deadlines, real Ready,
+resolved DSP/NAND pad drivers and trusted snapshot/callback lifetime guards pass
+six component groups/profile under ASan/UBSan and separate TSan. Logical GPIO
+retains transient reserved Port-F register configurations while actual unknown
+samples and unsupported function drivers still fail. See nand-board.txt and
+dsp-gpio-write-decoder.txt. These support the storage/connection requirements;
+complete original reset-to-instrument execution remains pending.

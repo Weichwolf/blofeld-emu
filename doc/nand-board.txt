@@ -1,0 +1,44 @@
+Reusable NAND board connection
+
+blofeld_nand_peer promotes the project-owned native NAND fixture into
+src/board/nand_peer.{hpp,cpp}. It connects the modeled cell array, protocol,
+write/read timing, output driver and Ready input to the native dsp56300 owner.
+It does not load DSP program records directly. Native tests retain a small
+compatibility header and execute the same board implementation.
+
+The explicit connection uses Port C RE/WE/CLE/ALE, Port F data and timer1 DI
+Ready. CE is held selected in this candidate profile. A 100us power-ready
+reference and the chosen NAND read-continuation profile are declared model
+assumptions, not observations of a fitted part. Firmware correctness is judged
+as an instrument; physical part identification is not an acceptance gate.
+Unknown cells, invalid commands and missed deadlines remain visible failures.
+
+All interval conversions use the native owner's timebase. The new timebase test
+checks independently expected 54000/108000 tick power events at 540/1080MHz,
+unknown initial Ready, incorrect-event rejection, same-rate clones and atomic
+rejection of incompatible clocks. There is no production 1080MHz constant.
+The autonomous scheduler must dispatch exactly the offered completion/output
+boundary before the next CPU observation.
+
+The board attaches a resolved Port-F pad reader. DSP and NAND output intentions
+remain separate; opposing active levels are unknown at a read. Transient driver
+overlap between native instructions alone does not stop execution. NAND command,
+address and data latches sample resolved pads on real WE events, so contention
+cannot silently program a chosen value. Unused overlap supplies no success or
+sample. Native snapshot restoration detaches borrowed pad bindings; trusted peer
+payload restoration is staged before reattachment. Expired peer callbacks fail
+before accessing destroyed state.
+
+  cmake --build --preset strict --target blofeld-nand-peer-timebase-test \
+    blofeld-nand-native-runtime-test blofeld-nand-write-medium-test \
+    blofeld-nand-busy-status-test blofeld-dsp-gpio-write-decoder-test \
+    blofeld-dsp-gpio-test
+  ctest --preset strict -j1 --output-on-failure \
+    -R '^(nand_peer_timebase|nand_native_runtime|nand_write_medium|nand_busy_status|dsp_gpio_write_decoder|dsp_gpio)$'
+
+These six groups pass under ASan/UBSan and separate TSan. Warnings-as-errors,
+clang-format and clang-tidy remain enabled. Validation scope is the reusable
+connection and its native component continuations. Connected original reset/NAND
+loading is being investigated separately; complete boot, original audio,
+MIDI/USB, reset/update/recovery and all instrument functions are not qualified
+by these component results. No fuzzing or physical-device traffic was used.

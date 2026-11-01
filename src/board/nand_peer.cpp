@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "nand_native_peer.hpp"
+#include "board/nand_peer.hpp"
 
+#include "board/gpio_pads.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_gpio.hpp"
@@ -10,6 +11,7 @@
 #include "dsp56300/core.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
+#include "storage/nand_interval.hpp"
 #include "storage/nand_read_setup.hpp"
 #include "storage/nand_read_timing.hpp"
 #include "storage/nand_write_medium.hpp"
@@ -22,8 +24,7 @@
 #include <string>
 #include <utility>
 
-namespace blofeld::test {
-using namespace blofeld;
+namespace blofeld {
 
 namespace {
 constexpr unsigned control_mask = 0xf00;
@@ -35,15 +36,32 @@ constexpr unsigned data_mask = 0xff;
 constexpr unsigned port_f_mask = 0x7ff;
 constexpr unsigned ready_timer = 1;
 
+std::uint64_t power_deadline(const std::uint64_t timebase) {
+  constexpr unsigned microseconds = 100;
+  constexpr unsigned per_second = 1000000;
+  const auto ticks = nand_interval_ticks<per_second>(timebase, microseconds);
+  if (!ticks || *ticks == 0) { throw Fault("Invalid NAND peer power-on timebase"); }
+  return *ticks;
+}
+
 struct PeerState {
-  explicit PeerState(NandWriteMedium clock) : device(std::move(clock)) {}
+  PeerState(NandWriteMedium clock, const std::uint64_t timebase)
+      : device(std::move(clock)),
+        write(timebase),
+        setup(timebase),
+        output(timebase),
+        timebase_hz(timebase),
+        power_ready_tick(power_deadline(timebase)) {}
 
   bool power_ready = false;
   bool faulted = false;
   NandWriteMedium device;
-  NandWriteTiming write{nand_timebase_hz};
-  NandReadSetup setup{nand_timebase_hz};
-  NandReadTiming output{nand_timebase_hz};
+  NandWriteTiming write;
+  NandReadSetup setup;
+  NandReadTiming output;
+  DspGpioDrive drive;
+  std::uint64_t timebase_hz;
+  std::uint64_t power_ready_tick;
   DspRunContext context;
   std::optional<unsigned> previous_known;
   std::optional<bool> previous_re;
@@ -56,9 +74,10 @@ struct NandPeer::Impl {
   Impl(OwnDspMachine &machine, Nand device, NandCellProfile profile)
       : machine_(machine),
         state_(std::make_unique<PeerState>(
-            NandWriteMedium(std::move(device), nand_timebase_hz, std::move(profile)))) {
-    std::cerr << "UNQUALIFIED_OWNED_NAND CE=held-selected-lab power=100us-reference "
-                 "part=P-sequential GPIO=canonical-own-program sample=period-completion "
+            NandWriteMedium(std::move(device), machine.clock().timebase_hz(), std::move(profile)),
+            machine.clock().timebase_hz())) {
+    std::cerr << "NAND_BOARD_MODEL CE=held-selected power=100us-reference "
+                 "part=explicit-device-contract GPIO=logical sample=period-completion "
                  "board-qualified=0\n";
     publish();
     drive(0);
@@ -71,7 +90,7 @@ struct NandPeer::Impl {
         state_(std::make_unique<PeerState>(state)),
         identity_(std::move(identity)) {}
 
-  [[nodiscard]] PeerDetailed detailed() const {
+  [[nodiscard]] NandPeerDetailed detailed() const {
     healthy();
     auto output = state_->output;
     return {.base = status(),
@@ -87,6 +106,30 @@ struct NandPeer::Impl {
             .trace_access = state_->trace_access};
   }
 
+  void bind(const std::weak_ptr<const bool> &owner) {
+    if (!needs_binding_) { return; }
+    machine_.bus().gpio(DspPort::f).attach_pad_source([this, owner](const std::uint32_t mask) {
+      if (owner.expired()) { throw Fault("NAND pad read lost its live board owner"); }
+      return pads(mask);
+    });
+    needs_binding_ = false;
+  }
+
+  [[nodiscard]] GpioPadSample pads(const std::uint32_t mask) const {
+    healthy();
+    if (needs_binding_) { fail("pad read requires its restored native binding"); }
+    const auto output = machine_.bus().gpio(DspPort::f).outputs();
+    const auto drive = state_->drive;
+    return resolve_gpio_net(mask,
+                            {.active = (output.mask | output.peripheral) & mask,
+                             .known = output.known & mask,
+                             .levels = output.levels & mask},
+                            {.active = (drive.mask | drive.unknown) & mask,
+                             .known = drive.mask & mask,
+                             .levels = drive.levels & mask,
+                             .pull_down = drive.floating & mask});
+  }
+
   void before(const std::uint64_t ticks, const DspRunContext context) {
     healthy();
     state_->context = context;
@@ -100,7 +143,7 @@ struct NandPeer::Impl {
     healthy();
     const auto operation = state_->device.next_event();
     std::optional<std::uint64_t> next;
-    if (!state_->power_ready) { next = power_ready_tick; }
+    if (!state_->power_ready) { next = state_->power_ready_tick; }
     if (operation && (!next || operation->ticks < *next)) { next = operation->ticks; }
     const auto output = state_->output.next_transition();
     if (output && (!next || *output < *next)) { next = output; }
@@ -109,7 +152,7 @@ struct NandPeer::Impl {
 
   void dispatch(const std::uint64_t ticks) {
     if (next_event() != ticks) { fail("event requires its exact offered deadline"); }
-    const bool power = !state_->power_ready && ticks == power_ready_tick;
+    const bool power = !state_->power_ready && ticks == state_->power_ready_tick;
     const bool output = state_->output.next_transition() == ticks;
     const auto pending = state_->device.next_event();
     const bool operation = pending && pending->ticks == ticks;
@@ -119,8 +162,8 @@ struct NandPeer::Impl {
       if (power) {
         state_->device.observe_power_ready();
         state_->power_ready = true;
-        std::cerr << "NAND_AUTONOMOUS_POWER ticks=" << ticks
-                  << " timebase=1080000000 reference-observation=100us fitted-latency=unknown\n";
+        std::cerr << "NAND_AUTONOMOUS_POWER ticks=" << ticks << " timebase=" << state_->timebase_hz
+                  << " reference-observation=100us fitted-latency=unknown\n";
       }
       if (operation) {
         if (!completed || completed->ticks != ticks) { fail("operation completion mismatch"); }
@@ -146,7 +189,7 @@ struct NandPeer::Impl {
     } catch (const Fault &cause) { fail(std::string("dispatch: ") + cause.what()); }
   }
 
-  [[nodiscard]] PeerStatus status() const {
+  [[nodiscard]] NandPeerStatus status() const {
     healthy();
     return {.ticks = state_->device.ticks(),
             .ready = state_->device.device().ready(),
@@ -192,7 +235,7 @@ struct NandPeer::Impl {
     machine_.bus().timers().set_tio_drive(ready_timer, state_->device.device().ready());
   }
 
-  void drive(const std::uint64_t ticks) {
+  void drive(const std::uint64_t ticks) const {
     if (state_->device.device().status_mode() && state_->previous_re == false) {
       auto status = state_->device.device().status();
       status.known &= Nand::status_bits;
@@ -210,7 +253,7 @@ struct NandPeer::Impl {
       drive.levels = output.data.value;
       drive.unknown = data_mask & ~static_cast<unsigned>(output.data.known);
     }
-    machine_.bus().gpio(DspPort::f).set_drive(drive);
+    state_->drive = drive;
   }
 
   void latch(const NandWriteLatch input, const std::uint64_t ticks) const {
@@ -252,7 +295,7 @@ struct NandPeer::Impl {
     const bool we_n = (controls.levels & we_pin) != 0;
     const bool cle = (controls.levels & cle_pin) != 0;
     const bool ale = (controls.levels & ale_pin) != 0;
-    const auto data = machine_.bus().gpio(DspPort::f).outputs();
+    const auto data = machine_.bus().gpio(DspPort::f).observe_pads(data_mask);
     const auto input = state_->write.observe(
         ticks,
         {.ce_n = false,
@@ -300,9 +343,9 @@ struct NandPeer::Impl {
     machine_.bus().timers().set_tio_drive(ready_timer, state_->device.device().ready());
   }
 
-  static constexpr std::uint64_t power_ready_tick = 108000;
   OwnDspMachine &machine_;
   std::unique_ptr<PeerState> state_;
+  bool needs_binding_ = true;
   const std::shared_ptr<const PeripheralEventIdentity> identity_ =
       std::make_shared<const PeripheralEventIdentity>();
 };
@@ -324,7 +367,9 @@ NandPeer::NandPeer(OwnDspMachine &machine, Nand device)
     : NandPeer(machine, std::move(device), NandCellProfile{}) {}
 
 NandPeer::NandPeer(OwnDspMachine &machine, Nand device, NandCellProfile profile)
-    : impl_(std::make_unique<Impl>(machine, std::move(device), std::move(profile))) {}
+    : impl_(std::make_unique<Impl>(machine, std::move(device), std::move(profile))) {
+  impl_->bind(lifetime_);
+}
 
 NandPeer::NandPeer(const NandPeerSnapshot &snapshot, OwnDspMachine &target) {
   if (!snapshot.storage_ ||
@@ -332,6 +377,9 @@ NandPeer::NandPeer(const NandPeerSnapshot &snapshot, OwnDspMachine &target) {
     throw Fault("NAND clone requires a distinct native owner and trusted payload");
   }
   const auto &saved = *snapshot.storage_;
+  if (saved.state.timebase_hz != target.clock().timebase_hz()) {
+    throw Fault("NAND clone requires matching device timebase");
+  }
   impl_ = std::make_unique<Impl>(target, saved.state, saved.identity);
 }
 
@@ -350,22 +398,25 @@ NandPeerEvents NandPeer::events() {
                 if (owner.expired()) {
                   throw Fault("NAND event dispatch lost its live board owner");
                 }
+                impl_->bind(owner);
                 impl_->dispatch(ticks);
               }};
 }
 
 void NandPeer::before_native(const std::uint64_t common_ticks) {
+  impl_->bind(lifetime_);
   const auto cpu = impl_->machine_.cpu().registers();
   impl_->before(common_ticks, {.pc = cpu.pc, .omr = cpu.omr});
 }
 
 void NandPeer::after_native(const std::uint64_t common_ticks,
                             const std::optional<std::uint32_t> native_pc) {
+  impl_->bind(lifetime_);
   if (native_pc) { impl_->state_->context.pc = *native_pc; }
   impl_->after(common_ticks);
 }
 
-PeerDetailed NandPeer::detailed() const {
+NandPeerDetailed NandPeer::detailed() const {
   return impl_->detailed();
 }
 
@@ -395,5 +446,6 @@ void NandPeer::restore(const NandPeerSnapshot &snapshot) {
     throw Fault("NAND payload restore requires its original live board owner");
   }
   impl_->state_ = std::make_unique<PeerState>(snapshot.storage_->state);
+  impl_->needs_binding_ = true;
 }
 }
