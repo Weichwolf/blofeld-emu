@@ -55,7 +55,9 @@ OwnDspFetch::OwnDspFetch(OwnDspMachine &machine)
 }
 
 void OwnDspFetch::check_owner() const {
-  if (machine_.captured_fetch_owner_.lock() != identity_) {
+  // Private tokens own unique allocations; matching ownership proves liveness.
+  if (machine_.captured_fetch_owner_.owner_before(identity_) ||
+      identity_.owner_before(machine_.captured_fetch_owner_)) {
     throw Fault("Stale own DSP captured fetch pc=" + hex(machine_.cpu_.registers().pc, 6));
   }
   machine_.require_running();

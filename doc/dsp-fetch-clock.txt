@@ -61,6 +61,9 @@ The lease is excluded from checkpoints. Joint restore binds a fresh lease;
 held reset and recovery preserve it. Timeline destruction or an explicit
 chip-only restore releases scheduling authority, allowing genuine unclocked
 chip use. Retaining an immutable snapshot cannot keep a destroyed lease alive.
+Private allocation identities are compared without acquiring strong references.
+Internal deadline calculation reuses the checked boundary; public entries retain
+all ownership, reset, clock/epoch and DMA-index validation.
 This is host API ownership, not a replacement for device identity or firmware
 execution. The focused regression checks actual PCU publication, both native
 X/Y stores, direct control refusals, same/fresh restore and manual continuation.

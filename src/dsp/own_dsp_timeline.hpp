@@ -62,6 +62,7 @@ private:
   [[nodiscard]] static const OwnDspTimelineCheckpoint::Storage &
   saved_state(const OwnDspTimelineCheckpoint &checkpoint);
   void check_owner() const;
+  [[nodiscard]] std::uint64_t cycle_deadline() const;
   void start_reset(OwnDspResetInputs inputs);
   OwnDspMachine &machine_;
   std::shared_ptr<const bool> cycle_identity_;

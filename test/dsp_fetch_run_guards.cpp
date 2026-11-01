@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "bank_fixture.hpp"
+#include "common/bus.hpp"
 #include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_pll.hpp"
@@ -29,9 +30,9 @@ void unknown_pinit() {
     machine.begin_hardware_reset(
         {.mode_known = 15, .mode_levels = 5, .pinit = std::nullopt, .recovery_cycles = 2});
   });
-  require(error.contains("PINIT-low") && machine.cpu().registers() == before &&
-              machine.cpu().progress() == progress && machine.clock().elapsed_ticks() == 0 &&
-              !machine.bus().last_dma_cycle(),
+  require(error.contains("stable mode5/known PINIT") && error.contains("pc=" + hex(before.pc, 6)) &&
+              machine.cpu().registers() == before && machine.cpu().progress() == progress &&
+              machine.clock().elapsed_ticks() == 0 && !machine.bus().last_dma_cycle(),
           "Unknown PINIT/reset contract refuses before frontend, native, DMA or clock mutation");
 }
 

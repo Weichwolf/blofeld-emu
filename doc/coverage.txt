@@ -3965,6 +3965,12 @@ An isolated authored-loop measurement retains state/counts/ticks and reduces
 local median time from1.567s to1.333s per100000 periods. See dsp-fetch-clock.txt;
 full-instrument performance and realtime acceptance remain pending.
 
+Clocked ownership compares unique private allocation identities without strong
+reference acquisition and reuses checked state for internal cycle deadlines.
+Six authored groups plus original pitch/checkpoint pass under ASan/UBSan and
+separate TSan, retaining stale-owner/reset/clock/epoch/DMA guards. Complete
+256-byte TSan wall-limit acceptance remains open. See dsp-fetch-clock.txt.
+
 F2/native peripheral resources: the fetch frontend now uses the DMA arbiter's
 existing independent timer/GPIO classification. Authored22-register/31-offset
 tests cover empty/filled fetch queues, observe actual store-time value changes

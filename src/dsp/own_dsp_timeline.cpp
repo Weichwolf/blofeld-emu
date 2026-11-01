@@ -51,15 +51,17 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
 }
 
 void OwnDspTimeline::check_owner() const {
-  if (machine_.clocked_owner_.lock() != cycle_identity_ || faulted_ || machine_.clock().faulted() ||
-      machine_.clock().elapsed_ticks() != expected_ticks_ ||
+  if (machine_.clocked_owner_.owner_before(cycle_identity_) ||
+      cycle_identity_.owner_before(machine_.clocked_owner_) || faulted_ ||
+      machine_.clock().faulted() || machine_.clock().elapsed_ticks() != expected_ticks_ ||
       machine_.clock().native_epoch() != expected_epoch_ ||
       machine_.bus().last_dma_cycle() != expected_dma_) {
     throw Fault("Own DSP timeline requires its healthy unchanged native boundary");
   }
   if (fetch_) {
     static_cast<void>(fetch_->view());
-  } else if (!reset_identity_ || machine_.captured_fetch_owner_.lock() != reset_identity_) {
+  } else if (!reset_identity_ || machine_.captured_fetch_owner_.owner_before(reset_identity_) ||
+             reset_identity_.owner_before(machine_.captured_fetch_owner_)) {
     throw Fault("Own DSP timeline reset ownership is stale");
   }
 }
@@ -125,6 +127,10 @@ void OwnDspTimeline::release_hardware_reset() {
 std::uint64_t OwnDspTimeline::next_deadline() const {
   check_owner();
   if (!fetch_) { throw Fault("Own DSP timeline execution awaits completed reset recovery"); }
+  return cycle_deadline();
+}
+
+std::uint64_t OwnDspTimeline::cycle_deadline() const {
   const auto duration = machine_.clock().next_step_ticks(machine_.bus(), 1);
   constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
   if (duration > maximum - expected_ticks_ || expected_ticks_ + duration > maximum - epoch_ticks_) {
@@ -146,7 +152,7 @@ std::optional<OwnDspFetchCycleResult> OwnDspTimeline::advance_one(const std::uin
   }
   auto attempted_ticks = horizon;
   try {
-    attempted_ticks = next_deadline();
+    attempted_ticks = cycle_deadline();
     if (attempted_ticks > horizon ||
         (attempted_ticks == horizon && boundary == OwnDspBoundary::before)) {
       horizon_ = horizon;
