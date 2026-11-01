@@ -2,11 +2,13 @@
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_program_fetch.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_io.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp/own_dsp_timeline.hpp"
 #include "dsp56300/core.hpp"
@@ -354,6 +356,100 @@ void automatic_gpio_read(const bool known_input) {
     }
   }
   throw std::runtime_error("Native GPIO sample failed to finish within its bound");
+}
+
+struct EsaiReadCase {
+  bool secondary;
+  bool clock_known;
+  bool dma;
+};
+
+void configure_esai_read(OwnDspMachine &machine, const EsaiReadCase input) {
+  constexpr Word primary = 0xffffa0;
+  constexpr Word secondary = 0xffff80;
+  constexpr Word payload = 0x123456;
+  constexpr Word format = 0xf801;
+  constexpr Word mux = 0x818;
+  constexpr Word clock_offset = 22;
+  constexpr Word control_offset = 21;
+  constexpr Word direction_offset = 30;
+  constexpr Word mux_offset = 31;
+  const auto space = input.secondary ? DspSpace::y : DspSpace::x;
+  const auto base = input.secondary ? secondary : primary;
+  machine.bus().write({.space = space, .address = base + clock_offset, .value = 0});
+  machine.bus().write({.space = space, .address = base, .value = payload});
+  machine.bus().write({.space = space, .address = base + control_offset, .value = format});
+  machine.bus().write({.space = space, .address = base + mux_offset, .value = mux});
+  machine.bus().write({.space = space, .address = base + direction_offset, .value = mux});
+  if (input.clock_known) {
+    machine.bus().observe_esai_transmit(input.secondary ? DspEsaiInstance::secondary
+                                                        : DspEsaiInstance::primary,
+                                        {.clock = true, .frame_sync = false});
+  }
+  if (input.dma) {
+    constexpr Word dma_control = 0xffffec;
+    constexpr Word quiet_copy = 0x880240;
+    for (const auto offset : {1U, 2U, 3U}) {
+      machine.bus().write({.space = DspSpace::x, .address = dma_control + offset, .value = 0});
+    }
+    machine.bus().write({.space = DspSpace::x, .address = dma_control, .value = quiet_copy});
+    require(machine.bus().has_active_dma(),
+            "ESAI negative control actually enables its quiet DMA channel");
+  }
+}
+
+void automatic_esai_status(const EsaiReadCase input) {
+  // FM MOVEP split-qq forms for actual primary/secondary SAISR to X0.
+  constexpr Word primary = 0x0444d3;
+  constexpr Word secondary = 0x044433;
+  constexpr Word primary_address = 0xffffb3;
+  constexpr Word secondary_address = 0xffff93;
+  constexpr unsigned bound = 32;
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 8> rom{input.secondary ? secondary : primary};
+  machine.bus().install_rom({.start = boot_entry, .words = rom});
+  reset(machine);
+  configure_esai_read(machine, input);
+  const auto before = machine.cpu().registers();
+  OwnDspFetch fetch(machine);
+  bool overlapped = false;
+  for (unsigned cycle = 0; cycle < bound; ++cycle) {
+    OwnDspFetchCycleResult actual;
+    try {
+      actual = fetch.advance_dma_automatic(dma_input(cycle),
+                                           OwnDspAutomaticTiming::one_effect_per_cycle);
+    } catch (const blofeld::Fault &error) {
+      const std::string text(error.what());
+      require(input.dma && text.contains(input.secondary ? "Y:0xffff93" : "X:0xffffb3") &&
+                  !machine.io().failure() && machine.cpu().progress().instructions == 0,
+              "Active DMA must refuse before a native ESAI status transaction");
+      return;
+    }
+    overlapped = overlapped || (actual.captured && actual.instruction_started && actual.native);
+    if (actual.native && actual.native->fault.kind != FaultKind::none) {
+      const auto failure = machine.io().failure();
+      require(!input.clock_known && !input.dma && failure &&
+                  failure->operation == OwnDspIo::Operation::read &&
+                  failure->address == (input.secondary ? secondary_address : primary_address) &&
+                  failure->pc == boot_entry && failure->cause &&
+                  machine.cpu().progress().instructions == 0,
+              "F2 admission retains the actual missing-clock SAISR read failure");
+      return;
+    }
+    if (machine.cpu().progress().instructions == 1) {
+      auto expected = before;
+      expected.pc = boot_entry + 1;
+      expected.x = 0;
+      require(input.clock_known && !input.dma && overlapped &&
+                  machine.cpu().registers() == expected &&
+                  machine.cpu().progress().estimated_cycles == 1,
+              "Real F2/native SAISR sample retains independent registers, status and base cost");
+      return;
+    }
+  }
+  throw std::runtime_error("ESAI status sample failed to reach its bounded native endpoint");
 }
 
 void automatic_shi_receive() {
@@ -1672,6 +1768,11 @@ int main() {
     automatic_execution();
     automatic_peripheral_write();
     automatic_shi_status_test();
+    for (const bool secondary : {false, true}) {
+      automatic_esai_status({.secondary = secondary, .clock_known = true, .dma = false});
+      automatic_esai_status({.secondary = secondary, .clock_known = false, .dma = false});
+      automatic_esai_status({.secondary = secondary, .clock_known = true, .dma = true});
+    }
     automatic_shi_receive();
     automatic_gpio_read(true);
     automatic_gpio_read(false);

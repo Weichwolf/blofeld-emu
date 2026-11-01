@@ -1,23 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interrupts.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_native_access.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp/own_dsp_timeline.hpp"
+#include "dsp56300/core.hpp"
 #include "esai_interrupt_fixture.hpp"
 
 #include <array>
+#include <cstdint>
+#include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 
 namespace blofeld::test::esai_irq {
 namespace {
-constexpr unsigned handler = 0x300, ordinary_sr = 0xc00000, ipl_mask = 0x300;
+constexpr unsigned boot = 0xff0000, handler = 0x300, ordinary_sr = 0xc00000, ipl_mask = 0x300;
 constexpr unsigned absolute_jsr = 0x0bf080, secondary_priority = 0x400;
+constexpr unsigned move_sr = 0x05f439, rti = 4, instruction_limit = 64;
+constexpr std::uint64_t reset_hold = 90, reset_recovery = 90;
+constexpr DspRunClockInputs clocks{.extal_hz = 12000000,
+                                   .timebase_hz = 540000000,
+                                   .switch_timing = DspClockSwitch::reference_cycle_boundary};
+constexpr auto timing =
+    OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
 
 struct Scenario {
   bool second;
@@ -25,120 +36,213 @@ struct Scenario {
   bool reference;
 };
 
-unsigned install(DspMachine &machine, const Scenario input) {
-  DspProgram foreground;
-  foreground.immediate("sr", ordinary_sr);
-  const auto resume = foreground.pc();
-  foreground.emit("nop");
-  foreground.install(machine.bus());
-  machine.cpu().step();
-  require(machine.cpu().state().pc == resume && machine.cpu().state().sr == ordinary_sr,
-          "Own native foreground sets actual SR before any transmit request exists");
-  DspProgram body;
-  const auto space = input.second ? std::string("y") : std::string("x");
-  if (input.mode == 1) {
-    body.emit("movep " + space + ":<<" + number(base(input.second) + status_offset) + ",x0");
+struct CpuView {
+  dsp56300::Registers cpu;
+  dsp56300::Progress progress;
+  std::uint64_t ticks;
+  std::optional<std::uint64_t> dma;
+  bool operator==(const CpuView &) const = default;
+};
+
+using Snapshot = std::variant<OwnDspCheckpoint, OwnDspTimelineCheckpoint>;
+
+struct NativeFixture {
+  NativeFixture() {
+    // Authored MOVEC SR and foreground NOPs; reset itself executes no instruction.
+    const std::array<std::uint32_t, 8> words{move_sr, ordinary_sr};
+    machine.bus().install_rom({.start = boot, .words = words});
+    machine.begin_hardware_reset(
+        {.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2});
+    require(machine.advance_hardware_reset_ticks(reset_hold) == reset_hold, "Actual reset hold");
+    machine.release_hardware_reset();
+    require(machine.advance_hardware_reset_ticks(reset_recovery) == reset_recovery,
+            "Actual reset recovery");
+    step();
+    require(machine.cpu().registers().pc == boot + 2 && machine.cpu().registers().sr == ordinary_sr,
+            "Actual MOVEC unmasks the foreground before any transmit request exists");
   }
-  body.emit("movep #>" + number(next_first) + ',' + space + ":<<" + number(base(input.second)));
-  body.emit("movep #>" + number(next_second) + ',' + space + ":<<" +
-            number(base(input.second) + 5));
-  body.emit("rti");
-  DspBus storage;
-  body.install(storage);
-  for (unsigned n = 0; n < body.pc() - boot; ++n) {
-    machine.bus().write({.address = handler + n, .value = storage.inspect_program(boot + n)});
+
+  [[nodiscard]] CpuView view() {
+    return {.cpu = machine.cpu().registers(),
+            .progress = machine.cpu().progress(),
+            .ticks = machine.clock().elapsed_ticks(),
+            .dma = machine.bus().last_dma_cycle()};
+  }
+
+  void start_timeline() { timeline = std::make_unique<OwnDspTimeline>(machine, timing, 0); }
+
+  void step() {
+    const auto before = machine.cpu().progress().instructions;
+    if (timeline) {
+      for (unsigned cycle = 0;
+           cycle < instruction_limit && machine.cpu().progress().instructions == before;
+           ++cycle) {
+        const auto last = machine.bus().last_dma_cycle();
+        const auto result = timeline->advance_one(timeline->next_deadline(),
+                                                  OwnDspBoundary::through,
+                                                  {.cycle = last ? *last + 1 : 0,
+                                                   .known_requests = 15,
+                                                   .timing = DspDmaTiming::reference_sampled_cycles,
+                                                   .grant = DspDmaGrant::available});
+        require(result &&
+                    (!result->native || result->native->fault.kind == dsp56300::FaultKind::none),
+                "Automatic native ESAI instruction remains healthy");
+      }
+    } else {
+      auto progress = machine.begin_fetch();
+      for (unsigned effect = 0; effect < instruction_limit && progress.pending && !progress.retired;
+           ++effect) {
+        progress = machine.advance(progress.pending->ticket);
+        require(progress.fault.kind == dsp56300::FaultKind::none,
+                "Actual native ESAI effect remains healthy");
+      }
+      require(progress.retired, "Manual native ESAI instruction retires");
+    }
+    require(machine.cpu().progress().instructions == before + 1,
+            "Exactly one actual native instruction retires");
+  }
+
+  [[nodiscard]] Snapshot checkpoint() const {
+    if (timeline) { return timeline->checkpoint(); }
+    return machine.checkpoint();
+  }
+
+  void restore(const Snapshot &saved) {
+    if (const auto *value = std::get_if<OwnDspTimelineCheckpoint>(&saved)) {
+      timeline = std::make_unique<OwnDspTimeline>(machine, *value);
+    } else {
+      require(!timeline, "Manual checkpoint retains its execution owner");
+      machine.restore(std::get<OwnDspCheckpoint>(saved));
+    }
+  }
+
+  OwnDspMachine machine{clocks};
+  std::unique_ptr<OwnDspTimeline> timeline;
+};
+
+void install(NativeFixture &fixture, const Scenario input) {
+  // FM MOVEP low-X/low-Y immediate and split-qq reads, plus literal RTI.
+  constexpr unsigned primary_write = 0x07f420;
+  constexpr unsigned secondary_write = 0x07b480;
+  constexpr unsigned primary_status = 0x0444d3;
+  constexpr unsigned secondary_status = 0x044433;
+  auto &bus = fixture.machine.bus();
+  unsigned address = handler;
+  if (input.mode == 1) {
+    bus.write({.address = address++, .value = input.second ? secondary_status : primary_status});
+  }
+  const auto write = input.second ? secondary_write : primary_write;
+  for (const auto value : std::array{write, next_first, write + 5, next_second, rti}) {
+    bus.write({.address = address++, .value = value});
   }
   const auto vector = expected(input.second, input.mode, {.even = true, .error = input.mode == 1});
-  if (!vector.has_value()) { throw Fault("Own native interrupt scenario lacks a vector"); }
-  machine.bus().write({.address = vector.value(), .value = absolute_jsr});
-  machine.bus().write({.address = vector.value() + 1, .value = handler});
-  setup(machine.bus(), input.second, input.mode);
-  machine.bus().write({.space = DspSpace::x,
-                       .address = priority_register,
-                       .value = input.second ? secondary_priority : 1U});
-  require(word(machine.bus(), input.second) == std::array{first_data, second_data},
-          "Declared priming words actually leave both serial lanes");
-  if (input.mode == 1) { static_cast<void>(word(machine.bus(), input.second)); }
-  return resume;
+  if (!vector) { throw Fault("Actual ESAI scenario lacks its independently expected vector"); }
+  bus.write({.address = vector.value(), .value = absolute_jsr});
+  bus.write({.address = vector.value() + 1, .value = handler});
+  setup(bus, input.second, input.mode);
+  bus.write({.space = DspSpace::x,
+             .address = priority_register,
+             .value = input.second ? secondary_priority : 1U});
+  require(word(bus, input.second) == std::array{first_data, second_data},
+          "Actual serial priming words");
+  if (input.mode == 1) { static_cast<void>(word(bus, input.second)); }
+  if (!input.reference) { fixture.start_timeline(); }
 }
 
-void reference_entry(DspMachine &machine, const DspInterruptRequest expected_request) {
-  const auto before = machine.cpu().debug_state();
-  auto progress = machine.begin_reference_interrupt(DspReferenceExecution::access_boundaries);
+void reference_entry(OwnDspMachine &machine, const DspInterruptRequest request) {
+  const auto before = machine.cpu().progress();
+  const auto foreground = machine.cpu().registers().pc;
+  require(machine.bus().inspect_program(foreground) == 0 &&
+              machine.admit_interrupt({.address = foreground, .opcode = 0}) &&
+              machine.interrupt_pending(),
+          "Real unmasked ESAI source admits the known authored foreground");
+  auto progress = machine.begin_fetch();
   unsigned vectors = 0;
   unsigned acknowledgements = 0;
-  while (!progress.retired) {
-    if (!progress.pending) { throw Fault("Native ESAI entry lost its reference access ticket"); }
-    if (const auto *access = std::get_if<DspNativeAccess>(&progress.pending->effect)) {
-      require(access->kind == DspNativeAccessKind::vector && access->target.space == DspSpace::p &&
-                  access->target.address == expected_request.vector + vectors && vectors < 2,
-              "Actual reference entry fetches both own vector words in order");
-      ++vectors;
-    } else if (const auto *ack = std::get_if<DspInterruptAcknowledge>(&progress.pending->effect)) {
-      require(ack->request == expected_request && vectors == 2 && acknowledgements == 0,
-              "Reference entry admits only the fetched ESAI vector/priority");
-      ++acknowledgements;
-    } else {
-      throw Fault("Unexpected effect in own native ESAI vector entry");
+  for (unsigned effect = 0; effect < instruction_limit && !progress.retired; ++effect) {
+    if (!progress.pending) { throw Fault("ESAI entry lost its genuine native ticket"); }
+    const auto pending = progress.pending.value();
+    const bool vector = pending.effect.kind == dsp56300::EffectKind::fetch_opcode ||
+                        pending.effect.kind == dsp56300::EffectKind::fetch_extension;
+    require(machine.cpu().progress() == before && machine.bus().interrupt_request(0) == request,
+            "No entry retirement or level-source service precedes actual native effects");
+    if (vector) {
+      require(pending.effect.space == dsp56300::Space::program &&
+                  pending.effect.address == request.vector + vectors && vectors < 2,
+              "Both actual vector words retain their independently expected addresses");
+      require(machine.interrupt_pending(),
+              "Vector ownership remains pending until the second real read");
     }
-    require(machine.cpu().debug_state() == before &&
-                machine.bus().interrupt_request(0) == expected_request,
-            "Pending vector observations cannot retire CPU state or clear a level source");
-    progress = machine.advance_reference_access(progress.pending->ticket);
+    progress = machine.advance(pending.ticket);
+    require(progress.fault.kind == dsp56300::FaultKind::none,
+            "Native vector/PCU/stack effects remain healthy");
+    if (vector) {
+      ++vectors;
+      if (!machine.interrupt_pending()) { ++acknowledgements; }
+      require(machine.interrupt_pending() == (vectors == 1),
+              "Acknowledgement follows only the second actual vector read");
+      if (vectors == 1) {
+        const auto registers = machine.cpu().registers();
+        static_cast<void>(rejects([&] { static_cast<void>(machine.advance(pending.ticket)); }));
+        require(machine.interrupt_pending() && machine.cpu().registers() == registers,
+                "Stale ticket cannot consume the second vector or mutate architectural state");
+      }
+    }
   }
-  require(vectors == 2 && acknowledgements == 1,
-          "Reference native JSR retires after two vector reads and one acknowledgement");
+  require(progress.retired && vectors == 2 && acknowledgements == 1 && !machine.interrupt_pending(),
+          "Actual JSR entry retires after two vector reads and one acknowledgement");
 }
 
-void service(DspMachine &machine, const Scenario input, const unsigned resume) {
-  const auto before = machine.cpu().debug_state();
+void service(NativeFixture &fixture, const Scenario input) {
+  auto &machine = fixture.machine;
+  const auto before = fixture.view();
   const auto vector = expected(input.second, input.mode, {.even = true, .error = input.mode == 1});
-  if (!vector.has_value()) { throw Fault("Native ESAI test has no expected request"); }
+  if (!vector) { throw Fault("Expected ESAI request is missing"); }
   const DspInterruptRequest request{.vector = vector.value(), .level = 0};
-  require(machine.bus().interrupt_request(0) == request,
-          "Real peripheral state supplies the vector");
+  require(machine.bus().interrupt_request(0) == request, "Actual peripheral supplies the vector");
   if (input.reference) {
     reference_entry(machine, request);
   } else {
-    machine.cpu().step();
+    fixture.step();
   }
-  const auto entry = machine.cpu().state();
-  require(entry.pc == handler && entry.sp == 1 && entry.stack_pc == resume &&
-              entry.stack_sr == ordinary_sr && (entry.sr & ipl_mask) == 0x100 &&
-              machine.bus().interrupt_request(0) == request,
-          "Native JSR stacks the foreground; vector acknowledgement retains the level IRQ");
+  const auto entry = machine.cpu().registers();
+  const auto frame = (std::uint64_t{boot + 2} << word_bits) | ordinary_sr;
+  require(entry.pc == handler && entry.sp == 1 && entry.stack[1] == frame &&
+              (entry.sr & ipl_mask) == 0x100 && machine.bus().interrupt_request(0) == request &&
+              !machine.interrupt_pending(),
+          "Real JSR stacks foreground PC/SR; vector acknowledgement retains the level request");
   if (input.mode == 1) {
-    machine.cpu().step();
-    require((machine.cpu().state().x & status_underrun) != 0,
-            "Native error ISR reads actual SAISR before refilling enabled TX registers");
+    fixture.step();
+    require((machine.cpu().registers().x & status_underrun) != 0,
+            "ISR reads actual underrun status before refill");
   }
-  machine.cpu().step();
+  fixture.step();
   require(machine.bus().interrupt_request(0) == request,
-          "First native MOVEP cannot complete a two-lane transmitter refill");
-  machine.cpu().step();
+          "First native MOVEP leaves the other empty lane pending");
+  fixture.step();
   require(!machine.bus().interrupt_request(0), "Second native MOVEP services the actual level IRQ");
-  machine.cpu().step();
-  require(machine.cpu().state().pc == resume && machine.cpu().state().sp == 0 &&
-              machine.cpu().state().sr == ordinary_sr &&
-              machine.cpu().debug_state().native_instructions - before.native_instructions ==
+  fixture.step();
+  require(machine.cpu().registers().pc == boot + 2 && machine.cpu().registers().sp == 0 &&
+              machine.cpu().registers().sr == ordinary_sr &&
+              machine.cpu().progress().instructions - before.progress.instructions ==
                   (input.mode == 1 ? 5U : 4U),
-          "Native ISR/RTI preserve instruction count and restore foreground PC/SR/SP");
+          "Actual ISR/RTI restores independent PC/SR/SP and instruction count");
   require(word(machine.bus(), input.second) == std::array{next_first, next_second},
-          "Actual ISR writes become the next independent 24-bit serial words");
+          "Actual ISR writes become the next independent24-bit serial words");
 }
 
 void native_case(const Scenario input) {
-  DspMachine machine;
-  const auto resume = install(machine, input);
-  const auto saved = machine.checkpoint();
-  std::optional<DspDebugState> result;
+  NativeFixture fixture;
+  install(fixture, input);
+  const auto saved = fixture.checkpoint();
+  std::optional<CpuView> result;
   for (unsigned replay = 0; replay < 2; ++replay) {
-    machine.restore(saved);
-    service(machine, input, resume);
-    const auto actual = machine.cpu().debug_state();
-    if (result.has_value()) {
+    fixture.restore(saved);
+    service(fixture, input);
+    const auto actual = fixture.view();
+    if (result) {
       require(actual == result.value(),
-              "Trusted restore repeats every native ISR register/counter");
+              "Trusted restore repeats every native register, stack, counter and clock");
     } else {
       result = actual;
     }
@@ -146,45 +250,50 @@ void native_case(const Scenario input) {
 }
 
 void native_unknown_clock(const bool second) {
-  DspMachine machine;
-  DspProgram program;
-  program.immediate("sr", ordinary_sr);
-  const auto resume = program.pc();
-  program.emit("nop");
-  program.install(machine.bus());
-  machine.cpu().step();
-  setup(machine.bus(), second, 4, false);
-  machine.bus().write({.space = DspSpace::x,
-                       .address = priority_register,
-                       .value = second ? secondary_priority : 1U});
-  const auto saved = machine.checkpoint();
-  const auto error = rejects([&] { machine.cpu().step(); });
+  NativeFixture fixture;
+  setup(fixture.machine.bus(), second, 4, false);
+  fixture.machine.bus().write({.space = DspSpace::x,
+                               .address = priority_register,
+                               .value = second ? secondary_priority : 1U});
+  fixture.start_timeline();
+  const auto saved = fixture.checkpoint();
+  const auto error = rejects([&] { fixture.step(); });
   require(error.contains(second ? "Y:0xffff93" : "X:0xffffb3") &&
-              error.contains("pc=" + hex(resume, 6)) && error.contains("omr=") &&
-              rejects([&] {
-                static_cast<void>(machine.checkpoint());
-              }).contains("completed reference step"),
-          "Unknown eligible ESAI clock rejects actual native entry with PC/OMR and status address");
-  const auto failed = machine.cpu().debug_state();
-  static_cast<void>(rejects([&] { machine.cpu().step(); }));
-  require(machine.cpu().debug_state() == failed, "A rejected native owner cannot consume a vector");
-  machine.restore(saved);
-  machine.bus().observe_esai_transmit(instance(second), {.clock = true, .frame_sync = false});
-  machine.cpu().step();
-  require(
-      machine.cpu().state().pc == resume + 1 && !machine.bus().interrupt_request(0),
-      "Trusted recovery plus a real clock baseline permits only the unrequested foreground NOP");
+              error.contains("pc=" + hex(boot + 2, 6)) && error.contains("omr=0x000305") &&
+              error.contains("ticks=") &&
+              rejects([&] { static_cast<void>(fixture.checkpoint()); }).contains("healthy"),
+          "Unknown eligible clock reports its actual status address, PC/OMR/time and quarantines "
+          "the timeline");
+  const auto failed = fixture.view();
+  static_cast<void>(rejects([&] { fixture.step(); }));
+  require(fixture.view() == failed,
+          "Rejected owner cannot consume any vector, CPU state or clock period");
+  fixture.restore(saved);
+  fixture.machine.bus().observe_esai_transmit(instance(second),
+                                              {.clock = true, .frame_sync = false});
+  fixture.step();
+  require(fixture.machine.cpu().registers().pc == boot + 3 &&
+              !fixture.machine.bus().interrupt_request(0),
+          "Trusted recovery and actual clock baseline permit only the unrequested foreground NOP");
 }
-} // namespace
+}
 
 void native_checks() {
+  unsigned contexts = 0;
+  unsigned clock_refusals = 0;
   for (const bool second : {false, true}) {
     native_unknown_clock(second);
+    ++clock_refusals;
     for (const unsigned mode : {1U, 2U, 4U}) {
       for (const bool reference : {false, true}) {
         native_case({.second = second, .mode = mode, .reference = reference});
+        ++contexts;
       }
     }
   }
+  require(contexts == 12 && clock_refusals == 2,
+          "Every independent native source/entry context completes");
+  std::cout << "PASS ESAI_NATIVE_IRQ contexts=" << contexts << " replays=" << contexts * 2
+            << " clock-refusals=" << clock_refusals << '\n';
 }
-} // namespace blofeld::test::esai_irq
+}

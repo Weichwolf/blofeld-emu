@@ -93,6 +93,15 @@ bool gpio_data_read(const dsp56300::InstructionEffect effect) {
   });
 }
 
+bool esai_status_read(const dsp56300::InstructionEffect effect) {
+  // UM tables3-7/3-8: SAISR is a peripheral sample, not an internal RAM read.
+  constexpr unsigned primary_status = 0xffffb3;
+  constexpr unsigned secondary_status = 0xffff93;
+  return effect.kind == dsp56300::EffectKind::read &&
+         ((effect.space == dsp56300::Space::x && effect.address == primary_status) ||
+          (effect.space == dsp56300::Space::y && effect.address == secondary_status));
+}
+
 std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffect effect) {
   using enum dsp56300::EffectKind;
   switch (effect.kind) {
@@ -102,7 +111,7 @@ std::optional<DspMemoryAccess> native_footprint(const dsp56300::InstructionEffec
       constexpr unsigned shi_receive = 0xffff94;
       const auto phase = ((effect.kind == read && effect.space == dsp56300::Space::x &&
                            effect.address == shi_receive) ||
-                          gpio_data_read(effect))
+                          gpio_data_read(effect) || esai_status_read(effect))
                              ? DspMemoryPhase::peripheral_sample
                              : DspMemoryPhase::execute;
       return DspMemoryAccess{

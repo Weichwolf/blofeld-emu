@@ -1341,6 +1341,9 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           native vector/ISR/RTI service, including
                                           pure acknowledgement, partial refills,
                                           missing clocks and trusted replay.
+                                          Independent-core staged/automatic F1/F2
+                                          entry checks both vector reads, actual
+                                          acknowledgement and fault quarantine.
                                           RX/last-slot IRQ and physical latency
                                           remain unqualified (esai-interrupts.txt).
                                           Timed external events now merge between

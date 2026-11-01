@@ -61,6 +61,9 @@ public:
 
   [[nodiscard]] const OwnDspIo &io() const noexcept { return io_; }
 
+  // True until both actual vector words have completed through this owner.
+  [[nodiscard]] bool interrupt_pending() const noexcept { return interrupts_.pending(); }
+
   // Assertion discards staged work at the current published effect boundary.
   // Previously accepted bus writes remain; subcycle assertion timing is unqualified.
   void begin_hardware_reset(OwnDspResetInputs inputs);

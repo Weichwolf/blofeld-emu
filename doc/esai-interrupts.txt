@@ -33,9 +33,12 @@ purity, masked slots, live enables, personal/peripheral reset and clock faults.
 Independent priority expectations cover 64 group/mask combinations and 105 ranked
 source pairs. Twelve native source/entry contexts each restore twice: actual
 vector reads, JSR, SAISR/MOVEP service and RTI retain independently predicted
-PC/SR/SP, instruction counts and next serial words. Both atomic and explicitly
-suspended vector-fetch/acknowledgement paths execute. Two further native cases
-check missing clocks, quarantine, rejected retry and trusted recovery.
+PC/SR/SP, instruction counts and next serial words. The independent DSP core
+executes both manually staged effects and automatic F1/F2 reference cycles from
+actual mode5/PINIT-low reset; literal authored instructions require no legacy
+assembler. The second real vector read acknowledges entry; a stale first-read
+ticket cannot consume it. Two further native cases check missing clocks with
+address/PC/OMR/time, timeline quarantine, rejected retry and trusted recovery.
 
 These are own instruction/peripheral callers with explicit pin observations,
 not recovered original startup or measured board clocks. No host synthesizer,

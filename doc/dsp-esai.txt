@@ -170,9 +170,11 @@ literal old/new words, instruction counts and 12/18 documented base-cost units
 supplement replay. Instructions remain explicitly untimed; only reset advances
 the declared clock. Missing-clock reads on both maps latch actual I/O failures;
 retry cannot retire another instruction, and trusted restore retains recovery.
-The gate is also available in the independent component-only build. Generated-
-clock and interrupt helper migration remains separate. Full original DSP boot,
-physical timing, MIDI/audio and hardware equivalence remain pending.
+The gate is also available in the independent component-only build. Transmitter
+IRQ service uses that core through actual staged vector reads or automatic F1/F2
+cycles (esai-interrupts.txt). Generated-clock helper migration remains separate.
+Full original DSP boot, physical timing, MIDI/audio and hardware equivalence
+remain pending.
 
   cmake --build --preset strict --target blofeld-esai-clock-test
   ctest --test-dir build/strict -R '^dsp_esai_clock$' --output-on-failure

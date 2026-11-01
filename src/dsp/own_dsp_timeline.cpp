@@ -13,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace blofeld {
 OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
@@ -130,6 +131,11 @@ std::optional<OwnDspFetchCycleResult> OwnDspTimeline::advance_one(const std::uin
       faulted_ = true;
     }
     return result;
+  } catch (const Fault &error) {
+    faulted_ = true;
+    const auto regs = machine_.cpu().registers();
+    throw Fault("Own DSP timeline operation=reference-cycle pc=" + hex(regs.pc, 6) + " omr=" +
+                hex(regs.omr, 6) + " ticks=" + std::to_string(deadline) + ": " + error.what());
   } catch (...) {
     faulted_ = true;
     throw;
