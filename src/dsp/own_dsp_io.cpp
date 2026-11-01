@@ -64,7 +64,11 @@ bool OwnDspIo::write(const dsp56300::Space space,
                      const dsp56300::Word value) noexcept {
   if (failure_) { return false; }
   try {
-    bus_.write({.space = board_space(space), .address = address, .value = value});
+    const DspStore store{.space = board_space(space), .address = address, .value = value};
+    bus_.write(store);
+    if (write_observer_.completed != nullptr) {
+      write_observer_.completed(write_observer_.context, store, pc);
+    }
     return true;
   } catch (...) { return fail(Operation::write, space, address, pc, value); }
 }

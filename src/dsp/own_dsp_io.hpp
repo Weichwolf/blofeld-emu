@@ -9,6 +9,13 @@
 #include <optional>
 
 namespace blofeld {
+// Borrowed for one synchronous instruction. Observe only; references expire on return.
+// Callback errors quarantine execution after the already committed physical write.
+struct DspIoWriteObserver {
+  void *context = nullptr;
+  void (*completed)(void *context, const DspStore &store, unsigned pc) = nullptr;
+};
+
 // Converts synchronous core accesses to the strict board bus. This does not
 // schedule clocks, DMA, interrupts or a complete device.
 class OwnDspIo final : public dsp56300::Io {
@@ -56,5 +63,6 @@ private:
 
   DspBus &bus_;
   std::optional<Failure> failure_;
+  DspIoWriteObserver write_observer_;
 };
 } // namespace blofeld

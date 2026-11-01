@@ -359,10 +359,12 @@ Own-core interrupt ownership      partial  Own core executes the actual vector
                                           (own-dsp-integration.txt).
 Independent DSP integration       partial  Pinned own-core subproject and strict
                                           synchronous bus adapter build and
-                                          own_dsp_io pass under ASan/UBSan;
-                                          RAM, GPIO, reset and fault context checked.
-                                          Regular runtime, scheduler, clocks and
-                                          IRQs still use the legacy core. Full migration,
+                                          own_dsp_io pass under both sanitizers.
+                                          dsp_unclocked checks real stores/read
+                                          faults, observer lifetime/reentry,
+                                          diagnostic restore and execution owners.
+                                          Board and normal runtime use this core;
+                                          remaining legacy fixtures, complete
                                           original boot and device tests remain open
                                           (own-dsp-integration.txt).
 Documented GPIO passive bias      partial  Explicitly floating PC/PD/PE/PF inputs
@@ -1868,6 +1870,12 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           is an explicit RAM producer fixture;
                                           actual transport remains unqualified
                                           (dsp-midi-replay.txt).
+                                          Independent-core migration qualified:
+                                          complete 34576-call matrix, checkpoint
+                                          suffixes and both strict faults pass
+                                          ASan/UBSan and separate TSan within
+                                          unchanged TIMEOUT120. No legacy DSP
+                                          executor/assembler in this target.
                                           original_dsp_wire_* CTest cases execute
                                           logical-TIO0 input through the
                                           original producer through real IRQ/RTI

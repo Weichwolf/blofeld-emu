@@ -356,8 +356,8 @@ Conditional board contracts, each separately controlled and recorded:
   fixed-family comparison retains the previous qualified branch results and
   809 control forms. All 8,192 address-update encodings retain their fields.
   The own decoder rejects 24 undocumented register aliases
-  previously accepted for OMR/SR. The scheduler and regular standalone
-  runtime still require migration before the legacy dependency can be removed.
+  previously accepted for OMR/SR. Board and regular standalone execution now use
+  the independent core; remaining legacy harnesses still require the old dependency.
   `BLOFELD_OWN_DSP_ONLY=ON` configures the independent integration targets
   without the legacy source tree or its patches; it does not build the device.
 
@@ -791,6 +791,24 @@ this does not qualify remaining legacy fixtures or complete instrument boot.
 
   cmake --build build/strict --target blofeld-reference-original-midi-rom blofeld-dsp-rom-program-test -j2
   ctest --test-dir build/strict -R '^(dsp_rom_program|reference_midi_rom_fixture)$' --output-on-failure
+
+Synchronous original DSP MIDI parser
+The original_dsp_midi target now uses the independent core in normal and isolated
+builds. Both ASan/UBSan and separate TSan pass the complete 34576-call matrix,
+32873 callbacks, 70430 bytes and 3101868 retirements within unchanged TIMEOUT120.
+Two identical snapshot continuations, one changed suffix and both missing-ring
+faults retain their independent checks; no host transport or instrument boot is
+qualified by this component fixture (dsp-midi-replay.txt).
+
+OwnDspMachine::run_unclocked executes one real synchronous instruction through
+DspBus, with no clock advancement or automatic IRQ admission. Completed reset
+and inactive timeline/fetch/staged/vector owners are required. Its borrowed
+write observer sees committed stores before retirement. Callback errors retain
+the physical write and latch a native fault; snapshots preserve blocked execution.
+dsp_unclocked tests actual memory/fault state, same/fresh diagnostic restoration,
+observer lifetime/reentry and reset/fetch/timeline/staged/vector ownership under
+both sanitizer profiles. The seven affected integration groups pass per profile;
+remaining legacy fixtures and full-device acceptance remain open.
 
 Standalone dependency closure
 With BUILD_TESTING=OFF and BLOFELD_FUZZING=OFF, CMake does not configure the

@@ -3,6 +3,12 @@ Original DSP MIDI ring/parser and pitch callback replay
   cmake --build --preset strict --target blofeld-original-dsp-midi-test
   ctest --test-dir build/strict -R '^original_dsp_midi$' --output-on-failure
 
+The independent-core target passes the complete fixed matrix under ASan/UBSan
+and separate TSan within the unchanged 120-second gate. Checkpoint continuations
+and both strict missing-input controls also execute successfully. Normal and
+component-only configurations have identical compile/archive/link commands for
+this target and require no legacy DSP executor or assembler.
+
 The optional original_firmware.py wrapper verifies the official ZIP identity in
 downloads.json before execution; absent local firmware returns explicit skip 77.
 The firmware, extracted records and run traces remain local. The test loads
@@ -15,8 +21,14 @@ Component word-image SHA-256 identities:
     603cd0a98101a15a7994a2d9f2d946f39890865ebf566f84161a7d9cf0a2dc5f
 
 Declared caller context: OMR=000305, SR=c00300, linear M0..7, single block, omni or
-one selected MIDI channel, clock ignored by the original setting. An own native
-JSR harness calls both genuine ring consumers and the actual nested pitch-bend
+one selected MIDI channel, clock ignored by the original setting. The independent
+DSP core executes a literal MOVE/JSR caller after mode5/PINIT-low reset; both
+normal and isolated builds omit the SDK assembler/backend from this target.
+Each native instruction executes synchronously through the strict board bus,
+without advancing emulated clock time. A borrowed observer checks actual stores
+after bus completion and before retirement. This untimed fixture supplies no
+physical latency or automatic interrupt admission.
+The JSR harness calls both genuine ring consumers and the actual nested pitch-bend
 callback; no host PC/register patch or successful callback stub is supplied.
 Own input bytes are packed into the two original 64/128-word RAM rings. Their
 otherwise unknown cells and adjacent guards are explicitly initialized, without
@@ -37,7 +49,9 @@ match whole CPU and all permitted mutable RAM; a changed continuation must use
 the saved first byte and changed second byte. Six original callbacks complete.
 Missing first cells on either empty ring expose genuine speculative reads at
 P:0c5a / P:0c6a and X:2f80 / X:2d00 with PC/OMR. They fail before consumption,
-field mutation or retirement; further execution and checkpoint capture reject.
+field mutation or retirement; further execution rejects. Diagnostic snapshots
+retain the actual fault, complete registers/progress, unchanged cursors and pitch
+field. Restoring them preserves blocked execution; capture is not fault recovery.
 
 The original_dsp_wire_bytes/pitch/checkpoint CTest cases execute unchanged original configuration,
 vectors and input handlers from the complete P:2cd9 component through the actual

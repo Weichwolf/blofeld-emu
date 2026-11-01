@@ -74,6 +74,10 @@ public:
   [[nodiscard]] dsp56300::InstructionProgress begin_fetch(
       dsp56300::InstructionPublication publication = dsp56300::InstructionPublication::pcu_updates);
   [[nodiscard]] dsp56300::InstructionProgress advance(const dsp56300::EffectTicket &ticket);
+  // One synchronous reference instruction; no clock periods or IRQ admission.
+  // Requires completed reset and no timeline, captured fetch, pending effect or
+  // vector acknowledgement owner. The observer borrows actual committed stores.
+  [[nodiscard]] dsp56300::RunResult run_unclocked(DspIoWriteObserver observer = {});
   // One externally scheduled reference period; does not advance an instruction.
   // DMA arbitration and subcycle effects remain the scheduler's responsibility.
   std::uint64_t advance_reference_cycle();

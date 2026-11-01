@@ -18,7 +18,7 @@ add_library(blofeld_dsp_peripheral_calendar src/dsp/dsp_peripheral_calendar.cpp)
 target_include_directories(blofeld_dsp_peripheral_calendar PUBLIC src)
 target_link_libraries(blofeld_dsp_peripheral_calendar PUBLIC blofeld_firmware)
 add_library(blofeld_own_dsp_io STATIC EXCLUDE_FROM_ALL src/dsp/own_dsp_io.cpp
-  src/dsp/own_dsp_interrupts.cpp src/dsp/own_dsp_machine.cpp)
+  src/dsp/own_dsp_interrupts.cpp src/dsp/own_dsp_machine.cpp src/dsp/dsp_unclocked.cpp)
 target_include_directories(blofeld_own_dsp_io PUBLIC src)
 target_link_libraries(blofeld_own_dsp_io PUBLIC blofeld_dsp_peripherals dsp56300::core
   PRIVATE blofeld_dsp_peripheral_decode)
@@ -81,6 +81,9 @@ if(BUILD_TESTING)
   add_test(NAME dsp_esai COMMAND blofeld-esai-test)
   add_library(blofeld_dma_fixture STATIC test/dma_native_fixture.cpp)
   target_link_libraries(blofeld_dma_fixture PUBLIC blofeld_own_dsp_io)
+  add_executable(blofeld-dsp-unclocked-test test/dsp_unclocked_test.cpp)
+  target_link_libraries(blofeld-dsp-unclocked-test PRIVATE blofeld_dma_fixture blofeld_own_dsp_fetch)
+  add_test(NAME dsp_unclocked COMMAND blofeld-dsp-unclocked-test)
   add_executable(blofeld-dsp-boot-test test/original_dsp_boot_test.cpp
     test/original_dsp_reference.cpp)
   target_link_libraries(blofeld-dsp-boot-test PRIVATE blofeld_dma_fixture)
@@ -91,6 +94,15 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-spi-bootstrap.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-boot.trace")
   set_tests_properties(original_dsp_boot PROPERTIES SKIP_RETURN_CODE 77)
+  add_executable(blofeld-original-dsp-midi-test test/original_dsp_midi_test.cpp)
+  target_link_libraries(blofeld-original-dsp-midi-test PRIVATE
+    blofeld_dma_fixture)
+  add_test(NAME original_dsp_midi COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
+    $<TARGET_FILE:blofeld-original-dsp-midi-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-midi.trace")
+  set_tests_properties(original_dsp_midi PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_executable(blofeld-dsp-test test/dsp_core_test.cpp test/dsp_core_fixture.cpp
     test/dsp_core_pinit.cpp)
   target_link_libraries(blofeld-dsp-test PRIVATE blofeld_dma_fixture blofeld_own_dsp_fetch)
