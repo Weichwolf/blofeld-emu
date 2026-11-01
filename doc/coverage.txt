@@ -98,6 +98,14 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           finite bursts, pinned deadlines, callback
                                           guards and same/fresh native continuations
                                           are checked (dsp-fetch-events.txt).
+                                          Shared-write and MCU-driven DSP-reset
+                                          tests also use the native runtime.
+                                          Actual GPIO write slots can assert/release
+                                          reset; nested signal ownership remains
+                                          guarded. Cancelled PCU/retirement, RAM,
+                                          fractional hold/recovery and odd CLK2
+                                          epochs are checked across joint replays
+                                          (mcu-dsp-reset-control.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are

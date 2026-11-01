@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_fetch.hpp"
 #include "dsp/own_dsp_timeline.hpp"
@@ -111,6 +113,25 @@ void pin_guard(const unsigned kind) {
   if (kind == 2) { invalid.pinit.reset(); }
   if (kind == 3) { invalid.pinit = true; }
   if (kind == 4) { invalid.recovery_cycles = 1; }
+  if (kind == 3) {
+    // DSP56371 PCTL captures a known high PINIT as PEN on assertion. This is
+    // separate from the still unqualified PLL-enabled recovery/lock contract.
+    constexpr unsigned pll_enabled = 0x2000;
+    constexpr unsigned enabled_reset_pctl = reset_pctl | pll_enabled;
+    f.timeline->begin_hardware_reset(invalid);
+    static_cast<void>(
+        f.timeline->advance_reset_to(f.machine.clock().elapsed_ticks() + (2 * period)));
+    const auto held = f.observe();
+    require(f.machine.bus().pll().read() == enabled_reset_pctl && held.reset &&
+                held.reset->phase == DspHardwareResetPhase::asserted &&
+                f.machine.cpu().progress() == dsp56300::Progress{},
+            "Known high PINIT did not capture native PCTL.PEN under actual held reset");
+    require(
+        rejects([&] { f.timeline->release_hardware_reset(); }).contains("qualified PLL recovery") &&
+            f.observe() == held && !f.timeline->faulted(),
+        "Unqualified PLL recovery changed the held chip/frontend/time before refusal");
+    return;
+  }
   const auto before = f.observe();
   static_cast<void>(rejects([&] { f.timeline->begin_hardware_reset(invalid); }));
   require(f.observe() == before && !f.timeline->faulted(),

@@ -2,8 +2,9 @@ Legacy MCU-period / automatic DSP-pipeline fixtures
 
 The regular Board now uses McuDspRuntime and the independent DSP timeline.
 Its migrated external-event regression is described in dsp-fetch-events.txt.
-The following records concern remaining legacy McuDspFetchSchedule fixtures;
-they do not establish current native-runtime coverage by themselves.
+The basic shared-write and DSP-reset groups also use McuDspRuntime now;
+see mcu-dsp-reset-control.txt. Other records below concern remaining legacy
+McuDspFetchSchedule fixtures and do not establish native-runtime coverage.
 
 McuDspFetchSchedule orders DspFetchRun pipeline periods against actual native
 MCU period offers. It is separate from the instruction-completion reference
@@ -57,12 +58,12 @@ No real-time guarantee or measured physical timing is established.
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_schedule$'
 
-Seven own native cases use literal HCS12 LDAB/STAB encodings and independent
-period expectations: 450 common reset ticks, a write at 720 and six 45-tick DSP
-periods. Both tie orders, an unqualified tie, dropped/wrong-address observations,
-missing cycle inputs and budget exhaustion are checked, including callback
-reentry refusal and fault quarantine. The thread-profile run exercises these
-single-threaded owners under TSan; it is not a concurrency qualification.
+The seven shared-write cases now use the independent DSP core through
+McuDspRuntime:450 common held ticks,90 recovery ticks,a write at720 and four
+45tick DSP periods. Both declared orders, full NOP register/progress state,
+wrong/dropped delivery, missing inputs and exhausted budgets are checked.
+See mcu-dsp-reset-control.txt. TSan checks the same single-threaded ownership;
+it does not establish concurrent MCU/DSP execution.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-wait-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_wait$'
@@ -103,8 +104,10 @@ the joint restore,along with observers and caller-owned transport cursors.
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-dsp-reset-test blofeld-original-fetch-reset-start-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^(mcu_dsp_fetch_dsp_reset|original_fetch_reset_start)$'
 
-Nine own native cases cover fractional initial tails,held joint replay,actual
-PORTU STAB release before its trailing slot,and simultaneous held MCU reset.
+The authored DSP-reset group now uses the independent native runtime and real
+MCU instruction cuts instead of an offset reset epoch. Its14 control scenarios
+and boundary guards are described in mcu-dsp-reset-control.txt.
+The optional original regression below still uses the legacy schedule.
 The optional original1.25 regression observes actual U0 assertion/release and
 PORTB SPI stores. All94program words match unchanged firmware;three held-snapshot
 suffixes preserve native MCU/DSP state,5120byte MCU SRAM and every recorded event,

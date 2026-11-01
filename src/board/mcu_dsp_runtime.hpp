@@ -93,6 +93,9 @@ public:
                           const Observer &observer = {});
   void end_system_reset();
   void begin_system_reset(McuResetSource source, unsigned synchronization_cycles);
+  // Caller-owned reset wiring may act at a completed operation or inside the
+  // consumed MCU shared-write signal observation. Running DSP time must match.
+  void begin_dsp_reset(OwnDspResetInputs inputs);
   void release_dsp_reset();
   [[nodiscard]] McuDspRuntimeCheckpoint checkpoint() const;
   [[nodiscard]] bool faulted() const;
@@ -131,6 +134,7 @@ private:
   [[nodiscard]] std::optional<std::uint64_t> next_external();
   void healthy() const;
   void consumed() const;
+  void validate_dsp_reset_observation() const;
   void finish_boundary();
   void offer_period(bool waiting);
   void advance(bool native_through,
@@ -155,5 +159,6 @@ private:
   unsigned period_events_ = 0;
   bool active_ = false;
   bool faulted_ = false;
+  bool observing_signals_ = false;
 };
 }

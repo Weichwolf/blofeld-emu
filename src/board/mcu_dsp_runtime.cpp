@@ -6,6 +6,7 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_io.hpp"
+#include "dsp/own_dsp_machine.hpp"
 #include "dsp/own_dsp_timeline.hpp"
 #include "dsp56300/core.hpp"
 #include "mcu/hc12.hpp"
@@ -53,6 +54,19 @@ std::string_view space_name(const dsp56300::Space space) {
     default: return "unknown-space";
   }
 }
+
+class SignalObservation {
+public:
+  explicit SignalObservation(bool &active) : active_(active) { active_ = true; }
+
+  ~SignalObservation() { active_ = false; }
+
+  SignalObservation(const SignalObservation &) = delete;
+  SignalObservation &operator=(const SignalObservation &) = delete;
+
+private:
+  bool &active_;
+};
 }
 
 void McuDspRuntime::reject_native(const dsp56300::Fault &fault) const {
@@ -73,12 +87,14 @@ void McuDspRuntime::reject_native(const dsp56300::Fault &fault) const {
 class McuDspRuntime::Guard {
 public:
   explicit Guard(McuDspRuntime &runtime)
-      : runtime_(runtime), exceptions_(std::uncaught_exceptions()) {
+      : runtime_(runtime),
+        exceptions_(std::uncaught_exceptions()),
+        previously_active_(runtime.active_) {
     runtime_.active_ = true;
   }
 
   ~Guard() {
-    runtime_.active_ = false;
+    runtime_.active_ = previously_active_;
     if (std::uncaught_exceptions() > exceptions_) { runtime_.faulted_ = true; }
   }
 
@@ -88,6 +104,7 @@ public:
 private:
   McuDspRuntime &runtime_;
   int exceptions_;
+  bool previously_active_;
 };
 
 struct McuDspRuntimeCheckpoint::Storage {
@@ -394,7 +411,14 @@ void McuDspRuntime::observe_write(const BusEvent &event,
       *cycle_.address != event.address || !observe) {
     throw Fault("MCU/DSP observation must match the consumed shared-write period");
   }
-  observe();
+  const auto before = detail::mcu_boundary(mcu_);
+  {
+    const SignalObservation signals(observing_signals_);
+    observe();
+  }
+  if (faulted() || detail::mcu_boundary(mcu_) != before) {
+    throw Fault("MCU/DSP signal observation changed MCU ownership or faulted its runtime");
+  }
   consumed();
   const auto next = next_external();
   if (next && *next == state_.end_ticks && inputs_.external_writes != McuWriteOrder::after_mcu) {
@@ -504,10 +528,42 @@ void McuDspRuntime::begin_system_reset(const McuResetSource source,
   state_.resetting = true;
 }
 
-void McuDspRuntime::release_dsp_reset() {
-  healthy();
-  const Guard guard(*this);
+void McuDspRuntime::validate_dsp_reset_observation() const {
+  if (active_ && !observing_signals_) {
+    throw Fault("MCU/DSP reset control requires a consumed signal or inactive operation boundary");
+  }
+  if (active_) {
+    if (faulted() || mcu_.run_clock().native_epoch() != state_.epoch) {
+      throw Fault("MCU/DSP reset control lost its healthy native epoch");
+    }
+    timeline_->validate_boundary();
+  } else {
+    healthy();
+    if (mcu_.system_reset_active()) {
+      mcu_.validate_reset_boundary();
+    } else {
+      mcu_.validate_run_boundary();
+    }
+  }
   consumed();
+  if (state_.cop_deadline ||
+      (!observing_signals_ && (state_.offered || state_.waiting || state_.shared_write)) ||
+      inputs_.epoch_ticks + dsp_.clock().elapsed_ticks() != state_.end_ticks) {
+    throw Fault("MCU/DSP reset control cannot discard unconsumed peer time pc=" +
+                hex(dsp_.cpu().registers().pc, 6) + " mcu-pc=" + hex(mcu_.cpu().state().pc) +
+                " tick=" + std::to_string(state_.end_ticks));
+  }
+}
+
+void McuDspRuntime::begin_dsp_reset(const OwnDspResetInputs inputs) {
+  validate_dsp_reset_observation();
+  const Guard guard(*this);
+  timeline_->begin_hardware_reset(inputs);
+}
+
+void McuDspRuntime::release_dsp_reset() {
+  validate_dsp_reset_observation();
+  const Guard guard(*this);
   timeline_->release_hardware_reset();
 }
 

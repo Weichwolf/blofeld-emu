@@ -1,0 +1,47 @@
+Native MCU-driven DSP reset control
+
+McuDspRuntime.begin_dsp_reset and release_dsp_reset accept a completed operation
+boundary or the consumed shared-write signal callback. Board wiring belongs to
+the caller. Reset control from cycle/input callbacks or unclosed MCU offers
+refuses before mutation. Running DSP time must exactly meet the MCU boundary;
+a deferred native cycle or fractional interval cannot be silently discarded.
+
+The shared-write observation temporarily permits reset control. Nested control
+retains the active outer owner. Its permission closes on normal return and
+exception. A caught entered reset failure still quarantines the coordinator
+before another native effect can execute. Signal callbacks cannot replace MCU
+registers/time while retaining an apparently successful observation.
+
+The reset uses the native chip/frontend path. It discards pending computation,
+PCU/retirement and captured fetch state, retains completed RAM and lifetime time,
+and starts a new F1/F2 and CLK2 epoch after hold/recovery. Clock and instruction
+counters are independent: a reset at five completed reference cycles preserves
+two elapsed CLK2 edges and cancels the already published second NOP's retirement.
+Eleven later cycles bring the lifetime totals to16 cycles and7 CLK2 edges.
+
+The two migrated groups link the same native runtime as the regular Board,
+without the legacy DSP executor or assembler. Authored HCS12 LDAB/STAB and NOPs
+supply genuine bus periods; no test injects CPU registers or native cycle offers.
+Fixture pad/latch setup precedes attaching observers, which are explicitly
+reattached after native owner restoration.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test blofeld-mcu-dsp-fetch-dsp-reset-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_(schedule|dsp_reset)$'
+
+Seven shared-write cases use the12MHz MCU profile:450 held DSP ticks,90 recovery
+ticks and four genuine45tick DSP periods by the actual write at720. Both orders,
+full NOP registers/progress, dropped/wrong-address delivery, missing cycle inputs
+and finite cycle budgets are checked. The GPIO observer sees the native store.
+
+Fourteen reset-control scenarios use explicit12/18MHz MCU and12MHz DSP inputs:
+held snapshots at different real NOP cuts, native PORTU releases before trailing
+O slots,195 actual MCU SYSCLK reset edges plus five vector periods, RAM retention,
+and repeatable high/low/high reset writes at480/840/1080. Four guards retain active
+callback ownership, fractional/open boundaries, caught reset failures and a
+real MCU-before-DSP deferred-cycle refusal. Replays compare full DSP registers,
+progress, independently calculated native periods and divider epochs.
+
+PORTU is a caller-declared fixture route. Actual Blofeld reset-net reconstruction,
+PLL-enabled recovery, asynchronous silicon phase placement, full unchanged1.25
+Desktop/Keyboard boot and complete MIDI/audio/USB/storage/update acceptance
+remain separate requirements. These checks establish reference-effect ordering.
