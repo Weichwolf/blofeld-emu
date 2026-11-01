@@ -1967,17 +1967,18 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-address.trace")
   set_tests_properties(original_nand_address PROPERTIES SKIP_RETURN_CODE 77)
-  add_executable(blofeld-original-nand-write-test test/original_nand_write_test.cpp test/nand_gpio_fixture.cpp)
-  target_link_libraries(blofeld-original-nand-write-test PRIVATE blofeld_nand_store blofeld_dsp blofeld_dsp_native)
+  add_executable(blofeld-original-nand-write-test test/original_nand_write_test.cpp test/nand_gpio_fixture.cpp
+    test/dsp_core_fixture.cpp)
+  target_link_libraries(blofeld-original-nand-write-test PRIVATE blofeld_nand_store blofeld_dma_fixture)
   add_test(NAME original_nand_write COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_firmware.py"
     $<TARGET_FILE:blofeld-original-nand-write-test>
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-nand-write.trace")
   set_tests_properties(original_nand_write PROPERTIES SKIP_RETURN_CODE 77)
-  add_executable(blofeld-original-update-validation-test test/original_update_validation_test.cpp)
-  target_link_libraries(blofeld-original-update-validation-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
+  add_executable(blofeld-original-update-validation-test test/original_update_validation_test.cpp
+    test/dsp_core_fixture.cpp)
+  target_link_libraries(blofeld-original-update-validation-test PRIVATE blofeld_dma_fixture)
   add_test(NAME original_update_validation COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_update_validation.py"
     $<TARGET_FILE:blofeld-original-update-validation-test>

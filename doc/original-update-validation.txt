@@ -3,8 +3,9 @@ Original main-update validation
   cmake --build --preset strict --target blofeld-original-update-validation-test
   ctest --test-dir build/strict -R '^original_update_validation$' --output-on-failure
 
-The pinned original 400-word DSP main updater executes through an own native
-JSR with declared switched RAM and payload state. Original instructions choose
+The pinned original 400-word DSP main updater executes on the independent core
+through an authored native JSR with declared switched RAM and payload state.
+Original instructions choose
 the programming entry or the MCU error-helper stream. Execution stops at that
 selection, before GPIO transfer or NAND operations. No firmware opcode, branch,
 return value or checksum result is replaced by the host.
@@ -16,19 +17,31 @@ sums 29811 words, then retains a further pipelined read outside that sum. Its
 address must still be readable. An independent integer-modulo oracle checks
 every actual operand read/value/order, native instruction census, accumulator,
 cursor, zero flag, caller frame and branch. Program/payload guards remain exact;
-missing RAM remains unknown. Five fixed report corruptions must reject.
+missing RAM remains unknown. Six fixed report corruptions must reject, including
+the faulted accumulator.
 
 An additive checksum accepts compensating changes. A marker failure selects the
 error helper without checking the payload. These are original algorithm limits,
 not successful-update or authenticity guarantees. Unknown required words fail
 with address, PC and OMR instead of selecting either valid-data branch.
-The interpreter retains already fetched words/AGU updates on a rejected access;
-its diagnostic PC identifies the attempted instruction. Further steps reject
-without changing native registers, stack or counters until reset.
+Each case performs the native mode-5 reset (90 held and 90 recovery reference
+ticks), then executes an explicitly unclocked caller and helper. The synchronous
+owner reports actual completed reads and committed stores; it neither supplies
+operand values nor models elapsed helper clocks or automatic IRQ admission.
+The native core retains fetched words/AGU updates on a rejected access; its
+fault PC identifies the attempted instruction. Further fetch admission rejects
+without changing registers, stack, counters, processing or debug state until reset.
+Both sanitizer profiles pass all 25 cases and thirteen fixed oracle corruptions,
+with unchanged successful instruction/read/state/guard expectations. Rejected
+operand reads retain the preceding ALU/destination/status state. An independent
+signed-word sum checks the completed 56-bit accumulator prefix. Three failed-read
+CCR values differ from the old executor, which executed a paired ALU before its
+refused transfer; neither diagnostic ordering establishes physical bus-fault timing.
 
 Archive/MIDI and all 127 runtime-record identities are checked before execution.
 Original bytes, traces and reports remain local. This isolated validation does
-not establish preceding transport/boot, helper forwarding, NAND layout/timing, complete update/recovery or physical behavior.
+not establish preceding transport/boot, helper forwarding, NAND layout/timing,
+complete update/recovery or physical behavior.
 No fuzzing or physical traffic runs. See original-update-restarts.txt,
 nand-write.txt and objective.txt for the remaining update requirements.
 
@@ -49,8 +62,8 @@ its required extra prefetch, actual PCs, accumulator/sign extension, zero flag,
 cursor, native instruction count and accepted/error branch before any GPIO
 transfer or programming. The starting-page selector is outside this checksum;
 even its absence does not reject until later original code consumes it.
-Unknown required words quarantine execution. Program/payload guards and six
+Unknown required words quarantine execution. Program/payload guards and seven
 fixed evidence corruptions supplement the original main-updater regression.
-The shared main mode must preserve its previous byte-exact execution trace.
+The shared main mode retains its previous successful numeric trace and guards.
 Complete NAND setup, seventeenth-page behavior, helper forwarding, update/
 recovery/power-loss and physical validation retain separate requirements.

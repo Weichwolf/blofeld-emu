@@ -376,6 +376,11 @@ Independent DSP integration       partial  Pinned own-core subproject and strict
                                           dsp_unclocked checks real stores/read
                                           faults, observer lifetime/reentry,
                                           diagnostic restore and execution owners.
+                                          Synchronous/staged completed-read observers
+                                          retain actual FIFO consumption before
+                                          publication, exact contextual faults and
+                                          borrowed callback lifetime. Nine affected
+                                          groups pass each sanitizer profile.
                                           Board and normal runtime use this core;
                                           remaining legacy fixtures, complete
                                           original boot and device tests remain open
@@ -2223,7 +2228,19 @@ MCU security key access           partial  Nominal enabled-KEYEN four-word compa
                                           unsupported access combinations fail.
                                           Original recovery, BDM, physical mask and
                                           persistent unsecuring remain unqualified.
-Original update validation        partial  Thirteen original main-updater validation
+Original update validation        partial  Independent dsp56300 executes both original
+                                          checksum helpers after actual mode-5 reset,
+                                          with explicitly unclocked caller/entry.
+                                          Completed reads and committed stores come
+                                          from the actual synchronous bus owner.
+                                          All25 cases and13 fixed oracle controls
+                                          pass both sanitizer profiles; fault context,
+                                          quarantine, completed signed-sum prefixes
+                                          and instruction/read counts are checked.
+                                          Successful numeric traces remain exact;
+                                          three failed-read CCR values follow the
+                                          native pre-ALU refusal boundary.
+                                          Thirteen original main-updater validation
                                           cases check checksum/marker branches,
                                           exact operand reads and missing data.
                                           No programming or helper transfer;

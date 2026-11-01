@@ -10,7 +10,7 @@ import sys
 
 from original_dsp_voice import original_records
 from original_runtime_clocks import one, rows
-from original_update_validation import ROOT, MASK
+from original_update_validation import ROOT, MASK, signed_accumulator
 from inspect_firmware import decode_block, load_input, read_smf, split_blocks
 
 BASE, FIRST, COUNT = 0x10000, 0x10001, 0xb01
@@ -58,6 +58,8 @@ def check_case(body, data, name):
                 or f'pc=0x{pc:06x}' not in faults[0] or 'omr=' not in faults[0]):
             raise ValueError('FAULT secondary missing word/context differs')
         stop = one(body, 'STOP')
+        if stop['a'] != signed_accumulator(data[1:1 + max(0, missing - FIRST - 1)]):
+            raise ValueError('STOP secondary accumulator must retain completed additions only')
         if (stop['pc'] != pc + 1 or stop['r1'] != missing + 1
                 or stop['omr'] != 0x600389 or stop['sp'] != 1 or stop['r7'] != 0x789):
             raise ValueError('FAULT secondary committed fetch/cursor/caller differs')
@@ -100,7 +102,8 @@ def validate(text, original):
 
 def negative_controls(text, original):
     for label, field in (('READ', 'value'), ('DECISION', 'a'), ('END', 'pc'),
-                         ('COUNTS', 'steps'), ('GUARDS', 'payload'), ('QUARANTINE', 'unchanged')):
+                         ('COUNTS', 'steps'), ('GUARDS', 'payload'), ('QUARANTINE', 'unchanged'),
+                         ('STOP', 'a')):
         changed, count = re.subn('^' + label + r' (.*?\b' + field + r'=)(\d+)',
                                  lambda match: label + ' ' + match[1] + str(int(match[2]) + 1),
                                  text, count=1, flags=re.M)
@@ -142,7 +145,7 @@ def main():
         raise ValueError('Secondary validation input identity changed')
     report.write_text(json.dumps(dict(
         passed=True, cases=len(CASES), **totals, checksummed_words=COUNT, extra_prefetch_words=1,
-        fixed_oracle_corruptions=6, fuzz_execution=False, physical_traffic=False,
+        fixed_oracle_corruptions=7, fuzz_execution=False, physical_traffic=False,
         scope='Unchanged original secondary checksum instructions after declared '
               'post-identification entry. Own native caller/register/RAM context; no preceding '
               'GPIO/NAND identification, delay, programming, helper transfer or complete update '

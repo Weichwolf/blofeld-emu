@@ -25,6 +25,11 @@ HOLES = {'missing-marker': MARKER, 'missing-first': BASE,
          'short-circuit': BASE}
 
 
+def signed_accumulator(words):
+    return (sum(word - (1 << 24) if word & (1 << 23) else word
+                for word in words) << 24) % (1 << 56)
+
+
 def inputs(original, name):
     data = list(original)
     if name in ('bad-marker', 'short-circuit'):
@@ -71,6 +76,9 @@ def check_case(body, data, name):
                 or f'pc=0x{pc:06x}' not in faults[0] or 'omr=' not in faults[0]):
             raise ValueError('FAULT must retain exact missing address and execution context')
         stop = one(body, 'STOP')
+        prefix = [] if missing == MARKER else data[:max(0, missing - BASE - 1)]
+        if stop['a'] != signed_accumulator(prefix):
+            raise ValueError('STOP accumulator must retain only the completed additions')
         # The adapter quarantines committed native progress; it does not undo
         # opcode/extension fetch or an AGU postincrement preceding a failed read.
         fetched = 2 if missing == MARKER else 1
@@ -125,7 +133,7 @@ def validate(text, original):
 
 def negative_controls(text, original):
     for label, field in (('READ', 'value'), ('DECISION', 'r1'), ('END', 'pc'),
-                         ('COUNTS', 'steps'), ('GUARDS', 'payload')):
+                         ('COUNTS', 'steps'), ('GUARDS', 'payload'), ('STOP', 'a')):
         changed, count = re.subn('^' + label + r' (.*?\b' + field + r'=)(\d+)',
                                  lambda m: label + ' ' + m[1] + str(int(m[2]) + 1),
                                  text, count=1, flags=re.M)
@@ -166,7 +174,7 @@ def main():
         raise ValueError('Original validation input identity changed during execution')
     report.write_text(json.dumps({'passed': True, 'cases': len(CASES), **totals,
                                   'checksummed_words': COUNT, 'extra_prefetch_words': 1,
-                                  'fixed_oracle_corruptions': 5,
+                                  'fixed_oracle_corruptions': 6,
                                   'scope': 'Unmodified original main-update validation with an own '
                                   'native caller and declared original, damaged or incomplete RAM '
                                   'payloads. Stops at native success/error-helper selection; no '

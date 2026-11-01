@@ -50,6 +50,11 @@ private:
 }
 
 dsp56300::RunResult OwnDspMachine::run_unclocked(const DspIoWriteObserver observer) {
+  return run_observed_unclocked({}, observer);
+}
+
+dsp56300::RunResult OwnDspMachine::run_observed_unclocked(const DspIoReadObserver reads,
+                                                          const DspIoWriteObserver writes) {
   require_unclocked("synchronous-instruction");
   require_running();
   if (advancing_effect_ || !captured_fetch_owner_.expired() || interrupts_.pending() ||
@@ -58,7 +63,8 @@ dsp56300::RunResult OwnDspMachine::run_unclocked(const DspIoWriteObserver observ
     throw Fault("Own DSP synchronous instruction requires an inactive unclocked owner pc=" +
                 hex(state.pc, 6) + " omr=" + hex(state.omr, 6));
   }
-  const InstructionGuard guard(advancing_effect_, io_.write_observer_, observer);
+  const ObservedEffectGuard guard(
+      advancing_effect_, io_.read_observer_, io_.write_observer_, reads, writes);
   auto result = cpu_.run(1);
   if (result.fault.kind == dsp56300::FaultKind::none && result.dispatches == 1) {
     bus_.observe_omr(cpu_.registers().omr);

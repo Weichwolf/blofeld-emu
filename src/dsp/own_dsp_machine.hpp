@@ -78,6 +78,10 @@ public:
   // Requires completed reset and no timeline, captured fetch, pending effect or
   // vector acknowledgement owner. The observer borrows actual committed stores.
   [[nodiscard]] dsp56300::RunResult run_unclocked(DspIoWriteObserver observer = {});
+  // Same synchronous owner with borrowed completed-read and committed-write
+  // observations. No staged tickets, IRQ admission or hardware clocks.
+  [[nodiscard]] dsp56300::RunResult run_observed_unclocked(DspIoReadObserver reads,
+                                                           DspIoWriteObserver writes = {});
   // Advance one actual staged effect with borrowed post-access observations.
   // Retains interrupt vector acknowledgement; no clock/fetch owner may be active.
   [[nodiscard]] dsp56300::InstructionProgress advance_observed(const dsp56300::EffectTicket &ticket,

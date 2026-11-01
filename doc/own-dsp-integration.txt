@@ -803,12 +803,16 @@ qualified by this component fixture (dsp-midi-replay.txt).
 OwnDspMachine::run_unclocked executes one real synchronous instruction through
 DspBus, with no clock advancement or automatic IRQ admission. Completed reset
 and inactive timeline/fetch/staged/vector owners are required. Its borrowed
-write observer sees committed stores before retirement. Callback errors retain
-the physical write and latch a native fault; snapshots preserve blocked execution.
+write observer sees committed stores before retirement. run_observed_unclocked
+uses that same synchronous owner with borrowed completed-read and committed-write
+observers. Actual reads are observed after bus consumption and before CPU
+publication, without staged tickets or additional clock periods. Callback errors
+retain consumed input or committed stores and latch the actual native fault;
+snapshots preserve blocked execution and never retain borrowed callbacks.
 dsp_unclocked tests actual memory/fault state, same/fresh diagnostic restoration,
 observer lifetime/reentry and reset/fetch/timeline/staged/vector ownership under
-both sanitizer profiles. The seven affected integration groups pass per profile;
-remaining legacy fixtures and full-device acceptance remain open.
+both sanitizer profiles. Remaining legacy fixtures and full-device acceptance
+remain open.
 
 Observed staged effects and original SHI reception
 OwnDspMachine::advance_observed borrows post-read/write observers for one actual
@@ -817,8 +821,12 @@ acknowledgement. Reset must be complete; clock/fetch/reentrant owners are refuse
 It advances no time. Observers cover ordinary reads/writes, not bit/reset effects.
 Read callback failure retains destructive FIFO consumption, the contextual fault
 and the unretired destination; callbacks never survive return or restoration.
-dsp_observed checks these boundaries, stale tickets, diagnostic/healthy restore,
-and second-vector-read rejection without a false peripheral acknowledgement.
+dsp_observed checks accepted/rejected destructive FIFO reads through both staged
+and synchronous owners, exact native fault context, diagnostic/healthy restore,
+callback lifetime/reentry, stale tickets and second-vector-read rejection without
+a false peripheral acknowledgement. The observed synchronous API and original
+main/secondary checksum migration pass nine affected groups per sanitizer profile,
+including the retained original MIDI parser and four wire-entry regressions.
 
 Original SHI uses this interface with unchanged records, cases and wrapper.
 All nine affected groups pass ASan/UBSan and separate TSan. Its 18 cases/36 replays

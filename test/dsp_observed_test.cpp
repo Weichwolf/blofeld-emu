@@ -83,6 +83,7 @@ struct Reader {
             "Read observer sees the consumed physical FIFO value before CPU publication");
     const auto before = state(self.machine);
     static_cast<void>(rejects([&] { static_cast<void>(self.machine.run_unclocked()); }));
+    static_cast<void>(rejects([&] { static_cast<void>(self.machine.run_observed_unclocked({})); }));
     static_cast<void>(rejects([&] { static_cast<void>(self.machine.checkpoint()); }));
     require(state(self.machine) == before, "Read callback cannot reenter or capture its owner");
     if (self.fail) { throw Fault("Authored observer rejection after destructive FIFO read"); }
@@ -102,12 +103,18 @@ dsp56300::InstructionProgress finish(OwnDspMachine &machine,
   return progress;
 }
 
-void fifo_observation(const bool fail) {
-  OwnDspMachine machine(native::native_clocks);
-  setup_fifo(machine);
-  const auto healthy = machine.checkpoint();
-  const auto ticks = machine.clock().elapsed_ticks();
-  Reader reader{.machine = machine, .fail = fail};
+enum class Route : unsigned char { staged, synchronous };
+
+struct ReadOutcome {
+  dsp56300::Fault fault;
+  bool retired;
+};
+
+ReadOutcome observed_read(OwnDspMachine &machine, Reader &reader, const Route route) {
+  if (route == Route::synchronous) {
+    const auto result = machine.run_observed_unclocked(reader.borrowed());
+    return {.fault = result.fault, .retired = result.dispatches == 1};
+  }
   auto progress = machine.begin_fetch(dsp56300::InstructionPublication::retirement);
   if (!progress.pending) { throw Fault("Actual FIFO instruction lacks its staged fetch"); }
   const auto first = progress.pending.value().ticket;
@@ -119,14 +126,28 @@ void fifo_observation(const bool fail) {
   require(reader.calls == calls && state(machine) == after_fetch,
           "Stale tickets neither replay a callback nor mutate the native state");
   progress = finish(machine, progress, reader.borrowed());
+  return {.fault = progress.fault, .retired = progress.retired};
+}
+
+void fifo_observation(const bool fail, const Route route) {
+  OwnDspMachine machine(native::native_clocks);
+  setup_fifo(machine);
+  const auto healthy = machine.checkpoint();
+  const auto ticks = machine.clock().elapsed_ticks();
+  Reader reader{.machine = machine, .fail = fail};
+  const auto progress = observed_read(machine, reader, route);
   require(reader.fifo_reads == 1 && machine.bus().shi().interrupt_vectors().empty() &&
               machine.clock().elapsed_ticks() == ticks,
           "One actual read consumes the FIFO without advancing reference time");
   if (fail) {
     const auto &failure = machine.io().failure();
-    // Staged ordinary reads report memory_read, including peripheral addresses.
+    // The staged read ticket reports memory_read; synchronous high-I/O uses
+    // io_read (the documented Core bus fault classes). Both retain the real port.
+    const auto kind =
+        route == Route::staged ? dsp56300::FaultKind::memory_read : dsp56300::FaultKind::io_read;
     require(
-        progress.fault.kind == dsp56300::FaultKind::memory_read && failure &&
+        progress.fault.kind == kind && progress.fault.space == dsp56300::Space::x &&
+            progress.fault.address == hrx && progress.fault.pc == native::boot + 6 && failure &&
             failure->operation == OwnDspIo::Operation::read && failure->address == hrx &&
             failure->pc == native::boot + 6 && failure->cause &&
             machine.cpu().progress().instructions == 3 &&
@@ -215,8 +236,10 @@ void vector_and_owner_guards() {
 
 int main() {
   try {
-    fifo_observation(false);
-    fifo_observation(true);
+    fifo_observation(false, Route::staged);
+    fifo_observation(true, Route::staged);
+    fifo_observation(false, Route::synchronous);
+    fifo_observation(true, Route::synchronous);
     vector_and_owner_guards();
     std::cout << "Observed DSP effects: actual FIFO consumption, callback faults/lifetime, stale "
                  "tickets, vector acknowledgement and fetch/timeline ownership passed\n";

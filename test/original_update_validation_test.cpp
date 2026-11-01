@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_native_access.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp_core_fixture.hpp"
+#include "dsp_rom_program.hpp"
 #include "firmware/firmware.hpp"
 
 #include <algorithm>
@@ -16,12 +19,22 @@
 #include <iostream>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace {
-using blofeld::test::require;
+void require(const bool condition, const std::string &reason) {
+  if (!condition) { throw blofeld::Fault(reason); }
+}
+
+auto native_state(const blofeld::OwnDspMachine &machine) {
+  const auto &cpu = machine.cpu();
+  return std::tuple{
+      cpu.registers(), cpu.progress(), cpu.fault(), cpu.processing_state(), cpu.debug_status()};
+}
 using enum blofeld::DspSpace;
 constexpr unsigned entry = 0x2e00;
 constexpr unsigned alias_offset = 0xf000, memory_mode = 0x600389;
@@ -149,32 +162,34 @@ void install(blofeld::DspBus &bus,
   }
 }
 
-void caller(blofeld::DspBus &bus, blofeld::DspCore &cpu, const Layout layout) {
-  blofeld::test::DspProgram program;
-  program.immediate("r0", source_cookie);
-  program.immediate("r1", cursor_cookie);
+void caller(blofeld::DspBus &bus, blofeld::OwnDspMachine &cpu, const Layout layout) {
+  blofeld::test::core::Program program;
+  program.immediate(blofeld::test::DspRomRegister::r0, source_cookie);
+  program.immediate(blofeld::test::DspRomRegister::r1, cursor_cookie);
   if (layout.secondary) {
     // Explicit post-identification caller state, not successful NAND setup.
-    program.immediate("r7", source_cookie);
-    program.immediate("sr", post_identification_sr);
-    program.immediate("m1", word_mask);
-    program.immediate("m2", word_mask);
+    program.immediate(blofeld::test::DspRomRegister::r7, source_cookie);
+    program.immediate(blofeld::test::DspRomRegister::sr, post_identification_sr);
+    program.immediate(blofeld::test::DspRomRegister::m1, word_mask);
+    program.immediate(blofeld::test::DspRomRegister::m2, word_mask);
   }
-  program.immediate("omr", memory_mode);
-  for (unsigned index = 0; index < 3; ++index) { program.emit("nop"); }
+  program.immediate(blofeld::test::DspRomRegister::omr, memory_mode);
+  for (unsigned index = 0; index < 3; ++index) { program.emit(0); }
   const auto mapped = program.pc();
-  program.word(absolute_call);
-  program.word(layout.start);
+  program.emit(absolute_call, layout.start);
   program.install(bus);
-  for (unsigned steps = 0; cpu.state().pc != layout.start; ++steps) {
+  const blofeld::test::core::Driver reset(cpu);
+  require(reset.state().pc == blofeld::test::DspRomProgram::boot,
+          "Native reset selects the caller");
+  for (unsigned steps = 0; cpu.cpu().registers().pc != layout.start; ++steps) {
     require(steps < 32, "Own native caller must reach the original updater");
-    if (cpu.state().pc == mapped) { bus.advance_instruction_cycles(3); }
-    cpu.step();
+    if (cpu.cpu().registers().pc == mapped) { bus.advance_instruction_cycles(3); }
+    blofeld::test::dma_test::step_native(cpu);
   }
-  require(cpu.state().sp == 1, "Own native JSR supplies the actual updater call frame");
+  require(cpu.cpu().registers().sp == 1, "Own native JSR supplies the actual updater call frame");
 }
 
-void state(std::ostream &trace, const std::string_view label, const blofeld::DspState &value) {
+void state(std::ostream &trace, const std::string_view label, const dsp56300::Registers &value) {
   trace << label << " pc=" << value.pc << " sr=" << value.sr << " omr=" << value.omr
         << " a=" << value.a << " r1=" << value.r[1] << " r7=" << value.r[7] << " x=" << value.x
         << " y=" << value.y << " sp=" << value.sp << '\n';
@@ -206,54 +221,94 @@ void verify_memory(blofeld::DspBus &bus,
   }
 }
 
-void verify_quarantine(blofeld::DspCore &cpu, std::ostream &trace) {
-  const auto stopped = cpu.debug_state();
+void verify_quarantine(blofeld::OwnDspMachine &cpu, std::ostream &trace) {
+  require(cpu.cpu().fault().kind == dsp56300::FaultKind::memory_read && cpu.io().failure(),
+          "Unknown update data retains the actual native read fault");
+  const auto stopped = native_state(cpu);
   bool rejected = false;
   try {
-    cpu.step();
-  } catch (const blofeld::Fault &error) {
-    rejected =
-        std::string_view(error.what()).contains("requires reset after a rejected reference step");
+    static_cast<void>(cpu.begin_fetch());
+  } catch (const std::logic_error &error) {
+    rejected = std::string_view(error.what()).contains("healthy stopped running state");
   }
-  require(rejected && cpu.debug_state() == stopped,
+  require(rejected && native_state(cpu) == stopped,
           "Missing native update data quarantines all further execution until reset");
   trace << "QUARANTINE unchanged=1\n";
 }
 
-void execute(blofeld::DspCore &cpu, std::ostream &trace, const Layout layout) {
+struct Observations {
+  std::ostream &trace;
+  bool secondary;
   unsigned writes = 0;
-  const blofeld::DspNativeAccessObserver observer{
-      .observe = [&](const blofeld::DspNativeAccess &access) {
-        if (access.stage != blofeld::DspNativeAccessStage::after) { return; }
-        if (access.kind == blofeld::DspNativeAccessKind::read) {
-          require(access.target.space == y && access.value.has_value(),
-                  "Original validation operand reads must use known Y words");
-          trace << "READ address=" << access.target.address << " value=" << *access.value
-                << " pc=" << access.pc << '\n';
-        }
-        if (access.kind == blofeld::DspNativeAccessKind::write) {
-          require(!layout.secondary && access.target.space == x &&
-                      access.target.address == priority_register && access.value == priority_value,
-                  "Original validation only writes its native interrupt priority");
-          ++writes;
-        }
+
+  void read(const blofeld::DspIoReadAccess &access) const {
+    if (access.address.space == p) { return; }
+    require(access.address.space == y, "Original validation operand reads require Y words");
+    trace << "READ address=" << access.address.address << " value=" << access.value
+          << " pc=" << access.pc << '\n';
+  }
+
+  void write(const blofeld::DspStore &access) {
+    require(!secondary && access.space == x && access.address == priority_register &&
+                access.value == priority_value,
+            "Original validation only writes its native interrupt priority");
+    ++writes;
+  }
+};
+
+void step(blofeld::OwnDspMachine &machine, Observations &observations) {
+  const blofeld::DspIoReadObserver reads{
+      .context = &observations,
+      .completed = [](void *context, const blofeld::DspIoReadAccess &access) {
+        static_cast<Observations *>(context)->read(access);
       }};
+  const blofeld::DspIoWriteObserver writes{
+      .context = &observations,
+      .completed = [](void *context, const blofeld::DspStore &access, unsigned) {
+        static_cast<Observations *>(context)->write(access);
+      }};
+  const auto before = machine.cpu().progress();
+  const auto ticks = machine.clock().elapsed_ticks();
+  const auto progress = machine.run_observed_unclocked(reads, writes);
+  if (progress.fault.kind != dsp56300::FaultKind::none) {
+    std::string cause = "Original validation native instruction fault";
+    const auto &failure = machine.io().failure();
+    if (failure && failure->cause) {
+      try {
+        std::rethrow_exception(failure->cause);
+      } catch (const std::exception &error) { cause = error.what(); }
+    }
+    throw blofeld::Fault(cause + " pc=" + blofeld::hex(progress.fault.pc, 6) +
+                         " omr=" + blofeld::hex(machine.cpu().registers().omr, 6));
+  }
+  require(progress.dispatches == 1 &&
+              machine.cpu().progress().instructions == before.instructions + 1 &&
+              machine.clock().elapsed_ticks() == ticks,
+          "One actual native instruction retires without inventing clock periods");
+}
+
+void execute(blofeld::OwnDspMachine &cpu, std::ostream &trace, const Layout layout) {
+  Observations observations{.trace = trace, .secondary = layout.secondary};
   for (unsigned steps = 0; steps < layout.count + instruction_allowance; ++steps) {
-    const auto before = cpu.state();
+    const auto before = cpu.cpu().registers();
     if (before.pc == layout.decision || before.pc == layout.accepted) {
       state(trace, "DECISION", before);
     }
     if (before.pc == layout.forwarding || before.pc == layout.accepted) {
       state(trace, "END", before);
-      trace << "COUNTS steps=" << steps << " writes=" << writes << '\n';
+      trace << "COUNTS steps=" << steps << " writes=" << observations.writes << '\n';
       return;
     }
     try {
-      cpu.step(observer);
+      step(cpu, observations);
     } catch (const blofeld::Fault &error) {
+      const auto failed = cpu.cpu().registers();
+      require(std::tuple{failed.a, failed.b, failed.x, failed.y, failed.sr} ==
+                  std::tuple{before.a, before.b, before.x, before.y, before.sr},
+              "Rejected operand reads retain pre-instruction ALU, destinations and status");
       trace << "FAULT " << error.what() << '\n';
-      state(trace, "STOP", cpu.state());
-      trace << "COUNTS steps=" << steps << " writes=" << writes << '\n';
+      state(trace, "STOP", cpu.cpu().registers());
+      trace << "COUNTS steps=" << steps << " writes=" << observations.writes << '\n';
       verify_quarantine(cpu, trace);
       return;
     }
@@ -273,9 +328,9 @@ void run(const blofeld::Firmware &firmware, std::ostream &trace, const Layout la
   for (const auto name : selected) {
     const auto data = input(payload, name, layout);
     trace << "CASE name=" << name << '\n';
-    blofeld::DspBus bus;
+    blofeld::OwnDspMachine cpu(blofeld::test::dma_test::native_clocks);
+    auto &bus = cpu.bus();
     install(bus, helper, data, layout);
-    blofeld::DspCore cpu(bus);
     caller(bus, cpu, layout);
     execute(cpu, trace, layout);
     verify_memory(bus, helper, data, layout);
