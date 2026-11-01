@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp_core_fixture.hpp"
+#include "dsp_rom_program.hpp"
 #include "firmware/firmware.hpp"
 #include "nand_gpio_fixture.hpp"
-#include "nand_program_fixture.hpp"
+#include "nand_gpio_pins.hpp"
+#include "nand_native_program.hpp"
 #include "storage/nand.hpp"
 
 #include <array>
@@ -24,14 +28,15 @@
 
 namespace blofeld::test {
 namespace {
+using namespace nand_native;
 constexpr unsigned sample_row = 0x12345;
 constexpr unsigned instruction_limit = 10000;
 constexpr unsigned missing_column = 37;
 
-unsigned own_reader(DspProgram &program, const unsigned row) {
+unsigned own_reader(core::Program &program, const unsigned row) {
   setup_gpio(program);
-  program.immediate("r0", 0);
-  program.immediate("m0", word_mask);
+  program.immediate(DspRomRegister::r0, 0);
+  program.immediate(DspRomRegister::m0, word_mask);
   latch(program, {.value = 0, .mode = nand_cle});
   for (const unsigned byte : {0U, row & byte_mask, (row >> 8U) & byte_mask, row >> 16U}) {
     latch(program, {.value = byte, .mode = nand_ale});
@@ -41,13 +46,8 @@ unsigned own_reader(DspProgram &program, const unsigned row) {
   movep(program, input_f, port_f_direction, 'y');
   movep(program, all_inputs_f, port_f_control, 'y');
   const auto poll = program.pc();
-  program.emit("brclr #12,x:<<$ffff8b,$0");
-  for (unsigned column = 0; column < Nand::page_bytes; ++column) {
-    program.emit("bclr #8,x:<<" + number(port_c_data));
-    program.emit("movep y:<<" + number(port_f_data) + ",a");
-    program.emit("move a1,x:(r0)+");
-    program.emit("bset #8,x:<<" + number(port_c_data));
-  }
+  poll_ready(program);
+  for (unsigned column = 0; column < Nand::page_bytes; ++column) { read_byte(program); }
   return poll;
 }
 
@@ -60,20 +60,22 @@ std::array<std::uint8_t, Nand::page_bytes> sample_page() {
   return bytes;
 }
 
-void step(DspCore &cpu, NandLink &link, std::ostream &trace) {
-  const auto before = cpu.state();
+void step(OwnDspMachine &cpu, NandLink &link, std::ostream &trace) {
+  const auto before = cpu.cpu().registers();
   trace << "pc=" << hex(before.pc, 6) << " sr=" << hex(before.sr, 6)
         << " omr=" << hex(before.omr, 6) << " r0=" << hex(before.r[0], 6)
         << " r4=" << hex(before.r[4], 6) << " r5=" << hex(before.r[5], 6) << '\n';
-  cpu.step();
-  link.after_step(before);
+  dma_test::step_native(cpu);
+  link.after_step({.pc = before.pc, .omr = before.omr});
 }
 
 void test_own_reader(const unsigned row, const bool missing) {
-  DspProgram program;
+  core::Program program;
   const auto poll = own_reader(program, row);
-  DspBus bus;
+  OwnDspMachine cpu(dma_test::native_clocks);
+  auto &bus = cpu.bus();
   program.install(bus);
+  nand_native::reset(cpu);
   Nand nand;
   const auto bytes = sample_page();
   if (missing) {
@@ -85,9 +87,8 @@ void test_own_reader(const unsigned row, const bool missing) {
   nand.observe_power_ready();
   std::ostringstream trace;
   NandLink link(bus, nand, trace, {.poll_pcs = {poll}, .selected = true, .outcomes = {}});
-  DspCore cpu(bus);
   bool rejected = false;
-  for (unsigned count = 0; cpu.state().pc != program.pc(); ++count) {
+  for (unsigned count = 0; cpu.cpu().registers().pc != program.pc(); ++count) {
     require(count < instruction_limit, "Own native NAND reader instruction bound exceeded");
     try {
       step(cpu, link, trace);
@@ -105,7 +106,8 @@ void test_own_reader(const unsigned row, const bool missing) {
               nand.page() == row && link.commands() == 1 && link.addresses() == 4 &&
               link.polls() == 3,
           "Native DSP must emit exact command/address/read counts and really wait for readiness");
-  require(cpu.state().r[0] == expected, "Only native data stores may advance the destination");
+  require(cpu.cpu().registers().r[0] == expected,
+          "Only native data stores may advance the destination");
   for (unsigned index = 0; index < expected; ++index) {
     require(bus.read({.space = DspSpace::x, .address = index}) == bytes[index],
             "Native GPIO MOVEP/store must preserve every main/spare byte, without host RAM writes");
@@ -113,17 +115,18 @@ void test_own_reader(const unsigned row, const bool missing) {
 }
 
 void test_link_preconditions(const std::optional<bool> selected) {
-  DspProgram program;
+  core::Program program;
   setup_gpio(program);
   // Both strobes change together; without a measured edge order this must reject.
   movep(program, 0, port_c_data, 'x');
-  DspBus bus;
+  OwnDspMachine cpu(dma_test::native_clocks);
+  auto &bus = cpu.bus();
   program.install(bus);
+  nand_native::reset(cpu);
   Nand nand;
   nand.observe_power_ready();
   std::ostringstream trace;
   NandLink link(bus, nand, trace, {.poll_pcs = {}, .selected = selected, .outcomes = {}});
-  DspCore cpu(bus);
   std::string reason;
   for (unsigned count = 0; reason.empty(); ++count) {
     require(count < instruction_limit, "NAND link precondition diagnostic exceeded its bound");
@@ -167,24 +170,24 @@ void test_original_address(const Firmware &firmware, std::ostream &trace, const 
   constexpr unsigned reload_boundary = 0xc0b0;
   constexpr unsigned buffer = 0xc000;
   constexpr unsigned absolute_jsr = 0x0bf080;
-  DspProgram program;
+  core::Program program;
   setup_gpio(program);
-  program.immediate("r4", reload_boundary);
+  program.immediate(DspRomRegister::r4, reload_boundary);
   constexpr unsigned original_omr = 0x600389;
-  program.immediate("omr", original_omr);
-  program.immediate("r5", row);
-  program.immediate("r2", buffer);
-  program.immediate("m5", word_mask);
-  program.word(absolute_jsr);
-  program.word(original_reader);
-  DspBus bus;
+  program.immediate(DspRomRegister::omr, original_omr);
+  program.immediate(DspRomRegister::r5, row);
+  program.immediate(DspRomRegister::r2, buffer);
+  program.immediate(DspRomRegister::m5, word_mask);
+  program.emit(absolute_jsr, original_reader);
+  OwnDspMachine cpu(dma_test::native_clocks);
+  auto &bus = cpu.bus();
   install_original_stage(bus, firmware);
   program.install(bus);
+  nand_native::reset(cpu);
   Nand nand;
   nand.observe_bytes(row, 0, sample_page());
   nand.observe_power_ready();
   NandLink link(bus, nand, trace, {.poll_pcs = {original_poll}, .selected = true, .outcomes = {}});
-  DspCore cpu(bus);
   std::string reason;
   for (unsigned count = 0; reason.empty(); ++count) {
     require(count < instruction_limit, "Original NAND subroutine instruction bound exceeded");
@@ -208,7 +211,7 @@ void test_original_address(const Firmware &firmware, std::ostream &trace, const 
   require(link.commands() == 1 && link.addresses() == (high_row ? 1U : 4U) &&
               link.polls() == (high_row ? 0U : 3U) && link.reads() == 0 &&
               nand.page() == (high_row ? 0U : row) && nand.column() == 0 &&
-              cpu.state().r[5] == row + 1,
+              cpu.cpu().registers().r[5] == row + 1,
           "Original instructions must preserve exact NAND addressing/frontier side effects");
   std::cout << "Original NAND subroutine row " << hex(row, 6)
             << ": expected unqualified frontier retained: " << reason << '\n';

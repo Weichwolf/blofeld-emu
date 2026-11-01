@@ -38,9 +38,13 @@ Checks
 nand_read checks 42 row/area vectors, main/spare boundaries, upper row bits,
 explicit busy/completion, address-only power-on Read1, repeated/aborting reset,
 retained cells, unknown-byte retry and rejected ranges/commands/phases.
-nand_gpio uses native own DSP instructions, without firmware assets: command and
-address output, actual TIO1 ready polling, input/output turnaround, all 528 bytes
-and native X-memory stores. Two synthetic pages and a withdrawn byte check the
+nand_gpio uses dsp56300 and literal authored instructions, without firmware
+assets: command/address output, actual TIO1 ready polling, input/output
+turnaround, all 528 bytes and native X-memory stores. Actual reset holds and
+recovers for 90 ticks each; subsequent instructions are explicitly unclocked.
+The connector consumes only PC/OMR context and actual GPIO state, with no CPU
+implementation dependency. Read completion after three pending polls remains a
+declared lab observation. Two synthetic pages and a withdrawn byte check the
 candidate link. No host writes operand RAM or computes instruction results.
 Unknown/deselected chip-select observations and unordered simultaneous RE/WE
 transitions fail before any NAND operation, retaining CPU/device context.

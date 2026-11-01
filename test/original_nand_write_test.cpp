@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp_core_fixture.hpp"
+#include "dsp_rom_program.hpp"
 #include "firmware/firmware.hpp"
 #include "nand_gpio_fixture.hpp"
-#include "nand_program_fixture.hpp"
+#include "nand_native_program.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
 #include "storage/nand_file.hpp"
@@ -28,6 +31,7 @@
 
 namespace blofeld::test {
 namespace {
+using namespace nand_native;
 constexpr unsigned helper_base = 0x2e00;
 constexpr unsigned helper_alias = 0x10000 + helper_base - 0x1000;
 constexpr unsigned switched_omr = 0x600389;
@@ -118,16 +122,15 @@ void install_inputs(DspBus &bus,
   }
 }
 
-unsigned own_caller(DspProgram &program, const unsigned entry) {
+unsigned own_caller(core::Program &program, const unsigned entry) {
   setup_gpio(program);
-  program.immediate("m0", word_mask);
-  program.immediate("r0", buffer);
-  program.immediate("a", row);
-  program.immediate("omr", switched_omr);
-  for (unsigned index = 0; index < 3; ++index) { program.emit("nop"); }
+  program.immediate(DspRomRegister::m0, word_mask);
+  program.immediate(DspRomRegister::r0, buffer);
+  program.immediate(DspRomRegister::a, row);
+  program.immediate(DspRomRegister::omr, switched_omr);
+  for (unsigned index = 0; index < 3; ++index) { program.emit(0); }
   const auto after_nops = program.pc();
-  program.word(absolute_jsr);
-  program.word(entry);
+  program.emit(absolute_jsr, entry);
   return after_nops;
 }
 
@@ -162,13 +165,13 @@ struct Result {
 };
 
 Result execute(DspBus &bus,
-               DspCore &cpu,
+               OwnDspMachine &cpu,
                NandLink &link,
                const unsigned after_nops,
                const Stop stop,
                std::ostream &trace) {
   for (unsigned count = 0; count < instruction_limit; ++count) {
-    const auto before = cpu.state();
+    const auto before = cpu.cpu().registers();
     trace << "pc=" << hex(before.pc, 6) << " sr=" << hex(before.sr, 6)
           << " omr=" << hex(before.omr, 6) << " r0=" << hex(before.r[0], 6)
           << " lc=" << hex(before.lc, 6) << '\n';
@@ -179,16 +182,16 @@ Result execute(DspBus &bus,
       trace << "observed-switch-cycles=3\n";
     }
     try {
-      cpu.step();
-      link.after_step(before);
+      dma_test::step_native(cpu);
+      link.after_step({.pc = before.pc, .omr = before.omr});
       if ((stop == Stop::loaded && link.writes() == Nand::page_bytes) ||
           (stop == Stop::active && link.commands() == 2)) {
         trace << "cut-boundary=" << static_cast<unsigned>(stop) << '\n';
-        return {.reason = {}, .pc = before.pc, .source_end = cpu.state().r[0]};
+        return {.reason = {}, .pc = before.pc, .source_end = cpu.cpu().registers().r[0]};
       }
     } catch (const Fault &fault) {
       trace << "expected-frontier=" << fault.what() << '\n';
-      return {.reason = fault.what(), .pc = before.pc, .source_end = cpu.state().r[0]};
+      return {.reason = fault.what(), .pc = before.pc, .source_end = cpu.cpu().registers().r[0]};
     }
   }
   throw Fault("Original NAND helper exceeded its native instruction bound");
@@ -336,19 +339,20 @@ void run(const Firmware &firmware, const Input input, std::ostream &trace) {
         << " outcome=" << (input.outcome == NandOutcome::pass ? "pass" : "fail")
         << " stop=" << static_cast<unsigned>(input.stop) << " power=" << input.power << '\n';
   const auto source = source_words_from(firmware, input.original_source);
-  DspProgram caller;
+  core::Program caller;
   const auto after_nops =
       own_caller(caller, input.program ? input.helper.program : input.helper.erase);
-  DspBus bus;
+  OwnDspMachine cpu(dma_test::native_clocks);
+  auto &bus = cpu.bus();
   install_inputs(bus, firmware, input.helper, source);
   caller.install(bus);
+  nand_native::reset(cpu);
   Nand nand;
   prepare_nand(nand, input.program);
   NandLink link(bus,
                 nand,
                 trace,
                 {.poll_pcs = {input.helper.poll}, .selected = true, .outcomes = {input.outcome}});
-  DspCore cpu(bus);
   const auto result = execute(bus, cpu, link, after_nops, input.stop, trace);
   if (input.stop != Stop::none) {
     check_interrupted(nand, link, result, input);
@@ -383,18 +387,19 @@ int persistent_worker(const Firmware &firmware, char **arguments) {
   const auto helper = helpers.back();
   const auto outcome = fail != 0 ? NandOutcome::fail : NandOutcome::pass;
   const auto source = source_words_from(firmware, false);
-  DspProgram caller;
+  core::Program caller;
   const auto after_nops = own_caller(caller, program != 0 ? helper.program : helper.erase);
-  DspBus bus;
+  OwnDspMachine cpu(dma_test::native_clocks);
+  auto &bus = cpu.bus();
   install_inputs(bus, firmware, helper, source);
   caller.install(bus);
+  nand_native::reset(cpu);
   NandStore store(arguments[2]);
   store.observe_power_ready();
   store.observe_wp(true);
   std::ostringstream trace;
   NandLink link(
       bus, store, trace, {.poll_pcs = {helper.poll}, .selected = true, .outcomes = {outcome}});
-  DspCore cpu(bus);
   unsigned transactions = 0;
   store.set_observer([&](const NandFilePhase phase) {
     if (phase == NandFilePhase::created) { ++transactions; }
@@ -402,7 +407,7 @@ int persistent_worker(const Firmware &firmware, char **arguments) {
         static_cast<unsigned>(phase) != requested_phase) {
       return;
     }
-    const auto state = cpu.state();
+    const auto state = cpu.cpu().registers();
     std::cout << "NAND_FILE " << requested_transaction << ' ' << requested_phase
               << " pc=" << hex(state.pc, 6) << " source=" << hex(state.r[0], 6)
               << " pending=" << static_cast<unsigned>(store.pending())

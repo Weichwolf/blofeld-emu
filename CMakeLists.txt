@@ -1952,11 +1952,13 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-power-test test/nand_power_test.cpp)
   target_link_libraries(blofeld-nand-power-test PRIVATE blofeld_nand)
   add_test(NAME nand_power COMMAND blofeld-nand-power-test)
-  add_executable(blofeld-nand-gpio-test test/nand_gpio_test.cpp test/nand_gpio_fixture.cpp)
-  target_link_libraries(blofeld-nand-gpio-test PRIVATE blofeld_nand_store blofeld_dsp blofeld_dsp_native)
+  add_executable(blofeld-nand-gpio-test test/nand_gpio_test.cpp test/nand_gpio_fixture.cpp
+    test/dsp_core_fixture.cpp)
+  target_link_libraries(blofeld-nand-gpio-test PRIVATE blofeld_nand_store blofeld_dma_fixture)
   add_test(NAME nand_gpio COMMAND blofeld-nand-gpio-test)
-  add_executable(blofeld-nand-gpio-write-test test/nand_gpio_write_test.cpp test/nand_gpio_fixture.cpp)
-  target_link_libraries(blofeld-nand-gpio-write-test PRIVATE blofeld_nand_store blofeld_dsp blofeld_dsp_native)
+  add_executable(blofeld-nand-gpio-write-test test/nand_gpio_write_test.cpp test/nand_gpio_fixture.cpp
+    test/dsp_core_fixture.cpp)
+  target_link_libraries(blofeld-nand-gpio-write-test PRIVATE blofeld_nand_store blofeld_dma_fixture)
   add_test(NAME nand_gpio_write COMMAND blofeld-nand-gpio-write-test
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/nand-gpio-write.trace")
   add_test(NAME original_nand_address COMMAND ${Python3_EXECUTABLE}

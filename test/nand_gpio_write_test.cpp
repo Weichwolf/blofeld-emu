@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_core_fixture.hpp"
+#include "dsp_rom_program.hpp"
 #include "nand_gpio_fixture.hpp"
-#include "nand_program_fixture.hpp"
+#include "nand_gpio_pins.hpp"
+#include "nand_native_program.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
 
@@ -19,6 +23,7 @@
 
 namespace blofeld::test {
 namespace {
+using namespace nand_native;
 constexpr unsigned failure_exit = 0xff4000;
 constexpr unsigned status_command = 0x70;
 constexpr unsigned program_command = 0x80;
@@ -28,12 +33,12 @@ constexpr unsigned erase_confirm = 0xd0;
 constexpr unsigned instruction_limit = 10000;
 constexpr unsigned neighbor_cookie = 0x42;
 
-void outputs(DspProgram &program) {
+void outputs(core::Program &program) {
   movep(program, nand_other_f, port_f_control, 'y');
   movep(program, output_f, port_f_direction, 'y');
 }
 
-void inputs(DspProgram &program) {
+void inputs(core::Program &program) {
   movep(program, idle_c, port_c_data, 'x');
   movep(program, input_f, port_f_direction, 'y');
   movep(program, all_inputs_f, port_f_control, 'y');
@@ -44,20 +49,26 @@ struct Wait {
   unsigned result = 0;
 };
 
-Wait status_wait(DspProgram &program) {
+Wait status_wait(core::Program &program) {
   latch(program, {.value = status_command, .mode = nand_cle});
   inputs(program);
-  program.emit("bclr #8,x:<<" + number(port_c_data));
+  program.bit({.operand = {.space = DspSpace::x, .address = port_c_data},
+               .index = 8,
+               .action = core::BitAction::clear});
   const auto poll = program.pc();
-  program.emit("brclr #6,y:<<" + number(port_f_data) + ",$0");
-  program.emit("btst #0,y:<<" + number(port_f_data));
+  // FM BRCLR Y:pp: prefix$0cc000,pp=$35,S=Y,bit6,relative displacement0.
+  constexpr unsigned status_poll = 0x0cf546;
+  program.emit(status_poll, 0);
+  program.bit({.operand = {.space = DspSpace::y, .address = port_f_data},
+               .index = 0,
+               .action = core::BitAction::test});
   const auto result = program.pc();
   // FM13-80, tables12-13/12-18: absolute EA110000 and carry-set CCCC1000.
-  // The helper assembler does not support this long conditional form.
   constexpr unsigned absolute_carry_jump = 0x0af0a8;
-  program.word(absolute_carry_jump);
-  program.word(failure_exit);
-  program.emit("bset #8,x:<<" + number(port_c_data));
+  program.emit(absolute_carry_jump, failure_exit);
+  program.bit({.operand = {.space = DspSpace::x, .address = port_c_data},
+               .index = 8,
+               .action = core::BitAction::set});
   outputs(program);
   return {.poll = poll, .result = result};
 }
@@ -73,10 +84,10 @@ struct Layout {
   unsigned read_poll = 0;
 };
 
-Layout own_write_program(DspProgram &program) {
+Layout own_write_program(core::Program &program) {
   setup_gpio(program);
-  program.immediate("r0", 0);
-  program.immediate("m0", word_mask);
+  program.immediate(DspRomRegister::r0, 0);
+  program.immediate(DspRomRegister::m0, word_mask);
   latch(program, {.value = erase_command, .mode = nand_cle});
   for (unsigned index = 0; index < 3; ++index) { latch(program, {.value = 0, .mode = nand_ale}); }
   latch(program, {.value = erase_confirm, .mode = nand_cle});
@@ -93,13 +104,8 @@ Layout own_write_program(DspProgram &program) {
   for (unsigned index = 0; index < 4; ++index) { latch(program, {.value = 0, .mode = nand_ale}); }
   inputs(program);
   const auto read_poll = program.pc();
-  program.emit("brclr #12,x:<<$ffff8b,$0");
-  for (unsigned index = 0; index < Nand::page_bytes; ++index) {
-    program.emit("bclr #8,x:<<" + number(port_c_data));
-    program.emit("movep y:<<" + number(port_f_data) + ",a");
-    program.emit("move a1,x:(r0)+");
-    program.emit("bset #8,x:<<" + number(port_c_data));
-  }
+  poll_ready(program);
+  for (unsigned index = 0; index < Nand::page_bytes; ++index) { read_byte(program); }
   return {.erase = erased, .program = programmed, .read_poll = read_poll};
 }
 
@@ -108,17 +114,19 @@ struct Execution {
   unsigned checks = 0;
 };
 
-Execution execute(DspCore &cpu,
+Execution execute(OwnDspMachine &cpu,
                   NandLink &link,
                   const Layout &layout,
                   const std::vector<NandOutcome> &outcomes,
                   const unsigned end,
                   std::ostream &trace) {
   Execution result;
-  for (unsigned count = 0; cpu.state().pc != end && cpu.state().pc != failure_exit; ++count) {
+  for (unsigned count = 0;
+       cpu.cpu().registers().pc != end && cpu.cpu().registers().pc != failure_exit;
+       ++count) {
     require(count < instruction_limit,
             "Own native NAND write/readback exceeded its instruction bound");
-    const auto before = cpu.state();
+    const auto before = cpu.cpu().registers();
     trace << "pc=" << hex(before.pc, 6) << " sr=" << hex(before.sr, 6)
           << " r0=" << hex(before.r[0], 6) << '\n';
     if (before.pc == layout.erase.result || before.pc == layout.program.result) {
@@ -129,8 +137,8 @@ Execution execute(DspCore &cpu,
       ++result.checks;
     }
     try {
-      cpu.step();
-      link.after_step(before);
+      dma_test::step_native(cpu);
+      link.after_step({.pc = before.pc, .omr = before.omr});
     } catch (const Fault &fault) {
       result.reason = fault.what();
       trace << "fault=" << result.reason << '\n';
@@ -144,10 +152,12 @@ void test_write(const std::vector<NandOutcome> &outcomes, std::ostream &trace) {
   trace << "outcomes=";
   for (const auto outcome : outcomes) { trace << (outcome == NandOutcome::pass ? 'p' : 'f'); }
   trace << '\n';
-  DspProgram program;
+  core::Program program;
   const auto layout = own_write_program(program);
-  DspBus bus;
+  OwnDspMachine cpu(dma_test::native_clocks);
+  auto &bus = cpu.bus();
   program.install(bus);
+  nand_native::reset(cpu);
   Nand nand;
   nand.observe_power_ready();
   nand.observe_wp(true); // Explicit held-high lab observation, no board route is inferred.
@@ -159,9 +169,8 @@ void test_write(const std::vector<NandOutcome> &outcomes, std::ostream &trace) {
                 {.poll_pcs = {layout.erase.poll, layout.program.poll, layout.read_poll},
                  .selected = true,
                  .outcomes = outcomes});
-  DspCore cpu(bus);
   const auto execution = execute(cpu, link, layout, outcomes, program.pc(), trace);
-  trace << "final-pc=" << hex(cpu.state().pc, 6) << " writes=" << link.writes()
+  trace << "final-pc=" << hex(cpu.cpu().registers().pc, 6) << " writes=" << link.writes()
         << " reads=" << link.reads() << " completed-writes=" << link.completed_writes() << '\n';
   const auto &reason = execution.reason;
   const auto checks = execution.checks;
@@ -179,7 +188,7 @@ void test_write(const std::vector<NandOutcome> &outcomes, std::ostream &trace) {
   require(reason.empty(), "Unexpected native NAND write/readback error: " + reason);
   const bool erase_failed = outcomes[0] == NandOutcome::fail;
   const bool failed = erase_failed || outcomes.back() == NandOutcome::fail;
-  require(cpu.state().pc == (failed ? failure_exit : program.pc()) &&
+  require(cpu.cpu().registers().pc == (failed ? failure_exit : program.pc()) &&
               checks == (erase_failed ? 1U : 2U) &&
               link.completed_writes() == (erase_failed ? 1U : 2U),
           "Native JCS must take the failure path directly from the NAND status bit");
@@ -187,11 +196,11 @@ void test_write(const std::vector<NandOutcome> &outcomes, std::ostream &trace) {
               NandByte{.value = neighbor_cookie, .known = byte_mask},
           "Native erase/program must preserve the neighboring block");
   if (failed) {
-    require(cpu.state().r[0] == 0 && nand.cell({}).known == 0,
+    require(cpu.cpu().registers().r[0] == 0 && nand.cell({}).known == 0,
             "Failed native command must leave its target unknown and skip all readback stores");
     return;
   }
-  require(cpu.state().r[0] == Nand::page_bytes && link.writes() == Nand::page_bytes &&
+  require(cpu.cpu().registers().r[0] == Nand::page_bytes && link.writes() == Nand::page_bytes &&
               link.reads() == Nand::page_bytes + 2 && link.commands() == 8 &&
               link.addresses() == 11 && link.polls() == 9,
           "Native erase/program/readback must emit every data byte and poll all three pending "

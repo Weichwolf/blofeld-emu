@@ -3,9 +3,10 @@
 
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_timers.hpp"
+#include "nand_gpio_pins.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
 #include "storage/nand_store.hpp"
@@ -121,7 +122,7 @@ void NandLink::complete_operation() {
   }
 }
 
-void NandLink::after_step(const DspState &before) {
+void NandLink::after_step(const DspRunContext before) {
   std::optional<unsigned> page;
   std::optional<unsigned> column;
   try {

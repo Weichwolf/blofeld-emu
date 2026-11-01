@@ -2,7 +2,9 @@
 #pragma once
 
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
+#include "dsp/dsp_run_clock.hpp"
+// Retain the existing public pin-name interface for fixture consumers.
+#include "nand_gpio_pins.hpp" // IWYU pragma: export
 #include "storage/nand.hpp"
 #include "storage/nand_array.hpp"
 #include "storage/nand_store.hpp"
@@ -14,15 +16,6 @@
 #include <vector>
 
 namespace blofeld::test {
-inline constexpr unsigned nand_controls = 0xf00;
-inline constexpr unsigned nand_re = 0x100;
-inline constexpr unsigned nand_we = 0x200;
-inline constexpr unsigned nand_cle = 0x400;
-inline constexpr unsigned nand_ale = 0x800;
-inline constexpr unsigned nand_data = 0xff;
-inline constexpr unsigned nand_other_f = 0x300;
-inline constexpr unsigned nand_timer_one = 1;
-
 struct NandLinkConditions {
   std::vector<unsigned> poll_pcs;
   std::optional<bool> selected = std::nullopt;
@@ -35,7 +28,8 @@ class NandLink {
 public:
   NandLink(DspBus &bus, Nand &nand, std::ostream &trace, NandLinkConditions conditions);
   NandLink(DspBus &bus, NandStore &nand, std::ostream &trace, NandLinkConditions conditions);
-  void after_step(const DspState &before);
+
+  void after_step(DspRunContext before);
 
   [[nodiscard]] unsigned commands() const { return commands_; }
 

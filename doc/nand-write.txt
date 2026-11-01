@@ -48,21 +48,23 @@ history survives restart; discarded staging can be retried. Independent componen
 copies isolate a cut branch from a successful completion of the same pending job.
 An additional failed-erase observation leaves the entire block unknown.
 
-nand_gpio_write runs own native DSP instructions from mode-five reset. It emits
-erase/program/status cycles through the candidate GPIO link, polls actual GPIO
+nand_gpio_write runs authored instructions on dsp56300 from actual mode-five
+reset (90 hold ticks, 90 recovery ticks, then explicitly unclocked execution).
+It emits erase/program/status cycles through the candidate GPIO link, polls actual GPIO
 status bits, branches on failure and reads all 528 programmed bytes into operand
 RAM using native MOVEP/store. Outcomes are explicit laboratory inputs. Erase and
 program failure take the native JCS branch; missing either outcome fails visibly.
-Status changes remain visible while RE stays low. The long conditional jump uses
-own documented FM13-80/12-13/12-18 bits because the helper assembler omits it.
+Status changes remain visible while RE stays low. The caller, peripheral bit
+operations and long conditional jump use documented FM instruction fields;
+no foreign executor or assembler is linked.
 The private Testing/nand-gpio-write.trace records CPU state, GPIO operations,
 status knowledge, outcomes and final branch positions for all five scenarios.
 No host writes operand RAM or substitutes instruction results.
 
 Unmodified updater helper checks
 original_nand_write loads both original helper objects from the pinned firmware.
-An own native caller supplies explicit GPIO/register/source-buffer preconditions;
-executed OMR/NOP instructions expose the documented X/P switched RAM. This is an
+An authored caller on dsp56300 supplies explicit GPIO/register/source-buffer
+preconditions; executed OMR/NOP instructions expose the documented X/P switched RAM. This is an
 isolated subroutine experiment, not execution of the preceding full loader/init.
 Own bounded source words let each original routine serialize all 176 words into
 528 bytes without reserved Port F bits. All block cells, spare bytes, neighboring
@@ -86,7 +88,10 @@ validity. A component retry probe checks that discarded native staging consumed
 no program allowance. These cuts are component observations; CPU/board power
 sequencing, complete original retry/recovery and all elapsed failure phases
 remain unqualified. The private Testing/original-nand-write.trace records all
-22 scenarios and the exact native boundaries.
+22 scenarios and the exact native boundaries. Five affected groups, including
+40 process-death cuts and four complete persistent jobs, pass ASan/UBSan and
+separate TSan. CPU/NAND traces retain all 125930 prior observations; only three
+error-owner prefixes change with the executor. See nand-persistence.txt.
 
 Limits
 These are untimed reference milestones and synthetic native instruction checks.

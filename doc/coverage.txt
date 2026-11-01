@@ -1528,11 +1528,12 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           Program/erase reference milestones retain
                                           per-bit unknownness and explicit history,
                                           WP/protection and outcome observations.
-                                          Own native GPIO program/status/readback
+                                          Independent dsp56300 GPIO read/write
                                           checks all 528 bytes, actual failure
                                           branches and missing-outcome rejection
                                           (nand-write.txt). Both unchanged updater
-                                          helpers emit erase/program cycles under
+                                          helpers now run on dsp56300 and emit
+                                          erase/program cycles under
                                           controlled preconditions: eight outcomes,
                                           all 528 bytes, twelve selected native cuts.
                                           Original status turnaround and actual

@@ -2,23 +2,12 @@
 #pragma once
 
 #include "dsp_norm_fixture.hpp"
-#include "nand_gpio_fixture.hpp"
+// Retain the existing public pin-name interface for fixture consumers.
+#include "nand_gpio_pins.hpp" // IWYU pragma: export
 
 #include <string>
 
 namespace blofeld::test {
-inline constexpr unsigned port_c_data = 0xffffbd;
-inline constexpr unsigned port_c_direction = 0xffffbe;
-inline constexpr unsigned port_c_control = 0xffffbf;
-inline constexpr unsigned port_f_data = 0xfffff5;
-inline constexpr unsigned port_f_direction = 0xfffff6;
-inline constexpr unsigned port_f_control = 0xfffff7;
-inline constexpr unsigned bus_control = 0xfffffb;
-inline constexpr unsigned port_f_bus = 0x01ffff;
-inline constexpr unsigned output_f = 0x4ff;
-inline constexpr unsigned input_f = 0x400;
-inline constexpr unsigned all_inputs_f = 0x3ff;
-inline constexpr unsigned idle_c = 0x300;
 inline constexpr unsigned byte_mask = 0xff;
 
 inline void

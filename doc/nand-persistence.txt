@@ -71,8 +71,9 @@ directory identity after renaming and replacing the original parent path.
 
 nand_store_processes requires the private pinned original 1.25 firmware and skips
 explicitly when absent. It executes an unchanged original DSP updater helper
-through an own caller and bounded own payload, using the explicit GPIO fixture
-and three-poll completion observations of nand-write.txt. It does not execute
+through an authored dsp56300 caller and bounded payload, using the explicit GPIO
+fixture and three-poll completion observations of nand-write.txt. Actual native
+reset precedes untimed helper execution; no legacy executor/assembler is linked. It does not execute
 the complete original loader, initialization or real update payload. Forty actual
 SIGKILL cases cover program/erase, pass/fail, confirm/completion publications and
 all five host phases. Independently encoded Python expectations check exact
