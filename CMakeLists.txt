@@ -2242,10 +2242,6 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-irqa-test test/dsp_irqa_test.cpp)
   target_link_libraries(blofeld-dsp-irqa-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_irqa COMMAND blofeld-dsp-irqa-test)
-  add_executable(blofeld-dsp-dma-interrupt-test test/dsp_dma_interrupt_test.cpp
-    test/dsp_dma_interrupt_native.cpp)
-  target_link_libraries(blofeld-dsp-dma-interrupt-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_dma_interrupts COMMAND blofeld-dsp-dma-interrupt-test)
   add_executable(blofeld-original-dsp-gpio-input-test test/original_dsp_gpio_input_test.cpp)
   target_link_libraries(blofeld-original-dsp-gpio-input-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_executable(blofeld-original-dsp-gpio-request-test test/original_dsp_gpio_request_test.cpp

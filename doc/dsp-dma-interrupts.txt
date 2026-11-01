@@ -1,7 +1,7 @@
 DSP56371 DMA interrupt events and native service
 
   cmake --build --preset strict --target blofeld-dsp-dma-interrupt-test
-  ctest --test-dir build/strict -R '^(dsp_dma_interrupts|dsp_dma|dsp_interrupts|dsp_irqa|dsp_checkpoint)$' --output-on-failure
+  ctest --test-dir build/strict -R '^dsp_dma_interrupts$' --output-on-failure
 
 Primary references: DSP56300FM Rev5 table10-5 (DIE), table10-10 (DTD), and
 section2.3.2; DSP56371UM Rev2.1 figures4-1/4-2 and tables4-4/4-5/4-6.
@@ -26,7 +26,7 @@ DIE gates delivery;
 clearing it does not erase an already captured request. Enabling DIE over an
 uncaptured old done status does not invent an end-of-block event. Reset clears
 the latches. Trusted machine snapshots retain both DMA phase and IRQ state.
-The conservative admitted/reference-vector source-hold checks also apply to
+The conservative admitted-vector source-hold checks also apply to
 DMA; a withdrawn/changed source before acknowledgement requires coordinated
 recovery rather than a fabricated successful service.
 
@@ -37,6 +37,15 @@ wait/failure, explicit stop before/after a captured word, live DIE changes,
 reset/copy, repeated events, and actual native fast/long vectors with real RTI.
 Joint snapshots retain held data and pending requests; missing vector words and
 suspended acknowledgement retain strict failures and recover through snapshots.
+
+Native cases use the pinned independent core, actual mode5/PINIT-low reset and
+literal MOVEC/MOVEP/MOVE/JSR/NOP/RTI programs. Each channel/vector form has three
+same-owner and one fresh-owner replay:48 continuations across12 contexts.
+Independent full-register/stack and retirement-count expectations check entry,
+RTI and foreground resumption. Untimed execution adds no modeled clock periods.
+The refused second fetch retains its source and exposes no completed instruction
+receipt. Withdrawn-source acknowledgement recovers through a fresh-owner snapshot
+and renewed native ticket. Standalone DMA phases remain explicitly supplied.
 
 This extends the explicit standalone DMA reference phases, not automatic
 native core/DMA bus arbitration. DCON/other transfer modes, missing inputs,

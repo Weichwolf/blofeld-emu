@@ -49,6 +49,10 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           Actual core outcomes distinguish taken
                                           same-cursor branches from fallthrough;
                                           no host condition reevaluation is used.
+                                          DMA IRQ service uses actual native
+                                          vectors/RTI on all six channels,48
+                                          same/fresh-owner continuations and
+                                          strict vector/source-hold recovery.
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).

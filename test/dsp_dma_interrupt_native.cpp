@@ -1,132 +1,198 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "common/bus.hpp"
 #include "dma_fixture.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interrupts.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp_checkpoint_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "dsp_dma_interrupt_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
 
-#include <array>
 #include <cstdint>
+#include <iostream>
 #include <optional>
-#include <string>
-#include <variant>
+#include <stdexcept>
 
 namespace blofeld::test::dma_irq {
 namespace {
-using checkpoint::assemble;
-using checkpoint::ram;
-using checkpoint::until;
-using dma_test::control0;
-using dma_test::counter0;
-using dma_test::destination;
-using dma_test::destination0;
-using dma_test::enable;
-using dma_test::grant;
-using dma_test::ring_start;
-using dma_test::source0;
-using dma_test::status;
-using dma_test::timing;
-using dma_test::word_copy;
-constexpr unsigned ordinary_status = 0xc00000;
-constexpr unsigned handler = 0x300;
-constexpr unsigned absolute_jsr = 0x0bf080;
-constexpr unsigned payload = 0x123456;
-constexpr unsigned sentinel = 0x654321;
-constexpr unsigned foreground_value = 0x77;
+using namespace dma_test;
+constexpr unsigned ordinary_status = 0xc00000, handler = 0x300;
+// FM MOVEC immediate SR, MOVE immediate R7, absolute JSR, NOP and RTI.
+constexpr unsigned move_sr = 0x05f439, move_r7 = 0x67f400, absolute_jsr = 0x0bf080;
+constexpr unsigned nop = 0, rti = 4, effect_bound = 32;
+constexpr unsigned word_bits = 24;
+constexpr unsigned payload = 0x123456, sentinel = 0x654321, foreground_value = 0x77;
 constexpr unsigned dma_control = word_copy | interrupt_enable;
 
 void write(DspBus &bus, const unsigned address, const unsigned value) {
   bus.write({.space = DspSpace::x, .address = address, .value = value});
 }
 
-unsigned prepare(DspMachine &machine,
+unsigned prepare(OwnDspMachine &machine,
                  const unsigned channel,
                  const bool long_vector,
                  const bool complete_vector = true) {
-  DspProgram program;
-  program.immediate("sr", ordinary_status);
-  const auto put = [&](const unsigned address, const unsigned value) {
-    program.emit("movep #>" + number(value) + ",x:<<" + number(address));
-  };
-  put(iprc, 1U << (priority_shift + (2 * channel)));
-  put(source0 - (4 * channel), ring_start);
-  put(destination0 - (4 * channel), destination);
-  put(counter0 - (4 * channel), 0);
-  put(control0 - (4 * channel), dma_control);
+  NativeProgram program;
+  program.word(move_sr);
+  program.word(ordinary_status);
+  program.write(
+      {.space = DspSpace::x, .address = iprc, .value = 1U << (priority_shift + (2 * channel))});
+  program.write({.space = DspSpace::x, .address = source0 - (4 * channel), .value = ring_start});
+  program.write(
+      {.space = DspSpace::x, .address = destination0 - (4 * channel), .value = destination});
+  program.write({.space = DspSpace::x, .address = counter0 - (4 * channel), .value = 0});
+  program.write({.space = DspSpace::x, .address = control0 - (4 * channel), .value = dma_control});
   const auto foreground = program.pc();
-  program.immediate("r7", foreground_value);
-  program.install(machine.bus());
+  program.word(move_r7);
+  program.word(foreground_value);
+  reset_native(machine, program);
   write(machine.bus(), ring_start, payload);
   machine.bus().write({.space = DspSpace::y, .address = destination, .value = sentinel});
   const auto vector = first_vector + (2 * channel);
+  machine.bus().write({.address = vector, .value = long_vector ? absolute_jsr : nop});
+  if (complete_vector) {
+    machine.bus().write({.address = vector + 1, .value = long_vector ? handler : nop});
+  }
   if (long_vector) {
-    constexpr std::array call{absolute_jsr, handler};
-    ram(machine.bus(), vector, call);
-    ram(machine.bus(), handler, assemble("nop"));
-    ram(machine.bus(), handler + 1, assemble("rti"));
-  } else {
-    ram(machine.bus(), vector, assemble("nop"));
-    if (complete_vector) { ram(machine.bus(), vector + 1, assemble("nop")); }
+    machine.bus().write({.address = handler, .value = nop});
+    machine.bus().write({.address = handler + 1, .value = rti});
   }
   static_cast<void>(
-      machine.advance_dma({.cycle = 0, .known_requests = 1, .timing = timing, .grant = grant}));
-  until(machine, foreground);
+      dma(machine, {.cycle = 0, .known_requests = 1, .timing = timing, .grant = grant}));
+  for (unsigned instruction = 0; instruction < 6; ++instruction) { step_native(machine); }
+  require(machine.cpu().registers().pc == foreground &&
+              machine.cpu().registers().sr == ordinary_status &&
+              machine.cpu().progress().instructions == 6,
+          "Actual reset and six literal MOVEC/MOVEP instructions establish the foreground");
   return foreground;
 }
 
-std::optional<DspDmaWord> tick(DspMachine &machine, const std::uint64_t cycle) {
-  return machine.advance_dma(
+std::optional<DspDmaWord> tick(OwnDspMachine &machine, const std::uint64_t cycle) {
+  return dma(
+      machine,
       {.cycle = cycle, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant});
 }
 
-void native_service(const unsigned channel, const bool long_vector) {
-  DspMachine machine;
-  const auto foreground = prepare(machine, channel, long_vector);
-  const auto before = machine.cpu().state();
-  require(!tick(machine, 1) && !machine.bus().interrupt_request(0),
-          "Native DMA enable plus an actual source read has not signalled completion");
-  const auto held = machine.checkpoint();
-  const DspInterruptRequest request{.vector = first_vector + (2 * channel)};
-  std::optional<DspDebugState> completed;
-  for (unsigned replay = 0; replay < 3; ++replay) {
-    if (replay != 0) { machine.restore(held); }
-    require(machine.bus().read({.space = DspSpace::y, .address = destination}) == sentinel,
-            "A joint held-source restore retains the original destination and no completion");
-    const auto word = tick(machine, 2);
-    require(word && word->channel == channel && word->value == payload &&
-                machine.bus().read({.space = DspSpace::y, .address = destination}) == payload &&
-                machine.bus().interrupt_request(0) == request,
-            "Only the actual RAM destination store requests this channel's native IRQ vector");
-    const auto pending = machine.checkpoint();
-    machine.restore(pending);
-    require(machine.bus().interrupt_request(0) == request,
-            "Joint restore retains pending DMA event and priority independently of DTD");
-    machine.cpu().step();
-    require(!machine.bus().interrupt_request(0) &&
-                machine.bus().read({.space = DspSpace::x, .address = status}) == dma_test::all_done,
-            "Real native second-vector fetch clears only the DMA request, preserving DTD");
-    if (long_vector) {
-      const auto entry = machine.cpu().state();
-      require(entry.pc == handler && entry.sp == 1 && entry.stack_pc == foreground &&
-                  entry.stack_sr == before.sr && entry.sr == (ordinary_status | 0x100U),
-              "DMA IPL0 enters the genuine long vector and literal native frame at mask1");
-      machine.cpu().step();
-      machine.cpu().step();
+void admit(OwnDspMachine &machine) {
+  const auto pc = machine.cpu().registers().pc;
+  require(
+      machine.admit_interrupt({.address = pc, .opcode = move_r7, .extension = foreground_value}) &&
+          machine.interrupt_pending(),
+      "Actual unmasked DMA event admits the independently authored foreground instruction");
+}
+
+void drain(OwnDspMachine &machine, dsp56300::InstructionProgress progress) {
+  const auto before = machine.cpu().progress().instructions;
+  for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired &&
+                            progress.fault.kind == dsp56300::FaultKind::none;
+       ++effect) {
+    progress = machine.advance(progress.pending->ticket);
+  }
+  require(progress.retired && progress.fault.kind == dsp56300::FaultKind::none &&
+              machine.cpu().progress().instructions == before + 1,
+          "Actual native continuation retires once without a substituted service result");
+}
+
+void vector_service(OwnDspMachine &machine, const DspInterruptRequest request) {
+  admit(machine);
+  unsigned reads = 0;
+  for (unsigned instruction = 0; instruction < 2 && machine.interrupt_pending(); ++instruction) {
+    auto progress = machine.begin_fetch();
+    for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired;
+         ++effect) {
+      const auto pending = progress.pending.value();
+      const bool fetch = pending.effect.kind == dsp56300::EffectKind::fetch_opcode ||
+                         pending.effect.kind == dsp56300::EffectKind::fetch_extension;
+      if (fetch) {
+        require(reads < 2 && pending.effect.space == dsp56300::Space::program &&
+                    pending.effect.address == request.vector + reads &&
+                    machine.interrupt_pending() && machine.bus().interrupt_request(0) == request,
+                "Actual vector reads preserve address, source latch and acknowledgement ownership");
+      }
+      progress = machine.advance(pending.ticket);
+      require(progress.fault.kind == dsp56300::FaultKind::none,
+              "Native vector execution must not fault");
+      if (fetch) {
+        ++reads;
+        require(machine.interrupt_pending() == (reads == 1) &&
+                    machine.bus().interrupt_request(0).has_value() == (reads == 1),
+                "Only the second accepted native vector read acknowledges the DMA latch");
+      }
     }
-    require(machine.cpu().state() == before,
-            "Fast NOP vectors or real long NOP/RTI preserve every foreground register");
-    machine.cpu().step();
-    require(machine.cpu().state().r[7] == foreground_value,
-            "Foreground resumes only after the actual DMA vector service and return");
-    const auto after = machine.cpu().debug_state();
-    if (completed) { require(after == *completed, "Joint restores reproduce all native counters"); }
-    completed = after;
+    require(progress.retired, "Each real vector instruction retires within its bound");
+  }
+  require(reads == 2 && !machine.interrupt_pending() && !machine.bus().interrupt_request(0) &&
+              machine.bus().read({.space = DspSpace::x, .address = status}) == all_done,
+          "Two genuine vector reads consume one IRQ while retaining all DMA DTD bits");
+}
+
+struct Result {
+  dsp56300::Registers registers;
+  dsp56300::Progress progress;
+  std::uint64_t ticks;
+  bool operator==(const Result &) const = default;
+};
+
+Result completed_service(OwnDspMachine &machine, const unsigned channel, const bool long_vector) {
+  auto expected = machine.cpu().registers();
+  const auto before = machine.cpu().progress();
+  const auto ticks = machine.clock().elapsed_ticks();
+  require(machine.bus().read({.space = DspSpace::y, .address = destination}) == sentinel &&
+              !machine.bus().interrupt_request(0),
+          "Held source snapshots retain the old destination and no completion");
+  const auto word = tick(machine, 2);
+  const DspInterruptRequest request{.vector = first_vector + (2 * channel)};
+  require(word && word->channel == channel && word->value == payload &&
+              machine.bus().read({.space = DspSpace::y, .address = destination}) == payload &&
+              machine.bus().interrupt_request(0) == request,
+          "Only the actual destination store raises this channel's interrupt");
+  const auto pending = machine.checkpoint();
+  machine.restore(pending);
+  require(machine.bus().interrupt_request(0) == request,
+          "Joint restore retains the real pending event independently of DTD");
+  vector_service(machine, request);
+  if (long_vector) {
+    const auto frame = (std::uint64_t{expected.pc} << word_bits) | expected.sr;
+    expected.stack[1] = frame;
+    auto entry = expected;
+    entry.pc = handler;
+    entry.sp = 1;
+    entry.sc = 1;       // FM SC counts the one stacked interrupt frame.
+    entry.sr |= 0x100U; // FM IPL0 entry executes at mask1.
+    require(machine.cpu().registers() == entry,
+            "Real JSR preserves every register and stacks literal foreground PC/SR at mask1");
+    step_native(machine);
+    step_native(machine);
+  }
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions ==
+                  before.instructions + (long_vector ? 3U : 2U),
+          "Actual fast NOPs or long NOP/RTI restore the complete foreground register set");
+  step_native(machine);
+  expected.pc += 2;
+  expected.r[7] = foreground_value;
+  require(machine.cpu().registers() == expected && machine.clock().elapsed_ticks() == ticks,
+          "Real foreground MOVE changes only R7/PC; untimed native service invents no clock");
+  return {
+      .registers = machine.cpu().registers(), .progress = machine.cpu().progress(), .ticks = ticks};
+}
+
+void native_service(const unsigned channel, const bool long_vector) {
+  OwnDspMachine machine(native_clocks);
+  prepare(machine, channel, long_vector);
+  require(!tick(machine, 1) && !machine.bus().interrupt_request(0),
+          "Actual source capture alone cannot signal DMA completion");
+  const auto held = machine.checkpoint();
+  std::optional<Result> completed;
+  for (unsigned replay = 0; replay < 4; ++replay) {
+    OwnDspMachine fresh(native_clocks);
+    auto &owner = replay == 3 ? fresh : machine;
+    owner.restore(held);
+    const auto result = completed_service(owner, channel, long_vector);
+    if (completed) { require(result == *completed, "Same/fresh owners replay all native state"); }
+    completed = result;
   }
 }
 
@@ -184,48 +250,75 @@ void bus_arbitration() {
 }
 
 void missing_vector_and_recovery() {
-  DspMachine machine;
+  OwnDspMachine machine(native_clocks);
   prepare(machine, 1, false, false);
   static_cast<void>(tick(machine, 1));
-  require(tick(machine, 2).has_value(), "A real DMA1 destination store establishes the IRQ");
-  constexpr unsigned dma1 = first_vector + 2;
+  require(tick(machine, 2).has_value(), "Actual DMA1 destination store establishes the IRQ");
+  constexpr unsigned vector = first_vector + 2;
+  const DspInterruptRequest request{.vector = vector};
   const auto saved = machine.checkpoint();
-  const auto before = machine.cpu().state();
-  const auto reason = rejects([&] { machine.cpu().step(); });
-  require(reason.contains("00001b") && machine.cpu().state() == before &&
-              machine.bus().interrupt_request(0) == DspInterruptRequest{.vector = dma1},
-          "Missing second vector word rejects before CPU mutation or DMA acknowledgement");
+  const auto foreground = machine.cpu().registers();
+  admit(machine);
+  step_native(machine); // The first genuine fast-vector NOP retires before the missing word.
+  const auto before = machine.cpu().registers();
+  const auto count = machine.cpu().progress();
+  auto progress = machine.begin_fetch();
+  if (!progress.pending) { throw Fault("Missing native second-vector fetch"); }
+  require(progress.pending->effect.address == vector + 1,
+          "Missing second word remains an actual native program fetch");
+  progress = machine.advance(progress.pending->ticket);
+  require(progress.fault.kind == dsp56300::FaultKind::memory_read &&
+              progress.fault.space == dsp56300::Space::program &&
+              progress.fault.address == vector + 1 && machine.cpu().registers() == before &&
+              machine.cpu().progress() == count && machine.interrupt_pending() &&
+              machine.bus().interrupt_request(0) == request && machine.io().failure() &&
+              !machine.cpu().instruction_outcome(),
+          "Refused second vector fetch preserves the source and retires no instruction");
   machine.restore(saved);
-  ram(machine.bus(), dma1 + 1, assemble("nop"));
-  machine.cpu().step();
-  require(machine.cpu().state() == before && !machine.bus().interrupt_request(0),
-          "Joint recovery retains the event until both genuine vector words can execute");
+  machine.bus().write({.address = vector + 1, .value = nop});
+  vector_service(machine, request);
+  require(
+      machine.cpu().registers() == foreground,
+      "Trusted recovery needs two real vector reads before returning to the original foreground");
 }
 
 void suspended_acknowledgement() {
-  DspMachine machine;
+  OwnDspMachine machine(native_clocks);
   prepare(machine, 1, false);
   static_cast<void>(tick(machine, 1));
-  require(tick(machine, 2).has_value(), "Actual DMA1 completion precedes suspended native entry");
+  require(tick(machine, 2).has_value(), "Actual DMA1 completion precedes suspended entry");
+  admit(machine);
+  step_native(machine);
+  auto progress = machine.begin_fetch();
+  constexpr unsigned second = first_vector + 3;
+  if (!progress.pending) { throw Fault("Missing native acknowledgement boundary"); }
+  require(progress.pending->effect.kind == dsp56300::EffectKind::fetch_opcode &&
+              progress.pending->effect.address == second && machine.interrupt_pending(),
+          "The second actual vector read remains pending before acknowledgement");
   const auto saved = machine.checkpoint();
-  auto progress = machine.begin_reference_interrupt(DspReferenceExecution::access_boundaries);
-  unsigned accesses = 0;
-  while (progress.pending &&
-         std::get_if<DspInterruptAcknowledge>(&progress.pending->effect) == nullptr) {
-    require(++accesses <= 4, "Both vector reads must reach the bounded native acknowledgement");
-    progress = machine.advance_reference_access(progress.pending->ticket);
-  }
-  require(progress.pending && !progress.retired && accesses == 2,
-          "Two actual vector fetches precede the separate DMA acknowledge effect");
+  const auto stale = progress.pending->ticket;
   write(machine.bus(), control0 - 4, word_copy & ~enable);
-  static_cast<void>(rejects(
-      [&] { static_cast<void>(machine.advance_reference_access(progress.pending->ticket)); }));
-  machine.restore(saved);
-  require(machine.bus().interrupt_request(0) == DspInterruptRequest{.vector = first_vector + 2},
-          "A failed conservative source-hold contract cannot consume the saved DMA event");
-  machine.cpu().step();
-  require(!machine.bus().interrupt_request(0),
-          "Fresh genuine service consumes the recovered event");
+  static_cast<void>(rejects([&] { static_cast<void>(machine.advance(stale)); }));
+  require(machine.interrupt_pending(), "Refused source-hold validation cannot consume ownership");
+  write(machine.bus(), control0 - 4, dma_control & ~enable);
+  const DspInterruptRequest request{.vector = first_vector + 2};
+  require(
+      machine.bus().interrupt_request(0) == request,
+      "Refused acknowledgement retains the genuine DMA event behind its disabled delivery gate");
+  OwnDspMachine fresh(native_clocks);
+  fresh.restore(saved);
+  const auto pending = fresh.cpu().pending_instruction();
+  if (!pending) { throw Fault("Trusted restore lost the actual vector read"); }
+  bool rejected = false;
+  try {
+    static_cast<void>(fresh.advance(stale));
+  } catch (const std::invalid_argument &) { rejected = true; }
+  require(rejected && fresh.bus().interrupt_request(0) == request && fresh.interrupt_pending(),
+          "A foreign pre-restore ticket cannot acknowledge the recovered DMA event");
+  progress = fresh.advance(pending->ticket);
+  require(!fresh.interrupt_pending() && !fresh.bus().interrupt_request(0),
+          "Fresh actual second-vector read consumes the recovered event once");
+  drain(fresh, progress);
 }
 }
 
@@ -236,5 +329,6 @@ void native_checks() {
   bus_arbitration();
   missing_vector_and_recovery();
   suspended_acknowledgement();
+  std::cout << "PASS DMA_NATIVE_IRQ contexts=12 replays=48 missing-vector=1 suspended-ack=1\n";
 }
 }
