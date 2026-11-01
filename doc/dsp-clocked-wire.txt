@@ -43,9 +43,9 @@ original callback result. At P:002ce4 the unknown DI read must expose X:ffff8f,
 the native PC/OMR and failure context, leave its nominal duration uncharged and
 retain the incomplete message. Faulted capture rejects until coordinated restore.
 
-These are component experiments with supplied caller state. Full original boot
-still encounters reserved Y:002000; note allocation encounters Y:ffffff. Complete
-note lifecycle, physical baud/clock qualification, original
+These are component experiments with supplied caller state. Connected startup
+evidence and its current frontier are tracked in own-dsp-nand-reference.json.
+Complete note lifecycle, physical baud/clock qualification, original
 audio, update/recovery and Desktop/Keyboard hardware equivalence remain open.
 The separate dsp-host-midi.txt path now supplies host file/device byte queues to
 this component receiver through the headless scheduler. The legacy timing remains
