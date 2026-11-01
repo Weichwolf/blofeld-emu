@@ -28,6 +28,9 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           reset, timeline and joint checkpoints with
                                           literal word/tick expectations, without
                                           the old executor or assembler.
+                                          Generated-clock ESAI tests likewise use
+                                          native reset/F1/F2, both tie orders and
+                                          actual status/refill side effects.
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).

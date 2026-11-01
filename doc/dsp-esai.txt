@@ -172,12 +172,12 @@ the declared clock. Missing-clock reads on both maps latch actual I/O failures;
 retry cannot retire another instruction, and trusted restore retains recovery.
 The gate is also available in the independent component-only build. Transmitter
 IRQ service uses that core through actual staged vector reads or automatic F1/F2
-cycles (esai-interrupts.txt). Generated-clock helper migration remains separate.
+cycles (esai-interrupts.txt). Generated-clock tests also use that core directly.
 Full original DSP boot, physical timing, MIDI/audio and hardware equivalence
 remain pending.
 
-  cmake --build --preset strict --target blofeld-esai-clock-test
-  ctest --test-dir build/strict -R '^dsp_esai_clock$' --output-on-failure
+  cmake --build --preset strict --target blofeld-esai-clock-test blofeld-esai-status-fetch-test
+  ctest --test-dir build/strict -R '^dsp_esai_(clock|status_fetch)$' --output-on-failure
 
 Literal divider expectations cover both prescaler ranges, minimum/maximum TPM/TFP
 and repeated observations. Sixteen bit/frame/high-clock polarity and bit/word-FS
@@ -185,13 +185,25 @@ cases check complete literal old/new words, padding and request flags, including
 frame wraps, retained-data underrun and read/refill recovery. They cover late
 enable, personal reset/reprime with both FST polarities, preserved external
 baseline, generated FST with external SCKT, unknown inputs and pad contention.
-Own native MOVEP programs configure both register maps during a free-running
-external HCKT experiment; an independent receiver samples on the opposite SCKT
-edge and checks every bit's literal timestamp. Both explicit native/external tie
-orders and trusted snapshots of partial divider, frame, data, native instruction
-and receiver phase reproduce the full stream. A separate real native missing-
-clock fault/recovery checks its PC/address and independent instruction cost.
-The fixture's frequency and initial phase are assumptions, not Blofeld evidence.
+Authored literal MOVEP/NOP/JMP programs execute on dsp56300 after actual reset
+hold/recovery. Both register maps share an explicit effect-per-reference-cycle
+timeline and a free-running HCKT source. The native GPIO direction write is
+checked at195840 ticks; the first falling SCKT at230625 precedes TE, and the first
+transmitted frame starts at3110625. An independent receiver checks all64 bits
+and their opposite-edge sample times. Both native/input tie orders and two
+mid-word timeline/source/divider/receiver restores retain the stream and CPU.
+The final partial native period remains uncharged. Missing-clock status reads
+on both maps retain the actual operation, address, PC and tick; trusted recovery
+checks seven instructions,13 manual base-cost units and25 reference periods.
+These frequencies, phases and effect placements are fixture assumptions, not
+physical Blofeld timing. The generated-clock and SAISR/F2 tests need no legacy
+executor or assembler.
+
+Native SAISR/F2 tests separately sample actual TFS/TDE/TEDE/TUE flags on both
+maps. Two real external words create underrun. The native read arms its clearing
+on refill; an unread control retains TUE. Active DMA refuses before the pending
+status read, F2 sample or clock/DMA progress. Missing-clock and active-DMA guards
+remain strict; the reference F2 ordering does not qualify DMA/status overlap.
 
 The original_dsp_peripheral_init regression additionally executes the unchanged
 original control-write prefix. Default active reconfiguration still rejects;

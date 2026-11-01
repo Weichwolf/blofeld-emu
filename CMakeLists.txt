@@ -1430,9 +1430,6 @@ if(BUILD_TESTING)
   add_executable(blofeld-dsp-io-map-test test/dsp_io_map_test.cpp)
   target_link_libraries(blofeld-dsp-io-map-test PRIVATE blofeld_dsp_peripherals)
   add_test(NAME dsp_io_map COMMAND blofeld-dsp-io-map-test)
-  add_executable(blofeld-esai-clock-test test/dsp_esai_clock_test.cpp test/dsp_esai_clock_native.cpp)
-  target_link_libraries(blofeld-esai-clock-test PRIVATE blofeld_dsp blofeld_dsp_native)
-  add_test(NAME dsp_esai_clock COMMAND blofeld-esai-clock-test)
   add_executable(blofeld-dma-test test/dsp_dma_test.cpp test/dsp_dma_state.cpp test/dsp_dma_native.cpp)
   target_link_libraries(blofeld-dma-test PRIVATE blofeld_dsp blofeld_dsp_native)
   add_test(NAME dsp_dma COMMAND blofeld-dma-test)
@@ -3310,7 +3307,8 @@ add_custom_target(quality
     blofeld-hcs08-flash-vector-test blofeld-hcs08-vector-irq-test blofeld-hcs08-vector-atomic-test
     blofeld-hcs08-swi-test blofeld-hcs08-swi-boundary-test blofeld-hcs08-decimal-test
     blofeld-headless blofeld-dsp-dispatch-cache-test blofeld-host-audio-test blofeld-pcm-queue-test
-    blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test blofeld-dma-test
+    blofeld-audio-runtime-test blofeld-esai-test blofeld-esai-clock-test
+    blofeld-esai-status-fetch-test blofeld-dma-test
     blofeld-gpio-pad-checkpoint-test blofeld-hcs08-prefetch-scanner-test blofeld-hcs08-prefetch-irq-test blofeld-hcs08-prefetch-jump-test
     blofeld-hcs08-prefetch-return-test blofeld-hcs08-spi-run-clock-test blofeld-original-hcs08-spi-run-clock-test blofeld-usbip-runtime-test
     blofeld-usbip-suspend-test blofeld-hcs08-prefetch-peripheral-test blofeld-hcs08-prefetch-branch-test blofeld-hcs08-prefetch-data-test
