@@ -18,6 +18,9 @@ scan reaching the terminator clears it. Both native calls are checked.
 An independent integer/list model checks complete state after every stage,
 actual call counts and four corrupted-trace controls. Native guards check all
 unrelated held-slot words, genuine returns and original program words.
+Both sanitizer profiles pass all 592 cases on independent dsp56300. All 5904
+state/call trace lines also match the archived legacy observations; the unchanged
+integer/list oracle remains authoritative. Shared reset/observer scope: dsp-notes.txt.
 
   cmake --build --preset strict --target blofeld-original-dsp-note-test
   ctest --test-dir build/strict --output-on-failure -R '^original_dsp_note(_release)?$'

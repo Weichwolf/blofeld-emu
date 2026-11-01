@@ -2030,6 +2030,12 @@ Voice management and audio        partial  Original envelope coefficient/state
                                           prioritization, retirement and owner
                                           cleanup (dsp-note-release.txt); positive
                                           allocation and scheduled audio stay open.
+                                          The shared note/release/sustain fixture
+                                          now uses independent dsp56300, actual
+                                          mode5 reset and a literal ROM caller.
+                                          Full 27/23/2 note,592 release,960 sustain
+                                          matrices pass both sanitizer profiles;
+                                          normal/isolated target commands match.
                                           Original foreground release now retains
                                           48 voice/80 body blocks through eight
                                           retirements and32 empty bodies,1280

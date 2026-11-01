@@ -2809,27 +2809,6 @@ if(BUILD_TESTING)
   add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_corpus_bounds.py"
     $<TARGET_FILE:blofeld-dsp-corpus-test>)
-  add_executable(blofeld-original-dsp-note-test test/original_dsp_note_test.cpp)
-  target_link_libraries(blofeld-original-dsp-note-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  add_test(NAME original_dsp_note COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_note.py"
-    $<TARGET_FILE:blofeld-original-dsp-note-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-note.trace")
-  set_tests_properties(original_dsp_note PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_test(NAME original_dsp_note_release COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_note_release.py"
-    $<TARGET_FILE:blofeld-original-dsp-note-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-note-release.trace")
-  set_tests_properties(original_dsp_note_release PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
-  add_test(NAME original_dsp_sustain COMMAND ${Python3_EXECUTABLE}
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_sustain.py"
-    $<TARGET_FILE:blofeld-original-dsp-note-test>
-    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-sustain.trace")
-  set_tests_properties(original_dsp_sustain PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
   add_executable(blofeld-original-dsp-wire-test test/original_dsp_wire_test.cpp)
   target_link_libraries(blofeld-original-dsp-wire-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)

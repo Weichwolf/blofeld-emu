@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Execute original note allocation boundaries and declared active-note release.
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_native_access.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_rom_program.hpp"
+#include "esai_fixture.hpp"
 #include "firmware/firmware.hpp"
 
 #include <array>
@@ -23,7 +25,8 @@
 
 namespace {
 using enum blofeld::DspSpace;
-using blofeld::test::require;
+using blofeld::test::DspRomRegister;
+using blofeld::test::esai::require;
 constexpr unsigned memory_mode = 0x600389;
 constexpr unsigned absolute_jump = 0x0af080;
 constexpr unsigned word_mask = 0xffffff;
@@ -122,6 +125,17 @@ constexpr unsigned clear_latches = 0xd33;
 constexpr unsigned dispatch_note_event = 0x1ea8;
 constexpr std::array<unsigned, held_slots> held_notes{64, 65, 64, 64};
 constexpr std::array<unsigned, held_slots> held_channels{0, 0, 1, 0};
+constexpr unsigned maximum_effects = 64;
+// FM MOVE X:ea,R1; JSR (R1); JSR xxx; RTS. Authored caller, not original code.
+constexpr unsigned load_selector = 0x61f000;
+constexpr unsigned call_r1 = 0x0be180;
+constexpr unsigned call_short = 0x0d0000;
+constexpr unsigned return_subroutine = 0x0c;
+
+struct ReadAccess {
+  blofeld::DspAddress target;
+  std::optional<unsigned> value;
+};
 
 std::string rejected(const auto &operation) {
   try {
@@ -172,9 +186,9 @@ struct Fixture {
       }
     }
     harness();
-    machine.cpu().reset_spi_boot();
+    reset();
     run(register_prefix, register_end);
-    machine.cpu().reset_spi_boot();
+    reset();
     for (unsigned i = 0; i < sound_words; ++i) {
       write(x, sound + i, i < raw_sound_words ? read(y, factory_sound + i) & byte_mask : 0U);
     }
@@ -192,7 +206,7 @@ struct Fixture {
     run(event_initialize);
     run(block_initialize);
     run(pointer_prefix, pointer_end);
-    machine.cpu().reset_spi_boot();
+    reset();
     // Only declared caller settings and transport readability are host inputs.
     write(x, 6, 0);
     write(x, channel_setting, 0);
@@ -265,7 +279,8 @@ struct Fixture {
     trace_ << '\n' << std::dec;
     if (stage == 6 || stage == 10) {
       for (const auto &[at, value] : original_program_) {
-        require(machine.bus().peek_program(at) == value, "Original release program word changed");
+        require(machine.bus().inspect_program(at) == value,
+                "Original release program word changed");
       }
     }
   }
@@ -331,7 +346,7 @@ struct Fixture {
     }
     write(x, producer, cursor);
     run(parser);
-    require(read(x, consumer) == cursor && machine.cpu().state().sp == 0,
+    require(read(x, consumer) == cursor && machine.cpu().registers().sp == 0,
             "Original parser drains the ring and returns through its actual frame");
   }
 
@@ -354,7 +369,8 @@ struct Fixture {
       }
     }
     for (const auto &[at, value] : original_program_) {
-      require(machine.bus().peek_program(at) == value, "Every original executable word is intact");
+      require(machine.bus().inspect_program(at) == value,
+              "Every original executable word is intact");
     }
   }
 
@@ -392,14 +408,25 @@ struct Fixture {
     verify_accesses();
     verify_history(note, velocity);
     verify_unallocated();
-    static_cast<void>(rejected([&] { machine.cpu().step(); }));
-    static_cast<void>(rejected([&] { static_cast<void>(machine.checkpoint()); }));
+    const auto failed = machine.cpu().registers();
+    const auto progress = machine.cpu().progress();
+    const auto quarantine = blofeld::test::esai::rejects([&] { step(); });
+    require(quarantine == "Pending instruction owns CPU mutation",
+            "The failed staged instruction retains ownership and refuses native reentry");
+    require(machine.cpu().registers() == failed && machine.cpu().progress() == progress,
+            "Quarantined native fault cannot replay accesses or retire another instruction");
+    const auto diagnostic = machine.checkpoint();
+    blofeld::OwnDspMachine restored(blofeld::test::dma_test::native_clocks);
+    restored.restore(diagnostic);
+    require(restored.cpu().registers() == failed && restored.cpu().progress() == progress &&
+                restored.cpu().fault() == machine.cpu().fault() && restored.io().failure(),
+            "Fresh diagnostic checkpoint retains the actual reserved-read fault and CPU prefix");
     ++frontiers;
     trace_ << "FAULT note=" << note << " velocity=" << velocity << " channel=" << channel << " "
            << error << '\n';
   }
 
-  blofeld::DspMachine machine;
+  blofeld::OwnDspMachine machine{blofeld::test::dma_test::native_clocks};
   Counts counts;
   unsigned frontiers = 0;
   unsigned controls = 0;
@@ -419,36 +446,41 @@ struct Fixture {
   }
 
   void harness() {
-    blofeld::test::DspProgram code;
-    code.immediate("x1", memory_mode);
-    code.emit("move x1,omr");
-    for (unsigned i = 0; i < 3; ++i) { code.emit("nop"); }
+    blofeld::test::DspRomProgram code;
+    code.immediate(DspRomRegister::x1, memory_mode);
+    code.immediate(DspRomRegister::omr, memory_mode);
+    for (unsigned i = 0; i < 3; ++i) { code.word(0); }
     const auto begin = code.pc();
-    for (unsigned i = 0; i < 8; ++i) { code.immediate("m" + std::to_string(i), word_mask); }
-    code.immediate("sr", 0);
-    code.immediate("b", 0); // The original per-block reset takes its block index in B1.
-    code.immediate("r0", sound);
-    code.immediate("r2", entry);
-    code.immediate("r5", entry);
-    code.immediate("r3", caller_scratch);
-    code.immediate("r4", selector);
-    code.immediate("r6", 0);
-    code.immediate("r7", 0);
-    code.emit("move x:>$800,r1");
-    code.emit("jsr (r1)");
+    for (unsigned i = 0; i < 8; ++i) {
+      code.immediate(static_cast<DspRomRegister>(static_cast<unsigned>(DspRomRegister::m0) + i),
+                     word_mask);
+    }
+    code.immediate(DspRomRegister::sr, 0);
+    code.immediate(DspRomRegister::b, 0); // Original block reset takes its index in B1.
+    code.immediate(DspRomRegister::r0, sound);
+    code.immediate(DspRomRegister::r2, entry);
+    code.immediate(DspRomRegister::r5, entry);
+    code.immediate(DspRomRegister::r3, caller_scratch);
+    code.immediate(DspRomRegister::r4, selector);
+    code.immediate(DspRomRegister::r6, 0);
+    code.immediate(DspRomRegister::r7, 0);
+    code.word(load_selector);
+    code.word(selector);
+    code.word(call_r1);
     stop_ = code.pc();
-    code.emit("nop");
+    code.word(0);
     code.word(absolute_jump);
     code.word(begin);
     envelope_call_ = code.pc();
-    code.immediate("r5",
-                   entry + 1); // Original callback dispatcher takes the envelope pointer slot.
-    code.emit("jsr " + blofeld::test::number(envelope_dispatch));
-    code.emit("rts");
-    code.install(machine.bus());
+    code.immediate(DspRomRegister::r5, entry + 1); // Original callback pointer slot.
+    code.word(call_short | envelope_dispatch);
+    code.word(return_subroutine);
+    for (const auto word : code.words()) { program_.word(word); }
   }
 
-  void observe(const blofeld::DspState &state) {
+  void reset() { blofeld::test::dma_test::reset_native(machine, program_); }
+
+  void observe(const dsp56300::Registers &state) {
     counts.handlers += static_cast<unsigned>(state.pc == note_handler);
     counts.begins += static_cast<unsigned>(state.pc == note_begin);
     counts.transforms += static_cast<unsigned>(state.pc == velocity_transform);
@@ -468,50 +500,93 @@ struct Fixture {
     if (sustain_stage_ && state.pc == release_handler) { sustain_call(*sustain_stage_); }
   }
 
+  void healthy(const dsp56300::InstructionProgress &result) const {
+    if (result.fault.kind == dsp56300::FaultKind::none) { return; }
+    std::string cause = "Original note native instruction fault";
+    const auto &failure = machine.io().failure();
+    if (failure && failure->cause) {
+      try {
+        std::rethrow_exception(failure->cause);
+      } catch (const std::exception &error) { cause = error.what(); }
+    }
+    throw blofeld::Fault(cause + " pc=" + blofeld::hex(result.fault.pc, 6) +
+                         " omr=" + blofeld::hex(machine.cpu().registers().omr, 6) +
+                         " address=" + blofeld::hex(result.fault.address, 6));
+  }
+
+  void step() {
+    const auto before = machine.cpu().progress().instructions;
+    const auto ticks = machine.clock().elapsed_ticks();
+    auto result = machine.begin_fetch(dsp56300::InstructionPublication::retirement);
+    const blofeld::DspIoReadObserver observer{
+        .context = this, .completed = [](void *context, const blofeld::DspIoReadAccess &access) {
+          if (access.pc == reserved_read && access.address.space != p) {
+            static_cast<Fixture *>(context)->accesses_.push_back(
+                {.target = access.address, .value = access.value});
+          }
+        }};
+    for (unsigned effect = 0; effect < maximum_effects && result.pending && !result.retired &&
+                              result.fault.kind == dsp56300::FaultKind::none;
+         ++effect) {
+      const auto pending = result.pending.value();
+      const auto &access = pending.effect;
+      if (access.pc == reserved_read) {
+        require(access.kind != dsp56300::EffectKind::write,
+                "Rejected original parallel read performs no write");
+        if (access.kind == dsp56300::EffectKind::read) {
+          const auto space = access.space == dsp56300::Space::x ? x : y;
+          require(access.space == dsp56300::Space::x || access.space == dsp56300::Space::y,
+                  "Actual reserved-read operands use only X/Y data spaces");
+          accesses_.push_back(
+              {.target = {.space = space, .address = access.address}, .value = std::nullopt});
+        }
+      }
+      result = machine.advance_observed(pending.ticket, observer);
+    }
+    healthy(result);
+    require(result.retired && machine.cpu().progress().instructions == before + 1 &&
+                machine.clock().elapsed_ticks() == ticks,
+            "Exactly one original/caller instruction retires without invented clock periods");
+    // This component fixture has no peripheral schedule; preserve the explicit
+    // laboratory memory-mode publication step, without claiming physical timing.
+    machine.bus().advance_instruction_cycles(1);
+  }
+
   void run(const unsigned target, const std::optional<unsigned> end = std::nullopt) {
     write(x, selector, target);
     unsigned steps = 0;
-    const blofeld::DspNativeAccessObserver observer{
-        .observe = [this](const blofeld::DspNativeAccess &access) {
-          if (access.pc == reserved_read) { accesses_.push_back(access); }
-        }};
-    while (machine.cpu().state().pc != end.value_or(stop_) || steps == 0) {
+    while (machine.cpu().registers().pc != end.value_or(stop_) || steps == 0) {
       require(steps++ < instruction_limit, "Original note experiment instruction bound");
-      const auto state = machine.cpu().state();
+      const auto state = machine.cpu().registers();
       observe(state);
       try {
-        machine.cpu().step(observer);
-        machine.bus().advance_instruction_cycles(1);
+        step();
       } catch (const blofeld::Fault &) {
         failed_state_ = state;
         throw;
       }
     }
-    require(end.has_value() || machine.cpu().state().sp == 0,
+    require(end.has_value() || machine.cpu().registers().sp == 0,
             "Original complete initialization/parser call returns with its actual frame");
   }
 
   void verify_accesses() {
-    using enum blofeld::DspNativeAccessKind;
-    using enum blofeld::DspNativeAccessStage;
+    require(accesses_.size() == 3, "Actual failed instruction has no unrelated memory access");
     unsigned completed_x = 0;
     unsigned pending_y = 0;
     for (const auto &access : accesses_) {
-      if (access.kind == read && access.target.space == x) {
+      if (access.target.space == x) {
         require(pending_y == 0 && access.target.address == entry + first_state,
                 "Original X state read precedes the reserved parallel Y operand");
-        if (access.stage == after) {
+        if (access.value) {
           require(access.value == idle_callback, "Original slot state has its real reset value");
           ++completed_x;
         }
-      } else if (access.kind == read && access.target.space == y) {
-        require(completed_x == 1 && access.stage == before && access.target.address == word_mask &&
-                    !access.value.has_value(),
+      } else {
+        require(access.target.space == y && completed_x == 1 &&
+                    access.target.address == word_mask && !access.value,
                 "Reserved Y read has no fabricated value or successful access completion");
         ++pending_y;
-      } else {
-        require(access.kind == opcode || access.kind == extension,
-                "No write or unrelated operation occurs inside the rejected instruction");
       }
     }
     require(completed_x == 1 && pending_y == 1,
@@ -520,8 +595,9 @@ struct Fixture {
 
   std::ostream &trace_;
   std::map<unsigned, unsigned> original_program_;
-  std::optional<blofeld::DspState> failed_state_;
-  std::vector<blofeld::DspNativeAccess> accesses_;
+  std::optional<dsp56300::Registers> failed_state_;
+  std::vector<ReadAccess> accesses_;
+  blofeld::test::dma_test::NativeProgram program_;
   std::optional<unsigned> sustain_stage_;
   unsigned stop_ = 0;
   unsigned envelope_call_ = 0;
@@ -530,7 +606,7 @@ struct Fixture {
 };
 
 void accepted(Fixture &fixture,
-              const blofeld::DspCheckpoint &initial,
+              const blofeld::OwnDspCheckpoint &initial,
               const NoteInput input,
               const Delivery delivery = Delivery::complete) {
   const auto [note, velocity, channel] = input;
@@ -561,7 +637,7 @@ void accepted(Fixture &fixture,
 }
 
 void completed(Fixture &fixture,
-               const blofeld::DspCheckpoint &initial,
+               const blofeld::OwnDspCheckpoint &initial,
                const Message input,
                const unsigned channel,
                const bool filtered) {
@@ -583,7 +659,7 @@ struct ReleaseInput {
 };
 
 void release_case(Fixture &fixture,
-                  const blofeld::DspCheckpoint &initial,
+                  const blofeld::OwnDspCheckpoint &initial,
                   const ReleaseInput input,
                   std::ostream &trace) {
   fixture.machine.restore(initial);
@@ -683,7 +759,7 @@ void sustain_note(Fixture &fixture, const SustainInput input, const unsigned not
 }
 
 void sustain_case(Fixture &fixture,
-                  const blofeld::DspCheckpoint &initial,
+                  const blofeld::OwnDspCheckpoint &initial,
                   const SustainInput input,
                   std::ostream &trace) {
   fixture.machine.restore(initial);

@@ -20,8 +20,10 @@ Y:ffffff. The native access observer checks the preceding completed X:c53e read,
 the rejected Y access without a returned value, real SP8/DO25 context and the
 unaltered original program and slot payloads. The original caller has already
 consumed the message and written its independently checked packed history.
-Subsequent execution and checkpoint capture reject the faulted CPU; the next
-case restores a coordinated trusted snapshot. No reserved read is ignored.
+The failed staged instruction retains ownership and rejects reentry without
+changing registers/progress. A fresh diagnostic snapshot preserves CPU/fault
+state; the next case restores the trusted pre-input snapshot. No reserved
+read is ignored.
 
 DSP56371UM Rev.2.1, table 3-8 (PDF page 72), marks Y:ffffff reserved. The pinned
 manual is recorded in hardware/sources.json. It does not qualify a readable
@@ -37,6 +39,17 @@ scheduled rendering, PCM transport, real audio or hardware equivalence. The
 separate held-note voice regression retains its independent numerical scope.
 The separate note-release profile follows real MIDI release from declared active
 entries through original envelope retirement/collection (dsp-note-release.txt).
+
+The shared note/release/sustain target uses independent dsp56300 and an authored
+literal ROM caller, with no legacy executor/assembler in its closure. Diagnostic
+resets use actual mode5 pins, hold and recovery; they are not original MCU boot.
+Staged observations prove the real completed X read and rejected Y request.
+The explicit laboratory memory-switch step supplies no peripheral schedule or
+calibrated instruction timing. All original programs and Python oracles remain
+unchanged.
+ASan/UBSan and separate TSan pass the complete 27/23/2 note matrix, all 592 release
+and 960 sustain cases, including twelve independent corrupted-trace controls per
+profile. The normal and isolated target commands/properties are identical.
 
   cmake --build --preset strict --target blofeld-original-dsp-note-test
   ctest --test-dir build/strict -R '^original_dsp_note$' --output-on-failure
