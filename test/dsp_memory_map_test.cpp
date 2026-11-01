@@ -1,21 +1,31 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp/own_dsp_timeline.hpp"
+#include "dsp56300/core.hpp"
 
 #include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <memory>
+#include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 using blofeld::DspBus;
 using blofeld::DspSpace;
 using blofeld::Fault;
-using blofeld::test::require;
+
+void require(const bool condition, const std::string &message) {
+  if (!condition) { throw Fault(message); }
+}
 
 struct Layout {
   unsigned omr;
@@ -225,58 +235,168 @@ void ignored_and_overlapping_requests() {
       "Same-map observations and rejected requests do not restart or cancel the first deadline");
 }
 
-blofeld::DspRunContract contract() {
-  constexpr unsigned extal_hz = 12000000;
-  constexpr unsigned timebase_hz = 540000000;
-  return {.clock = {.extal_hz = extal_hz,
-                    .timebase_hz = timebase_hz,
-                    .switch_timing = blofeld::DspClockSwitch::reference_instruction_boundary},
-          .timing = blofeld::DspRunTiming::native_internal_estimates};
+constexpr blofeld::DspRunClockInputs clocks{.extal_hz = 12000000,
+                                            .timebase_hz = 540000000,
+                                            .switch_timing =
+                                                blofeld::DspClockSwitch::reference_cycle_boundary};
+constexpr auto timing = blofeld::OwnDspAutomaticTiming::one_effect_per_cycle;
+constexpr unsigned movec_omr = 0x05f43a, period_ticks = 45, switch_cycles = 3;
+
+struct Observation {
+  dsp56300::Registers registers;
+  dsp56300::Progress progress;
+  std::optional<dsp56300::InstructionEffect> pending;
+  std::optional<unsigned> opcode;
+  std::optional<std::uint64_t> dma_cycle;
+  std::uint64_t ticks = 0, cycles = 0;
+  bool faulted = false;
+  bool operator==(const Observation &) const = default;
+};
+
+Observation observe(blofeld::OwnDspMachine &machine, const blofeld::OwnDspTimeline &timeline) {
+  const auto pending = machine.cpu().pending_instruction();
+  return {.registers = machine.cpu().registers(),
+          .progress = machine.cpu().progress(),
+          .pending = pending ? std::optional{pending->effect} : std::nullopt,
+          .opcode = pending ? pending->opcode : std::nullopt,
+          .dma_cycle = machine.bus().last_dma_cycle(),
+          .ticks = machine.clock().elapsed_ticks(),
+          .cycles = machine.clock().native_cycle_units(),
+          .faulted = timeline.faulted()};
+}
+
+void advance(blofeld::OwnDspMachine &machine, blofeld::OwnDspTimeline &timeline) {
+  const auto cycle = machine.bus().last_dma_cycle();
+  const auto ticks = machine.clock().elapsed_ticks();
+  const auto result =
+      timeline.advance_one(timeline.next_deadline(),
+                           blofeld::OwnDspBoundary::through,
+                           {.cycle = cycle ? *cycle + 1 : 0,
+                            .known_requests = 15,
+                            .timing = blofeld::DspDmaTiming::reference_sampled_cycles,
+                            .grant = blofeld::DspDmaGrant::available});
+  require(result && (!result->native || result->native->fault.kind == dsp56300::FaultKind::none),
+          "A literal MOVEC/NOP/JMP reference cycle executes without native substitution");
+  require(machine.clock().elapsed_ticks() == ticks + period_ticks,
+          "Every selected reference cycle consumes one actual bypass-EXTAL period");
+}
+
+void check_switch(DspBus &bus, const bool complete) {
+  if (complete) {
+    require(bus.read({.address = p_moved}) == cookie,
+            "The exact third elapsed reference cycle exposes the retained X-to-P word");
+  } else {
+    require(rejects([&] {
+              static_cast<void>(bus.read({.address = p_moved}));
+            }).contains("elapsed switch cycles"),
+            "A pending native OMR switch refuses the changing address until its deadline");
+  }
+}
+
+std::vector<Observation> suffix(blofeld::OwnDspMachine &machine,
+                                blofeld::OwnDspTimeline &timeline,
+                                const Layout layout,
+                                const unsigned remaining) {
+  std::vector<Observation> result{observe(machine, timeline)};
+  auto expected = machine.cpu().registers();
+  expected.pc = p_y_begin;
+  expected.omr = layout.omr;
+  check_switch(machine.bus(), remaining == 0);
+  for (unsigned cycle = 0; cycle < remaining; ++cycle) {
+    advance(machine, timeline);
+    check_switch(machine.bus(), cycle + 1 == remaining);
+    result.push_back(observe(machine, timeline));
+  }
+  constexpr unsigned bound = 128;
+  constexpr unsigned instructions = 5;
+  std::optional<std::string> failure;
+  for (unsigned cycle = 0; cycle < bound && !failure; ++cycle) {
+    try {
+      advance(machine, timeline);
+    } catch (const Fault &error) { failure = error.what(); }
+    result.push_back(observe(machine, timeline));
+  }
+  const std::string reason = layout.program_end == p_y_begin ? "Unmapped DSP memory read"
+                                                             : "Y-to-P physical relocation read";
+  require(failure && failure->contains(reason) && failure->contains("P:0x003000") &&
+              failure->contains("pc=0x003000") &&
+              failure->contains("omr=" + blofeld::hex(layout.omr, 6)) && timeline.faulted(),
+          "The real refused program fetch retains operation, address, PC and native OMR");
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions == instructions,
+          "MOVEC, three NOPs and JMP preserve every other register before the refused fetch");
+  const auto stopped = observe(machine, timeline);
+  static_cast<void>(rejects([&] { advance(machine, timeline); }));
+  require(observe(machine, timeline) == stopped,
+          "An unsupported native mapping preserves fail-stop execution without further effects");
+  return result;
+}
+
+blofeld::OwnDspTimelineCheckpoint prepare(blofeld::OwnDspMachine &machine, const Layout layout) {
+  // Independent FM MOVEC immediate OMR, NOP and JMP absolute instruction fields.
+  const std::array<std::uint32_t, 10> program{
+      movec_omr, layout.omr, 0, 0, 0, jump_absolute, p_y_begin, 0, 0, 0};
+  machine.bus().install_rom({.start = boot, .words = program});
+  machine.bus().write({.space = DspSpace::x, .address = x_moved, .value = cookie});
+  constexpr blofeld::OwnDspResetInputs reset{
+      .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2};
+  blofeld::OwnDspTimeline timeline(machine, timing, 0, reset);
+  constexpr unsigned hold_ticks = 90;
+  constexpr unsigned recovery_end = 180;
+  constexpr unsigned bound = 32;
+  require(timeline.advance_reset_to(hold_ticks) == hold_ticks, "Real native reset hold");
+  timeline.release_hardware_reset();
+  require(timeline.advance_reset_to(recovery_end) == recovery_end - hold_ticks,
+          "Real mode-five bypass-PLL reset recovery");
+  for (unsigned cycle = 0; cycle < bound && machine.cpu().registers().omr != layout.omr; ++cycle) {
+    advance(machine, timeline);
+  }
+  require(machine.cpu().registers().omr == layout.omr,
+          "Actual native MOVEC publishes the independently authored memory mode");
+  check_switch(machine.bus(), false);
+  return timeline.checkpoint();
 }
 
 void native_modes_and_snapshots() {
+  unsigned contexts = 0;
   for (const auto layout : layouts) {
     if (layout.program_end == p_moved) { continue; }
-    blofeld::test::DspProgram program;
-    program.immediate("omr", layout.omr);
-    for (unsigned nop = 0; nop < 3; ++nop) { program.emit("nop"); }
-    // Independent FM JMP absolute encoding. Actual next fetch, not host PC replacement.
-    program.word(jump_absolute);
-    program.word(p_y_begin);
-    blofeld::DspMachine machine(contract());
-    program.install(machine.bus());
-    machine.bus().pll().observe_pinit(false);
-    machine.cpu().reset_spi_boot();
-    machine.bus().write({.space = DspSpace::x, .address = x_moved, .value = cookie});
-    machine.cpu().step();
-    machine.cpu().step();
-    const auto saved = machine.checkpoint();
-    for (unsigned replay = 0; replay < 2; ++replay) {
-      machine.restore(saved);
-      require(rejects([&] {
-                static_cast<void>(machine.bus().read({.address = p_moved}));
-              }).contains("elapsed switch cycles"),
-              "A native checkpoint retains the outstanding OMR switch deadline");
-      machine.cpu().step();
-      machine.cpu().step();
-      require(machine.cpu().state().omr == layout.omr &&
-                  machine.run_clock().native_cycle_units() == 5 &&
-                  machine.bus().read({.address = p_moved}) == cookie,
-              "Original core MOVEC and three subsequent NOP units select the literal layout");
-      machine.cpu().step();
-      const auto error = rejects([&] { machine.cpu().step(); });
-      const std::string reason = layout.program_end == p_y_begin
-                                     ? "Unmapped DSP memory read"
-                                     : "Y-to-P physical relocation read";
-      require(machine.cpu().state().pc == p_y_begin && error.contains(reason) &&
-                  error.contains("P:0x003000") && error.contains("pc=0x003000") &&
-                  error.contains("omr=" + blofeld::hex(layout.omr, 6)),
-              "A genuine program fetch reports address, operation, PC, OMR and unresolved mapping");
-      require(rejects([&] { machine.cpu().step(); }).contains("requires reset"),
-              "Unsupported native fetches preserve fail-stop execution");
+    blofeld::OwnDspMachine initial(clocks);
+    const auto start = prepare(initial, layout);
+    for (unsigned cut = 0; cut <= switch_cycles; ++cut) {
+      blofeld::OwnDspMachine source(clocks);
+      auto owner = std::make_unique<blofeld::OwnDspTimeline>(source, start);
+      for (unsigned cycle = 0; cycle < cut; ++cycle) { advance(source, *owner); }
+      const auto saved = owner->checkpoint();
+      const auto before = observe(source, *owner);
+      const auto deadline = owner->next_deadline();
+      const auto old = std::move(owner);
+      owner = std::make_unique<blofeld::OwnDspTimeline>(source, saved);
+      require(!old->faulted(),
+              "The previous timeline is healthy before its identity is invalidated");
+      static_cast<void>(rejects([&] { static_cast<void>(old->next_deadline()); }));
+      require(observe(source, *owner) == before && owner->next_deadline() == deadline,
+              "Restoring invalidates a healthy old owner without changing the saved boundary");
+      const auto expected = suffix(source, *owner, layout, switch_cycles - cut);
+      owner = std::make_unique<blofeld::OwnDspTimeline>(source, saved);
+      require(observe(source, *owner) == before && owner->next_deadline() == deadline,
+              "Same-owner restore recovers the native/frontend clock and switch after failure");
+      require(suffix(source, *owner, layout, switch_cycles - cut) == expected,
+              "Same-owner continuation repeats every real native/map effect and visible refusal");
+      blofeld::OwnDspMachine fresh(clocks);
+      blofeld::OwnDspTimeline replay(fresh, saved);
+      require(observe(fresh, replay) == before && replay.next_deadline() == deadline,
+              "Fresh-owner restore retains full native registers, staged work, DMA and time");
+      require(suffix(fresh, replay, layout, switch_cycles - cut) == expected,
+              "Fresh-owner continuation repeats the exact native/map/failure trace");
+      ++contexts;
     }
   }
+  require(contexts == 16, "All four switched maps cover each pending and committed cycle cut");
+  std::cout << "Native memory-map checkpoint states=" << contexts
+            << " same/fresh continuations=" << contexts * 2 << '\n';
 }
+
 }
 
 int main() {

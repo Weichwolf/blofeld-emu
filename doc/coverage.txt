@@ -1144,6 +1144,10 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           All five documented RAM window layouts
                                           decoded, with retained direct X/Y data
                                           and three subsequent switch units.
+                                          Native clocked MOVEC/JMP coverage uses
+                                          the independent core: 16 switch states,
+                                          32 same/fresh continuations retain exact
+                                          map deadlines and contextual fail-stop.
                                           Extra Y-to-P word order remains unknown
                                           and fails explicitly; no guessed alias
                                           or new backing RAM (dsp-memory-map.txt).

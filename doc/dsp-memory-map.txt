@@ -33,9 +33,9 @@ it does not establish physical pipeline/bus timing.
 
 Physical correspondence must not be inferred from window capacities alone.
 The previous X:010000..011fff to P:001000..002fff linear mapping remains an
-explicit hypothesis, still requiring hardware calibration. The additional
-Y-to-P word order is not established by the reviewed tables. Core reads,
-writes, instruction fetches and physical-resource queries in that part of
+explicit hypothesis; the tabulated capacities do not prove its word order.
+The additional Y-to-P word order is not established by the reviewed tables.
+Core reads, writes, instruction fetches and physical-resource queries in that part of
 the expanded P window therefore fail with 'Y-to-P physical relocation',
 rather than using guessed aliases, independent RAM or zero-filled contents.
 This is partial support for the extra layouts, not complete memory emulation.
@@ -47,10 +47,15 @@ Reserved and protected-ROM accesses retain their strict failure contracts.
 Independent literal tests cover every window endpoint, 25 layout transitions,
 retained/unknown RAM, ROM protection, pending switches, code invalidation and
 ignored/overlapping requests. Actual native MOVEC instructions and subsequent
-NOPs exercise the four switched modes, trusted mid-delay CPU/board snapshots
-and contextual fail-stop on a real next program fetch. These tests verify the
-emulator model against the tabulated requirements; no manufacturer code bytes
-are embedded and no physical-device equivalence is claimed.
+NOPs exercise the four switched modes with the independent core and literal ISA
+words, without the SDK assembler/backend. A selected effect-per-cycle timeline
+checks the exact three subsequent reference periods, preserving the model delay
+without assigning one cycle to each whole instruction. Sixteen pending/committed
+checkpoints cover all four cuts in each switched mode; 32 same/fresh-owner suffixes
+compare complete registers, staged effects, retirement counts, DMA/time and the
+actual refused target fetch. Stale timeline owners reject without effects.
+These tests verify the emulator model against the tabulated requirements;
+no manufacturer code bytes are embedded and no physical-device equivalence is claimed.
 
 Original 1.25 requests MS/MSW=111. Its reserved Y:002000 clear remains unresolved
 and unchanged, as do matching stock ROM, later Port-F setup, NAND, full boot,

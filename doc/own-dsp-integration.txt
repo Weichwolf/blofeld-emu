@@ -41,6 +41,11 @@ core, with no SDK assembler/backend. It covers priority, fast/long/nested entry,
 real SHI consumption, VBA/reset, DO/REP and explicit failures; 126 native checkpoint
 states have 252 same/fresh suffixes across seven vector forms. See dsp-interrupts.txt.
 
+The retained dsp_memory_map gate also uses this core without the SDK assembler.
+Its unchanged five-window/25-transition expectations are joined by 16 clocked
+switch checkpoints and 32 same/fresh continuations, preserving actual MOVEC/JMP
+effects, the three-period model delay and strict unresolved-target fetches.
+
 OwnDspMachine pairs the bus, adapter, own core and interrupt owner. It requires
 explicit mode5/PINIT-low observations and at least two supplied recovery periods.
 The existing DspRunClock holds execution closed through assertion and recovery;
