@@ -1,7 +1,7 @@
 {
   "independent_dsp56300": {
     "source": "https://github.com/Weichwolf/dsp56300",
-    "revision": "002ca93c54f597850bfc3735b0c84acef33877be",
+    "revision": "b218b578ff95766764146ccbccd303a1a746ef37",
     "license": "GPL-3.0-only",
     "integration": "Pinned source subproject used by the regular Board/headless runtime, with strict board bus, captured fetch, interrupt/reset ownership and joint snapshots. Legacy test migration and full instrument operation remain incomplete."
   },

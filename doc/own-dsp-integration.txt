@@ -36,6 +36,10 @@ the caller must route every staged advance through this owner during entry.
 This supplies functional ownership, not clock timing or reset.
 The synthetic IRQ test covers SR masking, two vector bases, stale tickets,
 fast-vector return and refusal of an unknown second vector word.
+The retained general IRQ gate also uses this owner and the pinned independent
+core, with no SDK assembler/backend. It covers priority, fast/long/nested entry,
+real SHI consumption, VBA/reset, DO/REP and explicit failures; 126 native checkpoint
+states have 252 same/fresh suffixes across seven vector forms. See dsp-interrupts.txt.
 
 OwnDspMachine pairs the bus, adapter, own core and interrupt owner. It requires
 explicit mode5/PINIT-low observations and at least two supplied recovery periods.

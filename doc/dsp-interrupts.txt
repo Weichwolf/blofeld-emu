@@ -1,4 +1,4 @@
-DSP56371 reference interrupt arbitration and native entry
+DSP56371 interrupt arbitration and independent-core entry
 
 Primary references: DSP56371UM Rev 2.1 chapter 4, tables 4-4..4-6 and Appendix B;
 DSP56300FM Rev 5 sections 2.3.2.3..2.3.2.8, VBA and REP instruction definitions.
@@ -27,20 +27,19 @@ software RESET preserves CPU SR and VBA, while hardware reset restores VBA=0.
 Native MOVEC writes preserve VBA's eight read-only zero low bits. The actual
 vector address is VBA plus the source's relative vector, without rewriting PC.
 
-DspCore arbitrates at explicit reference instruction boundaries. The native
-reference entry fetches two real program words through the strict bus. Unknown
-first or second contents fail before acknowledging a timer or pushing a frame.
+OwnDspMachine admits the controller request using installed foreground metadata.
+Native begin_fetch/advance tickets fetch both real words through the strict bus.
+Unknown first or second contents fail before acknowledging a timer or pushing a frame.
 Once both are fetched, a timer clears only its serviced flag. SHI acknowledgement
 does not drain its FIFO or clear errors; ESAI acknowledgement retains its data
 and error state. The handler must perform the modeled
 peripheral's actual read/write sequence. No generic host interrupt FIFO is used.
 
 Both vector words are latched before either executes. A first-slot P store
-cannot replace the second instruction in the same entry. One DspCore step
-executes at most the two vector words atomically. The separate explicit unclocked
-begin_reference_interrupt API can suspend before their actual accesses and
-acknowledgement, including a trusted pending checkpoint; see
-dsp-reference-execution.txt. A fast vector
+cannot replace the second instruction in the same entry. Native fetch, operand,
+publication and retirement boundaries can suspend and resume independently.
+Peripheral acknowledgement ends after the second accepted read; the CPU retains
+the remaining vector opcode until its execution completes. A fast vector
 executes either two single-word instructions or one double-word instruction,
 without advancing foreground PC or implicitly saving SR. A JSR in the first or
 second slot enters a long interrupt using the native JSR stack operation. Its
@@ -59,7 +58,7 @@ are outside this conservative subset. A rejected native step requires reset.
 Reproducible checks
   cmake --preset strict
   cmake --build build/strict --target blofeld-dsp-interrupt-test
-  ctest --test-dir build/strict -R '^(dsp_interrupts|dsp_timers|dsp_shi|native_dsp|original_dsp_boot)$' --output-on-failure
+  ctest --test-dir build/strict -R '^dsp_interrupts$' --output-on-failure
 
 The project-owned diagnostics execute native instructions from reset. Expected
 priority/mask combinations, vector order, JSR/RTI encodings and stack/SR effects
@@ -71,19 +70,27 @@ VBA, both reset types, DO/REP deferral/restoration and missing-vector failures.
 A self-modifying first vector word checks second-word latching; it fails against
 the earlier reread implementation. A first-slot JSR discards its fetched second
 RTI word without executing it. Stack overflow rejects before a frame push.
-No manufacturer program bytes or physical MIDI/flash transactions are involved.
-The model fuzzer exercises priority writes, mask selection and acknowledgements.
-The expanded synthetic-seed campaign completed 39720 executions in 61 seconds
-without sanitizer findings; it is an initial campaign, not sustained validation.
+The retained 24 native contexts use literal ISA words and the independent core;
+there is no SDK assembler/backend in this target. Fifteen actual nested JSRs
+fill SP/SC for the overflow check. Setup defines canaries with native MOVEs.
+A seven-form matrix covers 126 checkpoint states and 252 same/fresh-owner suffixes:
+fast one/two-word vectors, each JSR placement, SHI FIFO and self-modifying P code.
+It checks every observable effect, full registers/frames/flags, exact retirement
+counts and actual foreground execution. In-flight views use the pending effect;
+fetch/latch metadata is read only between instructions. Stale tickets refuse
+without effects. No manufacturer bytes or physical transactions are involved.
+Offline priority/mask/acknowledgement fuzzing runs only on explicit request.
 
 Limits
 This is an instruction-boundary architectural reference, not a physical DSP
 pipeline. Interrupt synchronization, recognition/fetch latency, mask-change
 latency, DO endpoint pipeline restrictions and entry-cycle accounting remain
-unqualified. Neither atomic entry nor semantic access suspension supplies physical
-sub-instruction pin timing.
+unqualified. Post-fast/RTI exclusion uses the core's existing conservative policy;
+the tie-order fixture executes real foreground NOPs to release it while checking
+that sources remain pending. Semantic access suspension does not establish
+physical sub-instruction pin timing.
 Peripheral clocks still require explicit board inputs; no automatic timer/SHI
-clock ratio is inferred. Other core/peripheral sources, DMA, cache behavior,
+clock ratio is inferred. Complete source arbitration, DMA/cache/pipeline coupling,
 stack extension and full ISA/derivative reset validation remain outstanding.
 
 These synthetic checks do not advance original DSP startup past the reserved

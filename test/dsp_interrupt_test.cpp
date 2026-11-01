@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_interrupts.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp56kEmu/assembler.h"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_interrupt_fixture.hpp"
 
 #include <array>
 #include <cstddef>
@@ -14,12 +16,11 @@
 #include <iostream>
 #include <optional>
 #include <span>
-#include <sstream>
 #include <string>
-#include <vector>
 
 namespace {
-constexpr unsigned boot = 0xff0000;
+using namespace blofeld::test::irq;
+using blofeld::test::dma_test::native_clocks;
 constexpr unsigned iprp = 0xfffffe;
 constexpr unsigned iprc = 0xffffff;
 constexpr unsigned csr0 = 0xffff8f;
@@ -42,7 +43,7 @@ constexpr unsigned rti_opcode = 4;
 constexpr unsigned foreground_value = 0x77;
 constexpr unsigned short_jsr = 0x0d0000;
 constexpr unsigned absolute_jsr = 0x0bf080;
-constexpr unsigned base = 0x500;
+constexpr unsigned base = 0x500, vba_low_mask = 0xff;
 constexpr unsigned nested_priorities = 0x10c;
 constexpr unsigned timer_two_vector = 0x5c;
 enum class VectorForm : std::uint8_t { first, second, absolute };
@@ -63,63 +64,7 @@ std::string reject(const auto &operation, const std::string &message) {
   throw blofeld::Fault(message);
 }
 
-std::string number(const unsigned value) {
-  std::ostringstream text;
-  text << '$' << std::hex << value;
-  return text.str();
-}
-
-void load_program(blofeld::DspBus &bus,
-                  const unsigned start,
-                  const std::span<const std::uint32_t> words) {
-  if (start >= boot) {
-    bus.install_rom({.start = start, .words = words});
-  } else {
-    for (std::size_t index = 0; index < words.size(); ++index) {
-      bus.write({.address = start + static_cast<unsigned>(index), .value = words[index]});
-    }
-  }
-}
-
-class Program {
-public:
-  void emit(const std::string &text) {
-    const auto instruction = assembler_.assemble(text.c_str());
-    require(instruction.success(), "Cannot assemble independent interrupt diagnostic: " + text);
-    for (unsigned index = 0; index < instruction.wordCount; ++index) {
-      words_.push_back(instruction.word[index]);
-    }
-    ++instructions_;
-  }
-
-  void timer(const unsigned csr, const unsigned load = 5, const unsigned compare = 5) {
-    emit("movep #>" + number(load) + ",x:<<" + number(csr - 1));
-    emit("movep #>" + number(compare) + ",x:<<" + number(csr - 2));
-    emit("movep #>7,x:<<" + number(csr));
-  }
-
-  void setup(const unsigned priorities, const unsigned status = ordinary_sr) {
-    emit("move #>" + number(status) + ",sr");
-    emit("movep #>" + number(priorities) + ",x:<<$fffffe");
-  }
-
-  void install(blofeld::DspBus &bus, const unsigned start = boot) const {
-    load_program(bus, start, words_);
-  }
-
-  [[nodiscard]] unsigned instructions() const { return instructions_; }
-
-  [[nodiscard]] unsigned pc() const { return boot + static_cast<unsigned>(words_.size()); }
-
-  [[nodiscard]] std::span<const std::uint32_t> words() const { return words_; }
-
-private:
-  dsp56k::Assembler assembler_;
-  std::vector<std::uint32_t> words_;
-  unsigned instructions_ = 0;
-};
-
-void run(blofeld::DspCore &cpu, const unsigned instructions) {
+void run(Driver &cpu, const unsigned instructions) {
   for (unsigned index = 0; index < instructions; ++index) { cpu.step(); }
 }
 
@@ -211,24 +156,25 @@ void test_priority_rejections_and_reset() {
 }
 
 void test_fast_entry(const bool double_word) {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100);
+  program.setup({.priorities = 0x100});
   program.timer(csr0);
   const auto setup_count = program.instructions();
   const auto foreground = program.pc();
-  program.emit("move #>$77,r7");
+  program.emit(move_r7, foreground_value);
   program.install(bus);
   Program vector;
   if (double_word) {
-    vector.emit("move #>$123456,x0");
+    vector.emit(move_x0, payload);
   } else {
-    vector.emit("move #<5,r1");
-    vector.emit("move #<7,r2");
+    vector.emit(short_r1_five);
+    vector.emit(short_r2_seven);
   }
   require(vector.words().size() == 2, "Fast fixture contains exactly two vector words");
   vector.install(bus, timer_vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   const auto before = cpu.state();
   bus.timers().advance_clk2(1);
@@ -247,26 +193,27 @@ void test_fast_entry(const bool double_word) {
 }
 
 void test_fast_latches_both_vector_words() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program changed;
-  changed.emit("move #<9,r2");
+  changed.emit(short_r2_nine);
   require(changed.words().size() == 1, "Replacement diagnostic opcode is one word");
   Program program;
-  program.setup(0x100);
+  program.setup({.priorities = 0x100});
   program.timer(csr0);
-  program.emit("move #>" + number(changed.words().front()) + ",x0");
-  program.emit("move #>" + number(timer_vector + 1) + ",r0");
+  program.emit(move_x0, changed.words().front());
+  program.emit(move_r0, timer_vector + 1);
   const auto setup_count = program.instructions();
   const auto foreground = program.pc();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   Program vector;
-  vector.emit("move x0,p:(r0)");
-  vector.emit("move #<7,r2");
+  vector.emit(movem_x0_r0);
+  vector.emit(short_r2_seven);
   require(vector.words().size() == 2,
           "Self-modifying vector contains two single-word instructions");
   vector.install(bus, timer_vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   bus.timers().advance_clk2(1);
   cpu.step();
@@ -278,18 +225,19 @@ void test_fast_latches_both_vector_words() {
 }
 
 void test_native_mask_release() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100, ordinary_sr | mask_bits);
+  program.setup({.priorities = 0x100, .status = ordinary_sr | mask_bits});
   program.timer(csr0);
   const auto setup_count = program.instructions();
-  program.emit("andi #$fc,mr");
+  program.emit(release_mask);
   const auto foreground = program.pc();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 2> vector{0, 0};
   load_program(bus, timer_vector, vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   bus.timers().advance_clk2(1);
   cpu.step();
@@ -302,20 +250,21 @@ void test_native_mask_release() {
 }
 
 void test_masked_source_does_not_probe_unknown_pins() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
   constexpr unsigned priorities = 0x304;
   constexpr unsigned cpu_mask = 0x200;
-  program.setup(priorities, ordinary_sr | cpu_mask);
-  program.emit("movep #>$1009,x:<<$ffff91");
+  program.setup({.priorities = priorities, .status = ordinary_sr | cpu_mask});
+  program.write({.space = blofeld::DspSpace::x, .address = hcsr, .value = shi_receive_enabled});
   program.timer(csr0);
   const auto setup_count = program.instructions();
   const auto foreground = program.pc();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 2> vector{0, 0};
   load_program(bus, timer_vector, vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   bus.timers().advance_clk2(1);
   cpu.step();
@@ -326,16 +275,19 @@ void test_masked_source_does_not_probe_unknown_pins() {
 }
 
 void test_bus_tie_order_and_shi_acknowledgement() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
   constexpr unsigned all_ones = 0xffffff;
   constexpr unsigned same_level_priorities = 0x104;
-  program.setup(same_level_priorities);
-  program.timer(csr0, all_ones, 0);
-  program.emit("movep #>$1009,x:<<$ffff91");
+  program.setup({.priorities = same_level_priorities});
+  program.timer(csr0, {.load = all_ones, .compare = 0});
+  program.write({.space = blofeld::DspSpace::x, .address = hcsr, .value = shi_receive_enabled});
   const auto setup_count = program.instructions();
   const auto foreground = program.pc();
-  program.emit("nop");
+  program.emit(0);
+  program.emit(0);
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 2> shi{short_jsr | handler, 0};
   constexpr std::array<std::uint32_t, 2> fast{0, 0};
@@ -343,10 +295,10 @@ void test_bus_tie_order_and_shi_acknowledgement() {
   load_program(bus, timer_vector, fast);
   load_program(bus, overflow_vector, fast);
   Program receive;
-  receive.emit("movep x:<<$ffff94,x0");
-  receive.emit("rti");
+  receive.emit(receive_x0);
+  receive.emit(rti_opcode);
   receive.install(bus, handler);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   bus.timers().advance_clk2(2);
   send(bus.shi());
@@ -357,25 +309,34 @@ void test_bus_tie_order_and_shi_acknowledgement() {
   require((cpu.state().x & iprc) == payload && pending_vector(bus) == overflow_vector,
           "Native HRX consumption exposes the already pending timer overflow before compare");
   cpu.step();
+  require(cpu.state().pc == foreground && pending_vector(bus) == overflow_vector,
+          "Actual RTI restores foreground while the overflow stays pending");
+  cpu.step();
+  require(cpu.state().pc == foreground + 1 && pending_vector(bus) == overflow_vector,
+          "One actual foreground NOP releases the conservative native post-RTI exclusion");
   cpu.step();
   constexpr unsigned overflow = 0x100000;
-  require(cpu.state().pc == foreground && bus.timers().read(csr0, overflow) == 0 &&
+  require(cpu.state().pc == foreground + 1 && bus.timers().read(csr0, overflow) == 0 &&
               bus.timers().read(csr0, compare_flag) == compare_flag &&
               pending_vector(bus) == timer_vector,
           "Native overflow service clears only its own flag, retaining the same timer's compare");
   cpu.step();
-  require(cpu.state().pc == foreground && !bus.interrupt_request(0),
+  require(cpu.state().pc == foreground + 2 && pending_vector(bus) == timer_vector,
+          "A real foreground NOP releases post-fast exclusion without consuming the compare");
+  cpu.step();
+  require(cpu.state().pc == foreground + 2 && !bus.interrupt_request(0),
           "The subsequent native compare fetch acknowledges the remaining event");
 }
 
 void test_long_entry(const VectorForm form, const unsigned level) {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup((level + 1) << 8U, scaling_sr);
+  program.setup({.priorities = (level + 1) << 8U, .status = scaling_sr});
   program.timer(csr0);
   const auto setup_count = program.instructions();
   const auto foreground = program.pc();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   // DSP56300FM JSR xxx/ea and RTI opcodes, independent of the SDK assembler.
   std::array<std::uint32_t, 2> vector{};
@@ -388,15 +349,15 @@ void test_long_entry(const VectorForm form, const unsigned level) {
   load_program(bus, timer_vector, vector);
   constexpr std::array<std::uint32_t, 1> return_code{rti_opcode};
   load_program(bus, handler, return_code);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   const auto before = cpu.state();
   require(before.sr == scaling_sr, "Native startup retains the independently specified SR bits");
   bus.timers().advance_clk2(1);
   cpu.step();
   const auto entered = cpu.state();
-  require(entered.pc == handler && entered.sp == 1 && entered.stack_pc == foreground &&
-              entered.stack_sr == before.sr,
+  require(entered.pc == handler && entered.sp == 1 && stack_pc(entered) == foreground &&
+              stack_sr(entered) == before.sr,
           "JSR in either vector slot or an absolute pair stacks the native return PC/SR once");
   const auto expected_sr = (before.sr & ~long_cleared_bits) | ((level + 1) << 8U);
   require(entered.sr == expected_sr,
@@ -408,18 +369,19 @@ void test_long_entry(const VectorForm form, const unsigned level) {
 }
 
 void test_fast_status_and_shi_fifo() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(4);
-  program.emit("movep #>$1009,x:<<$ffff91");
+  program.setup({.priorities = 4});
+  program.write({.space = blofeld::DspSpace::x, .address = hcsr, .value = shi_receive_enabled});
   const auto setup_count = program.instructions();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   Program vector;
-  vector.emit("movep x:<<$ffff94,x0");
-  vector.emit("clr a");
+  vector.emit(receive_x0);
+  vector.emit(clear_a);
   vector.install(bus, shi_vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   const auto before = cpu.state();
   send(bus.shi());
@@ -434,14 +396,15 @@ void test_fast_status_and_shi_fifo() {
 }
 
 void test_nested_priority_and_pending_retention() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(nested_priorities);
+  program.setup({.priorities = nested_priorities});
   program.timer(csr0);
   program.timer(csr2);
-  program.emit("movep #>$1009,x:<<$ffff91");
+  program.write({.space = blofeld::DspSpace::x, .address = hcsr, .value = shi_receive_enabled});
   const auto setup_count = program.instructions();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 2> timer{short_jsr | handler, 0};
   constexpr std::array<std::uint32_t, 2> shi{0, short_jsr | nested_handler};
@@ -450,10 +413,10 @@ void test_nested_priority_and_pending_retention() {
   constexpr std::array<std::uint32_t, 2> outer{0, rti_opcode};
   load_program(bus, handler, outer);
   Program nested;
-  nested.emit("movep x:<<$ffff94,x0");
-  nested.emit("rti");
+  nested.emit(receive_x0);
+  nested.emit(rti_opcode);
   nested.install(bus, nested_handler);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   bus.shi().observe_spi({.mosi = false});
   run(cpu, setup_count);
   const auto foreground = cpu.state();
@@ -467,7 +430,7 @@ void test_nested_priority_and_pending_retention() {
   send(bus.shi());
   cpu.step();
   require(cpu.state().pc == nested_handler && cpu.state().sp == 2 &&
-              cpu.state().stack_pc == interrupted.pc && cpu.state().stack_sr == interrupted.sr &&
+              stack_pc(cpu.state()) == interrupted.pc && stack_sr(cpu.state()) == interrupted.sr &&
               (cpu.state().sr & mask_bits) == mask_bits,
           "Higher-level SHI preempts a native long timer interrupt with a second exact frame");
   cpu.step();
@@ -482,18 +445,19 @@ void test_nested_priority_and_pending_retention() {
 }
 
 void test_vba_relocation_and_resets() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100);
-  program.emit("move #>$5ff,vba");
+  program.setup({.priorities = 0x100});
+  program.emit(move_vba, base | vba_low_mask);
   program.timer(csr0);
   const auto setup_count = program.instructions();
-  program.emit("reset");
-  program.emit("nop");
+  program.emit(reset);
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 2> vector{0, 0};
   load_program(bus, base + timer_vector, vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   require(cpu.state().vba == base, "Native MOVEC cannot write the eight read-only low VBA bits");
   bus.timers().advance_clk2(1);
@@ -505,27 +469,28 @@ void test_vba_relocation_and_resets() {
   require(cpu.state().vba == base && cpu.state().sr == before.sr &&
               bus.read({.space = blofeld::DspSpace::x, .address = iprp}) == 0,
           "Native RESET clears priority registers while retaining CPU VBA and SR");
-  cpu.reset_spi_boot();
+  cpu.hardware_reset();
   require(cpu.state().vba == 0 && (cpu.state().sr & mask_bits) == mask_bits,
           "Hardware reset restores zero VBA and blocks all maskable levels");
 }
 
 void test_sequential_rep_deferral() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100);
+  program.setup({.priorities = 0x100});
   program.timer(csr0);
   const auto setup_count = program.instructions();
-  program.emit("rep #2");
-  program.emit("move x0,x1");
-  program.emit("rep #3");
-  program.emit("move y0,y1");
+  program.emit(rep_two);
+  program.emit(x0_x1);
+  program.emit(rep_three);
+  program.emit(y0_y1);
   const auto foreground = program.pc();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 2> vector{0, 0};
   load_program(bus, timer_vector, vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count + 1);
   bus.timers().advance_clk2(1);
   // Two first bodies, next REP, three next bodies: all six steps defer service.
@@ -541,23 +506,24 @@ void test_sequential_rep_deferral() {
 }
 
 void test_do_loop_interrupt_restore() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100);
+  program.setup({.priorities = 0x100});
   program.timer(csr0);
   const auto setup_count = program.instructions();
   // DO is two words, then one native NOP; assembler end label is one beyond LA.
   const auto loop = program.pc() + 2;
-  program.emit("do #2," + number(loop + 1));
-  program.emit("nop");
+  program.emit(do_two, loop);
+  program.emit(0);
   const auto foreground = program.pc();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 2> vector{short_jsr | handler, 0};
   constexpr std::array<std::uint32_t, 1> restore{rti_opcode};
   load_program(bus, timer_vector, vector);
   load_program(bus, handler, restore);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count + 1);
   const auto before = cpu.state();
   constexpr unsigned lf = 0x8000;
@@ -566,7 +532,7 @@ void test_do_loop_interrupt_restore() {
   bus.timers().advance_clk2(1);
   cpu.step();
   require(cpu.state().pc == handler && cpu.state().sp == 3 && (cpu.state().sr & lf) == 0 &&
-              cpu.state().stack_pc == loop && cpu.state().stack_sr == before.sr,
+              stack_pc(cpu.state()) == loop && stack_sr(cpu.state()) == before.sr,
           "Long IRQ inside DO saves the loop flag and disables loop redirection inside the ISR");
   cpu.step();
   require(cpu.state().pc == loop && cpu.state().sp == 2 && cpu.state().sr == before.sr &&
@@ -578,16 +544,17 @@ void test_do_loop_interrupt_restore() {
 }
 
 void test_unknown_vector_and_extension(const unsigned known_words) {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100);
+  program.setup({.priorities = 0x100});
   program.timer(csr0);
   const auto setup_count = program.instructions();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   constexpr std::array<std::uint32_t, 1> first{absolute_jsr};
   if (known_words != 0) { load_program(bus, timer_vector, first); }
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   const auto before = cpu.state();
   bus.timers().advance_clk2(1);
@@ -600,7 +567,7 @@ void test_unknown_vector_and_extension(const unsigned known_words) {
   require(bus.timers().read(csr0, compare_flag) == compare_flag && cpu.state().sp == 0,
           "Rejected vector fetch cannot acknowledge the timer or push an invented frame");
   static_cast<void>(reject([&cpu] { cpu.step(); }, "Faulted native interrupt requires reset"));
-  cpu.reset_spi_boot();
+  cpu.hardware_reset();
   run(cpu, setup_count);
   require(
       cpu.state().pc == before.pc && cpu.state().sp == 0 && !bus.interrupt_request(0),
@@ -608,44 +575,55 @@ void test_unknown_vector_and_extension(const unsigned known_words) {
 }
 
 void test_interrupt_stack_overflow_rejection() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100);
+  program.setup({.priorities = 0x100});
   program.timer(csr0);
-  program.emit("move #>15,sp");
-  const auto setup_count = program.instructions();
-  program.emit("nop");
+  // FM5.4.3: real nested JSRs fill both SP and SC without host register edits.
+  constexpr unsigned frames = 15;
+  constexpr unsigned chain = 0x600;
+  program.emit(short_jsr | chain);
+  const auto setup_count = program.instructions() + frames - 1;
+  program.emit(0);
   program.install(bus);
+  for (unsigned index = 0; index < frames; ++index) {
+    bus.write({.address = chain + index,
+               .value = index + 1 < frames ? short_jsr | (chain + index + 1) : 0});
+  }
   constexpr std::array<std::uint32_t, 2> vector{short_jsr | handler, 0};
   load_program(bus, timer_vector, vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   const auto before = cpu.state();
+  require(before.sp == frames && before.sc == frames,
+          "Fifteen actual JSRs fill the independently counted hardware stack");
   bus.timers().advance_clk2(1);
-  const auto error = reject([&cpu] { cpu.step(); }, "Interrupt stack overflow must fail visibly");
-  require(error.find("Unsupported reference interrupt stack overflow") != std::string::npos &&
-              cpu.state().pc == before.pc && cpu.state().sp == before.sp,
+  static_cast<void>(reject([&cpu] { cpu.step(); }, "Interrupt stack overflow must fail visibly"));
+  require(machine.cpu().fault().kind == dsp56300::FaultKind::stack && cpu.state() == before,
           "Full native stack rejects JSR before writing/wrapping a frame or transferring control");
 }
 
 void test_rejected_fast_control_flow() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.setup(0x100);
+  program.setup({.priorities = 0x100});
   program.timer(csr0);
   const auto setup_count = program.instructions();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
   // JMP xxx is prohibited for this maskable fast-reference subset.
   constexpr std::array<std::uint32_t, 2> vector{0x0c0300, 0};
   load_program(bus, timer_vector, vector);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   run(cpu, setup_count);
   const auto before = cpu.state();
   bus.timers().advance_clk2(1);
   const auto error = reject([&cpu] { cpu.step(); }, "Unsupported fast-vector jump fails");
-  require(error.find("Unsupported reference interrupt vector instruction") != std::string::npos &&
-              cpu.state().pc == before.pc && cpu.state().sp == 0,
+  require(!error.empty() &&
+              machine.cpu().fault().kind == dsp56300::FaultKind::unsupported_instruction &&
+              machine.cpu().fault().pc == timer_vector && cpu.state() == before,
           "Unsupported vector flow fails before executing the branch");
 }
 }
@@ -672,6 +650,7 @@ int main() {
     test_unknown_vector_and_extension(1);
     test_rejected_fast_control_flow();
     test_interrupt_stack_overflow_rejection();
+    checkpoint_checks();
     std::cout << "DSP priority, native fast/long entry, nested IRQ, RTI, VBA, DO/REP and rejection "
                  "checks passed\n";
     return 0;

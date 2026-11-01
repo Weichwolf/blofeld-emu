@@ -708,10 +708,13 @@ Interrupts, timers, clock         partial  USB PHY control, CRG qualification, l
                                           remain explicitly unqualified.
                                           Native ready polls and RESET checked.
                                           IRQA/SHI/TIM priority arbitration, CPU masking,
-                                          native fast/long and nested entry,
+                                          independent-core fast/long/nested entry,
                                           exact JSR/RTI frames, VBA relocation and
                                           DO/REP interaction checked
-                                          (dsp-interrupts.txt). Separate unclocked
+                                          (dsp-interrupts.txt): 24 native contexts,
+                                          126 checkpoint states and 252 same/fresh
+                                          suffixes across seven vector forms.
+                                          Separate unclocked
                                           access continuation admits vector words,
                                           acknowledgement and native effects once;
                                           later higher-priority sources retain
