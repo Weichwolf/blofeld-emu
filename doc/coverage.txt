@@ -57,6 +57,14 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           their real CPU/peripheral effects;
                                           reset and timeline ownership remain
                                           guarded (dsp-program-fetch.txt).
+                                          Composed DMA/F2/native cycle tests now
+                                          retain real clock periods, separate
+                                          data/publication/retirement, held DMA
+                                          values and failure/recovery prefixes.
+                                          Pure DMA-status bit tests can share F2;
+                                          status RMW and unqualified peripheral
+                                          sharing still refuse before sampling
+                                          (dsp-reference-cycle.txt).
                                           DMA IRQ service uses actual native
                                           vectors/RTI on all six channels,48
                                           same/fresh-owner continuations and

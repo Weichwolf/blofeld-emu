@@ -264,7 +264,15 @@ OwnDspFetch::native_overlap(const DspProgramFetchView &state,
   const bool peripheral_bit = access->phase == DspMemoryPhase::peripheral_bit &&
                               DspBus::handles_peripheral_bit(access->target) &&
                               !machine_.bus_.has_active_dma();
-  if (peripheral_write || shi_read || gpio_read || esai_read || peripheral_bit ||
+  // FM table10-10: read-only DMA status uses its controller register route,
+  // distinct from P RAM. The explicit DMA-first cycle samples the real bit later.
+  constexpr unsigned dma_status = 0xfffff4;
+  const bool dma_status_test = access->phase == DspMemoryPhase::peripheral_bit &&
+                               pending.effect.kind == dsp56300::EffectKind::bit &&
+                               pending.effect.action == dsp56300::BitAction::test &&
+                               pending.effect.space == dsp56300::Space::x &&
+                               pending.effect.address == dma_status;
+  if (peripheral_write || shi_read || gpio_read || esai_read || peripheral_bit || dma_status_test ||
       (data && access->target.address < io_base &&
        machine_.bus_.memory_conflict({.core = program, .dma = *access}) ==
            DspMemoryConflict::independent)) {

@@ -1,63 +1,64 @@
-Actual native/F2 DMA cycle admission
-
-DspMachine::advance_reference_bus_cycle selects a genuine pending native ticket
-and/or an existing frontend address/read stage. It derives the core occupancy
-from those actual effects and the issued F2 address. Callers supply neither a
-core footprint nor an instruction word. An already captured opcode/extension,
-including zero, needs no second P read. F1 only issues its sequential address.
-The returned footprint describes the selected memory effects, including stalled
-ones; it is not a hardware pipeline trace.
-
-The declared order must be dma_then_fetch_then_native. The existing DMA model
-samples its reference index/requests and arbitrates against that derived group.
-A fresh conflicting DMA source waits while native core work proceeds. A held
-DMA destination has priority: core_stall prevents both selected frontend and
-native actions, including the cycle that commits the DMA write. A later actual
-admission reads the committed value. An independent DMA source/destination and
-core action both execute. Controller reads, including an actual native DMA bit
-test, use the separate controller route; the chosen order exposes DMA's updated
-register value. This order is an explicit experiment, not silicon sampling order.
-
-Preflight checks tickets, current queue readiness, fetch stage, memory resources
-and core port sharing before DMA request sampling or real bus I/O. Two P-space
-reads or an unqualified pair sharing physical storage cannot be declared as
-independent simultaneous core accesses. General core I/O, controller writes,
-non-memory reset/acknowledge effects and unqualified sharing remain refusals.
-The established strict resource/map/ROM and actual-value handlers still apply.
-A refused preflight preserves the legitimate pending access and DMA index.
-
-After entering the DMA/fetch/native sequence, an actual failure quarantines the
-CPU with index, address/operation, PC and OMR context. Already completed DMA and
-core effects remain a prefix; no later selected action runs. Only a trusted
-coordinated checkpoint or actual reset can recover. Snapshots retain real held
-DMA data, native tickets/prefixes and ready/issued frontend state together;
-restore invalidates old tickets. A returned fetch view is the final view after
-native work, including any real branch redirect that discarded a just-read word.
-
-This composes real actions at an explicitly selected reference boundary. It
-advances no instruction clock, timers, CLK/2 or elapsed-time counters and does
-not itself assign AG1/AG2/E1/E2 timestamps. Explicit callers select actions; the
-automatic profiles own their selected phases separately. Access ordinals cannot
-determine physical grouping. The complete overlapped pipeline, general automatic
-action scheduling, actual core/DMA time placement, loop/IRQ timelines,
-full ROM, reserved Y:002000 and full instrument startup/audio remain open.
-Existing unclocked calls and clocked completion contracts retain their behavior;
-a clocked owner refuses this semantic cycle API. Matching headers/libraries are
-required. The automatic memory profile additionally uses the generic native
-AG1 helper described in dsp-memory-pipeline.txt.
-
-The separate DspFetchRun owner now automates F1/F2 and reference core/peripheral
-clocks around this API (dsp-fetch-clock.txt). Backend admission remains explicit;
-this unclocked selected-action API and its completion-clock refusal are unchanged.
+Native DMA/F2 cycle admission
 
   cmake --build --preset strict --target blofeld-reference-cycle-test
-  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_reference_bus_cycle$'
+  ctest --test-dir build/strict -R '^dsp_reference_bus_cycle$' --output-on-failure
 
-Own native MOVEP setup programs configure real X-to-Y and P-to-P DMA. Literal
-source/destination/register/PC/count expectations cover fresh-source core wins,
-held-destination native/F2 waits, actual write completion, two joint replays,
-zero-word admission, F2 plus controller-bit observation, and a younger F2 word
-invalidated by an actual same-cursor JMP. Guard cases preserve request indices,
-FIFO data and pending effects. A real unknown F2 read after an admitted DMA
-source retains that prefix, refuses checkpoints and recovers only through a
-trusted snapshot. No manufacturer bytes are embedded in these own programs.
+OwnDspMachine::advance_dma_reference_cycle holds the CPU while advancing an
+actual DMA/reference period. advance_dma_native_cycle selects its actual pending
+native effect with the explicit isolated_effect hypothesis. OwnDspFetch's capture
+and pipeline variants additionally derive F2 occupancy from the already issued
+address. Callers provide neither a memory footprint, instruction word nor
+peripheral response. Pending native effects identify their original operation,
+space, address, PC and OMR. Captured opcode/extension words need no second P read.
+
+The selected reference order is DMA, existing F2, selected native effect; the
+pipeline variant then issues a new F1 if capacity/context permits. A fresh
+conflicting DMA source waits while actual CPU work proceeds. A held DMA
+destination stalls both F2 and the native effect, including the destination
+commit cycle. Later admission samples that committed value. A reported source
+phase may still wait for a resource; phase metadata alone is not a captured word.
+
+Preflight checks ownership, pending effects, fetch readiness, memory resources,
+clock mode and the explicit model before DMA request sampling or real I/O.
+Unqualified simultaneous P reads, active-DMA/FIFO sharing and unsupported timing
+retain their original native/queue/clock state and DMA index. Core effect tickets
+cannot be fabricated; abandoned genuine tickets fail after coordinated restore.
+Status RMW does not inherit read-only status-test qualification.
+
+FM table10-10 places read-only DMA status on the controller register route,
+distinct from P RAM. A genuine native bit test of X:fffff4 can share F2 while
+DMA is enabled. The existing controller handler samples its actual status after
+this reference cycle's DMA phase. The test covers both quiet and requested
+channel0 activity; a same-cursor JSET preserves or discards the actual F2 word
+according to its native outcome. No controller value or branch result is injected.
+Other peripheral sharing and physical sampling order remain separately qualified.
+
+Data access, CPU result publication and instruction retirement are distinct
+native boundaries. Tests complete remaining CPU effects explicitly without
+inventing extra clock periods. The normal automatic timeline owns those periods
+separately. After actual retirement, the caller synchronizes the frontend; a
+same-cursor JMP can discard a younger F2 word sampled in that very cycle.
+
+Required unknown data returns the original memory fault and latched board I/O
+cause, with space/address/PC. Already admitted DMA/F2 prefixes persist, including
+an explicitly absent program sample. Checkpointing the failed frontend and
+further cycle admission refuse; trusted joint restore retains the original
+captured instruction while explicitly initialized data permits recovery. A
+hardware reset is the separate recovery path. No success response is substituted.
+
+All admitted cycles advance actual peripheral/reference clocks. At the supplied
+540MHz common timebase and 12MHz EXTAL, the selected stable reference period is
+45 ticks. DMA wait periods still advance time while holding CPU effects; raw
+CPU publication/retirement advances none. An instruction-boundary clock contract
+cannot be bypassed with the composed-cycle API. These are explicit ordering and
+clock hypotheses, not measured AG1/AG2/E1/E2, bus or silicon timing.
+
+Literal native MOVEP setup and complete register/retirement expectations cover
+held Y loads, source-conflicting stores, held F2, actual program-data reads,
+DMA-written opcode consumption, same-cursor redirect, required-read failure and
+recovery, pure preflight refusal, controller-bit/F2 observation, retained FIFO
+and clock ownership. Native and joint frontend restores preserve held DMA words
+and discard abandoned capabilities. Both sanitizer profiles pass the scoped
+cycle/fetch/checkpoint/runtime regression. Full overlapped pipeline scheduling,
+complete ROM, reserved Y:002000 and original instrument startup/audio remain open.
+Reference assets and manufacturer programs remain local.

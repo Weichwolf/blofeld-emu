@@ -2,427 +2,565 @@
 #include "bank_fixture.hpp"
 #include "common/bus.hpp"
 #include "dma_fixture.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_native_access.hpp"
-#include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_program_fetch.hpp"
-#include "dsp/dsp_reference_cycle.hpp"
-#include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_shi.hpp"
-#include "dsp_checkpoint_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
-#include "native_access_fixture.hpp"
-#include "reference_execution_fixture.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "esai_fixture.hpp"
 
 #include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
-#include <optional>
+#include <memory>
 #include <span>
+#include <string>
+#include <utility>
 
 namespace {
 using namespace blofeld;
-using namespace blofeld::test;
-namespace access = blofeld::test::reference;
-namespace dma = blofeld::test::dma_test;
-using native_access::fault;
+namespace native = blofeld::test::dma_test;
+namespace banks = blofeld::test::banks;
+using blofeld::test::esai::rejects;
+using blofeld::test::esai::require;
 constexpr unsigned program = 0x100;
 constexpr unsigned initial_r0 = 0x7e;
 constexpr unsigned copied_r0 = 0x34;
 constexpr unsigned program_source = 0x800;
 constexpr unsigned program_copy = 0x88024a;
-constexpr auto cycle_order = DspReferenceBusOrder::dma_then_fetch_then_native;
+constexpr unsigned first = 0x123456;
+constexpr unsigned second = 0x234567;
+constexpr unsigned third = 0x345678;
+constexpr unsigned bound = 32;
+constexpr unsigned reset_omr = 0x305;
+constexpr std::uint64_t period = 45;
+constexpr auto model = OwnDspNativeCycleModel::isolated_effect;
+// Independent FM MOVE/MOVEM absolute, MOVEP qq, JMP and short-immediate fields.
+constexpr unsigned long_r0 = 0x60f400;
+constexpr unsigned immediate_x0 = 0x44f400;
+constexpr unsigned load_y_x0 = 0x4cf000;
+constexpr unsigned store_x_x0 = 0x447000;
+constexpr unsigned long_jump = 0x0af080;
+constexpr unsigned program_load = 0x07f084;
+constexpr unsigned short_move = 0x303400;
+constexpr unsigned fifo_load = 0x044494;
+constexpr unsigned fifo = 0xffff94;
+constexpr unsigned shi_control = 0xffff91;
+constexpr unsigned shi_configuration = 0xa9;
 
-void prepare(DspMachine &machine,
-             const std::span<const std::uint32_t> words,
-             const banks::Transfer transfer = {}) {
-  DspProgram setup;
-  setup.immediate("r0", initial_r0);
-  for (const auto store :
-       {DspStore{.space = DspSpace::x, .address = dma::source0, .value = transfer.source},
-        DspStore{.space = DspSpace::x, .address = dma::destination0, .value = transfer.destination},
-        DspStore{.space = DspSpace::x, .address = dma::counter0},
-        DspStore{.space = DspSpace::x, .address = dma::control0, .value = transfer.control}}) {
-    setup.emit("movep #>" + number(store.value) + ",x:<<" + number(store.address));
+void healthy(const dsp56300::InstructionProgress &progress) {
+  require(progress.fault.kind == dsp56300::FaultKind::none,
+          "Actual native cycle fault pc=" + hex(progress.fault.pc, 6) +
+              " address=" + hex(progress.fault.address, 6));
+}
+
+dsp56300::PendingInstruction pending(const OwnDspMachine &machine) {
+  const auto value = machine.cpu().pending_instruction();
+  if (!value) { throw Fault("Expected an actual pending native bus-cycle effect"); }
+  return *value;
+}
+
+void finish(OwnDspMachine &machine) {
+  const auto ticks = machine.clock().elapsed_ticks();
+  for (unsigned effect = 0; effect < bound; ++effect) {
+    const auto result = machine.advance(pending(machine).ticket);
+    healthy(result);
+    if (result.retired) {
+      require(machine.clock().elapsed_ticks() == ticks,
+              "Unclocked publication/retirement cannot invent extra reference periods");
+      return;
+    }
   }
-  setup.word(access::long_jump);
-  setup.word(program);
-  setup.install(machine.bus());
-  checkpoint::ram(machine.bus(), program, words);
-  machine.bus().write({.space = DspSpace::x, .address = dma::ring_start, .value = access::first});
-  machine.bus().write({.space = DspSpace::y, .address = dma::destination, .value = access::second});
-  static_cast<void>(machine.advance_dma(banks::inputs({.index = 0}), banks::use()));
-  checkpoint::run(machine, 6);
-  require(machine.cpu().state().pc == program && machine.cpu().state().r[0] == initial_r0,
-          "Actual native MOVEP setup configures DMA and jumps to the own RAM program");
+  throw Fault("Actual native completion exceeded its bounded effect count");
 }
 
-DspReferenceCycleInputs cycle(const banks::Cycle input,
-                              const std::optional<DspReferenceTicket> &ticket = std::nullopt,
-                              const std::optional<DspProgramFetchStage> fetch = std::nullopt) {
-  return {.dma = banks::inputs(input), .fetch = fetch, .access = ticket, .order = cycle_order};
+void expect_data(const OwnDspMachine &machine, const dsp56300::InstructionEffect expected) {
+  const auto access = pending(machine).effect;
+  require(access.kind == expected.kind && access.space == expected.space &&
+              access.address == expected.address && access.pc == program && access.omr == reset_omr,
+          "Native occupancy comes from the actual effect space, address, direction and context");
 }
 
-DspReferenceProgress until_data(DspMachine &machine, const DspNativeAccessKind kind) {
-  auto progress = machine.begin_reference_instruction(access::boundaries);
-  for (unsigned budget = 0; budget < 8 && !progress.retired; ++budget) {
-    if (access::request(progress).kind == kind) { return progress; }
-    progress = machine.advance_reference_access(access::ticket(progress));
+void clocked(const OwnDspMachine &machine, const std::uint64_t before) {
+  require(machine.clock().elapsed_ticks() == before + period,
+          "Each admitted reference cycle advances one independent 45-tick period");
+}
+
+std::string failure_cause(const OwnDspMachine &machine) {
+  const auto failure = machine.io().failure();
+  if (!failure || !failure->cause) { throw Fault("Missing actual native I/O failure cause"); }
+  try {
+    std::rethrow_exception(failure->cause);
+  } catch (const std::exception &error) { return error.what(); }
+}
+
+struct Fixture {
+  Fixture(const std::span<const std::uint32_t> words, const banks::Transfer transfer = {}) {
+    native::NativeProgram setup;
+    setup.word(long_r0);
+    setup.word(initial_r0);
+    for (const auto store :
+         {DspStore{.space = DspSpace::x, .address = native::source0, .value = transfer.source},
+          DspStore{
+              .space = DspSpace::x, .address = native::destination0, .value = transfer.destination},
+          DspStore{.space = DspSpace::x, .address = native::counter0},
+          DspStore{.space = DspSpace::x, .address = native::control0, .value = transfer.control}}) {
+      setup.write(store);
+    }
+    setup.word(long_jump);
+    setup.word(program);
+    native::reset_native(machine, setup);
+    for (unsigned i = 0; i < words.size(); ++i) {
+      machine.bus().write({.address = program + i, .value = words[i]});
+    }
+    machine.bus().write({.space = DspSpace::x, .address = native::ring_start, .value = first});
+    machine.bus().write({.space = DspSpace::y, .address = native::destination, .value = second});
+    for (unsigned i = 0; i < 6; ++i) { native::step_native(machine); }
+    require(machine.cpu().registers().pc == program && machine.cpu().registers().r[0] == initial_r0,
+            "Actual reset and literal MOVEP setup configure DMA before entering the RAM program");
+    static_cast<void>(machine.advance_dma_reference_cycle(banks::inputs({.index = 0})));
   }
-  throw Fault("Own native instruction never reached the expected actual data effect");
+
+  void start_fetch(const unsigned words) {
+    fetch = std::make_unique<OwnDspFetch>(machine);
+    for (unsigned i = 0; i < words; ++i) {
+      fetch->issue();
+      fetch->capture();
+    }
+    healthy(fetch->begin());
+  }
+
+  void until_data(const dsp56300::EffectKind kind) {
+    healthy(machine.begin_fetch());
+    for (unsigned effect = 0; effect < bound; ++effect) {
+      if (pending(machine).effect.kind == kind) { return; }
+      const auto step = machine.advance(pending(machine).ticket);
+      healthy(step);
+      require(!step.retired, "The actual instruction must reach its requested data boundary");
+    }
+    throw Fault("Native instruction never reached its data effect");
+  }
+
+  void restore(const OwnDspFetchCheckpoint &saved) {
+    const auto abandoned = std::move(fetch);
+    fetch = std::make_unique<OwnDspFetch>(machine, saved);
+    require(rejects([&] { static_cast<void>(abandoned->view()); }).contains("Stale"),
+            "Coordinated restore invalidates the previous captured-fetch owner");
+  }
+
+  void complete() {
+    finish(machine);
+    if (fetch) { fetch->synchronize(); }
+  }
+
+  OwnDspMachine machine{native::native_clocks};
+  std::unique_ptr<OwnDspFetch> fetch;
+};
+
+OwnDspDmaCycleResult native_cycle(OwnDspMachine &machine, const banks::Cycle cycle) {
+  const auto before = machine.clock().elapsed_ticks();
+  auto result = machine.advance_dma_native_cycle(banks::inputs(cycle), model);
+  clocked(machine, before);
+  return result;
 }
 
-const DspReferenceProgress &completed(const DspReferenceCycleResult &result) {
-  if (!result.progress) { throw Fault("Expected actual native bus-cycle progress"); }
-  return *result.progress;
+DspDmaBusResult dma_cycle(OwnDspMachine &machine, const banks::Cycle cycle) {
+  const auto before = machine.clock().elapsed_ticks();
+  auto result = machine.advance_dma_reference_cycle(banks::inputs(cycle));
+  clocked(machine, before);
+  return result;
 }
 
-void one_access(const DspReferenceCycleResult &result, const DspMemoryAccess expected) {
-  const auto actual = result.core_accesses.front();
-  require(result.core_access_count == 1 && actual.target.space == expected.target.space &&
-              actual.target.address == expected.target.address &&
-              actual.operation == expected.operation,
-          "Core occupancy is derived from the actual native/F2 address and direction");
+OwnDspFetchCycleResult
+fetch_cycle(Fixture &fixture, const banks::Cycle cycle, const bool admit_native) {
+  const auto before = fixture.machine.clock().elapsed_ticks();
+  auto result = admit_native
+                    ? fixture.fetch->advance_dma_capture_native(banks::inputs(cycle), model)
+                    : fixture.fetch->advance_dma_capture(banks::inputs(cycle));
+  clocked(fixture.machine, before);
+  if (result.native && result.native->retired) { fixture.fetch->synchronize(); }
+  return result;
 }
 
 void held_destination_load() {
-  DspMachine machine;
-  prepare(machine, checkpoint::assemble("move y:>$900,x0"));
-  const auto progress = until_data(machine, DspNativeAccessKind::read);
-  const auto before = machine.cpu().debug_state();
-  const auto captured = machine.advance_reference_bus_cycle(cycle({.index = 1, .requests = 1}));
-  require(captured.dma.phase && captured.dma.phase->kind == DspDmaPhaseKind::source_read &&
-              captured.core_access_count == 0 && !captured.progress,
-          "A real DMA source phase captures its word before the pending native load is selected");
-  const auto held = machine.advance_reference_bus_cycle(
-      cycle({.index = 2, .requests = 1, .grant = DspDmaGrant::wait}, access::ticket(progress)));
-  one_access(held, {.target = {.space = DspSpace::y, .address = dma::destination}});
-  require(
-      held.dma.core_stall && !held.dma.word && !held.progress &&
-          machine.cpu().debug_state() == before &&
-          access::ticket(machine) == access::ticket(progress),
-      "A held DMA destination actually holds native execution, not just an advisory stall flag");
+  const std::array words{load_y_x0, native::destination};
+  Fixture fixture(words);
+  auto &machine = fixture.machine;
+  fixture.until_data(dsp56300::EffectKind::read);
+  expect_data(machine,
+              {.kind = dsp56300::EffectKind::read,
+               .space = dsp56300::Space::y,
+               .address = native::destination});
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto captured = dma_cycle(machine, {.index = 1, .requests = 1});
+  require(captured.phase && captured.phase->kind == DspDmaPhaseKind::source_read && !captured.word,
+          "Actual DMA captures its source before the selected native load");
+  const auto held = native_cycle(machine, {.index = 2, .requests = 1, .grant = DspDmaGrant::wait});
+  require(held.dma.core_stall && !held.dma.word && !held.native &&
+              machine.cpu().registers() == before && machine.cpu().progress() == progress,
+          "A held DMA destination prevents the actual native read and all CPU publication");
   const auto saved = machine.checkpoint();
-  const auto stale = access::ticket(progress);
+  const auto stale = pending(machine).ticket;
   for (unsigned replay = 0; replay < 2; ++replay) {
     machine.restore(saved);
-    static_cast<void>(fault([&] {
-      static_cast<void>(
-          machine.advance_reference_bus_cycle(cycle({.index = 3, .requests = 1}, stale)));
-    }));
-    machine.bus().write({.space = DspSpace::x, .address = dma::ring_start, .value = access::third});
-    const auto written = machine.advance_reference_bus_cycle(
-        cycle({.index = 3, .requests = 1}, access::ticket(machine)));
-    require(written.dma.word && written.dma.word->value == access::first &&
-                written.dma.core_stall && !written.progress &&
-                machine.cpu().debug_state() == before,
-            "DMA commits the already captured word while the conflicting native load remains held");
-    const auto loaded =
-        machine.advance_reference_bus_cycle(cycle({.index = 4}, access::ticket(machine)));
-    require(!loaded.dma.core_stall && completed(loaded).retired &&
-                access::completed(completed(loaded)).value == access::first &&
-                (machine.cpu().state().x & word_mask) == access::first &&
-                machine.cpu().state().pc == program + 2 &&
-                machine.cpu().debug_state().native_instructions == before.native_instructions + 1,
-            "The next actual native admission reads DMA's held value and retires exactly once");
+    const auto ticks = machine.clock().elapsed_ticks();
+    static_cast<void>(rejects([&] { static_cast<void>(machine.advance(stale)); }));
+    require(machine.clock().elapsed_ticks() == ticks && machine.bus().last_dma_cycle() == 2,
+            "Abandoned capabilities cannot sample another DMA cycle");
+    machine.bus().write({.space = DspSpace::x, .address = native::ring_start, .value = third});
+    const auto written = native_cycle(machine, {.index = 3, .requests = 1});
+    require(
+        written.dma.word && written.dma.word->value == first && written.dma.core_stall &&
+            !written.native && machine.cpu().registers() == before &&
+            machine.cpu().progress() == progress,
+        "Actual destination commit preserves the latched source and still holds the native CPU");
+    const auto loaded = native_cycle(machine, {.index = 4});
+    require(!loaded.dma.core_stall && loaded.native && !loaded.native->retired &&
+                machine.cpu().progress() == progress,
+            "A later native data read is an actual effect, separate from result "
+            "publication/retirement");
+    fixture.complete();
+    auto expected = before;
+    expected.x = first;
+    expected.pc = program + 2;
+    require(machine.cpu().registers() == expected &&
+                machine.cpu().progress().instructions == progress.instructions + 1,
+            "Independent complete registers and one retirement observe the committed DMA word");
   }
 }
 
 void native_store_wins_source() {
-  DspMachine machine;
-  auto words = checkpoint::assemble("move #>$234567,x0");
-  const auto store = checkpoint::assemble("move x0,x:>$660");
-  words.insert(words.end(), store.begin(), store.end());
-  prepare(machine, words);
-  machine.cpu().step();
-  const auto progress = until_data(machine, DspNativeAccessKind::write);
-  const auto before = machine.cpu().debug_state();
-  const auto stored = machine.advance_reference_bus_cycle(
-      cycle({.index = 1, .requests = 1}, access::ticket(progress)));
-  one_access(stored,
-             {.target = {.space = DspSpace::x, .address = dma::ring_start},
-              .operation = DspMemoryOperation::write});
-  require(stored.dma.phase && stored.dma.phase->kind == DspDmaPhaseKind::source_read &&
-              !stored.dma.word && !stored.dma.core_stall && completed(stored).retired &&
-              machine.bus().read({.space = DspSpace::x, .address = dma::ring_start}) ==
-                  access::second,
-          "Actual pending core store delays a fresh DMA source and commits its real native value");
-  static_cast<void>(machine.advance_reference_bus_cycle(cycle({.index = 2, .requests = 1})));
-  machine.bus().write({.space = DspSpace::x, .address = dma::ring_start, .value = access::third});
-  const auto copied = machine.advance_reference_bus_cycle(cycle({.index = 3, .requests = 1}));
-  require(copied.dma.word && copied.dma.word->value == access::second &&
-              machine.bus().read({.space = DspSpace::y, .address = dma::destination}) ==
-                  access::second &&
-              machine.cpu().debug_state().native_instructions == before.native_instructions + 1,
-          "The delayed source captures the new core value and retains it after a later source "
-          "mutation");
+  const std::array words{immediate_x0, second, store_x_x0, native::ring_start};
+  Fixture fixture(words);
+  auto &machine = fixture.machine;
+  native::step_native(machine);
+  fixture.until_data(dsp56300::EffectKind::write);
+  const auto actual = pending(machine).effect;
+  require(actual.kind == dsp56300::EffectKind::write && actual.space == dsp56300::Space::x &&
+              actual.address == native::ring_start && actual.value == second &&
+              actual.pc == program + 2,
+          "The actual pending native store supplies its own address and source value");
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto stored = native_cycle(machine, {.index = 1, .requests = 1});
+  require(
+      stored.dma.phase && stored.dma.phase->kind == DspDmaPhaseKind::source_read &&
+          !stored.dma.word && !stored.dma.core_stall && stored.native && !stored.native->retired &&
+          machine.bus().read({.space = DspSpace::x, .address = native::ring_start}) == second,
+      "A genuine native source-bank store defers DMA's source capture and writes its real value");
+  static_cast<void>(dma_cycle(machine, {.index = 2, .requests = 1}));
+  machine.bus().write({.space = DspSpace::x, .address = native::ring_start, .value = third});
+  const auto copied = dma_cycle(machine, {.index = 3, .requests = 1});
+  require(copied.word && copied.word->value == second &&
+              machine.bus().read({.space = DspSpace::y, .address = native::destination}) ==
+                  second &&
+              machine.cpu().progress() == progress,
+          "DMA retains the newer core source across later RAM mutation while CPU retirement "
+          "remains held");
+  fixture.complete();
+  auto expected = before;
+  expected.pc = program + 4;
+  require(machine.cpu().registers() == expected &&
+              machine.cpu().progress().instructions == progress.instructions + 1,
+          "Native store publishes only its independent sequential PC and single completion");
 }
 
 void fetch_wait_and_admit() {
-  DspMachine machine;
   const std::array words{0U, 0U};
-  const auto opcode = checkpoint::assemble("move #<$34,r0").front();
-  prepare(
-      machine, words, {.source = program_source, .destination = program, .control = program_copy});
-  machine.bus().write({.address = program_source, .value = opcode});
-  const auto progress = machine.begin_reference_instruction(access::boundaries);
-  static_cast<void>(machine.start_reference_fetch(access::ticket(progress)));
-  const auto first = machine.advance_reference_bus_cycle(
-      cycle({.index = 1, .requests = 1}, std::nullopt, DspProgramFetchStage::address));
-  require(first.core_access_count == 0 && first.fetch && first.fetch->pending_address == program,
-          "F1 uses its actual sequential address but performs no fictitious memory read");
-  const auto held = machine.advance_reference_bus_cycle(
-      cycle({.index = 2, .requests = 1, .grant = DspDmaGrant::wait},
-            std::nullopt,
-            DspProgramFetchStage::read));
-  one_access(held, {.target = {.address = program}});
-  require(held.dma.core_stall && !held.fetch && machine.reference_fetch().used == 0,
-          "A real F2 memory sample is held by the conflicting DMA destination");
-  const auto saved = machine.checkpoint();
+  Fixture fixture(words,
+                  {.source = program_source, .destination = program, .control = program_copy});
+  auto &machine = fixture.machine;
+  machine.bus().write({.address = program_source, .value = short_move});
+  fixture.fetch = std::make_unique<OwnDspFetch>(machine);
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto ticks = machine.clock().elapsed_ticks();
+  const auto issued =
+      fixture.fetch->advance_dma_pipeline(banks::inputs({.index = 1, .requests = 1}), false, model);
+  clocked(machine, ticks);
+  require(issued.dma.phase && issued.dma.phase->kind == DspDmaPhaseKind::source_read &&
+              issued.issued_address == program && !issued.captured && !issued.native,
+          "Actual DMA source capture coexists with F1 issue, without a fictitious P read");
+  const auto held =
+      fetch_cycle(fixture, {.index = 2, .requests = 1, .grant = DspDmaGrant::wait}, false);
+  require(held.dma.core_stall && !held.captured && fixture.fetch->view().used == 0 &&
+              machine.cpu().registers() == before && machine.cpu().progress() == progress,
+          "A conflicting held DMA destination prevents the real F2 sample");
+  const auto saved = fixture.fetch->checkpoint();
   for (unsigned replay = 0; replay < 2; ++replay) {
-    machine.restore(saved);
-    const auto before = machine.cpu().debug_state();
-    const auto copied = machine.advance_reference_bus_cycle(
-        cycle({.index = 3, .requests = 1}, std::nullopt, DspProgramFetchStage::read));
-    require(copied.dma.word && copied.dma.word->value == opcode && copied.dma.core_stall &&
-                !copied.fetch && machine.reference_fetch().used == 0,
-            "The actual destination write wins and does not also sample the conflicting P word");
-    const auto fetched = machine.advance_reference_bus_cycle(
-        cycle({.index = 4}, std::nullopt, DspProgramFetchStage::read));
-    require(fetched.fetch && fetched.fetch->words.front().data == opcode &&
-                machine.cpu().debug_state() == before,
-            "A later actual F2 read sees DMA's replacement without native retirement");
-    const auto retired = machine.advance_reference_bus_cycle(
-        cycle({.index = 5}, access::ticket(machine), DspProgramFetchStage::address));
-    require(retired.core_access_count == 0 && completed(retired).retired &&
-                machine.cpu().state().r[0] == copied_r0 && machine.cpu().state().pc == program + 1,
-            "Native admission of an actually queued word uses no new P-bus footprint");
+    fixture.restore(saved);
+    const auto committed = fetch_cycle(fixture, {.index = 3, .requests = 1}, false);
+    require(committed.dma.word && committed.dma.word->value == short_move &&
+                committed.dma.core_stall && !committed.captured && fixture.fetch->view().used == 0,
+            "The actual DMA destination write cannot also sample the conflicting P word");
+    const auto fetched = fetch_cycle(fixture, {.index = 4}, false);
+    require(fetched.captured && fixture.fetch->view().words.front().data == short_move &&
+                machine.cpu().registers() == before && machine.cpu().progress() == progress,
+            "A later F2 reads DMA's actual replacement before any native instruction starts");
+    healthy(fixture.fetch->begin());
+    require(pending(machine).effect.kind == dsp56300::EffectKind::move_update,
+            "An already captured ordinary opcode needs CPU publication, not another P read");
+    const auto published =
+        fixture.fetch->advance_dma_pipeline(banks::inputs({.index = 5}), true, model);
+    require(published.native && !published.native->retired && !published.dma.core_stall,
+            "Captured instruction publication has no fabricated extra program-bus access");
+    fixture.complete();
+    auto expected = before;
+    expected.pc = program + 1;
+    expected.r[0] = copied_r0;
+    require(machine.cpu().registers() == expected &&
+                machine.cpu().progress().instructions == progress.instructions + 1,
+            "Actual publication and retirement execute the captured DMA-written word exactly once");
   }
 }
 
 void simultaneous_fetch_and_redirect() {
-  DspMachine machine;
-  const std::array words{access::long_jump, program + 2, 0U};
-  prepare(machine, words);
-  const auto progress = machine.begin_reference_instruction(access::boundaries);
-  static_cast<void>(machine.start_reference_fetch(access::ticket(progress)));
-  for (unsigned index = 0; index < 2; ++index) {
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::read));
-  }
-  const auto decoded = machine.advance_reference_bus_cycle(
-      cycle({.index = 1}, access::ticket(progress), DspProgramFetchStage::address));
-  require(!completed(decoded).retired &&
-              access::request(completed(decoded)).kind == DspNativeAccessKind::extension,
-          "Actual opcode admission can coexist with a real younger F1 address");
-  const auto redirected = machine.advance_reference_bus_cycle(
-      cycle({.index = 2}, access::ticket(machine), DspProgramFetchStage::read));
-  one_access(redirected, {.target = {.address = program + 2}});
-  require(
-      completed(redirected).retired && redirected.fetch && redirected.fetch->used == 0 &&
-          !redirected.fetch->pending_address && redirected.fetch->next_address == program + 2,
-      "The native same-cursor JMP discards the actual younger F2 sample in final returned state");
+  const std::array words{long_jump, program + 2, 0U};
+  Fixture fixture(words);
+  fixture.start_fetch(2);
+  fixture.fetch->issue();
+  const auto published = fixture.machine.advance(pending(fixture.machine).ticket);
+  require(!published.retired &&
+              pending(fixture.machine).effect.kind == dsp56300::EffectKind::retire,
+          "A real JMP target publication leaves actual retirement pending");
+  const auto before = fixture.machine.cpu().progress();
+  const auto result = fetch_cycle(fixture, {.index = 1}, true);
+  const auto view = fixture.fetch->view();
+  require(result.native && result.native->retired && result.captured && view.used == 0 &&
+              !view.pending_address && view.next_address == program + 2 &&
+              fixture.machine.cpu().progress().instructions == before.instructions + 1,
+          "Same-cursor JMP completion discards the younger word actually captured in that cycle");
 }
 
 void dual_port_preflight() {
-  DspMachine machine;
-  constexpr unsigned program_load = 0x07f084; // Independently checked FM MOVEM P:ea,X0.
   constexpr unsigned operand = 0x500;
   const std::array words{program_load, operand, 0U};
-  prepare(machine, words);
-  machine.bus().write({.address = operand, .value = access::first});
-  auto progress = machine.begin_reference_instruction(access::boundaries);
-  static_cast<void>(machine.start_reference_fetch(access::ticket(progress)));
-  for (unsigned index = 0; index < 2; ++index) {
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::read));
-    progress = machine.advance_reference_access(access::ticket(progress));
-  }
-  static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-  const auto before = machine.cpu().debug_state();
-  const auto fetch = machine.reference_fetch();
-  const auto error = fault([&] {
-    static_cast<void>(machine.advance_reference_bus_cycle(
-        cycle({.index = 1}, access::ticket(progress), DspProgramFetchStage::read)));
-  });
-  require(error.contains("dual core bus-cycle use") && error.contains("pc=0x000100") &&
-              error.contains("omr=0x000305") && machine.cpu().debug_state() == before &&
-              machine.reference_fetch() == fetch &&
-              access::ticket(machine) == access::ticket(progress),
-          "Unqualified simultaneous P reads reject before DMA sampling or actual core effects");
-  static_cast<void>(machine.advance_reference_bus_cycle(
-      cycle({.index = 1}, std::nullopt, DspProgramFetchStage::read)));
-  const auto loaded =
-      machine.advance_reference_bus_cycle(cycle({.index = 2}, access::ticket(machine)));
+  Fixture fixture(words);
+  auto &machine = fixture.machine;
+  machine.bus().write({.address = operand, .value = first});
+  fixture.start_fetch(2);
+  expect_data(
+      machine,
+      {.kind = dsp56300::EffectKind::read, .space = dsp56300::Space::program, .address = operand});
+  fixture.fetch->issue();
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto view = fixture.fetch->view();
+  const auto ticks = machine.clock().elapsed_ticks();
+  const auto error = rejects([&] { static_cast<void>(fetch_cycle(fixture, {.index = 1}, true)); });
+  require(error.contains("overlap read P:") && error.contains("pc=0x000100") &&
+              error.contains("omr=0x000305") && machine.cpu().registers() == before &&
+              machine.cpu().progress() == progress && fixture.fetch->view() == view &&
+              machine.clock().elapsed_ticks() == ticks && machine.bus().last_dma_cycle() == 0,
+          "Unqualified simultaneous P reads reject before request sampling, clocks or CPU effects");
+  static_cast<void>(fetch_cycle(fixture, {.index = 1}, false));
+  const auto loaded = fixture.fetch->advance_dma_pipeline(banks::inputs({.index = 2}), true, model);
+  require(loaded.native && !loaded.native->retired,
+          "Separate native P-data admission remains genuine");
+  fixture.complete();
+  auto expected = before;
+  expected.pc = program + 2;
+  expected.x = first;
   require(
-      completed(loaded).retired && (machine.cpu().state().x & word_mask) == access::first,
-      "Rejected preflight preserves the same DMA index and legitimate separate P-data admission");
+      machine.cpu().registers() == expected &&
+          machine.cpu().progress().instructions == progress.instructions + 1,
+      "Preflight refusal preserves the original instruction and its independently expected result");
 }
 
 void failed_required_read_keeps_dma_prefix() {
-  DspMachine machine;
-  const auto words = checkpoint::assemble("move y:>$20,x0");
-  require(words.size() == 2, "Own absolute Y-data load has its independently expected extension");
-  prepare(machine, words);
-  auto progress = machine.begin_reference_instruction(access::boundaries);
-  static_cast<void>(machine.start_reference_fetch(access::ticket(progress)));
-  for (unsigned index = 0; index < 2; ++index) {
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::read));
-  }
-  progress = machine.advance_reference_access(access::ticket(progress));
-  progress = machine.advance_reference_access(access::ticket(progress));
-  require(access::request(progress).kind == DspNativeAccessKind::read &&
-              access::request(progress).target.space == DspSpace::y &&
-              access::request(progress).target.address == 0x20,
-          "Actual opcode and extension reach the genuine required Y-data read");
-  static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-  const auto saved = machine.checkpoint();
-  const auto before = machine.cpu().debug_state();
-  const auto error = fault([&] {
-    static_cast<void>(machine.advance_reference_bus_cycle(
-        cycle({.index = 1, .requests = 1}, access::ticket(progress), DspProgramFetchStage::read)));
-  });
-  require(
-      error.contains("cycle=1") && error.contains("Unknown DSP memory read at Y:0x000020") &&
-          error.contains("pc=0x000100") && error.contains("omr=0x000305") &&
-          machine.cpu().debug_state() == before &&
-          machine.bus().access_peripheral_bit({.space = DspSpace::x,
-                                               .address = dma::status,
+  constexpr unsigned unknown = 0x20;
+  const std::array words{load_y_x0, unknown};
+  Fixture fixture(words);
+  auto &machine = fixture.machine;
+  fixture.start_fetch(2);
+  fixture.fetch->issue();
+  const auto saved = fixture.fetch->checkpoint();
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto result = fetch_cycle(fixture, {.index = 1, .requests = 1}, true);
+  const auto failure = machine.io().failure();
+  const auto actual_fault = result.native ? result.native->fault : dsp56300::Fault{};
+  require(result.native && result.native->fault.kind == dsp56300::FaultKind::memory_read &&
+              result.native->fault.space == dsp56300::Space::y &&
+              result.native->fault.address == unknown && result.native->fault.pc == program,
+          "Required native data fault kind=" +
+              std::to_string(static_cast<unsigned>(actual_fault.kind)) +
+              " address=" + hex(actual_fault.address, 6) + " pc=" + hex(actual_fault.pc, 6));
+  require(failure && failure->cause && failure->address == unknown && failure->pc == program,
+          "Native failure preserves its real board I/O context");
+  require(machine.cpu().registers() == before && machine.cpu().progress() == progress,
+          "Failed native data cannot publish registers or retirement");
+  require(result.dma.phase && result.dma.phase->kind == DspDmaPhaseKind::source_read &&
+              result.captured && !fixture.fetch->view().words.front().data,
+          "Earlier actual DMA and absent-value F2 remain an accepted prefix");
+  require(machine.bus().access_peripheral_bit({.space = DspSpace::x,
+                                               .address = native::status,
                                                .bit = 8,
                                                .operation = DspBitOperation::test}) == true &&
-          machine.bus().read({.space = DspSpace::y, .address = dma::destination}) == access::second,
-      "Required unknown data still fails after DMA source/F2 without committing native results");
-  static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
-  static_cast<void>(fault([&] { static_cast<void>(machine.reference_pending()); }));
-  machine.restore(saved);
-  machine.bus().write({.space = DspSpace::y, .address = 0x20, .value = access::third});
+              machine.bus().read({.space = DspSpace::y, .address = native::destination}) == second,
+          "Accepted DMA source remains active while its destination is still unchanged");
+  require(failure_cause(machine).contains("Unknown DSP memory read at Y:0x000020"),
+          "Failure preserves its actual bus operation/address");
+  static_cast<void>(rejects([&] { static_cast<void>(fixture.fetch->checkpoint()); }));
+  const auto ticks = machine.clock().elapsed_ticks();
+  static_cast<void>(rejects(
+      [&] { static_cast<void>(fixture.fetch->advance_dma_capture(banks::inputs({.index = 2}))); }));
+  require(machine.clock().elapsed_ticks() == ticks && machine.bus().last_dma_cycle() == 1,
+          "Faulted execution cannot silently advance another reference cycle");
+  fixture.restore(saved);
+  machine.bus().write({.space = DspSpace::y, .address = unknown, .value = third});
   machine.bus().write({.address = program + 2});
-  const auto changed_opcode = checkpoint::assemble("move #<$34,r0").front();
-  machine.bus().write({.address = program, .value = changed_opcode});
-  const auto recovered = machine.advance_reference_bus_cycle(
-      cycle({.index = 1, .requests = 1}, access::ticket(machine), DspProgramFetchStage::read));
-  require(recovered.dma.phase && recovered.dma.phase->kind == DspDmaPhaseKind::source_read &&
-              completed(recovered).retired && machine.cpu().state().pc == program + 2 &&
-              machine.cpu().state().r[0] == initial_r0 &&
-              (machine.cpu().state().x & word_mask) == access::third &&
-              recovered.core_access_count == 2,
-          "Trusted restore preserves the captured instruction and samples initialized data with "
-          "actual F2");
+  machine.bus().write({.address = program, .value = short_move});
+  const auto recovered = fetch_cycle(fixture, {.index = 1, .requests = 1}, true);
+  require(recovered.native && recovered.native->fault.kind == dsp56300::FaultKind::none &&
+              !recovered.native->retired && recovered.captured,
+          "Trusted joint restore reoffers the original actual data effect and F2 address");
+  fixture.complete();
+  auto expected = before;
+  expected.pc = program + 2;
+  expected.x = third;
+  require(
+      machine.cpu().registers() == expected &&
+          machine.cpu().progress().instructions == progress.instructions + 1,
+      "Captured original load executes despite changed code and uses explicitly initialized data");
 }
 
 void protocol_preflight() {
-  DspMachine machine;
-  const std::array words{0U};
-  prepare(machine, words);
-  const auto progress = machine.begin_reference_instruction(access::boundaries);
-  const auto before = machine.cpu().debug_state();
-  auto invalid = cycle({.index = 1, .requests = 1}, access::ticket(progress));
-  invalid.order = DspReferenceBusOrder::unqualified;
-  static_cast<void>(
-      fault([&] { static_cast<void>(machine.advance_reference_bus_cycle(invalid)); }));
-  invalid.order = cycle_order;
-  invalid.access = DspReferenceTicket{};
-  static_cast<void>(
-      fault([&] { static_cast<void>(machine.advance_reference_bus_cycle(invalid)); }));
-  invalid.access = access::ticket(progress);
-  invalid.fetch = DspProgramFetchStage::read;
-  static_cast<void>(
-      fault([&] { static_cast<void>(machine.advance_reference_bus_cycle(invalid)); }));
-  require(
-      machine.cpu().debug_state() == before &&
-          access::ticket(machine) == access::ticket(progress) &&
-          machine.bus().access_peripheral_bit({.space = DspSpace::x,
-                                               .address = dma::status,
-                                               .bit = 8,
-                                               .operation = DspBitOperation::test}) == false,
-      "Order, capability and fetch-stage errors reject before request sampling or native effects");
-  const auto valid = machine.advance_reference_bus_cycle(
-      cycle({.index = 1, .requests = 1}, access::ticket(machine)));
-  one_access(valid, {.target = {.address = program}});
-  require(
-      valid.dma.phase && valid.dma.phase->kind == DspDmaPhaseKind::source_read &&
-          completed(valid).retired,
-      "The unchanged actual opcode and DMA index remain admissible after pure preflight refusal");
+  const std::array words{0U, 0U};
+  Fixture fixture(words);
+  fixture.start_fetch(1);
+  const auto stale = pending(fixture.machine).ticket;
+  const auto saved = fixture.fetch->checkpoint();
+  fixture.restore(saved);
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
+  const auto ticks = fixture.machine.clock().elapsed_ticks();
+  static_cast<void>(rejects([&] {
+    static_cast<void>(fixture.fetch->advance_dma_capture_native(
+        banks::inputs({.index = 1, .requests = 1}), OwnDspNativeCycleModel::unqualified));
+  }));
+  static_cast<void>(rejects([&] {
+    static_cast<void>(
+        fixture.fetch->advance_dma_capture(banks::inputs({.index = 1, .requests = 1})));
+  }));
+  static_cast<void>(rejects([&] { static_cast<void>(fixture.machine.advance(stale)); }));
+  require(fixture.machine.cpu().registers() == before &&
+              fixture.machine.cpu().progress() == progress &&
+              fixture.machine.clock().elapsed_ticks() == ticks &&
+              fixture.machine.bus().last_dma_cycle() == 0,
+          "Unqualified timing and missing F1 reject before DMA request sampling or native effects");
+  fixture.complete();
 }
 
 void controller_bit_with_fetch() {
-  DspMachine machine;
-  auto words = checkpoint::assemble("jset #8,x:<<$fffff4,$102");
-  require(words.size() == 2, "Independent peripheral bit-branch instruction length");
-  words.push_back(0);
-  prepare(machine, words);
-  auto progress = machine.begin_reference_instruction(access::boundaries);
-  static_cast<void>(machine.start_reference_fetch(access::ticket(progress)));
-  for (unsigned index = 0; index < 2; ++index) {
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-    static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::read));
-    progress = machine.advance_reference_access(access::ticket(progress));
+  // FM13-88: JSET #8,X:fffff4,absolute target; the target equals sequential PC.
+  constexpr unsigned status_test = 0x0ab4a8;
+  for (const bool requested : {false, true}) {
+    const std::array words{status_test, program + 2, 0U};
+    Fixture fixture(words);
+    fixture.start_fetch(2);
+    expect_data(fixture.machine,
+                {.kind = dsp56300::EffectKind::bit,
+                 .space = dsp56300::Space::x,
+                 .address = native::status});
+    fixture.fetch->issue();
+    auto expected = fixture.machine.cpu().registers();
+    const auto result = fetch_cycle(fixture, {.index = 1, .requests = requested ? 1U : 0U}, true);
+    require(result.native && result.native->fault.kind == dsp56300::FaultKind::none &&
+                result.captured && !result.dma.core_stall &&
+                result.dma.phase.has_value() == requested &&
+                fixture.machine.bus().access_peripheral_bit({.space = DspSpace::x,
+                                                             .address = native::status,
+                                                             .bit = 8,
+                                                             .operation = DspBitOperation::test}) ==
+                    requested,
+            "DMA-first sampling exposes its actual selected activity bit to a genuine native test "
+            "alongside F2");
+    fixture.complete();
+    expected.pc = program + 2;
+    const auto outcome = fixture.machine.cpu().instruction_outcome();
+    require(fixture.machine.cpu().registers() == expected && outcome &&
+                outcome->control_transfer == requested &&
+                fixture.fetch->view().used == (requested ? 0U : 1U),
+            "Actual DMA state determines same-PC branch/refill versus retained F2 without a host "
+            "condition");
   }
-  require(access::request(progress).kind == DspNativeAccessKind::bit &&
-              access::request(progress).target.address == dma::status,
-          "The original native bit-test path suspends at its actual DMA-controller read");
-  static_cast<void>(machine.advance_reference_fetch(DspProgramFetchStage::address));
-  const auto before = machine.cpu().debug_state();
-  const auto result = machine.advance_reference_bus_cycle(
-      cycle({.index = 1, .requests = 1}, access::ticket(progress), DspProgramFetchStage::read));
-  require(result.core_access_count == 2 && result.core_accesses[0].target.address == program + 2 &&
-              result.core_accesses[1].target.space == DspSpace::x &&
-              result.core_accesses[1].target.address == dma::status && result.dma.phase &&
-              result.dma.phase->kind == DspDmaPhaseKind::source_read && !result.dma.core_stall &&
-              completed(result).retired && access::completed(completed(result)).value == 1 &&
-              machine.cpu().state().pc == program + 2 &&
-              machine.cpu().state().sr == before.cpu.sr && result.fetch &&
-              result.fetch->used == 0 && !result.fetch->pending_address,
-          "Declared DMA-first order exposes real active bit8 to the native branch alongside an "
-          "independent F2 read");
+}
+
+void controller_write_preflight() {
+  // FM BCLR #8,X:fffff4; unlike the read-only status test this RMW stays unqualified.
+  constexpr unsigned status_clear = 0x0ab408;
+  const std::array words{status_clear, 0U};
+  Fixture fixture(words);
+  fixture.start_fetch(1);
+  fixture.fetch->issue();
+  const auto before = fixture.machine.cpu().registers();
+  const auto ticks = fixture.machine.clock().elapsed_ticks();
+  const auto view = fixture.fetch->view();
+  const auto error =
+      rejects([&] { static_cast<void>(fetch_cycle(fixture, {.index = 1, .requests = 1}, true)); });
+  require(error.contains("overlap") && error.contains("0xfffff4") &&
+              fixture.machine.cpu().registers() == before &&
+              fixture.machine.clock().elapsed_ticks() == ticks &&
+              fixture.machine.bus().last_dma_cycle() == 0 && fixture.fetch->view() == view,
+          "Status RMW cannot inherit the pure status-test/F2 qualification or sample DMA requests");
 }
 
 void peripheral_preflight() {
-  DspMachine machine;
-  prepare(machine, checkpoint::assemble("movep x:<<$ffff94,x0"));
-  machine.bus().shi().observe_spi({.mosi = false});
-  constexpr unsigned shi_control = 0xffff91;
-  constexpr unsigned shi_configuration = 0xa9;
+  const std::array words{fifo_load, 0U};
+  Fixture fixture(words);
+  auto &machine = fixture.machine;
+  auto &shi = machine.bus().shi();
+  shi.observe_spi({.mosi = false});
   machine.bus().write({.space = DspSpace::x, .address = shi_control, .value = shi_configuration});
-  access::send(machine.bus().shi(), access::first);
-  const auto progress = until_data(machine, DspNativeAccessKind::read);
-  const auto error = fault([&] {
-    static_cast<void>(machine.advance_reference_bus_cycle(
-        cycle({.index = 1, .requests = 1}, access::ticket(progress))));
-  });
-  require(
-      error.contains("pc=0x000100") && error.contains("omr=0x000305") &&
-          error.contains("0xffff94") && access::ticket(machine) == access::ticket(progress) &&
-          machine.bus().read({.space = DspSpace::x, .address = access::fifo}) == access::first,
-      "Unqualified simultaneous peripheral occupancy refuses before consuming actual FIFO data");
+  constexpr unsigned bits = 24;
+  shi.observe_spi({.selected = true, .mosi = false});
+  for (unsigned bit = bits; bit != 0; --bit) {
+    const bool level = ((first >> (bit - 1)) & 1U) != 0;
+    shi.observe_spi({.selected = true, .clock = true, .mosi = level});
+    shi.observe_spi({.selected = true, .clock = false, .mosi = level});
+  }
+  shi.observe_spi({.mosi = false});
+  fixture.start_fetch(1);
+  fixture.fetch->issue();
+  const auto ticks = machine.clock().elapsed_ticks();
+  const auto error =
+      rejects([&] { static_cast<void>(fetch_cycle(fixture, {.index = 1, .requests = 1}, true)); });
+  require(error.contains("pc=0x000100") && error.contains("omr=0x000305") &&
+              error.contains("0xffff94") && machine.clock().elapsed_ticks() == ticks &&
+              machine.bus().last_dma_cycle() == 0 &&
+              machine.bus().read({.space = DspSpace::x, .address = fifo}) == first,
+          "Unqualified FIFO/F2 overlap with active DMA refuses before consuming data or sampling "
+          "requests");
 }
 
 void clocked_owner_guard() {
-  constexpr unsigned extal = 12000000;
-  DspMachine machine(
-      DspRunContract{.clock = {.extal_hz = extal,
-                               .timebase_hz = extal,
-                               .switch_timing = DspClockSwitch::reference_instruction_boundary},
-                     .timing = DspRunTiming::native_internal_estimates});
-  DspProgram code;
-  code.emit("nop");
-  code.install(machine.bus());
-  machine.bus().pll().observe_pinit(false);
-  machine.cpu().reset_spi_boot();
-  const auto before = machine.cpu().debug_state();
-  static_cast<void>(
-      fault([&] { static_cast<void>(machine.advance_reference_bus_cycle(cycle({.index = 1}))); }));
-  require(machine.cpu().debug_state() == before && !machine.timing_faulted(),
-          "Composed semantic bus cycles cannot bypass an existing instruction-clock contract");
-  machine.cpu().step();
-  require(machine.run_clock().native_cycle_units() == 1,
-          "Rejected composed-cycle admission preserves the genuine existing clocked path");
+  auto unsupported = native::native_clocks;
+  unsupported.switch_timing = DspClockSwitch::reference_instruction_boundary;
+  OwnDspMachine machine(unsupported);
+  native::NativeProgram code;
+  code.word(0);
+  native::reset_native(machine, code);
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto ticks = machine.clock().elapsed_ticks();
+  static_cast<void>(rejects([&] {
+    static_cast<void>(machine.advance_dma_reference_cycle(banks::inputs({.index = 0})));
+  }));
+  require(machine.cpu().registers() == before && machine.cpu().progress() == progress &&
+              machine.clock().elapsed_ticks() == ticks && !machine.bus().last_dma_cycle(),
+          "Explicit composed cycles cannot override an instruction-boundary clock contract");
+  native::step_native(machine);
+  require(
+      machine.cpu().progress().instructions == progress.instructions + 1 &&
+          machine.clock().elapsed_ticks() == ticks,
+      "Refused clock ownership preserves genuine native execution without inventing clock time");
 }
 }
 
@@ -436,9 +574,10 @@ int main() {
     failed_required_read_keeps_dma_prefix();
     protocol_preflight();
     controller_bit_with_fetch();
+    controller_write_preflight();
     peripheral_preflight();
     clocked_owner_guard();
-    std::cout << "Actual native/F2 DMA bus-cycle admission checks passed\n";
+    std::cout << "Native DMA/F2 cycle, publication and actual controller-status checks passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
