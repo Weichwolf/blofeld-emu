@@ -28,7 +28,11 @@ A real write to reserved Y:$2000 during WAI reports the operation,address,
 MCU/DSP PCs and time; failed execution and new joint snapshots refuse, while
 only genuinely completed MCU and DSP periods enter their respective ledgers.
 Diagnostic chip snapshots retain the failed clock/state and cannot resume
-native execution even in a fresh owner. PHY-derived MCU horizons may fall
+native execution even in a fresh owner. A healthy joint idle checkpoint also
+replays that fault twice, retaining every accepted native effect/fetch and the
+same diagnostic. Independent full-register and clock expectations require
+30 retirements/32 base costs,65 completed DSP periods,17 MCU idle periods and
+the uncharged write attempt at tick3510. PHY-derived MCU horizons may fall
 between45-tick DSP reference boundaries; that residue remains pending rather
 than changing either emulated clock.
 

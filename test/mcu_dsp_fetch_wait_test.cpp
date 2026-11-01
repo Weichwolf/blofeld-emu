@@ -411,15 +411,20 @@ void committed_irq() {
   check_frame(f.mcu);
 }
 
-void idle_fault() {
-  Fixture f(true);
+std::string check_idle_fault(Fixture &f) {
   const auto error = rejects([&] { static_cast<void>(f.mcu.advance_wait(64)); });
   const auto pending = f.dsp.cpu().pending_instruction();
   constexpr unsigned store_pc = boot + 32;
   constexpr unsigned completed = 65;
   constexpr unsigned retired_before_store = 30;
+  constexpr unsigned attempted_ticks = 3510;
+  constexpr unsigned reset_sr = 0xc00300;
+  constexpr unsigned bypass_omr = 0x305;
+  constexpr unsigned linear_modifier = 0xffffff;
+  constexpr std::uint64_t idle_periods = 17;
+  constexpr unsigned mcu_period_ticks = 10;
   require(error.contains("MCU wait advance pc=0x800f") && error.contains("pc=0xff0020") &&
-              error.contains("attempted-ticks=3510") &&
+              error.contains("attempted-ticks=" + std::to_string(attempted_ticks)) &&
               error.contains("Unmapped DSP memory write at Y:0x002000") && f.runtime->faulted() &&
               f.mcu.timing_faulted() && f.dsp.clock().faulted() && pending &&
               pending->effect.kind == dsp56300::EffectKind::write &&
@@ -436,6 +441,25 @@ void idle_fault() {
               dsp_end < f.runtime->end_ticks() &&
               f.mcu.run_clock().bus_cycles() == initial_cycles + f.mcu.idle_bus_cycles(),
           "A partial failing idle interval charges only genuinely completed DSP and MCU periods");
+  dsp56300::Registers expected{.x = 7, .pc = store_pc, .sr = reset_sr, .omr = bypass_omr};
+  expected.r[0] = stack;
+  expected.m.fill(linear_modifier);
+  const auto state = f.mcu.cpu().state();
+  require(
+      f.dsp.cpu().registers() == expected &&
+          f.dsp.cpu().progress() ==
+              dsp56300::Progress{.instructions = retired_before_store, .estimated_cycles = 32} &&
+          f.mcu.cpu().waiting() && state.pc == resume && state.sp == wait_stack &&
+          state.d == foreground_d && state.x == foreground_x && state.y == foreground_y &&
+          state.ccr == unmasked && f.mcu.idle_bus_cycles() == idle_periods &&
+          f.mcu.run_clock().bus_cycles() == initial_cycles + idle_periods &&
+          f.mcu.run_clock().elapsed_ticks() == initial_ticks + (idle_periods * mcu_period_ticks) &&
+          f.mcu.run_clock().oscillator_cycles() == (initial_cycles + idle_periods) * 2 &&
+          dsp_end == recovery_end + (completed * dsp_period) &&
+          f.dsp.clock().hardware_reset_ticks() == recovery_end &&
+          f.dsp.clock().timer_clk2_edges() == completed / 2 &&
+          f.runtime->end_ticks() == attempted_ticks,
+      "Failed native WAI prefix retains independent complete registers and literal clock costs");
   static_cast<void>(rejects([&] { f.runtime->end_wait(); }));
   static_cast<void>(rejects([&] { static_cast<void>(f.mcu.checkpoint()); }));
   static_cast<void>(rejects([&] { static_cast<void>(f.runtime->checkpoint()); }));
@@ -454,6 +478,27 @@ void idle_fault() {
           }).contains("requires completed hardware reset"),
           "A restored failed chip cannot acquire fresh native execution authority");
   check_frame(f.mcu);
+  return error;
+}
+
+void idle_fault() {
+  Fixture f(true);
+  const auto saved = f.runtime->checkpoint();
+  const auto ledger = f.ledger();
+  std::string expected;
+  std::vector<Observation> trace;
+  for (unsigned suffix = 0; suffix < 2; ++suffix) {
+    f.restore(saved, ledger);
+    require(!f.runtime->faulted() && !f.mcu.timing_faulted() && !f.dsp.clock().faulted(),
+            "Healthy joint idle checkpoint must clear both prior failed owners");
+    const auto error = check_idle_fault(f);
+    if (suffix == 0) {
+      expected = error;
+      trace = f.trace;
+    }
+    require(error == expected && f.trace == trace,
+            "Joint idle restore changed a native fault,effect,register or fetch/clock prefix");
+  }
 }
 
 void empty_wait_guards() {
@@ -529,7 +574,7 @@ void run() {
 int main() {
   try {
     run();
-    std::cout << "Native MCU WAI/RTI and dsp56300 timing/failure cases passed\n";
+    std::cout << "Native MCU WAI/RTI:15 cases,8 RTI and2 fault replay suffixes passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
