@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_fetch_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
+#include "dsp/dsp_run_clock.hpp"
 #include "fetch_clone_fixture.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_reset.hpp"
@@ -13,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace {
 using namespace clone_test;
@@ -26,11 +26,13 @@ void prefix(Owners &owner, const Cut cut) {
     owner.step();
     return;
   }
-  owner.mcu.advance_system_reset(settle_edge, McuResetPad::unknown);
+  owner.mcu.advance_system_reset(
+      settle_edge - static_cast<unsigned>(owner.mcu.run_clock().reset_sysclk_edges()),
+      McuResetPad::unknown);
   if (cut == Cut::recovery) {
     owner.schedule->release_dsp_reset();
     owner.mcu.advance_system_reset(1, McuResetPad::unknown);
-    require(owner.schedule->run().hardware_reset_remaining_ticks() == period,
+    require(owner.dsp.clock().hardware_reset_remaining_ticks() == period,
             "The cut retains one literal EXTAL period before native DSP recovery");
   }
 }
@@ -47,13 +49,22 @@ void suffix(Owners &owner) {
               owner.mcu.run_clock().reset_sysclk_edges() == reset_edges &&
               owner.mcu.run_clock().elapsed_ticks() == ticks &&
               owner.schedule->end_ticks() == ticks * common_factor &&
-              owner.schedule->run().completed_cycles() ==
-                  (owner.schedule->end_ticks() - owner.schedule->run().hardware_reset_ticks()) /
-                      period,
+              owner.schedule->completed_cycles() ==
+                  (owner.schedule->end_ticks() - owner.dsp.clock().hardware_reset_ticks()) / period,
           "Literal195SYSCLK+five-vector+1+3+four-NOP periods retain independent full clock totals");
   require(owner.mcu.bus().read(mcu_ram) == marker && (owner.mcu.cpu().state().d >> 8U) == marker &&
               owner.dsp.bus().read({.space = DspSpace::x, .address = dsp_ram}) == dsp_word,
           "Own native LDAA/STAA produces literal SRAM data; DSP fixture RAM survives transfer");
+  if (owner.dsp.clock().hardware_reset_active()) {
+    require(owner.dsp.cpu().progress() == dsp56300::Progress{} &&
+                owner.schedule->completed_cycles() == 0 &&
+                owner.dsp.clock().hardware_reset_ticks() == owner.schedule->end_ticks(),
+            "A held DSP cannot execute while actual MCU reset and instructions continue");
+  } else {
+    require(owner.dsp.cpu().progress().instructions >= 3 &&
+                (owner.dsp.cpu().registers().x >> word_bits) == 1,
+            "A released DSP reaches actual MOVE,CLR and independently checked ADD retirements");
+  }
   require(rejects([&] {
             static_cast<void>(owner.dsp.bus().read({.space = DspSpace::x, .address = dsp_ram + 1}));
           }).contains("Unknown DSP memory read"),
@@ -81,15 +92,18 @@ void test_suffix(const Cut cut, const bool held, const unsigned phase) {
     cursor.forbidden = true;
     Owners target(phase);
     target.schedule =
-        std::make_unique<McuDspFetchSchedule>(snapshot, target.mcu, target.dsp, cursor.events());
+        std::make_unique<McuDspRuntime>(snapshot, target.mcu, target.dsp, cursor.events());
     require(cursor.queries == queries && cursor.observed == saved_events &&
                 equal(endpoint(target), at_cut) && equal(endpoint(source), expected),
             "Fresh staged owners reproduce every native/clock state without calling live input");
     const auto own = target.schedule->checkpoint();
-    require(rejects([&] { target.schedule->restore(snapshot); }).contains("matching inactive") &&
-                !target.schedule->faulted(),
-            "Explicit clone never turns a foreign snapshot into a same-owner restore token");
-    target.schedule->restore(own);
+    auto superseded = std::move(target.schedule);
+    target.schedule = std::make_unique<McuDspRuntime>(own, target.mcu, target.dsp, cursor.events());
+    require(rejects([&] {
+              static_cast<void>(superseded->checkpoint());
+            }).contains("healthy unchanged native boundary"),
+            "An explicit replacement revokes the superseded native timeline authority");
+    superseded.reset();
     require(cursor.queries == queries && equal(endpoint(target), at_cut),
             "The clone's own checkpoint restores with the retained event floor and no callback");
     cursor.forbidden = false;
@@ -112,50 +126,48 @@ void test_rejections() {
   const auto saved_position = cursor.position;
   const auto queries = cursor.queries;
   cursor.forbidden = true;
-  for (unsigned fault = 0; fault < 7; ++fault) {
-    Owners target;
+  for (unsigned fault = 0; fault < 9; ++fault) {
+    Owners target(fault == 5 ? 1U : 0U);
     const auto initial = target.mcu.run_clock().elapsed_ticks();
     auto events = cursor.events();
+    const McuDspRuntimeCheckpoint empty;
+    OwnDspMachine wrong_clock({.extal_hz = oscillator / 2,
+                               .timebase_hz = timebase,
+                               .switch_timing = DspClockSwitch::reference_cycle_boundary});
+    const char *reason = "matching external identity";
     switch (fault) {
-      case 0: events.identity = std::make_shared<DspFetchEventIdentity>(); break;
-      case 1: events.order = DspExternalOrder::dsp_before_external; break;
-      case 2: ++events.maximum_events; break;
+      case 0: events.identity = std::make_shared<const bool>(false); break;
+      case 1: events.order = DspPeerOrder::dsp_first; break;
+      case 2: ++events.maximum_events_per_period; break;
       case 3: events.next_ticks = {}; break;
       case 4: events.observe = {}; break;
-      case 5: target.mcu.advance_system_reset(1, McuResetPad::unknown); break;
-      case 6: prepare(target.dsp); break;
-      default: throw Fault("Invalid fixed admission case");
+      case 5: reason = "reference run contract"; break; // Incompatible initial OSC phase.
+      case 6: reason = "Empty"; break; // Empty snapshot precedes either target restore.
+      case 7: events = {}; break;
+      case 8: reason = "clock inputs differ"; break; // Admitted MCU staging; no atomic rollback.
+      default: throw Fault("Invalid fixed native admission case");
     }
-    const auto actual_ticks = target.mcu.run_clock().elapsed_ticks();
-    require(!rejects([&] {
-               const McuDspFetchSchedule rejected(snapshot, target.mcu, target.dsp, events);
-             }).empty() &&
-                target.mcu.run_clock().elapsed_ticks() == actual_ticks &&
-                cursor.queries == queries && cursor.position == saved_position &&
-                equal(endpoint(source), before),
-            "Malformed identity/order/budget/callbacks and non-pristine targets refuse before "
-            "model input");
-    require(fault == 5 || actual_ticks == initial,
-            "Only the explicit non-fresh case advances its own clock");
+    const auto failure = rejects([&] {
+      const McuDspRuntime rejected(
+          fault == 6 ? empty : snapshot, target.mcu, fault == 8 ? wrong_clock : target.dsp, events);
+    });
+    require(cursor.queries == queries && cursor.position == saved_position &&
+                equal(endpoint(source), before) && !target.schedule,
+            "Rejected staging must not query input,publish an owner or change the live source");
+    require(target.mcu.run_clock().elapsed_ticks() ==
+                (fault == 8 ? source.mcu.run_clock().elapsed_ticks() : initial),
+            "Only the admitted late DSP-clock refusal may retain restored disposable MCU state");
+    require(failure.contains(reason),
+            "Native admission refuses its actual malformed contract or target: " + failure);
   }
-  Owners target;
-  require(rejects([&] {
-            const McuDspFetchSchedule rejected(snapshot, source.mcu, target.dsp, cursor.events());
-          }).contains("distinct isolated"),
-          "Live source MCU cannot be used as a clone destination");
-  require(rejects([&] {
-            const McuDspFetchSchedule rejected(snapshot, target.mcu, source.dsp, cursor.events());
-          }).contains("distinct isolated"),
-          "Live source DSP cannot be used as a clone destination");
   try {
     Owners staged;
     staged.schedule =
-        std::make_unique<McuDspFetchSchedule>(snapshot, staged.mcu, staged.dsp, cursor.events());
+        std::make_unique<McuDspRuntime>(snapshot, staged.mcu, staged.dsp, cursor.events());
     throw Fault("Own deterministic staged wiring refusal before publication");
   } catch (const Fault &) {
     require(equal(endpoint(source), before) && cursor.queries == queries,
-            "Discarding a fully staged replacement leaves the original native owners and input "
-            "untouched");
+            "Discarding a complete staged replacement leaves native source and input untouched");
   }
 }
 
@@ -172,13 +184,12 @@ void test_deferred_cursor_validation() {
   cursor.position = 0; // Deliberately stale external cursor, still not observed during staging.
   cursor.forbidden = true;
   Owners target;
-  target.schedule =
-      std::make_unique<McuDspFetchSchedule>(saved, target.mcu, target.dsp, cursor.events());
+  target.schedule = std::make_unique<McuDspRuntime>(saved, target.mcu, target.dsp, cursor.events());
   require(cursor.queries == queries && cursor.observed == events,
           "Stage construction never consults a currently stale external cursor");
   cursor.forbidden = false;
   target.attach();
-  require(rejects([&] { target.step(); }).contains("external timestamp precedes") &&
+  require(rejects([&] { target.step(); }).contains("pinned pending deadline") &&
               target.schedule->faulted() &&
               target.mcu.run_clock().elapsed_ticks() == source.mcu.run_clock().elapsed_ticks() &&
               equal(endpoint(source), original) && cursor.observed == events,
@@ -192,11 +203,11 @@ void test_deferred_cursor_validation() {
 
 void test_expired_source_address_reuse() {
   std::optional<McuMachine> mcu;
-  std::optional<DspMachine> dsp;
-  std::optional<McuDspFetchSchedule> schedule;
+  std::optional<OwnDspMachine> dsp;
+  std::optional<McuDspRuntime> schedule;
   mcu.emplace(image(), BLOFELD_DEFAULT_SLA, contract(), McuPowerOnInputs{3});
-  dsp.emplace();
-  schedule.emplace(inputs(true), *mcu, *dsp);
+  dsp.emplace(dsp_clock);
+  schedule.emplace(inputs(), *mcu, *dsp);
   mcu->set_reset_period_observer(
       [&](const auto edge) { schedule->begin_reset_period(edge, pins); });
   mcu->advance_system_reset(13, McuResetPad::unknown);
@@ -207,16 +218,16 @@ void test_expired_source_address_reuse() {
   mcu.reset();
   dsp.reset();
   mcu.emplace(image(), BLOFELD_DEFAULT_SLA, contract(), McuPowerOnInputs{3});
-  dsp.emplace();
+  dsp.emplace(dsp_clock);
   require(std::addressof(*mcu) == old_mcu && std::addressof(*dsp) == old_dsp,
           "The controlled optional storage reuses both exact native object addresses");
   schedule.emplace(saved, *mcu, *dsp);
   require(schedule->end_ticks() == 13 * period && mcu->run_clock().reset_sysclk_edges() == 13 &&
-              rejects([&] { schedule->restore(saved); }).contains("matching inactive") &&
               !schedule->faulted(),
-          "Expired lifetime permits explicit transfer but rejects accidental same-address restore");
+          "Expired lifetime permits explicit reset-state transfer at the same object addresses");
   const auto own = schedule->checkpoint();
-  schedule->restore(own);
+  schedule.reset();
+  schedule.emplace(own, *mcu, *dsp);
   mcu->set_reset_period_observer(
       [&](const auto edge) { schedule->begin_reset_period(edge, pins); });
   mcu->advance_system_reset(1, McuResetPad::unknown);
@@ -238,7 +249,7 @@ int main() {
     test_rejections();
     test_expired_source_address_reuse();
     test_deferred_cursor_validation();
-    std::cout << "Joint clone:8native profiles,16suffixes,9admission refusals and expired-address "
+    std::cout << "Joint clones:8native profiles,16suffixes,9admission refusals and expired-address "
                  "transfer passed\n";
     return 0;
   } catch (const std::exception &error) {

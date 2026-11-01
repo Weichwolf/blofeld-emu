@@ -2680,12 +2680,12 @@ Traces and snapshots              partial  MCU state, disassembly and register-w
                                           mid-frame restore now checks every
                                           remaining timestamped event under four
                                           declared experiments.
-                                          Explicit pipeline snapshot transfer
-                                          stages fresh isolated native owners
-                                          without live input callbacks. Native,
-                                          timeline and joint lifetime guards,
-                                          interleaved suffixes, original event
-                                          floor and RAM isolation are checked
+                                          Fetch/timeline/joint snapshot transfer
+                                          now uses dsp56300 without live input
+                                          callbacks. Full native/fetch suffixes,
+                                          actual reset/CLK2, revoked ownership,
+                                          retained deadlines and nonzero event
+                                          floors accompany deep RAM isolation
                                           (dsp-fetch-clone.txt). Optional Board
                                           POR/pipeline staging and host lifecycle
                                           guards are in reference-pipeline.txt;

@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_fetch_schedule.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_pipeline.hpp"
-#include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_program_fetch.hpp"
-#include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp/dsp_scheduled_run.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp/own_dsp_timeline.hpp"
+#include "dsp56300/core.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_cycles.hpp"
 #include "mcu/mcu_bus.hpp"
@@ -27,6 +21,7 @@
 
 #include <array>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
@@ -35,14 +30,25 @@
 
 namespace clone_test {
 using namespace blofeld;
-using blofeld::test::require;
 constexpr unsigned oscillator = 12000000, timebase = 540000000, boot = 0xff0000;
 constexpr unsigned entry = 0x8000, mcu_ram = 0x1200, marker = 0x5a;
 constexpr unsigned dsp_ram = 0x200, dsp_word = 0x123456, vector_ticks = 9225;
 constexpr std::uint64_t period = 45;
 constexpr unsigned source_words = 512, reset_edges = 195, settle_edge = 131;
 constexpr unsigned nop = 0xa7, unsecured = 0xfe, word_bits = 24;
+constexpr auto timing =
+    OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts;
+constexpr DspRunClockInputs dsp_clock{.extal_hz = oscillator,
+                                      .timebase_hz = timebase,
+                                      .switch_timing = DspClockSwitch::reference_cycle_boundary};
+constexpr OwnDspResetInputs reset_pins{
+    .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2};
 constexpr std::uint64_t unit = std::uint64_t{1} << 24U;
+constexpr std::array<std::uint64_t, 7> external_ticks{0, period, 6000, 9300, 9405, 10000, 11565};
+
+inline void require(const bool condition, const std::string &message) {
+  if (!condition) { throw Fault(message); }
+}
 
 inline McuFlashImage image() {
   // Own LDAA #5a;STAA $1200;NOP, with literal1+3+1 native periods.
@@ -67,118 +73,121 @@ inline McuRunContract contract(const unsigned phase = 0) {
           .memory_timing = McuRunMemory::unstretched_internal};
 }
 
-inline DspFetchRunInputs dsp_inputs() {
-  return {.extal_hz = oscillator,
-          .timebase_hz = timebase,
-          .timing = DspFetchTiming::reference_cycle_order,
-          .execution = DspReferenceExecution::staged_register_boundaries,
-          .pipeline = DspFetchPipeline::automatic_memory,
-          .resets = DspFetchResetTiming::reference_cycle_boundary};
+inline McuDspRuntimeInputs inputs() {
+  return {.timing = timing,
+          .maximum_cycles_per_period = 16,
+          .writes = McuWriteOrder::before_mcu,
+          .reset_dsp_first = true,
+          .initial_reset = reset_pins};
 }
 
-inline McuDspFetchInputs inputs(const bool held) {
-  McuDspFetchInputs result{.dsp = dsp_inputs(),
-                           .shared_write_order = McuDspTieOrder::dsp_before_mcu,
-                           .maximum_dsp_cycles_per_period = 16,
-                           .reset_order = McuDspResetOrder::dsp_before_mcu};
-  if (held) {
-    result.initial_reset = McuDspFetchInitialReset{
-        .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2};
-  }
-  return result;
+inline DspDmaInputs pins() {
+  return {.known_requests = 15,
+          .timing = DspDmaTiming::reference_sampled_cycles,
+          .grant = DspDmaGrant::available};
 }
 
-inline DspFetchCycleInputs pins() {
-  // Explicit isolated laboratory DMA inputs, not a production board default.
-  return {.known_requests = 15, .grant = DspDmaGrant::available};
-}
-
-inline DspMachine &prepare(DspMachine &dsp, const bool held = false) {
-  blofeld::test::DspProgram program;
-  program.immediate("x1", 1);
-  program.emit("clr a");
-  for (unsigned i = 0; i < source_words; ++i) { program.emit("add x1,a"); }
-  program.install(dsp.bus());
-  dsp.bus().pll().observe_pinit(false);
-  // Own fixture data establishes known/unknown RAM before native execution.
+inline void prepare(OwnDspMachine &dsp, const bool held = false) {
+  // Independently encoded FM MOVE #>1,X1; CLR A; unrolled ADD X1,A.
+  constexpr unsigned immediate_x1 = 0x45f400;
+  constexpr unsigned clear_a = 0x200013;
+  constexpr unsigned add_x1 = 0x200060;
+  std::array<std::uint32_t, source_words + 3> code{};
+  code[0] = immediate_x1;
+  code[1] = 1;
+  code[2] = clear_a;
+  for (unsigned i = 3; i < code.size(); ++i) { code.at(i) = add_x1; }
+  dsp.bus().install_rom({.space = DspSpace::p, .start = boot, .words = code});
   dsp.bus().write({.space = DspSpace::x, .address = dsp_ram, .value = dsp_word});
-  if (!held) {
-    dsp.cpu().reset_spi_boot();
-    static_cast<void>(
-        dsp.begin_reference_instruction(DspReferenceExecution::staged_register_boundaries));
-  }
-  return dsp;
+  if (held) { return; }
+  dsp.begin_hardware_reset(reset_pins);
+  require(dsp.advance_hardware_reset_ticks(period * 2) == period * 2, "Actual DSP reset hold");
+  dsp.release_hardware_reset();
+  require(dsp.advance_hardware_reset_ticks(period * 2) == period * 2, "Actual DSP reset recovery");
 }
 
 struct Frame {
-  DspDebugState cpu;
-  DspProgramFetchView fetch;
-  std::array<std::optional<DspProgramWord>, 3> stages;
-  std::optional<DspProgramWord> retiring;
-  std::optional<DspState> operands;
-  std::array<std::optional<DspProgramWord>, 5> phases;
-  std::optional<DspState> e1, e2, candidate;
-  std::uint32_t decode_address;
-  std::uint64_t cycles, ticks, reset_ticks;
+  dsp56300::Registers cpu;
+  dsp56300::Progress progress;
+  std::optional<dsp56300::InstructionEffect> pending;
+  std::optional<DspProgramFetchView> fetch;
+  std::uint64_t cycles, ticks, reset_ticks, clk2;
+  bool interrupt_pending;
   bool operator==(const Frame &) const = default;
 };
 
-inline Frame frame(const DspMachine &dsp, const DspFetchRun &run) {
-  const auto view = run.pipeline();
-  if (!view) { throw Fault("Actual automatic pipeline required"); }
-  return {.cpu = dsp.cpu().debug_state(),
-          .fetch = dsp.reference_fetch(),
-          .stages = view->stages,
-          .retiring = view->awaiting_retirement,
-          .operands = view->awaiting_inputs,
-          .phases = {view->cycle.decode,
-                     view->cycle.ag1,
-                     view->cycle.ag2,
-                     view->cycle.execute1,
-                     view->cycle.execute2},
-          .e1 = view->cycle.e1_operands,
-          .e2 = view->cycle.e2_operands,
-          .candidate = view->cycle.candidate_inputs,
-          .decode_address = view->decode_address,
-          .cycles = run.completed_cycles(),
-          .ticks = run.elapsed_ticks(),
-          .reset_ticks = run.hardware_reset_ticks()};
+inline Frame frame(const OwnDspMachine &dsp, const OwnDspFetch *fetch = nullptr) {
+  const auto pending = dsp.cpu().pending_instruction();
+  return {.cpu = dsp.cpu().registers(),
+          .progress = dsp.cpu().progress(),
+          .pending = pending ? std::optional{pending->effect} : std::nullopt,
+          .fetch = fetch != nullptr ? std::optional{fetch->view()} : std::nullopt,
+          .cycles = dsp.clock().native_cycle_units(),
+          .ticks = dsp.clock().elapsed_ticks(),
+          .reset_ticks = dsp.clock().hardware_reset_ticks(),
+          .clk2 = dsp.clock().timer_clk2_edges(),
+          .interrupt_pending = dsp.interrupt_pending()};
 }
 
-inline void independent(const DspFetchCycleResult &cycle, const DspMachine &dsp) {
-  require(cycle.period_ticks == period && cycle.pipeline,
-          "Every actual pipeline period retains its literal45tick clock");
-  if (!cycle.pipeline) { throw Fault("Missing actual pipeline"); }
-  if (!cycle.pipeline->retirement_published) { return; }
-  const auto retired = cycle.pipeline->execute2;
-  if (!retired) { throw Fault("Actual E2 word required for native retirement"); }
-  const auto cpu = dsp.cpu().state();
-  if (retired->address == boot) {
+struct CycleFrame {
+  Frame chip;
+  std::optional<std::uint32_t> issued, native_pc;
+  bool captured, started, retired;
+  bool operator==(const CycleFrame &) const = default;
+};
+
+inline void independent(const OwnDspFetchCycleResult &cycle, const OwnDspMachine &dsp) {
+  require(dsp.clock().elapsed_ticks() == dsp.clock().hardware_reset_ticks() +
+                                             (dsp.clock().native_cycle_units() * period) &&
+              dsp.clock().timer_clk2_edges() == dsp.clock().native_cycle_units() / 2,
+          "Every accepted F1/F2/effect period retains independent45tick and CLK2 costs");
+  if (!cycle.native || !cycle.native->retired) { return; }
+  const auto retired = cycle.native_pc;
+  if (!retired) { throw Fault("Actual native retirement address required"); }
+  const auto cpu = dsp.cpu().registers();
+  if (*retired == boot) {
     require((cpu.x >> word_bits) == 1, "Own MOVE establishes independent X1=1");
-  } else if (retired->address == boot + 2) {
+  } else if (*retired == boot + 2) {
     require(cpu.a == 0, "Own CLR has independent zero accumulator result");
   } else {
-    require(retired->address >= boot + 3 &&
-                cpu.a == static_cast<std::uint64_t>(retired->address - boot - 2) * unit,
+    require(*retired >= boot + 3 && cpu.a == static_cast<std::uint64_t>(*retired - boot - 2) * unit,
             "Every real unrolled ADD has an independently derived full accumulator result");
   }
+}
+
+inline CycleFrame observe(const OwnDspFetchCycleResult &cycle,
+                          const OwnDspMachine &dsp,
+                          const OwnDspFetch *fetch = nullptr) {
+  independent(cycle, dsp);
+  return {.chip = frame(dsp, fetch),
+          .issued = cycle.issued_address,
+          .native_pc = cycle.native_pc,
+          .captured = cycle.captured,
+          .started = cycle.instruction_started,
+          .retired = cycle.native && cycle.native->retired};
+}
+
+inline CycleFrame advance(OwnDspFetch &fetch, OwnDspMachine &dsp) {
+  auto input = pins();
+  input.cycle = dsp.clock().native_cycle_units();
+  return observe(fetch.advance_dma_automatic(input, timing), dsp, &fetch);
 }
 
 inline std::string rejects(const auto &operation) {
   try {
     operation();
-  } catch (const Fault &error) { return error.what(); }
-  throw Fault("Expected strict checkpoint transfer refusal");
+  } catch (const std::exception &error) { return error.what(); }
+  throw Fault("Expected strict native checkpoint transfer refusal");
 }
 
 struct Cursor {
-  std::shared_ptr<const DspFetchEventIdentity> identity = std::make_shared<DspFetchEventIdentity>();
-  std::array<std::uint64_t, 7> ticks{0, 45, 6000, 9300, 9405, 10000, 11565};
+  std::shared_ptr<const bool> identity = std::make_shared<const bool>(false);
+  std::array<std::uint64_t, 7> ticks = external_ticks;
   unsigned position = 0, queries = 0;
   bool forbidden = false;
   std::vector<std::uint64_t> observed;
 
-  DspFetchExternalEvents events() {
+  DspRuntimeEvents events() {
     return {.identity = identity,
             .next_ticks = [this]() -> std::optional<std::uint64_t> {
               ++queries;
@@ -189,12 +198,12 @@ struct Cursor {
             .observe =
                 [this](const auto time) {
                   require(!forbidden && time == ticks.at(position),
-                          "Only actual timeline advancement may consume the next external event");
+                          "Only actual advancement may consume the next external event");
                   observed.push_back(time);
                   ++position;
                 },
-            .order = DspExternalOrder::external_before_dsp,
-            .maximum_events = 4};
+            .order = DspPeerOrder::peer_first,
+            .maximum_events_per_period = 4};
   }
 };
 
@@ -212,9 +221,15 @@ struct Owners {
   }
 
   void start(const bool held, Cursor &cursor) {
-    prepare(dsp, held);
-    schedule = std::make_unique<McuDspFetchSchedule>(inputs(held), mcu, dsp, cursor.events());
+    prepare(dsp, true);
+    schedule = std::make_unique<McuDspRuntime>(inputs(), mcu, dsp, cursor.events());
     attach();
+    if (!held) {
+      const unsigned minimum_edges = 2 + (initial_phase == 0 ? 0U : 1U);
+      require(mcu.advance_system_reset(minimum_edges, McuResetPad::unknown) == minimum_edges,
+              "Actual MCU reset edges provide the DSP's minimum reset hold");
+      schedule->release_dsp_reset();
+    }
   }
 
   void attach() {
@@ -226,9 +241,11 @@ struct Owners {
     });
   }
 
-  void record(const DspFetchCycleResult &result) {
-    independent(result, dsp);
-    trace.push_back(frame(dsp, schedule->run()));
+  void record(const DspRuntimeCycle &cycle) {
+    require(cycle.completion_ticks - cycle.start_ticks == period &&
+                cycle.completion_ticks == dsp.clock().elapsed_ticks(),
+            "Actual joint DSP periods retain their common-time completion");
+    trace.push_back(observe(cycle.result, dsp));
   }
 
   void finish_reset() {
@@ -245,9 +262,9 @@ struct Owners {
 
   const unsigned initial_phase;
   McuMachine mcu;
-  DspMachine dsp;
-  std::unique_ptr<McuDspFetchSchedule> schedule;
-  std::vector<Frame> trace;
+  OwnDspMachine dsp{dsp_clock};
+  std::unique_ptr<McuDspRuntime> schedule;
+  std::vector<CycleFrame> trace;
 };
 
 inline auto cpu(const CpuState s) {
@@ -258,7 +275,6 @@ struct Endpoint {
   std::optional<decltype(cpu(CpuState{}))> mcu;
   Frame dsp;
   McuFlashImage nvm;
-  DspFetchScheduleState timeline;
   std::optional<McuResetState> reset;
   std::optional<DspHardwareResetState> dsp_reset;
   std::optional<std::uint64_t> dsp_remaining;
@@ -271,13 +287,12 @@ inline Endpoint endpoint(const Owners &owner) {
   // reset/clock state there, and every CPU register after the real vector fetch.
   return {.mcu = owner.mcu.system_reset_active() ? std::nullopt
                                                  : std::optional{cpu(owner.mcu.cpu().state())},
-          .dsp = frame(owner.dsp, owner.schedule->run()),
+          .dsp = frame(owner.dsp),
           .nvm = owner.mcu.bus().power_off_flash_image(),
-          .timeline = owner.schedule->timeline_state(),
           .reset = owner.mcu.system_reset_state(),
-          .dsp_reset = owner.schedule->run().hardware_reset_state(),
-          .dsp_remaining = owner.schedule->run().hardware_reset_remaining_ticks(),
-          .dsp_epoch = owner.schedule->run().native_epoch(),
+          .dsp_reset = owner.dsp.clock().hardware_reset_state(),
+          .dsp_remaining = owner.dsp.clock().hardware_reset_remaining_ticks(),
+          .dsp_epoch = owner.dsp.clock().native_epoch(),
           .mcu_ticks = owner.mcu.run_clock().elapsed_ticks(),
           .bus_cycles = owner.mcu.run_clock().bus_cycles(),
           .edges = owner.mcu.run_clock().reset_sysclk_edges(),
@@ -287,8 +302,8 @@ inline Endpoint endpoint(const Owners &owner) {
 
 inline bool equal(const Endpoint &a, const Endpoint &b) {
   return a.mcu == b.mcu && a.dsp == b.dsp && a.nvm.bytes == b.nvm.bytes &&
-         a.nvm.known == b.nvm.known && a.nvm.fresh == b.nvm.fresh && a.timeline == b.timeline &&
-         a.reset == b.reset && a.dsp_reset == b.dsp_reset && a.dsp_remaining == b.dsp_remaining &&
+         a.nvm.known == b.nvm.known && a.nvm.fresh == b.nvm.fresh && a.reset == b.reset &&
+         a.dsp_reset == b.dsp_reset && a.dsp_remaining == b.dsp_remaining &&
          a.dsp_epoch == b.dsp_epoch && a.mcu_ticks == b.mcu_ticks && a.bus_cycles == b.bus_cycles &&
          a.edges == b.edges && a.epoch == b.epoch && a.end == b.end;
 }
