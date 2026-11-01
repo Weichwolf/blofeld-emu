@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_shi.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp56kEmu/assembler.h"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp_core_fixture.hpp"
+#include "dsp_rom_program.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iostream>
-#include <span>
-#include <sstream>
 #include <string>
-#include <vector>
 
 namespace {
+using namespace blofeld::test::core;
+using blofeld::DspSpace;
+using blofeld::test::DspRomRegister;
 constexpr unsigned boot = 0xff0000;
 constexpr unsigned reset_omr = 0x305; // FM figure 5-3/table 5-2, mode-five pins.
 constexpr unsigned word_mask = 0xffffff;
@@ -29,6 +31,14 @@ constexpr unsigned last_switched = 0x2fff;
 constexpr unsigned immediate_x0 = 0x44f400;
 constexpr unsigned negative_address = 0x21;
 constexpr unsigned next_repeat_address = 0x201;
+constexpr unsigned timer0_status = 0xffff8f, timer1_status = 0xffff8b, timer1_count = 0xffff88;
+constexpr unsigned c_data = 0xffffbd, c_direction = 0xffffbe, c_control = 0xffffbf;
+constexpr unsigned f_data = 0xfffff5, f_direction = 0xfffff6, port_f_bcr = 0xfffffb;
+constexpr unsigned port_f_bcr_enabled = 0x01ffff, e_data = 0xffff9d, e_control = 0xffff9f;
+constexpr unsigned shi_rate = 0xffff90, shi_control = 0xffff91, shi_receive = 0xffff94;
+constexpr unsigned shi_fifo_enabled = 0xa9, shi_polled_words = 0x29, shi_fifo_bit = 17;
+constexpr unsigned gpio_pin_mask = 0xfff, initial_c_latch = 0x615, adjacent_ram = 0x21;
+constexpr unsigned retained_layout = 0x600085, retained_r0 = 0x55;
 
 void require(const bool value, const std::string &message) {
   if (!value) { throw blofeld::Fault(message); }
@@ -40,51 +50,6 @@ void reject(const auto &operation, const std::string &message) {
   } catch (const blofeld::Fault &) { return; }
   throw blofeld::Fault(message);
 }
-
-std::string address(const unsigned value) {
-  std::ostringstream text;
-  text << '$' << std::hex << value;
-  return text.str();
-}
-
-class Program {
-public:
-  void jump(const std::uint32_t target) {
-    // DSP56300FM JMP ea: MMMRRR=110000 selects a 24-bit absolute extension.
-    constexpr unsigned absolute_jump = 0x0af080;
-    require(target <= word_mask, "Synthetic jump target is a 24-bit word");
-    words_.push_back(absolute_jump);
-    words_.push_back(target);
-    ++instructions_;
-  }
-
-  void emit(const std::string &text) {
-    const auto instruction = assembler_.assemble(text.c_str());
-    require(instruction.success(), "Cannot assemble own DSP diagnostic: " + text);
-    for (unsigned index = 0; index < instruction.wordCount; ++index) {
-      words_.push_back(instruction.word[index]);
-    }
-    ++instructions_;
-  }
-
-  void append(const Program &program) {
-    words_.insert(words_.end(), program.words_.begin(), program.words_.end());
-    instructions_ += program.instructions_;
-  }
-
-  [[nodiscard]] std::span<const std::uint32_t> words() const { return words_; }
-
-  [[nodiscard]] unsigned pc() const { return boot + static_cast<unsigned>(words_.size()); }
-
-  [[nodiscard]] unsigned instructions() const { return instructions_; }
-
-  void install(blofeld::DspBus &bus) const { bus.install_rom({.start = boot, .words = words_}); }
-
-private:
-  dsp56k::Assembler assembler_;
-  std::vector<std::uint32_t> words_;
-  unsigned instructions_ = 0;
-};
 
 void send_word(blofeld::DspShi &shi, const unsigned value) {
   shi.observe_spi({.selected = true, .mosi = false});
@@ -158,10 +123,11 @@ void test_memory_boundaries_rom_and_retained_switch() {
 }
 
 void test_native_reset_fetch_fault_and_arithmetic() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   const std::array<std::uint32_t, 1> nop{0};
   bus.install_rom({.start = boot, .words = nop});
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   require(cpu.state().pc == boot && cpu.state().omr == reset_omr && cpu.state().sp == 0,
           "SPI boot reset enters the documented P:ff0000 mode-five vector");
   cpu.step();
@@ -180,21 +146,21 @@ void test_native_reset_fetch_fault_and_arithmetic() {
   reject([&cpu] { cpu.step(); }, "Faulted reference state cannot silently resume");
   const std::array<std::uint32_t, 1> missing_extension{immediate_x0};
   bus.install_rom({.start = boot, .words = missing_extension});
-  cpu.reset_spi_boot();
+  cpu.hardware_reset();
   reject([&cpu] { cpu.step(); }, "A required two-word operand cannot use zero-filled lookahead");
   Program program;
-  program.emit("move #>$123456,x0");
+  program.immediate(DspRomRegister::x0, input);
   require(program.words()[0] == immediate_x0 && program.words()[1] == input,
           "Immediate X0 encoding agrees with the independent instruction reference");
-  program.emit("move #>$10,x1");
-  program.emit("clr a");
-  program.emit("add x0,a");
-  program.emit("add x1,a");
-  program.emit("move a,x:>$20");
-  program.emit("neg a");
-  program.emit("move a,x:>$21");
+  program.immediate(DspRomRegister::x1, 0x10);
+  program.emit(clear_a);
+  program.emit(add_x0_a);
+  program.emit(add_x1_a);
+  program.emit(store_a_absolute, 0x20);
+  program.emit(negate_a);
+  program.emit(store_a_absolute, negative_address);
   program.install(bus);
-  cpu.reset_spi_boot();
+  cpu.hardware_reset();
   for (unsigned index = 0; index < program.instructions(); ++index) { cpu.step(); }
   constexpr unsigned sum = 0x123466;
   constexpr unsigned negative = 0xedcb9a;
@@ -207,14 +173,15 @@ void test_native_reset_fetch_fault_and_arithmetic() {
 }
 
 void test_native_code_write_and_decoder_invalidation() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program start;
-  start.emit("move #>0,x0");
-  start.emit("move #>$100,r0");
-  start.emit("move x0,p:(r0)");
+  start.immediate(DspRomRegister::x0, 0);
+  start.immediate(DspRomRegister::r0, 0x100);
+  start.emit(store_x0_program_r0);
   start.jump(data);
   start.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   cpu.step();
   cpu.step();
@@ -222,11 +189,11 @@ void test_native_code_write_and_decoder_invalidation() {
   cpu.step();
   require(cpu.state().pc == data + 1, "Writing unknown P RAM does not require a synthetic preread");
   Program loop;
-  loop.emit("move #>1,x0");
+  loop.immediate(DspRomRegister::x0, 1);
   loop.jump(data);
   unsigned offset = data;
   for (const auto value : loop.words()) { bus.write({.address = offset++, .value = value}); }
-  cpu.reset_spi_boot();
+  cpu.hardware_reset();
   cpu.step();
   cpu.step();
   cpu.step();
@@ -240,7 +207,7 @@ void test_native_code_write_and_decoder_invalidation() {
   cpu.step();
   require((cpu.state().x & word_mask) == 2, "Changed P operand cannot execute from stale state");
   Program replacement;
-  replacement.emit("move #>3,x1");
+  replacement.immediate(DspRomRegister::x1, 3);
   bus.write({.address = data, .value = replacement.words()[0]});
   bus.write({.address = data + 1, .value = replacement.words()[1]});
   cpu.step();
@@ -249,21 +216,25 @@ void test_native_code_write_and_decoder_invalidation() {
 }
 
 void test_native_timer_input_poll_and_reset() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("btst #0,x:<<$ffff8b");
+  program.bit({.operand = {.space = DspSpace::x, .address = timer1_status},
+               .index = 0,
+               .action = BitAction::test});
   const auto wait = program.pc();
-  program.emit("brclr #12,x:<<$ffff8b,$0");
+  program.branch(
+      {.operand = {.space = DspSpace::x, .address = timer1_status}, .index = 12, .target = 0});
   const auto ready = program.pc();
-  program.emit("movep x:<<$ffff88,x0");
+  program.receive({.space = DspSpace::x, .address = timer1_count}, DspRomRegister::x0);
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   require((cpu.state().sr & 1U) == 0,
           "Known TE can be tested while the separate live DI is unknown");
   reject([&cpu] { cpu.step(); }, "A native NAND-style ready poll cannot fabricate unknown TIO1");
   bus.timers().set_tio_drive(1, false);
-  cpu.reset_spi_boot();
+  cpu.hardware_reset();
   cpu.step();
   const auto status = cpu.state().sr;
   for (unsigned index = 0; index < 3; ++index) {
@@ -277,7 +248,7 @@ void test_native_timer_input_poll_and_reset() {
           "Only an explicit high TIO1 observation releases the ready loop");
   cpu.step();
   require((cpu.state().x & word_mask) == 0, "GPIO polling does not invent timer counter progress");
-  cpu.reset_spi_boot();
+  cpu.hardware_reset();
   constexpr unsigned tcsr1 = 0xffff8b;
   constexpr unsigned input_bit = 0x1000;
   require(bus.timers().read(tcsr1, input_bit) == input_bit && bus.timers().read(tcsr1, 1) == 0,
@@ -285,12 +256,15 @@ void test_native_timer_input_poll_and_reset() {
 }
 
 void test_native_timer_w1c_word_writeback() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("bset #13,x:<<$ffff8f");
-  program.emit("movep x:<<$ffff8f,x0");
+  program.bit({.operand = {.space = DspSpace::x, .address = timer0_status},
+               .index = 13,
+               .action = BitAction::set});
+  program.receive({.space = DspSpace::x, .address = timer0_status}, DspRomRegister::x0);
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   constexpr unsigned tcsr0 = 0xffff8f;
   constexpr unsigned tlr0 = 0xffff8e;
   constexpr unsigned tcpr0 = 0xffff8d;
@@ -315,12 +289,17 @@ void test_native_timer_w1c_word_writeback() {
 }
 
 void test_native_timer_read_only_input_bit() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("bclr #12,x:<<$ffff8b");
-  program.emit("btst #12,x:<<$ffff8b");
+  program.bit({.operand = {.space = DspSpace::x, .address = timer1_status},
+               .index = 12,
+               .action = BitAction::clear});
+  program.bit({.operand = {.space = DspSpace::x, .address = timer1_status},
+               .index = 12,
+               .action = BitAction::test});
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   bus.timers().set_tio_drive(1, true);
   for (unsigned index = 0; index < program.instructions(); ++index) {
     cpu.step();
@@ -330,20 +309,29 @@ void test_native_timer_read_only_input_bit() {
 }
 
 void test_native_symbolic_gpio_bits_and_effective_address() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("movep #>1,x:<<$ffffbe");
-  program.emit("movep #>1,x:<<$ffffbd");
-  program.emit("movep #>3,x:<<$ffffbe");
-  program.emit("bclr #0,x:<<$ffffbd");
-  program.emit("bset #0,x:<<$ffffbd");
-  program.emit("bchg #0,x:<<$ffffbd");
-  program.emit("btst #0,x:<<$ffffbd");
-  program.emit("move #>$ffffbd,r0");
-  program.emit("bchg #0,x:(r0)+");
-  program.emit("bset #1,x:<<$ffffbd");
+  program.write({.space = DspSpace::x, .address = c_direction, .value = 1});
+  program.write({.space = DspSpace::x, .address = c_data, .value = 1});
+  program.write({.space = DspSpace::x, .address = c_direction, .value = 3});
+  program.bit({.operand = {.space = DspSpace::x, .address = c_data},
+               .index = 0,
+               .action = BitAction::clear});
+  program.bit(
+      {.operand = {.space = DspSpace::x, .address = c_data}, .index = 0, .action = BitAction::set});
+  program.bit({.operand = {.space = DspSpace::x, .address = c_data},
+               .index = 0,
+               .action = BitAction::change});
+  program.bit({.operand = {.space = DspSpace::x, .address = c_data},
+               .index = 0,
+               .action = BitAction::test});
+  program.immediate(DspRomRegister::r0, c_data);
+  program.emit(change_r0_post);
+  program.bit(
+      {.operand = {.space = DspSpace::x, .address = c_data}, .index = 1, .action = BitAction::set});
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   for (unsigned index = 0; index < 3; ++index) { cpu.step(); }
   constexpr std::array<unsigned, 4> carries{1, 0, 1, 0};
   constexpr std::array<unsigned, 4> levels{0, 1, 0, 0};
@@ -370,17 +358,24 @@ void test_native_symbolic_gpio_bits_and_effective_address() {
 }
 
 void test_native_symbolic_port_f_pp_bits() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("movep #>$01ffff,x:<<$fffffb");
-  program.emit("movep #>1,y:<<$fffff6");
-  program.emit("movep #>1,y:<<$fffff5");
-  program.emit("movep #>3,y:<<$fffff6");
-  program.emit("bclr #0,y:<<$fffff5");
-  program.emit("bchg #0,y:<<$fffff5");
-  program.emit("btst #0,y:<<$fffff5");
+  program.write({.space = DspSpace::x, .address = port_f_bcr, .value = port_f_bcr_enabled});
+  program.write({.space = DspSpace::y, .address = f_direction, .value = 1});
+  program.write({.space = DspSpace::y, .address = f_data, .value = 1});
+  program.write({.space = DspSpace::y, .address = f_direction, .value = 3});
+  program.bit({.operand = {.space = DspSpace::y, .address = f_data},
+               .index = 0,
+               .action = BitAction::clear});
+  program.bit({.operand = {.space = DspSpace::y, .address = f_data},
+               .index = 0,
+               .action = BitAction::change});
+  program.bit({.operand = {.space = DspSpace::y, .address = f_data},
+               .index = 0,
+               .action = BitAction::test});
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   for (unsigned index = 0; index < 4; ++index) { cpu.step(); }
   constexpr std::array<unsigned, 3> carries{1, 0, 1};
   constexpr std::array<unsigned, 3> levels{0, 1, 1};
@@ -394,21 +389,27 @@ void test_native_symbolic_port_f_pp_bits() {
 }
 
 void test_native_symbolic_bit_branches() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("movep #>4,x:<<$ffffbf");
+  program.write({.space = DspSpace::x, .address = c_control, .value = 4});
   const auto wait = program.pc();
-  program.emit("brclr #2,x:<<$ffffbd,$0");
+  program.branch({.operand = {.space = DspSpace::x, .address = c_data}, .index = 2, .target = 0});
   const auto after_wait = program.pc();
   const auto landing = after_wait + 3;
-  program.emit("jset #2,x:<<$ffffbd," + address(landing));
-  program.emit("movep x:<<$ffffbd,x0");
+  program.branch({.operand = {.space = DspSpace::x, .address = c_data},
+                  .index = 2,
+                  .target = landing,
+                  .kind = BranchKind::jump_set});
+  program.receive({.space = DspSpace::x, .address = c_data}, DspRomRegister::x0);
   require(program.pc() == landing,
           "Independent branch length skips one deliberately unknown MOVEP");
-  program.emit("nop");
-  program.emit("btst #2,x:<<$ffffbd");
+  program.emit(0);
+  program.bit({.operand = {.space = DspSpace::x, .address = c_data},
+               .index = 2,
+               .action = BitAction::test});
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   bus.gpio(blofeld::DspPort::c).set_drive({.mask = 4});
   const auto status = cpu.state().sr;
@@ -431,14 +432,24 @@ void test_native_symbolic_bit_branches() {
 }
 
 void test_native_highest_bit_and_rejected_encoding() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("btst #23,x:$20");
-  program.emit("bchg #23,x:$20");
-  program.emit("bset #23,x:$20");
-  program.emit("bclr #23,x:$20");
+  program.bit({.operand = {.space = DspSpace::x, .address = 0x20},
+               .index = word_bits - 1,
+               .action = BitAction::test});
+  program.bit({.operand = {.space = DspSpace::x, .address = 0x20},
+               .index = word_bits - 1,
+               .action = BitAction::change});
+  program.bit({.operand = {.space = DspSpace::x, .address = 0x20},
+               .index = word_bits - 1,
+               .action = BitAction::set});
+  program.bit({.operand = {.space = DspSpace::x, .address = 0x20},
+               .index = word_bits - 1,
+               .action = BitAction::clear});
   const auto invalid_pc = program.pc();
-  program.emit("btst #0,x:$20");
+  program.bit(
+      {.operand = {.space = DspSpace::x, .address = 0x20}, .index = 0, .action = BitAction::test});
   program.install(bus);
   // DSP56300FM BTST's low five opcode bits are bbbbb; 24 is outside the 0..23 range.
   constexpr unsigned bit_field = 0x1f;
@@ -448,7 +459,7 @@ void test_native_highest_bit_and_rejected_encoding() {
   constexpr unsigned target = 0x20;
   constexpr unsigned high_bit = 0x800000;
   bus.write({.space = blofeld::DspSpace::x, .address = target, .value = high_bit});
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   constexpr std::array<unsigned, 4> carries{1, 1, 0, 1};
   constexpr std::array<unsigned, 4> words{high_bit, 0, high_bit, 0};
   for (std::size_t index = 0; index < carries.size(); ++index) {
@@ -464,16 +475,24 @@ void test_native_highest_bit_and_rejected_encoding() {
 }
 
 void test_native_bit_ram_and_fifo_fallback() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("move #>$20,r0");
-  program.emit("bset #2,x:(r0)+");
-  program.emit("bclr #7,x:$20");
-  program.emit("bchg #0,x:$21");
-  program.emit("btst #0,x:$21");
-  program.emit("movep #>$a9,x:<<$ffff91");
-  program.emit("btst #0,x:<<$ffff94");
-  program.emit("movep x:<<$ffff94,x0");
+  program.immediate(DspRomRegister::r0, 0x20);
+  program.emit(set_r0_post | 2U);
+  program.bit(
+      {.operand = {.space = DspSpace::x, .address = 0x20}, .index = 7, .action = BitAction::clear});
+  program.bit({.operand = {.space = DspSpace::x, .address = adjacent_ram},
+               .index = 0,
+               .action = BitAction::change});
+  program.bit({.operand = {.space = DspSpace::x, .address = adjacent_ram},
+               .index = 0,
+               .action = BitAction::test});
+  program.write({.space = DspSpace::x, .address = shi_control, .value = shi_fifo_enabled});
+  program.bit({.operand = {.space = DspSpace::x, .address = shi_receive},
+               .index = 0,
+               .action = BitAction::test});
+  program.receive({.space = DspSpace::x, .address = shi_receive}, DspRomRegister::x0);
   program.install(bus);
   constexpr unsigned first_address = 0x20;
   constexpr unsigned second_address = 0x21;
@@ -481,7 +500,7 @@ void test_native_bit_ram_and_fifo_fallback() {
   constexpr unsigned set_value = 0x84;
   bus.write({.space = blofeld::DspSpace::x, .address = first_address, .value = initial_value});
   bus.write({.space = blofeld::DspSpace::x, .address = second_address, .value = 1});
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   cpu.step();
   require(cpu.state().r[0] == second_address &&
@@ -514,21 +533,26 @@ void test_native_bit_ram_and_fifo_fallback() {
 }
 
 void test_native_gpio_output_bits_and_external_input() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("movep #>$fff,x:<<$ffffbe");
-  program.emit("movep #>$615,x:<<$ffffbd");
-  program.emit("bclr #4,x:<<$ffffbd");
-  program.emit("bset #11,x:<<$ffffbd");
-  program.emit("movep #>$fff,y:<<$ffff9f");
-  program.emit("movep y:<<$ffff9d,x0");
+  program.write({.space = DspSpace::x, .address = c_direction, .value = gpio_pin_mask});
+  program.write({.space = DspSpace::x, .address = c_data, .value = initial_c_latch});
+  program.bit({.operand = {.space = DspSpace::x, .address = c_data},
+               .index = 4,
+               .action = BitAction::clear});
+  program.bit({.operand = {.space = DspSpace::x, .address = c_data},
+               .index = 11,
+               .action = BitAction::set});
+  program.write({.space = DspSpace::y, .address = e_control, .value = gpio_pin_mask});
+  program.receive({.space = DspSpace::y, .address = e_data}, DspRomRegister::x0);
   const auto before_reset = program.instructions();
-  program.emit("reset");
+  program.emit(reset_opcode);
   const auto after_reset = program.pc();
-  program.emit("movep #>$fff,x:<<$ffffbe");
-  program.emit("movep x:<<$ffffbd,x0");
+  program.write({.space = DspSpace::x, .address = c_direction, .value = gpio_pin_mask});
+  program.receive({.space = DspSpace::x, .address = c_data}, DspRomRegister::x0);
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   constexpr unsigned inputs = 0xa53;
   constexpr unsigned all_pins = 0xfff;
   constexpr unsigned output = 0xe05;
@@ -550,15 +574,16 @@ void test_native_gpio_output_bits_and_external_input() {
 }
 
 void test_software_reset_preserves_clock_and_memory_mode() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("move #>$600085,omr");
-  program.emit("move #>$55,r0");
-  program.emit("reset");
+  program.immediate(DspRomRegister::omr, retained_layout);
+  program.immediate(DspRomRegister::r0, retained_r0);
+  program.emit(reset_opcode);
   const auto after_reset = program.pc();
-  program.emit("nop");
+  program.emit(0);
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   cpu.step();
   bus.advance_instruction_cycles(3);
@@ -593,12 +618,17 @@ void test_software_reset_preserves_clock_and_memory_mode() {
               bus.timers().read(timer_control, timer_compare_flag | 1U) == 0 &&
               bus.timers().read(timer_control, timer_input) == timer_input,
           "Executed RESET clears timer count/control/flags and retains the external TIO drive");
-  cpu.reset_spi_boot();
+  cpu.assert_reset(true);
   constexpr unsigned pinit_high_control = 0x04601d;
   require(bus.pll().read() == pinit_high_control && cpu.state().omr == reset_omr,
           "Hardware reset samples PINIT and restores the selected SPI boot profile");
   require(bus.read({.space = blofeld::DspSpace::x, .address = 0x10000}) == input,
           "Hardware reset restores the original map and retains the physical RAM contents");
+  require(machine.clock().hardware_reset_active(),
+          "PINIT-high reset state is captured while the actual CPU remains held");
+  reject([&cpu] { cpu.step(); }, "Held PINIT-high reset cannot execute a native instruction");
+  reject([&machine] { machine.release_hardware_reset(); },
+         "PLL-enabled recovery cannot silently reuse bypass EXTAL timing");
 }
 
 void test_hardware_reset_restores_core_dma_priority() {
@@ -606,19 +636,20 @@ void test_hardware_reset_restores_core_dma_priority() {
   constexpr unsigned previous_mode = 0xa;
   for (unsigned priority = 0; priority < 4; ++priority) {
     const auto configured = (priority << priority_shift) | previous_mode;
-    blofeld::DspBus bus;
+    blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+    auto &bus = machine.bus();
     Program program;
-    program.emit("move #>" + address(configured) + ",omr");
-    program.emit("reset");
+    program.immediate(DspRomRegister::omr, configured);
+    program.emit(reset_opcode);
     program.install(bus);
-    blofeld::DspCore cpu(bus);
+    Driver cpu(machine);
     cpu.step();
     require(cpu.state().omr == configured,
             "A native MOVEC can configure every documented core-DMA priority");
     cpu.step();
     require(cpu.state().omr == configured,
             "The executed RESET instruction preserves CPU priority and operating-mode bits");
-    cpu.reset_spi_boot();
+    cpu.hardware_reset();
     require(cpu.state().omr == reset_omr && cpu.state().pc == boot,
             "External hardware reset restores literal CDP=11 and mode-five pins from every prior "
             "priority");
@@ -626,16 +657,17 @@ void test_hardware_reset_restores_core_dma_priority() {
 }
 
 void test_short_immediates_and_register_repeat_count() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("move #<5,x0");
-  program.emit("move #<7,r0");
-  program.emit("move #<9,a1");
-  program.emit("rep x0");
+  program.emit(short_x0_five);
+  program.emit(short_r0_seven);
+  program.emit(short_a1_nine);
+  program.emit(repeat_x0);
   const auto body = program.pc();
-  program.emit("move x0,x:(r0)+");
+  program.emit(store_x0_post);
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   for (unsigned index = 0; index < 4; ++index) { cpu.step(); }
   // DSP56300FM immediate-short parallel move: X0 is fractional; R0/A1 are integers.
   constexpr unsigned fractional_five = 0x050000;
@@ -654,16 +686,17 @@ void test_short_immediates_and_register_repeat_count() {
 }
 
 void test_bounded_rep_steps() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("move #>$200,r0");
-  program.emit("move #>5,x0");
-  program.emit("rep #3");
+  program.immediate(DspRomRegister::r0, 0x200);
+  program.immediate(DspRomRegister::x0, 5);
+  program.emit(repeat_three);
   const auto body = program.pc();
-  program.emit("move x0,x:(r0)+");
+  program.emit(store_x0_post);
   const auto end = program.pc();
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   cpu.step();
   cpu.step();
@@ -679,24 +712,28 @@ void test_bounded_rep_steps() {
 }
 
 void test_bounded_do_waits_for_real_spi_words() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   bus.shi().observe_spi({});
   Program program;
-  program.emit("movep #>0,x:<<$ffff90");
-  program.emit("movep #>$29,x:<<$ffff91");
-  program.emit("move #>$100,r0");
+  program.write({.space = DspSpace::x, .address = shi_rate, .value = 0});
+  program.write({.space = DspSpace::x, .address = shi_control, .value = shi_polled_words});
+  program.immediate(DspRomRegister::r0, 0x100);
   const auto loop = program.pc() + 2;
   Program body;
-  body.emit("jclr #17,x:<<$ffff91," + address(loop));
-  body.emit("movep x:<<$ffff94,a0");
-  body.emit("move a0,x:(r0)+");
-  body.emit("nop");
+  body.branch({.operand = {.space = DspSpace::x, .address = shi_control},
+               .index = shi_fifo_bit,
+               .target = loop,
+               .kind = BranchKind::jump_clear});
+  body.receive({.space = DspSpace::x, .address = shi_receive}, DspRomRegister::a0);
+  body.emit(store_a0_post);
+  body.emit(0);
   const auto last = loop + static_cast<unsigned>(body.words().size()) - 1;
-  program.emit("do #2," + address(last + 1));
-  require(program.words().back() == last, "Assembler end label encodes the preceding NOP as LA");
+  program.emit(do_two, last);
+  require(program.words().back() == last, "Literal DO encodes the preceding NOP as LA");
   program.append(body);
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   cpu.step();
   cpu.step();
@@ -723,17 +760,18 @@ void test_bounded_do_waits_for_real_spi_words() {
 }
 
 void test_rep_latches_single_word_without_stale_cache() {
-  blofeld::DspBus bus;
+  blofeld::OwnDspMachine machine(blofeld::test::dma_test::native_clocks);
+  auto &bus = machine.bus();
   Program program;
-  program.emit("move #>5,x0");
-  program.emit("move #>7,x1");
-  program.emit("rep #3");
+  program.immediate(DspRomRegister::x0, 5);
+  program.immediate(DspRomRegister::x1, 7);
+  program.emit(repeat_three);
   const auto body = program.pc();
-  program.emit("move x0,x:<$10");
+  program.emit(short_x0_store);
   const auto after = program.pc();
   program.jump(body);
   program.install(bus);
-  blofeld::DspCore cpu(bus);
+  Driver cpu(machine);
   cpu.step();
   cpu.step();
   cpu.step();
@@ -743,7 +781,7 @@ void test_rep_latches_single_word_without_stale_cache() {
   require(bus.read({.space = blofeld::DspSpace::x, .address = first_target}) == 5,
           "First REP pass writes the independent original operand");
   Program modified;
-  modified.emit("move x1,x:<$11");
+  modified.emit(short_x1_store);
   bus.install_rom({.start = body, .words = modified.words()});
   for (unsigned index = 0; index < 2; ++index) {
     bus.write({.space = blofeld::DspSpace::x, .address = first_target, .value = 0});
@@ -785,6 +823,7 @@ int main() {
     test_bounded_rep_steps();
     test_bounded_do_waits_for_real_spi_words();
     test_rep_latches_single_word_without_stale_cache();
+    pinit_checks();
     std::cout << "Native DSP reset, strict memory, arithmetic, code mutation and bounded "
                  "DO/REP/SPI checks passed\n";
     return 0;

@@ -1,15 +1,19 @@
 Native DSP56371 reference execution
 
-The pinned C++ dsp56300 interpreter is integrated through DspCore and DspBus.
-Its JIT is disabled in this reference path. No host synthesizer or host bootstrap
-loader supplies executed DSP program words. Original chip data remain external
-local inputs. The default headless CLI runs the MCU; its optional reference-board
-profile coordinates MCU/DSP under explicit reference inputs and scheduling
-(reference-board.txt). Complete original board boot/audio remain unqualified.
-The session transport is separate (host-audio.txt); isolated original master
-output arithmetic and access scope are tested in dsp-master-output.txt.
+The standalone Board runtime uses the independent core pinned in dependencies.json;
+see own-dsp-integration.txt. Original chip data remain external local inputs.
+The retained native_dsp gate uses this core and authored instruction fields,
+without the SDK assembler/backend: 18 groups preserve 69 independent conditions
+for reset, strict memory, arithmetic, P writes, GPIO/TIO, FIFO, bits and DO/REP.
+PINIT-high assertion additionally has 14 chip/timeline snapshots and 28 original/
+fresh-owner hold continuations; PLL-enabled recovery remains visibly unsupported.
+These component checks do not establish complete original boot, MIDI or audio.
+Host transport remains separate (host-audio.txt).
 
-Native adaptation
+The remaining DspCore/SDK harness is test-only while its retained cases migrate.
+The adaptation details below describe that legacy harness, not the normal runtime.
+
+Remaining legacy test adapter
 Unhooked atomic admission reads only its typed PC/SR/OMR/VBA context. SR uses
 the native register getter, including lazy CCR materialization. Timing hooks
 retain the full pre-step DspState observation. Native instructions, interrupt

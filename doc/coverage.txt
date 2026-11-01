@@ -1141,6 +1141,11 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           documented OMR CDP=11 plus mode5;
                                           native MOVEC/software RESET retain
                                           their separate effects (dsp-reset.txt).
+                                          Independent native_dsp retains 18 groups
+                                          and 69 comparison conditions. PINIT-high
+                                          reset capture has 14 chip/timeline states,
+                                          28 hold continuations; PLL release refuses
+                                          before any phase/time/CPU change.
                                           All five documented RAM window layouts
                                           decoded, with retained direct X/Y data
                                           and three subsequent switch units.

@@ -267,9 +267,8 @@ void OwnDspMachine::check_hardware_reset(const OwnDspResetInputs inputs) const {
   constexpr unsigned mode_mask = 15;
   constexpr unsigned spi_mode = 5;
   if (inputs.mode_known != mode_mask || inputs.mode_levels != spi_mode ||
-      !inputs.pinit.has_value() || inputs.pinit.value() || inputs.recovery_cycles < 2 ||
-      clock_.hardware_reset_active()) {
-    throw Fault("Own DSP reset requires stable mode5/PINIT-low and "
+      !inputs.pinit.has_value() || inputs.recovery_cycles < 2 || clock_.hardware_reset_active()) {
+    throw Fault("Own DSP reset requires stable mode5/known PINIT and "
                 "at least two recovery periods pc=" +
                 hex(cpu_.registers().pc, 6));
   }
@@ -320,7 +319,19 @@ std::uint64_t OwnDspMachine::advance_hardware_reset_ticks(const std::uint64_t ma
 
 void OwnDspMachine::release_hardware_reset() {
   require_unclocked("reset-release");
+  check_reset_release();
   clock_.release_hardware_reset();
+}
+
+void OwnDspMachine::check_reset_release() const {
+  // PEN captures either observed PINIT level on assertion. PLL-enabled reset
+  // recovery/lock is not yet modeled; it cannot use the bypass-EXTAL contract.
+  constexpr unsigned pll_enabled = 0x2000;
+  const auto control = bus_.pll().read();
+  if ((control & pll_enabled) != 0) {
+    throw Fault("Own DSP reset-release requires qualified PLL recovery at X:0xfffffd value=" +
+                hex(control, 6) + " pc=" + hex(cpu_.registers().pc, 6));
+  }
 }
 
 dsp56300::InstructionProgress

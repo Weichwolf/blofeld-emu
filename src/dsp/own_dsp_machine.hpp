@@ -102,6 +102,7 @@ private:
   void require_unclocked(const char *operation) const;
   void perform_hardware_reset(OwnDspResetInputs inputs);
   void check_hardware_reset(OwnDspResetInputs inputs) const;
+  void check_reset_release() const;
   [[nodiscard]] static std::optional<DspMemoryAccess>
   dma_native_footprint(const dsp56300::PendingInstruction &pending);
   [[nodiscard]] OwnDspDmaCycleResult dma_cycle(DspDmaInputs inputs, bool admit_native);

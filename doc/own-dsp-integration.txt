@@ -46,8 +46,15 @@ Its unchanged five-window/25-transition expectations are joined by 16 clocked
 switch checkpoints and 32 same/fresh continuations, preserving actual MOVEC/JMP
 effects, the three-period model delay and strict unresolved-target fetches.
 
-OwnDspMachine pairs the bus, adapter, own core and interrupt owner. It requires
-explicit mode5/PINIT-low observations and at least two supplied recovery periods.
+The retained native_dsp gate uses authored instruction fields and this core,
+without the SDK assembler/backend: 18 groups retain 69 independent comparison
+conditions. See dsp-core.txt for its reset/memory/ALU/code/GPIO/TIO/FIFO/loop scope.
+
+OwnDspMachine pairs the bus, adapter, own core and interrupt owner. Assertion
+requires mode5 and known PINIT. Only PINIT-low has a supplied bypass-recovery
+contract of at least two periods. High PINIT captures PCTL.PEN and held CPU state;
+chip/timeline release explicitly refuses unqualified PLL recovery. 14 snapshots
+and 28 original/fresh hold continuations cover whole/fractional EXTAL cuts.
 The existing DspRunClock holds execution closed through assertion and recovery;
 partial reference periods and the exact recovery endpoint are retained. Inputs
 are a caller-supplied stable reset contract, not recovered physical board wiring.

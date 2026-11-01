@@ -79,3 +79,16 @@ References: DSP56300FM2.3.3; DSP56371UM table2-6; DSP56371 data sheet table19
 and note4. Their reset/recovery minima do not supply an exact physical latency.
 Asynchronous in-flight abort, other boot modes, PLL locking, physical recovery
 latency and real reset/ready routing remain unqualified.
+
+Independent chip/timeline PINIT capture
+OwnDspMachine assertion accepts mode5 with either explicitly known PINIT level.
+High PINIT sets PCTL.PEN, yielding the documented 04601d reset control while CPU,
+RAM and reset-register capture follow the same native reset transaction. Both
+chip and timeline release refuse PLL-enabled recovery before changing phase,
+time or CPU state; no bypass period, lock completion or running clock is invented.
+Fourteen trusted chip/timeline snapshots at seven whole/fractional hold cuts
+retain 28 original/fresh-owner continuations. They check PCTL/register/RAM state,
+EXTAL accounting, blocked execution and contextual non-mutating release refusal.
+PINIT-low completion retains its existing supplied bypass-recovery contract.
+
+  ctest --test-dir build/strict -R '^(native_dsp|own_dsp_reset|own_dsp_timeline_checkpoint)$' --output-on-failure

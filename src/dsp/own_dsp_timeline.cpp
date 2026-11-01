@@ -118,6 +118,7 @@ std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
 void OwnDspTimeline::release_hardware_reset() {
   check_owner();
   if (fetch_) { throw Fault("Own DSP timeline reset is already complete"); }
+  machine_.check_reset_release();
   machine_.clock_.release_hardware_reset();
 }
 
