@@ -53,23 +53,25 @@ XNADR at X:ffffd1 and the XADR aliases at X:ffffd2/3. DAX data now enters actual
 buffers/metadata (dsp-dax.txt); a full XADR write fails visibly. GPIO, peripheral
 status/configuration DMA and unimplemented peripheral sources reject.
 Unknown/protected/unmapped memory is
-never supplied as zero or silently discarded. DspMachine adds current native
-PC/OMR to phase errors; trusted owner checkpoints include all DMA state and the
-held source value. Source cursor/receiver state remains caller-owned.
-The memory-footprint arbiter now also admits these actual peripheral writes
-against qualified core RAM/ROM use and read-only DMA-controller inspection
-(dsp-bank-arbitration.txt). Core data-peripheral occupancy, controller writes,
-unsupported I/O and automatic native timing remain separate refusals.
+never supplied as zero or silently discarded. The independent-core fixture adds
+current native PC/OMR to standalone phase errors; trusted owner checkpoints
+include all DMA state and the held source value. Source cursor/receiver state
+remains caller-owned.
+The memory-footprint arbiter admits these actual peripheral writes against
+qualified core RAM/ROM use and selected DMA-controller access
+(dsp-bank-arbitration.txt, own-dsp-integration.txt). Other peripheral collisions
+and unqualified timing remain visible failures.
 
-This is a standalone instruction/peripheral reference experiment. Automatic
-clocked native execution rejects an active DMA channel: core/DMA bank contention,
-per-cycle instruction bus accesses, request synchronization and dynamic internal
-deadlines still need integration. Explicit phases do not establish those facts.
-The separate bank arbiter resolves real storage/OMR aliases and can admit or
-delay the selected phase against explicitly supplied reference core occupancy;
-it reports held-word core stalls (dsp-bank-arbitration.txt).
-Native semantic bus observations are available (dsp-native-access.txt); they do
-not yet supply arbitration timestamps or stalls.
+This gate retains standalone instruction/peripheral reference experiments:
+untimed native steps do not advance DMA, and external HCKT observations/grants
+remain explicit. The bank arbiter resolves real storage/OMR aliases against
+supplied reference core occupancy and reports held-word core stalls
+(dsp-bank-arbitration.txt). A separate independent-core automatic F1/F2 case
+executes foreground NOPs while three literal X-to-Y words pass through actual
+DMA arbitration; source/destination/value, DE clear and clock progression have
+independent expectations. Advancing a bare reference clock with active DMA
+still refuses before consuming a period. Selected effect-per-cycle admission
+is an explicit model, not measured instruction timing or HCKT/core synchronization.
 The isolated original dual-enable fragment and repeating two-channel ring have
 additional reference coverage in dsp-audio-dma.txt. No physical HCKT/core frequency,
 complete original DMA startup, physical DAX output, normal-runtime PCM transport,
@@ -91,15 +93,17 @@ After those queries, exactly three explicit waited cycles clear only the enabled
 DTD bits without any I/O. A further 144 own native MOVEP/BTST programs cover every
 status bit with each channel enabled: known fields change only Carry/PC;
 unknown fields retain contextual failure and do not retire the instruction.
-Own unclocked native MOVEP programs configure
-both ESAI maps and DMA registers. Explicit HCKT observations and DMA grants feed
-an opposite-edge receiver;66 complete serial words and every actual RAM/TX transfer
-match independent expectations, including ring wrap. A checkpoint between the
+Independent-core programs start with actual mode5/PINIT-low reset and authored
+literal MOVEP/MOVEC/BTST/JCLR words, without a legacy assembler. Untimed native
+MOVEP programs configure both ESAI maps and DMA registers. Explicit HCKT
+observations and DMA grants feed an opposite-edge receiver;66 complete serial
+words and every actual RAM/TX transfer match independent expectations, including
+ring wrap. A checkpoint between the
 first source read and destination write reproduces that stream. A separate same-
 edge DMA0/DMA3 test proves a real ESAI refill cannot swallow a full-XADR failure. An
 independent map test distinguishes all three DAX data addresses from forbidden
-status/control DMA. A real
-clocked native DE write faults instead of bypassing unsupported bus arbitration.
+status/control DMA. The no-arbitration clock refusal and separate automatic
+three-word copy distinguish unsupported timing from actual granted transfers.
 These bounds and explicit reference phases do not qualify original firmware audio.
 An isolated original voice/mix/master composition now supplies finite DMA0
 transfers and pin-decoded frames (dsp-voice-pcm.txt); original repeating DMA

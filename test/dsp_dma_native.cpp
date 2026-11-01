@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
 #include "dma_fixture.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "esai_clock_fixture.hpp"
 #include "esai_fixture.hpp"
 
@@ -40,40 +40,47 @@ void native_masked_status_case(const StatusBitCase input) {
   constexpr unsigned channels = 6;
   const auto [channel, bit] = input;
   const auto register_offset = channel * 4;
-  DspMachine machine;
-  DspProgram code;
+  OwnDspMachine machine(native_clocks);
+  NativeProgram code;
   for (const auto [address, value] : {std::pair{source0, ring_start},
                                       std::pair{destination0, destination},
                                       std::pair{counter0, 0U},
                                       std::pair{control0, word_copy}}) {
-    code.emit("movep #>" + number(value) + ",x:<<" + number(address - register_offset));
+    code.write({.space = DspSpace::x, .address = address - register_offset, .value = value});
   }
-  code.emit(bit < channels ? "andi #$fe,ccr" : "ori #1,ccr");
-  code.emit("btst #" + std::to_string(bit) + ",x:<<" + number(status));
-  code.install(machine.bus());
-  machine.cpu().reset_spi_boot();
-  for (unsigned step = 0; step < 5; ++step) { machine.cpu().step(); }
-  const auto before = machine.cpu().debug_state();
+  // FM MOVEC SR seeds the opposite Carry; high-pp BTST selects DSTR's real bit.
+  constexpr unsigned move_sr = 0x05f439;
+  constexpr unsigned masked_sr = 0xc00300;
+  constexpr unsigned btst_status = 0x0bb420;
+  code.word(move_sr);
+  code.word(masked_sr | (bit < channels ? 0U : 1U));
+  code.word(btst_status | bit);
+  reset_native(machine, code);
+  for (unsigned step = 0; step < 5; ++step) { step_native(machine); }
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
   const bool unknown = bit == channel || (bit >= 8 && bit <= 11);
   if (unknown) {
-    const auto error = rejects([&] { machine.cpu().step(); });
-    require(error.contains("cycle timing") && error.contains("pc=" + hex(before.cpu.pc, 6)) &&
-                error.contains("omr=" + hex(before.cpu.omr, 6)) &&
+    const auto error = rejects([&] { step_native(machine); });
+    require(error.contains("cycle timing") && error.contains("pc=" + hex(before.pc, 6)) &&
+                error.contains("omr=" + hex(before.omr, 6)) &&
                 error.contains("mask=" + hex(1U << bit, 6)) &&
-                machine.cpu().state().sr == before.cpu.sr &&
-                machine.cpu().debug_state().native_instructions == before.native_instructions,
+                machine.cpu().registers() == before &&
+                machine.cpu().progress().instructions == progress.instructions,
             "Native selected unknown DMA fields fail with exact CPU/register/mask context");
-    const auto stopped = machine.cpu().debug_state();
-    require(rejects([&] { machine.cpu().step(); }).contains("requires reset") &&
-                machine.cpu().debug_state() == stopped,
+    const auto stopped = machine.cpu().registers();
+    const auto stopped_progress = machine.cpu().progress();
+    require(!rejects([&] { step_native(machine); }).empty() && machine.io().failure() &&
+                machine.cpu().registers() == stopped &&
+                machine.cpu().progress() == stopped_progress,
             "Rejected unknown status cannot resume or change native state without recovery");
   } else {
-    machine.cpu().step();
-    auto expected = before.cpu;
+    step_native(machine);
+    auto expected = before;
     ++expected.pc;
     expected.sr = (expected.sr & ~1U) | (bit < channels ? 1U : 0U);
-    require(machine.cpu().state() == expected &&
-                machine.cpu().debug_state().native_instructions == before.native_instructions + 1,
+    require(machine.cpu().registers() == expected &&
+                machine.cpu().progress().instructions == progress.instructions + 1,
             "FM BTST changes only Carry and PC for an independent known DTD or reserved bit");
   }
   require(machine.bus().read({.space = DspSpace::x, .address = control0 - register_offset}) ==
@@ -92,11 +99,10 @@ void native_masked_status_without_time() {
   }
 }
 
-unsigned program(DspProgram &code, const bool second, const bool with_dax) {
+unsigned program(NativeProgram &code, const bool second, const bool with_dax) {
   unsigned count = 0;
   const auto put = [&](const DspSpace space, const unsigned address, const unsigned value) {
-    code.emit("movep #>" + number(value) + (space == DspSpace::x ? ",x:<<" : ",y:<<") +
-              number(address));
+    code.write({.space = space, .address = address, .value = value});
     ++count;
   };
   const auto base = second ? secondary_base : primary_base;
@@ -122,27 +128,32 @@ unsigned program(DspProgram &code, const bool second, const bool with_dax) {
     constexpr unsigned secondary_one_word = 0x88b240;
     put(DspSpace::x, control0 - 12, secondary_one_word);
   }
-  code.emit("nop");
-  code.emit("movep x:<<$ffffef,x0");
-  code.emit("movep x:<<$ffffed,y0");
-  code.emit("jclr #8,x:<<$fffff4," + number(code.pc()));
+  // FM high-pp MOVEP loads DSAR0->X0/DCO0->Y0, then JCLR DACT back to itself.
+  constexpr unsigned source_x0 = 0x08442f;
+  constexpr unsigned count_y0 = 0x08462d;
+  constexpr unsigned poll_dact = 0x0ab488;
+  code.word(0);
+  code.word(source_x0);
+  code.word(count_y0);
+  const auto poll = code.pc();
+  code.word(poll_dact);
+  code.word(poll);
   return count;
 }
 
-void initialize(DspMachine &machine,
+void initialize(OwnDspMachine &machine,
                 const DspEsaiInstance instance,
-                const DspProgram &code,
+                const NativeProgram &code,
                 const unsigned instructions) {
-  code.install(machine.bus());
+  reset_native(machine, code);
   for (unsigned address = ring_start; address <= ring_last; ++address) {
     machine.bus().write(
         {.space = DspSpace::x, .address = address, .value = first_value + address - ring_start});
   }
-  machine.cpu().reset_spi_boot();
   machine.bus().observe_esai_transmit(instance,
                                       {.high_clock = false, .timing = esai_clock::timing});
-  static_cast<void>(machine.advance_dma({.cycle = 0, .timing = timing, .grant = grant}));
-  for (unsigned i = 0; i < instructions; ++i) { machine.cpu().step(); }
+  static_cast<void>(dma(machine, {.cycle = 0, .timing = timing, .grant = grant}));
+  for (unsigned i = 0; i < instructions; ++i) { step_native(machine); }
 }
 
 struct Stream {
@@ -150,7 +161,7 @@ struct Stream {
   std::string bits;
   std::vector<DspDmaWord> transfers;
 
-  void step(DspMachine &machine, const DspEsaiInstance instance) {
+  void step(OwnDspMachine &machine, const DspEsaiInstance instance) {
     const auto old = machine.bus().esai_clock_outputs(instance);
     machine.bus().observe_esai_transmit(
         instance, {.high_clock = edge % 2 != 0, .timing = esai_clock::timing});
@@ -160,9 +171,10 @@ struct Stream {
       if (data.driven != 0) { bits.push_back(esai::sample(data, 0)); }
     }
     const std::array declared_fetch{
-        DspMemoryAccess{.target = {.address = machine.cpu().state().pc}},
+        DspMemoryAccess{.target = {.address = machine.cpu().registers().pc}},
         DspMemoryAccess{.target = {.space = DspSpace::x, .address = source0}}};
-    const auto progress = machine.advance_dma(
+    const auto progress = dma(
+        machine,
         {.cycle = edge, .timing = timing, .grant = grant},
         {.accesses = declared_fetch, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
     require(!progress.core_stall,
@@ -189,8 +201,8 @@ std::string expected_stream() {
 
 void serial_refill(const bool second) {
   const auto instance = second ? DspEsaiInstance::secondary : DspEsaiInstance::primary;
-  DspMachine machine;
-  DspProgram code;
+  OwnDspMachine machine(native_clocks);
+  NativeProgram code;
   const auto count = program(code, second, false);
   initialize(machine, instance, code, count);
   Stream stream;
@@ -200,7 +212,7 @@ void serial_refill(const bool second) {
   require(stream.transfers.empty() && stream.bits.empty() &&
               machine.bus().read({.space = DspSpace::x, .address = status}) == zero_active,
           "The first real TDE edge has read DMA0 but has not fabricated a destination write");
-  machine.cpu().step(); // A real native NOP does not clock the standalone DMA model.
+  step_native(machine); // A real native NOP does not clock the standalone DMA model.
   const auto checkpoint = machine.checkpoint();
   const auto saved = stream;
   const auto expected = expected_stream();
@@ -228,22 +240,22 @@ void serial_refill(const bool second) {
     require(machine.bus().read(
                 {.space = second ? DspSpace::y : DspSpace::x, .address = base + esai::status}) == 0,
             "Timely real DMA refills prevent both underrun and fabricated empty flags");
-    machine.cpu().step();
-    machine.cpu().step();
+    step_native(machine);
+    step_native(machine);
     constexpr unsigned remaining_counter = 0xf40;
-    require(machine.cpu().state().x == ring_start + 2 &&
-                machine.cpu().state().y == remaining_counter,
+    require(machine.cpu().registers().x == ring_start + 2 &&
+                machine.cpu().registers().y == remaining_counter,
             "Actual native MOVEP reads see the literal updated pointer and counter");
-    const auto poll = machine.cpu().state().pc;
-    machine.cpu().step();
-    require(machine.cpu().state().pc == poll,
+    const auto poll = machine.cpu().registers().pc;
+    step_native(machine);
+    require(machine.cpu().registers().pc == poll,
             "Actual native masked DACT polling does not invent or read unknown repeating DTD");
   }
 }
 
 void dax_fifo_failure() {
-  DspMachine machine;
-  DspProgram code;
+  OwnDspMachine machine(native_clocks);
+  NativeProgram code;
   const auto count = program(code, true, true);
   initialize(machine, DspEsaiInstance::secondary, code, count);
   // Actual disabled DAX storage: A, B, then the single pending XADR word.
@@ -256,43 +268,79 @@ void dax_fifo_failure() {
   require(stream.transfers.size() == 1 && stream.transfers[0].channel == 0,
           "The higher-priority real ESAI refill completes before DMA3");
   const auto error = rejects([&] {
-    static_cast<void>(
-        machine.advance_dma({.cycle = stream.edge, .timing = timing, .grant = grant}));
+    static_cast<void>(dma(machine, {.cycle = stream.edge, .timing = timing, .grant = grant}));
   });
   require(error.contains("channel=3") && error.contains("0xffffd2") &&
-              error.contains("pc=" + hex(machine.cpu().state().pc, 6)),
+              error.contains("pc=" + hex(machine.cpu().registers().pc, 6)),
           "A latched same-edge DMA3 request survives TDE clear and visibly faults on full XADR");
   const auto again = rejects([&] {
-    static_cast<void>(
-        machine.advance_dma({.cycle = stream.edge, .timing = timing, .grant = grant}));
+    static_cast<void>(dma(machine, {.cycle = stream.edge, .timing = timing, .grant = grant}));
   });
   require(error == again &&
               machine.bus().read({.space = DspSpace::x, .address = source0 - 12}) == ring_start,
           "The rejected DAX destination retains the held word and exact same failing cycle");
 }
 
-void automatic_timing_rejects() {
-  constexpr unsigned extal = 12000000;
-  DspMachine machine(
-      DspRunContract{.clock = {.extal_hz = extal,
-                               .timebase_hz = extal,
-                               .switch_timing = DspClockSwitch::reference_instruction_boundary},
-                     .timing = DspRunTiming::native_internal_estimates});
-  DspProgram code;
+void automatic_dma_arbitration() {
+  OwnDspMachine machine(native_clocks);
+  NativeProgram code;
+  constexpr unsigned words = 3;
+  constexpr unsigned payload = 0x123450;
+  constexpr unsigned sentinel = 0x654321;
   for (const auto [address, value] : {std::pair{source0, ring_start},
                                       std::pair{destination0, destination},
-                                      std::pair{counter0, 0U},
+                                      std::pair{counter0, words - 1},
                                       std::pair{control0, software_copy}}) {
-    code.emit("movep #>" + number(value) + ",x:<<" + number(address));
+    code.write({.space = DspSpace::x, .address = address, .value = value});
   }
-  code.install(machine.bus());
-  machine.bus().pll().observe_pinit(false);
-  machine.cpu().reset_spi_boot();
-  for (unsigned i = 0; i < 3; ++i) { machine.cpu().step(); }
-  const auto error = rejects([&] { machine.cpu().step(); });
-  require(error.contains("0xff0006") && error.contains("automatic") && error.contains("0xfffff4") &&
-              machine.timing_faulted(),
-          "Native timed execution cannot silently bypass missing DMA/core bus arbitration");
+  constexpr unsigned foreground_words = 64;
+  for (unsigned i = 0; i < foreground_words; ++i) { code.word(0); }
+  reset_native(machine, code);
+  for (unsigned i = 0; i < words; ++i) {
+    machine.bus().write({.space = DspSpace::x, .address = ring_start + i, .value = payload + i});
+    machine.bus().write({.space = DspSpace::y, .address = destination + i, .value = sentinel});
+  }
+  for (unsigned i = 0; i < 4; ++i) { step_native(machine); }
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto ticks = machine.clock().elapsed_ticks();
+  const auto error = rejects([&] { static_cast<void>(machine.advance_reference_cycle()); });
+  require(error.contains("DMA arbitration") && error.contains("X:0xfffff4") &&
+              error.contains("pc=" + hex(before.pc, 6)) && machine.cpu().registers() == before &&
+              machine.cpu().progress() == progress && machine.clock().elapsed_ticks() == ticks &&
+              !machine.bus().last_dma_cycle(),
+          "A bare reference clock cannot bypass actual DMA arbitration or consume a period");
+  OwnDspFetch fetch(machine);
+  std::vector<DspDmaWord> transfers;
+  constexpr unsigned bound = 128;
+  for (unsigned cycle = 0; cycle < bound; ++cycle) {
+    const auto actual = fetch.advance_dma_automatic(
+        {.cycle = cycle, .known_requests = 15, .timing = timing, .grant = grant},
+        OwnDspAutomaticTiming::one_effect_per_cycle);
+    require(!actual.native || actual.native->fault.kind == dsp56300::FaultKind::none,
+            "Actual native foreground remains healthy during automatic DMA arbitration");
+    if (actual.dma.word) { transfers.push_back(*actual.dma.word); }
+    if (transfers.size() == words &&
+        machine.cpu().progress().instructions > progress.instructions) {
+      for (unsigned i = 0; i < words; ++i) {
+        const auto &word = transfers.at(i);
+        require(
+            word.channel == 0 && word.source == DspDmaAddress{.address = ring_start + i} &&
+                word.destination ==
+                    DspDmaAddress{.space = DspDmaSpace::y, .address = destination + i} &&
+                word.value == payload + i &&
+                machine.bus().read({.space = DspSpace::y, .address = destination + i}) ==
+                    payload + i,
+            "Every automatic DMA read/write and native RAM endpoint matches literal expectations");
+      }
+      require(machine.bus().read({.space = DspSpace::x, .address = control0}) ==
+                      (software_copy & ~enable) &&
+                  machine.clock().elapsed_ticks() > ticks,
+              "Actual arbitration clears DE after three words and advances real reference periods");
+      return;
+    }
+  }
+  throw Fault("Automatic native DMA copy exceeded its bounded reference periods");
 }
 
 void memory_failures() {
@@ -302,13 +350,12 @@ void memory_failures() {
   constexpr unsigned protected_rom = 0x4000;
   constexpr unsigned gpio_data = 0xffff9d;
   for (const auto target : {destination, protected_rom, gpio_data}) {
-    DspMachine machine;
-    DspProgram code;
-    code.emit("nop");
-    code.install(machine.bus());
-    machine.cpu().reset_spi_boot();
+    OwnDspMachine machine(native_clocks);
+    NativeProgram code;
+    code.word(0);
+    reset_native(machine, code);
     static_cast<void>(
-        machine.advance_dma({.cycle = 0, .known_requests = 1, .timing = timing, .grant = grant}));
+        dma(machine, {.cycle = 0, .known_requests = 1, .timing = timing, .grant = grant}));
     for (const auto [address, data] : {std::pair{source0, source_address},
                                        std::pair{destination0, target},
                                        std::pair{counter0, 0U},
@@ -318,21 +365,21 @@ void memory_failures() {
     const DspDmaInputs read_cycle{
         .cycle = 1, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant};
     require(rejects([&] {
-              static_cast<void>(machine.advance_dma(read_cycle));
+              static_cast<void>(dma(machine, read_cycle));
             }).contains("Unknown DSP memory read at X:0x000200"),
             "Unknown real RAM never becomes a zero DMA source or consumes the request");
     machine.bus().write({.space = DspSpace::x, .address = source_address, .value = value});
-    static_cast<void>(machine.advance_dma(read_cycle));
+    static_cast<void>(dma(machine, read_cycle));
     machine.bus().write({.space = DspSpace::x, .address = source_address, .value = sentinel});
     const DspDmaInputs write_cycle{
         .cycle = 2, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant};
     if (target == destination) {
-      const auto word = machine.advance_dma(write_cycle);
+      const auto word = dma(machine, write_cycle);
       require(word && word->value == value &&
                   machine.bus().read({.space = DspSpace::y, .address = target}) == value,
               "The real destination receives the captured value despite later source mutation");
     } else {
-      const auto error = rejects([&] { static_cast<void>(machine.advance_dma(write_cycle)); });
+      const auto error = rejects([&] { static_cast<void>(dma(machine, write_cycle)); });
       require(error.contains(target == protected_rom ? "Protected DSP ROM" : "peripheral write") &&
                   error.contains("pc=0xff0000") && error.contains("cycle=2") &&
                   machine.bus().read({.space = DspSpace::x, .address = control0}) == word_copy &&
@@ -351,13 +398,12 @@ void dax_data_map() {
   constexpr unsigned dax_status = 0xffffd4;
   constexpr unsigned x_word_copy = 0x880240;
   for (const auto target : {control, non_audio, audio_a, audio_b, dax_status}) {
-    DspMachine machine;
-    DspProgram code;
-    code.emit("nop");
-    code.install(machine.bus());
-    machine.cpu().reset_spi_boot();
+    OwnDspMachine machine(native_clocks);
+    NativeProgram code;
+    code.word(0);
+    reset_native(machine, code);
     static_cast<void>(
-        machine.advance_dma({.cycle = 0, .known_requests = 1, .timing = timing, .grant = grant}));
+        dma(machine, {.cycle = 0, .known_requests = 1, .timing = timing, .grant = grant}));
     constexpr unsigned payload = 0x400; // Valid XNADR fields and a known audio word.
     machine.bus().write({.space = DspSpace::x, .address = ring_start, .value = payload});
     for (const auto [address, value] : {std::pair{source0, ring_start},
@@ -366,19 +412,20 @@ void dax_data_map() {
                                         std::pair{control0, x_word_copy}}) {
       machine.bus().write({.space = DspSpace::x, .address = address, .value = value});
     }
-    static_cast<void>(machine.advance_dma(
-        {.cycle = 1, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant}));
+    static_cast<void>(
+        dma(machine,
+            {.cycle = 1, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant}));
     const bool data_register = target >= non_audio && target <= audio_b;
     const DspDmaInputs write_cycle{
         .cycle = 2, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant};
     if (data_register) {
-      const auto word = machine.advance_dma(write_cycle);
+      const auto word = dma(machine, write_cycle);
       require(word && word->value == payload &&
                   machine.bus().read({.space = DspSpace::x, .address = control0}) ==
                       (x_word_copy & ~enable),
               "Both XADR aliases and XNADR accept their actual data-register transfer");
     } else {
-      const auto error = rejects([&] { static_cast<void>(machine.advance_dma(write_cycle)); });
+      const auto error = rejects([&] { static_cast<void>(dma(machine, write_cycle)); });
       require(error.contains("Unsupported DSP DMA peripheral write") &&
                   error.contains(hex(target, 6)) &&
                   machine.bus().read({.space = DspSpace::x, .address = control0}) == x_word_copy,
@@ -393,7 +440,7 @@ void native_checks() {
   serial_refill(false);
   serial_refill(true);
   dax_fifo_failure();
-  automatic_timing_rejects();
+  automatic_dma_arbitration();
   memory_failures();
   dax_data_map();
 }
