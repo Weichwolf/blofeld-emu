@@ -3931,3 +3931,12 @@ reference_checkpoint pass under ASan/UBSan and separate TSan; the current
 headless binary has no foreign-core symbols. See nand-board.txt. Durable NAND
 publication, original normal-instrument startup and all instrument acceptance
 requirements remain pending; this connection does not complete those claims.
+
+Reserved internal-I/O writes: functional_decode gives documented reserved X/Y
+slots no selected device while retaining unknown reads and assigned-register
+failures. Independent118-slot/three-word checks, actual MOVEP state/flags, fresh
+native restoration and31 DMA request offsets pass with low-window/map/Board
+regressions under ASan/UBSan and separate TSan. Both real DMA phases overlap the
+native write without synthetic data; the cold-NAND Board uses the policy.
+See dsp-reserved-write-decoder.txt. Complete original instrument acceptance and
+durable update/recovery remain pending.

@@ -15,6 +15,9 @@ peripheral state machines and coarser scheduling are allowed when their tested
 contracts preserve those observable results. Execute the original Blofeld firmware
 and DSP synthesis; firmware patches, skipped firmware routines, fabricated
 instrument results and a host synthesizer do not satisfy this objective.
+Prefer the simplest functional model that preserves instrument behavior. Refine
+internal timing or wiring only when needed for firmware execution or observable
+instrument effects; physical implementation detail alone does not justify it.
 Reconstruct missing hardware properties independently from primary documentation,
 actual firmware accesses, available PCB photographs and reproducible offline
 experiments. Physical disassembly and measurement are unavailable and must not

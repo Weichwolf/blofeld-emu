@@ -6,6 +6,7 @@
 #include "dsp/dsp_dma_registers.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
+#include "dsp/dsp_io_map.hpp"
 #include "dsp/dsp_timers.hpp"
 
 #include <algorithm>
@@ -132,6 +133,12 @@ std::optional<DspMemoryAccess> bit_peripheral(const DspCoreBusUse core) {
   return controller_access(*selected) ? std::nullopt : selected;
 }
 
+bool unselected_io_write(const DspBus &bus, const DspMemoryAccess access) {
+  return access.phase == DspMemoryPhase::execute && access.operation == DspMemoryOperation::write &&
+         bus.write_contract() == DspWriteContract::functional_decode &&
+         dsp_io_selection(access.target) == DspIoSelection::reserved;
+}
+
 std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreBusUse core) {
   // Short-I/O occupancy is separate from RAM. This never dispatches a core transaction;
   // native E1 still owns register validation and the actual read/write. Writable DMA
@@ -149,7 +156,8 @@ std::optional<DspMemoryAccess> core_peripheral(const DspBus &bus, const DspCoreB
   const bool program_pair = program_store_pair(core);
   for (const auto access : core.accesses) {
     const auto target = access.target;
-    if (target.space != DspSpace::p) { ++data_accesses; }
+    if (unselected_io_write(bus, access)) { continue; }
+    data_accesses += static_cast<unsigned>(target.space != DspSpace::p);
     const bool io = (target.space == DspSpace::x || target.space == DspSpace::y) &&
                     target.address >= io_base && target.address <= DspDma::full_word;
     if (access.phase == DspMemoryPhase::peripheral_sample) {
@@ -199,8 +207,14 @@ bool core_conflict(const DspBus &bus, const DspCoreBusUse core, const DspMemoryA
   return conflict;
 }
 
-void check_access(const DspDmaAddress address, const bool write) {
+void check_access(const DspBus &bus, const DspDmaAddress address, const bool write) {
   if (address.space == DspDmaSpace::p || address.address < io_base) { return; }
+  if (write &&
+      unselected_io_write(bus,
+                          {.target = {.space = space(address.space), .address = address.address},
+                           .operation = DspMemoryOperation::write})) {
+    return;
+  }
   constexpr unsigned primary_tx = 0xffffa0;
   constexpr unsigned secondary_tx = 0xffff80;
   constexpr unsigned dax_non_audio = 0xffffd1;
@@ -253,12 +267,12 @@ std::optional<DspDmaWord> DspBus::advance_dma_with_admission(DspDmaInputs inputs
       inputs,
       {.read =
            [this](const DspDmaAddress address) {
-             check_access(address, false);
+             check_access(*this, address, false);
              return read({.space = space(address.space), .address = address.address});
            },
        .write =
            [this](const DspDmaAddress address, const auto value) {
-             check_access(address, true);
+             check_access(*this, address, true);
              write({.space = space(address.space), .address = address.address, .value = value});
            },
        .admit = admission});
@@ -289,7 +303,7 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
     if (selected.space != DspDmaSpace::p && selected.address >= io_base) {
       // Active DMA permits only physical memory or DMA-controller reads in the core footprint.
       // FM10.2/APR23 section5: these resources do not contend with a data register.
-      check_access(selected, write);
+      check_access(*this, selected, write);
       return DspDmaGrant::available;
     }
     const bool conflict = core_conflict(*this, core, target);

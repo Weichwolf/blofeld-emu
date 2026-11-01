@@ -113,7 +113,8 @@ void guards() {
                 bus.write({.space = DspSpace::y, .address = y_low_end, .value = 0x1000000});
               }).contains("exceeds 24 bits"),
           "High memory, P, reserved I/O and invalid words retain their actual failures");
-  for (unsigned raw = 2; raw <= std::numeric_limits<std::uint8_t>::max(); ++raw) {
+  constexpr unsigned first_invalid = static_cast<unsigned>(DspWriteContract::functional_decode) + 1;
+  for (unsigned raw = first_invalid; raw <= std::numeric_limits<std::uint8_t>::max(); ++raw) {
     const auto invalid = std::bit_cast<DspWriteContract>(static_cast<std::uint8_t>(raw));
     static_cast<void>(rejects([&] { bus.set_write_contract(invalid); }));
   }

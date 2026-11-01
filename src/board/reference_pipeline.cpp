@@ -39,7 +39,7 @@ void Board::prepare_dsp() {
         std::ranges::any_of(config_.dsp_events, ready)) {
       throw Fault("NAND Ready owns DSP timer1 input; a second input source is unsupported");
     }
-    native_->dsp.bus().set_write_contract(DspWriteContract::internal_writable_storage);
+    native_->dsp.bus().set_write_contract(DspWriteContract::functional_decode);
     native_->dsp.bus().shi().set_reset_contract(ShiResetContract::selected_quiescent_reference);
     native_->dsp.bus().set_esai_configuration_contract(
         DspEsaiInstance::secondary, DspEsaiConfigurationContract::cold_unclocked_reference);

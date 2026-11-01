@@ -1,0 +1,45 @@
+Functional reserved internal-I/O write decoding
+
+DspWriteContract::functional_decode combines the low internal-storage contract
+with an explicit no-register-select interpretation for documented reserved X/Y
+I/O slots. DSP56371UM tables3-7/3-8 assign X:ffff80 as reserved; Y:ffff80 is TX0_1.
+The input document identity is pinned in hardware/sources.json. The assignment
+is documented; no selected register on a write is a functional instrument model,
+not a measured response of the silicon. Strict and internal_writable_storage
+retain their existing reserved-peripheral failures.
+
+Validate space, address and the full 24-bit word before accepting a store.
+Only a slot classified reserved by the existing map can be unselected. Assigned
+but unsupported registers, reserved reads, RMW old-value requests, P space and
+external unmapped addresses retain visible failures. No register latch, read
+value, acknowledgement, data word or interrupt is supplied. The native instruction
+still executes; unselected_writes counts each genuine commit. Resource queries
+select no storage and do not change the count. Reset and trusted copies retain
+the policy; reset starts a new count epoch.
+
+A no-select write consumes neither a RAM bank nor a peripheral register resource.
+Native F1/F2 and genuine DMA phases can overlap it. A real DMA destination phase
+may discard its already-read source word at a reserved slot; the controller
+advances through its actual request/read/write sequence. DMA reads of unsupported
+peripheral data keep their existing guards. Assigned ESAI/DAX endpoints still use
+their actual register, clock, request and data-transfer models.
+
+  cmake --build --preset strict --target blofeld-dsp-reserved-write-decoder-test \
+    blofeld-dsp-write-decoder-test blofeld-dsp-io-map-test \
+    blofeld-reference-nand-test blofeld-reference-pipeline-test blofeld-headless
+  ctest --preset strict -j1 --output-on-failure \
+    -R '^(dsp_reserved_write_decoder|dsp_write_decoder|dsp_io_map|reference_nand|reference_pipeline)$'
+
+All five groups pass under ASan/UBSan and separate TSan. Independent map rows
+cover all118 reserved slots and three distinct words per slot. Native MOVEP
+checks whole-register/flag and two-word PC expectations, a fresh owner and31
+request offsets. Both actual DMA read/write phases overlap the committed native
+store; real RAM transfers and a reserved DMA destination are checked. Existing
+low-window decoding, strict-map and Board regressions remain passing.
+
+The regular cold-NAND Board profile explicitly selects this interpretation.
+Original reset-to-instrument experiments remain separate from these component
+results. The known original zero store at P002eb1/Xffff80 motivates the model;
+complete instrument behavior, MIDI/audio and durable update/recovery remain open.
+No manufacturer program bytes, automatic fuzzing or physical-device traffic are
+included in these checks.

@@ -66,3 +66,8 @@ reports and full event/census/phase records match across instrumentation.
 
 The separate logical-GPIO continuation in dsp-gpio-write-decoder.txt reaches the
 first original NAND-ready input without changing this storage contract.
+
+The separate functional_decode policy additionally selects no device for writes
+to documented reserved internal I/O. It is used by the regular cold-NAND Board
+profile. The narrower policy described above keeps its strict peripheral checks.
+See dsp-reserved-write-decoder.txt for native/DMA evidence and remaining limits.

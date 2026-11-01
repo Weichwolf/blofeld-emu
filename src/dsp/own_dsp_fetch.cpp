@@ -236,6 +236,10 @@ std::optional<DspMemoryAccess>
 OwnDspFetch::native_overlap(const DspProgramFetchView &state,
                             const dsp56300::PendingInstruction &pending) const {
   const auto access = OwnDspMachine::dma_native_footprint(pending);
+  if (access && access->operation == DspMemoryOperation::write &&
+      machine_.bus_.unselected_write(access->target)) {
+    return access;
+  }
   if (!access || !state.pending_address) { return access; }
   constexpr unsigned io_base = 0xffff80;
   const DspMemoryAccess program{.target = {.address = *state.pending_address}};
