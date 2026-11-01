@@ -3940,3 +3940,13 @@ regressions under ASan/UBSan and separate TSan. Both real DMA phases overlap the
 native write without synthetic data; the cold-NAND Board uses the policy.
 See dsp-reserved-write-decoder.txt. Complete original instrument acceptance and
 durable update/recovery remain pending.
+
+Connected original NAND/runtime continuation: the declared FF-tail initial image
+preserves all56238 source bytes. Actual protocol and retired CPU reads match all
+56496 cells;107 independent read deadlines and all18287 unique resident DSP words
+are checked before the loader handoff. A genuine joint MCU/DSP/NAND checkpoint
+reproduces identical suffixes twice under ASan/UBSan. The reserved original store
+commits, then original audio DMA enable visibly rejects the absent ESAI HCKT
+source at Yffff96. A diagnostic-decoder replay reproduces the prior failure.
+See own-dsp-nand-reference.json and dsp-reserved-write-decoder.txt. This is
+connected startup evidence, not complete instrument boot, audio or persistence.

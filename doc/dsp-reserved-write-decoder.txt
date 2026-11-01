@@ -38,8 +38,18 @@ store; real RAM transfers and a reserved DMA destination are checked. Existing
 low-window decoding, strict-map and Board regressions remain passing.
 
 The regular cold-NAND Board profile explicitly selects this interpretation.
-Original reset-to-instrument experiments remain separate from these component
-results. The known original zero store at P002eb1/Xffff80 motivates the model;
-complete instrument behavior, MIDI/audio and durable update/recovery remain open.
+A separate local cold-start experiment executes the original MCU, document boot
+ROM and NAND loader. It reads all56238 source bytes plus258 explicitly chosen
+unused FF cells, verifies all18287 unique resident DSP words, and enters the
+original runtime. A genuine joint checkpoint at P000108 reproduces two identical
+native suffixes, MCU instruction censuses and memory-phase records. The original
+zero store at P002eb1/Xffff80 commits once without selecting a register. Execution
+then reaches audio DMA enable at P002ebb; the missing ESAI HCKT clock remains a
+visible failure at Yffff96. Restoring the same checkpoint with the diagnostic
+decoder reproduces the earlier reserved-write failure. The reference manifest
+own-dsp-nand-reference.json records the scope and local audit identity.
+This qualifies the connected continuation under ASan/UBSan, not full instrument
+behavior, physical NAND contents or original audio. MIDI/audio and durable
+update/recovery remain open.
 No manufacturer program bytes, automatic fuzzing or physical-device traffic are
 included in these checks.

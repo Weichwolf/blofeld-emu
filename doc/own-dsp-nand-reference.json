@@ -30,5 +30,29 @@
     "physical_part_qualified": false,
     "timing_qualified": false,
     "loader_handoff_proven": false
+  },
+  "connected_cold_ff_candidate": {
+    "qualification": "Original reset/NAND loading and native runtime continuation under ASan/UBSan; instrument operation incomplete",
+    "initial_image_sha256": "de64537c1c33b10ec94ab13ae2570dabc27a94ccb1afab5c734871c5443900f7",
+    "original_source_bytes_preserved_and_read": 56238,
+    "explicit_virtual_unused_ff_bytes": 258,
+    "protocol_and_retired_cpu_bytes_matched": 56496,
+    "commanded_pages_and_read_deadlines_checked": 107,
+    "resident_unique_words_matched": 18287,
+    "loader_handoff_tick": 264019138,
+    "timebase_hz": 1080000000,
+    "runtime_core_hz": 216000000,
+    "genuine_joint_checkpoint_replay": true,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "reserved_original_store_commits": 1,
+    "local_audit": "doc/local/connected-nand/warm-replay/audit.json",
+    "local_audit_sha256": "8e79771dc04b806230e63c6a28cbac125b15d7a433ffd7f6d8e4417afc941a2f",
+    "physical_part_qualified": false,
+    "full_instrument_boot_proven": false,
+    "original_audio_proven": false,
+    "nvm_unchanged_qualified": false,
+    "durable_update_recovery_qualified": false,
+    "next_missing_input": "ESAI_1 HCKT source at Y:ffff96 during original audio DMA enable"
   }
 }
