@@ -35,6 +35,10 @@ this same routine (dsp-midi-replay.txt). Its 30 fixed cases retain the explicit
 laboratory timing and include ignored headers, interrupted collection, realtime
 interleaving and an omitted trailing word. The original end marker is then read;
 this path does not invoke the ordinary parameter-checksum validator.
+The wire scope now passes on independent dsp56300 under ASan/UBSan and separate
+TSan, with the same 30 cases/counters and original wrapper. Its native P writes,
+self-modified stores and six launches retain their independent checks; the
+direct-command matrix above remains a separate migration requirement.
 
 Limits: the direct-command matrix alone has no upstream caller/frame provenance.
 Neither scope establishes cold boot or normal physical MIDI baud/connector

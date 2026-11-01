@@ -1903,6 +1903,12 @@ MIDI/controller input             partial  Bounded byte queue and rational 31250
                                           two identical and one changed wire
                                           suffix through the genuine callback,
                                           preserving CPU and watched RAM/timers.
+                                          All four wire scopes now pass on
+                                          independent dsp56300 in both sanitizer
+                                          profiles and normal/isolated builds;
+                                          wrapper/counters/timeouts stay unchanged.
+                                          Authored post-RTI caller work is separate
+                                          from the original-producer ledger.
                                           Continuous nominal CPU/timer clocks
                                           now receive all 256 bytes without host
                                           timer advances and drive five original

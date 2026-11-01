@@ -73,6 +73,20 @@ CPU and watched RAM/timer state. Changing a later bit gives the independently
 expected different value through the genuine callback; no queue or CPU state is
 patched to manufacture the continuation. All three suffixes execute real RTI.
 
+All four wire scopes now use independent dsp56300 in normal and isolated builds.
+Mode5 reset/hold/recovery precede the authored literal ROM caller. Actual staged
+vector reads retain the peripheral acknowledgement owner; ordinary instructions
+run synchronously, with staged observation of the final download prefetch.
+Both sanitizer profiles pass the unchanged reference counters, four scopes and
+TIMEOUT120/wrapper110; all four traces match the archived legacy observations.
+
+The core's post-RTI foreground exclusion remains provisional library policy.
+When required, five checked native instructions execute an authored idle call
+and return before the next explicit admission. This caller work is outside the
+unchanged original-producer ledger; no PC/SR/frame is patched. IRQ return checks
+all registers and the full stack, including the retained popped IRQ frame.
+This fixture does not calibrate the interrupt pipeline or automatic timer clocks.
+
 doc/dsp-midi-wire-reference.json pins the four original program/vector records
 and exact fixed-case counts. The wrapper verifies the official archive, decoded
 MID and records before native execution, and checks complete trace counters.

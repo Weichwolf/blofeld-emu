@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_native_access.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_io.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_rom_program.hpp"
+#include "esai_fixture.hpp"
 #include "firmware/firmware.hpp"
 
 #include <algorithm>
@@ -14,14 +16,40 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
 using blofeld::DspSpace;
-using blofeld::test::require;
+using blofeld::test::DspRomRegister;
+using blofeld::test::esai::require;
+constexpr unsigned word_mask = 0xffffff;
+constexpr unsigned word_bits = 24;
+// FM MOVE X:ea,R6; JSR (R6); high-X MOVEP #imm. Authored ROM caller only.
+constexpr unsigned load_selector = 0x66f000;
+constexpr unsigned call_r6 = 0x0be680;
+constexpr unsigned priority_immediate = 0x08f4be;
+constexpr unsigned maximum_effects = 64;
+enum class AccessKind : std::uint8_t { read, write };
+
+struct CompletedAccess {
+  AccessKind kind;
+  blofeld::DspAddress target;
+  unsigned pc;
+  std::optional<unsigned> value;
+};
+
+using Observer = std::function<void(const CompletedAccess &)>;
+
+struct BorrowedObserver {
+  const Observer &completed;
+};
+
+using NativeState = std::pair<dsp56300::Registers, dsp56300::Progress>;
 constexpr unsigned download_program = 0x2361;
 constexpr unsigned download_entry = download_program;
 constexpr unsigned download_target = 0x600;
@@ -161,7 +189,7 @@ void install(blofeld::DspBus &bus, const blofeld::Firmware &firmware) {
 [[nodiscard]] unsigned bend_word(const unsigned lsb, const unsigned msb) {
   const auto centered =
       static_cast<std::int32_t>(lsb | (msb << 7)) - static_cast<std::int32_t>(midi_center);
-  return static_cast<unsigned>(centered * midi_scale) & blofeld::test::word_mask;
+  return static_cast<unsigned>(centered * midi_scale) & word_mask;
 }
 
 struct SampleExpectation {
@@ -209,7 +237,7 @@ std::vector<unsigned> configuration_bytes(const HeaderFrame header) {
 std::vector<unsigned> data_bytes(const Transfer transfer) {
   std::vector<unsigned> decoded;
   for (const auto word : own_payload) {
-    for (unsigned shift = 0; shift < blofeld::test::word_bits; shift += 8) {
+    for (unsigned shift = 0; shift < word_bits; shift += 8) {
       decoded.push_back((word >> shift) & byte_mask);
     }
   }
@@ -261,37 +289,43 @@ public:
     bus.write({.space = DspSpace::x, .address = field, .value = field_seed});
     bus.write({.space = DspSpace::x, .address = field - 1, .value = ring_guard});
     bus.write({.space = DspSpace::x, .address = field + 1, .value = ring_guard});
-    bus.timers().set_tio_drive(0, true);
-    bus.timers().observe_synchronized_tio(0, true);
-    blofeld::test::DspProgram code;
-    code.immediate("omr", switch_omr);
-    code.emit("nop");
-    code.emit("nop");
-    code.emit("nop");
+    blofeld::test::DspRomProgram code;
+    code.immediate(DspRomRegister::omr, switch_omr);
+    for (unsigned index = 0; index < 3; ++index) { code.word(0); }
     const auto mapped = code.pc();
-    code.immediate("sr", ordinary_status);
-    code.immediate("a1", timestamp_seed);
+    code.immediate(DspRomRegister::sr, ordinary_status);
+    code.immediate(DspRomRegister::a1, timestamp_seed);
     for (unsigned index = 0; index < 8; ++index) {
-      code.immediate("m" + std::to_string(index), blofeld::test::word_mask);
+      code.immediate(static_cast<DspRomRegister>(static_cast<unsigned>(DspRomRegister::m0) + index),
+                     word_mask);
     }
-    code.emit("movep #>$200,x:<<$fffffe");
-    code.immediate("r6", original_program);
-    code.emit("jsr (r6)");
+    code.word(priority_immediate);
+    code.word(0x200);
+    code.immediate(DspRomRegister::r6, original_program);
+    code.word(call_r6);
     foreground_ = code.pc();
-    code.emit("move x:>$50,r6");
-    code.emit("jsr (r6)");
+    code.word(load_selector);
+    code.word(harness_selector);
+    code.word(call_r6);
     complete_ = code.pc();
-    code.emit("nop");
+    code.word(0);
     code.word(jump);
     code.word(foreground_);
-    code.install(bus);
-    for (unsigned step = 0; machine_.cpu().state().pc != foreground_; ++step) {
-      require(step < step_limit, "Own setup and original configuration must return");
-      if (machine_.cpu().state().pc == mapped) { bus.advance_instruction_cycles(3); }
-      machine_.cpu().step();
+    idle_ = code.pc();
+    code.word(literal_rts); // Authored no-work caller target between input samples.
+    blofeld::test::dma_test::NativeProgram program;
+    for (const auto word : code.words()) { program.word(word); }
+    blofeld::test::dma_test::reset_native(machine_, program);
+    bus.timers().set_tio_drive(0, true);
+    bus.timers().observe_synchronized_tio(0, true);
+    bus.write({.space = DspSpace::x, .address = harness_selector, .value = idle_});
+    for (unsigned setup_step = 0; machine_.cpu().registers().pc != foreground_; ++setup_step) {
+      require(setup_step < step_limit, "Own setup and original configuration must return");
+      if (machine_.cpu().registers().pc == mapped) { bus.advance_instruction_cycles(3); }
+      step();
     }
     require(
-        machine_.cpu().state().omr == switch_omr &&
+        machine_.cpu().registers().omr == switch_omr &&
             bus.timers().read(control, control_without_di) == capture_control &&
             bus.timers().read(compare) == 1 && bus.timers().read(counter) == 0 &&
             bus.read({.space = DspSpace::x, .address = priority}) == 0x200,
@@ -316,8 +350,7 @@ public:
     for (unsigned value = 0; value < midi_values; ++value) {
       const auto centered =
           static_cast<std::int32_t>(value) - static_cast<std::int32_t>(midi_center);
-      const auto expected =
-          static_cast<std::uint32_t>(centered * midi_scale) & blofeld::test::word_mask;
+      const auto expected = static_cast<std::uint32_t>(centered * midi_scale) & word_mask;
       deliver(value & midi_data_mask, {.word = expected_field_, .completed = false});
       if (value == 0 || value == midi_center || value == midi_values - 1) {
         deliver(clock_byte, {.word = expected_field_, .completed = false});
@@ -352,19 +385,19 @@ public:
     expected_byte_ = first_msb;
     const auto context = begin_interrupt(input_handler);
     // One real handler instruction retires before the trusted checkpoint.
-    machine_.cpu().step(producer_observer());
-    require(machine_.cpu().state().sp == 1 && words_ == 2 && read(field) == field_seed,
+    step(producer_observer());
+    require(machine_.cpu().registers().sp == 1 && words_ == 2 && read(field) == field_seed,
             "Snapshot is inside the genuine third-bit ISR with an incomplete MIDI message");
     const auto saved = machine_.checkpoint();
-    const auto before_cpu = machine_.cpu().debug_state();
+    const auto before_cpu = native_state();
     const auto before_host = host_state();
     const auto before_memory = signature();
-    std::optional<blofeld::DspDebugState> first_cpu;
+    std::optional<NativeState> first_cpu;
     std::vector<unsigned> first_memory;
     for (unsigned replay = 0; replay < 3; ++replay) {
       machine_.restore(saved);
       restore_host(before_host);
-      require(machine_.cpu().debug_state() == before_cpu && signature() == before_memory,
+      require(native_state() == before_cpu && signature() == before_memory,
               "Restore preserves whole CPU, active IRQ frame and every watched RAM cell");
       const auto byte = replay == 2 ? changed_msb : first_msb;
       expected_byte_ = byte;
@@ -383,10 +416,10 @@ public:
                   returns_ == expected_irq_count,
               "Each restored suffix completes exactly one real byte and one original callback");
       if (replay == 0) {
-        first_cpu = machine_.cpu().debug_state();
+        first_cpu = native_state();
         first_memory = signature();
       } else if (replay == 1) {
-        require(first_cpu.has_value() && machine_.cpu().debug_state() == first_cpu.value() &&
+        require(first_cpu.has_value() && native_state() == first_cpu.value() &&
                     signature() == first_memory,
                 "Identical remaining wire bits replay every CPU and watched memory effect");
       } else {
@@ -446,37 +479,132 @@ private:
   }
 
   struct InterruptContext {
-    blofeld::DspDebugState before;
+    NativeState before;
     unsigned returns;
   };
 
-  [[nodiscard]] blofeld::DspNativeAccessObserver producer_observer() {
-    return {.observe = [this](const blofeld::DspNativeAccess &access) {
+  [[nodiscard]] NativeState native_state() const {
+    return {machine_.cpu().registers(), machine_.cpu().progress()};
+  }
+
+  void healthy(const dsp56300::Fault fault) const {
+    if (fault.kind == dsp56300::FaultKind::none) { return; }
+    std::string cause = "Original wire native instruction fault";
+    const auto &failure = machine_.io().failure();
+    if (failure && failure->cause) {
+      try {
+        std::rethrow_exception(failure->cause);
+      } catch (const std::exception &error) { cause = error.what(); }
+    }
+    throw blofeld::Fault(cause + " pc=" + blofeld::hex(fault.pc, 6) +
+                         " omr=" + blofeld::hex(machine_.cpu().registers().omr, 6) +
+                         " address=" + blofeld::hex(fault.address, 6));
+  }
+
+  void step(const Observer &observer = {}) {
+    BorrowedObserver borrowed{.completed = observer};
+    const auto before = machine_.cpu().progress().instructions;
+    const auto ticks = machine_.clock().elapsed_ticks();
+    const blofeld::DspIoWriteObserver writes{
+        .context = &borrowed,
+        .completed = [](void *context, const blofeld::DspStore &store, const unsigned pc) {
+          const auto &completed = static_cast<BorrowedObserver *>(context)->completed;
+          if (completed) {
+            completed({.kind = AccessKind::write,
+                       .target = {.space = store.space, .address = store.address},
+                       .pc = pc,
+                       .value = store.value});
+          }
+        }};
+    if (machine_.interrupt_pending() || machine_.cpu().registers().pc == final_payload_prefetch) {
+      const blofeld::DspIoReadObserver reads{
+          .context = &borrowed,
+          .completed = [](void *context, const blofeld::DspIoReadAccess &access) {
+            const auto &completed = static_cast<BorrowedObserver *>(context)->completed;
+            if (completed) {
+              completed({.kind = AccessKind::read,
+                         .target = access.address,
+                         .pc = access.pc,
+                         .value = access.value});
+            }
+          }};
+      auto result = machine_.begin_fetch(dsp56300::InstructionPublication::retirement);
+      for (unsigned effect = 0; effect < maximum_effects && result.pending && !result.retired &&
+                                result.fault.kind == dsp56300::FaultKind::none;
+           ++effect) {
+        result = machine_.advance_observed(result.pending->ticket, reads, writes);
+      }
+      healthy(result.fault);
+      require(result.retired, "Bounded real vector or final payload read retires");
+    } else {
+      const auto result = machine_.run_unclocked(writes);
+      healthy(result.fault);
+      require(result.dispatches == 1, "One synchronous instruction actually retires");
+    }
+    require(machine_.cpu().progress().instructions == before + 1 &&
+                machine_.clock().elapsed_ticks() == ticks,
+            "One actual instruction retires without supplying automatic timer clocks");
+  }
+
+  [[nodiscard]] Observer producer_observer() {
+    return [this](const CompletedAccess &access) {
       watch(access);
       observe(access);
-    }};
+    };
+  }
+
+  [[nodiscard]] dsp56300::InstructionWords foreground_words() {
+    const auto &bus = machine_.bus();
+    require(machine_.cpu().registers().pc == foreground_ &&
+                bus.inspect_program(foreground_) == load_selector &&
+                bus.inspect_program(foreground_ + 1) == harness_selector,
+            "Actual authored foreground metadata is unchanged");
+    return {.address = foreground_, .opcode = load_selector, .extension = harness_selector};
+  }
+
+  void finish_caller() {
+    // The library's post-RTI foreground exclusion is provisional pipeline policy.
+    // A complete authored idle call clears it with real instructions, no PC/SR edits.
+    const auto words = foreground_words();
+    if (machine_.cpu().interruptible(words)) { return; }
+    require(read(harness_selector) == idle_, "Only the authored idle target may run between IRQs");
+    const auto before = machine_.cpu().progress().instructions;
+    const std::array sequence{foreground_, foreground_ + 2, idle_, complete_, complete_ + 1};
+    for (const auto pc : sequence) {
+      require(machine_.cpu().registers().pc == pc, "Exact native idle-call instruction sequence");
+      step();
+    }
+    require(machine_.cpu().progress().instructions == before + sequence.size() &&
+                machine_.cpu().interruptible(foreground_words()),
+            "Five authored retirements return to an interruptible native foreground boundary");
   }
 
   [[nodiscard]] InterruptContext begin_interrupt(const unsigned entry) {
-    const InterruptContext context{.before = machine_.cpu().debug_state(), .returns = returns_};
-    machine_.cpu().step(producer_observer());
-    require(machine_.cpu().state().pc == entry && machine_.cpu().state().sp == 1,
+    finish_caller();
+    const InterruptContext context{.before = native_state(), .returns = returns_};
+    require(machine_.admit_interrupt(foreground_words()), "Actual pending timer IRQ is admitted");
+    step(producer_observer());
+    require(machine_.cpu().registers().pc == entry && machine_.cpu().registers().sp == 1,
             "Actual native original vector enters its real handler and pushes one frame");
     return context;
   }
 
   void finish_interrupt(const InterruptContext &context) {
-    for (unsigned steps = 0; machine_.cpu().state().pc != foreground_; ++steps) {
+    for (unsigned steps = 0; machine_.cpu().registers().pc != foreground_; ++steps) {
       require(steps < step_limit, "Original handler must execute its actual finite return path");
-      const auto pc = machine_.cpu().state().pc;
-      machine_.cpu().step(producer_observer());
+      const auto pc = machine_.cpu().registers().pc;
+      step(producer_observer());
       if (pc == capture_return || pc == sample_return || pc == input_return) { ++returns_; }
     }
-    const auto after = machine_.cpu().debug_state();
-    require(after.cpu == context.before.cpu && returns_ == context.returns + 1 &&
+    const auto after = native_state();
+    auto expected = context.before.first;
+    // RTI preserves the caller and live stack; the popped slot retains its real IRQ frame.
+    expected.stack.at((expected.sp + 1) % dsp56300::stack_entries) =
+        (std::uint64_t{expected.pc} << word_bits) | expected.sr;
+    require(after.first == expected && returns_ == context.returns + 1 &&
                 machine_.bus().timers().interrupt_vectors().empty(),
             "Original RTI restores all foreground registers and acknowledges its real source");
-    instructions_ += after.native_instructions - context.before.native_instructions;
+    instructions_ += after.second.instructions - context.before.second.instructions;
     ++irqs_;
   }
 
@@ -510,8 +638,8 @@ private:
     const auto bit = expectation.bit;
     const auto words_before = expectation.words_before;
     const auto received = bit + 1;
-    const auto prefix = ((byte & ((1U << received) - 1)) << (blofeld::test::word_bits - received)) |
-                        (sample_seed >> received);
+    const auto prefix =
+        ((byte & ((1U << received) - 1)) << (word_bits - received)) | (sample_seed >> received);
     require(read(state_word) == (received == byte_bits ? sample_seed : prefix),
             "Original partial shift equals the independent LSB-first bit prefix and sentinel");
     require(words_ == words_before + (received == byte_bits ? 1U : 0U),
@@ -567,39 +695,38 @@ private:
         {.space = DspSpace::x, .address = harness_selector, .value = parser_entry});
     unsigned entries = 0;
     unsigned writes = 0;
-    const auto observer =
-        blofeld::DspNativeAccessObserver{.observe = [&](const blofeld::DspNativeAccess &access) {
-          watch(access);
-          if (access.stage == blofeld::DspNativeAccessStage::after &&
-              access.kind == blofeld::DspNativeAccessKind::write &&
-              access.target.space == DspSpace::x && access.target.address == field) {
-            require(completed && access.value == expected,
-                    "Every original pitch field write matches independent signed14-bit MIDI math");
-            ++writes;
-          }
-        }};
-    for (unsigned steps = 0; machine_.cpu().state().pc != complete_; ++steps) {
+    const Observer observer = [&](const CompletedAccess &access) {
+      watch(access);
+      if (access.kind == AccessKind::write && access.target.space == DspSpace::x &&
+          access.target.address == field) {
+        require(completed && access.value == expected,
+                "Every original pitch field write matches independent signed14-bit MIDI math");
+        ++writes;
+      }
+    };
+    for (unsigned steps = 0; machine_.cpu().registers().pc != complete_; ++steps) {
       require(steps < parser_steps,
               "Original parser must consume the actual produced byte and return");
-      const auto cpu = machine_.cpu().state();
+      const auto cpu = machine_.cpu().registers();
       if (cpu.pc == callback_entry) {
-        require(cpu.sp == 2 && cpu.stack_pc == callback_return,
+        require(cpu.sp == 2 && (cpu.stack.at(cpu.sp) >> word_bits) == callback_return,
                 "Actual original nested dispatcher JSR enters the genuine pitch callback");
         ++entries;
       }
-      machine_.cpu().step(observer);
+      step(observer);
     }
     require(
         entries == (completed ? 1U : 0U) && writes == entries && read(field) == expected &&
-            machine_.cpu().state().sp == 0 && read(consumer) == read(producer) &&
+            machine_.cpu().registers().sp == 0 && read(consumer) == read(producer) &&
             read(field - 1) == ring_guard && read(field + 1) == ring_guard,
         "Original consumer drains its real producer cursor and returns with the independent value");
     expected_field_ = expected;
     callbacks_ += entries;
-    for (unsigned steps = 0; machine_.cpu().state().pc != foreground_; ++steps) {
+    for (unsigned steps = 0; machine_.cpu().registers().pc != foreground_; ++steps) {
       require(steps < step_limit, "Own harness returns naturally to the next wire-input boundary");
-      machine_.cpu().step();
+      step();
     }
+    machine_.bus().write({.space = DspSpace::x, .address = harness_selector, .value = idle_});
   }
 
   std::array<unsigned, 8> protocol_state() {
@@ -616,7 +743,7 @@ private:
     const std::array spaces{DspSpace::p, DspSpace::p, DspSpace::x, DspSpace::y};
     expected_target_ = spaces.at(transfer.mode);
     packet_writes_ = 0;
-    expected_trailing_ = transfer.omitted ? blofeld::test::word_mask : transfer.trailing << 16U;
+    expected_trailing_ = transfer.omitted ? word_mask : transfer.trailing << 16U;
     for (const auto space : {DspSpace::p, DspSpace::x, DspSpace::y}) {
       for (unsigned offset = 0; offset < 6; ++offset) {
         bus.write({.space = space, .address = download_target - 1 + offset, .value = ring_guard});
@@ -714,22 +841,16 @@ private:
         {.value = end_sysex, .index = static_cast<unsigned>(body.size()), .appending = false});
   }
 
-  void download_write(const blofeld::DspNativeAccess &access,
-                      const InputByte input,
-                      unsigned &appended) {
+  void download_write(const CompletedAccess &access, const InputByte input, unsigned &appended) {
     watch(access);
-    if (access.stage == blofeld::DspNativeAccessStage::after &&
-        access.kind == blofeld::DspNativeAccessKind::read && access.pc == final_payload_prefetch &&
+    if (access.kind == AccessKind::read && access.pc == final_payload_prefetch &&
         access.target.space == DspSpace::x &&
         access.target.address == download_buffer + packet_body_words - 1) {
       require(access.value == expected_trailing_,
               "Actual original final payload prefetch uses checksum or M4 terminator");
       ++prefetches_;
     }
-    if (access.stage != blofeld::DspNativeAccessStage::after ||
-        access.kind != blofeld::DspNativeAccessKind::write) {
-      return;
-    }
+    if (access.kind != AccessKind::write) { return; }
     const auto address = access.target.address;
     const bool data =
         access.target.space == DspSpace::x &&
@@ -765,48 +886,47 @@ private:
     machine_.bus().write(
         {.space = DspSpace::x, .address = harness_selector, .value = parser_entry});
     unsigned appended = 0;
-    const blofeld::DspNativeAccessObserver observer{
-        .observe = [&](const blofeld::DspNativeAccess &access) {
-          download_write(access, input, appended);
-        }};
-    for (unsigned steps = 0; machine_.cpu().state().pc != complete_; ++steps) {
+    const Observer observer = [&](const CompletedAccess &access) {
+      download_write(access, input, appended);
+    };
+    for (unsigned steps = 0; machine_.cpu().registers().pc != complete_; ++steps) {
       require(steps < parser_steps, "Actual original SysEx consumer instruction bound");
-      const auto state = machine_.cpu().state();
+      const auto state = machine_.cpu().registers();
       if (state.pc == download_entry) {
         require(
-            input.value == end_sysex && state.sp == 2 && state.stack_pc == launch_return,
+            input.value == end_sysex && state.sp == 2 &&
+                (state.stack.at(state.sp) >> word_bits) == launch_return,
             "The real F7 path reaches original downloading with its actual nested caller frame");
         ++download_entries_;
       }
       if (state.pc == download_target) {
         require(
-            input.value == end_sysex && state.sp == 2 && state.stack_pc == launch_return &&
+            input.value == end_sysex && state.sp == 2 &&
+                (state.stack.at(state.sp) >> word_bits) == launch_return &&
                 state.r[0] == context_base && read(download_status) == completed_status &&
                 machine_.bus().read({.space = DspSpace::p, .address = download_return}) ==
                     literal_rts,
             "Actual original launch restores RTS and passes context without a host PC/frame patch");
         ++download_launches_;
       }
-      machine_.cpu().step(observer);
+      step(observer);
     }
     if (input.value == start_sysex) { ++frame_starts_; }
     if (input.value == end_sysex) { ++frame_ends_; }
     const auto expected_count = input.appending ? input.index + 1 : input.index;
     require(appended == (input.appending ? 1U : 0U) && read(download_count) == expected_count &&
-                machine_.cpu().state().sp == 0 && read(consumer) == read(producer),
+                machine_.cpu().registers().sp == 0 && read(consumer) == read(producer),
             "Real byte collection consumes one actual producer word and returns through the "
             "original stack");
-    for (unsigned steps = 0; machine_.cpu().state().pc != foreground_; ++steps) {
+    for (unsigned steps = 0; machine_.cpu().registers().pc != foreground_; ++steps) {
       require(steps < step_limit, "Own caller returns to the actual next input boundary");
-      machine_.cpu().step();
+      step();
     }
+    machine_.bus().write({.space = DspSpace::x, .address = harness_selector, .value = idle_});
   }
 
-  void observe(const blofeld::DspNativeAccess &access) {
-    if (access.stage != blofeld::DspNativeAccessStage::after ||
-        access.kind != blofeld::DspNativeAccessKind::write) {
-      return;
-    }
+  void observe(const CompletedAccess &access) {
+    if (access.kind != AccessKind::write) { return; }
     if (access.target.space != DspSpace::x || !access.value.has_value()) {
       throw blofeld::Fault("Original producer writes require one known X-space result");
     }
@@ -830,12 +950,8 @@ private:
     }
   }
 
-  void watch(const blofeld::DspNativeAccess &access) {
-    if (access.stage != blofeld::DspNativeAccessStage::after ||
-        access.kind != blofeld::DspNativeAccessKind::write ||
-        access.target.address >= peripheral_base) {
-      return;
-    }
+  void watch(const CompletedAccess &access) {
+    if (access.kind != AccessKind::write || access.target.address >= peripheral_base) { return; }
     const auto same = [&](const blofeld::DspAddress target) {
       return target.space == access.target.space && target.address == access.target.address;
     };
@@ -905,8 +1021,9 @@ private:
     watched_ = saved.watched;
   }
 
-  blofeld::DspMachine machine_;
+  blofeld::OwnDspMachine machine_{blofeld::test::dma_test::native_clocks};
   unsigned foreground_ = 0;
+  unsigned idle_ = 0;
   unsigned complete_ = 0;
   unsigned expected_field_ = field_seed;
   unsigned expected_timestamp_ = timestamp_seed;

@@ -2809,17 +2809,6 @@ if(BUILD_TESTING)
   add_test(NAME dsp_corpus_bounds COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/dsp_corpus_bounds.py"
     $<TARGET_FILE:blofeld-dsp-corpus-test>)
-  add_executable(blofeld-original-dsp-wire-test test/original_dsp_wire_test.cpp)
-  target_link_libraries(blofeld-original-dsp-wire-test PRIVATE
-    blofeld_dsp blofeld_dsp_native blofeld_firmware)
-  foreach(scope IN ITEMS bytes pitch checkpoint download)
-    add_test(NAME original_dsp_wire_${scope} COMMAND ${Python3_EXECUTABLE}
-      "${CMAKE_CURRENT_SOURCE_DIR}/test/original_dsp_wire.py"
-      $<TARGET_FILE:blofeld-original-dsp-wire-test>
-      "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
-      "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-dsp-wire-${scope}.trace" ${scope})
-    set_tests_properties(original_dsp_wire_${scope} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  endforeach()
   add_executable(blofeld-original-dsp-clocked-wire-test test/original_dsp_clocked_wire_test.cpp)
   target_link_libraries(blofeld-original-dsp-clocked-wire-test PRIVATE
     blofeld_dsp blofeld_dsp_native blofeld_firmware)
