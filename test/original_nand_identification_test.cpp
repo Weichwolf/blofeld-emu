@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_gpio.hpp"
-#include "dsp/dsp_machine.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "dsp_boot_reference.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp_core_fixture.hpp"
+#include "dsp_rom_program.hpp"
 #include "firmware/firmware.hpp"
-#include "nand_gpio_fixture.hpp"
-#include "nand_program_fixture.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_image.hpp"
 
@@ -24,10 +24,60 @@
 #include <span>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace blofeld::test {
 namespace {
+constexpr unsigned word_bits = 24, word_mask = 0xffffff, byte_mask = 0xff;
+constexpr unsigned masked_status = 0xc00300;
+constexpr unsigned nand_controls = 0xf00, nand_re = 0x100, nand_we = 0x200;
+constexpr unsigned nand_cle = 0x400, nand_ale = 0x800, nand_data = 0xff, nand_other_f = 0x300;
+constexpr unsigned port_c_data = 0xffffbd, port_c_direction = 0xffffbe, port_c_control = 0xffffbf;
+constexpr unsigned port_f_data = 0xfffff5, port_f_direction = 0xfffff6, port_f_control = 0xfffff7;
+constexpr unsigned bus_control = 0xfffffb, port_f_bus = 0x01ffff;
+constexpr unsigned output_f = 0x4ff, input_f = 0x400, all_inputs_f = 0x3ff, idle_c = 0x300;
+
+void require(const bool condition, const std::string &reason) {
+  if (!condition) { throw Fault(reason); }
+}
+
+void movep(core::Program &program, const unsigned value, const unsigned address, const char space) {
+  require(space == 'x' || space == 'y', "Authored NAND caller uses only X/Y MOVEP");
+  program.write(
+      {.space = space == 'x' ? DspSpace::x : DspSpace::y, .address = address, .value = value});
+}
+
+void setup_gpio(core::Program &program) {
+  program.immediate(DspRomRegister::sr, masked_status);
+  movep(program, port_f_bus, bus_control, 'x');
+  movep(program, nand_controls, port_c_direction, 'x');
+  movep(program, nand_data, port_c_control, 'x');
+  movep(program, idle_c, port_c_data, 'x');
+  movep(program, output_f, port_f_direction, 'y');
+  movep(program, 0, port_f_data, 'y');
+  movep(program, nand_other_f, port_f_control, 'y');
+}
+
+struct Latch {
+  unsigned value;
+  unsigned mode;
+};
+
+void latch(core::Program &program, const Latch input) {
+  movep(program, input.value, port_f_data, 'y');
+  movep(program, idle_c | input.mode, port_c_data, 'x');
+  const DspAddress we{.space = DspSpace::x, .address = port_c_data};
+  program.bit({.operand = we, .index = 9, .action = core::BitAction::clear});
+  program.bit({.operand = we, .index = 9, .action = core::BitAction::set});
+}
+
+auto native_state(const OwnDspMachine &machine) {
+  const auto &cpu = machine.cpu();
+  return std::tuple{
+      cpu.registers(), cpu.progress(), cpu.fault(), cpu.processing_state(), cpu.debug_status()};
+}
+
 constexpr unsigned helper_base = 0x2e00, alias = 0x11e00, memory_mode = 0x600389;
 constexpr unsigned absolute_jsr = 0x0bf080, instruction_limit = 1000, sentinel = 0x123456;
 constexpr std::array<std::uint8_t, 4> identity{0xec, 0x76, 0x5a, 0x3f};
@@ -66,7 +116,7 @@ struct WireState {
 // Selected reference chip: CE is held active separately; F10 is not inferred as CE.
 class Wire {
 public:
-  Wire(DspMachine &machine,
+  Wire(OwnDspMachine &machine,
        Nand &device,
        std::ostream &trace,
        const unsigned switch_boundary,
@@ -81,18 +131,18 @@ public:
 
   void step() {
     if (state_.faulted) { throw Fault("NAND ID owner requires coordinated recovery"); }
-    const auto before = machine_.cpu().state();
+    const auto before = machine_.cpu().registers();
     try {
       if (!state_.switched && before.pc == switch_boundary_) {
         // Three real own NOPs precede this explicit unclocked switch observation.
         machine_.bus().advance_instruction_cycles(3);
         state_.switched = true;
       }
-      machine_.cpu().step();
+      dma_test::step_native(machine_);
       ++state_.steps;
       observe();
-      trace_ << "STEP " << before.pc << ' ' << machine_.cpu().state().pc << ' ' << state_.commands
-             << ' ' << state_.addresses << ' ' << state_.reads << '\n';
+      trace_ << "STEP " << before.pc << ' ' << machine_.cpu().registers().pc << ' '
+             << state_.commands << ' ' << state_.addresses << ' ' << state_.reads << '\n';
     } catch (const Fault &error) {
       state_.faulted = true;
       throw Fault("NAND ID at X:" + hex(port_c_data, 6) + " dsp-pc=" + hex(before.pc, 6) +
@@ -155,7 +205,7 @@ private:
     state_.previous = control.levels;
   }
 
-  DspMachine &machine_;
+  OwnDspMachine &machine_;
   Nand &device_;
   std::ostream &trace_;
   unsigned switch_boundary_;
@@ -192,14 +242,14 @@ Entry install(DspBus &bus, const Firmware &firmware, const Helper helper, const 
                .value = dsp_boot_word(std::span<const std::uint8_t, 3>(
                    bytes.subspan(static_cast<std::size_t>(index) * 3U, 3)))});
   }
-  DspProgram code;
+  core::Program code;
   setup_gpio(code);
-  code.immediate("a", 0);
-  code.immediate("b", 0);
-  code.immediate("x1", sentinel);
-  code.immediate("x0", sentinel);
-  code.immediate("omr", memory_mode);
-  for (unsigned index = 0; index < 3; ++index) { code.emit("nop"); }
+  code.immediate(DspRomRegister::a, 0);
+  code.immediate(DspRomRegister::b, 0);
+  code.immediate(DspRomRegister::x1, sentinel);
+  code.immediate(DspRomRegister::x0, sentinel);
+  code.immediate(DspRomRegister::omr, memory_mode);
+  for (unsigned index = 0; index < 3; ++index) { code.emit(0); }
   const auto switch_boundary = code.pc();
   if (!full) {
     // Own legal setup supplies the explicitly declared entry of the original packing tail.
@@ -210,10 +260,9 @@ Entry install(DspBus &bus, const Firmware &firmware, const Helper helper, const 
     movep(code, input_f, port_f_direction, 'y');
     movep(code, all_inputs_f, port_f_control, 'y');
   }
-  code.word(absolute_jsr);
-  code.word(full ? helper.identify : helper.packing);
+  code.emit(absolute_jsr, full ? helper.identify : helper.packing);
   const auto returned = code.pc();
-  code.emit("nop");
+  code.emit(0);
   code.install(bus);
   return {.switch_boundary = switch_boundary, .returned = returned};
 }
@@ -238,34 +287,58 @@ std::vector<std::uint8_t> cold_image(Nand model) {
   return encode_nand_image(model.persistent_image());
 }
 
-void returned(const DspMachine &machine, const Wire &wire, const Entry entry) {
-  const auto cpu = machine.cpu().state();
-  require(cpu.pc == entry.returned && cpu.sp == 0 && cpu.omr == memory_mode &&
-              cpu.a == (std::uint64_t{packed_identity} << word_bits) &&
-              cpu.b == (std::uint64_t{shifted_prefix} << word_bits) &&
-              cpu.x == ((std::uint64_t{sentinel} << word_bits) | identity[2]),
-          "Original four-byte pack returns full independent A/B/X and real JSR/RTS frame");
+void returned(const OwnDspMachine &machine,
+              const Wire &wire,
+              const Entry entry,
+              const Helper helper) {
+  const auto cpu = machine.cpu().registers();
+  // FM5.4.3: positive full56 result, unequal extension/sign and equal MSP top bits.
+  constexpr unsigned result_flags = 0x30;
+  constexpr unsigned last_reader_return = 8;
+  dsp56300::Registers expected{.x = (std::uint64_t{sentinel} << word_bits) | identity[2],
+                               .a = std::uint64_t{packed_identity} << word_bits,
+                               .b = std::uint64_t{shifted_prefix} << word_bits,
+                               .pc = entry.returned,
+                               .sr = masked_status | result_flags,
+                               .omr = memory_mode};
+  expected.m.fill(word_mask);
+  // FM4.3.4: accepted calls leave PC:SR in actual stack slots1 and2 after RTS.
+  expected.stack.at(1) = (std::uint64_t{entry.returned} << word_bits) | masked_status;
+  expected.stack.at(2) =
+      (std::uint64_t{helper.packing + last_reader_return} << word_bits) | expected.sr;
+  require(cpu == expected,
+          "Independent complete register/CCR/AGU/stack expectations after ID packing");
+  // FM tableA-1: authored caller=57, four(BSR4+reader14), final arithmetic/RTS=8.
+  constexpr dsp56300::Progress progress{.instructions = 67, .estimated_cycles = 137};
+  constexpr unsigned reset_ticks = 180;
+  require(machine.cpu().progress() == progress && !machine.cpu().pending_instruction() &&
+              machine.cpu().fault().kind == dsp56300::FaultKind::none &&
+              machine.clock().elapsed_ticks() == reset_ticks &&
+              machine.clock().native_cycle_units() == 0,
+          "Native nominal costs and actual reset time remain separate from unclocked execution");
   require(wire.state().commands == 1 && wire.state().addresses == 1 && wire.state().reads == 4 &&
               !wire.state().faulted,
           "Actual native pins perform one ID command/address and four data reads");
 }
 
 struct Saved {
-  DspCheckpoint machine;
+  OwnDspCheckpoint machine;
   Nand nand;
   WireState wire;
 };
 
 void packing(const Firmware &firmware, const Helper helper, std::ostream &trace) {
-  DspMachine machine;
+  OwnDspMachine machine(dma_test::native_clocks);
   const auto entry = install(machine.bus(), firmware, helper, false);
+  const core::Driver reset(machine);
+  require(reset.state().pc == DspRomProgram::boot, "Actual reset selects the authored caller");
   auto nand = device();
   const auto initial = cold_image(nand);
   std::ostringstream steps;
   auto wire = std::make_unique<Wire>(machine, nand, steps, entry.switch_boundary);
   std::optional<Saved> saved;
   std::size_t prefix_bytes = 0;
-  while (machine.cpu().state().pc != entry.returned) {
+  while (machine.cpu().registers().pc != entry.returned) {
     require(wire->state().steps < instruction_limit, "Original ID packing must return");
     wire->step();
     if (wire->state().reads == 2 && !saved) {
@@ -273,11 +346,11 @@ void packing(const Firmware &firmware, const Helper helper, std::ostream &trace)
       prefix_bytes = steps.str().size();
     }
   }
-  returned(machine, *wire, entry);
+  returned(machine, *wire, entry, helper);
   if (!saved) { throw Fault("Original ID path did not reach its joint checkpoint"); }
   const auto &joint = saved.value();
   require(cold_image(nand) == initial, "Original ID path retains NVM");
-  const auto expected = machine.cpu().debug_state();
+  const auto expected = native_state(machine);
   const auto suffix = steps.str().substr(prefix_bytes);
   trace << "PACK " << helper.block << ' ' << wire->state().steps << ' ' << packed_identity << '\n';
   trace << "BEGIN_PACK " << helper.block << '\n'
@@ -289,14 +362,14 @@ void packing(const Firmware &firmware, const Helper helper, std::ostream &trace)
     steps.str({});
     steps.clear();
     wire = std::make_unique<Wire>(machine, nand, steps, entry.switch_boundary, joint.wire);
-    while (machine.cpu().state().pc != entry.returned) {
+    while (machine.cpu().registers().pc != entry.returned) {
       require(wire->state().steps < instruction_limit, "Original restored ID path must return");
       wire->step();
     }
-    returned(machine, *wire, entry);
-    require(machine.cpu().debug_state() == expected && steps.str() == suffix &&
+    returned(machine, *wire, entry, helper);
+    require(native_state(machine) == expected && steps.str() == suffix &&
                 cold_image(nand) == initial,
-            "Joint native/ID/edge-cursor restore reproduces full debug state, events and NVM");
+            "Joint native/ID/edge-cursor restore reproduces full native state, events and NVM");
     trace << "REPLAY " << helper.block << ' ' << replay << ' ' << wire->state().steps << '\n';
     trace << "BEGIN_REPLAY " << helper.block << ' ' << replay << '\n'
           << steps.str() << "END_REPLAY " << helper.block << ' ' << replay << '\n';
@@ -308,8 +381,10 @@ void frontier(const Firmware &firmware,
               const bool full,
               const unsigned missing,
               std::ostream &trace) {
-  DspMachine machine;
+  OwnDspMachine machine(dma_test::native_clocks);
   const auto entry = install(machine.bus(), firmware, helper, full);
+  const core::Driver reset(machine);
+  require(reset.state().pc == DspRomProgram::boot, "Actual reset selects the authored caller");
   auto nand = device(full ? std::nullopt : std::optional{missing});
   const auto initial = cold_image(nand);
   Wire wire(machine, nand, trace, entry.switch_boundary);
@@ -324,14 +399,14 @@ void frontier(const Firmware &firmware,
   require(reason.contains("dsp-pc=" + hex(full ? helper.first_re : helper.reader, 6)) &&
               reason.contains(full ? "turnaround" : "unknown bits byte=" + std::to_string(missing)),
           "Original ID faults must retain their independent PC and exact cause: " + reason);
-  const auto before = machine.cpu().debug_state();
+  const auto before = native_state(machine);
   try {
     wire.step();
     throw Fault("Faulted ID wire unexpectedly resumed");
   } catch (const Fault &fault) {
     require(std::string(fault.what()).contains("coordinated recovery"), "ID owner is fail-stop");
   }
-  require(machine.cpu().debug_state() == before && cold_image(nand) == initial,
+  require(native_state(machine) == before && cold_image(nand) == initial,
           "Refused continuation cannot execute another CPU instruction or NVM effect");
   trace << (full ? "TURNAROUND " : "MISSING ") << helper.block << ' ' << missing << ' '
         << wire.state().reads << ' ' << reason << '\n';

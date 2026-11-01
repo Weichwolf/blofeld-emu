@@ -1843,8 +1843,9 @@ if(BUILD_TESTING)
   add_executable(blofeld-nand-identification-test test/nand_identification_test.cpp)
   target_link_libraries(blofeld-nand-identification-test PRIVATE blofeld_nand_store blofeld_nand_operation_clock)
   add_test(NAME nand_identification COMMAND blofeld-nand-identification-test)
-  add_executable(blofeld-original-nand-identification-test test/original_nand_identification_test.cpp)
-  target_link_libraries(blofeld-original-nand-identification-test PRIVATE blofeld_dsp blofeld_dsp_native blofeld_nand)
+  add_executable(blofeld-original-nand-identification-test test/original_nand_identification_test.cpp
+    test/dsp_core_fixture.cpp)
+  target_link_libraries(blofeld-original-nand-identification-test PRIVATE blofeld_dma_fixture blofeld_nand)
   add_test(NAME original_nand_identification COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_nand_identification.py"
     $<TARGET_FILE:blofeld-original-nand-identification-test>

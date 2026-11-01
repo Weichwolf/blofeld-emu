@@ -1,6 +1,7 @@
 NAND Read-ID protocol and conditional original updater paths
 
-  cmake --build --preset strict --target blofeld-nand-identification-test blofeld-original-nand-identification-test
+  cmake --build --preset strict --target blofeld-original-nand-identification-test \
+    blofeld-nand-identification-test blofeld-nand-read-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^(nand_identification|nand_read|original_nand_identification)$'
 
 Samsung K9F1208U0C Rev1.1 p33/Figure15 defines command 90h, one address 00h
@@ -31,12 +32,22 @@ unknown fifth-byte retention, atomic immutable observations, reset/power cuts,
 trusted copies and both owners. The existing array regression additionally
 checks that refused 90h preserves staged program/erase continuations and data.
 
+The original-ID fixture now uses dsp56300 and the authored literal core-program
+fixture, with no legacy executor or assembler. It performs 90 ticks of reset hold
+and 90 of recovery; all subsequent instructions are explicitly unclocked. Each
+packing path executes 67 instructions/137 nominal FM base units. Independent
+complete registers include A/B/X, CCR=$30, AGU defaults and both retained PC:SR
+stack frames. All three affected groups pass ASan/UBSan and separate TSan.
+The 738 trace lines match the previously qualified paths byte-for-byte.
+These are semantic/base-cost checks, not physical bus timing.
+
 Both unchanged updater objects issue90h/address00. Their complete ID setup
 still asserts RE with DSP data outputs enabled and fails at the retained
 turnaround boundary. A separate own legal command/address/input setup calls
 each original packing tail: four actual GPIO reads produce independently
 expected A/B/X and return through native BSR/RTS. Four joint native/NAND/edge
-cursor restores preserve complete CPU debug state, event suffix and NVM.
+cursor restores preserve complete native registers, progress, fault/processing/
+debug status, event suffix and NVM.
 Eight missing-byte controls retain exact byte/PC/operation diagnostics.
 
 These are selected-chip laboratory fixtures: CE held active separately,

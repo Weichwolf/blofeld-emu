@@ -1510,7 +1510,11 @@ DSP56371 peripherals/boot ROM     partial  NXP 55-word SPI prefix assembled priv
                                           invalid addresses, owner/file isolation,
                                           both original packing tails/four joint
                                           restores and eight unknown-byte cuts
-                                          pass. Original full ID setup retains
+                                          pass on dsp56300. Literal full native
+                                          registers/CCR/stack and 67 instructions/
+                                          137 base units accompany each packing
+                                          path (unclocked after real reset).
+                                          Original full ID setup retains
                                           driven-data turnaround failure; physical
                                           identity remains unverified
                                           (nand-identification.txt).
