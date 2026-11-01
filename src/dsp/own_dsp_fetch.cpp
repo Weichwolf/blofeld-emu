@@ -502,6 +502,15 @@ void OwnDspFetch::synchronize() {
   const auto context = machine_.cpu_.instruction_fetch();
   const auto regs = machine_.cpu_.registers();
   const auto state = fetch_.view();
+  if (context.exception_vector) {
+    interrupt_vector_ = context.address;
+    native_fetch_ = false;
+    native_latch_ = false;
+    repeated_.reset();
+    admitted_.reset();
+    in_flight_ = false;
+    return;
+  }
   if (native_fetch_ || (regs.sr & cache_enable) != 0) {
     fetch_.redirect(context.address, regs.omr);
     native_latch_ = context.latched_opcode.has_value();
@@ -534,16 +543,16 @@ void OwnDspFetch::finish_interrupt_vector() {
   const auto context = machine_.cpu_.instruction_fetch();
   const auto regs = machine_.cpu_.registers();
   if (machine_.interrupts_.pending()) {
+    throw Fault("Own DSP vector retired before its actual pair acknowledgement read P:" +
+                hex(context.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
+  }
+  if (context.exception_vector) {
     constexpr unsigned mask = 0xffffff;
-    if (!context.exception_vector || context.address != ((*vector + 1U) & mask)) {
+    if (context.address != ((*vector + 1U) & mask) || !context.latched_opcode) {
       throw Fault("Unqualified DSP interrupt vector continuation read P:" +
                   hex(context.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
     }
     return;
-  }
-  if (context.exception_vector) {
-    throw Fault("Own DSP IRQ acknowledged before native vector completion read P:" +
-                hex(context.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
   }
   fetch_.redirect(context.address, regs.omr);
   interrupt_vector_.reset();

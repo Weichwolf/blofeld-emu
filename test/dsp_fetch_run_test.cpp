@@ -1,308 +1,309 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "bank_fixture.hpp"
+#include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_native_access.hpp"
 #include "dsp/dsp_pll.hpp"
-#include "dsp/dsp_program_fetch.hpp"
-#include "dsp/dsp_reference_execution.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp_checkpoint_fixture.hpp"
-#include "dsp_fetch_run_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
-#include "native_access_fixture.hpp"
-#include "reference_execution_fixture.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp/own_dsp_timeline.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_fetch_native_fixture.hpp"
 
 #include <array>
 #include <cstdint>
 #include <exception>
 #include <iostream>
-#include <span>
+#include <memory>
 #include <string>
 
 namespace {
 using namespace blofeld;
-using namespace blofeld::test;
-using namespace blofeld::test::fetch_clock;
-namespace access = blofeld::test::reference;
-using native_access::fault;
-constexpr std::uint64_t base_period_ticks = 45;
-constexpr std::uint64_t faster_period_ticks = 10;
+using namespace blofeld::test::fetch_native;
+namespace banks = blofeld::test::banks;
 constexpr unsigned switched_omr = 0x600085;
 
-bool retired(const DspFetchCycleResult &result) {
-  return result.bus.progress && result.bus.progress->retired;
+OwnDspFetchCycleResult step(OwnDspMachine &machine, OwnDspTimeline &timeline) {
+  const auto last = machine.bus().last_dma_cycle();
+  const auto result = timeline.advance_one(timeline.next_deadline(),
+                                           OwnDspBoundary::through,
+                                           banks::inputs({.index = last ? *last + 1 : 0}));
+  if (!result) { throw Fault("The actual next deadline must admit one reference cycle"); }
+  healthy(*result);
+  return *result;
 }
 
 void dma_stalls_clock_and_replay() {
-  DspMachine machine;
-  std::array<std::uint32_t, 16> words{};
-  prepare(machine,
-          words,
-          {.transfer = {.source = program_source, .destination = program, .control = program_copy},
-           .timer = true});
-  const auto opcode = checkpoint::assemble("move #<$34,r0").front();
-  machine.bus().write({.address = program_source, .value = opcode});
-  const auto before = machine.cpu().debug_state();
-  DspFetchRun run(contract(), machine);
-  auto request = input(true);
-  request.requests = 1;
-  const auto first = run.advance_cycle(machine, request);
-  require(first.native_starved && !first.bus.progress && first.fetch.used == 0 &&
-              first.issued_address == program && first.period_ticks == base_period_ticks &&
-              first.completion_ticks == base_period_ticks && run.timer_clk2_edges() == 0,
-          "First clock issues real F1; an unfetched instruction cannot admit in the same cycle");
-  request.grant = DspDmaGrant::wait;
-  const auto held = run.advance_cycle(machine, request);
-  require(held.bus.dma.core_stall && held.fetch.used == 0 &&
-              held.fetch.pending_address == program && run.completed_cycles() == 2 &&
-              run.elapsed_ticks() == 2 * base_period_ticks && run.timer_clk2_edges() == 1 &&
+  const std::array<std::uint32_t, 16> words{};
+  Fixture fixture(
+      words,
+      {.transfer = {.source = program_source, .destination = program, .control = program_copy},
+       .timer = true});
+  auto &machine = fixture.machine;
+  machine.bus().write({.address = program_source, .value = short_move});
+  fixture.attach();
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  const auto first = fixture.advance(true, 1);
+  require(
+      !first.native && !first.captured && first.issued_address == program &&
+          fixture.fetch->view().used == 0 && fixture.elapsed() == base_period &&
+          machine.clock().timer_clk2_edges() == 0,
+      "First clock issues actual F1 without admitting an unfetched instruction or a CLK/2 edge");
+  const auto held = fixture.advance(true, 1, DspDmaGrant::wait);
+  require(held.dma.core_stall && !held.native && !held.captured &&
+              fixture.fetch->view().pending_address == program &&
+              fixture.elapsed() == 2 * base_period && machine.clock().timer_clk2_edges() == 1 &&
               machine.bus().timers().read(count0) == load_value,
-          "The stalled F2 keeps its actual address while a completed core clock advances CLK/2");
-  const auto saved = run.checkpoint(machine);
+          "A stalled F2 retains its actual address while the real CLK/2 edge loads the timer");
+  const auto saved = fixture.fetch->checkpoint();
   for (unsigned replay = 0; replay < 2; ++replay) {
-    run.restore(saved, machine);
-    request.grant = DspDmaGrant::wait;
-    const auto waited = run.advance_cycle(machine, request);
-    require(waited.bus.dma.core_stall && !waited.issued_address &&
-                run.elapsed_ticks() == 3 * base_period_ticks,
-            "A restored held destination retains the old F1 address and real elapsed wait clock");
-    request.grant = DspDmaGrant::available;
-    const auto copied = run.advance_cycle(machine, request);
-    require(copied.bus.dma.word && copied.bus.dma.word->value == opcode &&
-                copied.bus.dma.core_stall && !copied.bus.progress && copied.fetch.used == 0 &&
-                run.elapsed_ticks() == 4 * base_period_ticks &&
-                machine.bus().timers().read(count0) == 8,
-            "Actual DMA completion still holds F2 while the second CLK/2 edge advances the timer");
-    request.requests = 0;
-    const auto fetched = run.advance_cycle(machine, request);
-    require(fetched.native_starved && !fetched.bus.progress &&
-                fetched.fetch.words.front().data == opcode &&
-                fetched.issued_address == program + 1 && machine.cpu().debug_state() == before,
-            "The following F2 samples DMA's word and overlaps the next F1 without early native "
-            "retirement");
-    const auto executed = run.advance_cycle(machine, request);
-    require(retired(executed) && executed.issued_address == program + 2 &&
-                run.completed_cycles() == 6 && run.elapsed_ticks() == 6 * base_period_ticks &&
-                run.timer_clk2_edges() == 3 && machine.cpu().state().r[0] == copied_r0 &&
-                machine.cpu().state().pc == program + 1 &&
-                machine.cpu().debug_state().native_cycles == before.native_cycles + 1 &&
+    fixture.restore(saved);
+    const auto waited = fixture.advance(true, 1, DspDmaGrant::wait);
+    require(waited.dma.core_stall && !waited.captured && !waited.issued_address &&
+                fixture.elapsed() == 3 * base_period,
+            "Joint restore retains the issued F1, held destination and elapsed wait period");
+    const auto copied = fixture.advance(true, 1);
+    require(
+        copied.dma.word && copied.dma.word->value == short_move && copied.dma.core_stall &&
+            !copied.captured && !copied.native && fixture.fetch->view().used == 0 &&
+            fixture.elapsed() == 4 * base_period && machine.bus().timers().read(count0) == 8,
+        "DMA destination commit still holds F2 while the second CLK/2 edge increments the timer");
+    const auto fetched = fixture.advance(true);
+    require(fetched.captured && !fetched.native && fetched.issued_address == program + 1 &&
+                fixture.fetch->view().words.front().data == short_move &&
+                machine.cpu().registers() == before && machine.cpu().progress() == progress,
+            "Actual later F2 samples the DMA-written opcode before any native result");
+    const auto moved = fixture.advance(true);
+    auto expected = before;
+    expected.r[0] = copied_r0;
+    require(moved.native && !moved.native->retired && machine.cpu().registers() == expected &&
+                machine.cpu().progress() == progress && fixture.elapsed() == 6 * base_period &&
+                machine.clock().timer_clk2_edges() == 3 &&
                 machine.bus().timers().read(count0) == compare_value &&
                 (machine.bus().timers().read(csr0, timer_flag) & timer_flag) != 0,
-            "Elapsed waits, real instruction result, independent timer compare and SDK units "
-            "remain distinct");
-    static_cast<void>(run.begin_instruction(machine));
-    const auto nop = run.advance_cycle(machine, input(true));
-    require(retired(nop) && nop.issued_address == program + 3 &&
-                run.elapsed_ticks() == 7 * base_period_ticks &&
-                machine.cpu().state().pc == program + 2 && machine.cpu().state().r[0] == copied_r0,
-            "The following queued zero word executes without a second program read");
-    request.requests = 1;
+            "Native MOVE publication and independent timer compare precede CPU retirement");
+    const auto pc = fixture.advance(true);
+    ++expected.pc;
+    require(pc.native && !pc.native->retired && machine.cpu().registers() == expected &&
+                machine.cpu().progress() == progress,
+            "Actual native PC publication is also separate from instruction retirement");
+    const auto retired = fixture.advance(true);
+    require(retired.native && retired.native->retired && machine.cpu().registers() == expected &&
+                machine.cpu().progress().instructions == progress.instructions + 1 &&
+                machine.cpu().progress().estimated_cycles == progress.estimated_cycles + 1 &&
+                fixture.elapsed() == 8 * base_period && machine.clock().timer_clk2_edges() == 4 &&
+                machine.bus().timers().read(count0) == compare_value + 1,
+            "One native completion, eight elapsed periods and four CLK/2 edges remain distinct");
+    for (unsigned i = 0; i < 2; ++i) { static_cast<void>(fixture.advance(true)); }
+    ++expected.pc;
+    require(machine.cpu().registers() == expected &&
+                machine.cpu().progress().instructions == progress.instructions + 2 &&
+                fixture.elapsed() == 10 * base_period,
+            "The next actual queued NOP publishes PC and retires without another opcode admission "
+            "read");
   }
 }
 
 void automatic_fetch_and_backpressure() {
-  DspMachine machine;
-  std::array<std::uint32_t, 16> words{};
-  prepare(machine, words);
-  const auto before = machine.cpu().debug_state();
-  DspFetchRun run(contract(), machine);
+  const std::array<std::uint32_t, 16> words{};
+  Fixture fixture(words);
+  fixture.attach();
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
   for (unsigned cycle = 1; cycle <= 10; ++cycle) {
-    const auto result = run.advance_cycle(machine, input());
+    const auto result = fixture.advance();
     const auto expected = cycle < 9 ? cycle - 1 : 8;
-    require(result.completed_cycles == cycle && result.fetch.used == expected &&
-                result.completion_ticks == static_cast<std::uint64_t>(cycle) * base_period_ticks &&
-                machine.cpu().debug_state() == before,
-            "Primary F1/F2 word latency and one sampled word per clock are independent of native "
-            "execution");
+    require(fixture.fetch->view().used == expected && fixture.elapsed() == cycle * base_period &&
+                fixture.machine.cpu().registers() == before &&
+                fixture.machine.cpu().progress() == progress,
+            "Automatic F1/F2 fills one real word per period while the selected CPU is held");
     if (cycle < 9) {
       require(result.issued_address == program + cycle - 1,
-              "Every F1 address is derived sequentially without caller supplied fetch commands");
+              "Every new F1 comes from the actual sequential cursor");
     } else {
-      require(!result.issued_address && !result.fetch.pending_address,
-              "Host continuation capacity applies backpressure without a fictitious memory read");
+      require(!result.issued_address && !fixture.fetch->view().pending_address,
+              "Finite host continuation capacity applies real backpressure");
     }
   }
-  require(run.timer_clk2_edges() == 5, "Clock/2 retains completed idle and backpressure cycles");
-  const auto released = run.advance_cycle(machine, input(true));
-  require(retired(released) && released.bus.core_access_count == 0 &&
-              released.issued_address == program + 8 && released.fetch.used == 7 &&
-              machine.cpu().state().pc == program + 1,
-          "A genuine native dequeue releases capacity for the next automatic F1");
-  static_cast<void>(run.begin_instruction(machine));
-  const auto steady = run.advance_cycle(machine, input(true));
-  require(retired(steady) && steady.issued_address == program + 9 && steady.fetch.used == 7 &&
-              machine.cpu().state().pc == program + 2,
-          "Old F2, queued native admission and new F1 coexist under the explicit reference order");
+  require(fixture.machine.clock().timer_clk2_edges() == 5,
+          "CLK/2 counts held and backpressure periods");
+  const auto published = fixture.advance(true);
+  auto expected = before;
+  ++expected.pc;
+  require(published.native && !published.native->retired &&
+              published.issued_address == program + 8 && fixture.fetch->view().used == 7 &&
+              fixture.machine.cpu().registers() == expected &&
+              fixture.machine.cpu().progress() == progress,
+          "One native dequeue and actual PC publication release capacity without a fabricated "
+          "retirement");
+  const auto retired = fixture.advance(true);
+  require(retired.native && retired.native->retired && !retired.issued_address &&
+              fixture.fetch->view().used == 8 && fixture.machine.cpu().registers() == expected &&
+              fixture.machine.cpu().progress().instructions == progress.instructions + 1,
+          "The following real F2 refills capacity while the prior actual NOP retires");
 }
 
 void pll_and_odd_phase_restore() {
-  DspMachine machine;
-  std::array<std::uint32_t, 16> words{};
-  prepare(machine, words, {.timer = true});
-  DspFetchRun run(contract(), machine);
-  static_cast<void>(run.advance_cycle(machine, input()));
-  const auto saved = run.checkpoint(machine);
-  constexpr unsigned faster = 0x02e112;
+  const std::array<std::uint32_t, 16> words{};
+  Fixture fixture(words, {.timer = true});
+  fixture.attach();
+  static_cast<void>(fixture.advance());
+  const auto saved = fixture.fetch->checkpoint();
   for (unsigned replay = 0; replay < 2; ++replay) {
-    run.restore(saved, machine);
-    machine.bus().pll().write(faster);
+    fixture.restore(saved);
+    fixture.machine.bus().pll().write(faster);
     for (unsigned cycle = 2; cycle <= 4; ++cycle) {
-      const auto result = run.advance_cycle(machine, input());
-      require(result.period_ticks == faster_period_ticks &&
-                  result.completion_ticks == base_period_ticks + (cycle - 1) * faster_period_ticks,
-              "A new declared PCTL target changes the next reference clock period, not prior "
-              "elapsed time");
+      const auto before = fixture.machine.clock().elapsed_ticks();
+      static_cast<void>(fixture.advance());
+      require(fixture.machine.clock().elapsed_ticks() == before + faster_period &&
+                  fixture.elapsed() == base_period + (cycle - 1) * faster_period,
+              "Actual PCTL changes only subsequent reference periods without retiming the prefix");
     }
-    require(run.completed_cycles() == 4 &&
-                run.elapsed_ticks() == base_period_ticks + 3 * faster_period_ticks &&
-                run.timer_clk2_edges() == 2 && machine.bus().timers().read(count0) == 8,
-            "Joint restore retains odd CLK/2 residue, actual timer and initial PLL command state");
+    require(fixture.machine.clock().native_cycle_units() == 4 &&
+                fixture.machine.clock().timer_clk2_edges() == 2 &&
+                fixture.machine.bus().timers().read(count0) == 8,
+            "Joint restore preserves odd CLK/2 residue, timer state and prior PLL command");
   }
 }
 
 void memory_switch_delay() {
-  DspMachine machine;
-  auto words = checkpoint::assemble("move #>$600085,omr");
-  require(words.size() == 2, "Independent long-immediate OMR instruction length");
-  words.insert(words.end(), 14, 0);
-  prepare(machine, words);
+  const std::array<std::uint32_t, 16> words{long_omr, switched_omr};
+  Fixture fixture(words);
+  fixture.attach();
   constexpr unsigned alias = 0x1000;
   constexpr unsigned source = 0x10000;
-  machine.bus().write({.space = DspSpace::x, .address = source, .value = access::first});
-  DspFetchRun run(contract(), machine);
-  for (unsigned cycle = 0; cycle < 4; ++cycle) {
-    static_cast<void>(run.advance_cycle(machine, input(true)));
-  }
-  require(machine.cpu().state().omr == switched_omr && machine.cpu().state().pc == program + 2,
-          "The selected real native OMR command requests memory switching");
+  constexpr unsigned datum = 0x123456;
+  fixture.machine.bus().write({.space = DspSpace::x, .address = source, .value = datum});
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
+  for (unsigned cycle = 0; cycle < 4; ++cycle) { static_cast<void>(fixture.advance(true)); }
+  require(fixture.machine.cpu().registers().omr == switched_omr &&
+              fixture.machine.cpu().progress() == progress,
+          "Actual native OMR publication requests memory switching before later retirement");
   for (unsigned delay = 0; delay < 3; ++delay) {
-    static_cast<void>(fault([&] { static_cast<void>(machine.bus().inspect_program(alias)); }));
-    static_cast<void>(run.advance_cycle(machine, input()));
+    static_cast<void>(
+        rejects([&] { static_cast<void>(fixture.machine.bus().inspect_program(alias)); }));
+    static_cast<void>(fixture.advance(delay < 2));
   }
-  require(
-      run.completed_cycles() == 7 && machine.bus().read({.address = alias}) == access::first,
-      "The switch takes three subsequent completed core clocks, excluding its own command cycle");
+  auto expected = before;
+  expected.omr = switched_omr;
+  expected.pc = program + 2;
+  require(fixture.machine.cpu().registers() == expected &&
+              fixture.machine.cpu().progress().instructions == progress.instructions + 1 &&
+              fixture.machine.bus().read({.address = alias}) == datum &&
+              fixture.elapsed() == 7 * base_period,
+          "Memory switch takes three subsequent completed periods, excluding its actual OMR "
+          "command cycle");
 }
 
 void failure_and_joint_recovery() {
-  DspMachine machine;
   const std::array words{0U};
-  prepare(machine, words);
-  DspFetchRun run(contract(), machine);
-  static_cast<void>(run.advance_cycle(machine, input()));
-  static_cast<void>(run.advance_cycle(machine, input()));
-  const auto saved = run.checkpoint(machine);
-  const auto before = machine.cpu().debug_state();
-  const auto sampled = run.advance_cycle(machine, input(true));
-  auto retired_before = before;
-  retired_before.cpu.pc = program + 1;
-  ++retired_before.native_instructions;
-  ++retired_before.native_cycles;
-  require(retired(sampled) && sampled.fetch.used == 1 &&
-              sampled.fetch.words.front().address == program + 1 &&
-              !sampled.fetch.words.front().data && machine.cpu().debug_state() == retired_before,
-          "Mapped unknown F2 preserves its absent value while the older genuine NOP retires");
-  const auto absent = run.checkpoint(machine);
+  Fixture fixture(words);
+  auto timeline = std::make_unique<OwnDspTimeline>(fixture.machine, timing, 0);
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
+  for (unsigned i = 0; i < 2; ++i) { static_cast<void>(step(fixture.machine, *timeline)); }
+  const auto saved = timeline->checkpoint();
+  static_cast<void>(step(fixture.machine, *timeline));
+  const auto retired = step(fixture.machine, *timeline);
+  auto expected = before;
+  ++expected.pc;
+  require(retired.native && retired.native->retired &&
+              fixture.machine.cpu().registers() == expected &&
+              fixture.machine.cpu().progress().instructions == progress.instructions + 1,
+          "Actual NOP retires after its PC publication while unknown younger F2 samples remain "
+          "distinct");
+  const auto absent = timeline->checkpoint();
   for (const bool rewrite : {false, true}) {
-    run.restore(absent, machine);
-    if (rewrite) { machine.bus().write({.address = program + 1}); }
-    static_cast<void>(run.begin_instruction(machine));
-    const auto error = fault([&] { static_cast<void>(run.advance_cycle(machine, input(true))); });
-    require(error.contains("completed-cycles=3") && error.contains("DMA-index=4") &&
-                error.contains("Unknown DSP program sample read P:0x000101") &&
-                error.contains("pc=0x000101") && error.contains("omr=0x000305") && run.faulted() &&
-                run.completed_cycles() == 3 && run.elapsed_ticks() == 3 * base_period_ticks &&
-                machine.bus().last_dma_cycle() == 3 &&
-                machine.cpu().debug_state() == retired_before,
-            "Actual unknown opcode admission refuses before DMA; restore or later RAM writes "
-            "cannot repair the captured absent value");
-    static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
-    static_cast<void>(fault([&] { static_cast<void>(run.checkpoint(machine)); }));
+    timeline = std::make_unique<OwnDspTimeline>(fixture.machine, absent);
+    if (rewrite) { fixture.machine.bus().write({.address = program + 1}); }
+    const auto error = rejects([&] { static_cast<void>(step(fixture.machine, *timeline)); });
+    require(error.contains("Unknown DSP program sample read P:0x000101") &&
+                error.contains("pc=0x000101") && error.contains("omr=0x000305") &&
+                timeline->faulted() && fixture.elapsed() == 4 * base_period &&
+                fixture.machine.bus().last_dma_cycle() == 4 &&
+                fixture.machine.cpu().registers() == expected,
+            "Stored unknown opcode cannot be repaired by later RAM writes; actual timeline "
+            "quarantines before DMA");
+    static_cast<void>(rejects([&] { static_cast<void>(timeline->checkpoint()); }));
   }
-  run.restore(saved, machine);
-  machine.bus().write({.address = program + 1});
-  machine.bus().write({.address = program, .value = checkpoint::assemble("move #<$34,r0").front()});
-  const auto recovered = run.advance_cycle(machine, input(true));
-  require(
-      !run.faulted() && retired(recovered) && run.completed_cycles() == 3 &&
-          run.elapsed_ticks() == 3 * base_period_ticks && machine.cpu().state().r[0] == initial_r0,
-      "Joint restore recovers clock/index/queue; an already sampled zero survives RAM overwrite");
+  timeline = std::make_unique<OwnDspTimeline>(fixture.machine, saved);
+  fixture.machine.bus().write({.address = program + 1});
+  fixture.machine.bus().write({.address = program, .value = short_move});
+  for (unsigned i = 0; i < 2; ++i) { static_cast<void>(step(fixture.machine, *timeline)); }
+  require(!timeline->faulted() && fixture.machine.cpu().registers() == expected &&
+              fixture.machine.cpu().progress().instructions == progress.instructions + 1 &&
+              fixture.elapsed() == 4 * base_period,
+          "Joint restore retains the sampled original NOP despite current code replacement");
 }
 
 void unknown_extension_admission() {
-  constexpr unsigned immediate_value = 0x123456;
-  DspMachine machine;
-  const auto words = checkpoint::assemble("move #>$123456,r0");
-  require(words.size() == 2, "Own long immediate has an independently expected extension word");
-  prepare(machine, std::span(words).first(1));
-  const auto before = machine.cpu().debug_state();
-  DspFetchRun run(contract(), machine);
-  static_cast<void>(run.advance_cycle(machine, input()));
-  static_cast<void>(run.advance_cycle(machine, input()));
-  const auto before_extension = run.checkpoint(machine);
-  const auto opcode = run.advance_cycle(machine, input(true));
-  const auto pending = machine.reference_pending();
-  require(!retired(opcode) && pending &&
-              std::get<DspNativeAccess>(pending->effect).kind == DspNativeAccessKind::extension &&
-              opcode.fetch.used == 1 && opcode.fetch.words.front().address == program + 1 &&
-              !opcode.fetch.words.front().data && machine.cpu().debug_state() == before,
-          "Actual opcode admission and absent extension F2 complete without instruction effects");
-  const auto absent = run.checkpoint(machine);
+  constexpr unsigned immediate = 0x123456;
+  const std::array words{long_r0};
+  Fixture fixture(words);
+  auto timeline = std::make_unique<OwnDspTimeline>(fixture.machine, timing, 0);
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
+  for (unsigned i = 0; i < 2; ++i) { static_cast<void>(step(fixture.machine, *timeline)); }
+  const auto before_extension = timeline->checkpoint();
+  static_cast<void>(step(fixture.machine, *timeline));
+  require(fixture.machine.cpu().registers() == before &&
+              fixture.machine.cpu().progress() == progress &&
+              !fixture.machine.cpu().pending_instruction(),
+          "Actual absent extension F2 does not authorize an incomplete native instruction");
+  const auto absent = timeline->checkpoint();
   for (const bool rewrite : {false, true}) {
-    run.restore(absent, machine);
-    if (rewrite) { machine.bus().write({.address = program + 1, .value = words.at(1)}); }
-    const auto error = fault([&] { static_cast<void>(run.advance_cycle(machine, input(true))); });
+    timeline = std::make_unique<OwnDspTimeline>(fixture.machine, absent);
+    if (rewrite) { fixture.machine.bus().write({.address = program + 1, .value = immediate}); }
+    const auto error = rejects([&] { static_cast<void>(step(fixture.machine, *timeline)); });
     require(error.contains("Unknown DSP program sample read P:0x000101") &&
-                error.contains("pc=0x000100") && error.contains("omr=0x000305") && run.faulted() &&
-                run.completed_cycles() == 3 && run.elapsed_ticks() == 3 * base_period_ticks &&
-                machine.bus().last_dma_cycle() == 3 && machine.cpu().debug_state() == before,
-            "Actual absent extension refuses before DMA or CPU effects despite a later RAM write");
+                error.contains("pc=0x000100") && timeline->faulted() &&
+                fixture.elapsed() == 3 * base_period &&
+                fixture.machine.bus().last_dma_cycle() == 3 &&
+                fixture.machine.cpu().registers() == before &&
+                fixture.machine.cpu().progress() == progress,
+            "Actual unknown extension refuses before CPU work/DMA despite later initialization of "
+            "its address");
   }
-  run.restore(before_extension, machine);
-  machine.bus().write({.address = program + 1, .value = words.at(1)});
-  static_cast<void>(run.advance_cycle(machine, input(true)));
-  const auto recovered = run.advance_cycle(machine, input(true));
+  timeline = std::make_unique<OwnDspTimeline>(fixture.machine, before_extension);
+  fixture.machine.bus().write({.address = program + 1, .value = immediate});
+  fixture.machine.bus().write({.address = program, .value = short_move});
+  for (unsigned i = 0; i < 4; ++i) { static_cast<void>(step(fixture.machine, *timeline)); }
   auto expected = before;
-  expected.cpu.pc = program + 2;
-  expected.cpu.r[0] = immediate_value;
-  ++expected.native_instructions;
-  expected.native_cycles += 2;
-  require(retired(recovered) && run.completed_cycles() == 4 &&
-              run.elapsed_ticks() == 4 * base_period_ticks &&
-              machine.cpu().debug_state() == expected,
-          "A genuinely fresh extension F2 executes the own long immediate with full native state");
+  expected.pc = program + 2;
+  expected.r[0] = immediate;
+  require(fixture.machine.cpu().registers() == expected && fixture.elapsed() == 6 * base_period &&
+              fixture.machine.cpu().progress() ==
+                  dsp56300::Progress{.instructions = progress.instructions + 1,
+                                     .estimated_cycles = progress.estimated_cycles + 2},
+          "A fresh extension F2 supplies the actual captured long MOVE, full registers and "
+          "independent base cost");
 }
 
 void uncoordinated_restore_guard() {
-  DspMachine machine;
-  std::array<std::uint32_t, 16> words{};
-  prepare(machine, words);
-  DspFetchRun run(contract(), machine);
-  for (unsigned cycle = 0; cycle < 3; ++cycle) {
-    static_cast<void>(run.advance_cycle(machine, input(true)));
-  }
-  require(!machine.reference_pending(),
-          "Own queued NOP has actually retired before the ownership check");
-  const auto machine_only = machine.checkpoint();
-  const auto joint = run.checkpoint(machine);
-  const auto before = machine.cpu().debug_state();
-  machine.restore(machine_only);
-  require(machine.cpu().debug_state() == before,
-          "All exposed native registers/counters are identical after restore");
-  require(fault([&] {
-            static_cast<void>(run.advance_cycle(machine, input()));
-          }).contains("coordinated native/frontend/DMA"),
-          "An identical machine-only restore still invalidates the process-local clock owner "
-          "capability");
-  require(run.completed_cycles() == 3 && machine.bus().last_dma_cycle() == 3,
-          "Rejected uncoordinated restore performs no DMA sampling or clock advance");
-  run.restore(joint, machine);
-  const auto continued = run.advance_cycle(machine, input());
-  require(continued.completed_cycles == 4 && run.elapsed_ticks() == 4 * base_period_ticks,
-          "A trusted joint restore refreshes the capability while retaining exact elapsed clocks");
+  const std::array<std::uint32_t, 16> words{};
+  Fixture fixture(words);
+  auto timeline = std::make_unique<OwnDspTimeline>(fixture.machine, timing, 0);
+  for (unsigned i = 0; i < 4; ++i) { static_cast<void>(step(fixture.machine, *timeline)); }
+  const auto machine_only = fixture.machine.checkpoint();
+  const auto joint = timeline->checkpoint();
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
+  fixture.machine.restore(machine_only);
+  require(fixture.machine.cpu().registers() == before &&
+              fixture.machine.cpu().progress() == progress,
+          "A machine-only restore can retain every exposed CPU field and counter");
+  static_cast<void>(rejects([&] { static_cast<void>(step(fixture.machine, *timeline)); }));
+  require(
+      fixture.elapsed() == 4 * base_period && fixture.machine.bus().last_dma_cycle() == 4,
+      "Identical CPU fields cannot authorize an abandoned timeline after uncoordinated restore");
+  timeline = std::make_unique<OwnDspTimeline>(fixture.machine, joint);
+  static_cast<void>(step(fixture.machine, *timeline));
+  require(
+      fixture.elapsed() == 5 * base_period && fixture.machine.bus().last_dma_cycle() == 5,
+      "Trusted joint restore refreshes ownership and preserves the exact reference-clock prefix");
 }
 }
 
@@ -316,7 +317,7 @@ int main() {
     unknown_extension_admission();
     uncoordinated_restore_guard();
     guard_checks();
-    std::cout << "Clocked automatic DSP F1/F2 checks passed\n";
+    std::cout << "Native clocked F1/F2, timer/PLL, pipeline ownership and recovery checks passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';

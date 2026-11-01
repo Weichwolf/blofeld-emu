@@ -27,12 +27,14 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
       expected_epoch_(machine.clock().native_epoch()),
       expected_dma_(machine.bus().last_dma_cycle()),
       horizon_(epoch_ticks) {
-  if ((timing_ != OwnDspAutomaticTiming::one_effect_per_cycle &&
+  if (machine_.clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary ||
+      (timing_ != OwnDspAutomaticTiming::one_effect_per_cycle &&
        timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_write_priority &&
        timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts &&
        timing_ != OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) ||
       expected_ticks_ > std::numeric_limits<std::uint64_t>::max() - epoch_ticks_) {
-    throw Fault("Own DSP timeline requires qualified timing and representable epoch");
+    throw Fault("Own DSP timeline requires reference-cycle clock switching, qualified timing and "
+                "representable epoch");
   }
   if (initial_reset) {
     if (!machine_.captured_fetch_owner_.expired()) {
@@ -115,17 +117,19 @@ std::optional<OwnDspFetchCycleResult> OwnDspTimeline::advance_one(const std::uin
        boundary == OwnDspBoundary::before)) {
     throw Fault("Own DSP timeline cannot rewind a consumed boundary");
   }
-  const auto deadline = next_deadline();
-  if (deadline > horizon || (deadline == horizon && boundary == OwnDspBoundary::before)) {
-    horizon_ = horizon;
-    boundary_ = boundary;
-    return std::nullopt;
-  }
+  auto attempted_ticks = horizon;
   try {
+    attempted_ticks = next_deadline();
+    if (attempted_ticks > horizon ||
+        (attempted_ticks == horizon && boundary == OwnDspBoundary::before)) {
+      horizon_ = horizon;
+      boundary_ = boundary;
+      return std::nullopt;
+    }
     auto result = fetch_->advance_dma_automatic(inputs, timing_);
     expected_ticks_ = machine_.clock().elapsed_ticks();
     expected_dma_ = machine_.bus().last_dma_cycle();
-    horizon_ = deadline;
+    horizon_ = attempted_ticks;
     boundary_ = OwnDspBoundary::through;
     if (result.native && result.native->fault.kind != dsp56300::FaultKind::none) {
       faulted_ = true;
@@ -134,8 +138,9 @@ std::optional<OwnDspFetchCycleResult> OwnDspTimeline::advance_one(const std::uin
   } catch (const Fault &error) {
     faulted_ = true;
     const auto regs = machine_.cpu().registers();
-    throw Fault("Own DSP timeline operation=reference-cycle pc=" + hex(regs.pc, 6) + " omr=" +
-                hex(regs.omr, 6) + " ticks=" + std::to_string(deadline) + ": " + error.what());
+    throw Fault("Own DSP timeline operation=reference-cycle pc=" + hex(regs.pc, 6) +
+                " omr=" + hex(regs.omr, 6) + " attempted-ticks=" + std::to_string(attempted_ticks) +
+                ": " + error.what());
   } catch (...) {
     faulted_ = true;
     throw;

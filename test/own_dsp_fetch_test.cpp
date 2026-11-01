@@ -728,6 +728,26 @@ void automatic_interrupt_frontier() {
   }
 }
 
+bool second_vector_sample(OwnDspMachine &machine,
+                          const OwnDspFetchCycleResult &result,
+                          const Registers &foreground,
+                          const std::uint64_t instructions,
+                          const bool missing_second) {
+  if (!result.native) { throw std::runtime_error("Second vector read lost native progress"); }
+  require(machine.cpu().registers() == foreground &&
+              machine.cpu().progress().instructions == instructions,
+          "The pair is sampled before any actual first-slot register update or retirement");
+  if (result.native->fault.kind == FaultKind::memory_read) {
+    require(missing_second && result.native->fault.address == irqa_vector + 1 &&
+                machine.bus().interrupt_request(0).has_value(),
+            "Missing second vector word faults before either slot and retains its IRQ");
+    return true;
+  }
+  require(result.native->fault.kind == FaultKind::none && !machine.bus().interrupt_request(0),
+          "The accepted second vector read acknowledges before either slot retires");
+  return false;
+}
+
 void automatic_interrupt_vector(const bool missing_second) {
   constexpr unsigned maximum_cycles = 100;
   auto cycle_clocks = clocks;
@@ -749,29 +769,41 @@ void automatic_interrupt_vector(const bool missing_second) {
   machine.bus().write({.space = DspSpace::x, .address = priority_register, .value = 6});
   machine.bus().observe_irqa(true);
   machine.bus().observe_irqa(false);
+  const auto foreground = machine.cpu().registers();
+  const auto instructions = machine.cpu().progress().instructions;
   bool saw_first = false;
   bool saw_second = false;
   for (; cycle < maximum_cycles; ++cycle) {
+    const auto pending = machine.cpu().pending_instruction();
     const auto result = fetch.advance_dma_automatic(dma_input(cycle), timing);
-    if (result.native && result.native->retired &&
-        machine.cpu().instruction_fetch().exception_vector &&
-        machine.cpu().instruction_fetch().address == irqa_vector + 1) {
+    if (result.native && result.native->pending &&
+        result.native->pending->effect.kind == EffectKind::fetch_extension &&
+        result.native->pending->effect.address == irqa_vector + 1) {
       saw_first = true;
-      require(machine.bus().interrupt_request(0).has_value(),
-              "First actual vector read must not acknowledge the interrupt");
+      require(machine.bus().interrupt_request(0).has_value() &&
+                  machine.cpu().registers() == foreground &&
+                  machine.cpu().progress().instructions == instructions,
+              "First actual vector read retains the IRQ before either NOP slot executes");
     }
-    if (saw_first && result.native && result.native->fault.kind == FaultKind::memory_read) {
-      require(missing_second && result.native->fault.address == irqa_vector + 1 &&
-                  machine.bus().interrupt_request(0).has_value(),
-              "Missing second vector word must fault and retain its IRQ");
+    if (saw_first && pending && pending->effect.kind == EffectKind::fetch_extension &&
+        pending->effect.address == irqa_vector + 1) {
       saw_second = true;
+      if (second_vector_sample(machine, result, foreground, instructions, missing_second)) {
+        break;
+      }
+    }
+    if (!missing_second && saw_second && result.native && result.native->retired &&
+        machine.cpu().registers().x == 7) {
       break;
     }
-    if (saw_first && !machine.bus().interrupt_request(0)) { saw_second = true; }
-    if (!missing_second && saw_second && machine.cpu().registers().x == 7) { break; }
   }
-  require(saw_first && saw_second && (missing_second || machine.cpu().registers().x == 7),
-          "Automatic IRQ must execute both actual vector words and resume its foreground");
+  auto expected = foreground;
+  expected.pc += 2;
+  expected.x = 7;
+  require(saw_first && saw_second &&
+              (missing_second || (machine.cpu().registers() == expected &&
+                                  machine.cpu().progress().instructions == instructions + 3)),
+          "Two actual vector NOPs and the foreground MOVE retire with literal full-state results");
 }
 
 void automatic_interrupt_missing_first() {
@@ -1216,8 +1248,12 @@ void vector_read(OwnDspMachine &machine,
                  const Acknowledgement acknowledgement) {
   const auto pending = machine.cpu().pending_instruction();
   if (!pending) { throw std::runtime_error("Native vector lost its fetch"); }
-  require(pending->effect.kind == EffectKind::fetch_opcode && pending->effect.address == expected &&
-              pending->effect.pc == expected && pending->effect.space == Space::program,
+  const bool first = acknowledgement == Acknowledgement::pending;
+  require(pending->effect.kind ==
+                  (first ? EffectKind::fetch_opcode : EffectKind::fetch_extension) &&
+              pending->effect.address == expected &&
+              pending->effect.pc == (first ? expected : expected - 1) &&
+              pending->effect.space == Space::program,
           "Native vector must own the actual program-bus access");
   const auto result = machine.advance(pending->ticket);
   require(result.fault.kind == FaultKind::none && machine.bus().interrupt_request(0).has_value() ==
@@ -1249,20 +1285,22 @@ void interrupt_vector(const bool missing_second) {
   rejects([&] { fetch.issue(); }, "F2 prefetch was accepted during native vector ownership");
   static_cast<void>(fetch.begin());
   vector_read(machine, irqa_vector, Acknowledgement::pending);
-  retire(machine);
-  fetch.synchronize();
-  static_cast<void>(fetch.begin());
   if (missing_second) {
     const auto pending = machine.cpu().pending_instruction();
     if (!pending) { throw std::runtime_error("Second vector read is missing"); }
     const auto result = machine.advance(pending->ticket);
     require(result.fault.kind == FaultKind::memory_read && result.fault.space == Space::program &&
-                result.fault.address == irqa_vector + 1 && result.fault.pc == irqa_vector + 1 &&
+                result.fault.address == irqa_vector + 1 && result.fault.pc == irqa_vector &&
                 machine.io().failure() && machine.bus().interrupt_request(0).has_value(),
             "Unknown vector word must fail with its actual address and retain IRQ ownership");
     return;
   }
   vector_read(machine, irqa_vector + 1, Acknowledgement::accepted);
+  retire(machine);
+  fetch.synchronize();
+  require(machine.cpu().instruction_fetch().latched_opcode == 0,
+          "First retirement retains the accepted zero second opcode");
+  static_cast<void>(fetch.begin());
   retire(machine);
   fetch.synchronize();
   require(fetch.view().next_address == boot_entry + 2 &&
@@ -1300,19 +1338,6 @@ void interrupt_call(const bool short_vector) {
   require(fetch.admit_interrupt(), "Real IRQA call was not admitted");
   static_cast<void>(fetch.begin());
   vector_read(machine, irqa_vector, Acknowledgement::pending);
-  if (short_vector) {
-    retire(machine);
-    require(machine.cpu().registers().pc == irqa_vector + 1 && machine.bus().interrupt_request(0),
-            "Short vector must retain its actual unacknowledged source");
-    try {
-      fetch.synchronize();
-      throw std::runtime_error("Unqualified one-word vector was accepted");
-    } catch (const blofeld::Fault &error) {
-      require(std::string(error.what()).contains("interrupt vector continuation"),
-              "Unqualified vector must report its real continuation");
-    }
-    return;
-  }
   const auto extension = machine.cpu().pending_instruction();
   if (!extension) { throw std::runtime_error("Long vector extension is missing"); }
   require(extension->effect.kind == EffectKind::fetch_extension &&
@@ -1323,9 +1348,11 @@ void interrupt_call(const bool short_vector) {
           "Real second vector word must acknowledge the source");
   retire(machine);
   fetch.synchronize();
-  require(machine.cpu().registers().pc == handler && machine.cpu().registers().sp == 1 &&
-              fetch.view().next_address == handler,
-          "Long interrupt call must install its real frame and handler fetch");
+  const auto target = short_vector ? irqa_vector + 1 : handler;
+  require(machine.cpu().registers().pc == target && machine.cpu().registers().sp == 1 &&
+              fetch.view().next_address == target,
+          "Both real call forms accept the pair before installing their frame and actual target");
+  if (short_vector) { return; }
   read_word(fetch, handler);
   static_cast<void>(fetch.begin());
   retire(machine);
@@ -1376,14 +1403,29 @@ void software_vector() {
   retire(machine);
   fetch.synchronize();
   require(machine.cpu().instruction_fetch().exception_vector &&
-              fetch.view().next_address == trap_vector,
-          "The native TRAP must redirect to its actual software vector");
-  for (const auto address : {trap_vector, trap_vector + 1}) {
-    read_word(fetch, address);
-    static_cast<void>(fetch.begin());
-    retire(machine);
+              fetch.view().next_address == boot_entry + 1,
+          "Native TRAP holds the foreground queue during actual vector ownership");
+  rejects([&] { fetch.issue(); }, "Software vector cannot admit speculative foreground F1");
+  unsigned reads = 0;
+  for (unsigned slot = 0; slot < 2; ++slot) {
+    auto progress = fetch.begin();
+    for (unsigned effect = 0; effect < 16 && progress.pending && !progress.retired; ++effect) {
+      const auto pending = progress.pending.value();
+      const bool read = pending.effect.kind == EffectKind::fetch_opcode ||
+                        pending.effect.kind == EffectKind::fetch_extension;
+      if (read) {
+        require(slot == 0 && reads < 2 && pending.effect.address == trap_vector + reads &&
+                    pending.effect.pc == trap_vector,
+                "Both real software-vector reads precede the first slot");
+        ++reads;
+      }
+      progress = machine.advance(pending.ticket);
+      require(progress.fault.kind == FaultKind::none, "Actual software-vector effects are healthy");
+    }
+    require(progress.retired, "Each real software vector slot must retire within its bound");
     fetch.synchronize();
   }
+  require(reads == 2, "The accepted second software opcode has no additional bus read");
   require(!machine.cpu().instruction_fetch().exception_vector &&
               machine.cpu().registers().pc == boot_entry + 1 &&
               fetch.view().next_address == boot_entry + 1,

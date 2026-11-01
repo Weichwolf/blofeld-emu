@@ -1,59 +1,74 @@
 Automatic DSP program-fetch reference clock
 
-DspFetchRun owns one completed core reference cycle per advance_cycle call.
-Its explicit reference_cycle_order contract orders actual DMA admission, old
-F2 sampling, a selected native effect, new F1 address generation, then SHI/map
-delays and CLK/2. The caller supplies external DMA requests/grants and chooses
-native admission; it supplies no fetch action, memory footprint, program word,
-DMA index or elapsed-cycle chunk. This is not the complete seven-stage CPU.
+OwnDspFetch drives the independent dsp56300 core. Each completed
+advance_dma_pipeline or advance_dma_automatic call orders actual DMA admission,
+old F2 sampling, one selected native effect, new F1 address generation, then
+SHI/map delays and CLK/2. The caller supplies external DMA requests/grants and
+the next DMA index; it supplies no program words, CPU results or elapsed-cycle
+chunks. The pipeline entry can hold CPU admission while continuing fetch and
+peripheral clocks. OwnDspTimeline additionally owns absolute deadlines and
+failure quarantine. This is not the complete seven-stage CPU.
 
 DSP56300FM Rev5 sections2.3.1/Table2-1 and5.3/Table5-1 distinguish F1 address
 generation from the following F2 memory read, with one fetched word per clock.
 The first cycle only issues F1. Subsequent cycles can sample the previous F2
-and issue the next F1. The established eight-word host continuation bound
-applies backpressure; it is not evidence for silicon queue depth. Genuine native
-JMP/JSR/RTS handling and captured opcode/extension consumption remain those of
-the underlying frontend (dsp-program-fetch.txt). No extra P read is invented
-for an already captured word, including zero.
+and issue the next F1. The eight-word host continuation bound applies real
+backpressure; it is not evidence for silicon queue depth. Actual captured
+opcode/extension consumption remains that of the underlying frontend
+(dsp-program-fetch.txt). No extra P read is invented for an already captured
+word, including zero. Native register publication, PC publication and retirement
+are separate observed boundaries; the reference profile does not collapse them
+into the old backend's single-cycle completion.
 
 A held DMA destination stalls selected native/F2 work and new F1, including
 the cycle that commits the destination. Completed stalled or backpressure
 cycles still advance peripheral delays and CLK/2, retaining the odd residue.
-A new OMR memory-switch command does not consume its own delay: three subsequent
-completed clocks are required. End-of-cycle peripheral sampling is an explicit
-reference order, not a measured placement of every physical bus effect.
+An actual native OMR memory-switch publication does not consume its own delay:
+three subsequent completed clocks are required. End-of-cycle peripheral
+sampling is an explicit reference order, not measured physical bus placement.
 
 Each cycle latches the current PCTL requested EXTAL ratio. Exact integral
 timebase ticks are committed only when the cycle completes. Unknown PINIT,
 nonintegral rates and counter exhaustion refuse rather than round. These
 digital command ratios do not establish analog PLL lock or Blofeld clock rates.
-The reference epoch begins at zero cycles/ticks/CLK2 phase; the starting DMA
-index follows the controller's actual last admitted index.
+The test epoch follows genuine mode5/PINIT-low reset and native MOVEP setup;
+that setup is explicitly untimed. A stopped-CPU DMA request observation at the
+epoch is not an elapsed clock. Actual elapsed time retains reset hold/recovery,
+while completed reference-cycle and CLK2 totals begin at zero.
 
-Joint checkpoints retain native execution, real captured words, issued F1,
-DMA, timer/PLL/map state, reference time and divider phase. Only the matching
-machine and clock contract can restore them. A fresh process-local execution
-capability detects machine-only restore even when every exposed CPU field is
-identical. It is unrelated to persistent device identity. Out-of-band native,
-fetch or DMA-index changes refuse coordinated continuation.
+Joint checkpoints retain native execution, captured words, issued F1, DMA,
+timer/PLL/map state, reference time and divider phase. Trusted snapshots are
+portable to a compatible machine and clock contract. A fresh process-local
+execution capability detects machine-only restore even when every exposed CPU
+field is identical. It is unrelated to persistent device identity. Out-of-band
+native, fetch or DMA-index changes refuse coordinated continuation.
 
-An entered-cycle failure quarantines CPU and clock, preserving already admitted
-DMA/native effects. Completed time is a prefix, not permission to retry partial
-effects. Diagnostics include completed cycles, DMA index, ticks, PC/OMR and the
-underlying failing address/operation. Trusted joint restore recovers both owners.
-The existing completion-clock contract cannot be replaced, and its active-DMA
-refusal is unchanged. Matching rebuilt headers and libraries are required.
+An entered timeline cycle failure quarantines its owner, preserving already
+admitted effects and refusing another advance or checkpoint. This includes a
+period that becomes unrepresentable after a PLL command; no DMA/CPU/clock effect
+is admitted in that case. Invalid observation boundaries remain preflight errors.
+Completed time is a prefix, not permission to retry partial effects. Diagnostics
+include PC/OMR, attempted time and the underlying address/operation. Trusted
+joint restore recovers the owner. A timeline requires reference-cycle clock
+switching before acquiring ownership; it cannot replace an instruction-boundary
+clock contract. Matching rebuilt headers and libraries are required.
 
   cmake --build --preset strict --target blofeld-fetch-run-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_fetch_run$'
 
-Own assembled programs use actual native MOVEP setup before the reference epoch.
-Literal clock/register/address oracles cover F1/F2 latency and overlap, capacity
-backpressure, real DMA waits/writes, timer compare/CLK2 edges, native OMR delay,
-sampled zero preservation, partial failure and joint replay. PLL period-change
-cases alter the model command directly; they do not qualify native PCTL stage
-placement. Guard cases check unknown PINIT, invalid period/contract, foreign and
-duplicate owners, machine-only restore and unchanged nominal completion use.
+Authored literal instructions use actual native MOVEP setup before the test
+epoch. Independent register/address/clock expectations cover F1/F2 latency,
+capacity backpressure, DMA waits/writes, timer compare/CLK2 edges, native OMR
+delay, sampled zero/unknown opcode/unknown extension retention, partial failure
+and joint replay. PLL cases alter the model command directly; they do not
+qualify native PCTL stage placement. Guards check unknown PINIT, nonintegral
+periods, invalid/duplicate owners, portable independent continuation,
+machine-only restore and preservation of rejected clock contracts.
+
+Legacy reset and automatic-pipeline qualification
+
+The following fixtures still use the former backend. They describe their
+original harness and do not qualify the independent runtime.
 
 Explicit reset hold/recovery
 

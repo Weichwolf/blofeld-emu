@@ -198,11 +198,21 @@ void vector_cut(const bool fetched) {
   for (auto *machine : {&source, &clone}) {
     require(machine->bus().interrupt_request(0).has_value(), "Checkpoint acknowledged first word");
     if (!fetched) { static_cast<void>(machine->advance(pending(*machine).ticket)); }
-    retire(*machine);
-    static_cast<void>(machine->begin_fetch());
-    require(pending(*machine).effect.address == irqa_vector + 1, "Lost second vector ownership");
-    static_cast<void>(machine->advance(pending(*machine).ticket));
+    const auto second = pending(*machine);
+    require(second.effect.kind == dsp56300::EffectKind::fetch_extension &&
+                second.effect.address == irqa_vector + 1,
+            "The second actual vector read precedes first-slot execution");
+    static_cast<void>(machine->advance(second.ticket));
     require(!machine->bus().interrupt_request(0), "Second real vector read was not acknowledged");
+    retire(*machine);
+    const auto accepted = machine->cpu().instruction_fetch();
+    require(accepted.exception_vector && accepted.address == irqa_vector + 1 &&
+                accepted.latched_opcode == 0,
+            "First retirement retains the genuine second zero vector word");
+    static_cast<void>(machine->begin_fetch());
+    require(pending(*machine).effect.kind != dsp56300::EffectKind::fetch_opcode &&
+                pending(*machine).effect.kind != dsp56300::EffectKind::fetch_extension,
+            "The second vector instruction consumes its accepted sample without another P read");
     retire(*machine);
     require(machine->cpu().registers().pc == boot_entry + 2, "Fast vector changed foreground PC");
   }

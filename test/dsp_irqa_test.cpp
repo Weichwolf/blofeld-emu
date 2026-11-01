@@ -275,7 +275,13 @@ void service(OwnDspMachine &machine,
   require(machine.bus().interrupt_request(0) == request && machine.admit_interrupt(foreground),
           "The actual eligible IRQA source admits the installed foreground instruction");
   unsigned reads = 0;
-  for (unsigned instruction = 0; instruction < 2 && machine.interrupt_pending(); ++instruction) {
+  for (unsigned instruction = 0;
+       instruction < 2 && machine.cpu().instruction_fetch().exception_vector;
+       ++instruction) {
+    if (instruction == 1) {
+      require(machine.cpu().instruction_fetch().latched_opcode == 0 && !machine.interrupt_pending(),
+              "The second fast NOP consumes its accepted opcode after peripheral acknowledgement");
+    }
     auto progress = machine.begin_fetch();
     for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired;
          ++effect) {
@@ -456,15 +462,18 @@ void test_native_missing_vector() {
     const DspInterruptRequest request{.vector = irqa_vector, .level = 1};
     require(owner.admit_interrupt({.address = foreground, .opcode = move_y0, .extension = 9}),
             "Actual pending edge admits the known foreground before vector reads");
-    step_native(owner);
     auto progress = owner.begin_fetch();
+    if (!progress.pending) { throw Fault("Missing actual first-vector fetch"); }
+    progress = owner.advance(progress.pending->ticket);
     if (!progress.pending) { throw Fault("Missing actual second-vector fetch"); }
+    require(progress.pending->effect.kind == dsp56300::EffectKind::fetch_extension &&
+                progress.pending->effect.address == irqa_vector + 1,
+            "Both actual vector reads precede any first-slot retirement");
     progress = owner.advance(progress.pending->ticket);
     require(progress.fault.kind == dsp56300::FaultKind::memory_read &&
                 progress.fault.space == dsp56300::Space::program &&
-                progress.fault.address == irqa_vector + 1 && progress.fault.pc == irqa_vector + 1 &&
-                owner.cpu().registers() == expected &&
-                owner.cpu().progress().instructions == before.instructions + 1 &&
+                progress.fault.address == irqa_vector + 1 && progress.fault.pc == irqa_vector &&
+                owner.cpu().registers() == expected && owner.cpu().progress() == before &&
                 owner.interrupt_pending() && owner.bus().interrupt_request(0) == request &&
                 owner.io().failure() && !owner.cpu().instruction_outcome(),
             "Refused second read reports its actual address/PC without acknowledging the edge or "

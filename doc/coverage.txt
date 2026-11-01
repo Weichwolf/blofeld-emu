@@ -65,6 +65,23 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           status RMW and unqualified peripheral
                                           sharing still refuse before sampling
                                           (dsp-reference-cycle.txt).
+                                          Fetch-run tests use native F1/F2 and
+                                          actual register/PC/retirement boundaries,
+                                          DMA waits, timer compare/odd CLK2 phase,
+                                          PLL changes and native OMR delay.
+                                          Timeline period failures quarantine;
+                                          incompatible clock ownership refuses
+                                          before admission. Unknown opcode and
+                                          extension samples retain their identity
+                                          across writes and joint restores
+                                          (dsp-fetch-clock.txt).
+                                          Native vector pairs are accepted before
+                                          first-slot execution. IRQ acknowledge
+                                          and retained second-slot ownership are
+                                          separate; real P stores cannot replace
+                                          an accepted second opcode. IRQA/TRAP
+                                          cover20 cuts/40 restored suffixes
+                                          (own-dsp-integration.txt).
                                           DMA IRQ service uses actual native
                                           vectors/RTI on all six channels,48
                                           same/fresh-owner continuations and

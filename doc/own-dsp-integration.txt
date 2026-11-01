@@ -29,7 +29,9 @@ OwnDspInterrupts selects requests through the board's interrupt controller and
 admits them to the paired own core. Its advance method executes the genuine
 native ticket before updating the state of vector fetches. A stale ticket or refused
 read cannot acknowledge a source. After the second accepted vector read, only
-the admitted source is acknowledged. Core and board must share the same I/O bus;
+the admitted source is acknowledged. Both native vector reads complete before
+first-slot execution. Unknown second words leave that slot unexecuted and its
+source held; a stale ticket cannot repeat acknowledgement. Core and board must share the same I/O bus;
 the caller must route every staged advance through this owner during entry.
 This supplies functional ownership, not clock timing or reset.
 The synthetic IRQ test covers SR masking, two vector bases, stale tickets,
@@ -292,9 +294,21 @@ native retirement. Reset and restore invalidate its identity. The focused test
 covers stale/unknown samples, two-word capture, real branch redirection, an
 OMR transition and native REP latch reuse after program memory changes.
 IRQ admission uses the captured foreground and the real core's vector reads;
-acknowledgement follows the second accepted read. Tests cover masked and
-missing vector reads, fast/long entry and software exceptions. A one-word
-interrupt call before a second vector read remains explicitly unqualified.
+acknowledgement follows the second accepted read, before first-slot execution.
+Peripheral acknowledgement and native vector continuation are separate owners:
+after a short first slot retires, the core retains the second accepted opcode.
+The frontend holds F1/F2 until the native vector finishes, including software
+TRAP entry. Native slot restrictions reject unavailable instruction forms.
+The pair test executes a first-slot P store that replaces the second word;
+the second slot must still use its earlier accepted value. Twenty checkpoint
+contexts (external IRQA/software TRAP) execute forty same/fresh-owner suffixes
+with literal full-register, P-memory and foreground expectations. The owner
+and machine checkpoint tests separately cover masking, two vector bases, stale
+first/second tickets and unknown second reads before any slot retires.
+
+  cmake --build --preset strict --target blofeld-own-dsp-vector-pair-test
+  ctest --test-dir build/strict -R '^own_dsp_vector_pair$' --output-on-failure
+
 With CE enabled, the actual native core owns program reads and cache behavior;
 the F2 owner resumes after the real CE-disable retirement. The current board
 map qualifies internal P/ROM only and does not configure an external P cache

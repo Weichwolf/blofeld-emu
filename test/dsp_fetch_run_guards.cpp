@@ -1,108 +1,126 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "bank_fixture.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_machine.hpp"
+#include "dma_native_fixture.hpp"
+#include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
-#include "dsp_fetch_run_fixture.hpp"
-#include "dsp_norm_fixture.hpp"
-#include "native_access_fixture.hpp"
-#include "reference_execution_fixture.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp/own_dsp_timeline.hpp"
+#include "dsp_fetch_native_fixture.hpp"
 
 #include <array>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 
-namespace blofeld::test::fetch_clock {
+namespace blofeld::test::fetch_native {
 namespace {
-using native_access::fault;
-
 void unknown_pinit() {
-  DspMachine machine;
-  DspProgram code;
-  code.emit("nop");
+  OwnDspMachine machine(native::native_clocks);
+  native::NativeProgram code;
+  code.word(0);
   code.install(machine.bus());
-  const auto pending = machine.begin_reference_instruction(reference::boundaries);
-  const auto before = machine.cpu().debug_state();
-  const auto error = fault([&] { const DspFetchRun run(contract(), machine); });
-  require(error.contains("X:0xfffffd") && error.contains("pc=0xff0000") &&
-              error.contains("omr=0x000305") && machine.cpu().debug_state() == before &&
-              reference::ticket(machine) == reference::ticket(pending) &&
-              !machine.reference_fetch().active,
-          "Unobserved reset PINIT refuses clock ownership before any frontend or native mutation");
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  static_cast<void>(rejects([&] { const OwnDspFetch fetch(machine); }));
+  const auto error = rejects([&] {
+    machine.begin_hardware_reset(
+        {.mode_known = 15, .mode_levels = 5, .pinit = std::nullopt, .recovery_cycles = 2});
+  });
+  require(error.contains("PINIT-low") && machine.cpu().registers() == before &&
+              machine.cpu().progress() == progress && machine.clock().elapsed_ticks() == 0 &&
+              !machine.bus().last_dma_cycle(),
+          "Unknown PINIT/reset contract refuses before frontend, native, DMA or clock mutation");
 }
 
 void invalid_period_recovery() {
-  DspMachine machine;
-  std::array<std::uint32_t, 16> words{};
-  prepare(machine, words);
-  auto inputs = contract();
-  inputs.timebase_hz = extal;
-  DspFetchRun run(inputs, machine);
-  static_cast<void>(run.advance_cycle(machine, input()));
-  const auto saved = run.checkpoint(machine);
-  constexpr unsigned faster = 0x02e112;
-  machine.bus().pll().write(faster);
-  require(fault([&] {
-            static_cast<void>(run.advance_cycle(machine, input()));
-          }).contains("Unrepresentable"),
-          "A nonintegral reference period fails rather than rounding elapsed time");
-  require(run.faulted() && run.elapsed_ticks() == 1 && run.completed_cycles() == 1 &&
-              machine.bus().last_dma_cycle() == 1,
-          "An impossible period commits no DMA sample, frontend step or clock");
-  static_cast<void>(fault([&] { static_cast<void>(machine.checkpoint()); }));
-  run.restore(saved, machine);
-  const auto recovered = run.advance_cycle(machine, input());
-  require(!run.faulted() && recovered.period_ticks == 1 && run.elapsed_ticks() == 2,
-          "A joint checkpoint restores the exact prior PLL command and reference period");
+  const std::array<std::uint32_t, 16> words{};
+  auto clocks = native::native_clocks;
+  clocks.timebase_hz = clocks.extal_hz;
+  Fixture fixture(words, {.clocks = clocks});
+  auto timeline = std::make_unique<OwnDspTimeline>(fixture.machine, timing, 0);
+  const auto first_deadline = timeline->next_deadline();
+  require(
+      timeline->advance_one(first_deadline, OwnDspBoundary::through, banks::inputs({.index = 1}))
+          .has_value(),
+      "Integral one-tick period admits one actual F1/reference cycle");
+  const auto saved = timeline->checkpoint();
+  const auto attempted = timeline->next_deadline();
+  fixture.machine.bus().pll().write(faster);
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
+  const auto error = rejects([&] {
+    static_cast<void>(
+        timeline->advance_one(attempted, OwnDspBoundary::through, banks::inputs({.index = 2})));
+  });
+  require(error.contains("not integral") && timeline->faulted() && fixture.elapsed() == 1 &&
+              fixture.machine.bus().last_dma_cycle() == 1 &&
+              fixture.machine.cpu().registers() == before &&
+              fixture.machine.cpu().progress() == progress,
+          "Nonintegral period quarantines attempted timeline execution without rounding, DMA or "
+          "CPU effects");
+  static_cast<void>(rejects([&] { static_cast<void>(timeline->checkpoint()); }));
+  timeline = std::make_unique<OwnDspTimeline>(fixture.machine, saved);
+  require(timeline->advance_one(timeline->next_deadline(),
+                                OwnDspBoundary::through,
+                                banks::inputs({.index = 2}))
+                  .has_value() &&
+              fixture.elapsed() == 2,
+          "Joint restore recovers the actual prior PLL command and exact integral period");
 }
 
 void owner_and_contract_guards() {
-  DspMachine machine;
-  DspMachine foreign;
-  std::array<std::uint32_t, 16> words{};
-  prepare(machine, words);
-  prepare(foreign, words);
-  auto invalid = contract();
-  invalid.timing = DspFetchTiming::unqualified;
-  static_cast<void>(fault([&] { const DspFetchRun run(invalid, machine); }));
-  DspFetchRun run(contract(), machine);
-  DspFetchRun other(contract(), foreign);
-  const auto saved = run.checkpoint(machine);
-  static_cast<void>(fault([&] { static_cast<void>(run.advance_cycle(foreign, input())); }));
-  static_cast<void>(fault([&] { other.restore(saved, foreign); }));
-  static_cast<void>(fault([&] { const DspFetchRun duplicate(contract(), machine); }));
-  require(run.completed_cycles() == 0 && other.completed_cycles() == 0,
-          "Invalid, foreign and duplicate clock ownership cannot advance either real machine");
-  static_cast<void>(machine.advance_dma(banks::inputs({.index = 1}), banks::use()));
-  require(fault([&] {
-            static_cast<void>(run.advance_cycle(machine, input()));
-          }).contains("coordinated"),
-          "An out-of-band DMA observation cannot create an unobserved clock hole");
-  run.restore(saved, machine);
-  require(run.advance_cycle(machine, input()).completed_cycles == 1,
-          "Trusted joint restore recovers the real prior DMA index and first F1 clock");
+  const std::array<std::uint32_t, 16> words{};
+  Fixture fixture(words);
+  Fixture foreign(words);
+  static_cast<void>(rejects([&] {
+    const OwnDspTimeline invalid(fixture.machine, OwnDspAutomaticTiming::unqualified, 0);
+  }));
+  auto timeline = std::make_unique<OwnDspTimeline>(fixture.machine, timing, 0);
+  const auto saved = timeline->checkpoint();
+  static_cast<void>(rejects([&] { const OwnDspTimeline duplicate(fixture.machine, timing, 0); }));
+  // Checkpoints are intentionally portable; validate a genuine independent clone.
+  OwnDspTimeline clone(foreign.machine, saved);
+  const auto result = clone.advance_one(
+      clone.next_deadline(), OwnDspBoundary::through, banks::inputs({.index = 1}));
+  require(
+      result && result->issued_address == program && foreign.elapsed() == base_period &&
+          fixture.elapsed() == 0 && fixture.machine.bus().last_dma_cycle() == 0,
+      "Fresh-owner restore permits a real independent continuation without mutating its source");
+  static_cast<void>(native::dma(fixture.machine, banks::inputs({.index = 1}), banks::use()));
+  static_cast<void>(rejects([&] { static_cast<void>(timeline->next_deadline()); }));
+  require(fixture.elapsed() == 0, "Out-of-band DMA cannot create an unobserved clock hole");
+  timeline = std::make_unique<OwnDspTimeline>(fixture.machine, saved);
+  require(timeline->advance_one(timeline->next_deadline(),
+                                OwnDspBoundary::through,
+                                banks::inputs({.index = 1}))
+                  .has_value() &&
+              fixture.elapsed() == base_period,
+          "Trusted joint restore recovers actual prior DMA index and first F1 period");
 }
 
 void completion_owner() {
-  DspMachine machine(
-      DspRunContract{.clock = {.extal_hz = extal,
-                               .timebase_hz = timebase,
-                               .switch_timing = DspClockSwitch::reference_instruction_boundary},
-                     .timing = DspRunTiming::native_internal_estimates});
-  const auto before = machine.cpu().debug_state();
-  static_cast<void>(fault([&] { const DspFetchRun run(contract(), machine); }));
-  require(!machine.timing_faulted() && machine.cpu().debug_state() == before,
-          "The frontend clock cannot replace an existing native completion-clock contract");
-  DspProgram code;
-  code.emit("nop");
-  code.install(machine.bus());
-  machine.bus().pll().observe_pinit(false);
-  machine.cpu().reset_spi_boot();
-  machine.cpu().step();
-  require(machine.run_clock().native_cycle_units() == 1,
-          "Rejected frontend ownership preserves the actual previous nominal path");
+  auto clocks = native::native_clocks;
+  clocks.switch_timing = DspClockSwitch::reference_instruction_boundary;
+  const std::array words{0U};
+  Fixture fixture(words, {.clocks = clocks});
+  const auto before = fixture.machine.cpu().registers();
+  const auto progress = fixture.machine.cpu().progress();
+  static_cast<void>(rejects([&] { const OwnDspTimeline invalid(fixture.machine, timing, 0); }));
+  require(fixture.machine.cpu().registers() == before &&
+              fixture.machine.cpu().progress() == progress && fixture.elapsed() == 0 &&
+              fixture.machine.bus().last_dma_cycle() == 0,
+          "A reference-cycle timeline cannot acquire an instruction-boundary clock contract");
+  native::step_native(fixture.machine);
+  auto expected = before;
+  ++expected.pc;
+  require(fixture.machine.cpu().registers() == expected &&
+              fixture.machine.cpu().progress().instructions == progress.instructions + 1 &&
+              fixture.elapsed() == 0,
+          "Rejected timeline acquisition preserves actual native execution and its existing clock "
+          "contract");
 }
 }
 

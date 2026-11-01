@@ -98,7 +98,13 @@ void drain(OwnDspMachine &machine, dsp56300::InstructionProgress progress) {
 void vector_service(OwnDspMachine &machine, const DspInterruptRequest request) {
   admit(machine);
   unsigned reads = 0;
-  for (unsigned instruction = 0; instruction < 2 && machine.interrupt_pending(); ++instruction) {
+  for (unsigned instruction = 0;
+       instruction < 2 && machine.cpu().instruction_fetch().exception_vector;
+       ++instruction) {
+    if (instruction == 1) {
+      require(machine.cpu().instruction_fetch().latched_opcode == 0 && !machine.interrupt_pending(),
+              "The second fast NOP consumes its accepted opcode after peripheral acknowledgement");
+    }
     auto progress = machine.begin_fetch();
     for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired;
          ++effect) {
@@ -259,10 +265,11 @@ void missing_vector_and_recovery() {
   const auto saved = machine.checkpoint();
   const auto foreground = machine.cpu().registers();
   admit(machine);
-  step_native(machine); // The first genuine fast-vector NOP retires before the missing word.
   const auto before = machine.cpu().registers();
   const auto count = machine.cpu().progress();
   auto progress = machine.begin_fetch();
+  if (!progress.pending) { throw Fault("Missing native first-vector fetch"); }
+  progress = machine.advance(progress.pending->ticket);
   if (!progress.pending) { throw Fault("Missing native second-vector fetch"); }
   require(progress.pending->effect.address == vector + 1,
           "Missing second word remains an actual native program fetch");
@@ -288,11 +295,12 @@ void suspended_acknowledgement() {
   static_cast<void>(tick(machine, 1));
   require(tick(machine, 2).has_value(), "Actual DMA1 completion precedes suspended entry");
   admit(machine);
-  step_native(machine);
   auto progress = machine.begin_fetch();
+  if (!progress.pending) { throw Fault("Missing native first-vector fetch"); }
+  progress = machine.advance(progress.pending->ticket);
   constexpr unsigned second = first_vector + 3;
   if (!progress.pending) { throw Fault("Missing native acknowledgement boundary"); }
-  require(progress.pending->effect.kind == dsp56300::EffectKind::fetch_opcode &&
+  require(progress.pending->effect.kind == dsp56300::EffectKind::fetch_extension &&
               progress.pending->effect.address == second && machine.interrupt_pending(),
           "The second actual vector read remains pending before acknowledgement");
   const auto saved = machine.checkpoint();

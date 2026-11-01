@@ -25,9 +25,13 @@ void service(OwnDspMachine &machine,
     for (unsigned effect = 0; effect < effect_bound && progress.pending && !progress.retired;
          ++effect) {
       const auto pending = progress.pending.value();
-      const bool fetch = pending.effect.kind == dsp56300::EffectKind::fetch_opcode;
+      const bool fetch = pending.effect.kind == dsp56300::EffectKind::fetch_opcode ||
+                         pending.effect.kind == dsp56300::EffectKind::fetch_extension;
       if (fetch) {
-        require(pending.effect.space == dsp56300::Space::program &&
+        require(word == 0 &&
+                    pending.effect.kind == (reads == 0 ? dsp56300::EffectKind::fetch_opcode
+                                                       : dsp56300::EffectKind::fetch_extension) &&
+                    pending.effect.space == dsp56300::Space::program &&
                     pending.effect.address == request.vector + reads && reads < 2 &&
                     machine.bus().interrupt_request(0) == request && machine.interrupt_pending(),
                 "Both real vector reads precede acknowledgement of the selected timer source");
