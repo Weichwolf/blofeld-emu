@@ -43,6 +43,12 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           Program-word latches now use actual F2
                                           samples with independent DMA-time/length
                                           checks and unknown-value quarantine/replay.
+                                          The native condition matrix retains all
+                                          4096 Jcc/CCR cases and 64 fresh-owner
+                                          restores after retirement/before F2 sync.
+                                          Actual core outcomes distinguish taken
+                                          same-cursor branches from fallthrough;
+                                          no host condition reevaluation is used.
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).

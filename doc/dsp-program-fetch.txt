@@ -36,6 +36,25 @@ later genuine fetch. FIFO/type/capability guards and unknown opcode/extension
 recovery retain strict failures. Supplied DMA/core occupancy remains an explicit
 reference experiment; these tests provide no physical phase timestamps.
 
+After actual staged retirement, synchronize validates the core's instruction
+outcome against the admitted address/opcode and retirement count. The native
+control-transfer flag discards both queued F2 samples and issued F1 even for a
+sequential target. An untaken condition retains them. No branch condition is
+re-evaluated from later registers or RAM. REP latch reuse remains distinct from
+a control transfer. Trusted chip/frontend checkpoints retain the actual outcome
+when stopped after retirement but before frontend synchronization.
+
+  cmake --build --preset strict --target blofeld-prefetch-condition-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_prefetch_conditions$'
+
+The independent-core matrix executes all 16 Jcc codes and 256 CCR values against
+FM tables12-17/12-18 Boolean expectations, including normalized/signed conditions.
+Each branch targets its ordinary successor while RAM replaces the queued NOP.
+Independent full-register/CCR/stack/PC expectations and four native retirements
+per case distinguish retained samples from refetched code. Sixty-four fresh-owner
+restores stop after actual branch retirement and before F2 synchronization.
+These deterministic ISA cases are not fuzzing. Separate TSan uses build/thread.
+
 No calibrated DMA timing, complete ROM, reserved Y:002000 behavior, full Desktop/
 Keyboard reset-to-instrument boot, real-time callback bound or silicon
 equivalence is established. Manufacturer assets remain local.
@@ -92,14 +111,6 @@ JMP redirects invalidate ready and issued words, including a fallthrough target.
 Capacity, starvation, competing APIs, reset and unknown-value consumption/recovery
 remain explicit. Full seven-stage scheduling and physical bus timing are open.
 
-  cmake --build --preset strict --target blofeld-prefetch-condition-test
-  ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_prefetch_conditions$'
-
-A fixed matrix executes all 16 Jcc codes with all 256 CCR values using independent
-FM tables12-17/12-18 Boolean expectations, including normalized and signed conditions.
-Every branch targets the identical sequential PC, so only the real decision
-can select retention versus fresh fetch after code overwrite. Literal native
-flags, register values, stack, PC and four retirements per case are checked.
 Separate native-configured DMA cases pause an actual memory-bit operand or
 conditional call, replay two joint snapshots and distinguish the following
 queued NOP from the DMA-written instruction. Existing distinct-target branches,

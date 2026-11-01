@@ -471,11 +471,19 @@ dsp56300::InstructionProgress OwnDspFetch::admit(const DspFetchedInstruction &ca
 
 void OwnDspFetch::synchronize() {
   check_owner();
+  const auto outcome = machine_.cpu_.instruction_outcome();
   if (!in_flight_ || machine_.cpu_.pending_instruction() ||
       machine_.cpu_.fault().kind != dsp56300::FaultKind::none ||
-      machine_.cpu_.progress().instructions != instructions_ + 1) {
+      machine_.cpu_.progress().instructions != instructions_ + 1 || !outcome ||
+      outcome->instructions != instructions_ + 1) {
     throw Fault("Own DSP F2 synchronization requires its actual retirement pc=" +
                 hex(machine_.cpu_.registers().pc, 6));
+  }
+  if (!native_fetch_ && (!admitted_ || admitted_->opcode.word.address != outcome->address ||
+                         admitted_->opcode.word.value != outcome->opcode)) {
+    throw Fault("DSP F2 retirement differs from its admitted instruction read P:" +
+                hex(outcome->address, 6) + " pc=" + hex(machine_.cpu_.registers().pc, 6) +
+                " omr=" + hex(machine_.cpu_.registers().omr, 6));
   }
   if (interrupt_vector_) {
     finish_interrupt_vector();
@@ -503,7 +511,8 @@ void OwnDspFetch::synchronize() {
                   " pc=" + hex(context.address, 6) + " omr=" + hex(regs.omr, 6));
     }
     repeated_ = admitted_;
-  } else if (state.consume_address != context.address || state.omr != regs.omr) {
+  } else if (outcome->control_transfer || state.consume_address != context.address ||
+             state.omr != regs.omr) {
     fetch_.redirect(context.address, regs.omr);
   }
   if (!context.latched_opcode) { repeated_.reset(); }
