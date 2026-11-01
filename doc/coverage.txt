@@ -172,6 +172,12 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           is removed; full native effects and
                                           independent clocks retain its coverage
                                           (mcu-dsp-schedule.txt).
+                                          Joint-checkpoint tests now use that
+                                          runtime too:45 instruction/WAI/reset,
+                                          fresh-clone and failure scenarios retain
+                                          full native state/effect/fetch suffixes,
+                                          deep independent RAM and literal clocks
+                                          (dsp-fetch-schedule.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are

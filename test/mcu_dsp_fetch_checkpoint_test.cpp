@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "board/mcu_dsp_fetch_schedule.hpp"
-#include "board/mcu_dsp_schedule.hpp"
+#include "board/mcu_dsp_runtime.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_dma.hpp"
-#include "dsp/dsp_fetch_run.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp/dsp_pipeline.hpp"
-#include "dsp/dsp_pll.hpp"
-#include "dsp/dsp_program_fetch.hpp"
-#include "dsp/dsp_reference_execution.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/dsp_run_clock.hpp"
+#include "dsp/own_dsp_fetch.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
@@ -28,6 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -35,9 +31,8 @@
 
 namespace {
 using namespace blofeld;
-using namespace blofeld::test;
 constexpr unsigned oscillator_hz = 12000000, common_hz = 540000000;
-constexpr unsigned epoch = 450, dsp_period = 45, common_factor = 9;
+constexpr unsigned boot = 0xff0000, dsp_period = 45, common_factor = 9, recovery_ticks = 90;
 constexpr unsigned entry = 0x8000, resume = 0x800f, handler = 0x9000;
 constexpr unsigned stack = 0x2000, wait_stack = stack - 9, unmasked = 0xc0;
 constexpr unsigned foreground_d = 0x1234, foreground_x = 0x4567, foreground_y = 0x6789;
@@ -46,12 +41,17 @@ constexpr unsigned initial_word = 0x123456, mutation = 0x79;
 constexpr unsigned nop = 0xa7, protection = 0x7f0d, security = 0x7f0f;
 constexpr unsigned byte_mask = 0xff, unsecured = 0xfe, irq_vector = 0xfff2;
 constexpr unsigned branch_back = 0x050fdf, reset_edges = 195, initial_wait_ticks = 210;
+constexpr unsigned fault_delay = 48;
 constexpr std::uint64_t accumulator_unit = std::uint64_t{1} << 24U;
+
+void require(const bool condition, const std::string &message) {
+  if (!condition) { throw Fault(message); }
+}
 
 std::string rejects(const auto &operation) {
   try {
     operation();
-  } catch (const Fault &error) { return error.what(); }
+  } catch (const std::exception &error) { return error.what(); }
   throw Fault("Expected joint native checkpoint rejection");
 }
 
@@ -85,46 +85,46 @@ McuRunContract mcu_inputs(const unsigned phase) {
           .memory_timing = McuRunMemory::unstretched_internal};
 }
 
-McuDspFetchInputs inputs() {
-  return {.dsp = {.extal_hz = oscillator_hz,
-                  .timebase_hz = common_hz,
-                  .timing = DspFetchTiming::reference_cycle_order,
-                  .execution = DspReferenceExecution::staged_register_boundaries,
-                  .pipeline = DspFetchPipeline::automatic_memory},
-          .epoch_ticks = epoch,
-          .shared_write_order = McuDspTieOrder::dsp_before_mcu,
-          .maximum_dsp_cycles_per_period = 16,
-          .wait_order = McuDspWaitOrder::dsp_before_mcu,
-          .reset_order = McuDspResetOrder::dsp_before_mcu};
+McuDspRuntimeInputs inputs() {
+  return {.timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts,
+          .maximum_cycles_per_period = 16,
+          .wait_dsp_first = true,
+          .reset_dsp_first = true,
+          .initial_reset = OwnDspResetInputs{
+              .mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 2}};
 }
 
-DspFetchCycleInputs cycle_inputs() {
-  return {.known_requests = 15, .grant = DspDmaGrant::available};
+DspDmaInputs cycle_inputs() {
+  return {.known_requests = 15,
+          .timing = DspDmaTiming::reference_sampled_cycles,
+          .grant = DspDmaGrant::available};
 }
 
-DspMachine &initialize(DspMachine &dsp, const bool fault) {
-  DspProgram code;
+void initialize(OwnDspMachine &dsp, const bool fault) {
+  // DSP56300FM literal MOVE immediate, CLR, ADD, BRA and indirect Y store forms.
+  constexpr unsigned immediate_x1 = 0x45f400;
+  constexpr unsigned clear_a = 0x200013;
+  constexpr unsigned add_x1 = 0x200060;
+  constexpr unsigned immediate_r0 = 0x60f400;
+  constexpr unsigned immediate_x0 = 0x44f400;
+  constexpr unsigned store_x0_y_r0 = 0x4c6000;
+  constexpr unsigned rom_words = 128;
+  std::array<std::uint32_t, rom_words> code{};
   if (fault) {
-    code.immediate("r0", stack);
-    code.immediate("x0", 7);
-    constexpr unsigned delay = 48;
-    for (unsigned i = 0; i < delay; ++i) { code.emit("nop"); }
-    code.emit("move x0,y:(r0)");
+    code[0] = immediate_r0;
+    code[1] = stack;
+    code[2] = immediate_x0;
+    code[3] = 7;
+    code[4 + fault_delay] = store_x0_y_r0;
   } else {
-    code.immediate("x1", 1);
-    code.emit("clr a");
-    code.emit("add x1,a");
-    code.word(branch_back);
+    code[0] = immediate_x1;
+    code[1] = 1;
+    code[2] = clear_a;
+    code[3] = add_x1;
+    code[4] = branch_back;
   }
-  constexpr unsigned padding = 32;
-  for (unsigned i = 0; i < padding; ++i) { code.emit("nop"); }
-  code.install(dsp.bus());
-  dsp.bus().pll().observe_pinit(false);
-  dsp.cpu().reset_spi_boot();
-  static_cast<void>(
-      dsp.begin_reference_instruction(DspReferenceExecution::staged_register_boundaries));
+  dsp.bus().install_rom({.space = DspSpace::p, .start = boot, .words = code});
   dsp.bus().write({.space = DspSpace::x, .address = dsp_ram, .value = initial_word});
-  return dsp;
 }
 
 struct Ledger {
@@ -132,16 +132,20 @@ struct Ledger {
   unsigned expected_pc = boot;
 };
 
-// Include actual fetch/latches and complete native debug state,not just final values.
 struct NativeTrace {
-  DspDebugState cpu;
-  DspProgramFetchView fetch;
-  std::array<std::optional<DspProgramWord>, 3> stages;
-  std::optional<DspProgramWord> retiring;
-  std::optional<DspState> operands;
-  std::uint32_t decode_address;
-  std::uint64_t cycles;
+  dsp56300::Registers cpu;
+  dsp56300::Progress progress;
+  std::optional<dsp56300::InstructionEffect> pending;
+  std::uint64_t elapsed, reset_ticks, cycles, clk2;
+  bool interrupt_pending;
   bool operator==(const NativeTrace &) const = default;
+};
+
+struct CycleTrace {
+  NativeTrace native;
+  std::optional<std::uint32_t> issued, native_pc;
+  bool captured, started, retired;
+  bool operator==(const CycleTrace &) const = default;
 };
 
 struct Scenario {
@@ -152,75 +156,82 @@ struct Scenario {
 
 struct Fixture {
   explicit Fixture(const Scenario &scenario = {})
-      : mcu(image(), scenario.backend, mcu_inputs(scenario.phase)),
-        schedule(inputs(), mcu, initialize(dsp, scenario.failing)),
-        failing(scenario.failing) {
+      : mcu(image(), scenario.backend, mcu_inputs(scenario.phase)), failing(scenario.failing) {
+    initialize(dsp, failing);
     mcu.bus().write(mcu_ram, initial_byte);
     mcu.bus().set_pin_drive(McuPort::e, {.mask = 3, .levels = 3});
+    recovered = mcu.run_clock().elapsed_ticks() * common_factor + recovery_ticks;
+    runtime = std::make_unique<McuDspRuntime>(inputs(), mcu, dsp);
+    runtime->release_dsp_reset();
     attach();
   }
 
   [[nodiscard]] NativeTrace native() const {
-    const auto view = schedule.run().pipeline();
-    if (!view) { throw Fault("Joint snapshot requires its real automatic pipeline"); }
-    return {.cpu = dsp.cpu().debug_state(),
-            .fetch = dsp.reference_fetch(),
-            .stages = view->stages,
-            .retiring = view->awaiting_retirement,
-            .operands = view->awaiting_inputs,
-            .decode_address = view->decode_address,
-            .cycles = schedule.run().completed_cycles()};
+    const auto pending = dsp.cpu().pending_instruction();
+    return {.cpu = dsp.cpu().registers(),
+            .progress = dsp.cpu().progress(),
+            .pending = pending ? std::optional{pending->effect} : std::nullopt,
+            .elapsed = dsp.clock().elapsed_ticks(),
+            .reset_ticks = dsp.clock().hardware_reset_ticks(),
+            .cycles = dsp.clock().native_cycle_units(),
+            .clk2 = dsp.clock().timer_clk2_edges(),
+            .interrupt_pending = dsp.interrupt_pending()};
   }
 
   void attach() {
     const auto observe = [this](const auto &result) { record(result); };
     mcu.set_cycle_observer([this, observe](const auto period) {
-      schedule.begin_cycle(period, false, cycle_inputs, observe);
+      runtime->begin_cycle(period, false, cycle_inputs, observe);
     });
     mcu.set_wait_period_observer([this, observe](const auto period) {
-      schedule.begin_wait_period(period, cycle_inputs, observe);
+      runtime->begin_wait_period(period, cycle_inputs, observe);
     });
     mcu.set_reset_period_observer([this, observe](const auto period) {
-      schedule.begin_reset_period(period, cycle_inputs, observe);
+      runtime->begin_reset_period(period, cycle_inputs, observe);
     });
   }
 
-  void record(const DspFetchCycleResult &result) {
-    require(result.completed_cycles == ledger.cycles + 1 && result.period_ticks == dsp_period &&
-                result.completion_ticks == result.completed_cycles * dsp_period,
-            "Every actual pipeline period follows the independent45tick clock");
+  void record(const DspRuntimeCycle &cycle) {
+    const auto &result = cycle.result;
+    require(cycle.cycle == ledger.cycles &&
+                cycle.completion_ticks - cycle.start_ticks == dsp_period &&
+                cycle.completion_ticks == recovered + ((ledger.cycles + 1) * dsp_period),
+            "Every actual F1/F2/effect period follows held reset and the independent45tick clock");
     ++ledger.cycles;
-    if (!result.pipeline) { throw Fault("Automatic cycle must retain its actual native phases"); }
-    const auto &phase = *result.pipeline;
-    if (!failing && phase.retirement_published) {
-      require(phase.execute2 && phase.execute2->address == ledger.expected_pc,
+    if (!failing && result.native && result.native->retired) {
+      require(result.native_pc && *result.native_pc == ledger.expected_pc,
               "Native retirements follow literal MOVE/CLR/ADD/BRA addresses");
       if (ledger.expected_pc == boot) {
         ledger.expected_pc = boot + 2;
       } else if (ledger.expected_pc == boot + 2) {
-        require(dsp.cpu().state().a == 0, "Native CLR has its independent zero result");
+        require(dsp.cpu().registers().a == 0, "Native CLR has its independent zero result");
         ledger.expected_pc = boot + 3;
       } else if (ledger.expected_pc == boot + 3) {
         ++ledger.adds;
-        require(dsp.cpu().state().a == ledger.adds * accumulator_unit,
+        require(dsp.cpu().registers().a == ledger.adds * accumulator_unit,
                 "Native ADD has the independently counted full accumulator result");
         ledger.expected_pc = boot + 4;
       } else {
         ledger.expected_pc = boot + 3;
       }
     }
-    trace.push_back(native());
+    trace.push_back({.native = native(),
+                     .issued = result.issued_address,
+                     .native_pc = result.native_pc,
+                     .captured = result.captured,
+                     .started = result.instruction_started,
+                     .retired = result.native && result.native->retired});
   }
 
   CpuStep step() {
     const auto result = mcu.cpu().step();
-    schedule.end_instruction();
+    runtime->end_instruction();
     return result;
   }
 
   void idle(const unsigned periods) {
     require(mcu.advance_wait(periods) == periods, "Requested actual native idle periods complete");
-    schedule.end_wait();
+    runtime->end_wait();
     time();
   }
 
@@ -260,45 +271,52 @@ struct Fixture {
 
   void time() const {
     const auto common = mcu.run_clock().elapsed_ticks() * common_factor;
-    require(schedule.end_ticks() == common && ledger.cycles == (common - epoch) / dsp_period &&
-                schedule.run().completed_cycles() == ledger.cycles &&
-                schedule.run().elapsed_ticks() == ledger.cycles * dsp_period &&
-                schedule.run().timer_clk2_edges() == ledger.cycles / 2,
-            "Both native owners and CLK2 match the independent integer time ledger");
+    const auto cycles = common < recovered ? 0 : (common - recovered) / dsp_period;
+    const auto reset = common < recovered ? common : recovered;
+    require(runtime->end_ticks() == common && ledger.cycles == cycles &&
+                runtime->completed_cycles() == cycles &&
+                dsp.clock().elapsed_ticks() == reset + (cycles * dsp_period) &&
+                dsp.clock().hardware_reset_ticks() == reset &&
+                dsp.clock().timer_clk2_edges() == cycles / 2,
+            "Native reset/recovery,MCU,DSP effects and CLK2 retain independent absolute clocks");
   }
 
   McuMachine mcu;
-  DspMachine dsp;
-  McuDspFetchSchedule schedule;
+  OwnDspMachine dsp{{.extal_hz = oscillator_hz,
+                     .timebase_hz = common_hz,
+                     .switch_timing = DspClockSwitch::reference_cycle_boundary}};
+  std::unique_ptr<McuDspRuntime> runtime;
   bool failing;
+  std::uint64_t recovered = 0;
   Ledger ledger;
-  std::vector<NativeTrace> trace;
+  std::vector<CycleTrace> trace;
 };
 
 struct Saved {
-  McuDspFetchCheckpoint checkpoint;
+  McuDspRuntimeCheckpoint checkpoint;
   Ledger ledger;
   NativeTrace native;
   std::uint64_t mcu_ticks;
 };
 
 Saved capture(Fixture &f) {
-  return {.checkpoint = f.schedule.checkpoint(),
+  return {.checkpoint = f.runtime->checkpoint(),
           .ledger = f.ledger,
           .native = f.native(),
           .mcu_ticks = f.mcu.run_clock().elapsed_ticks()};
 }
 
 void restore(Fixture &f, const Saved &saved) {
-  f.schedule.restore(saved.checkpoint);
-  f.ledger = saved.ledger; // External test observer cursors are explicitly caller-owned.
+  f.runtime.reset();
+  f.runtime = std::make_unique<McuDspRuntime>(saved.checkpoint, f.mcu, f.dsp);
+  f.ledger = saved.ledger;
   f.trace.clear();
   f.attach();
   require(f.native() == saved.native && f.mcu.run_clock().elapsed_ticks() == saved.mcu_ticks &&
               f.mcu.bus().read(mcu_ram) == initial_byte &&
               f.dsp.bus().read({.space = DspSpace::x, .address = dsp_ram}) == initial_word &&
-              !f.schedule.faulted(),
-          "Joint restore recovers complete native CPU/fetch/latches,clocks and deep bus contents");
+              !f.runtime->faulted(),
+          "Joint restore recovers full native CPU/pending effects,clocks and deep bus contents");
   f.time();
 }
 
@@ -316,10 +334,9 @@ void ordinary(const unsigned cut) {
   require(registers(f.mcu.cpu().state()) == expected_cpu, "All six actual MCU registers rewind");
   f.enter_wait(cut);
   f.wake();
-  require(
-      std::vector<NativeTrace>(suffix.begin() + static_cast<std::ptrdiff_t>(saved.ledger.cycles),
-                               suffix.end()) == f.trace,
-      "Independently checked future native effects and every fetch/latch observation repeat");
+  require(std::vector<CycleTrace>(suffix.begin() + static_cast<std::ptrdiff_t>(saved.ledger.cycles),
+                                  suffix.end()) == f.trace,
+          "Independently checked future native effects and every fetch/latch observation repeat");
 }
 
 void waiting(const unsigned cut) {
@@ -350,7 +367,7 @@ struct ResetScenario {
 void reset(const ResetScenario scenario) {
   const auto [cut, phase, hold] = scenario;
   Fixture f({.phase = phase});
-  f.schedule.begin_system_reset(McuResetSource::external, 3);
+  f.runtime->begin_system_reset(McuResetSource::external, 3);
   f.attach();
   require(f.mcu.advance_system_reset(cut, McuResetPad::low) == cut,
           "Actual reset reaches the requested native SYSCLK capture edge");
@@ -371,7 +388,7 @@ void reset(const ResetScenario scenario) {
       require(f.mcu.advance_system_reset(1, McuResetPad::high) == 1,
               "A later observed high pad releases the actual reset");
     }
-    f.schedule.end_system_reset();
+    f.runtime->end_system_reset();
     const auto expected = 50U + ((reset_edges + (hold ? 1U : 0U)) * 5U) - phase + 50U;
     require(f.mcu.run_clock().elapsed_ticks() == expected && f.mcu.cpu().state().pc == entry &&
                 f.mcu.cpu().state().ccr == hc12::reset_ccr &&
@@ -381,18 +398,54 @@ void reset(const ResetScenario scenario) {
   }
 }
 
+void check_fault_prefix(const Fixture &f, const std::string &failure) {
+  constexpr unsigned reset_sr = 0xc00300;
+  constexpr unsigned bypass_omr = 0x305;
+  constexpr unsigned linear_modifier = 0xffffff;
+  constexpr unsigned failed_pc = boot + 4 + fault_delay;
+  constexpr std::uint64_t completed = (2 * fault_delay) + 9;
+  constexpr unsigned attempt_ticks = 5310;
+  constexpr unsigned mcu_bus_periods = 58;
+  constexpr unsigned mcu_idle_periods = 37;
+  constexpr unsigned mcu_ticks = 580;
+  dsp56300::Registers expected{.x = 7, .pc = failed_pc, .sr = reset_sr, .omr = bypass_omr};
+  expected.r[0] = stack;
+  expected.m.fill(linear_modifier);
+  const auto pending = f.dsp.cpu().pending_instruction();
+  require(
+      failure.contains("attempted-ticks=" + std::to_string(attempt_ticks)) &&
+          failure.contains("pc=" + hex(failed_pc, 6)) &&
+          failure.contains("Unmapped DSP memory write at Y:0x002000") &&
+          f.dsp.cpu().registers() == expected &&
+          f.dsp.cpu().progress() == dsp56300::Progress{.instructions = fault_delay + 2,
+                                                       .estimated_cycles = fault_delay + 4} &&
+          pending && pending->effect.kind == dsp56300::EffectKind::write &&
+          pending->effect.space == dsp56300::Space::y && pending->effect.address == stack &&
+          pending->effect.value == 7 && pending->effect.pc == failed_pc &&
+          f.ledger.cycles == completed && f.runtime->completed_cycles() == completed &&
+          f.dsp.clock().elapsed_ticks() == f.recovered + (completed * dsp_period) &&
+          f.dsp.clock().timer_clk2_edges() == completed / 2 &&
+          f.mcu.run_clock().bus_cycles() == mcu_bus_periods &&
+          f.mcu.idle_bus_cycles() == mcu_idle_periods &&
+          f.mcu.run_clock().elapsed_ticks() == mcu_ticks,
+      "Fault replay retains independent complete native registers,actual store and both clocks");
+}
+
 void fault_recovery() {
   Fixture f({.failing = true});
   f.enter_wait();
   const auto saved = capture(f);
   std::string expected;
-  std::vector<NativeTrace> suffix;
+  std::vector<CycleTrace> suffix;
   for (unsigned repeat = 0; repeat < 2; ++repeat) {
     restore(f, saved);
     const auto failure = rejects([&] { f.idle(64); });
-    require(failure.contains("2000") && failure.contains("mcu-pc=") && f.schedule.faulted() &&
-                !rejects([&] { static_cast<void>(f.schedule.checkpoint()); }).empty(),
-            "Actual reserved-Y store remains a contextual native failure and quarantines capture");
+    require(
+        failure.contains("MCU wait advance pc=0x800f") && f.runtime->faulted() &&
+            !rejects([&] { static_cast<void>(f.runtime->checkpoint()); }).empty(),
+        "Actual reserved-Y store remains a contextual native failure and quarantines capture: " +
+            failure);
+    check_fault_prefix(f, failure);
     if (repeat == 0) {
       expected = failure;
       suffix = f.trace;
@@ -404,20 +457,51 @@ void fault_recovery() {
   restore(f, saved);
 }
 
-void foreign_owner() {
+void fresh_owner() {
+  constexpr unsigned idle_cut = 17;
   Fixture left;
-  Fixture right;
   left.enter_wait();
-  right.enter_wait();
+  left.idle(idle_cut);
   const auto saved = capture(left);
-  const auto before = right.native();
-  const auto cpu = registers(right.mcu.cpu().state());
-  const auto ticks = right.mcu.run_clock().elapsed_ticks();
-  require(rejects([&] { right.schedule.restore(saved.checkpoint); }).contains("matching") &&
-              right.native() == before && registers(right.mcu.cpu().state()) == cpu &&
-              right.mcu.run_clock().elapsed_ticks() == ticks && !right.schedule.faulted(),
-          "A foreign owner rejects before changing either native machine or its health");
-  right.idle(1);
+  left.idle(7);
+  left.wake();
+  const std::vector<CycleTrace> expected(
+      left.trace.begin() + static_cast<std::ptrdiff_t>(saved.ledger.cycles), left.trace.end());
+  Fixture right;
+  restore(right, saved);
+  left.mcu.bus().write(mcu_ram, mutation);
+  left.dsp.bus().write({.space = DspSpace::x, .address = dsp_ram, .value = mutation});
+  right.idle(7);
+  right.wake();
+  require(right.trace == expected && right.mcu.bus().read(mcu_ram) == initial_byte &&
+              right.dsp.bus().read({.space = DspSpace::x, .address = dsp_ram}) == initial_word &&
+              left.mcu.bus().read(mcu_ram) == mutation &&
+              left.dsp.bus().read({.space = DspSpace::x, .address = dsp_ram}) == mutation,
+          "Fresh native owners retain the complete suffix and deep independent MCU/DSP memories");
+}
+
+void external_contract() {
+  Fixture f;
+  const auto saved = capture(f);
+  const auto before = f.native();
+  const auto cpu = registers(f.mcu.cpu().state());
+  unsigned queries = 0;
+  DspRuntimeEvents different{
+      .identity = std::make_shared<const bool>(false),
+      .next_ticks = [&]() -> std::optional<std::uint64_t> {
+        ++queries;
+        return std::nullopt;
+      },
+      .observe =
+          [](std::uint64_t) { throw Fault("Unexpected event on rejected checkpoint owner"); },
+      .order = DspPeerOrder::dsp_first,
+      .maximum_events_per_period = 1};
+  require(rejects([&] {
+            const McuDspRuntime rejected(saved.checkpoint, f.mcu, f.dsp, different);
+          }).contains("matching external identity and contract") &&
+              queries == 0 && f.native() == before && registers(f.mcu.cpu().state()) == cpu &&
+              f.mcu.run_clock().elapsed_ticks() == saved.mcu_ticks && !f.runtime->faulted(),
+          "A different external owner rejects before queries or either native machine changes");
 }
 
 void active_owner() {
@@ -425,17 +509,22 @@ void active_owner() {
   const auto saved = capture(f);
   unsigned rejected = 0;
   f.mcu.set_cycle_observer([&](const auto period) {
-    f.schedule.begin_cycle(period, false, cycle_inputs, [&](const auto &result) {
-      require(rejects([&] { f.schedule.restore(saved.checkpoint); }).contains("inactive") &&
-                  rejects([&] { static_cast<void>(f.schedule.checkpoint()); }).contains("inactive"),
-              "Reentrant snapshot operations fail before any native replacement");
+    f.runtime->begin_cycle(period, false, cycle_inputs, [&](const auto &result) {
+      const auto before = f.native();
+      const auto cpu = registers(f.mcu.cpu().state());
+      require(rejects([&] { static_cast<void>(f.runtime->checkpoint()); }).contains("inactive") &&
+                  rejects([&] {
+                    const McuDspRuntime replacement(saved.checkpoint, f.mcu, f.dsp);
+                  }).contains("active MCU execution") &&
+                  f.native() == before && registers(f.mcu.cpu().state()) == cpu,
+              "Active capture/replacement rejects before either native machine changes");
       ++rejected;
       f.record(result);
     });
   });
   static_cast<void>(f.step());
-  require(rejected > 0 && !f.schedule.faulted(),
-          "Caught reentrant requests preserve outer execution");
+  require(rejected > 0 && !f.runtime->faulted(),
+          "Caught reentrant requests preserve actual outer execution");
   restore(f, saved);
   f.enter_wait();
 }
@@ -450,7 +539,9 @@ void incomplete_offer(const bool wait) {
   } else {
     static_cast<void>(f.mcu.cpu().step());
   }
-  require(rejects([&] { static_cast<void>(f.schedule.checkpoint()); }).contains("completed"),
+  require(rejects([&] {
+            static_cast<void>(f.runtime->checkpoint());
+          }).contains("consumed operation boundary"),
           "Capture refuses an unclosed native instruction or idle offer");
   restore(f, saved);
   if (wait) {
@@ -469,10 +560,13 @@ void external_observers() {
   f.mcu.set_wait_observer([&](const auto) { ++external_calls; });
   f.idle(1);
   require(external_calls == 1, "Caller-owned native observation is attached before restore");
-  f.schedule.restore(saved.checkpoint);
+  f.runtime.reset();
+  f.runtime = std::make_unique<McuDspRuntime>(saved.checkpoint, f.mcu, f.dsp);
   require(f.mcu.advance_wait(1) == 1 && external_calls == 1,
           "Native restore drops external wiring and observer callbacks");
-  require(rejects([&] { static_cast<void>(f.schedule.checkpoint()); }).contains("consumed"),
+  require(rejects([&] {
+            static_cast<void>(f.runtime->checkpoint());
+          }).contains("consumed native period"),
           "Missing reattachment cannot silently relabel an unobserved native idle period");
   restore(f, saved);
   f.wake();
@@ -480,44 +574,37 @@ void external_observers() {
 
 void unknown_reset_pad() {
   Fixture f;
-  f.schedule.begin_system_reset(McuResetSource::external, 3);
+  f.runtime->begin_system_reset(McuResetSource::external, 3);
   f.attach();
   f.mcu.advance_system_reset(reset_edges - 1, McuResetPad::unknown);
   const auto saved = capture(f);
   require(
       rejects([&] { f.mcu.advance_system_reset(1, McuResetPad::unknown); }).contains("RESET pad") &&
-          f.schedule.faulted() && f.native() == saved.native &&
+          f.runtime->faulted() && f.native() == saved.native &&
           f.mcu.run_clock().elapsed_ticks() == saved.mcu_ticks,
       "Unknown RESET sampling rejects before either native clock advances");
   restore(f, saved);
   require(f.mcu.advance_system_reset(1, McuResetPad::high) == 1,
           "Trusted restore permits a later explicitly known reset-pad observation");
-  f.schedule.end_system_reset();
+  f.runtime->end_system_reset();
   require(f.mcu.cpu().state().pc == entry, "Recovered reset fetches the actual original vector");
   f.time();
 }
 
 void input_contract() {
-  McuMachine mcu(image(), BLOFELD_DEFAULT_SLA, mcu_inputs(0));
-  DspMachine dsp;
-  initialize(dsp, false);
-  const auto before_clock = dsp.checkpoint();
-  std::optional<McuDspFetchCheckpoint> saved;
-  {
-    const McuDspFetchSchedule schedule(inputs(), mcu, dsp);
-    saved.emplace(schedule.checkpoint());
-  }
-  dsp.restore(before_clock);
-  auto other_inputs = inputs();
-  other_inputs.maximum_dsp_cycles_per_period *= 2;
-  McuDspFetchSchedule other(other_inputs, mcu, dsp);
-  const auto cpu = dsp.cpu().debug_state();
-  const auto fetch = dsp.reference_fetch();
-  if (!saved) { throw Fault("Actual checkpoint must survive its schedule's lifetime"); }
-  require(rejects([&] { other.restore(*saved); }).contains("contracts") && !other.faulted() &&
-              other.run().completed_cycles() == 0 && dsp.cpu().debug_state() == cpu &&
-              dsp.reference_fetch() == fetch && mcu.cpu().state().pc == entry,
-          "Even matching native owners reject a different scheduler contract before mutation");
+  Fixture source;
+  const auto saved = capture(source);
+  Fixture different({.phase = 1});
+  const auto native = different.native();
+  const auto cpu = registers(different.mcu.cpu().state());
+  const auto ticks = different.mcu.run_clock().elapsed_ticks();
+  require(rejects([&] {
+            const McuDspRuntime rejected(saved.checkpoint, different.mcu, different.dsp);
+          }).contains("incompatible reference run contract") &&
+              different.native() == native && registers(different.mcu.cpu().state()) == cpu &&
+              different.mcu.run_clock().elapsed_ticks() == ticks && !different.runtime->faulted(),
+          "An incompatible MCU clock contract rejects before either native target changes");
+  static_cast<void>(different.step());
 }
 
 void backend_failure(const std::filesystem::path &temporary) {
@@ -528,14 +615,18 @@ void backend_failure(const std::filesystem::path &temporary) {
   const auto saved = capture(f);
   f.idle(1);
   const auto before = f.native();
+  const auto cpu = registers(f.mcu.cpu().state());
   {
     std::ofstream changed(backend, std::ios::binary | std::ios::app);
     changed.exceptions(std::ios::failbit | std::ios::badbit);
     changed.put('x');
   }
-  require(!rejects([&] { f.schedule.restore(saved.checkpoint); }).empty() && f.schedule.faulted() &&
-              f.native() == before,
-          "A rejected native restore quarantines the joint owner without inventing success");
+  f.runtime.reset();
+  require(!rejects([&] {
+             f.runtime = std::make_unique<McuDspRuntime>(saved.checkpoint, f.mcu, f.dsp);
+           }).empty() &&
+              !f.runtime && f.native() == before && registers(f.mcu.cpu().state()) == cpu,
+          "Changed backend refuses a fresh joint owner before either native target changes");
   std::filesystem::remove(backend);
   std::filesystem::copy_file(BLOFELD_DEFAULT_SLA, backend);
   restore(f, saved);
@@ -554,7 +645,8 @@ int main(const int count, char **arguments) {
       reset({.cut = reset_edges, .phase = phase, .hold = true});
     }
     fault_recovery();
-    foreign_owner();
+    fresh_owner();
+    external_contract();
     active_owner();
     incomplete_offer(false);
     incomplete_offer(true);
@@ -562,7 +654,8 @@ int main(const int count, char **arguments) {
     unknown_reset_pad();
     input_contract();
     backend_failure(arguments[1]);
-    std::cout << "44 joint native checkpoint scenarios passed:6 run,4 WAI,25 reset,9 guards\n";
+    std::cout
+        << "45 dsp56300 joint checkpoint scenarios passed:6 run,4 WAI,25 reset,1 clone,9 guards\n";
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
     return 1;

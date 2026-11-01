@@ -1732,7 +1732,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-mcu-dsp-fetch-dsp-reset-test PRIVATE blofeld_mcu_dsp_fixture)
   add_test(NAME mcu_dsp_fetch_dsp_reset COMMAND blofeld-mcu-dsp-fetch-dsp-reset-test)
   add_executable(blofeld-mcu-dsp-fetch-checkpoint-test test/mcu_dsp_fetch_checkpoint_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-checkpoint-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
+  target_link_libraries(blofeld-mcu-dsp-fetch-checkpoint-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME mcu_dsp_fetch_checkpoint COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/mcu_checkpoint.py"
     $<TARGET_FILE:blofeld-mcu-dsp-fetch-checkpoint-test>)

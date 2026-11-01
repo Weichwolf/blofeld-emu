@@ -104,25 +104,29 @@ See mcu-dsp-original-reset.txt for exact times, ROM provenance and acceptance
 limits. Actual power-on wiring, reserved-write silicon behavior and full boot
 remain open.
 
-Trusted joint checkpoints capture both native machines and pipeline/clock ledgers
-at completed instruction,WAI-slice or active reset-edge boundaries. Restore
-requires the same native owners and exact input contracts. Reattach MCU observers
-and restore caller-owned wiring/transport/audio event cursors before advancing.
-Snapshots are immutable in-process objects,not a serialized state format.
-Early owner/contract/reentry rejection preserves state;an admitted native restore
-failure quarantines the schedule. No joint atomic rollback is promised.
+Trusted joint checkpoints use McuDspRuntime and dsp56300. They capture both native
+machines and pending computation/fetch/clock state at completed instruction,
+WAI-slice or active reset-edge boundaries. The DSP is initially held from zero;
+its two-period recovery follows the actual MCU vector time,including OSC phase.
+Restore constructs a new owner on matching existing or fresh machines and retains
+the saved scheduler policy. Reattach MCU observers and restore caller-owned
+wiring/transport/audio event cursors before advancing. Snapshots are immutable
+in-process objects,not a serialized state format. A failed constructor establishes
+no usable joint owner; no atomic rollback of an admitted restore is promised.
 
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-checkpoint-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_checkpoint$'
 
-Forty-four native scenarios cover6instruction cuts,4WAI cuts with independent
-future IRQ schedules,25reset cuts/phases/pad holds,and9failure controls. Literal
-MCU frame/register/period expectations and full DSP ADD results accompany exact
-native F1/F2/pipeline suffix comparisons. Deep RAM,reset epochs,unknown RESET-pad
-recovery,real reserved-Y failure/recovery,active/foreign/incompatible owners,
-unclosed/unobserved offers and changed-backend quarantine are checked. External
-I/O,physical timing,whole-board persistence and complete instrument boot remain
-unqualified.
+Forty-five scenarios cover6instruction cuts,4WAI cuts with independent future IRQ
+schedules,25reset cuts/phases/pad holds,one fresh-owner clone and9failure controls.
+Literal MCU frame/register/period expectations and independently counted DSP ADD
+results accompany full native register/progress/pending-effect and F1/F2 suffix
+comparisons. The real reserved-Y failure retains independent complete registers,
+50 retirements/52 base costs,105 DSP periods and37 MCU idle periods in both replays.
+Deep independent RAM,reset epochs,unknown RESET-pad recovery,active replacement,
+incompatible clock/external contracts,unclosed/unobserved offers and changed
+backends are checked. External I/O,physical timing,whole-board persistence and
+complete instrument boot remain unqualified.
 
 Local original1.25 experiments additionally coupled actual native MCU PORTB
 stores to this pipeline under declared laboratory clocks/ready/skew and a
