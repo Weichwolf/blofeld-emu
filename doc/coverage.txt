@@ -3958,3 +3958,9 @@ NAND power. Four joint cuts reproduce native, clock, NAND and PCM state and full
 suffix traces with fresh owners. The six affected Board/NAND/audio groups pass
 under ASan/UBSan and separate TSan. See nand-board.txt and reference-audio-clock.txt.
 Original instrument audio and complete function acceptance remain pending.
+
+Native cycle overhead: captured-fetch/DMA fault contexts format only on failure.
+Five affected native/Board groups pass under ASan/UBSan and separate TSan.
+An isolated authored-loop measurement retains state/counts/ticks and reduces
+local median time from1.567s to1.333s per100000 periods. See dsp-fetch-clock.txt;
+full-instrument performance and realtime acceptance remain pending.

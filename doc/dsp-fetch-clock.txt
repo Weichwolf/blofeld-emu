@@ -9,6 +9,15 @@ chunks. The pipeline entry can hold CPU admission while continuing fetch and
 peripheral clocks. OwnDspTimeline additionally owns absolute deadlines and
 failure quarantine. This is not the complete seven-stage CPU.
 
+Successful captured-fetch and DMA periods do not format fault context strings.
+Formatting is deferred until a failing guard or caught exception; the retained
+PC/OMR snapshot and diagnostic text stay the same. Existing own_dsp_fetch,
+own_dsp_clock, dsp_observed, dsp_reserved_write_decoder and reference_pipeline
+groups pass under ASan/UBSan and separate TSan. An authored100000-period NOP/JMP
+loop gives local ASan/UBSan medians of1.567s before and1.333s after in three
+interleaved pairs, with identical native state/counts/ticks. This is an isolated
+performance observation, not original-instrument throughput or a real-time claim.
+
 DSP56300FM Rev5 sections2.3.1/Table2-1 and5.3/Table5-1 distinguish F1 address
 generation from the following F2 memory read, with one fetched word per clock.
 The first cycle only issues F1. Subsequent cycles can sample the previous F2

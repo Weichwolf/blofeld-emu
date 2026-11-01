@@ -314,13 +314,13 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
   check_sample_context(hold_fetch);
   const auto state = fetch_.view();
   const auto regs = machine_.cpu_.registers();
-  const auto context = " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
+  const auto context = [&regs] { return " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6); };
   if (machine_.clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary ||
       machine_.cpu_.fault().kind != dsp56300::FaultKind::none ||
       machine_.cpu_.processing_state() != dsp56300::ProcessingState::running || !state.active ||
       (require_capture && !state.pending_address) ||
       (state.pending_address && state.used == state.words.size())) {
-    throw Fault("Own DSP DMA/F2 cycle requires a qualified fetch boundary" + context);
+    throw Fault("Own DSP DMA/F2 cycle requires a qualified fetch boundary" + context());
   }
   std::array<DspMemoryAccess, 2> accesses{};
   std::size_t count = 0;
@@ -332,7 +332,7 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
   const auto pending = machine_.cpu_.pending_instruction();
   if (admit_native) {
     if (!in_flight_ || !pending) {
-      throw Fault("Own DSP DMA/F2/native cycle requires its pending owned effect" + context);
+      throw Fault("Own DSP DMA/F2/native cycle requires its pending owned effect" + context());
     }
     if (const auto access = native_overlap(native_state, *pending)) { accesses[count++] = *access; }
   }
@@ -366,7 +366,7 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
     machine_.clock_.fail();
     throw Fault(
         "Own DSP DMA/F2 cycle P:" + hex(state.pending_address.value_or(state.next_address), 6) +
-        context + ": " + error.what());
+        context() + ": " + error.what());
   }
 }
 

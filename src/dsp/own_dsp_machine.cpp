@@ -405,19 +405,19 @@ OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const b
   require_unclocked("dma-cycle");
   require_running();
   const auto regs = cpu_.registers();
-  const auto context = " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
+  const auto context = [&regs] { return " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6); };
   if (clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary ||
       advancing_effect_ || cpu_.fault().kind != dsp56300::FaultKind::none ||
       (cpu_.processing_state() != dsp56300::ProcessingState::running &&
        cpu_.processing_state() != dsp56300::ProcessingState::waiting)) {
-    throw Fault("Own DSP DMA cycle requires an inactive healthy cycle clock" + context);
+    throw Fault("Own DSP DMA cycle requires an inactive healthy cycle clock" + context());
   }
   if (!captured_fetch_owner_.expired()) {
-    throw Fault("Own DSP DMA cycle requires an unoccupied captured-fetch bus" + context);
+    throw Fault("Own DSP DMA cycle requires an unoccupied captured-fetch bus" + context());
   }
   const auto pending = cpu_.pending_instruction();
   if (admit_native && !pending) {
-    throw Fault("Own DSP DMA/native cycle requires an actual pending effect" + context);
+    throw Fault("Own DSP DMA/native cycle requires an actual pending effect" + context());
   }
   std::array<DspMemoryAccess, 1> access{};
   std::size_t count = 0;
@@ -443,7 +443,7 @@ OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const b
     return result;
   } catch (const std::exception &error) {
     clock_.fail();
-    throw Fault("Own DSP DMA cycle" + context + ": " + error.what());
+    throw Fault("Own DSP DMA cycle" + context() + ": " + error.what());
   }
 }
 
