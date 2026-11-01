@@ -91,9 +91,11 @@ input frequency, synchronizer latency and board timing remain unverified.
 
 dsp_timer_events checks 64 fixed external sequences against independent literal
 clock transitions, shared prescaling and UINT64_MAX batches, unknown inputs,
-GPIO/capture handover and reset. Own native setup and fast vectors check real
-overflow-before-compare service/source acknowledgement for timers 0/1; four
-coordinated owner restores reproduce both native IRQ/foreground suffixes.
+GPIO/capture handover and reset. Independent-core reset, literal native setup
+and fast vectors check overflow-before-compare service for timers 0/1, with
+eight same/fresh-owner continuations. An actual foreground NOP releases the
+core's conservative post-vector admission hold while compare remains pending;
+this untimed case does not qualify physical interrupt arbitration latency.
 
 Capture mode six, TRM=0
 Timers 0/1 support one-shot measurement capture. Internal CLK/2 or prescaler
@@ -117,8 +119,11 @@ synchronized value for later edge detection, while withdrawing its timing
 qualification. Unknown TLR also rejects a batch; an explicitly ordered capture
 before the first timer clock can latch the reset-cleared internal zero.
 
-The native capture diagnostic executes mode-six setup, then consumes a qualified
-capture through the real fast-interrupt vector and source acknowledgement. The
+The independent-core capture diagnostic executes mode-six setup on timers0/1
+and both polarities, then consumes the qualified value13 through two genuine
+fast-vector reads and source acknowledgement. Sixteen same/fresh-owner
+continuations check complete registers/stack, literal retirement/base counts and
+foreground resumption without advancing board time. The
 unmodified NAND helpers also execute their mode-six control writes, but their
 three-poll laboratory NAND completion does not prove physical capture timing.
 Capture TRM=1, timer-2 capture, nonzero capture DIR/DO and enabled mode/polarity
@@ -138,7 +143,7 @@ and SHI priority, vector fetch acknowledgement, fast/long entry and native RTI
 effects. DMA event history and physical interrupt timing remain pending.
 
 Checks
-  ctest --test-dir build/strict -R '^(dsp_timers|dsp_timer_updates|dsp_timer_events|dsp_capture|native_dsp|original_dsp_boot|original_nand_write)$' --output-on-failure
+  ctest --test-dir build/strict -R '^(dsp_timers|dsp_timer_updates|dsp_timer_events|dsp_capture)$' --output-on-failure
 Independent register/clock expectations cover reset permissions/unknown values,
 TIO polarity and contention, first preload, M-N+1 compare, reload, live preload,
 wrap/W1C, source acknowledgement, shared/direct clocks, PL changes/maxima,

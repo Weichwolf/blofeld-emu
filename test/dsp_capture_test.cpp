@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp56kEmu/assembler.h"
-#include "dsp_norm_fixture.hpp"
-#include "nand_program_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "timer_native_fixture.hpp"
 
 #include <cstdint>
 #include <exception>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace blofeld::test {
 namespace {
+using timer_native::require;
 constexpr unsigned capture_mode = 0x60;
 constexpr unsigned enable = 1;
 constexpr unsigned overflow_enable = 2;
@@ -38,6 +40,7 @@ constexpr unsigned overflow_vector = 0x56;
 constexpr unsigned priorities = 0xfffffe;
 constexpr unsigned timer_priority = 0x100;
 constexpr unsigned ordinary_status = 0xc00000;
+constexpr unsigned word_mask = 0xffffff;
 
 void rejects(const auto &operation, const std::string &reason) {
   try {
@@ -196,39 +199,93 @@ void test_changed_raw_input_requires_new_qualification() {
           "Unqualified raw-edge batch must not advance the counter before a qualified capture");
 }
 
-void test_native_capture_interrupt() {
-  DspProgram program;
-  program.immediate("sr", ordinary_status);
-  program.immediate("r2", 0);
-  program.immediate("r7", 0);
-  movep(program, timer_priority, priorities, 'x');
-  movep(program, 10, control0 - 1, 'x');
+struct NativeCaptureInput {
+  unsigned index;
+  unsigned polarity;
+};
+
+void native_capture_case(const NativeCaptureInput setup) {
+  using namespace dma_test;
+  const auto index = setup.index;
+  const auto polarity = setup.polarity;
+  const auto csr = control0 - (4 * index);
+  const auto vector = timer_vector + (4 * index);
+  NativeProgram program;
+  program.word(timer_native::move_sr);
+  program.word(ordinary_status);
+  program.word(timer_native::move_r2);
+  program.word(0);
+  program.word(timer_native::move_r7);
+  program.word(0);
+  program.write({.space = DspSpace::x, .address = priorities, .value = timer_priority});
+  program.write({.space = DspSpace::x, .address = csr - 1, .value = 10});
   const auto enable_pc = program.pc();
-  movep(program, capture_mode | enable | capture_enable | flags, control0, 'x');
+  program.write({.space = DspSpace::x,
+                 .address = csr,
+                 .value = capture_mode | polarity | enable | capture_enable | flags});
   const auto foreground = program.pc();
-  program.emit("move #<9,r7");
-  DspBus bus;
-  program.install(bus);
-  const dsp56k::Assembler assembler;
-  const auto vector = assembler.assemble("move #<7,r2");
-  require(vector.wordCount == 1,
-          "Own fast capture vector must have one explicit instruction plus NOP");
-  bus.write({.address = timer_vector, .value = vector.word[0]});
-  bus.write({.address = timer_vector + 1, .value = 0});
-  DspCore cpu(bus);
-  while (cpu.state().pc != enable_pc) { cpu.step(); }
-  bus.timers().observe_synchronized_tio(0, false);
-  cpu.step();
-  require(cpu.state().pc == foreground, "Original-shaped native mode-six control write executes");
-  bus.timers().advance_clk2(4);
-  bus.timers().observe_synchronized_tio(0, true);
-  cpu.step();
-  require(cpu.state().pc == foreground && cpu.state().r[2] == 7 && cpu.state().r[7] == 0 &&
-              bus.timers().read(control0 - 3) == 13 && bus.timers().read(control0, flags) == 0,
-          "Native fast capture IRQ executes its vector and acknowledges only the source flag");
-  cpu.step();
-  require(cpu.state().pc == program.pc() && cpu.state().r[7] == 9,
-          "Native foreground resumes after capture IRQ without host CPU-register replacement");
+  program.word(timer_native::foreground_move);
+  const auto complete = program.pc();
+  OwnDspMachine machine(native_clocks);
+  reset_native(machine, program);
+  timer_native::install_vector(machine, vector, timer_native::short_r2);
+  for (unsigned instruction = 0; instruction < 5; ++instruction) { step_native(machine); }
+  require(machine.cpu().registers().pc == enable_pc,
+          "Five literal native setup instructions stop before the actual TCSR enable write");
+  const bool initial = polarity != 0;
+  timer_native::sample(machine.bus().timers(), index, initial);
+  step_native(machine);
+  require(machine.cpu().registers().pc == foreground &&
+              machine.cpu().progress().instructions == 6 &&
+              machine.cpu().progress().estimated_cycles == 12,
+          "Six actual two-word native instructions establish the capture foreground");
+  machine.bus().timers().advance_clk2(4); // Actual load10, then11,12,13.
+  timer_native::sample(machine.bus().timers(), index, !initial);
+  require(machine.bus().timers().read(csr - 3) == 13 &&
+              machine.bus().timers().read(csr, flags) == capture_flag,
+          "Only the selected synchronized edge captures thirteen and requests TCF");
+  const auto saved = machine.checkpoint();
+  std::optional<dsp56300::Registers> completed;
+  std::optional<dsp56300::Progress> progress;
+  for (unsigned replay = 0; replay < 4; ++replay) {
+    OwnDspMachine fresh(native_clocks);
+    auto &owner = replay == 3 ? fresh : machine;
+    owner.restore(saved);
+    auto expected = owner.cpu().registers();
+    const auto before = owner.cpu().progress();
+    const auto ticks = owner.clock().elapsed_ticks();
+    timer_native::service(owner,
+                          {.vector = vector},
+                          {.address = foreground, .opcode = timer_native::foreground_move});
+    expected.r[2] = 7;
+    require(
+        owner.cpu().registers() == expected && !owner.bus().interrupt_request(0) &&
+            owner.bus().timers().read(csr - 3) == 13 && owner.bus().timers().read(csr, flags) == 0,
+        "Actual fast vector changes only R2 and acknowledges the captured source without rearming");
+    step_native(owner);
+    expected.pc = complete;
+    expected.r[7] = 9;
+    require(owner.cpu().registers() == expected &&
+                owner.cpu().progress().instructions == before.instructions + 3 &&
+                owner.cpu().progress().estimated_cycles == before.estimated_cycles + 3 &&
+                owner.clock().elapsed_ticks() == ticks,
+            "Real foreground MOVE changes only R7/PC with three literal instruction/base costs");
+    if (completed && progress) {
+      require(owner.cpu().registers() == *completed && owner.cpu().progress() == *progress,
+              "Same/fresh-owner restore repeats complete native registers, stack and counters");
+    }
+    completed = owner.cpu().registers();
+    progress = owner.cpu().progress();
+  }
+}
+
+void test_native_capture_interrupt() {
+  for (unsigned index = 0; index < 2; ++index) {
+    for (const unsigned polarity : {0U, inv}) {
+      native_capture_case({.index = index, .polarity = polarity});
+    }
+  }
+  std::cout << "PASS TIMER_NATIVE_CAPTURE contexts=4 continuations=16\n";
 }
 }
 }

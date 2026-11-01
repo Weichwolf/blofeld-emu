@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
+#include "dsp/dsp_interrupts.hpp"
 #include "dsp/dsp_timers.hpp"
-#include "dsp56kEmu/assembler.h"
-#include "dsp_norm_fixture.hpp"
-#include "nand_program_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "timer_native_fixture.hpp"
 
 #include <array>
 #include <cstdint>
@@ -14,12 +14,11 @@
 #include <iostream>
 #include <limits>
 #include <optional>
-#include <string>
 #include <string_view>
 
 namespace {
 using blofeld::DspTimers;
-using blofeld::test::require;
+using blofeld::test::timer_native::require;
 constexpr unsigned event_mode = 0x30, capture_mode = 0x60;
 constexpr unsigned enable = 1, interrupt_enables = 6, invert = 0x100, reload = 0x200;
 constexpr unsigned direction = 0x800, input = 0x1000, data_out = 0x2000, prescale = 0x8000;
@@ -271,70 +270,92 @@ void pin_modes_and_rejections() {
   rejects([&] { actual.timers.observe_synchronized_tio(2, false); }, "no synchronized TIO");
 }
 
-void install_fast_vector(blofeld::DspBus &bus, const unsigned address, const char *instruction) {
-  const dsp56k::Assembler assembler;
-  const auto encoded = assembler.assemble(instruction);
-  require(encoded.success() && encoded.wordCount == 1, "Own fast vector must be one word plus NOP");
-  bus.write({.address = address, .value = encoded.word[0]});
-  bus.write({.address = address + 1, .value = 0});
+void native_event_case(const unsigned index) {
+  using namespace blofeld;
+  using namespace test::dma_test;
+  namespace native = test::timer_native;
+  const unsigned csr = first_control - (4 * index);
+  const unsigned compare_vector = first_compare_vector + (4 * index);
+  NativeProgram program;
+  for (const auto opcode : {native::move_sr, native::move_r2, native::move_r3, native::move_r7}) {
+    program.word(opcode);
+    program.word(opcode == native::move_sr ? ordinary_status : 0);
+  }
+  program.write({.space = DspSpace::x, .address = peripheral_priority, .value = timer_priority});
+  program.write({.space = DspSpace::x, .address = csr - 1, .value = maximum});
+  program.write({.space = DspSpace::x, .address = csr - 2, .value = 0});
+  program.write(
+      {.space = DspSpace::x, .address = csr, .value = event_mode | enable | interrupt_enables});
+  const auto foreground = program.pc();
+  // FM table2-7 resumes the normal stream after the two fast-vector words.
+  // The explicit NOP also releases the core's conservative post-vector hold;
+  // this untimed fixture does not qualify physical interrupt arbitration latency.
+  program.word(0);
+  program.word(native::foreground_move);
+  const auto complete = program.pc();
+  OwnDspMachine machine(native_clocks);
+  reset_native(machine, program);
+  native::install_vector(machine, compare_vector, native::short_r3);
+  native::install_vector(machine, compare_vector + 2, native::short_r2);
+  native::sample(machine.bus().timers(), index, false);
+  for (unsigned instruction = 0; instruction < 8; ++instruction) { step_native(machine); }
+  require(machine.cpu().registers().pc == foreground &&
+              machine.cpu().progress().instructions == 8 &&
+              machine.cpu().progress().estimated_cycles == 16,
+          "Eight literal native setup instructions retire before any external counter edge");
+  for (const bool level : {true, false, true}) {
+    native::sample(machine.bus().timers(), index, level);
+  }
+  require(machine.bus().timers().read(csr, flags) == flags,
+          "Independent preload-ffffff then wrap-zero requests both real timer sources");
+  const auto saved = machine.checkpoint();
+  std::optional<dsp56300::Registers> completed;
+  std::optional<dsp56300::Progress> progress;
+  for (unsigned replay = 0; replay < 4; ++replay) {
+    OwnDspMachine fresh(native_clocks);
+    auto &owner = replay == 3 ? fresh : machine;
+    owner.restore(saved);
+    auto expected = owner.cpu().registers();
+    const auto before = owner.cpu().progress();
+    const auto ticks = owner.clock().elapsed_ticks();
+    native::service(owner, {.vector = compare_vector + 2}, {.address = foreground, .opcode = 0});
+    expected.r[2] = 7;
+    require(
+        owner.cpu().registers() == expected && owner.bus().timers().read(csr, flags) == match,
+        "Native overflow service changes only R2 and retains the independently pending compare");
+    require(!owner.admit_interrupt({.address = foreground, .opcode = 0}) &&
+                owner.bus().interrupt_request(0) == DspInterruptRequest{.vector = compare_vector},
+            "The conservative post-vector admission hold cannot consume the pending compare");
+    step_native(owner);
+    ++expected.pc;
+    require(owner.cpu().registers() == expected && owner.bus().timers().read(csr, flags) == match,
+            "The actual foreground NOP preserves both the compare event and all data registers");
+    native::service(owner,
+                    {.vector = compare_vector},
+                    {.address = foreground + 1, .opcode = native::foreground_move});
+    expected.r[3] = 8;
+    require(owner.cpu().registers() == expected && owner.bus().timers().read(csr, flags) == 0,
+            "The retained compare executes its own real vector and clears only its source");
+    step_native(owner);
+    expected.pc = complete;
+    expected.r[7] = 9;
+    require(owner.cpu().registers() == expected && owner.bus().timers().read(csr - 3) == 0 &&
+                owner.cpu().progress().instructions == before.instructions + 6 &&
+                owner.cpu().progress().estimated_cycles == before.estimated_cycles + 6 &&
+                owner.clock().elapsed_ticks() == ticks,
+            "Six real vector/foreground instructions leave the external count unchanged");
+    if (completed && progress) {
+      require(owner.cpu().registers() == *completed && owner.cpu().progress() == *progress,
+              "Same/fresh-owner restore repeats complete native registers, stack and counters");
+    }
+    completed = owner.cpu().registers();
+    progress = owner.cpu().progress();
+  }
 }
 
 void native_vectors_and_owner_restore() {
-  for (unsigned index = 0; index < 2; ++index) {
-    const unsigned csr = first_control - (4 * index);
-    const unsigned compare_vector = first_compare_vector + (4 * index);
-    blofeld::test::DspProgram program;
-    program.immediate("sr", ordinary_status);
-    program.immediate("r2", 0);
-    program.immediate("r3", 0);
-    program.immediate("r7", 0);
-    blofeld::test::movep(program, timer_priority, peripheral_priority, 'x');
-    blofeld::test::movep(program, maximum, csr - 1, 'x');
-    blofeld::test::movep(program, 0, csr - 2, 'x');
-    blofeld::test::movep(program, event_mode | enable | interrupt_enables, csr, 'x');
-    const auto foreground = program.pc();
-    program.emit("move #<9,r7");
-    const auto complete = program.pc();
-    program.emit("nop");
-    blofeld::DspMachine machine;
-    program.install(machine.bus());
-    install_fast_vector(machine.bus(), compare_vector, "move #<8,r3");
-    install_fast_vector(machine.bus(), compare_vector + 2, "move #<7,r2");
-    machine.bus().timers().set_tio_drive(index, false);
-    machine.bus().timers().observe_synchronized_tio(index, false);
-    for (unsigned step = 0; machine.cpu().state().pc != foreground && step < 32; ++step) {
-      machine.cpu().step();
-    }
-    require(machine.cpu().state().pc == foreground,
-            "Own native timer setup completes before input");
-    for (const bool level : {true, false, true}) {
-      machine.bus().timers().set_tio_drive(index, level);
-      machine.bus().timers().observe_synchronized_tio(index, level);
-    }
-    require(machine.bus().timers().read(csr, flags) == flags,
-            "Independent preload-ffffff then wrap-zero requests both real timer sources");
-    const auto saved = machine.checkpoint();
-    std::optional<blofeld::DspDebugState> expected;
-    for (unsigned replay = 0; replay < 3; ++replay) {
-      if (replay != 0) { machine.restore(saved); }
-      machine.cpu().step();
-      require(machine.cpu().state().pc == foreground && machine.cpu().state().r[2] == 7 &&
-                  machine.cpu().state().r[3] == 0 &&
-                  machine.bus().timers().read(csr, flags) == match,
-              "Native arbitration services overflow first and clears only its actual source");
-      machine.cpu().step();
-      require(machine.cpu().state().pc == foreground && machine.cpu().state().r[3] == 8 &&
-                  machine.bus().timers().read(csr, flags) == 0,
-              "The retained compare source executes its own vector before foreground resumes");
-      machine.cpu().step();
-      require(machine.cpu().state().pc == complete && machine.cpu().state().r[7] == 9 &&
-                  machine.bus().timers().read(csr - 3) == 0,
-              "Native foreground return cannot manufacture another external counter event");
-      if (!expected) { expected = machine.cpu().debug_state(); }
-      require(machine.cpu().debug_state() == *expected,
-              "Coordinated owner restores reproduce complete native debug state after both IRQs");
-    }
-  }
+  for (unsigned index = 0; index < 2; ++index) { native_event_case(index); }
+  std::cout << "PASS TIMER_NATIVE_EVENTS contexts=2 continuations=8\n";
 }
 }
 

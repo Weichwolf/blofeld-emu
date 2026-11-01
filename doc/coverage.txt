@@ -53,6 +53,10 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           vectors/RTI on all six channels,48
                                           same/fresh-owner continuations and
                                           strict vector/source-hold recovery.
+                                          Timer capture/event vectors use native
+                                          reset/setup and complete register/stack
+                                          oracles:6 contexts,24 same/fresh-owner
+                                          continuations; physical IRQ latency is open.
                                           Older test harnesses and transitional
                                           names still need removal
                                           (own-dsp-integration.txt).
