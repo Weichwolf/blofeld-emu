@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "common/bus.hpp"
+#include "dsp/detail/dsp_dma_resource.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dax.hpp"
 #include "dsp/dsp_dma.hpp"
@@ -70,10 +71,6 @@ bool gpio_configuration_write(const DspMemoryAccess access) {
                   (access.target.address == port.address + direction ||
                    access.target.address == port.address + control);
          });
-}
-
-bool independent_peripheral(const DspMemoryAccess access) {
-  return gpio_data_access(access) || timer_access(access) || gpio_configuration_write(access);
 }
 
 DspSpace space(const DspDmaSpace value) {
@@ -194,7 +191,7 @@ bool core_conflict(const DspBus &bus, const DspCoreBusUse core, const DspMemoryA
   for (const auto access : core.accesses) {
     // Controller inspection and qualified independent peripheral accesses do not
     // consume the DMA memory path. Other core accesses still arbitrate normally.
-    if (controller_access(access) || independent_peripheral(access)) { continue; }
+    if (controller_access(access) || detail::independent_dma_peripheral(access)) { continue; }
     const auto relation = bus.memory_conflict({.core = access, .dma = target});
     if (relation == DspMemoryConflict::unqualified) {
       const bool write = target.operation == DspMemoryOperation::write;
@@ -230,6 +227,10 @@ void check_access(const DspBus &bus, const DspDmaAddress address, const bool wri
   throw Fault(std::string("Unsupported DSP DMA peripheral ") + (write ? "write at " : "read at ") +
               (x ? "X:" : "Y:") + hex(address.address, 6));
 }
+}
+
+bool detail::independent_dma_peripheral(const DspMemoryAccess access) {
+  return gpio_data_access(access) || timer_access(access) || gpio_configuration_write(access);
 }
 
 std::optional<DspDmaWord> DspBus::advance_dma(DspDmaInputs inputs) {
@@ -286,7 +287,7 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
   // Qualified GPIO/timer/Port-F configuration resources are distinct from admitted DMA paths.
   // Native handlers still own the actual transactions and every strict fault.
   // Other peripheral collisions require separate qualification.
-  if (peripheral && dma_.active() && !independent_peripheral(*peripheral)) {
+  if (peripheral && dma_.active() && !detail::independent_dma_peripheral(*peripheral)) {
     const auto *const operation =
         peripheral->operation == DspMemoryOperation::write ? "write" : "read";
     throw Fault("Unqualified DSP peripheral memory resource " + std::string(operation) + " at " +

@@ -1,0 +1,37 @@
+Independent peripheral accesses during captured program fetch
+
+The captured-fetch frontend and DMA arbiter share one internal resource
+predicate in dsp/detail/dsp_dma_resource.hpp. Existing GPIO data/configuration
+and timer resources are independent of P fetch and the admitted DMA RAM/ESAI/
+DAX endpoints. An enabled channel alone cannot forbid those native effects.
+The classification performs no transaction. Native I/O handlers still own
+register permissions, values, pad knowledge, counter updates and failures.
+Other peripheral collisions retain their existing guards.
+
+dsp_independent_io_fetch executes authored immediate MOVEP words through native
+F2 and retirement. Ten timer/prescaler and twelve GPIO registers each run at31
+directed DMA-request offsets with initially empty and filled fetch queues.
+The actual register-value change marks the store, separately from retirement;
+every empty-queue store overlaps real next-word P sampling. Native retirement
+preserves the whole independent CPU/flag expectation except its two-word PC
+advance. Write-only TLR contents are checked through their actual first
+timer-clock load. Each register overlaps both real DMA phases at its store
+in both queue contexts; all1364 transfers copy the independent RAM payload and disable the
+channel normally. Six negative cases retain actual read-only counter/prescaler,
+write-only load and unknown-DI failures with unretired PC and native I/O context.
+The identical test object linked with the previous fetch archive fails at the
+prescaler write, before reaching its real timer handler.
+
+  cmake --build --preset strict --target blofeld-dsp-independent-io-fetch-test \
+    blofeld-dsp-timer-sample-test blofeld-dsp-gpio-write-decoder-test \
+    blofeld-dsp-reserved-write-decoder-test blofeld-reference-pipeline-test
+  ctest --preset strict -j1 --output-on-failure \
+    -R '^(dsp_independent_io_fetch|dsp_timer_sample|dsp_gpio_write_decoder|dsp_reserved_write_decoder|reference_pipeline)$'
+
+All five groups pass under ASan/UBSan and separate TSan. Warnings-as-errors,
+format and zero-finding analysis remain enabled. This qualifies the shared
+functional resource contract; it is not a silicon-pipeline timing requirement.
+The frozen original reset/audio-clock experiment reaches timer initialization
+after12 genuine DMA words and motivates this correction. A new connected
+continuation is still required. Original instrument audio, voice operation,
+MIDI/USB and full update/recovery remain pending.

@@ -3964,3 +3964,15 @@ Five affected native/Board groups pass under ASan/UBSan and separate TSan.
 An isolated authored-loop measurement retains state/counts/ticks and reduces
 local median time from1.567s to1.333s per100000 periods. See dsp-fetch-clock.txt;
 full-instrument performance and realtime acceptance remain pending.
+
+F2/native peripheral resources: the fetch frontend now uses the DMA arbiter's
+existing independent timer/GPIO classification. Authored22-register/31-offset
+tests cover empty/filled fetch queues, observe actual store-time value changes
+and P sampling, preserve whole CPU/flag expectations and transfer1364 RAM words.
+Six true I/O failures remain visible;
+the identical object rejects the previous fetch archive at Xffff83. Five affected
+groups pass under ASan/UBSan and separate TSan. See dsp-independent-io-fetch.txt.
+Frozen original reset with an explicit audio oscillator advances both native
+audio DMA channels (12 zero words); decoded original PCM and complete instrument
+operation remain unproven. The next connected continuation includes a serial
+PCM receiver and an explicit idle MIDI source.

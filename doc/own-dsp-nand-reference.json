@@ -54,5 +54,32 @@
     "nvm_unchanged_qualified": false,
     "durable_update_recovery_qualified": false,
     "next_missing_input": "ESAI_1 HCKT source at Y:ffff96 during original audio DMA enable"
+  },
+  "connected_audio_clock_candidate": {
+    "qualification": "Frozen original reset/NAND continuation under ASan/UBSan with explicit functional audio-clock profile; instrument audio incomplete",
+    "initial_image_sha256": "de64537c1c33b10ec94ab13ae2570dabc27a94ccb1afab5c734871c5443900f7",
+    "original_source_bytes_preserved_and_read": 56238,
+    "explicit_virtual_unused_ff_bytes": 258,
+    "protocol_and_retired_cpu_bytes_matched": 56496,
+    "resident_unique_words_matched": 18287,
+    "timebase_hz": 211680000000,
+    "declared_shared_hckt_aci_hz": 11289600,
+    "declared_audio_epoch_ticks": 51747920000,
+    "independently_checked_audio_events": 56648,
+    "actual_native_dma_words": 12,
+    "dma_channels": [
+      0,
+      3
+    ],
+    "dma_payloads": "Twelve actual initialization words, all zero",
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "refusal_in_frozen_run": "Captured F2/native overlap at original timer prescaler write; shared resource correction separately component-qualified",
+    "local_audit": "doc/local/connected-nand/audio-warm/audit.json",
+    "local_audit_sha256": "e60f2cc3fd14a942a1617334a9df397074bea75ad04e49cfb56de12625f26d31",
+    "physical_clock_or_wiring_claim": false,
+    "decoded_original_pcm_proven": false,
+    "full_instrument_boot_proven": false,
+    "original_instrument_audio_proven": false
   }
 }

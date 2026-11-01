@@ -2,6 +2,7 @@
 #include "dsp/own_dsp_fetch.hpp"
 
 #include "common/bus.hpp"
+#include "dsp/detail/dsp_dma_resource.hpp"
 #include "dsp/detail/dsp_program_fetch.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
@@ -236,6 +237,7 @@ std::optional<DspMemoryAccess>
 OwnDspFetch::native_overlap(const DspProgramFetchView &state,
                             const dsp56300::PendingInstruction &pending) const {
   const auto access = OwnDspMachine::dma_native_footprint(pending);
+  if (access && detail::independent_dma_peripheral(*access)) { return access; }
   if (access && access->operation == DspMemoryOperation::write &&
       machine_.bus_.unselected_write(access->target)) {
     return access;
