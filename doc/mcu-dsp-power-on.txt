@@ -1,0 +1,39 @@
+Native MCU/DSP power-on timeline
+
+mcu_dsp_fetch_power_on uses McuDspRuntime and dsp56300 from actual held MCU
+and DSP reset at tick zero. Timestamped TIO pad observations at0/45 precede
+MCU vector fetch. Explicit synchronization delays3..6 cover eight profiles:
+four keep DSP reset asserted; four release it after90 real hold ticks and
+90 recovery ticks while the MCU still drives its128-edge reset pulse.
+
+Each profile restores a time-zero snapshot twice and a later held-MCU snapshot
+twice, checking32 suffixes. Native vector slots remain VfPPP. The final common
+time is (128+sync+64)*45+5*90. The running DSP completes201..204 reference cycles,
+with independently expected NOP registers,flags,PCU and retirement, fetch records
+and CLK2 edges. A further MCU-only reset retains an already pending DSP
+retirement, which completes on the first real reset edge. Two restored suffixes
+retain406 DSP clocks,202 retired NOPs and203 CLK2 edges. No device starts with an injected opcode or elapsed reset time.
+These are explicit effect-per-reference-cycle profiles, not measured silicon
+pipeline placement or physical reset-net qualification.
+
+A missing-ROM case executes real recovery and F1/F2, retaining an unknown
+captured boot word. Installing ROM after capture cannot replace it: subsequent
+execution must still fail at P:ff0000 with PC/OMR context and unchanged CPU state.
+Restoring before F1 permits newly installed authored ROM to retire three NOPs
+in eight genuine periods. Unqualified initial reset order refuses at time zero.
+
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-power-on-test blofeld-original-power-on-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(mcu_dsp_fetch_power_on|original_power_on)$'
+
+original_power_on now uses the same native runtime. It executes unchanged1.25
+MCU firmware from held POR twice with an independently held DSP and no DSP ROM.
+Each suffix retains90312 instructions,233747 bus periods,469069 MCU ticks and
+4221621 common ticks. All5120 initialized SRAM bytes,complete NVM bytes,
+knowledge and erase history are compared across trusted restoration.
+The wrapper pins the private MCU input hash; no firmware program is embedded
+or distributed. Explicit E2/E3 loopback,PHY window,RESET-high and other pad
+observations remain conditional laboratory inputs (mcu-power-on-reference.json).
+
+These migrated groups support reset/bootstrap coverage. Full original DSP
+startup, Desktop/Keyboard instrument behavior, MIDI/audio/USB, persistence,
+update/recovery, analog clocks and real-time acceptance remain open.

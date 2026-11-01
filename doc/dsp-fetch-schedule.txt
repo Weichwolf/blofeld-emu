@@ -159,12 +159,11 @@ reference connections and timing contracts, not measured physical board routes.
   cmake --build --preset strict --target blofeld-mcu-dsp-fetch-power-on-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^mcu_dsp_fetch_power_on$'
 
-Initial DSP reset construction no longer requires a prepared opcode or installed
-ROM. DspFetchRun/DspFetchScheduledRun accept an explicit initial-reset input;
-existing running constructors retain their pending-opcode contract. Eight joint
-initial profiles retain32suffixes and actual external input at zero. A declared
-running DSP retires genuine NOPs through MCU startup; a declared held DSP advances
-only its reset ledger. Actual release with missing ROM fails at native F2 read
-P:ff0000 with MCU/DSP/clock context. No placeholder opcode, physical reset route
-or successful ROM response is supplied. Analog startup and full instrument boot
-remain unqualified.
+The startup group now uses McuDspRuntime and the independent dsp56300 core.
+Both devices start in actual reset at zero. Four profiles keep the DSP held;
+four release it after90 observed hold ticks and90 recovery ticks while MCU
+startup continues. Eight profiles retain32 snapshot suffixes with native vector
+slots, full NOP registers/progress, actual pad inputs and strict missing-ROM
+capture/late-installation controls. The original MCU POR regression likewise
+uses the native runtime and retains its full independent bootstrap/RAM/NVM
+ledger. See mcu-dsp-power-on.txt. Full instrument acceptance remains open.

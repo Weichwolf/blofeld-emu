@@ -1681,11 +1681,12 @@ if(BUILD_TESTING)
   add_executable(blofeld-mcu-power-on-test test/mcu_power_on_test.cpp)
   target_link_libraries(blofeld-mcu-power-on-test PRIVATE blofeld_core)
   add_test(NAME mcu_power_on COMMAND blofeld-mcu-power-on-test)
-  add_executable(blofeld-mcu-dsp-fetch-power-on-test test/mcu_dsp_fetch_power_on_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-fetch-power-on-test PRIVATE blofeld_mcu_dsp)
+  add_executable(blofeld-mcu-dsp-fetch-power-on-test test/mcu_dsp_fetch_power_on_test.cpp
+    test/mcu_dsp_power_on_fixture.cpp test/mcu_dsp_power_on_guards.cpp)
+  target_link_libraries(blofeld-mcu-dsp-fetch-power-on-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME mcu_dsp_fetch_power_on COMMAND blofeld-mcu-dsp-fetch-power-on-test)
   add_executable(blofeld-original-power-on-test test/original_power_on_test.cpp)
-  target_link_libraries(blofeld-original-power-on-test PRIVATE blofeld_mcu_dsp)
+  target_link_libraries(blofeld-original-power-on-test PRIVATE blofeld_mcu_dsp_runtime)
   add_test(NAME original_power_on COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_power_on.py"
     $<TARGET_FILE:blofeld-original-power-on-test>

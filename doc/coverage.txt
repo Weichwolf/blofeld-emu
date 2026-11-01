@@ -106,6 +106,14 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           fractional hold/recovery and odd CLK2
                                           epochs are checked across joint replays
                                           (mcu-dsp-reset-control.txt).
+                                          Joint power-on tests now use that core
+                                          from genuine reset at zero. Early DSP
+                                          release/recovery runs alongside held MCU
+                                          POR, with32 replay suffixes and strict
+                                          unknown-F2/late-ROM retention. Unchanged
+                                          original MCU POR retains both complete
+                                          bootstrap/RAM/NVM suffixes through this
+                                          runtime (mcu-dsp-power-on.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are
