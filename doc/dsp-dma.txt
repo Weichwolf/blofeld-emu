@@ -35,6 +35,9 @@ edges require a known baseline. APR23 section5.6 permits either initialization
 order: a peripheral's held request also survives late DMA enable and is captured
 on its first explicitly known sample. No unknown input becomes an asserted request.
 Regular requests cannot silently queue a second word before the first is served.
+With every channel disabled and no pending word or settling, sampling still
+validates time/grants/request knowledge and retains edge baselines. Only the
+controller copy and priority search are omitted; no bus callback is invoked.
 Only one channel occupies a word transfer, including wait cycles. A higher-priority
 request waits for its predecessor's destination phase. No CPU instruction, PLL
 value or elapsed host time supplies missing cycles/grants. Initial round-robin

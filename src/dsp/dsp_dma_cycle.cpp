@@ -140,14 +140,21 @@ std::optional<DspDmaWord> DspDma::advance_checked(const DspDmaInputs inputs, con
 }
 
 std::optional<DspDmaWord> DspDma::advance(const DspDmaInputs inputs, const DspDmaIo &io) {
-  auto next = *this;
+  std::optional<DspDma> next;
   try {
-    const auto result = next.advance_checked(inputs, io);
-    *this = next;
+    if (!active()) {
+      // No channel can change or throw after sample validates a quiescent cycle.
+      sample(inputs);
+      return std::nullopt;
+    }
+    next.emplace(*this);
+    const auto result = next->advance_checked(inputs, io);
+    *this = *next;
     return result;
   } catch (const std::exception &error) {
     std::string context = "DSP DMA reference cycle=" + std::to_string(inputs.cycle);
-    const auto selected = active_ ? std::optional{active_->channel} : next.select();
+    auto selected = active_ ? std::optional{active_->channel} : std::nullopt;
+    if (!selected && next) { selected = next->select(); }
     if (selected) {
       const auto &channel = channels_.at(*selected);
       context += " channel=" + std::to_string(*selected) + " source=" + hex(channel.source, 6) +

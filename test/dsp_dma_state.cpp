@@ -3,9 +3,85 @@
 #include "dsp/dsp_dma.hpp"
 
 #include <array>
+#include <string>
 
 namespace blofeld::test::dma_test {
 namespace {
+void disabled_sampling() {
+  DspDma dma;
+  unsigned reads = 0;
+  unsigned writes = 0;
+  unsigned admissions = 0;
+  const DspDmaIo io{.read =
+                        [&](const DspDmaAddress address) {
+                          ++reads;
+                          require(address.space == DspDmaSpace::x && address.address == ring_start,
+                                  "Late-enabled regular DMA reads the configured actual source");
+                          return ring_start;
+                        },
+                    .write =
+                        [&](const DspDmaAddress address, const unsigned value) {
+                          ++writes;
+                          require(address.space == DspDmaSpace::y &&
+                                      address.address == destination && value == ring_start,
+                                  "Late-enabled regular DMA writes exactly its captured word");
+                        },
+                    .admit =
+                        [&](const DspDmaPhase &) {
+                          ++admissions;
+                          return grant;
+                        }};
+  for (unsigned cycle = 0; cycle < 3; ++cycle) {
+    const bool unknown = cycle == 1;
+    require(!dma.advance({.cycle = cycle,
+                          .known_requests = unknown ? 0U : 1U,
+                          .requests = unknown ? 0U : 1U,
+                          .timing = timing,
+                          .grant = unknown ? DspDmaGrant::wait : grant},
+                         io) &&
+                dma.last_cycle() == cycle && dma.read(status) == all_done && !dma.active() &&
+                reads == 0 && writes == 0 && admissions == 0,
+            "Disabled sampling retains real time and request knowledge without bus callbacks");
+  }
+  const DspDmaInputs valid{.cycle = 3, .known_requests = 1, .timing = timing, .grant = grant};
+  std::array<DspDmaInputs, 5> invalid{valid, valid, valid, valid, valid};
+  invalid[0].timing = DspDmaTiming::unqualified;
+  invalid[1].grant = DspDmaGrant::unknown;
+  invalid[2].requests = 2;
+  invalid[3].cycle = 4;
+  invalid[4].cycle = 2;
+  for (const auto input : invalid) {
+    const auto error = rejects([&] { static_cast<void>(dma.advance(input, io)); });
+    require(error.contains("DSP DMA reference cycle=" + std::to_string(input.cycle)) &&
+                dma.last_cycle() == 2 && dma.read(status) == all_done && !dma.active() &&
+                reads == 0 && writes == 0 && admissions == 0,
+            "Invalid disabled samples retain time, status, request baseline and callbacks");
+  }
+  configure(dma, word_copy);
+  for (unsigned cycle = 3; cycle < 6; ++cycle) {
+    require(
+        !dma.advance(
+            {.cycle = cycle, .known_requests = 1, .requests = 1, .timing = timing, .grant = grant},
+            io) &&
+            reads == 0 && writes == 0 && admissions == 0,
+        "A held regular request sampled while disabled cannot become a new rising edge");
+  }
+  require(dma.read(status) == zero_not_done, "Actual enabled cycles retain the DTD settling delay");
+  for (unsigned cycle = 6; cycle < 9; ++cycle) {
+    const auto word = dma.advance({.cycle = cycle,
+                                   .known_requests = 1,
+                                   .requests = cycle == 6 ? 0U : 1U,
+                                   .timing = timing,
+                                   .grant = grant},
+                                  io);
+    require(word.has_value() == (cycle == 8),
+            "Only a subsequent real edge supplies separate read and write phases");
+  }
+  require(reads == 1 && writes == 1 && admissions == 2 && dma.read(status) == all_done &&
+              !dma.active(),
+          "Late enable after rejected samples preserves the exact once-only transfer");
+}
+
 struct StatusMaskCase {
   unsigned control;
   unsigned enabled;
@@ -191,6 +267,7 @@ void late_peripheral() {
 }
 
 void state_checks() {
+  disabled_sampling();
   masked_status_without_time();
   priorities();
   captured_disable_and_recovery();
