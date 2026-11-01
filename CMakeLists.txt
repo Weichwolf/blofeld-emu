@@ -1675,9 +1675,6 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-echo-cli" echo)
   set_tests_properties(reference_echo_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
-  add_executable(blofeld-mcu-dsp-schedule-test test/mcu_dsp_schedule_test.cpp)
-  target_link_libraries(blofeld-mcu-dsp-schedule-test PRIVATE blofeld_mcu_dsp blofeld_dsp_native)
-  add_test(NAME mcu_dsp_schedule COMMAND blofeld-mcu-dsp-schedule-test)
   add_executable(blofeld-mcu-power-on-test test/mcu_power_on_test.cpp)
   target_link_libraries(blofeld-mcu-power-on-test PRIVATE blofeld_core)
   add_test(NAME mcu_power_on COMMAND blofeld-mcu-power-on-test)
@@ -3317,7 +3314,6 @@ add_custom_target(quality
     blofeld-reference-original-midi-rom
     blofeld-dsp-completion-observer-test blofeld-dsp-native-access-test blofeld-dsp-external-events-test
     blofeld-core-test blofeld-code-cache-test blofeld-mcu-test
-    blofeld-mcu-dsp-schedule-test
     blofeld-mcu-dsp-fetch-schedule-test
     blofeld-mcu-power-on-test blofeld-mcu-dsp-fetch-power-on-test blofeld-original-power-on-test
     blofeld-dsp-fetch-clone-test blofeld-mcu-dsp-fetch-clone-test blofeld-fetch-clone-isolation-test

@@ -161,6 +161,14 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           exact-boundary ordering; genuinely
                                           earlier timed inputs still refuse
                                           (reference-pipeline.txt).
+                                          Basic scheduler checks are consolidated
+                                          on that core:13 cases include three
+                                          actual DBNE fault slots/six restored
+                                          suffixes and pre-mutation clock guards.
+                                          The duplicate completion-backend test
+                                          is removed; full native effects and
+                                          independent clocks retain its coverage
+                                          (mcu-dsp-schedule.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are

@@ -1,119 +1,69 @@
-MCU/DSP reference schedule
+Native MCU/DSP reference scheduling
 
-McuDspSchedule in blofeld_mcu_dsp supplies the common nominal ordering previously
-held by the original-firmware test fixture. It references two native clocked
-owners but retains no GPIO routes, observers, transport, reset logic or firmware
-PC policy. DspStepObservation::reference_completion_boundary, an explicit DSP
-epoch and a positive per-cycle instruction budget are required. The DSP owner's
-timebase must be an exact positive integer multiple of the MCU owner's timebase.
-No physical instruction pipeline or analog clock transition is inferred.
+The regular Board uses McuDspRuntime with dsp56300. MCU operations supply actual
+IPBus/reset/WAI periods; the runtime advances genuine DSP F1/F2, native effects,
+PCU and retirement boundaries against their common timebase. Board wiring,
+external event cursors and host transport remain caller-owned. These are
+explicit reference-effect contracts, not calibrated physical pipeline clocks.
 
-Integration order
-1. Construct/configure the native machines and explicitly establish external
-   reset/clock/pad observations. Construct McuDspSchedule with the chosen epoch,
-   completion contract, shared-write tie experiment and DSP instruction budget.
-2. From the MCU owner's pre-cycle observer, call begin_cycle(cycle, shared_write,
-   before_dsp). The board must identify every write that can change shared inputs.
-   Each offered period comes from the actual MCU clock source/divider. DSP native
-   completions stop at that exact common-time boundary.
-3. In the corresponding native bus-write observer, call observe_write(event,
-   observe_signals, before_dsp). It first checks the actual completed one-byte
-   write address and time. observe_signals then samples/delivers board signals.
-   The remaining simultaneous DSP completion runs in the selected order.
-4. After cpu().step() has returned, call end_instruction(). This checks inactive
-   native MCU accounting, every consumed offered period, delivered shared writes
-   and the next unfinished DSP deadline. It executes no MCU instruction itself.
+Shared writes require explicit before/after-MCU ordering. Only the actual bus
+write observer delivers the signal change. Missing/wrong-address delivery,
+unknown ties, missing cycle inputs, exhausted budgets and reentrant snapshot/
+completion calls refuse. The native shared-write matrix checks real output
+pads, full DSP registers/progress and literal MCU/DSP time; no assembler or
+instruction-completion backend supplies the execution.
 
-Exact shared-write ties require an explicit DSP-before-MCU or MCU-before-DSP
-experiment. Unqualified ties fail with the write address and both PCs. Unknown
-geometry, a missing native signal observation, unconsumed/extra MCU periods,
-time overflow and exhausted DSP budgets reject. Signals and diagnostic callbacks
-are caller-owned and must not advance either native CPU secretly. Reentrant
-schedule calls/captures reject; a failed operation leaves the schedule faulted.
-Native operand errors retain MCU cycle kind/address, both PCs and attempted DSP
-completion versus last completed DSP time/units. There is no automatic rollback.
+Delay-slot failures
 
-Native WAI periods
-Use McuMachine::set_wait_observer only for current-boundary input observations.
-Its IRQ and timer-input checks can cancel an idle offer without consuming time.
-The separate set_wait_period_observer runs after those checks and before one
-committed idle IPBus period. From that hook call begin_wait_period(period,
-before_dsp). An explicit McuDspWaitOrder::dsp_before_mcu contract is required:
-nominal DSP completions through the endpoint precede that MCU peripheral-clock
-edge. A new IRQ supplied there stops at the next boundary after consuming this
-period. No CPU bus slot is invented. Exceptions still quarantine partial state.
-Call end_wait() after advance_wait() returns, including a zero-period result.
-Do not route the cancellable pre-input hook to begin_wait_period. Unconsumed idle
-offers, missing period hooks and unclosed slices reject at the next boundary.
-Other simultaneous idle-edge orders and physical wake latency remain unqualified.
+Authored HCS12 NOP;LDX #ffff;DBNE X,self starts from its real reset vector.
+Five reset-vector periods consume450 common ticks. DSP hold starts at zero;
+release at450 and two actual recovery clocks finish at540. The MCU NOP/LDX
+setup reaches720, eight bus periods,80 local ticks and16 oscillator periods.
+One/two/three real DSP NOPs precede MOVE X0,Y:>$2000, with X0=0 from the declared
+cold CPU state. Their genuine prefetch fills the long MOVE's extension before
+its write. No prepared instruction, register injection or epoch shift places
+that fault in a chosen MCU slot.
 
-Snapshots
-A trusted McuDspScheduleCheckpoint retains the observation contract, common-time
-boundary, MCU visible registers/cycle/idle counts, tie count and pending DSP schedule.
-Capture requires healthy inactive owners and a closed instruction or wait slice.
-The caller separately checkpoints both native machines and external wiring.
-Restore the owners/wiring first, then restore the schedule. Compatible inputs and
-restored MCU registers/time are checked before changing the schedule; the DSP
-schedule checks its restored native state and unfinished plan. External observers
-are not checkpointed and must be reattached after native MCU restore.
-These are process-local trusted checkpoints, not portable files, authenticated
-owner identities or an atomic restore of an entire board and host transport.
+  Consumed DBNE slots   0     1     2
+  MCU completed tick    720   810   900
+  MCU offered tick      810   900   990
+  DSP completed tick    720   810   900
+  Attempted write tick  765   855   945
+  DSP periods           4     6     8
+  DSP retirements       1     2     3
+  CLK2 edges            2     3     4
 
-Verification
-  cmake --build --preset strict --target blofeld-mcu-dsp-schedule-test blofeld-scheduled-coupling-test
-  ctest --test-dir build/strict -R '^(mcu_dsp_schedule|original_scheduled_coupling)$' --output-on-failure
-  cmake --build --preset strict --target blofeld-mcu-dsp-wait-test
-  ctest --test-dir build/strict -R '^mcu_dsp_wait$' --output-on-failure
+Every accepted period checks independent full native registers, PC and progress.
+The real write retains value, address, instruction PC and its uncharged deadline;
+DBNE's actual X decrement survives the interrupted operation. Both owners
+quarantine, failed snapshots refuse and restoring the DSP alone cannot resume
+the coordinator. Each case restores the joint cut twice, comparing complete
+native effect/clock traces and the exact contextual failure. The native snapshot
+restores both CPUs, frontend, RAM and clocks together; external observer cursors
+remain explicit caller state.
 
-Own native programs use independent HCS12 LDX immediate/DBNE IX cycle sequences
-and DSP long-immediate/MOVE costs. Controlled DSP reset epochs place a real
-reserved-operand fault after zero, one or two consumed MCU DBNE slots. Only those
-consumed MCU periods and completed DSP instructions advance their respective
-clocks. Coordinated owner/schedule restore reproduces the interrupted-slot error;
-unilateral restore and faulted capture reject. Both explicit exact-time orders
-are checked at an actual native GPIO write, including observed output pads.
-Dropping that signal observation rejects with the simultaneous DSP step still
-unfinished; active observer callbacks cannot become trusted checkpoints.
+The consolidated mcu_dsp_fetch_schedule group has13 cases, including these three
+fault profiles/six restored suffixes and three pre-mutation clock/contract
+refusals. It replaces the former mcu_dsp_schedule test; its shared-write cases
+were already covered by the stronger native matrix and are not duplicated.
+The separate mcu_dsp_runtime group also checks six causal write/input/DSP orders,
+two cyclic refusals, fresh-owner checkpoints and contextual native input failure.
 
-The unchanged original-firmware experiment now uses this production component.
-Its four phase/tie cases retain all native serial stores, frame contents, CPU
-cost/timestamp ledgers, mid-frame replay and actual reserved-write recovery
-(scheduled-coupling.txt). Its pin-order and ready observations stay in the caller.
-Own partial-slot tests do not establish physical bus phases or turn the original
-four cases' first-slot failures into hardware-verified coverage of every cut.
+  cmake --build --preset strict --target blofeld-mcu-dsp-fetch-schedule-test blofeld-mcu-dsp-runtime-test
+  ctest --test-dir build/strict -j1 --output-on-failure -R '^(mcu_dsp_fetch_schedule|mcu_dsp_runtime)$'
 
-Own WAI/RTI programs and a native DSP NOP/JMP loop independently check all frame
-bytes, source/divider/OSC counts, every nominal DSP deadline, OSC/PHY source and
-TIM wait-gate combinations, mid-wait restore and real six-cycle wake/RTI. Existing,
-pre-observed and timer-sampled IRQs execute no speculative DSP step. A newly
-asserted IRQ within the committed period consumes exactly one period. Actual DSP
-reserved-operand failure leaves the MCU period unconsumed and repeats after
-coordinated native recovery. Unqualified idle ordering rejects before execution.
+Repeat with the separate thread preset. Scope is single-threaded emulated
+ordering, not safe concurrent access or full Desktop/Keyboard acceptance.
+Native WAI/reset controls are in mcu-dsp-wait.txt and mcu-dsp-cop-reset.txt;
+external event arbitration is in dsp-fetch-events.txt. No allocating/throwing
+diagnostic or snapshot facility belongs in a future real-time audio callback.
 
-Scope
-This is single-threaded normal-run and explicitly ordered WAI reference scheduling.
-Physical reset/clock/routing, bidirectional host signals, complete mask ROM/assets,
-and Desktop/Keyboard board profiles remain pending. The opt-in headless reference
-driver composes both owners and explicit return routes (reference-board.txt).
-No future real-time audio callback may inherit these allocating/throwing
-diagnostic and snapshot facilities.
-Original full boot, MIDI/voices/audio, full update/recovery/persistence/stress and
-stock-hardware equivalence remain unproven. Unknown hardware is not substituted.
+Legacy instruction-completion fixtures
 
-Native DSP output delivery
-
-The optional typed DspCompletionObserver is forwarded by begin_cycle,
-observe_write and begin_wait_period. Outputs can therefore reach board-owned
-GPIO after each committed native DSP step, including multiple DSP transitions
-within a single MCU period. Both shared-write tie orders retain their order:
-DSP-before-MCU delivers completion outputs first; MCU-before-DSP delivers the
-actual shared pin change first. Committed WAI still consumes its offered period
-when the completion observer supplies an IRQ. Cancelled pre-input WAI offers
-never call a DSP observer. The scheduler owns no output routing or callbacks.
-Observer failures preserve completed DSP counters and quarantine the schedule.
-A match between CPU/clock/schedule checkpoints is still required for recovery.
-
-Timed external peripheral sources are also forwarded at exact common ticks,
-including between native DSP completions. They participate in shared MCU-write
-ordering and committed WAI periods; cancelled offers dispatch no source event.
-See dsp-external-events.txt for binding, budgets, tie contracts and checkpoints.
+McuDspSchedule and remaining instruction-completion fixtures still use the old
+backend. Their independent observation/epoch contracts do not qualify the
+regular runtime. The four unchanged original_scheduled_coupling cases remain
+separate supporting evidence (scheduled-coupling.txt); they do not demonstrate
+native replacement, complete stock boot or physical board timing. Full original
+firmware operation, MIDI/audio/USB, persistence, updates/recovery and real-time
+acceptance remain open (objective.txt and coverage.txt).
