@@ -40,15 +40,11 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
     if (!machine_.captured_fetch_owner_.expired()) {
       throw Fault("Own DSP timeline reset requires an unowned machine");
     }
-    reset_identity_ = std::make_shared<const bool>(true);
-    machine_.begin_hardware_reset(*initial_reset);
-    machine_.captured_fetch_owner_ = reset_identity_;
-    expected_epoch_ = machine_.clock().native_epoch();
-    expected_dma_ = machine_.bus().last_dma_cycle();
+    start_reset(*initial_reset);
   } else {
     fetch_ = std::make_unique<OwnDspFetch>(machine_);
   }
-  horizon_ += expected_ticks_;
+  horizon_ = epoch_ticks_ + expected_ticks_;
   if (fetch_) { static_cast<void>(next_deadline()); }
 }
 
@@ -64,6 +60,32 @@ void OwnDspTimeline::check_owner() const {
   } else if (!reset_identity_ || machine_.captured_fetch_owner_.lock() != reset_identity_) {
     throw Fault("Own DSP timeline reset ownership is stale");
   }
+}
+
+void OwnDspTimeline::start_reset(const OwnDspResetInputs inputs) {
+  machine_.check_hardware_reset(inputs);
+  const auto identity = std::make_shared<const bool>(true);
+  try {
+    machine_.begin_hardware_reset(inputs);
+    fetch_.reset();
+    reset_identity_ = identity;
+    machine_.captured_fetch_owner_ = reset_identity_;
+    expected_epoch_ = machine_.clock().native_epoch();
+    expected_dma_ = machine_.bus().last_dma_cycle();
+    horizon_ = epoch_ticks_ + expected_ticks_;
+    boundary_ = OwnDspBoundary::through;
+  } catch (...) {
+    faulted_ = true;
+    throw;
+  }
+}
+
+void OwnDspTimeline::begin_hardware_reset(const OwnDspResetInputs inputs) {
+  check_owner();
+  if (!fetch_ || horizon_ != epoch_ticks_ + expected_ticks_) {
+    throw Fault("Own DSP timeline reset requires its current completed reference boundary");
+  }
+  start_reset(inputs);
 }
 
 std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
@@ -111,6 +133,7 @@ std::optional<OwnDspFetchCycleResult> OwnDspTimeline::advance_one(const std::uin
                                                                   const OwnDspBoundary boundary,
                                                                   const DspDmaInputs inputs) {
   check_owner();
+  if (!fetch_) { throw Fault("Own DSP timeline execution awaits completed reset recovery"); }
   if ((boundary != OwnDspBoundary::before && boundary != OwnDspBoundary::through) ||
       horizon < horizon_ ||
       (horizon == horizon_ && boundary_ == OwnDspBoundary::through &&

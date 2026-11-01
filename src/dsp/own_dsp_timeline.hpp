@@ -41,6 +41,9 @@ public:
   OwnDspTimeline(const OwnDspTimeline &) = delete;
   OwnDspTimeline &operator=(const OwnDspTimeline &) = delete;
   // Reset time uses the same common epoch; execution begins after recovery.
+  // Assert at the current completed cycle/effect boundary; retain lifetime time.
+  // Uncompleted effects are discarded by actual native reset, not retired.
+  void begin_hardware_reset(OwnDspResetInputs inputs);
   std::uint64_t advance_reset_to(std::uint64_t horizon);
   void release_hardware_reset();
   [[nodiscard]] std::uint64_t next_deadline() const;
@@ -55,6 +58,7 @@ private:
   [[nodiscard]] static const OwnDspTimelineCheckpoint::Storage &
   saved_state(const OwnDspTimelineCheckpoint &checkpoint);
   void check_owner() const;
+  void start_reset(OwnDspResetInputs inputs);
   OwnDspMachine &machine_;
   std::unique_ptr<OwnDspFetch> fetch_;
   std::shared_ptr<const bool> reset_identity_;

@@ -40,8 +40,10 @@ Joint checkpoints retain native execution, captured words, issued F1, DMA,
 timer/PLL/map state, reference time and divider phase. Trusted snapshots are
 portable to a compatible machine and clock contract. A fresh process-local
 execution capability detects machine-only restore even when every exposed CPU
-field is identical. It is unrelated to persistent device identity. Out-of-band
-native, fetch or DMA-index changes refuse coordinated continuation.
+field is identical. It is unrelated to persistent device identity. Changes to
+clock/epoch, fetch identity or DMA index refuse coordinated continuation.
+Direct untimed advancement of a live partial native effect can currently leave
+those fields unchanged; enforcing timed-effect ownership remains open.
 
 An entered timeline cycle failure quarantines its owner, preserving already
 admitted effects and refusing another advance or checkpoint. This includes a
@@ -65,43 +67,48 @@ qualify native PCTL stage placement. Guards check unknown PINIT, nonintegral
 periods, invalid/duplicate owners, portable independent continuation,
 machine-only restore and preservation of rejected clock contracts.
 
-Legacy reset and automatic-pipeline qualification
+Digital reset hold/recovery
 
-The following fixtures still use the former backend. They describe their
-original harness and do not qualify the independent runtime.
+OwnDspTimeline.begin_hardware_reset asserts real native reset at its current
+completed reference boundary. It retains lifetime time and clock units while
+cancelling pending effects and the captured frontend. A later observed horizon
+cannot be used to assert reset retroactively. Stable mode5/PINIT-low and at
+least two bypass EXTAL recovery periods are required; invalid inputs leave the
+old owner intact. Entered reset failures quarantine continuation.
 
-Explicit reset hold/recovery
-
-DspFetchRunInputs.resets defaults to unqualified. reference_cycle_boundary admits
-native mode5/PINIT-low reset at a completed fetch-cycle boundary. The caller
-supplies stable observed pins and at least2 bypass EXTAL recovery periods.
-Assertion performs the actual native reset,flushes frontend/backend continuation
-and resets peripherals;completed RAM writes remain. Pending stores are cancelled,
-without undoing completed writes. No firmware bytes or arbitrary PC are supplied.
-
-The native core checkpoint retains the reset gate;machine/clock state must agree.
-Direct atomic/reference/DMA admissions reject while that native gate is held.
-Held/recovery ticks advance lifetime elapsed/reset time only. They execute no
-native cycles,DMA phases or timer CLK2 edges. Two asserted EXTAL periods are
-required before release;recovery starts at release and clamps at its supplied
-endpoint. Fractional periods and trusted snapshots retain their exact phase.
-Native F1/F2 resumes after recovery with a fresh CLK2 divider phase and a new
-native epoch;completed-cycle/DMA-index/CLK2 totals remain lifetime ledgers.
-Early invalid requests reject before mutation;entered native reset failures
-quarantine the owner. External pins/wiring and transport cursors stay caller-owned.
-This is explicit reference ordering,not measured asynchronous/power-on behavior.
+The native chip resets documented PC/SR/OMR/stack-control/modifier fields and
+retains unaffected registers and completed RAM stores. Held/recovery time
+executes no CPU effect, DMA phase, F1/F2 read or timer CLK2 edge. Exact fractional
+EXTAL phase survives checkpoints; release starts the supplied recovery interval.
+Recovery clamps at its endpoint before a fresh F1 and CLK2 divider epoch, while
+lifetime cycle/tick/reset/CLK2 ledgers remain intact. Gated execution requests
+refuse before mutation; an unchanged-time observation consumes no reset time.
 
   cmake --build --preset strict --target blofeld-fetch-reset-test
   ctest --test-dir build/strict -j1 --output-on-failure -R '^dsp_fetch_reset$'
 
-Twenty-eight native scenarios cover18pipeline cuts,held/recovery snapshot replay,
-second resets,pin/default-contract/phase/overflow guards and pending/completed
-long-store boundaries. Independent reset registers,retained X/Y values,full ADD
-results and exact EXTAL/native/CLK2/epoch ledgers accompany native suffix replay.
-A local original1.25 loader experiment adds91hold+135recovery ticks,then retains
-all94received words and the9777period strict Y002000 trace;only lifetime fault
-time increases by226ticks. It uses document ROM and between-period SPI input,
-not authentic full ROM,original MCU reset-net integration or successful boot.
+Twenty cycle cuts reach actual MOVE/ALU/PCU/retirement boundaries. Forty
+same/fresh-owner suffixes compare full native state, pending effects, actual
+F1/F2 observations, outcomes and time against literal register/flag/ADD/JMP
+expectations. FM table A-1 supplies base costs2/1/1/4 for immediate MOVE,
+CLR, ADD and long-absolute JMP; these remain separate from reference periods.
+Recovery snapshots, repeated resets, invalid pins/timing,
+retroactive assertion, stale tickets, early release and duration overflow are
+covered separately. Four long-store cuts check pending X, completed X/pending Y,
+both completed writes and real retirement, including fresh-owner held-reset
+recovery. These are explicit staged bus cuts, not measured simultaneous silicon
+ports or calibrated asynchronous reset placement. These checks qualify the
+chip/frontend timeline; connected MCU reset-net routing remains separate.
+
+Legacy automatic-pipeline qualification
+
+The remaining automatic seven-stage fixtures still use the former backend.
+They describe their original harness and do not qualify the independent runtime.
+A separate legacy original1.25 loader run retained all94 received words and
+reached the9777period Y002000 refusal after91hold+135recovery ticks. It used
+document ROM and between-period SPI input, not authentic full ROM, connected
+original MCU reset wiring or successful boot. Its older binary evidence does
+not qualify the migrated reset test above.
 
 The explicit_effects profile still selects backend begin/admission explicitly.
 Separate automatic ALU and selected memory profiles own decode/AG1/AG2/E1/E2

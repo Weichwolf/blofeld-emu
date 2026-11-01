@@ -97,6 +97,7 @@ private:
   friend class OwnDspFetch;
   friend class OwnDspTimeline;
   void require_running() const;
+  void check_hardware_reset(OwnDspResetInputs inputs) const;
   [[nodiscard]] static std::optional<DspMemoryAccess>
   dma_native_footprint(const dsp56300::PendingInstruction &pending);
   [[nodiscard]] OwnDspDmaCycleResult dma_cycle(DspDmaInputs inputs, bool admit_native);

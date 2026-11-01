@@ -242,7 +242,7 @@ void OwnDspMachine::require_running() const {
   }
 }
 
-void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
+void OwnDspMachine::check_hardware_reset(const OwnDspResetInputs inputs) const {
   if (advancing_effect_) { throw Fault("Own DSP reset requires an inactive native effect"); }
   constexpr unsigned mode_mask = 15;
   constexpr unsigned spi_mode = 5;
@@ -253,6 +253,10 @@ void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
                 "at least two recovery periods pc=" +
                 hex(cpu_.registers().pc, 6));
   }
+}
+
+void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
+  check_hardware_reset(inputs);
   auto regs = cpu_.registers();
   try {
     captured_fetch_owner_.reset();

@@ -209,11 +209,18 @@ void reset_during_interrupt_entry(const bool fetched) {
   if (!step.pending || step.pending->effect.address != irqa_vector) {
     throw std::runtime_error("Fresh interrupt did not fetch its first real vector word");
   }
+  step = machine.advance(step.pending->ticket);
+  if (!step.pending || step.pending->effect.kind != EffectKind::fetch_extension ||
+      step.pending->effect.address != irqa_vector + 1) {
+    throw std::runtime_error("Fresh interrupt did not offer its second real vector word");
+  }
+  step = machine.advance(step.pending->ticket);
+  require(!machine.interrupt_pending(), "Both accepted words release peripheral ownership");
   retire(machine, step, foreground.address);
   step = machine.begin_fetch();
-  if (!step.pending || step.pending->effect.address != irqa_vector + 1) {
-    throw std::runtime_error("Fresh interrupt did not fetch its second real vector word");
-  }
+  require(step.pending && (step.pending->effect.kind != EffectKind::fetch_opcode &&
+                           step.pending->effect.kind != EffectKind::fetch_extension),
+          "The accepted second vector word is not read again after first-slot retirement");
   retire(machine, step, foreground.address);
   require(!machine.bus().interrupt_request(0), "Fresh interrupt was not genuinely acknowledged");
 }

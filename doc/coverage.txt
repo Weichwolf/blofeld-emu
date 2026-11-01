@@ -75,6 +75,17 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           extension samples retain their identity
                                           across writes and joint restores
                                           (dsp-fetch-clock.txt).
+                                          Fetch-reset tests also use native reset
+                                          from20 real cycle cuts,40 same/fresh
+                                          suffixes and4 staged X/Y store cuts.
+                                          Full register/flag/ADD/JMP expectations,
+                                          fractional reset/recovery time and
+                                          lifetime/epoch CLK2 ledgers are checked;
+                                          physical asynchronous stage placement
+                                          remains unqualified. A local PCU probe
+                                          also exposes direct untimed advancement
+                                          during live timeline ownership; that
+                                          admission guard still needs enforcement.
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are
