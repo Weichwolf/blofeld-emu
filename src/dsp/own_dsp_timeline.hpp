@@ -28,7 +28,8 @@ private:
 
 // Orders completed reference cycles against a caller-owned common timebase.
 // External events and their ordering at equal timestamps remain board-owned.
-// Reset, checkpoint restoration and direct native execution invalidate the owner.
+// Owns chip execution and reset/time controls until destruction or chip-only
+// restoration. Direct unclocked execution is rejected while this owner lives.
 class OwnDspTimeline {
 public:
   OwnDspTimeline(OwnDspMachine &machine,
@@ -60,6 +61,7 @@ private:
   void check_owner() const;
   void start_reset(OwnDspResetInputs inputs);
   OwnDspMachine &machine_;
+  std::shared_ptr<const bool> cycle_identity_;
   std::unique_ptr<OwnDspFetch> fetch_;
   std::shared_ptr<const bool> reset_identity_;
   OwnDspAutomaticTiming timing_;

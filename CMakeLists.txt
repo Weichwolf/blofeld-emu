@@ -3323,7 +3323,7 @@ add_custom_target(quality
     blofeld-omr-peripheral-test blofeld-omr-memory-test blofeld-omr-thread-test
     blofeld-accumulator-clock-test blofeld-accumulator-hazard-test
     blofeld-accumulator-thread-test blofeld-postloop-context-test
-    blofeld-fetch-run-test blofeld-fetch-reset-test blofeld-fetch-schedule-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
+    blofeld-timeline-ownership-test blofeld-fetch-run-test blofeld-fetch-reset-test blofeld-fetch-schedule-test blofeld-retirement-test blofeld-address-phase-test blofeld-writeback-test
     blofeld-overlap-test blofeld-pipeline-test blofeld-memory-pipeline-test blofeld-parallel-memory-test
     blofeld-parallel-accumulator-add-test
     blofeld-transfer-pipeline-test blofeld-reference-dma-admission-test

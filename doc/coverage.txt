@@ -82,10 +82,14 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           fractional reset/recovery time and
                                           lifetime/epoch CLK2 ledgers are checked;
                                           physical asynchronous stage placement
-                                          remains unqualified. A local PCU probe
-                                          also exposes direct untimed advancement
-                                          during live timeline ownership; that
-                                          admission guard still needs enforcement.
+                                          remains unqualified. Clocked ownership
+                                          now refuses direct chip execution and
+                                          reset/time control before mutation,
+                                          including real PCU and X/Y store tickets.
+                                          Same/fresh and held/recovered restores
+                                          retain that guard; explicit release and
+                                          chip-only restore permit untimed use
+                                          (dsp-fetch-clock.txt).
                                           Native vector pairs are accepted before
                                           first-slot execution. IRQ acknowledge
                                           and retained second-slot ownership are

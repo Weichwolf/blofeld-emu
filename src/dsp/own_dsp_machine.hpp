@@ -47,6 +47,8 @@ struct OwnDspDmaCycleResult {
 
 // Coordinated own-core owner. Only reset time is modeled here; staged execution
 // remains untimed until the board scheduler supplies pipeline and bus cycles.
+// A live timeline exclusively owns execution and reset/clock control; direct
+// chip calls become available after that scheduling authority is released.
 class OwnDspMachine {
 public:
   explicit OwnDspMachine(DspRunClockInputs clock);
@@ -97,6 +99,8 @@ private:
   friend class OwnDspFetch;
   friend class OwnDspTimeline;
   void require_running() const;
+  void require_unclocked(const char *operation) const;
+  void perform_hardware_reset(OwnDspResetInputs inputs);
   void check_hardware_reset(OwnDspResetInputs inputs) const;
   [[nodiscard]] static std::optional<DspMemoryAccess>
   dma_native_footprint(const dsp56300::PendingInstruction &pending);
@@ -108,6 +112,8 @@ private:
   DspRunClock clock_;
   const DspRunClockInputs clock_inputs_;
   std::weak_ptr<const bool> captured_fetch_owner_;
+  // Process-local scheduling authority, deliberately excluded from chip snapshots.
+  std::weak_ptr<const bool> clocked_owner_;
   bool advancing_effect_ = false;
 };
 }

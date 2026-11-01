@@ -134,10 +134,17 @@ void phase_guards() {
   const auto held = f.observe();
   static_cast<void>(rejects([&] { f.timeline->release_hardware_reset(); }));
   static_cast<void>(rejects([&] { f.timeline->begin_hardware_reset(pins()); }));
-  static_cast<void>(rejects([&] { static_cast<void>(f.machine.advance_hardware_reset_ticks(0)); }));
+  const auto held_snapshot = f.timeline->checkpoint();
+  const auto held_ledger = f.ledger;
+  f.timeline.reset(); // Exercise chip duration validation without a clock-owner refusal masking it.
+  const auto zero = rejects([&] { static_cast<void>(f.machine.advance_hardware_reset_ticks(0)); });
   constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
-  static_cast<void>(
-      rejects([&] { static_cast<void>(f.machine.advance_hardware_reset_ticks(maximum)); }));
+  const auto overflow =
+      rejects([&] { static_cast<void>(f.machine.advance_hardware_reset_ticks(maximum)); });
+  require(zero.contains("positive reference ticks") && overflow.contains("exhausted") &&
+              f.observe() == held && !f.machine.clock().faulted(),
+          "Bare-chip zero/overflow durations refuse before consuming the actual held phase");
+  f.restore(held_snapshot, held_ledger);
   require(f.timeline->advance_reset_to(f.ledger.ticks) == 0 && f.observe() == held &&
               !f.timeline->faulted(),
           "Early release/reassertion/duration overflow refuse; a zero-time observation is inert");

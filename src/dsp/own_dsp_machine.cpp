@@ -232,6 +232,26 @@ void OwnDspMachine::restore(const OwnDspCheckpoint &checkpoint) {
   interrupts_.first_ = state.first;
   io_.failure_ = std::move(restored_failure);
   captured_fetch_owner_.reset();
+  clocked_owner_.reset();
+}
+
+void OwnDspMachine::require_unclocked(const char *const operation) const {
+  if (clocked_owner_.expired()) { return; }
+  const auto regs = cpu_.registers();
+  auto context = std::string("Own DSP clocked timeline owns operation=") + operation +
+                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
+  const auto pending = cpu_.pending_instruction();
+  if (pending && (pending->effect.kind == dsp56300::EffectKind::read ||
+                  pending->effect.kind == dsp56300::EffectKind::write ||
+                  pending->effect.kind == dsp56300::EffectKind::fetch_opcode ||
+                  pending->effect.kind == dsp56300::EffectKind::fetch_extension ||
+                  pending->effect.kind == dsp56300::EffectKind::bit)) {
+    constexpr std::array names{"P:", "X:", "Y:"};
+    context += " target=" +
+               std::string(names.at(static_cast<unsigned>(native_space(pending->effect.space)))) +
+               hex(pending->effect.address, 6);
+  }
+  throw Fault(context);
 }
 
 void OwnDspMachine::require_running() const {
@@ -256,10 +276,16 @@ void OwnDspMachine::check_hardware_reset(const OwnDspResetInputs inputs) const {
 }
 
 void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
+  require_unclocked("reset-assert");
+  perform_hardware_reset(inputs);
+}
+
+void OwnDspMachine::perform_hardware_reset(const OwnDspResetInputs inputs) {
   check_hardware_reset(inputs);
   auto regs = cpu_.registers();
   try {
     captured_fetch_owner_.reset();
+    clocked_owner_.reset();
     clock_.restart_native_epoch();
     bus_.observe_irqa((inputs.mode_levels & 1U) != 0);
     bus_.pll().observe_pinit(inputs.pinit);
@@ -288,15 +314,18 @@ void OwnDspMachine::begin_hardware_reset(const OwnDspResetInputs inputs) {
 }
 
 std::uint64_t OwnDspMachine::advance_hardware_reset_ticks(const std::uint64_t maximum_ticks) {
+  require_unclocked("reset-time");
   return clock_.advance_hardware_reset_ticks(maximum_ticks);
 }
 
 void OwnDspMachine::release_hardware_reset() {
+  require_unclocked("reset-release");
   clock_.release_hardware_reset();
 }
 
 dsp56300::InstructionProgress
 OwnDspMachine::begin_fetch(const dsp56300::InstructionPublication publication) {
+  require_unclocked("begin-fetch");
   require_running();
   if (advancing_effect_) { throw Fault("Own DSP fetch requires an inactive effect"); }
   if (!captured_fetch_owner_.expired()) {
@@ -306,6 +335,7 @@ OwnDspMachine::begin_fetch(const dsp56300::InstructionPublication publication) {
 }
 
 dsp56300::InstructionProgress OwnDspMachine::advance(const dsp56300::EffectTicket &ticket) {
+  require_unclocked("native-effect");
   require_running();
   if (advancing_effect_) { throw Fault("Own DSP native effect cannot reenter its owner"); }
   const EffectGuard guard(advancing_effect_);
@@ -315,6 +345,7 @@ dsp56300::InstructionProgress OwnDspMachine::advance(const dsp56300::EffectTicke
 }
 
 std::uint64_t OwnDspMachine::advance_reference_cycle() {
+  require_unclocked("reference-period");
   require_running();
   const auto regs = cpu_.registers();
   const auto context = [&regs] { return " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6); };
@@ -357,6 +388,7 @@ OwnDspDmaCycleResult OwnDspMachine::advance_dma_native_cycle(const DspDmaInputs 
 }
 
 OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const bool admit_native) {
+  require_unclocked("dma-cycle");
   require_running();
   const auto regs = cpu_.registers();
   const auto context = " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6);
@@ -402,6 +434,7 @@ OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const b
 }
 
 bool OwnDspMachine::admit_interrupt(const dsp56300::InstructionWords foreground) {
+  require_unclocked("admit-interrupt");
   require_running();
   if (advancing_effect_) { throw Fault("Own DSP interrupt requires an inactive effect"); }
   if (!captured_fetch_owner_.expired()) {

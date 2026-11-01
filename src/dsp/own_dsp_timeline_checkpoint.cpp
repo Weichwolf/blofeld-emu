@@ -58,6 +58,7 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine, const OwnDspTimelineCheck
       horizon_(saved_state(checkpoint).horizon),
       boundary_(saved_state(checkpoint).boundary) {
   const auto &state = saved_state(checkpoint);
+  cycle_identity_ = std::make_shared<const bool>(true);
   if (state.fetch) {
     fetch_ = std::make_unique<OwnDspFetch>(machine_, *state.fetch);
   } else if (state.reset) {
@@ -67,6 +68,7 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine, const OwnDspTimelineCheck
   } else {
     throw std::invalid_argument("Own DSP timeline checkpoint has no execution or reset state");
   }
+  machine_.clocked_owner_ = cycle_identity_;
   check_owner();
 }
 }

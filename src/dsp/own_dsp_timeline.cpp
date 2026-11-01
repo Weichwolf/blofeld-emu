@@ -36,6 +36,7 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
     throw Fault("Own DSP timeline requires reference-cycle clock switching, qualified timing and "
                 "representable epoch");
   }
+  cycle_identity_ = std::make_shared<const bool>(true);
   if (initial_reset) {
     if (!machine_.captured_fetch_owner_.expired()) {
       throw Fault("Own DSP timeline reset requires an unowned machine");
@@ -44,12 +45,13 @@ OwnDspTimeline::OwnDspTimeline(OwnDspMachine &machine,
   } else {
     fetch_ = std::make_unique<OwnDspFetch>(machine_);
   }
+  machine_.clocked_owner_ = cycle_identity_;
   horizon_ = epoch_ticks_ + expected_ticks_;
   if (fetch_) { static_cast<void>(next_deadline()); }
 }
 
 void OwnDspTimeline::check_owner() const {
-  if (faulted_ || machine_.clock().faulted() ||
+  if (machine_.clocked_owner_.lock() != cycle_identity_ || faulted_ || machine_.clock().faulted() ||
       machine_.clock().elapsed_ticks() != expected_ticks_ ||
       machine_.clock().native_epoch() != expected_epoch_ ||
       machine_.bus().last_dma_cycle() != expected_dma_) {
@@ -66,10 +68,11 @@ void OwnDspTimeline::start_reset(const OwnDspResetInputs inputs) {
   machine_.check_hardware_reset(inputs);
   const auto identity = std::make_shared<const bool>(true);
   try {
-    machine_.begin_hardware_reset(inputs);
+    machine_.perform_hardware_reset(inputs);
     fetch_.reset();
     reset_identity_ = identity;
     machine_.captured_fetch_owner_ = reset_identity_;
+    machine_.clocked_owner_ = cycle_identity_;
     expected_epoch_ = machine_.clock().native_epoch();
     expected_dma_ = machine_.bus().last_dma_cycle();
     horizon_ = epoch_ticks_ + expected_ticks_;
@@ -96,7 +99,7 @@ std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
   const auto now = epoch_ticks_ + expected_ticks_;
   if (horizon == now) { return 0; }
   try {
-    const auto consumed = machine_.advance_hardware_reset_ticks(horizon - now);
+    const auto consumed = machine_.clock_.advance_hardware_reset_ticks(horizon - now);
     expected_ticks_ = machine_.clock().elapsed_ticks();
     horizon_ = epoch_ticks_ + expected_ticks_;
     boundary_ = OwnDspBoundary::through;
@@ -115,7 +118,7 @@ std::uint64_t OwnDspTimeline::advance_reset_to(const std::uint64_t horizon) {
 void OwnDspTimeline::release_hardware_reset() {
   check_owner();
   if (fetch_) { throw Fault("Own DSP timeline reset is already complete"); }
-  machine_.release_hardware_reset();
+  machine_.clock_.release_hardware_reset();
 }
 
 std::uint64_t OwnDspTimeline::next_deadline() const {

@@ -42,8 +42,22 @@ portable to a compatible machine and clock contract. A fresh process-local
 execution capability detects machine-only restore even when every exposed CPU
 field is identical. It is unrelated to persistent device identity. Changes to
 clock/epoch, fetch identity or DMA index refuse coordinated continuation.
-Direct untimed advancement of a live partial native effect can currently leave
-those fields unchanged; enforcing timed-effect ownership remains open.
+A live timeline also owns chip execution and reset/time controls through an
+independent process-local lease. Direct chip fetch/effect/IRQ/period/DMA/reset
+calls refuse before mutation, even when a partial PCU update would not change
+instruction counts or clock/epoch fields. Timed native effects still advance
+through the captured frontend's real cycle path.
+
+The lease is excluded from checkpoints. Joint restore binds a fresh lease;
+held reset and recovery preserve it. Timeline destruction or an explicit
+chip-only restore releases scheduling authority, allowing genuine unclocked
+chip use. Retaining an immutable snapshot cannot keep a destroyed lease alive.
+This is host API ownership, not a replacement for device identity or firmware
+execution. The focused regression checks actual PCU publication, both native
+X/Y stores, direct control refusals, same/fresh restore and manual continuation.
+
+  cmake --build --preset strict --target blofeld-timeline-ownership-test
+  ctest --test-dir build/strict -R '^dsp_timeline_ownership$' --output-on-failure
 
 An entered timeline cycle failure quarantines its owner, preserving already
 admitted effects and refusing another advance or checkpoint. This includes a
