@@ -297,6 +297,12 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
   const DspDmaAdmission admission = [&](const DspDmaPhase &phase) {
     result.phase = phase;
     const bool write = phase.kind == DspDmaPhaseKind::destination_write;
+    if (core.indivisible_instruction) {
+      // Sampling and request latching still run. A previously sampled DMA word
+      // completes before the CPU proceeds; a fresh word cannot split its RMW.
+      result.core_stall = write;
+      return write ? DspDmaGrant::available : DspDmaGrant::wait;
+    }
     const auto selected = write ? phase.destination : phase.source;
     const DspMemoryAccess target{
         .target = {.space = space(selected.space), .address = selected.address},

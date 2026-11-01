@@ -61,6 +61,7 @@ bool readonly_short_ram_branch(const dsp56300::PendingInstruction &pending) {
 }
 
 void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
+  constexpr unsigned peripheral_base = 0xffff80;
   const auto effect = pending.effect;
   if (effect.kind != dsp56300::EffectKind::read && effect.kind != dsp56300::EffectKind::write) {
     return;
@@ -69,6 +70,10 @@ void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
   if (shape && shape->kind != dsp56300::InstructionKind::bit_memory &&
       shape->kind != dsp56300::InstructionKind::bit_jump &&
       shape->kind != dsp56300::InstructionKind::bit_branch) {
+    return;
+  }
+  if (shape && shape->kind == dsp56300::InstructionKind::bit_memory &&
+      effect.space != dsp56300::Space::program && effect.address < peripheral_base) {
     return;
   }
   if (shape && shape->kind == dsp56300::InstructionKind::bit_branch &&
@@ -388,6 +393,15 @@ OwnDspMachine::dma_native_footprint(const dsp56300::PendingInstruction &pending)
   return native_footprint(pending.effect);
 }
 
+bool OwnDspMachine::dma_indivisible_instruction(
+    const std::optional<dsp56300::PendingInstruction> &pending) {
+  if (!pending || !pending->opcode) { return false; }
+  const auto shape = dsp56300::inspect_instruction(*pending->opcode);
+  // Reserve through all publications, including cycles where the CPU is held.
+  // Native pending state already participates in checkpoint, restore and reset.
+  return shape && shape->kind == dsp56300::InstructionKind::bit_memory;
+}
+
 DspDmaBusResult OwnDspMachine::advance_dma_reference_cycle(const DspDmaInputs inputs) {
   return dma_cycle(inputs, false).dma;
 }
@@ -430,9 +444,11 @@ OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const b
   clock_.begin_step(bus_, {.pc = regs.pc, .omr = regs.omr});
   try {
     OwnDspDmaCycleResult result;
-    result.dma = bus_.advance_dma(inputs,
-                                  {.accesses = std::span(access).first(count),
-                                   .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    result.dma =
+        bus_.advance_dma(inputs,
+                         {.accesses = std::span(access).first(count),
+                          .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy,
+                          .indivisible_instruction = dma_indivisible_instruction(pending)});
     if (admit_native && !result.dma.core_stall) {
       result.native = interrupts_.advance(pending->ticket);
       if (result.native->fault.kind == dsp56300::FaultKind::none) {

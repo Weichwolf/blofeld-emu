@@ -65,6 +65,9 @@ struct DspMemoryResource {
 struct DspCoreBusUse {
   std::span<const DspMemoryAccess> accesses;
   DspCoreBusKnowledge knowledge = DspCoreBusKnowledge::unqualified;
+  // Functional instruction reservation: drain an already sampled DMA word,
+  // then defer new DMA reads until the instruction retires (or reset discards it).
+  bool indivisible_instruction = false;
 };
 
 struct DspDmaBusResult {

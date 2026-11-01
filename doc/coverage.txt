@@ -4010,6 +4010,20 @@ cells. Directed 512-state tests, fresh-owner restoration and native program/
 erase/status/readback cases support requirements 2/3/6 in 14 affected groups under
 ASan/UBSan and separate TSan on SDK d03de44. A frozen 94d4a30 original run passes
 this startup boundary twice, retains all 18287 loaded words and emits 159 silent
-PCM frames. The next limit is native admission of a RAM bit-control instruction.
+PCM frames. That run stops at native admission of a RAM BSET read-modify-write.
 See nand-board.txt and own-dsp-nand-reference.json. Full original instrument
 operation on either profile, durable NAND and update/recovery remain pending.
+
+Functional native RAM bit transactions: actual dsp56300 BCLR/BSET/BCHG/BTST
+effects execute under an instruction reservation that defers fresh DMA words
+and drains a previously sampled word before admitting the CPU. Existing strict
+peripheral handlers remain authoritative. The authored dsp_ram_rmw scope passes
+4416 cases, eight fresh-owner checkpoint cuts and four directed held-CPU/DMA/
+reset cases per sanitizer (ASan/UBSan and separate TSan). Whole-register ISA
+expectations include Carry, PC and linear AGU updates; accepted RAM writes
+survive reset and unfinished effects are discarded. This is functional ordering
+evidence, not exact bus-phase calibration. Ten adjacent native clock, DMA/bank,
+IRQ, checkpoint, I/O and Board/reset groups also pass in both profiles. A complete
+original-firmware run beyond the previous BSET frontier and normal instrument
+audio remain pending.
+See dsp-ram-rmw.txt.

@@ -94,8 +94,8 @@ public:
   // The caller supplies actual request levels and consecutive cycle numbers.
   [[nodiscard]] DspDmaBusResult advance_dma_reference_cycle(DspDmaInputs inputs);
   // DMA first, then the actual pending native effect if its bus is not stalled.
-  // The caller must qualify the whole instruction as safe to split at this effect;
-  // staged ordinary memory effects alone do not identify atomic instructions.
+  // RAM bit operations reserve the instruction against new DMA words; all
+  // other staged effects retain the qualified per-cycle arbitration contract.
   [[nodiscard]] OwnDspDmaCycleResult advance_dma_native_cycle(DspDmaInputs inputs,
                                                               OwnDspNativeCycleModel model);
   [[nodiscard]] bool admit_interrupt(dsp56300::InstructionWords foreground);
@@ -118,6 +118,8 @@ private:
   void check_reset_release() const;
   [[nodiscard]] static std::optional<DspMemoryAccess>
   dma_native_footprint(const dsp56300::PendingInstruction &pending);
+  [[nodiscard]] static bool
+  dma_indivisible_instruction(const std::optional<dsp56300::PendingInstruction> &pending);
   [[nodiscard]] OwnDspDmaCycleResult dma_cycle(DspDmaInputs inputs, bool admit_native);
   DspBus bus_;
   OwnDspIo io_;

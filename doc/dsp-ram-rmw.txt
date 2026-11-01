@@ -1,0 +1,33 @@
+Functional DSP RAM bit transactions
+
+The native dsp56300 core executes BCLR/BSET/BCHG/BTST, including the actual RAM
+read, optional write, address update and original-bit Carry publication. The
+board scheduler admits those staged effects instead of rejecting RAM bit forms.
+No firmware operation or result is supplied by the host.
+
+An instruction reservation defers new DMA source reads from the decoded bit
+instruction through retirement. An already sampled DMA word completes first;
+its destination phase holds CPU/F2, including external DMA grant waits. Requests
+continue to be sampled and latched during the reservation. Holding native
+execution does not release it. All bit-memory forms use this conservative
+priority; existing peripheral-bit access qualification remains in force.
+
+This is a functional ordering contract, not a claim about exact silicon bus
+phases. It prevents a DMA transfer from splitting the native RAM transaction.
+No extra reservation state is necessary: the pending native opcode is included
+in trusted checkpoints and discarded by hardware reset. Accepted RAM stores
+survive reset; unfinished effects do not execute afterward. Ordinary instruction
+arbitration and strict memory/peripheral handlers retain their contracts.
+
+Qualification commands (run profiles separately; no fuzzing):
+  cmake --build --preset strict --target blofeld-dsp-ram-rmw-test
+  ctest --preset strict -R '^dsp_ram_rmw$' --output-on-failure
+  cmake --build --preset thread --target blofeld-dsp-ram-rmw-test
+  ctest --preset thread -R '^dsp_ram_rmw$' --output-on-failure
+
+The authored test covers four operations, AA6/(R0)/(R0)+/absolute operands,
+X/Y RAM, bits0/13/23 and both original bit levels, with DMA request offsets.
+It checks actual publications and whole-register ISA expectations, fresh-owner
+checkpoint continuations, held CPU periods, pre-existing DMA writes and reset
+before/after the accepted RAM write. Component evidence does not establish a
+complete original-firmware boot, audible instrument output or real-time speed.

@@ -405,7 +405,7 @@ void native_dma_bit_refusal() {
   throw std::runtime_error("Native bit fixture did not reach its transaction");
 }
 
-void native_dma_memory_bit_refusal() {
+void native_dma_memory_bit() {
   constexpr Word memory_clear = 0x0a5800;
   OwnDspMachine machine(clocks);
   const std::array<Word, 1> rom{memory_clear};
@@ -417,18 +417,25 @@ void native_dma_memory_bit_refusal() {
     if (!pending) { throw std::runtime_error("Native RAM bit fixture lost its effect"); }
     if (pending->effect.kind == EffectKind::read) {
       require(pending->opcode == memory_clear, "RAM bit read must retain the actual opcode");
-      try {
-        static_cast<void>(machine.advance_dma_native_cycle(
-            dma_input(0), OwnDspNativeCycleModel::isolated_effect));
-        throw std::runtime_error("Unqualified RAM read-modify-write was accepted");
-      } catch (const blofeld::Fault &error) {
-        const std::string detail(error.what());
-        require(detail.contains("read X:0x000000") && detail.contains("pc=0xff0000") &&
-                    !machine.bus().last_dma_cycle() && machine.clock().native_cycle_units() == 0 &&
-                    !machine.clock().faulted(),
-                "A split RAM bit operation must refuse before DMA or native admission");
+      auto expected = machine.cpu().registers();
+      require(expected.r[0] == 1,
+              "The actual postincrement is published before the native RAM sample");
+      ++expected.pc;
+      expected.sr |= 1U;
+      for (unsigned cycle = 0; cycle < 8; ++cycle) {
+        const auto result = machine.advance_dma_native_cycle(
+            dma_input(cycle), OwnDspNativeCycleModel::isolated_effect);
+        if (!result.native) { throw std::runtime_error("Reserved native RAM bit effect stalled"); }
+        require(result.native && result.native->fault.kind == FaultKind::none,
+                "The actual reserved RAM bit operation advances through its staged effects");
+        if (!result.native->retired) { continue; }
+        require(machine.cpu().registers() == expected &&
+                    machine.bus().read({.space = DspSpace::x, .address = 0}) == 0 &&
+                    machine.clock().native_cycle_units() == cycle + 1 && !machine.clock().faulted(),
+                "Real BCLR publishes the cleared RAM cell, original Carry and postincrement");
+        return;
       }
-      return;
+      throw std::runtime_error("Native RAM bit fixture did not retire its transaction");
     }
     require(machine.advance(pending->ticket).fault.kind == FaultKind::none,
             "Native RAM bit fixture could not reach its read");
@@ -526,7 +533,7 @@ int main() {
     native_dma_source_conflict();
     native_dma_destination_conflict();
     native_dma_bit_refusal();
-    native_dma_memory_bit_refusal();
+    native_dma_memory_bit();
     timer_fault_recovery();
     stopped_and_waiting(stop, ProcessingState::stopped);
     stopped_and_waiting(wait, ProcessingState::waiting);

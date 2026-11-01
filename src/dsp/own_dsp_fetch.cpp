@@ -346,10 +346,11 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
   machine_.clock_.begin_step(machine_.bus_, {.pc = regs.pc, .omr = regs.omr});
   try {
     OwnDspFetchCycleResult result;
-    result.dma =
-        machine_.bus_.advance_dma(inputs,
-                                  {.accesses = std::span(accesses).first(count),
-                                   .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+    result.dma = machine_.bus_.advance_dma(
+        inputs,
+        {.accesses = std::span(accesses).first(count),
+         .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy,
+         .indivisible_instruction = OwnDspMachine::dma_indivisible_instruction(pending)});
     if (!result.dma.core_stall) {
       if (state.pending_address && !hold_fetch) {
         fetch_.capture(machine_.bus_);
