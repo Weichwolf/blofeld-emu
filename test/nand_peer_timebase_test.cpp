@@ -52,6 +52,10 @@ void power(const Rate rate) {
               peer.detailed().base.ticks == rate.power_ticks && !events.next_ticks() &&
               machine.bus().timers().read(timer1, di) == di,
           "The actual autonomous power event publishes the modeled Ready pin");
+  const auto powered = peer.detailed();
+  require(rejects([&] { const NandPeer duplicate(machine, Nand{}); }).contains("GPIO") &&
+              peer.detailed() == powered && machine.bus().timers().read(timer1, di) == di,
+          "A rejected second board owner cannot overwrite the first peer's Ready input");
   peer.before_native(rate.power_ticks);
   const auto snapshot = peer.checkpoint();
   OwnDspMachine fresh(clocks(rate.hz));

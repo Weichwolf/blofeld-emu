@@ -16,7 +16,9 @@ Unknown cells, invalid commands and missed deadlines remain visible failures.
 All interval conversions use the native owner's timebase. The new timebase test
 checks independently expected 54000/108000 tick power events at 540/1080MHz,
 unknown initial Ready, incorrect-event rejection, same-rate clones and atomic
-rejection of incompatible clocks. There is no production 1080MHz constant.
+rejection of incompatible clocks. A second live pad owner is rejected before
+changing the established peer's Ready input. There is no production 1080MHz
+constant.
 The autonomous scheduler must dispatch exactly the offered completion/output
 boundary before the next CPU observation.
 

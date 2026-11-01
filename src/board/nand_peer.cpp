@@ -79,7 +79,6 @@ struct NandPeer::Impl {
     std::cerr << "NAND_BOARD_MODEL CE=held-selected power=100us-reference "
                  "part=explicit-device-contract GPIO=logical sample=period-completion "
                  "board-qualified=0\n";
-    publish();
     drive(0);
   }
 
@@ -369,6 +368,7 @@ NandPeer::NandPeer(OwnDspMachine &machine, Nand device)
 NandPeer::NandPeer(OwnDspMachine &machine, Nand device, NandCellProfile profile)
     : impl_(std::make_unique<Impl>(machine, std::move(device), std::move(profile))) {
   impl_->bind(lifetime_);
+  impl_->publish();
 }
 
 NandPeer::NandPeer(const NandPeerSnapshot &snapshot, OwnDspMachine &target) {
