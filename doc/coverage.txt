@@ -4068,8 +4068,10 @@ conditional calls through the real single-read/PCU/stack path. The authored
 DMA matrix passes 3456 cases, 2192 same-owner/fresh-owner cuts and 160 native RTS
 continuations per sanitizer; seven adjacent groups also qualify by executed or
 identical-ELF evidence. Unknown peripheral and RAM-RMW guards remain intact.
-This supports requirements 2/3/6; actual original continuation after the correction
-is still required. See dsp-ram-control.txt. The preceding blank-Sound original
-run independently completes 383 default stores and a terminating/clamped restore
-without literal stores/damaged fallback, then reaches the same call-admission
-guard. Its 732 DMA words/181 silent frames remain initialization evidence only.
+A fresh corrected original cold run now executes 16 original JSSETs, restores/
+clamps all 16 Parts and performs 6128 literal stores over 9048 actual runtime
+NAND reads/stores. The original cold prefix/resident words, repeated suffixes
+and reserved-decoder control all match. It next refuses unknown startup page
+0x300; 1412 DMA words yield 351 silent frames. Live Part values and full
+instrument acceptance remain open. Supports requirements 2/3/6; see
+dsp-ram-control.txt for exact scope, input and audit hashes.

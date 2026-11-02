@@ -27,16 +27,16 @@ counts are checked. Seven adjacent clock, RMW, DMA, fetch, checkpoint, interrupt
 and bank groups also pass; three reuse identical independently qualified ELF,
 argument and log identities instead of repeating unchanged executions.
 
-The preceding connected original runs reach this admission boundary after
-actual reset, NAND loading, Global initialization and the first Sound restore.
-An explicitly erased Sound page produces 383 native default stores and a
-terminating packed restore without literal stores or damaged-block fallback;
-732 DMA words decode to 181 silent stereo frames. The official Sound import
-executes 383 literal stores instead (coverage.txt). Both earlier runs use the
-frozen pre-correction adapter. A new original continuation after this correction
-is required; component tests alone do not prove instrument startup or audio.
-The erased input is a declared virtual state, not recovered factory contents.
+The corrected adapter also executes the connected original cold startup with
+unchanged official Sound storage. All 18287 resident words and the complete
+cold-prefix trace match the previous run. Both joint suffixes restore/clamp
+all 16 Parts, retire 16 original JSSET instructions and execute 6128 literal
+stores across 9048 genuine runtime NAND reads/stores. The old reserved-decoder
+control also reproduces. The next refusal is unknown startup page 0x300.
+1412 DMA words decode to 351 silent stereo frames. Live parameter values,
+complete startup and instrument audio remain unqualified. The virtual storage
+input is explicit; it is not a recovered factory image or physical timing proof.
 
-Local blank-Sound audit: doc/local/nand-capture/erased-sound-r2/audit.json
-SHA-256: 11dd690f92f6faf57e4623df974eeb3ea6702adfd1c70e8421c78763614f12d6
-Input SHA-256: 1b82e40a02e49fbe9c2e65a7e5f614e594780d46791b7ee72cccbb9f63cf2789
+Local original audit: doc/local/ram-control/aa6-call/original/audit.json
+SHA-256: f2a59aa2157388443021ad185d4b53c0323209c1e9b0db9f663042c7548917f2
+Input SHA-256: 3f919ac1d15aa69841d74505424478710ad914520430dfb7a5898deb01ed2442

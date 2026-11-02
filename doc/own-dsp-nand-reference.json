@@ -219,5 +219,30 @@
       "local_audit_sha256": "e477d1e7c5a9d7e7c02ec346fc0d789609d20384a873a57f8161f13180b3a409",
       "instrument_audio_proven": false
     }
+  },
+  "native_aa6_control_candidate": {
+    "scope": "Unmodified original cold startup with fixed-RAM bit-control admission; official Sound image unchanged",
+    "execution_base_commit": "7e0ec62775fb24cfc12869ad9ccd391e65b0da73",
+    "adapter_source_sha256": "ae05d2ab82974e28ae23685338b8addc8b36035b024344d001c1d7223751c69a",
+    "source_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+    "initial_image_sha256": "3f919ac1d15aa69841d74505424478710ad914520430dfb7a5898deb01ed2442",
+    "resident_words": 18287,
+    "cold_prefix_matches_previous_run": true,
+    "runtime_nand_bytes_read": 9048,
+    "native_part_restores": 16,
+    "native_literal_stores": 6128,
+    "native_jsset_retirements": 16,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "actual_dma_words": 1412,
+    "silent_stereo_frames": 351,
+    "next_runtime_limit": "Unknown startup NAND page 0x300, column 0",
+    "local_audit": "doc/local/ram-control/aa6-call/original/audit.json",
+    "local_audit_sha256": "f2a59aa2157388443021ad185d4b53c0323209c1e9b0db9f663042c7548917f2",
+    "live_parameter_values_measured": false,
+    "instrument_audio_proven": false,
+    "whole_goal_complete": false,
+    "fuzzing": false,
+    "physical_traffic": false
   }
 }
