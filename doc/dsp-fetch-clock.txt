@@ -45,6 +45,10 @@ that setup is explicitly untimed. A stopped-CPU DMA request observation at the
 epoch is not an elapsed clock. Actual elapsed time retains reset hold/recovery,
 while completed reference-cycle and CLK2 totals begin at zero.
 
+Automatic cycles share one current native pending snapshot between fetch holding
+and effect admission. It stays local to that cycle; accepted I/O and CPU
+publications still execute natively.
+
 Joint checkpoints retain native execution, captured words, issued F1, DMA,
 timer/PLL/map state, reference time and divider phase. Trusted snapshots are
 portable to a compatible machine and clock contract. A fresh process-local

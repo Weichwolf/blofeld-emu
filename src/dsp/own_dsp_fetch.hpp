@@ -83,8 +83,12 @@ private:
   saved_state(const OwnDspFetchCheckpoint &checkpoint);
   void check_owner() const;
   void check_sample_context(bool hold_fetch = false) const;
+  void
+  check_sample_context(const dsp56300::Registers &regs, bool has_pending, bool hold_fetch) const;
   [[nodiscard]] bool begin_automatic(bool admit_interrupts);
-  [[nodiscard]] bool hold_program_fetch(OwnDspAutomaticTiming timing) const;
+  [[nodiscard]] bool
+  hold_program_fetch(OwnDspAutomaticTiming timing,
+                     const std::optional<dsp56300::PendingInstruction> &pending) const;
   [[nodiscard]] std::optional<DspMemoryAccess>
   native_overlap(const DspProgramFetchView &state,
                  const dsp56300::PendingInstruction &pending) const;
@@ -94,6 +98,13 @@ private:
                                                      bool require_capture,
                                                      bool issue_next,
                                                      bool hold_fetch);
+  [[nodiscard]] OwnDspFetchCycleResult
+  capture_cycle(DspDmaInputs inputs,
+                bool admit_native,
+                bool require_capture,
+                bool issue_next,
+                bool hold_fetch,
+                const std::optional<dsp56300::PendingInstruction> &pending);
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
   [[nodiscard]] dsp56300::InstructionProgress begin_native();
   void finish_interrupt_vector();

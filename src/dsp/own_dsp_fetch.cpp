@@ -66,8 +66,15 @@ void OwnDspFetch::check_owner() const {
 
 void OwnDspFetch::check_sample_context(const bool hold_fetch) const {
   const auto regs = machine_.cpu_.registers();
+  const bool has_pending = !in_flight_ || machine_.cpu_.pending_instruction().has_value();
+  check_sample_context(regs, has_pending, hold_fetch);
+}
+
+void OwnDspFetch::check_sample_context(const dsp56300::Registers &regs,
+                                       const bool has_pending,
+                                       const bool hold_fetch) const {
   const auto state = fetch_.view();
-  if (in_flight_ && !machine_.cpu_.pending_instruction()) {
+  if (in_flight_ && !has_pending) {
     throw Fault("Own DSP F2 requires retirement synchronization read P:" +
                 hex(state.pending_address.value_or(state.next_address), 6) +
                 " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
@@ -145,17 +152,19 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inp
   const bool started = begin_automatic(
       timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts ||
       timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts);
+  const auto pending = machine_.cpu_.pending_instruction();
   const bool stale_context = in_flight_ && fetch_.view().omr != machine_.cpu_.registers().omr;
-  const bool hold_fetch = hold_program_fetch(timing) || stale_context || repeated_ ||
+  const bool hold_fetch = hold_program_fetch(timing, pending) || stale_context || repeated_ ||
                           native_latch_ || interrupt_vector_;
-  auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch);
+  auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch, pending);
   result.instruction_started = started;
   if (result.native && result.native->retired) { synchronize(); }
   return result;
 }
 
-bool OwnDspFetch::hold_program_fetch(const OwnDspAutomaticTiming timing) const {
-  const auto pending = machine_.cpu_.pending_instruction();
+bool OwnDspFetch::hold_program_fetch(
+    const OwnDspAutomaticTiming timing,
+    const std::optional<dsp56300::PendingInstruction> &pending) const {
   const auto state = fetch_.view();
   if (pending && pending->effect.kind == dsp56300::EffectKind::read &&
       pending->effect.space == dsp56300::Space::program &&
@@ -315,9 +324,21 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
                                                   const bool issue_next,
                                                   const bool hold_fetch) {
   check_owner();
-  check_sample_context(hold_fetch);
-  const auto state = fetch_.view();
+  const auto pending = machine_.cpu_.pending_instruction();
+  return capture_cycle(inputs, admit_native, require_capture, issue_next, hold_fetch, pending);
+}
+
+OwnDspFetchCycleResult
+OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
+                           const bool admit_native,
+                           const bool require_capture,
+                           const bool issue_next,
+                           const bool hold_fetch,
+                           const std::optional<dsp56300::PendingInstruction> &pending) {
+  check_owner();
   const auto regs = machine_.cpu_.registers();
+  check_sample_context(regs, pending.has_value(), hold_fetch);
+  const auto state = fetch_.view();
   const auto context = [&regs] { return " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6); };
   if (machine_.clock_inputs_.switch_timing != DspClockSwitch::reference_cycle_boundary ||
       machine_.cpu_.fault().kind != dsp56300::FaultKind::none ||
@@ -333,7 +354,6 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
   }
   auto native_state = state;
   if (hold_fetch) { native_state.pending_address.reset(); }
-  const auto pending = machine_.cpu_.pending_instruction();
   if (admit_native) {
     if (!in_flight_ || !pending) {
       throw Fault("Own DSP DMA/F2/native cycle requires its pending owned effect" + context());
