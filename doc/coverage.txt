@@ -59,9 +59,13 @@ under both sanitizer configurations. This supports Board output capture; origina
 firmware replies and USB remain unqualified. A subsequent HostMidiSession adapter
 now delivers authored native SCI output through the same owned host port; both
 sanitizer profiles pass independent kernel-record and affected input-session
-checks. Normal-profile/CLI integration and original bidirectional transfers are
-still open. See midi-output.txt, midi-output-reference.json, host-midi-session.txt
-and host-midi-output-session-reference.json.
+checks. The ordinary reference-config CLI now exposes --midi-port NAME and the
+common-time SCI route. Authored actual-reset receive/reply cases on both routes,
+14 fixed refusal cases and affected file-input regressions pass both sanitizer
+profiles; independent standard ALSA tools observe only owned virtual ports.
+Normal-profile integration and original bidirectional transfers remain open.
+See midi-output.txt, midi-output-reference.json, host-midi-session.txt,
+host-midi-output-session-reference.json and reference-midi-session-cli-reference.json.
 
 Connected reset/SPI/NAND gates match all56238 known source bytes in actual
 protocol and retired DSP samples,107 address sequences and read deadlines.

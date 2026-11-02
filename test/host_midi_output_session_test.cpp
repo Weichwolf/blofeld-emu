@@ -172,7 +172,7 @@ void connected(const bool small) {
               final.midi_bytes == 0 && final.waiting && !session.retired(),
           "All actual SCI bytes drain despite a distant input poll deadline");
   const auto messages = receiver.read();
-  require(messages.size() == 4, "Two notes, a clock and one complete SysEx reach the kernel");
+  require(messages.size() >= 4, "Two notes, a clock and the SysEx fragments reach the kernel");
   for (unsigned i = 0; i < 2; ++i) {
     const auto &event = messages.at(i).event;
     require(event.type == SNDRV_SEQ_EVENT_NOTEON && event.data.note.channel == 0 &&
@@ -180,10 +180,15 @@ void connected(const bool small) {
                 event.data.note.velocity == first_velocity + i,
             "Independent event fields preserve native status/running-status note ordering");
   }
-  require(messages.at(2).event.type == SNDRV_SEQ_EVENT_CLOCK &&
-              messages.back().event.type == SNDRV_SEQ_EVENT_SYSEX &&
-              std::ranges::equal(messages.back().data, sysex),
-          "Independent raw kernel records retain clock and complete literal SysEx");
+  std::vector<std::uint8_t> payload;
+  for (const auto &message : std::span(messages).subspan(3)) {
+    require(message.event.type == SNDRV_SEQ_EVENT_SYSEX,
+            "Only ordered SysEx fragments follow the realtime clock");
+    payload.insert(payload.end(), message.data.begin(), message.data.end());
+  }
+  require(
+      messages.at(2).event.type == SNDRV_SEQ_EVENT_CLOCK && std::ranges::equal(payload, sysex),
+      "Independent raw kernel records retain clock and literal SysEx under actual packet grants");
   require(session.flush_output(f.board) == 0 && receiver.read().empty(),
           "An empty model queue cannot repeat an already delivered host prefix");
 }

@@ -3,7 +3,9 @@ Common-time SCI MIDI and host sessions
 Config::midi_sci_timed selects an explicit PR2/PS4 input and absolute common-time
 start. It requires PipelineTiming and external event order/budget. It is exclusive
 with fixed-IPBus and DSP-TIO MIDI sources; their existing contracts remain.
-This is a C++ reference API, not calibrated Desktop/Keyboard wiring or a new CLI.
+The reference-board text setting is midi-sci-timed PR2 after T (or PS4).
+It requires mcu-power-on plus dsp-input-order with an explicit event budget.
+These are declared reference routes, not calibrated Desktop/Keyboard wiring.
 If SCI samples before a later configured start, supply an explicit initial
 idle-high pad observation; the API does not invent pre-start pad knowledge.
 
@@ -30,15 +32,35 @@ An empty queue produces no response. Output does not advance emulated clocks.
 Host parser/partial-message state stays outside modeled snapshots. Kernel pool
 negotiation and packetization retain host-midi-port.txt's actual-grant contract.
 
-This remains a reference API, separate from the CLI's file/raw-device input pump
-and the pending normal-profile launcher. It does not establish original firmware
-replies, physical MIDI-Out wiring, wall-clock output pacing or USB enumeration.
+The ordinary headless CLI now selects this session with --midi-port NAME.
+Supply a reference board with one input route and midi-output PR3 or PS5.
+For actual POR use midi-sci-timed; fixed-IPBus midi-sci cannot clock through an
+asserted system reset. File, raw-device and sequencer sources are exclusive.
+Automatic checkpoint replay rejects external sessions before trace creation.
+The process publishes its actual kernel address, protocol and negotiated pool
+grants, then closes the endpoint at completion or a fault. Successful completion
+drains the final native queue without another guest operation. Timed SCI input
+counters/events/frames appear in the regular Board report.
+
+This remains an explicit reference configuration; the normal-profile launcher,
+original firmware replies, physical MIDI-Out wiring, wall-clock output pacing
+and USB enumeration remain separate requirements.
 
 Reproduce with separate strict and thread sanitizer presets:
   cmake --build --preset strict --target blofeld-host-midi-session-test blofeld-host-midi-output-session-test
   ctest --test-dir build/strict -R '^host_midi_(session|output_session)$' --output-on-failure
 For input-wire changes additionally use sci_midi_timeline; standard-tool input
 interoperability is a separate host_midi_session_tools check.
+For CLI integration:
+  cmake --build --preset strict --target blofeld-headless
+  ctest --test-dir build/strict -R '^reference_midi_session_cli$' --output-on-failure
+This fixed-case test uses aseqsend/aseqdump/aconnect/stdbuf and the private
+official1.25 archive; missing prerequisites produce an explicit skip.
+Its MCU program is authored test code, not a qualification of original startup.
+reference-midi-session-cli-reference.json pins the actual CLI executables,
+inputs and results on both routes and both sanitizer configurations. The same
+increment qualifies14 fixed refusal cases, the affected7 file-input methods and
+the native output unit with SysEx expectations independent of packet boundaries.
 
 Directed checks cover literal bits during held reset without IPBus periods,
 WAI, native divider setup, partial-frame restore, event-budget failures and

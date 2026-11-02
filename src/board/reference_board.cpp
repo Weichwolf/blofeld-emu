@@ -275,9 +275,15 @@ void Board::report(std::ostream &stream) const {
     stream << "MIDI-OUTPUT transmitted=" << control_.midi_output->transmitted_bytes()
            << " queued=" << control_.midi_output->queued_bytes() << '\n';
   }
-  if (config_.midi || config_.midi_dsp) {
+  if (config_.midi || config_.midi_sci_timed || config_.midi_dsp) {
     stream << "MIDI accepted=" << control_.midi_bytes << " queued=" << midi_queue_size()
-           << " started=" << (control_.midi.has_value() || (control_.midi_dsp && control_.started));
+           << " started="
+           << (control_.midi.has_value() ||
+               ((control_.midi_sci || control_.midi_dsp) && control_.started));
+    if (control_.midi_sci) {
+      stream << " sci-events=" << control_.midi_sci->observed_events()
+             << " sci-frames=" << control_.midi_sci->completed_frames();
+    }
     if (control_.midi_dsp) {
       stream << " dsp-events=" << control_.midi_dsp->observed_events()
              << " dsp-frames=" << control_.midi_dsp->completed_frames();

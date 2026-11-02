@@ -372,16 +372,19 @@ PcmRoute pcm_route(std::istringstream &line) {
   return result;
 }
 
-MidiRoute midi_route(std::istringstream &line) {
+SciReceivePin midi_input_pin(std::istringstream &line) {
   const auto input_pin = token(line);
   if (input_pin != "PR2" && input_pin != "PS4") {
     throw Fault("Reference MIDI pin must be PR2 or PS4");
   }
+  return input_pin == "PR2" ? SciReceivePin::pr2 : SciReceivePin::ps4;
+}
+
+MidiRoute midi_route(std::istringstream &line) {
+  const auto input_pin = midi_input_pin(line);
   const auto hz = static_cast<std::uint32_t>(number(line, UINT32_MAX));
   literal(line, "after");
-  return {.bus_hz = hz,
-          .pin = input_pin == "PR2" ? SciReceivePin::pr2 : SciReceivePin::ps4,
-          .after_ticks = number(line, UINT64_MAX)};
+  return {.bus_hz = hz, .pin = input_pin, .after_ticks = number(line, UINT64_MAX)};
 }
 
 DspMidiRoute dsp_midi_route(std::istringstream &line) {
@@ -398,6 +401,10 @@ DspMidiRoute dsp_midi_route(std::istringstream &line) {
 bool midi_setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "midi-sci") {
     config.midi = midi_route(line);
+  } else if (key == "midi-sci-timed") {
+    const auto pin = midi_input_pin(line);
+    literal(line, "after");
+    config.midi_sci_timed = {.pin = pin, .after_ticks = number(line, UINT64_MAX)};
   } else if (key == "midi-output") {
     const auto output = token(line);
     if (output != "PR3" && output != "PS5") { throw Fault("MIDI output pin must be PR3 or PS5"); }

@@ -213,6 +213,8 @@ PCM, MIDI and state
 
   pcm-receive esai 1 tx 0 after 2000 rising 32 24 2 high
   midi-sci PR2 6000000 after 2000
+  midi-sci-timed PR2 after 2000
+  midi-output PR3
   midi-transfer-reference 12 1
   midi-dsp-tio 0 after 2000 synchronized
 
@@ -224,7 +226,12 @@ PCs, addresses, time and source. See serial-pcm.txt and pcm-wave.txt for bounded
 recording via --audio-out/--audio-rate/--audio-max-frames.
 
 MIDI routes are exclusive. SCI uses PR2 or PS4 and a declared bus rate; its optional
-transfer reference is experimental. DSP MIDI uses an explicit31250-baud timer-pin
+transfer reference is experimental. The alternative midi-sci-timed uses the
+common timebase at31250baud, including held POR and WAI; it requires mcu-power-on
+and dsp-input-order with a positive event budget. Input clocks remain unchanged
+by host negotiation. midi-output selects actual resolved PR3/PS5 serial capture.
+--midi-port NAME binds input/output to one ordinary host sequencer session;
+see host-midi-session.txt. DSP MIDI uses an explicit31250-baud timer-pin
 wire, order/budget and source timing; see dsp-host-midi.txt. These route fixtures
 are not proof that the original complete instrument receives or plays notes.
 

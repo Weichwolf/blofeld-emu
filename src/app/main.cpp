@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "app/host_display_pump.hpp"
 #include "app/host_midi_runner.hpp"
+#include "app/host_midi_session.hpp"
 #include "audio/pcm_recording.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
@@ -15,12 +16,14 @@
 #include "storage/virtual_device_state.hpp"
 #include "usb/usbip_runtime.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -46,6 +49,7 @@ struct Options {
   std::filesystem::path display_directory;
   std::filesystem::path midi_file;
   std::filesystem::path midi_device;
+  std::optional<std::string> midi_port;
   std::optional<std::uint32_t> audio_rate;
   std::optional<std::size_t> audio_max_frames;
   std::optional<std::uint16_t> usbip_port;
@@ -106,6 +110,22 @@ void validate_usb_options(const Options &config) {
   }
 }
 
+void validate_midi_options(const Options &config) {
+  if ((!config.midi_file.empty() && !config.midi_device.empty()) ||
+      (config.midi_port && (!config.midi_file.empty() || !config.midi_device.empty())) ||
+      ((!config.midi_file.empty() || !config.midi_device.empty() || config.midi_port) &&
+       (config.reference_board.empty() || config.inspect))) {
+    throw blofeld::Fault("MIDI requires a reference board and exactly one of --midi-file, "
+                         "--midi-device or --midi-port");
+  }
+  constexpr unsigned maximum_port_name = 63;
+  if (config.midi_port &&
+      (config.midi_port->empty() || config.midi_port->size() > maximum_port_name ||
+       config.midi_port->contains('\0'))) {
+    throw blofeld::Fault("MIDI port name must contain 1..63 non-NUL bytes");
+  }
+}
+
 void validate_options(const Options &config) {
   if (config.firmware.empty()) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
@@ -114,7 +134,8 @@ void validate_options(const Options &config) {
                          "[--device-state unit.bfnvm] "
                          "[--reference-board scenario.bfboard --dsp-rom packed24.bin] "
                          "[--display-dir runtime-directory] "
-                         "[--midi-file bytes.bin | --midi-device /dev/snd/midiCxDy] "
+                         "[--midi-file bytes.bin | --midi-device /dev/snd/midiCxDy | "
+                         "--midi-port NAME] "
                          "[--usbip-port PORT --usbip-after TICKS --usbip-period TICKS "
                          "--usbip-probe-timeout TICKS] "
                          "[--audio-out capture.wav --audio-rate HZ --audio-max-frames N]");
@@ -135,12 +156,7 @@ void validate_options(const Options &config) {
   if (!config.display_directory.empty() && (config.reference_board.empty() || config.inspect)) {
     throw blofeld::Fault("Display publication requires reference-board execution");
   }
-  if ((!config.midi_file.empty() && !config.midi_device.empty()) ||
-      ((!config.midi_file.empty() || !config.midi_device.empty()) &&
-       (config.reference_board.empty() || config.inspect))) {
-    throw blofeld::Fault("MIDI input requires a reference board and exactly one of --midi-file "
-                         "or --midi-device");
-  }
+  validate_midi_options(config);
   const bool audio = !config.audio_out.empty();
   if (audio != config.audio_rate.has_value() || audio != config.audio_max_frames.has_value() ||
       (audio && (config.reference_board.empty() || config.inspect))) {
@@ -221,7 +237,9 @@ Options options(const int count, char **values) {
     const std::string_view value(values[++index]);
     const OptionValue input{.name = argument, .value = value};
     if (numeric_option(result, input) || path_option(result, input)) { continue; }
-    if (argument == "--port-e-input") {
+    if (argument == "--midi-port") {
+      result.midi_port = value;
+    } else if (argument == "--port-e-input") {
       result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
       const auto conversion =
@@ -426,10 +444,15 @@ void validate_board_options(const Options &config,
   if (!config.audio_out.empty() && (!board || !board->pcm)) {
     throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
   }
-  const bool midi = !config.midi_file.empty() || !config.midi_device.empty();
-  if (midi && (!board || (!board->midi && !board->midi_dsp) || board->checkpoint)) {
-    throw blofeld::Fault("Host MIDI requires midi-sci or midi-dsp-tio and rejects automatic "
-                         "checkpoint replay");
+  const bool midi = !config.midi_file.empty() || !config.midi_device.empty() || config.midi_port;
+  if (midi && (!board || (!board->midi && !board->midi_sci_timed && !board->midi_dsp) ||
+               board->checkpoint)) {
+    throw blofeld::Fault(
+        "Host MIDI requires midi-sci, midi-sci-timed or midi-dsp-tio and rejects automatic "
+        "checkpoint replay");
+  }
+  if (config.midi_port && (!board || !board->midi_output)) {
+    throw blofeld::Fault("Host MIDI port requires midi-output PR3 or PS5 in the reference board");
   }
   if (config.usbip_port && (!board || board->checkpoint)) {
     throw blofeld::Fault("Host USB/IP rejects automatic checkpoint replay");
@@ -443,11 +466,29 @@ std::optional<blofeld::reference::AudioOutput> audio_output(const Options &confi
                                          .maximum_frames = *config.audio_max_frames};
 }
 
+std::unique_ptr<blofeld::reference::HostMidiSession> midi_session(const std::string &name,
+                                                                  const std::uint64_t timebase_hz) {
+  if (timebase_hz == 0) { throw blofeld::Fault("Host MIDI requires a positive timebase"); }
+  constexpr unsigned polls_per_second = 1000;
+  const auto period = std::max(std::uint64_t{1}, timebase_hz / polls_per_second);
+  auto session = std::make_unique<blofeld::reference::HostMidiSession>(name, period);
+  const auto address = session->address();
+  const auto limits = session->limits();
+  if (!address || !limits) { throw blofeld::Fault("Host MIDI port has no actual address/grants"); }
+  std::cout << "MIDI port=" << address->client << ':' << address->port
+            << " name=" << std::quoted(name) << " protocol=" << limits->protocol_version
+            << " input-events=" << limits->input_events
+            << " output-events=" << limits->output_events << " period-ticks=" << period << '\n'
+            << std::flush;
+  return session;
+}
+
 int run_reference(const Options &config,
                   const blofeld::reference::Config &board,
                   const blofeld::reference::Execution &execution) {
   blofeld::reference::Board machine(board, execution);
   std::unique_ptr<blofeld::reference::HostMidiPump> input;
+  std::unique_ptr<blofeld::reference::HostMidiSession> session;
   std::unique_ptr<blofeld::reference::HostDisplayPump> display;
   std::unique_ptr<blofeld::UsbipRuntime> usb;
   if (!config.display_directory.empty()) {
@@ -460,6 +501,7 @@ int run_reference(const Options &config,
         raw ? blofeld::MidiInputKind::linux_rawmidi : blofeld::MidiInputKind::bytes,
         board.dsp_clock.timebase_hz);
   }
+  if (config.midi_port) { session = midi_session(*config.midi_port, board.dsp_clock.timebase_hz); }
   if (config.usbip_port && config.usbip_after && config.usbip_period &&
       config.usbip_probe_timeout) {
     const blofeld::UsbipRuntimeOptions usb_options{
@@ -477,12 +519,18 @@ int run_reference(const Options &config,
               << " output-timeout-ms=" << usb_options.tcp.output_timeout.count() << '\n'
               << std::flush;
   }
-  if (!input && !usb && !display) { return machine.run(); }
+  if (!input && !session && !usb && !display) { return machine.run(); }
   const auto result = machine.run([&](auto &target) {
     if (input) { (*input)(target); }
+    if (session) { static_cast<void>(session->poll(target)); }
     if (usb) { target.poll_usb(*usb); }
     if (display) { display->poll(target); }
   });
+  if (session) {
+    const auto final_bytes = result == 0 ? session->flush_output(machine) : 0;
+    session->retire();
+    std::cout << "MIDI session closed=1 final-output-bytes=" << final_bytes << '\n';
+  }
   if (display) { display->capture(machine); }
   if (usb) {
     const auto published = usb->published();
