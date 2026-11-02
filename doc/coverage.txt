@@ -4062,3 +4062,14 @@ DMA words/184 silent initialization frames, then refuse an unsupported AA6
 JSSET RAM-read admission. Final Sound memory values and the other 1023 Sound
 paths remain unmeasured. This is not a recovered physical NAND image or complete
 instrument acceptance. Source: library/sources.json; detailed analysis stays local.
+
+Native fixed-AA6 RAM control now admits all absolute/relative bit branches and
+conditional calls through the real single-read/PCU/stack path. The authored
+DMA matrix passes 3456 cases, 2192 same-owner/fresh-owner cuts and 160 native RTS
+continuations per sanitizer; seven adjacent groups also qualify by executed or
+identical-ELF evidence. Unknown peripheral and RAM-RMW guards remain intact.
+This supports requirements 2/3/6; actual original continuation after the correction
+is still required. See dsp-ram-control.txt. The preceding blank-Sound original
+run independently completes 383 default stores and a terminating/clamped restore
+without literal stores/damaged fallback, then reaches the same call-admission
+guard. Its 732 DMA words/181 silent frames remain initialization evidence only.

@@ -21,37 +21,52 @@ constexpr DspRunClockInputs clocks{.extal_hz = 12000000,
                                    .timebase_hz = 540000000,
                                    .switch_timing = DspClockSwitch::reference_cycle_boundary};
 constexpr Word boot = 0xff0000, entry = 0x100, normal_omr = 0x300;
-constexpr Word status = 0xc003ff, canary = 0x654321, pattern = 0xa55aa5;
+constexpr Word status = 0xc00300, canary = 0x654321, pattern = 0xa55aa5;
 constexpr Word movec_omr = 0x05f43a, movec_sr = 0x05f439, immediate_x0 = 0x44f400;
 constexpr Word long_jump = 0x0af080, positive = 32, negative = word_mask - 31;
 constexpr Word source_register = 0xffffef, destination_register = 0xffffee;
 constexpr Word counter_register = 0xffffed, control_register = 0xffffec;
 constexpr Word x_copy = 0x880240, y_copy = 0x880244, p_copy = 0x880248;
 constexpr Word source_ram = 0x800, destination_ram = 0x900, program_guard = 0x1f0;
-constexpr unsigned ram_words = 64, base_cost = 5, bound = 32;
+constexpr unsigned ram_words = 64, branch_cost = 5, jump_cost = 4, bound = 32, flags_mask = 0xff;
+constexpr unsigned stack_word_bits = 24;
 constexpr std::uint64_t hold_ticks = 90, recovery_ticks = 135, period = 45;
 constexpr auto model = OwnDspNativeCycleModel::isolated_effect;
 constexpr std::array endpoints{std::array{0U, 0U}, std::array{6U, 10U}, std::array{63U, 23U}};
 enum class Mode : std::uint8_t { quiet, before, after, program_hold, source };
 
 struct Sample {
-  unsigned address = 0, bit = 0, waits = 0;
+  unsigned address = 0, bit = 0, waits = 0, flags = flags_mask;
   Word displacement = positive;
-  bool y = false, set = false, level = false;
+  bool y = false, set = false, level = false, relative = true, call = false;
   Mode mode = Mode::quiet;
 };
+
+bool return_case(const Sample sample) {
+  return sample.call && sample.level == sample.set && sample.mode == Mode::quiet &&
+         sample.address == 6 && sample.bit == 10 && sample.displacement == positive;
+}
+
+Word target(const Sample sample) {
+  return sample.relative ? (entry + sample.displacement) & word_mask : sample.displacement;
+}
+
+constexpr Word return_subroutine = 0x00000c;
 
 void require(const bool value, const char *message) {
   if (!value) { throw std::runtime_error(message); }
 }
 
 Word opcode(const Sample sample) {
-  // FM13-27/30:literal fixed-AA6 BRCLR/BRSET,with independent space/sense/bit fields.
-  constexpr Word family = 0x0c8080;
+  // FM AA6 BR/BS and J/JS: independent family, call, space, sense and bit fields.
+  constexpr Word branch_family = 0x0c8080;
+  constexpr Word jump_family = 0x0a0080;
+  const Word family = sample.relative ? branch_family : jump_family;
+  constexpr Word call_bit = 0x10000;
   constexpr Word y_bit = 0x40;
   constexpr Word set_bit = 0x20;
-  return family | (sample.address << 8U) | (sample.y ? y_bit : 0U) | (sample.set ? set_bit : 0U) |
-         sample.bit;
+  return family | (sample.address << 8U) | (sample.call ? call_bit : 0U) | (sample.y ? y_bit : 0U) |
+         (sample.set ? set_bit : 0U) | sample.bit;
 }
 
 Word value(const Sample sample, const bool level) {
@@ -83,8 +98,14 @@ void complete(OwnDspMachine &machine) {
 }
 
 void prepare(OwnDspMachine &machine, const Sample sample) {
-  const std::array<Word, 8> setup{
-      movec_omr, normal_omr, movec_sr, status, immediate_x0, canary, long_jump, entry};
+  const std::array<Word, 8> setup{movec_omr,
+                                  normal_omr,
+                                  movec_sr,
+                                  status | sample.flags,
+                                  immediate_x0,
+                                  canary,
+                                  long_jump,
+                                  entry};
   machine.bus().install_rom({.space = DspSpace::p, .start = boot, .words = setup});
   machine.begin_hardware_reset(
       {.mode_known = 15, .mode_levels = 5, .pinit = false, .recovery_cycles = 3});
@@ -94,7 +115,8 @@ void prepare(OwnDspMachine &machine, const Sample sample) {
           "Lost reset recovery");
   for (unsigned instruction = 0; instruction < 4; ++instruction) { complete(machine); }
   const auto regs = machine.cpu().registers();
-  require(regs.pc == entry && regs.omr == normal_omr && regs.sr == status && regs.x == canary,
+  require(regs.pc == entry && regs.omr == normal_omr && regs.sr == (status | sample.flags) &&
+              regs.x == canary,
           "Real reset and native setup must establish PC,OMR,CCR and X0");
   for (unsigned pc = entry - ram_words; pc < entry + ram_words; ++pc) {
     machine.bus().write({.address = pc});
@@ -102,6 +124,9 @@ void prepare(OwnDspMachine &machine, const Sample sample) {
   machine.bus().write({.address = entry, .value = opcode(sample)});
   machine.bus().write({.address = entry + 1, .value = sample.displacement});
   machine.bus().write({.address = program_guard});
+  if (return_case(sample)) {
+    machine.bus().write({.address = target(sample), .value = return_subroutine});
+  }
   for (const auto space : {DspSpace::x, DspSpace::y}) {
     for (unsigned address = 0; address < ram_words; ++address) {
       machine.bus().write({.space = space, .address = address, .value = canary});
@@ -162,11 +187,21 @@ struct Oracle {
   unsigned cycle = 0, reads = 0, pcu = 0, retirements = 0, writes = 0, holds = 0;
 };
 
+bool taken(const Sample sample) {
+  const bool level = sample.mode == Mode::before ? !sample.level : sample.level;
+  return level == sample.set;
+}
+
+unsigned pcu_publications(const Sample sample) {
+  return sample.call && taken(sample) ? 2U : 1U;
+}
+
 unsigned final_cycle(const Sample sample) {
-  if (sample.mode == Mode::quiet) { return 3; }
-  if (sample.mode == Mode::before) { return 5 + sample.waits; }
-  if (sample.mode == Mode::program_hold) { return 4 + sample.waits; }
-  return 5;
+  const auto extra = pcu_publications(sample) - 1;
+  if (sample.mode == Mode::quiet) { return 3 + extra; }
+  if (sample.mode == Mode::before) { return 5 + sample.waits + extra; }
+  if (sample.mode == Mode::program_hold) { return 4 + sample.waits + extra; }
+  return 5 + extra;
 }
 
 bool admit(const Sample sample, const unsigned cycle) {
@@ -263,6 +298,7 @@ void memory(Rig &rig, const Sample sample, const Oracle &oracle) {
     Word expected = 0;
     if (pc == entry) { expected = opcode(sample); }
     if (pc == entry + 1) { expected = sample.displacement; }
+    if (return_case(sample) && pc == target(sample)) { expected = return_subroutine; }
     require(rig.machine.bus().read({.address = pc}) == expected,
             "Actual executable and prefetched backing words cannot be rewritten by the test");
   }
@@ -271,12 +307,32 @@ void memory(Rig &rig, const Sample sample, const Oracle &oracle) {
 void verify(Rig &rig, const Sample sample, const Oracle &oracle) {
   auto expected = oracle.initial;
   if (oracle.pcu != 0) {
-    const bool level = sample.mode == Mode::before ? !sample.level : sample.level;
-    expected.pc = level == sample.set ? (entry + sample.displacement) & word_mask : entry + 2;
+    // The native PCU publishes the sequential return PC with the frame,
+    // then the selected target. This is an API boundary, not silicon timing.
+    expected.pc = entry + 2;
+    if (oracle.pcu == pcu_publications(sample) && taken(sample)) { expected.pc = target(sample); }
+    if (taken(sample) && sample.call) {
+      expected.sp = 1;
+      expected.sc = 1;
+      expected.stack[1] = (std::uint64_t{entry + 2} << stack_word_bits) | expected.sr;
+    }
   }
   auto progress = oracle.progress;
   progress.instructions += oracle.retirements;
-  progress.estimated_cycles += static_cast<std::uint64_t>(oracle.retirements) * base_cost;
+  progress.estimated_cycles +=
+      static_cast<std::uint64_t>(oracle.retirements) * (sample.relative ? branch_cost : jump_cost);
+  if (rig.machine.cpu().registers() != expected || rig.machine.cpu().progress() != progress) {
+    const auto actual = rig.machine.cpu().registers();
+    const auto advanced = rig.machine.cpu().progress();
+    std::cerr << "RAM_CONTROL cycle=" << oracle.cycle << " relative=" << sample.relative
+              << " call=" << sample.call << " mode=" << static_cast<unsigned>(sample.mode)
+              << " pc=" << actual.pc << '/' << expected.pc << " sr=" << actual.sr << '/'
+              << expected.sr << " sp=" << actual.sp << '/' << expected.sp << " sc=" << actual.sc
+              << '/' << expected.sc << " sz=" << actual.sz << '/' << expected.sz
+              << " stack1=" << actual.stack[1] << '/' << expected.stack[1]
+              << " instructions=" << advanced.instructions << '/' << progress.instructions
+              << " costs=" << advanced.estimated_cycles << '/' << progress.estimated_cycles << '\n';
+  }
   require(
       rig.machine.cpu().registers() == expected && rig.machine.cpu().progress() == progress,
       "Literal branch truth,all CPU/CCR/stack fields and native base counters hold every cycle");
@@ -321,14 +377,45 @@ void step(Rig &rig, const Sample sample, Oracle &oracle) {
   ++oracle.cycle;
 }
 
+unsigned subroutine_returns = 0;
+
+void return_to_caller(Rig &rig, const Sample sample, const Oracle &oracle) {
+  if (!return_case(sample)) { return; }
+  auto expected = rig.machine.cpu().registers();
+  expected.pc = entry + 2;
+  expected.sp = 0;
+  expected.sc = 0;
+  const auto progress = rig.machine.cpu().progress();
+  const auto first = oracle.cycle;
+  for (unsigned offset = 0; offset < bound; ++offset) {
+    const auto cycle = first + offset;
+    const auto result = rig.fetch->advance_dma_automatic(
+        {.cycle = cycle,
+         .known_requests = 15,
+         .timing = DspDmaTiming::reference_sampled_cycles,
+         .grant = DspDmaGrant::available},
+        OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts);
+    if (!result.native || !result.native->retired) { continue; }
+    require(result.native_pc == target(sample) && result.native->fault.kind == FaultKind::none &&
+                rig.machine.cpu().registers() == expected &&
+                rig.machine.cpu().progress().instructions == progress.instructions + 1 &&
+                !rig.machine.io().failure(),
+            "A genuine captured RTS consumes the call frame and returns to the exact caller");
+    ++subroutine_returns;
+    return;
+  }
+  throw std::runtime_error("Native conditional-call return exceeded its bounded fetch sequence");
+}
+
 void finish(Rig &rig, const Sample sample, Oracle oracle) {
   while (oracle.cycle <= final_cycle(sample)) { step(rig, sample, oracle); }
   const unsigned hold_count =
       sample.mode == Mode::before || sample.mode == Mode::program_hold ? 1 + sample.waits : 0U;
-  require(
-      oracle.reads == 1 && oracle.pcu == 1 && oracle.retirements == 1 &&
-          oracle.writes == (sample.mode == Mode::quiet ? 0U : 1U) && oracle.holds == hold_count,
-      "One actual RAM sample,one PCU publication,one retirement,and the literal DMA word/holds");
+  require(oracle.reads == 1 && oracle.pcu == pcu_publications(sample) && oracle.retirements == 1 &&
+              oracle.writes == (sample.mode == Mode::quiet ? 0U : 1U) && oracle.holds == hold_count,
+          "One actual RAM sample, ordered PCU frame/target publications and the literal DMA "
+          "word/holds");
+  return_to_caller(rig, sample, oracle);
 }
 
 unsigned cases = 0, restores = 0, clones = 0;
@@ -369,26 +456,40 @@ void variants(Sample sample) {
   }
 }
 
+void forms(Sample sample) {
+  for (const bool relative : {false, true}) {
+    for (const bool call : {false, true}) {
+      for (const unsigned flags : {0U, flags_mask}) {
+        sample.relative = relative;
+        sample.call = call;
+        sample.flags = flags;
+        variants(sample);
+      }
+    }
+  }
+}
+
 void run() {
   for (const auto endpoint : endpoints) {
     for (const bool y : {false, true}) {
       for (const bool set : {false, true}) {
         for (const bool level : {false, true}) {
           for (const auto displacement : {positive, negative}) {
-            variants({.address = endpoint[0],
-                      .bit = endpoint[1],
-                      .displacement = displacement,
-                      .y = y,
-                      .set = set,
-                      .level = level});
+            forms({.address = endpoint[0],
+                   .bit = endpoint[1],
+                   .displacement = displacement,
+                   .y = y,
+                   .set = set,
+                   .level = level});
           }
         }
       }
     }
   }
-  constexpr unsigned expected_cases = 432;
-  constexpr unsigned expected_cuts = 264;
-  require(cases == expected_cases && restores == expected_cuts && clones == expected_cuts,
+  constexpr unsigned expected_cases = 3456;
+  constexpr unsigned expected_cuts = 2192;
+  require(cases == expected_cases && restores == expected_cuts && clones == expected_cuts &&
+              subroutine_returns >= 16,
           "Every literal DMA case and before/after-sample checkpoint cut must execute");
 }
 }
@@ -398,7 +499,7 @@ int main() {
     std::cout << "OWN_RAM_DMA begin\n" << std::flush;
     run();
     std::cout << "OWN_RAM_DMA cases=" << cases << " restores=" << restores << " clones=" << clones
-              << " passed\n";
+              << " returns=" << subroutine_returns << " passed\n";
     return 0;
   } catch (const std::exception &error) {
     std::cerr << "OWN_RAM_DMA cases=" << cases << ": " << error.what() << '\n';

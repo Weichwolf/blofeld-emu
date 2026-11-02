@@ -5,7 +5,6 @@
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_interrupts.hpp"
-#include "dsp/dsp_peripheral_read_form.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/dsp_timers.hpp"
@@ -51,13 +50,24 @@ DspSpace native_space(const dsp56300::Space space) {
   }
 }
 
-bool readonly_short_ram_branch(const dsp56300::PendingInstruction &pending) {
-  if (!pending.opcode || pending.effect.kind != dsp56300::EffectKind::read) { return false; }
-  const auto form = decode_peripheral_read(*pending.opcode);
-  constexpr unsigned aa6_words = 64;
-  return form && form->relative && form->bit && form->words == 2 &&
-         form->target.address < aa6_words && form->target.address == pending.effect.address &&
-         form->target.space == native_space(pending.effect.space);
+bool readonly_short_ram_control(const dsp56300::PendingInstruction &pending) {
+  if (!pending.opcode || pending.effect.kind != dsp56300::EffectKind::read ||
+      pending.effect.space == dsp56300::Space::program) {
+    return false;
+  }
+  // FM13-27/30/32/38/81/85/87/90: fixed AA6 bit tests, including calls.
+  // EA, register and peripheral encodings retain their separate contracts.
+  constexpr unsigned family_mask = 0xfec080;
+  constexpr unsigned absolute = 0x0a0080;
+  constexpr unsigned relative = 0x0c8080;
+  constexpr unsigned address_shift = 8;
+  constexpr unsigned address_mask = 0x3f;
+  constexpr unsigned space_bit = 0x40;
+  const auto opcode = *pending.opcode;
+  const auto family = opcode & family_mask;
+  const auto space = (opcode & space_bit) != 0 ? dsp56300::Space::y : dsp56300::Space::x;
+  return (family == absolute || family == relative) && space == pending.effect.space &&
+         ((opcode >> address_shift) & address_mask) == pending.effect.address;
 }
 
 void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
@@ -76,8 +86,10 @@ void qualify_native_memory(const dsp56300::PendingInstruction &pending) {
       effect.space != dsp56300::Space::program && effect.address < peripheral_base) {
     return;
   }
-  if (shape && shape->kind == dsp56300::InstructionKind::bit_branch &&
-      readonly_short_ram_branch(pending)) {
+  if (shape &&
+      (shape->kind == dsp56300::InstructionKind::bit_branch ||
+       shape->kind == dsp56300::InstructionKind::bit_jump) &&
+      readonly_short_ram_control(pending)) {
     return;
   }
   constexpr std::array names{"P:", "X:", "Y:"};

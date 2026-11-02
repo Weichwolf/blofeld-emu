@@ -1,0 +1,42 @@
+Native fixed RAM bit control
+
+The captured native frontend admits fixed six-bit X/Y RAM operands for
+JCLR/JSET, JSCLR/JSSET, BRCLR/BRSET and BSCLR/BSSET. The instruction performs
+one genuine RAM read; the DSP core retains the sampled bit and executes its
+original PCU/stack effects. This is read-only control flow, separate from the
+BCLR/BSET/BCHG/BTST reservation in dsp-ram-rmw.txt. Peripheral, effective-address
+and register forms retain their existing separate admission contracts.
+
+The encoding and architectural expectations follow DSP56300FM chapter 13:
+absolute/relative target, clear/set sense, return PC immediately after the
+two-word instruction, full saved SR and unchanged RAM. A taken call publishes
+its return frame/sequential PC and then its destination through two native API
+boundaries. These reference periods do not claim silicon pipeline timing.
+DMA before the sample can change the decision; later writes cannot resample it.
+Held DMA and program-fetch conflicts retain the actual pending native owner.
+
+  cmake --build --preset strict --target blofeld-own-dsp-ram-bit-dma-test
+  ctest --test-dir build/strict -R '^own_dsp_ram_bit_dma$' --output-on-failure
+
+The authored matrix passes 3456 cases per sanitizer (ASan/UBSan and separate
+TSan), including both CCR endpoint patterns, spaces, senses, forward/backward
+relative displacements and absolute targets. There are 2192 same-owner restore
+cuts, 2192 fresh-owner continuations and 160 genuine captured RTS returns per
+profile. Full registers, stack, memory canaries, DMA payloads, holds and clock
+counts are checked. Seven adjacent clock, RMW, DMA, fetch, checkpoint, interrupt
+and bank groups also pass; three reuse identical independently qualified ELF,
+argument and log identities instead of repeating unchanged executions.
+
+The preceding connected original runs reach this admission boundary after
+actual reset, NAND loading, Global initialization and the first Sound restore.
+An explicitly erased Sound page produces 383 native default stores and a
+terminating packed restore without literal stores or damaged-block fallback;
+732 DMA words decode to 181 silent stereo frames. The official Sound import
+executes 383 literal stores instead (coverage.txt). Both earlier runs use the
+frozen pre-correction adapter. A new original continuation after this correction
+is required; component tests alone do not prove instrument startup or audio.
+The erased input is a declared virtual state, not recovered factory contents.
+
+Local blank-Sound audit: doc/local/nand-capture/erased-sound-r2/audit.json
+SHA-256: 11dd690f92f6faf57e4623df974eeb3ea6702adfd1c70e8421c78763614f12d6
+Input SHA-256: 1b82e40a02e49fbe9c2e65a7e5f614e594780d46791b7ee72cccbb9f63cf2789
