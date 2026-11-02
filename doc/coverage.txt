@@ -4229,8 +4229,8 @@ executes native MCU display cycles from a declared peripheral reset source.
 Eleven affected groups pass per ASan/UBSan and TSan, including 32 prefixes /
 64 fresh-owner suffixes, independent pixels, dummy reads and an E-high reset-release/pull-up
 guard with strong and passive B inputs. Parsed configuration also reaches one
-actual cold reset period in both profiles. Original connected LCD rendering and
-instrument reset remain open. Local proof: board-b-pulls/qualified-r7.json.
+actual cold reset period in both profiles. Original connected rendering is
+observed below; instrument reset remains open. Local proof: board-b-pulls/qualified-r7.json.
 
 Passive B network (requirements 2/3/6): opt-in disjoint up/down masks resolve
 actual MCU outputs, internal bias and external drivers without hiding unknowns
@@ -4241,7 +4241,8 @@ Qualification SHA256 a30240875b9703917c1a6c947bdcf5e3fe5977c237bb1b7a10e8422273a
 An original-POR preflight reaches 100000 operations beyond the earlier unknown
 LCD selects with up82/down7d. Its read-only host observer exports a fresh reset/
 off frame; no LCD bus cycles or DSP instructions have occurred. This does not
-qualify original rendering or the later released-SPI frontier. Input/audit hashes
+qualify later rendering by itself. The connected continuation below passes the
+released-SPI frontier. Input/audit hashes
 are in regular-board-start-reference.json; pulls/reset remain functional hypotheses.
 
 Regular Board original cold-start experiment (requirements 2/3/6): actual POR,
@@ -4262,3 +4263,13 @@ and each current audit/input hash remain in regular-board-start-reference.json.
 Peer configuration now also rejects duplicate J0 sources, including SHI and
 loopback routes. Fifteen collision cases and unrelated J1 acceptance pass in
 the Board group under ASan/UBSan and separate TSan.
+
+Connected original LCD observation (requirements 2/3/6): frozen source79f9402
+starts from actual POR beyond the earlier released-SPI failure. At4299999 MCU
+operations it has retired5888482 original DSP instructions and completed194 LCD
+commands,2018 data writes and1988 reads. The captured native image shows
+"bad serial!", V1.25 and Feb19 2018; the unchanged update retains erased factory
+identity. All335102 NAND observations/83496 bytes exactly match R5. Log-prefix,
+frame and audit hashes are in regular-board-start-reference.json; reference
+pixels stay private. This live observation is not a terminal run, a provisioned
+unit, complete instrument operation or update/recovery qualification.

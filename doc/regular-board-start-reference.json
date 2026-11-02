@@ -1,6 +1,6 @@
 {
   "scope": "Regular Board original-POR evidence; each experiment retains its own clocks, inputs and limits",
-  "latest": "GPIO_configuration_continuation",
+  "latest": "connected_LCD_observation",
   "cold_PLL": {
     "scope": "Actual regular reference Board from digital POR with original firmware1.25; declared external inputs, clocks and functional NAND/GPIO topology",
     "source_commit": "b703b9d548e4efdc1ac3555927fb2f3d5ed1ccd3",
@@ -195,6 +195,44 @@
     "audits": {
       "doc/local/normal-board-start/lcd-preflight-r2/audit.json": "bce3de2fd9d1430b52b8b76e599168433492a96e41500998d2fe202f44b8a9e7",
       "doc/local/normal-board-start/lcd-preflight-r2/input-pins.json": "a04a75c7375bb349abc351d0299c307cefc9b0b46e27b0998d1913fe3a42aeb1"
+    }
+  },
+  "connected_LCD_observation": {
+    "status": "audited-live-original-LCD-rendering-beyond-released-SPI-frontier",
+    "source_commit": "79f9402adbcb01d7d2c9fa34f774fab43a716600",
+    "production_sources_matched": 469,
+    "executable_sha256": "1f3ea57e0a178e2eb3687f3b43abbe76223881646e50c46dbc65928a886cf21f",
+    "observed_operations": 4299999,
+    "common_ticks": 240798288024,
+    "DSP_instructions": 5888482,
+    "DSP_periods": 29895569,
+    "LCD_cycles": [
+      194,
+      2018,
+      1988
+    ],
+    "SPI_frame_counter": 98,
+    "original_text_observed": [
+      "bad serial!",
+      "V1.25",
+      "Feb 19 2018"
+    ],
+    "identity_scope": "Unprovisioned original update; erased factory serial is retained",
+    "frame_PBM_sha256": "f61d9d76e3eb60230e41c5cd77ecb52c79eba7cfc7a2e03f47e0592d37258dbf",
+    "baseline_NAND_observations_matched": 335102,
+    "baseline_NAND_bytes": 83496,
+    "log_prefix_bytes": 30576093,
+    "log_prefix_sha256": "3470afe55a0a27a77d411390dec69c70d7316c9e2f40494e71baeb8e497e6983",
+    "run_terminal": false,
+    "full_instrument": false,
+    "firmware_patch": false,
+    "fuzz": false,
+    "physical_traffic": false,
+    "manufacturer_pixels_published": false,
+    "audits": {
+      "doc/local/normal-board-start/r6/native-lcd-observation.json": "107df7584fd940d93deadb9bac2b95b165b57084935a9be6a8ef28105e60f381",
+      "doc/local/normal-board-start/r6/full-baseline-nand-audit.json": "5ecbdcf00020d5ae5a81fed1a13c315ae5ed5aff565880c3a66188b843a300eb",
+      "doc/local/normal-board-start/r6/published-source-proof.json": "46fb9e6a51e83f2dcbc2798ba7e0c0250120dca3c354284d736c9d498396a3d0"
     }
   }
 }
