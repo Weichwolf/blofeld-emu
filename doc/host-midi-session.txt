@@ -1,4 +1,4 @@
-Common-time SCI input and host sessions
+Common-time SCI MIDI and host sessions
 
 Config::midi_sci_timed selects an explicit PR2/PS4 input and absolute common-time
 start. It requires PipelineTiming and external event order/budget. It is exclusive
@@ -17,12 +17,28 @@ admit at most 256 bytes within remaining wire capacity and check kernel loss eve
 when that capacity is zero. Every call checks board identity, monotonic external
 restore revision and time before its poll deadline. Restore, owner changes,
 transport/native faults and failed admission retire the port; consumed prefixes
-must never be retried. A fresh session starts with a fresh kernel queue. It does
-not emit firmware replies, establish physical MIDI-Out wiring or replace USB.
+must never be retried. A fresh session starts with a fresh kernel queue.
+
+If Board output capture is configured, every poll additionally drains its actual
+native SCI bytes through the same bidirectional host port, independently of the
+input poll deadline. flush_output() explicitly services output, including after
+the operation budget ends. It requires a configured output, checks ownership,
+restore revision and time against both directions, then retires at most256 queued
+bytes into the existing host MIDI encoder. A host failure can follow an already
+delivered prefix; it closes the session and cannot retry consumed guest bytes.
+An empty queue produces no response. Output does not advance emulated clocks.
+Host parser/partial-message state stays outside modeled snapshots. Kernel pool
+negotiation and packetization retain host-midi-port.txt's actual-grant contract.
+
+This remains a reference API, separate from the CLI's file/raw-device input pump
+and the pending normal-profile launcher. It does not establish original firmware
+replies, physical MIDI-Out wiring, wall-clock output pacing or USB enumeration.
 
 Reproduce with separate strict and thread sanitizer presets:
-  cmake --build --preset strict --target blofeld-sci-midi-timeline-test blofeld-host-midi-session-test
-  ctest --test-dir build/strict -R '^(sci_midi_timeline|host_midi_session|host_midi_session_tools)$' --output-on-failure
+  cmake --build --preset strict --target blofeld-host-midi-session-test blofeld-host-midi-output-session-test
+  ctest --test-dir build/strict -R '^host_midi_(session|output_session)$' --output-on-failure
+For input-wire changes additionally use sci_midi_timeline; standard-tool input
+interoperability is a separate host_midi_session_tools check.
 
 Directed checks cover literal bits during held reset without IPBus periods,
 WAI, native divider setup, partial-frame restore, event-budget failures and
@@ -33,6 +49,16 @@ single-byte admissions. Same-time restore discards unread host backlog; foreign
 owners, absent routes, exhausted execution budgets, trace failures and unsupported
 kernel events reject. Only owned virtual ports receive traffic. Unavailable ALSA
 or tools skip explicitly; a skip is not transport qualification.
+
+The output integration additionally runs authored native MCU reset/SCI/WAI on
+both TX pads. Independent raw kernel records verify two notes with running
+status, realtime clock and complete literal SysEx. A distant input-poll deadline
+cannot delay output. Same-time restore refuses before consuming or repeating
+restored output; a fresh explicit session can bind it. Cross-direction foreign
+owners, absent routes and trace failures retire visibly. Final output drains
+without another guest operation. The new output and affected existing input
+test executables pass both sanitizer profiles, with zero compiler/format/tidy
+findings and verified ELF/core identity. See host-midi-output-session-reference.json.
 
 SCI stop-majority-to-RDRF timing remains unresolved. Positive receive experiments
 explicitly select SciReceiveReference(SBR12/6, zero transfer delay). Without that

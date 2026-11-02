@@ -3354,6 +3354,7 @@ add_custom_target(quality
     blofeld-original-run-clock-test
     blofeld-original-owned-clock-test
     blofeld-firmware-nand-test
+    blofeld-host-midi-output-session-test
     blofeld-midi-serial-test blofeld-midi-serial-receiver-test
     blofeld-mcu-midi-output-test blofeld-reference-midi-output-test
     blofeld-mcu-midi-test blofeld-clocked-midi-test
@@ -3507,6 +3508,10 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-host-midi-session-test PRIVATE blofeld_host_midi_session)
   add_test(NAME host_midi_session COMMAND blofeld-host-midi-session-test)
   set_tests_properties(host_midi_session PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
+  add_executable(blofeld-host-midi-output-session-test test/host_midi_output_session_test.cpp)
+  target_link_libraries(blofeld-host-midi-output-session-test PRIVATE blofeld_host_midi_session)
+  add_test(NAME host_midi_output_session COMMAND blofeld-host-midi-output-session-test)
+  set_tests_properties(host_midi_output_session PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120)
   add_test(NAME host_midi_session_tools COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/host_midi_session_tools.py"
     $<TARGET_FILE:blofeld-host-midi-session-test>

@@ -56,8 +56,12 @@ hardware profiles. See original-notes-reference.json and function-acceptance.tsv
 Passive MCU serial output is now captured from resolved PR3/PS5 pads into a
 bounded queue, including WAI and joint snapshots. Ten scoped native cases pass
 under both sanitizer configurations. This supports Board output capture; original
-firmware replies, host delivery and USB remain unqualified. See midi-output.txt
-and midi-output-reference.json.
+firmware replies and USB remain unqualified. A subsequent HostMidiSession adapter
+now delivers authored native SCI output through the same owned host port; both
+sanitizer profiles pass independent kernel-record and affected input-session
+checks. Normal-profile/CLI integration and original bidirectional transfers are
+still open. See midi-output.txt, midi-output-reference.json, host-midi-session.txt
+and host-midi-output-session-reference.json.
 
 Connected reset/SPI/NAND gates match all56238 known source bytes in actual
 protocol and retired DSP samples,107 address sequences and read deadlines.

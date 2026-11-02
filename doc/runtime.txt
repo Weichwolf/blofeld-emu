@@ -31,6 +31,9 @@ the connected Board runtime. See display-export.txt for actual Board publication
 Host adapters
 The reference API accepts owned ALSA sequencer input through a common-time SCI
 wire during POR/WAI (host-midi-session.txt). Restore retires that host session.
+With configured native output capture, HostMidiSession also delivers SCI bytes
+through the same port; authored MCU/kernel-record tests qualify this API scope.
+The CLI input pump and normal-profile launcher still need that output integration.
 Separate MIDI port negotiation and refusal tests are in host-midi-port.txt.
 The normal instrument must expose bidirectional MIDI/SysEx; input acceptance
 alone does not establish output, bank/program changes or USB enumeration.
