@@ -94,6 +94,13 @@ expectations;39 authored encodings match the pinned official assembler.
 See dsp-transfer-native.txt and dsp-transfer-native-reference.json. This does
 not establish physical timing or complete original instrument operation.
 
+SUBL/SUBR now retain3456 independent cases per direction, ten parallel vectors
+and the legal SUBR host-overflow regression on the native owner. All six scopes
+pass both sanitizer profiles with full register/stack comparisons; the original
+input-defined1440 SUBL carry qualification limits remain explicit. See
+dsp-shifted-subtract.txt and dsp-shifted-subtract-native-reference.json. Physical
+pipeline timing, other modes and complete instrument operation remain open.
+
 4. Complete update/recovery — partial
 Native flash/NAND command, persistence, interrupted-operation and loader tests
 provide component evidence. Full connected valid/damaged update, every power-loss

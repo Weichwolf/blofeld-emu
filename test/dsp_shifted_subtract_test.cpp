@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "dsp/dsp_core.hpp"
-#include "dsp/dsp_machine.hpp"
-#include "dsp_norm_fixture.hpp"
-#include "dsp_operand_fixture.hpp"
+#include "dma_native_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_norm_expectations.hpp"
 
 #include <array>
 #include <cstdint>
@@ -14,6 +14,24 @@
 
 namespace blofeld::test {
 namespace {
+namespace native = dma_test;
+using Program = native::NativeProgram;
+constexpr unsigned all_ccr = 0xff;
+constexpr unsigned operand_preamble_steps = 10;
+// FM13-118/131/174/175; the12 arithmetic/parallel encodings are independently
+// cross-checked with the pinned official assembler, never assembled at runtime.
+constexpr unsigned subtract_left = 0x16, subtract_right = 0x06, destination_b_bit = 8;
+constexpr unsigned no_move = 0x200000, move_a_to_x0 = 0x21c400, move_b_to_x0 = 0x21e400;
+constexpr std::array operand_seeds{0x50f400U,
+                                   0x54f400U,
+                                   0x52f400U,
+                                   0x51f400U,
+                                   0x55f400U,
+                                   0x53f400U,
+                                   0x44f400U,
+                                   0x45f400U,
+                                   0x47f400U,
+                                   0x05f439U};
 constexpr std::uint64_t full_range = std::uint64_t{1} << 56;
 constexpr auto signed_bound = static_cast<std::int64_t>(sign_bit);
 constexpr unsigned input_control = 0x123456;
@@ -32,7 +50,7 @@ constexpr std::array values{std::uint64_t{0},
                             sign_bit / 2,
                             accumulator_mask - (sign_bit / 2) + 1};
 constexpr std::array scales{0U, scale_down, scale_up};
-constexpr std::array statuses{0U, carry | overflow, limit | sticky, operands::all_ccr};
+constexpr std::array statuses{0U, carry | overflow, limit | sticky, all_ccr};
 
 struct Input {
   std::uint64_t source = 0;
@@ -80,27 +98,45 @@ Result expected(const Input &input) {
   return {.value = value, .flags = flags, .qualified_carry = !shifted_overflow};
 }
 
-void seed(DspProgram &code, const Input &input) {
-  operands::seed_operands(code,
-                          {.a = input.destination_b ? input.source : input.destination,
-                           .b = input.destination_b ? input.destination : input.source,
-                           .control = input_control,
-                           .source = input_source,
-                           .status = input.status});
+void seed(Program &code, const Input &input) {
+  const auto a = input.destination_b ? input.source : input.destination;
+  const auto b = input.destination_b ? input.destination : input.source;
+  const std::array data{static_cast<unsigned>(a & word_mask),
+                        static_cast<unsigned>((a >> word_bits) & word_mask),
+                        static_cast<unsigned>(a >> data_bits),
+                        static_cast<unsigned>(b & word_mask),
+                        static_cast<unsigned>((b >> word_bits) & word_mask),
+                        static_cast<unsigned>(b >> data_bits),
+                        input_control,
+                        input_source,
+                        input_source ^ word_mask,
+                        masked_status | input.status};
+  for (unsigned index = 0; index < operand_seeds.size(); ++index) {
+    code.word(operand_seeds[index]);
+    code.word(data[index]);
+  }
+}
+
+unsigned encoding(const Input &input, const bool parallel = false, const bool transfer_b = false) {
+  const auto source_move = transfer_b ? move_b_to_x0 : move_a_to_x0;
+  const auto move = parallel ? source_move : no_move;
+  return move | (input.left ? subtract_left : subtract_right) |
+         (input.destination_b ? destination_b_bit : 0U);
 }
 
 std::string instruction(const Input &input) {
   return std::string(input.left ? "subl " : "subr ") + (input.destination_b ? "a,b" : "b,a");
 }
 
-void verify(DspMachine &machine, const Input &input, const ParallelEffect effect = {}) {
-  const auto before = machine.cpu().debug_state();
-  require(before.cpu.a == (input.destination_b ? input.source : input.destination) &&
-              before.cpu.b == (input.destination_b ? input.destination : input.source) &&
-              before.cpu.sr == (masked_status | input.status),
+void verify(OwnDspMachine &machine, const Input &input, const ParallelEffect effect = {}) {
+  const auto before = machine.cpu().registers();
+  const auto progress = machine.cpu().progress();
+  require(before.a == (input.destination_b ? input.source : input.destination) &&
+              before.b == (input.destination_b ? input.destination : input.source) &&
+              before.sr == (masked_status | input.status),
           "Actual native setup supplies the independently specified accumulators and CCR");
   const auto wanted = expected(input);
-  auto cpu = before.cpu;
+  auto cpu = before;
   if (input.destination_b) {
     cpu.b = wanted.value;
   } else {
@@ -109,21 +145,19 @@ void verify(DspMachine &machine, const Input &input, const ParallelEffect effect
   ++cpu.pc;
   cpu.sr = (cpu.sr & ~changed_flags) | wanted.flags | effect.flags;
   if (effect.active) { cpu.x = (cpu.x & ~std::uint64_t{word_mask}) | effect.word; }
-  machine.cpu().step();
-  auto after = machine.cpu().debug_state();
-  const auto observed_status = after.cpu.sr;
+  native::step_native(machine);
+  auto after = machine.cpu().registers();
+  const auto observed_status = after.sr;
   if (!wanted.qualified_carry) {
-    // Observe but do not invent an independent silicon oracle for this C bit.
-    after.cpu.sr &= ~carry;
+    // Preserve the predeclared manual boundary, independent of observed C.
+    after.sr &= ~carry;
     cpu.sr &= ~carry;
   }
   const auto context = instruction(input) + " D=" + number(input.destination) +
                        " S=" + number(input.source) + " input SR=" + number(input.status) +
                        " expected SR=" + number(cpu.sr) + " observed SR=" + number(observed_status);
-  require(after.cpu == cpu && after.native_instructions == before.native_instructions + 1 &&
-              after.stack_high == before.stack_high && after.stack_low == before.stack_low &&
-              after.ep == before.ep && after.sz == before.sz && after.sc == before.sc,
-          "Independent 56-bit mathematical subtraction and every qualified state/flag: " + context);
+  require(after == cpu && machine.cpu().progress().instructions == progress.instructions + 1,
+          "Independent 56-bit subtraction and every qualified register/flag/stack: " + context);
 }
 
 std::vector<Input> inputs(const bool left, const unsigned scale) {
@@ -149,16 +183,16 @@ void matrix(const bool left) {
   unsigned unqualified_carry = 0;
   for (const auto scale : scales) {
     const auto cases = inputs(left, scale);
-    DspProgram code;
+    Program code;
     for (const auto &input : cases) {
       seed(code, input);
-      code.emit(instruction(input));
+      code.word(encoding(input));
     }
-    DspMachine machine;
-    code.install(machine.bus());
+    OwnDspMachine machine(native::native_clocks);
+    native::reset_native(machine, code);
     for (const auto &input : cases) {
-      for (unsigned index = 0; index < operands::operand_preamble_steps; ++index) {
-        machine.cpu().step();
+      for (unsigned index = 0; index < operand_preamble_steps; ++index) {
+        native::step_native(machine);
       }
       verify(machine, input);
       ++count;
@@ -174,13 +208,13 @@ void matrix(const bool left) {
 void host_overflow() {
   // A legal SUBR result needs the full 56-bit range, not padded signed-host subtraction.
   const Input input{.source = sign_bit};
-  DspProgram code;
+  Program code;
   seed(code, input);
-  code.emit(instruction(input));
-  DspMachine machine;
-  code.install(machine.bus());
-  for (unsigned index = 0; index < operands::operand_preamble_steps; ++index) {
-    machine.cpu().step();
+  code.word(encoding(input));
+  OwnDspMachine machine(native::native_clocks);
+  native::reset_native(machine, code);
+  for (unsigned index = 0; index < operand_preamble_steps; ++index) {
+    native::step_native(machine);
   }
   verify(machine, input);
 }
@@ -217,13 +251,13 @@ void parallel(const bool left) {
                       .status = carry | overflow,
                       .left = left,
                       .destination_b = item.destination_b};
-    DspProgram code;
+    Program code;
     seed(code, input);
-    code.emit(instruction(input) + (item.transfer_b ? " b,x0" : " a,x0"));
-    DspMachine machine;
-    code.install(machine.bus());
-    for (unsigned index = 0; index < operands::operand_preamble_steps; ++index) {
-      machine.cpu().step();
+    code.word(encoding(input, true, item.transfer_b));
+    OwnDspMachine machine(native::native_clocks);
+    native::reset_native(machine, code);
+    for (unsigned index = 0; index < operand_preamble_steps; ++index) {
+      native::step_native(machine);
     }
     verify(machine, input, item.effect);
   }
