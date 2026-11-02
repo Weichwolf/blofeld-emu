@@ -81,10 +81,32 @@ void controller_writes() {
   }
 }
 
+void gpio_control_occupancy() {
+  // DSP56371UM table3-7: PCRD is a GPIO register, not a hole below the DMA controller.
+  constexpr unsigned control_d = 0xffffd7;
+  const std::array core{DspMemoryAccess{.target = {.space = DspSpace::x, .address = control_d}}};
+  DspBus bus;
+  const auto idle = bus.advance_dma(inputs({.index = 0}), use(core));
+  require(!idle.phase && !idle.word && !idle.core_stall &&
+              bus.read({.space = DspSpace::x, .address = control_d}) == 0,
+          "Known GPIO control occupancy admits an idle period without changing the POR register");
+  bus.write({.space = DspSpace::x, .address = transfer::ring_start, .value = first});
+  configure(bus);
+  const auto read = bus.advance_dma(inputs({.index = 1, .requests = 1}), use(core));
+  require(read.phase && read.phase->kind == read_phase && !read.word && !read.core_stall,
+          "The distinct GPIO configuration resource permits a genuine DMA source read");
+  const auto write = bus.advance_dma(inputs({.index = 2, .requests = 1}), use(core));
+  require(write.phase && write.phase->kind == write_phase && write.word &&
+              write.word->value == first && !write.core_stall &&
+              bus.read({.space = DspSpace::y, .address = transfer::destination}) == first &&
+              bus.read({.space = DspSpace::x, .address = control_d}) == 0,
+          "DMA commits its literal captured word while GPIO control storage stays unchanged");
+}
+
 void unsupported_controller_use() {
   constexpr std::array cases{
       DspMemoryAccess{.target = {.space = DspSpace::y, .address = 0xffffef}},
-      DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0xffffd7}},
+      DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0xffff80}},
       DspMemoryAccess{.target = {.space = DspSpace::x, .address = 0xfffff5}},
       DspMemoryAccess{.target = {.space = DspSpace::x, .address = transfer::status},
                       .operation = DspMemoryOperation::write}};
@@ -96,7 +118,7 @@ void unsupported_controller_use() {
     require(
         error.contains("Unqualified DSP peripheral memory resource") &&
             error.contains(hex(access.target.address, 6)),
-        "Wrong-bank, adjacent and read-only status-write occupancy fail before request sampling");
+        "Wrong-bank, reserved and read-only status-write occupancy fail before request sampling");
     static_cast<void>(bus.advance_dma(inputs({.index = 0}), use()));
   }
 }
@@ -407,6 +429,7 @@ int main() {
     switched_alias();
     controller_reads();
     controller_writes();
+    gpio_control_occupancy();
     unsupported_controller_use();
     peripheral_destinations();
     forbidden_peripheral_phases();

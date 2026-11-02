@@ -4459,3 +4459,7 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-mcu-boundary-benchmark PRIVATE blofeld_mcu_dsp_runtime)
   add_dependencies(quality blofeld-mcu-boundary-benchmark)
 endif()
+
+if(TARGET blofeld-dma-callback-allocation-test)
+  add_dependencies(quality blofeld-dma-callback-allocation-test)
+endif()

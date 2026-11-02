@@ -1,0 +1,21 @@
+DMA callback storage
+
+The admission callable captures one reference to a stack context containing the
+bus, core occupancy and result. Its copies execute synchronously; DspDma never
+retains them. Request sampling, bank conflicts, indivisible instructions, captured
+words, peripheral guards and clocks are unchanged.
+
+On this libstdc++ host, 4096 inactive periods allocated/freed 8192 blocks totaling
+196608 bytes before this change and zero afterward, in ASan/UBSan and TSan.
+The regression positively checks the sanitizer allocation/free hooks before
+asserting zero allocations, releases and requested bytes for the idle periods.
+It is registered only with sanitizer runtimes, which provide those hook APIs.
+
+The bank regression admits the documented PCRD configuration resource at
+X:ffffd7 beside actual DMA source/destination phases; reserved X:ffff80 remains
+rejected. The former negative PCRD case also failed against the old implementation.
+
+No complete-runtime throughput or real-time guarantee follows from this test.
+Evidence: dsp-dma-callback-reference.json. Reproduce with strict or thread:
+  cmake --build build/strict --parallel 2 --target blofeld-dma-callback-allocation-test blofeld-bank-test
+  ctest --test-dir build/strict --output-on-failure -R '^dsp_(dma_callback_allocation|bank_arbitration)$'

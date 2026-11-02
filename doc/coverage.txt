@@ -38,6 +38,10 @@ Full own-DSP runtime migration    partial  Regular Board/headless now execute ds
                                           actual status/refill side effects.
                                           Bank/DMA tests retain genuine pending
                                           access tickets and held-word replay.
+                                          Inactive DMA callback storage avoids heap
+                                          allocation; PCRD occupancy and reserved
+                                          address refusal remain tested
+                                          (dsp-dma-callback.txt).
                                           Native DMA tests now use that core for
                                           144 status-bit programs, both 66-word ESAI
                                           streams and a granted F1/F2 memory copy;

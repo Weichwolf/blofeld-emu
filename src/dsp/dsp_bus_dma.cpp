@@ -300,13 +300,25 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
                 describe(peripheral->target) + " with active DMA");
   }
   DspDmaBusResult result;
-  const DspDmaAdmission admission = [&](const DspDmaPhase &phase) {
-    result.phase = phase;
+
+  struct AdmissionContext {
+    DspBus &bus;
+    const DspCoreBusUse &usage;
+    DspDmaBusResult &outcome;
+  };
+
+  const AdmissionContext context{.bus = *this, .usage = core, .outcome = result};
+  // Every callable copy is synchronous; one reference shares this live context.
+  const DspDmaAdmission admission = [&context](const DspDmaPhase &phase) {
+    auto &outcome = context.outcome;
+    const auto &usage = context.usage;
+    auto &bus = context.bus;
+    outcome.phase = phase;
     const bool write = phase.kind == DspDmaPhaseKind::destination_write;
-    if (core.indivisible_instruction) {
+    if (usage.indivisible_instruction) {
       // Sampling and request latching still run. A previously sampled DMA word
       // completes before the CPU proceeds; a fresh word cannot split its RMW.
-      result.core_stall = write;
+      outcome.core_stall = write;
       return write ? DspDmaGrant::available : DspDmaGrant::wait;
     }
     const auto selected = write ? phase.destination : phase.source;
@@ -316,11 +328,11 @@ DspDmaBusResult DspBus::advance_dma(const DspDmaInputs inputs, const DspCoreBusU
     if (selected.space != DspDmaSpace::p && selected.address >= io_base) {
       // Active DMA permits only physical memory or DMA-controller reads in the core footprint.
       // FM10.2/APR23 section5: these resources do not contend with a data register.
-      check_access(*this, selected, write);
+      check_access(bus, selected, write);
       return DspDmaGrant::available;
     }
-    const bool conflict = core_conflict(*this, core, target);
-    result.core_stall = write && conflict;
+    const bool conflict = core_conflict(bus, usage, target);
+    outcome.core_stall = write && conflict;
     return !write && conflict ? DspDmaGrant::wait : DspDmaGrant::available;
   };
   result.word = advance_dma_with_admission(inputs, admission);
