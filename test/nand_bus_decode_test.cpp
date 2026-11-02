@@ -31,7 +31,7 @@ void transition_table() {
   // Rows/columns: neutral, write, read, inactive. CLE/ALE are independent.
   constexpr std::array allowed{std::array{true, false, false, true},
                                std::array{false, true, true, true},
-                               std::array{false, true, true, true},
+                               std::array{true, true, true, true},
                                std::array{true, true, true, true}};
   constexpr std::array logical{0x300U, 0x100U, 0x200U, 0x300U};
   constexpr unsigned modes = 16;

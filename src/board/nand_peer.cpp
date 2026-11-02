@@ -289,6 +289,22 @@ struct NandPeer::Impl {
     }
   }
 
+  void release_read(const std::uint64_t ticks) const {
+    const auto before_page = state_->device.device().page();
+    const auto before_column = state_->device.device().column();
+    // Functional neutral hands the bus to its other peer. End the selected
+    // array read without starting a P-part sequential row behind that peer.
+    const bool neutral_array = state_->decoder.neutral() && !state_->device.device().status_mode();
+    state_->device.observe_read_end(neutral_array ? NandReadEnd::ce_high : NandReadEnd::re_high);
+    if (before_column != Nand::page_bytes) { return; }
+    const auto ready = state_->device.device().ready();
+    if (!ready) { throw Fault("P-part read-end lost Ready knowledge"); }
+    std::cerr << (neutral_array ? "NAND_NEUTRAL_READ_END ticks=" : "NAND_END ticks=") << ticks
+              << " pc=" << hex(state_->context.pc, 6) << " row=" << before_page
+              << " next-row=" << state_->device.device().page() << " ready=" << *ready
+              << " reference-tRB=0ns\n";
+  }
+
   void observe(const std::uint64_t ticks) {
     const auto controls = machine_.bus().gpio(DspPort::c).observe_pads(control_mask);
     if (controls.known != control_mask) {
@@ -352,18 +368,7 @@ struct NandPeer::Impl {
                 << '\n';
       return NandByte{.value = value, .known = static_cast<std::uint8_t>(mask)};
     });
-    if (state_->previous_re == false && re_n) {
-      const auto before_page = state_->device.device().page();
-      const auto before_column = state_->device.device().column();
-      state_->device.observe_read_end(NandReadEnd::re_high);
-      if (before_column == Nand::page_bytes) {
-        const auto ready = state_->device.device().ready();
-        if (!ready) { throw Fault("P-part read-end lost Ready knowledge"); }
-        std::cerr << "NAND_END ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
-                  << " row=" << before_page << " next-row=" << state_->device.device().page()
-                  << " ready=" << *ready << " reference-tRB=0ns\n";
-      }
-    }
+    if (state_->previous_re == false && re_n) { release_read(ticks); }
     state_->previous_re = re_n;
     publish();
   }

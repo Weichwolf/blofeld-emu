@@ -1,0 +1,46 @@
+{
+  "scope": "Functional selected-read release into a shared host phase; authored native J/P controls and affected Board regressions",
+  "profiles": [
+    "ASan/UBSan",
+    "TSan"
+  ],
+  "compiler_format_tidy": "zero findings",
+  "affected_groups_per_profile": 11,
+  "native_read_host_read_cases_per_profile": 4,
+  "same_owner_active_read_replays_per_profile": 4,
+  "host_payload_values_per_case": 256,
+  "decoder_transitions_per_profile": 512,
+  "old_decoder_counterfactuals_per_profile": 1,
+  "ordered_pins_unchanged": true,
+  "unfinished_write_and_direct_neutral_to_active_refused": true,
+  "protocol_pause": "CE-style array read pause; no physical CE wiring assertion",
+  "timing": "Existing output hold/release and Ready scheduler retained",
+  "source_sha256": {
+    "src/board/nand_bus_decode.cpp": "2181aaeb7ab0c24bb94475169801c4dc0b5d92f246db08403a01f938a44cfa90",
+    "src/board/nand_bus_decode.hpp": "d910bc5767a2b94a5ec2100d2aa499d4d2becc331bf95d3d059367da8071c68b",
+    "src/board/nand_peer.cpp": "be6bc7148a09f554a3f32259e074b51e2b140de7687a54081431d606a31e97b6",
+    "test/nand_bus_decode_test.cpp": "3e8caf5eff3f509612fe6300719b03f6243b54ef9509347062af14e87ba3e4ea",
+    "test/nand_read_handoff_test.cpp": "de855f96f269f3bbb0d9ead31beba0748d57ded8241895bc5f8040be73bd7414"
+  },
+  "evidence_sha256": {
+    "doc/local/nand-read-handoff/canonical-build-r2.json": "d2c8f5efd5b23dcbc56951b1d08db1c82bb6de7f07b261cefaa8fd4b65be6432",
+    "doc/local/nand-read-handoff/canonical-qualified-r2.json": "ac04b1063315a6f793c4bfb37c2145c466be86ce7fcf959cc63ac113dfcc6cff",
+    "doc/local/nand-read-handoff/private-native-r3.json": "dabb7749b552b0a757df0623b5fd52042fae9e93e74169425d5e70f32aeff1e8",
+    "doc/local/nand-read-handoff/negative-native.json": "c0f88149096f77b9ed5bbfe1856dc916dc31aeb31816ca8d76abd16cdbf03362",
+    "doc/local/nand-read-handoff/canonical-r1-stale-object-audit.json": "6691418876edcbc544ea46ad647de5cfef1a3336a1cc87fb50e2d8cc8aa5b14e",
+    "doc/local/durable-cli-midi-audio/observed/frontier-audit.json": "f94384621557a3e60cdb4be87568b6e5967293266e613370b4e3c19baf8c7252"
+  },
+  "discarded_compiler_generation": "r1 had a stale decoder object; detected before any native admission. Only r2 is qualified.",
+  "preceding_original_case": {
+    "native_exit": 2,
+    "completed_PCM_frames": 4439,
+    "MIDI_wire_frames": 4,
+    "final_WAV_published": false,
+    "complete_LCD_observed": false,
+    "both_stores_unchanged": true
+  },
+  "original_continuation_on_corrected_decoder": "pending",
+  "complete_instrument": false,
+  "physical_traffic": false,
+  "fuzz": false
+}

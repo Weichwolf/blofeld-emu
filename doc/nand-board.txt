@@ -141,9 +141,12 @@ Functional shared-bus transactions
 
 The regular Board selects NandBusContract::functional_transactions. Both-low
 RE/WE encodes a neutral shared-bus phase, interpreted as inactive strobes by
-the NAND transaction model. Raw GPIO values remain unchanged. Entry requires
-both strobes inactive, or the initial complete observation; exit requires
-both inactive again. Interrupted active pulses and unknown controls still fail.
+the NAND transaction model. Raw GPIO values remain unchanged. A selected read
+may release directly into neutral; unfinished writes still fail. Exit requires inactive strobes before another transfer. Unknown controls
+still fail. An array read released into neutral uses the device's CE-style
+protocol pause, preserving its next column without a P-part sequential-row
+start. Output hold/release keeps its existing timing model; no physical CE
+wiring or edge ordering is inferred. Status uses ordinary read release.
 CLE/ALE and data retain their values. Neutral creates no read, write latch,
 reset, Ready response or cell change. Single-strobe transfers use the existing
 real command/address/data protocol, cells, Busy deadlines and timing checks.
@@ -166,5 +169,34 @@ load and repeats its actual connected suffix twice: real FF reset completes,
 642 audio-DMA words and 159 silent stereo PCM frames reach the next native RAM
 instruction-admission limit. See own-dsp-nand-reference.json. This does not
 qualify original startup on the newer SDK or a complete sounding instrument.
-The live durable NAND store, complete original boot, MIDI/audio operation and
-update/recovery acceptance remain outstanding.
+The live durable NAND store is described in nand-write-store.txt. Complete
+original boot and combined live MIDI/audio/LCD plus update/recovery acceptance
+remain outstanding.
+
+Read-to-host handoff qualification
+
+  cmake --build --preset strict --target blofeld-nand-read-handoff-test \
+    blofeld-nand-bus-decode-test
+  ctest --preset strict -j1 --output-on-failure \
+    -R '^(nand_read_handoff|nand_bus_decode)$'
+
+Repeat with the thread preset for separate TSan. Four authored native streams
+cover J/P parts, mid-page and final-byte handoff, all 256 host payloads, real
+MOVEP samples with literal byte expectations, preserved Ready/column/output
+release and unrelated calendar events. Joint active-read restore repeats each
+suffix. The existing 512-transition table checks both contracts and unchanged
+write/entry/unknown-control guards; the neutral fresh-owner reset check remains.
+Eleven affected NAND/Board groups pass per sanitizer, including durable native
+writes, status, timer capture, live mount and checkpoint controls. The same new
+native test fails at the expected selected-read handoff with the prior decoder
+under both sanitizers. Compiler, format, tidy, ELF and receipt hashes are in
+nand-read-handoff-reference.json. The first compiler generation retained a
+stale decoder object and was discarded before native admission.
+
+The preceding ordinary original-firmware CLI run accepted four real MIDI wire
+frames and recorded 4439 PCM frames before this shared-bus refusal. A read-only
+observation found nonzero original DSP samples; no final WAV was published on
+the failed run and its LCD remained blank. Both file stores stayed identical.
+This explains the integration trigger, not successful continuation on the new
+model. Original boot/MIDI/audio/LCD and complete instrument acceptance remain
+pending. Detailed firmware analysis and recordings remain local.

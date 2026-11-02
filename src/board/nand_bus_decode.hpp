@@ -8,7 +8,8 @@ namespace blofeld {
 enum class NandBusContract : std::uint8_t { ordered_pins, functional_transactions };
 
 // Functional shared-bus encoding, not an assertion about electrical CE wiring.
-// Both-low strobes denote neutral only between complete, inactive transfers.
+// Both-low strobes denote neutral. A read may release into this shared-bus
+// phase; a write must finish, and the next transfer must start inactive.
 class NandBusDecode {
 public:
   explicit NandBusDecode(NandBusContract contract);

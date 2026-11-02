@@ -4019,8 +4019,10 @@ TSan, with zero clang-tidy findings. Full original boot, repeated live reset,
 durable NAND and instrument behavior remain pending. See reference-board.txt.
 
 Functional NAND shared bus: the ordinary Board decodes a both-low shared-bus
-neutral phase without storage operations. Both strobes must be inactive at
-entry/exit; unknown controls and interrupted transfers remain errors. Raw GPIO
+neutral phase without storage operations. Selected reads may release into
+neutral while incomplete writes remain errors; exit requires inactive strobes.
+Array pause preserves the next column and prevents P-part sequential read.
+Unknown controls remain errors. Raw GPIO
 is preserved. The real subsequent FF pulse creates reset Busy and preserves
 cells. Directed 512-state tests, fresh-owner restoration and native program/
 erase/status/readback cases support requirements 2/3/6 in 14 affected groups under
@@ -4304,3 +4306,14 @@ four read-only lanes per sanitizer,16 native runtime groups per profile and11
 connected Board groups qualify. Explicit query-only benchmark/source/evidence:
 mcu-integrity.txt and mcu-integrity-reference.json. Whole-emulator real-time
 throughput and the next original NAND/GPIO handoff remain unqualified.
+
+Functional read-to-host handoff (requirements2/3/6): four authored native J/P
+mid-page/final-byte cases and four active-read replays per sanitizer preserve
+literal read bytes, next column, Ready, output release and unrelated events
+through 256 host payloads. Eleven affected NAND/Board groups pass per profile;
+old-decoder counterfactuals reject the same native transition. Incomplete writes,
+unknown controls and neutral-to-active entry still refuse. See nand-board.txt
+and nand-read-handoff-reference.json. The preceding ordinary original CLI
+recorded 4439 PCM frames/four MIDI wire frames before the old refusal, with no
+final WAV and no completed LCD. Original continuation on this model, full boot,
+both profiles and update/recovery acceptance remain pending.
