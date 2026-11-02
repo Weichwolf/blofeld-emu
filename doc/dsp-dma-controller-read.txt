@@ -1,0 +1,41 @@
+DMA controller reads beside program prefetch
+
+The connected original voice-list service reaches MOVEP X:ffffef,A at P:00043e
+while F2 owns P:00043f. These are a DMA controller register and a program fetch,
+not two accesses to the same RAM. The frontend now admits real read effects
+in X space when DspDma::handles identifies the controller register. Atomic bit
+effects and writes do not acquire that permission. The native I/O interface
+still performs the actual transaction and reports unknown/unsupported state.
+Reference: DSP56300FM chapter10 register map and MOVEP/MOVE instruction entries.
+
+The existing reference cycle orders actual DMA progress before F2/native work.
+A held destination leaves DSR/DDR unchanged; its real commit updates them before
+the native read. The already captured DMA payload survives a later RAM-source
+write. Subsequent DMA completion cannot change a native operand already read.
+Program-fetch contention and global stalls still use the ordinary bank model.
+This is an explicit functional ordering, not a measured silicon bus phase.
+
+The authored matrix checks all 29 controller words with MOVE X:ea,X0 and
+MOVEP X:pp,A: 174 known cases cover quiet, held and committed transfers; 44 omit
+individual preloads and 2 expose the genuinely unspecified repeating DTD state.
+Every case executes on the native core and has same/fresh-owner continuations:
+220 cases plus 440 restores per sanitizer. Literal register values, full CPU/
+flags, accumulator sign extension, real DMA payloads, actual clocks and F2
+capture are checked. Unknown reads retain the exact native I/O failure and PC.
+
+  cmake --build --preset strict --target blofeld-own-dsp-fetch-test
+  ctest --test-dir build/strict -R '^own_dsp_fetch$' --output-on-failure
+
+Six affected fetch/checkpoint/clock/reset/DMA/bank groups qualify under
+ASan/UBSan and separate TSan, with zero format/tidy findings. One unchanged
+ASan result is reused by exact ELF/XML identity. Receipts bind actual compiler
+dependencies and sealed executables; unrelated Board integration is outside
+this component scope. No fuzzing or physical traffic runs.
+
+The same 220 cases pass against the frozen reference frontend plus this exact
+read-admission helper. That runtime also uses the production functional Bus
+reset state; the temporary Timer2 implementation override is removed.
+Its full original continuation remains pending. This does not establish
+complete instrument operation, original note audio or physical-device safety.
+Local qualification: doc/local/dma-controller-read/qualified.json
+SHA-256: 057c5d2f7d260c62a290ef7e232f2955f1aa221fcd68941da792e5ad390fa7c0

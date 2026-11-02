@@ -4123,3 +4123,15 @@ prefetch at P:00043e. All 1134 earlier NAND records remain byte-identical; the
 other previously absent pages are explicitly erased, not recovered factory
 metadata. Full normal instrument/USB/MIDI/audio/storage/update acceptance remains
 open. See dsp-timers.txt and own-dsp-nand-reference.json for scope and audit pins.
+
+DMA controller reads beside F2 (requirements 2/3/6): real X-space controller
+read effects are now admitted alongside program prefetch; the native I/O path
+returns actual DMA state. Writes and bit effects retain their prior guards.
+220 authored MOVE/MOVEP cases cover all 29 words, held/committed addresses and
+payloads, unknown preloads and repeating DTD uncertainty, with 440 same/fresh
+restores per sanitizer. Six affected groups qualify under ASan/UBSan and
+separate TSan; one exact unchanged ASan observation is reused. The identical
+matrix also passes on the frozen reference frontend with the proper production
+Bus reset model, without the temporary Timer2 override. Full original connected
+continuation is pending. See dsp-dma-controller-read.txt; component results do
+not establish complete instrument/MIDI/audio/storage/update acceptance.

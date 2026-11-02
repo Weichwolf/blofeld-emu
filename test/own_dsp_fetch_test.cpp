@@ -18,6 +18,7 @@
 #include <exception>
 #include <initializer_list>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -1132,6 +1133,232 @@ void dma_fetch_native_overlap() {
           "DMA-written opcode captured during the X load must execute on the own core");
 }
 
+constexpr Word dma_source0 = 0xffffef, dma_control0 = 0xffffec;
+constexpr Word dma_first = 0xffffd8, dma_last = 0xfffff4, dma_offset0 = 0xfffff3;
+constexpr Word dma_ram_source = 0x800, dma_ram_destination = 0x900;
+constexpr Word dma_payload = 0x123456, dma_canary = 0x654321;
+constexpr Word dma_software = 0x9802d4, dma_repeat = 0xa802d4, dma_enable = 0x800000;
+constexpr Word dma_offset_value = 0x100, dma_channel_stride = 16;
+constexpr unsigned dma_channels = 6, dma_registers = 4, dma_source_cycle = 3;
+constexpr unsigned dma_sample_cycle = 4, dma_repeat_sample_cycle = 5;
+constexpr unsigned controller_case_count = 220, controller_restore_count = 440;
+constexpr unsigned idle_counter_base = 7;
+constexpr unsigned dma_done_status = 0x3f, dma_held_status = 0x13e;
+constexpr unsigned accumulator_shift = 24;
+constexpr std::uint64_t accumulator_extension = 0xff000000000000;
+enum class ControllerReadMode : std::uint8_t { quiet, held, committed, repeating_status };
+
+struct ControllerReadCase {
+  Word address;
+  ControllerReadMode mode = ControllerReadMode::quiet;
+  bool movep = false;
+  bool unknown = false;
+};
+
+unsigned controller_cases = 0, controller_restores = 0;
+
+Word controller_expected(const ControllerReadCase input) {
+  const bool committed = input.mode == ControllerReadMode::committed;
+  if (input.address == dma_last) {
+    return input.mode == ControllerReadMode::held ? dma_held_status : dma_done_status;
+  }
+  if (input.address >= dma_offset0 - 3) { return dma_offset_value + dma_offset0 - input.address; }
+  const auto channel = (dma_source0 - input.address) / dma_registers;
+  switch ((dma_source0 - input.address) % dma_registers) {
+    case 0:
+      return dma_ram_source + (channel * dma_channel_stride) +
+             (committed && channel == 0 ? 1U : 0U);
+    case 1:
+      return dma_ram_destination + (channel * dma_channel_stride) +
+             (committed && channel == 0 ? 1U : 0U);
+    case 2: return channel == 0 ? 0U : channel + idle_counter_base;
+    case 3:
+      if (channel != 0) { return 0; }
+      return input.mode == ControllerReadMode::held ? dma_software : dma_software & ~dma_enable;
+    default: throw std::runtime_error("Invalid authored DMA register expectation");
+  }
+}
+
+void prepare_controller_dma(OwnDspMachine &machine, const ControllerReadCase input) {
+  for (unsigned channel = 0; channel < dma_channels; ++channel) {
+    const auto source = dma_source0 - (dma_registers * channel);
+    const std::array values{dma_ram_source + (channel * dma_channel_stride),
+                            dma_ram_destination + (channel * dma_channel_stride),
+                            channel == 0 ? 0U : channel + idle_counter_base};
+    for (unsigned offset = 0; offset < values.size(); ++offset) {
+      if (!input.unknown || input.address != source - offset) {
+        machine.bus().write(
+            {.space = DspSpace::x, .address = source - offset, .value = values.at(offset)});
+      }
+    }
+  }
+  for (unsigned index = 0; index < 4; ++index) {
+    if (!input.unknown || input.address != dma_offset0 - index) {
+      machine.bus().write({.space = DspSpace::x,
+                           .address = dma_offset0 - index,
+                           .value = dma_offset_value + index});
+    }
+  }
+  machine.bus().write({.space = DspSpace::x, .address = dma_ram_source, .value = dma_payload});
+  machine.bus().write({.space = DspSpace::y, .address = dma_ram_destination, .value = dma_canary});
+  const auto control =
+      input.mode == ControllerReadMode::repeating_status ? dma_repeat : dma_software;
+  machine.bus().write(
+      {.space = DspSpace::x,
+       .address = dma_control0,
+       .value = input.mode == ControllerReadMode::quiet ? control & ~dma_enable : control});
+  for (unsigned cycle = 0; cycle < dma_source_cycle; ++cycle) {
+    static_cast<void>(machine.advance_dma_reference_cycle(dma_input(cycle, DspDmaGrant::wait)));
+  }
+  auto source_input = dma_input(dma_source_cycle);
+  if (input.mode == ControllerReadMode::repeating_status) { source_input.requests = 1; }
+  const auto source = machine.advance_dma_reference_cycle(source_input);
+  require(!source.word && source.phase.has_value() == (input.mode != ControllerReadMode::quiet),
+          "The selected DMA source phase follows three real enable-settling periods");
+  machine.bus().write({.space = DspSpace::x, .address = dma_ram_source, .value = dma_canary});
+  if (input.mode == ControllerReadMode::repeating_status) {
+    const auto written = machine.advance_dma_reference_cycle(dma_input(dma_sample_cycle));
+    require(written.word && written.word->value == dma_payload,
+            "Repeating DTD uncertainty follows an actual completed DMA word");
+  }
+}
+
+void finish_controller_read(OwnDspMachine &machine,
+                            OwnDspFetch &fetch,
+                            const ControllerReadCase input) {
+  const auto before = machine.cpu().registers();
+  const auto retired = machine.cpu().progress().instructions;
+  const auto sample_cycle = input.mode == ControllerReadMode::repeating_status
+                                ? dma_repeat_sample_cycle
+                                : dma_sample_cycle;
+  const auto grant =
+      input.mode == ControllerReadMode::held ? DspDmaGrant::wait : DspDmaGrant::available;
+  const auto result = fetch.advance_dma_capture_native(dma_input(sample_cycle, grant),
+                                                       OwnDspNativeCycleModel::isolated_effect);
+  if (!result.native) { throw std::runtime_error("Controller read lost its real native effect"); }
+  require(result.captured && !result.dma.core_stall &&
+              machine.clock().native_cycle_units() == sample_cycle + 1 &&
+              machine.clock().timer_clk2_edges() == (sample_cycle + 1) / 2,
+          "F2 and the real controller read coexist with exactly the supplied reference clocks");
+  if (input.unknown || input.mode == ControllerReadMode::repeating_status) {
+    const auto &failure = machine.io().failure();
+    require(result.native->fault.kind == FaultKind::memory_read && failure &&
+                failure->operation == OwnDspIo::Operation::read &&
+                failure->address == input.address && failure->pc == ram_entry && failure->cause &&
+                machine.cpu().registers() == before &&
+                machine.cpu().progress().instructions == retired,
+            "Unknown register/DTD state reaches a genuine contextual I/O fault without retirement");
+    return;
+  }
+  require(result.native->fault.kind == FaultKind::none &&
+              result.dma.word.has_value() == (input.mode == ControllerReadMode::committed),
+          "Only the available destination phase commits before the controller is sampled");
+  if (result.dma.word) {
+    require(result.dma.word->value == dma_payload,
+            "The actual captured DMA payload survives an overwritten RAM source");
+  }
+  const auto expected_value = controller_expected(input);
+  auto expected = before;
+  expected.pc += input.movep ? 1U : 2U;
+  if (input.movep) {
+    expected.a = std::uint64_t{expected_value} << accumulator_shift;
+    if ((expected_value & dma_enable) != 0) { expected.a |= accumulator_extension; }
+  } else {
+    expected.x = (expected.x & ~std::uint64_t{word_mask}) | expected_value;
+  }
+  retire(machine);
+  fetch.synchronize();
+  require(
+      machine.cpu().registers() == expected &&
+          machine.cpu().progress().instructions == retired + 1 &&
+          machine.bus().read({.space = DspSpace::y, .address = dma_ram_destination}) ==
+              (input.mode == ControllerReadMode::committed ? dma_payload : dma_canary),
+      "Literal DMA register values publish through native MOVE/MOVEP with full CPU/flags intact");
+  if (input.mode == ControllerReadMode::held) {
+    const auto released = fetch.advance_dma_pipeline(
+        dma_input(sample_cycle + 1), false, OwnDspNativeCycleModel::unqualified);
+    require(released.dma.word && released.dma.word->value == dma_payload && !released.native &&
+                machine.cpu().registers() == expected,
+            "Later DMA completion cannot retroactively change the sampled native operand");
+  }
+}
+
+void execute_controller_case(const ControllerReadCase input) {
+  auto cycle_clocks = clocks;
+  cycle_clocks.switch_timing = DspClockSwitch::reference_cycle_boundary;
+  OwnDspMachine machine(cycle_clocks);
+  const std::array<Word, 4> rom{immediate_x0, dma_canary, jump_absolute, ram_entry};
+  machine.bus().install_rom({.start = boot_entry, .words = rom});
+  constexpr Word load_x0_absolute = 0x44f000;
+  constexpr Word movep_a = 0x084e00;
+  constexpr Word peripheral_high = 0xffffc0;
+  machine.bus().write(
+      {.address = ram_entry,
+       .value = input.movep ? movep_a | (input.address - peripheral_high) : load_x0_absolute});
+  machine.bus().write({.address = ram_entry + 1, .value = input.movep ? 0U : input.address});
+  machine.bus().write({.address = ram_entry + 2, .value = 0});
+  reset(machine);
+  for (unsigned instruction = 0; instruction < 2; ++instruction) {
+    static_cast<void>(machine.begin_fetch());
+    retire(machine);
+  }
+  prepare_controller_dma(machine, input);
+  std::optional<OwnDspFetchCheckpoint> saved;
+  {
+    OwnDspFetch fetch(machine);
+    read_word(fetch, ram_entry);
+    if (!input.movep) { read_word(fetch, ram_entry + 1); }
+    static_cast<void>(fetch.begin());
+    const auto pending = machine.cpu().pending_instruction();
+    require(pending && pending->effect.kind == EffectKind::read &&
+                pending->effect.space == Space::x && pending->effect.address == input.address,
+            "Authored MOVE/MOVEP reaches its real controller operand before F2 overlap");
+    fetch.issue();
+    saved = fetch.checkpoint();
+    finish_controller_read(machine, fetch, input);
+  }
+  for (const bool fresh_owner : {false, true}) {
+    OwnDspMachine fresh(cycle_clocks);
+    auto &target = fresh_owner ? fresh : machine;
+    OwnDspFetch fetch(target, saved.value());
+    finish_controller_read(target, fetch, input);
+    ++controller_restores;
+  }
+  ++controller_cases;
+}
+
+void controller_read_case(const ControllerReadCase input) {
+  try {
+    execute_controller_case(input);
+  } catch (const std::exception &error) {
+    throw std::runtime_error("Controller read X:" + hex(input.address, 6) +
+                             " mode=" + std::to_string(static_cast<unsigned>(input.mode)) +
+                             " movep=" + (input.movep ? "1" : "0") +
+                             " unknown=" + (input.unknown ? "1" : "0") + ": " + error.what());
+  }
+}
+
+void controller_read_matrix() {
+  for (Word address = dma_first; address <= dma_last; ++address) {
+    for (const bool movep : {false, true}) {
+      for (const auto mode :
+           {ControllerReadMode::quiet, ControllerReadMode::held, ControllerReadMode::committed}) {
+        controller_read_case({.address = address, .mode = mode, .movep = movep});
+      }
+      const bool preload = address != dma_last && (address >= dma_offset0 - 3 ||
+                                                   (dma_source0 - address) % dma_registers != 3);
+      if (preload) { controller_read_case({.address = address, .movep = movep, .unknown = true}); }
+    }
+  }
+  for (const bool movep : {false, true}) {
+    controller_read_case(
+        {.address = dma_last, .mode = ControllerReadMode::repeating_status, .movep = movep});
+  }
+  require(controller_cases == controller_case_count &&
+              controller_restores == controller_restore_count,
+          "Every declared controller-read case has both same/fresh-owner continuations");
+}
+
 void dma_fetch_native_program_conflict() {
   constexpr Word movem_x0 = 0x07f084;
   auto cycle_clocks = clocks;
@@ -1841,6 +2068,7 @@ int main() {
     timeline_reset_stale_owner();
     dma_fetch_conflict();
     dma_fetch_native_overlap();
+    controller_read_matrix();
     dma_fetch_native_program_conflict();
     invalidation();
     cache_fallback();
