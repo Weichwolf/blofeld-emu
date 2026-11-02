@@ -130,11 +130,13 @@ Actual DDRB writes publish resolved SPI transitions in shared-write order,
 without incrementing PORTB-write counts. A native word store declares exactly
 one shared byte; only its actual write observation can consume that period.
 Undeclared words and foreign observations remain errors.
-Authored tests check literal reads, real 24-bit SHI reception through latch and
-direction writes, 36 fresh-owner suffixes, 12 unknown/conflict suffixes and
-configuration guards. Shared-word tests cover both write orders, four fresh
-suffixes and five declaration/delivery guards. Eleven affected groups pass per
-ASan/UBSan and separate TSan. Original connected startup remains separate.
+Authored tests check literal reads, real 24-bit SHI reception through latch,
+direction and aligned word writes,42 fresh-owner suffixes,14 native fault
+suffixes and configuration guards. Shared-word tests cover both write orders
+and either byte of aligned DDRA/DDRB words, eight fresh-owner suffixes and
+five declaration/delivery guards. Odd register words remain unqualified in the
+MCU reference timing profile and fail visibly; internal RAM has its separate
+unaligned contract. Original connected startup remains separate.
 
 Optional LCD candidate
 

@@ -1,0 +1,37 @@
+{
+  "scope": "Read-only regular Board LCD publication and explicit timed NAND mounting; authored controls",
+  "profiles": [
+    "ASan/UBSan",
+    "TSan"
+  ],
+  "compiler_format_tidy": "zero findings",
+  "app_groups_per_profile": 9,
+  "live_NAND_alias_additional_groups_per_profile": 1,
+  "durable_NAND_groups_per_profile": 13,
+  "unchanged_checkpoint_rerun": false,
+  "source_sha256": {
+    "src/app/main.cpp": "ef0e7964e9d297801638488a4342aaf379887d969c513ed31b460b10c4ffdb14",
+    "src/app/host_display_pump.hpp": "56e1158f437f1534d526e68cefdaf5a00e26b41220aa4bc5d7750ad62e54a776",
+    "src/app/host_display_pump.cpp": "29d8fb4cd69b467d2300c05b31aa3f29a86dab261d44831be1408736c4d73953",
+    "src/board/reference_board.cpp": "fbc01fc9d13f0d6fc6d27be0a848a30cfc081d986067797371847954a1f27413",
+    "src/board/reference_board.hpp": "83f3ed1d8a5cb2c2cfff4bf0489126b29b1123beda6f0278d6fb479e30c8ef6c",
+    "src/board/reference_config.cpp": "f23694e202fc00155c4993caaf35e23e339488ac54f813702719a0541f2cfc6a",
+    "src/board/reference_checkpoint.cpp": "c8074a5376389f14f11b47d73808a4ae54da55d9bef8ee788dbd5be91fca6144",
+    "src/board/reference_pipeline.cpp": "8c3d57fa51d2788a2ce1f907a0262f74982c8f9a45a166bd65f5e9a9a28cec05",
+    "test/reference_display_cli.py": "325f4dace2c3292e9b8d0e84cbcc912a9a88816991b95f90764668d03b9d54d8",
+    "test/reference_nand_store_test.cpp": "54dc208b0117c59b1cb88ea72d179b3d40e7344932726a9497dc4f2dd09a9f6e",
+    "test/reference_b_pulls_test.cpp": "a9254ec79e8ef9a4677fc5d21b93061d952ead1ad91bac7a9142ea1d717658fe",
+    "test/mcu_dsp_shared_word_test.cpp": "347c6fd11e0bbb2d3bfa95b26b12c58e1516674c5f3d43565a782c346c9fed40"
+  },
+  "evidence_sha256": {
+    "doc/local/board-display-cli/frozen-r7/qualified.json": "a3c3f62c859546fb2c2553a1e86c0b502ea3d84fcad4ac3a106ca679cc343712",
+    "doc/local/board-display-cli/frozen-r8/qualified.json": "2e70600b370ab75ecdb4c226dfaeec50eec6b9b98e52e8ed11cbd75746c1a97a",
+    "doc/local/board-display-cli/frozen-r7/checkpoint-reuse.json": "e712f2d14556b189b1af3dfbf87b01b62899d94f9a8226005ee143e516b19cde",
+    "doc/local/durable-nand-integration/qualified-r7.json": "19f178da8f01b6f5e962faa721de5e9faba9b43a9f33fd5ab83258522df40970"
+  },
+  "original_firmware_run_by_authored_controls": false,
+  "original_dual_store_MIDI_audio_LCD_boot_qualified": false,
+  "complete_Desktop_Keyboard_profiles": false,
+  "physical_traffic": false,
+  "fuzz": false
+}

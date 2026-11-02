@@ -96,8 +96,21 @@ Board checkpoints retain NAND protocol, cells and pending deadlines with both
 native owners. Restoration creates a fresh NAND binding before execution resumes.
 Board::nand_image returns an explicit cold power-loss projection of a copy;
 exporting it preserves the live device, including Ready and pending work.
-This connection imports RAM state. Durable NAND publication through the live
-VirtualDeviceState store is still pending; that combination explicitly fails.
+nand-image imports cold RAM state and still rejects combination with a live
+MCU device store. Use the exclusive timed file owner explicitly for durability:
+
+  nand-store j "/absolute/path/to/device.bfnand"
+
+The existing file, part profile and source path remain explicit. nand-store and
+nand-image are mutually exclusive; no second in-memory image is accepted.
+A live NAND may coexist with --device-state for MCU flash. Each medium retains
+its own physical persistence; there is no cross-chip atomic transaction. Either
+live store prohibits RAM-only Board checkpoints/restores and cold flash export.
+Read-only NAND events leave the backing file unchanged. Trace/audio/flash/display
+outputs may not alias the NAND source, including existing hard links.
+reference_nand_store checks actual MCU POR/flash programming with mounted NAND,
+independent NAND power, ownership/parser and cold/live rewind guards. Combined
+original-firmware startup, preset saving and update/recovery remain unqualified.
 
   cmake --build --preset strict --target blofeld-reference-nand-test \
     blofeld-reference-pipeline-test blofeld-reference-checkpoint-test blofeld-headless

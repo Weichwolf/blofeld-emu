@@ -26,10 +26,12 @@
 namespace blofeld::reference {
 namespace {
 McuMachine make_mcu(const Config &config, const Execution &execution) {
-  if (config.nand && execution.device_state) {
+  const bool live_nand = config.nand && config.nand->backing == NandBacking::live_store;
+  if (config.nand && !live_nand && execution.device_state) {
     throw Fault("The cold NAND connection is not attached to the live durable device store");
   }
-  if (execution.device_state && (!execution.flash_out.empty() || config.checkpoint)) {
+  if ((execution.device_state || live_nand) &&
+      (!execution.flash_out.empty() || config.checkpoint)) {
     throw Fault("A live device state excludes cold export and automatic RAM checkpoint replay");
   }
   if (config.power_on) {

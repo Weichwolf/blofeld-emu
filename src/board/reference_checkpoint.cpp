@@ -118,7 +118,7 @@ void Board::advance() {
 }
 
 Checkpoint Board::checkpoint() const {
-  if (execution_.device_state) {
+  if (execution_.device_state || (native_->nand && native_->nand->durable())) {
     throw Fault("A live device state cannot be included in a RAM-only Board checkpoint");
   }
   require_healthy();
@@ -137,7 +137,7 @@ Checkpoint Board::checkpoint() const {
 
 void Board::restore(const Checkpoint &checkpoint) {
   require_idle();
-  if (execution_.device_state) {
+  if (execution_.device_state || (native_->nand && native_->nand->durable())) {
     throw Fault("A live device state cannot be rewound or removed by Board restore");
   }
   if (!checkpoint.storage_ || checkpoint.storage_->identity != identity_) {
@@ -360,7 +360,7 @@ Board::Outcome Board::finish_branch(const std::function<void(Board &)> &input) {
     mark_fault();
     // A failed live writer cannot supply a cold snapshot. Preserve the causal
     // execution fault instead of replacing it with the storage quarantine error.
-    if (execution_.device_state) { throw; }
+    if (execution_.device_state || (native_->nand && native_->nand->durable())) { throw; }
     fault = error.what();
   }
   return {.fault = std::move(fault), .state = status()};

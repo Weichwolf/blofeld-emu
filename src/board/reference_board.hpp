@@ -140,9 +140,15 @@ struct PowerOnTiming {
   McuResetPad reset_pad = McuResetPad::unknown;
 };
 
+enum class NandBacking : std::uint8_t { cold_image, live_store };
+
 struct NandConnection {
   NandImage image;
   NandReadContinuation continuation = NandReadContinuation::unqualified;
+  NandBacking backing = NandBacking::cold_image;
+  // Live backing requires an existing source file and an empty in-memory image.
+  // Parsed file provenance; typed in-memory fixtures need no input filename.
+  std::optional<std::filesystem::path> source_path = std::nullopt;
 };
 
 // Declared peripheral POR source; first native pad observation at/after release wins.

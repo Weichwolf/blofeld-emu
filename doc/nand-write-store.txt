@@ -39,5 +39,7 @@ Build/run only this affected component scope, for either sanitizer build:
 These tests use authored programs and cell fixtures, not manufacturer program
 bytes. They establish timed storage/pin integration, not original-firmware
 preset saving, a complete dual-store boot, updates/recovery or brick safety.
-Regular Board/CLI mounting and original 1.25 live-store execution are separate
-integration requirements. Evidence pins are in nand-write-store-reference.json.
+Explicit regular Board mounting and its authored ownership/POR controls are
+documented in nand-board.txt and board-host-reference.json. Original1.25
+live-store execution remains unqualified. Component evidence pins are in
+nand-write-store-reference.json.

@@ -4280,5 +4280,19 @@ commands,2018 data writes and1988 reads. The captured native image shows
 "bad serial!", V1.25 and Feb19 2018; the unchanged update retains erased factory
 identity. All335102 NAND observations/83496 bytes exactly match R5. Log-prefix,
 frame and audit hashes are in regular-board-start-reference.json; reference
-pixels stay private. This live observation is not a terminal run, a provisioned
-unit, complete instrument operation or update/recovery qualification.
+pixels stay private. The same run terminated naturally at its8M-operation
+budget:7999058 MCU instructions,747 IRQs and17734125 DSP instructions over
+696.23 ms emulated time. It published870 complete images and retained the
+original serial warning. ASan/UBSan remained clean; no MIDI bytes or PCM
+capture were requested. This is not a provisioned unit, complete instrument,
+real-time or update/recovery qualification. Terminal evidence is pinned in
+regular-board-start-reference.json.
+
+Regular host/display and durable NAND mounting (requirements2/3/6): the existing
+Board entry point can publish native LCD pixels without changing CPU/DSP traces.
+Explicit nand-store mounts an exclusive timed file owner beside live MCU flash;
+cold/live ambiguity, output aliases and RAM rewind are refused. Authored native
+MCU POR/flash writes, independent NAND power, writer failures and literal display
+pixels qualify under ASan/UBSan and separate TSan. Evidence and source hashes:
+board-host-reference.json. Combined original-firmware MIDI/audio/LCD operation,
+both final profiles, preset saving and update/recovery remain pending.

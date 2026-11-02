@@ -40,7 +40,19 @@ Frame availability is not publisher liveness: abandoned files remain snapshots.
 display_gui checks actual GTK redraw and file/directory/session lifecycle under
 Xvfb; missing test dependencies explicitly skip. No companion CLI is introduced.
 
-Pending: automatic normal Keyboard/Desktop runtime publication, MIDI-triggered
+Regular Board host publication
+  mkdir -p "$XDG_RUNTIME_DIR/blofeld-emu"
+  blofeld-headless --firmware update.zip --reference-board scenario.bfboard \
+    --dsp-rom packed24.bin --display-dir "$XDG_RUNTIME_DIR/blofeld-emu"
+Requires an explicit lcd-parallel route. A read-only host observer samples at
+most every20 ms of wall time and once at exit; it never advances guest clocks.
+Unknown raster pixels retain the last complete image. Native execution faults
+keep their failure result; input/output aliases and another writer are refused.
+This remains an experimental Board entry point, not the final profile launcher.
+reference_display_cli checks literal authored pixels, identical CPU/DSP traces,
+MIDI coexistence, unknown/native faults, writer ownership and file collisions.
+
+Pending: automatic Keyboard/Desktop runtime publication, MIDI-triggered original
 UI regression, physical display validation and complete board/audio operation.
 Manufacturer captures/traces remain ignored local references.
 

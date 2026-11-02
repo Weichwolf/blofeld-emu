@@ -17,6 +17,7 @@
 #include "mcu/mcu_run_clock.hpp"
 #include "storage/nand.hpp"
 #include "storage/nand_file.hpp"
+#include "storage/nand_image.hpp"
 #include "storage/private_file.hpp"
 
 #include <algorithm>
@@ -414,7 +415,7 @@ bool midi_setting(Config &config, const std::string_view key, std::istringstream
   return true;
 }
 
-NandConnection nand_connection(std::istringstream &line) {
+NandConnection nand_connection(std::istringstream &line, const NandBacking backing) {
   const auto kind = token(line);
   NandReadContinuation continuation = NandReadContinuation::unqualified;
   if (kind == "j") {
@@ -425,8 +426,11 @@ NandConnection nand_connection(std::istringstream &line) {
     throw Fault("NAND connection requires the explicit j or p read-continuation profile");
   }
   std::string path;
-  if (!(line >> std::quoted(path)) || path.empty()) { throw Fault("Missing cold NAND image path"); }
-  return {.image = load_nand_image(path), .continuation = continuation};
+  if (!(line >> std::quoted(path)) || path.empty()) { throw Fault("Missing NAND backing path"); }
+  return {.image = backing == NandBacking::cold_image ? load_nand_image(path) : NandImage{},
+          .continuation = continuation,
+          .backing = backing,
+          .source_path = path};
 }
 
 McuDspGpioWiring gpio_peer(std::istringstream &line) {
@@ -465,8 +469,10 @@ bool timing_setting(Config &config, const std::string_view key, std::istringstre
     literal(line, "st7565");
     literal(line, "reset-release");
     config.lcd_parallel = {.reset_release_ticks = number(line, UINT64_MAX)};
-  } else if (key == "nand-image") {
-    config.nand = nand_connection(line);
+  } else if (key == "nand-image" || key == "nand-store") {
+    if (config.nand) { throw Fault("NAND backing is already configured"); }
+    config.nand = nand_connection(
+        line, key == "nand-store" ? NandBacking::live_store : NandBacking::cold_image);
   } else {
     return false;
   }

@@ -13,12 +13,14 @@
 #include "storage/nand.hpp"
 #include "storage/nand_cell_model.hpp"
 #include "storage/nand_image.hpp"
+#include "storage/nand_write_store.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <utility>
 
 namespace blofeld::reference {
 DspRunClockInputs dsp_clock_inputs(const Config &config) {
@@ -55,11 +57,24 @@ void Board::prepare_dsp() {
     for (const auto port : {DspPort::c, DspPort::e, DspPort::f, DspPort::d}) {
       native_->dsp.bus().gpio(port).set_contract(DspGpioContract::logical_pins);
     }
-    native_->nand =
-        std::make_unique<NandPeer>(native_->dsp,
-                                   Nand(config_.nand->image, config_.nand->continuation),
-                                   NandCellProfile{},
-                                   NandBusContract::functional_transactions);
+    if (config_.nand->backing == NandBacking::live_store) {
+      if (!config_.nand->source_path || !config_.nand->image.pages.empty() ||
+          !config_.nand->image.blocks.empty()) {
+        throw Fault("Live NAND requires an existing source file without a second cold image");
+      }
+      auto store = std::make_unique<NandWriteStore>(
+          *config_.nand->source_path, config_.nand->continuation, common_hz(), NandCellProfile{});
+      native_->nand = std::make_unique<NandPeer>(
+          native_->dsp, std::move(store), NandBusContract::functional_transactions);
+    } else if (config_.nand->backing == NandBacking::cold_image) {
+      native_->nand =
+          std::make_unique<NandPeer>(native_->dsp,
+                                     Nand(config_.nand->image, config_.nand->continuation),
+                                     NandCellProfile{},
+                                     NandBusContract::functional_transactions);
+    } else {
+      throw Fault("Invalid NAND backing contract");
+    }
   }
 }
 

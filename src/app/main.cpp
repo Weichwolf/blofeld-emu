@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "app/host_display_pump.hpp"
 #include "app/host_midi_runner.hpp"
 #include "audio/pcm_recording.hpp"
 #include "board/reference_board.hpp"
@@ -42,6 +43,7 @@ struct Options {
   std::filesystem::path reference_board;
   std::filesystem::path dsp_rom;
   std::filesystem::path audio_out;
+  std::filesystem::path display_directory;
   std::filesystem::path midi_file;
   std::filesystem::path midi_device;
   std::optional<std::uint32_t> audio_rate;
@@ -94,6 +96,16 @@ usb_number(const std::string_view value, const std::uint64_t maximum, const bool
   return result;
 }
 
+void validate_usb_options(const Options &config) {
+  const bool usb =
+      config.usbip_port || config.usbip_after || config.usbip_period || config.usbip_probe_timeout;
+  if (usb && (!config.usbip_port || !config.usbip_after || !config.usbip_period ||
+              !config.usbip_probe_timeout || config.reference_board.empty() || config.inspect)) {
+    throw blofeld::Fault("USB/IP requires a reference board, --usbip-port, --usbip-after, "
+                         "--usbip-period and --usbip-probe-timeout together");
+  }
+}
+
 void validate_options(const Options &config) {
   if (config.firmware.empty()) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
@@ -101,6 +113,7 @@ void validate_options(const Options &config) {
                          "[--flash-in state.bfnvm] [--flash-out state.bfnvm] "
                          "[--device-state unit.bfnvm] "
                          "[--reference-board scenario.bfboard --dsp-rom packed24.bin] "
+                         "[--display-dir runtime-directory] "
                          "[--midi-file bytes.bin | --midi-device /dev/snd/midiCxDy] "
                          "[--usbip-port PORT --usbip-after TICKS --usbip-period TICKS "
                          "--usbip-probe-timeout TICKS] "
@@ -119,6 +132,9 @@ void validate_options(const Options &config) {
   if (!config.reference_board.empty() && (config.inspect || config.port_e_input)) {
     throw blofeld::Fault("--reference-board conflicts with --inspect or --port-e-input");
   }
+  if (!config.display_directory.empty() && (config.reference_board.empty() || config.inspect)) {
+    throw blofeld::Fault("Display publication requires reference-board execution");
+  }
   if ((!config.midi_file.empty() && !config.midi_device.empty()) ||
       ((!config.midi_file.empty() || !config.midi_device.empty()) &&
        (config.reference_board.empty() || config.inspect))) {
@@ -131,13 +147,7 @@ void validate_options(const Options &config) {
     throw blofeld::Fault("Audio output requires a reference board, --audio-out, --audio-rate and "
                          "--audio-max-frames together");
   }
-  const bool usb =
-      config.usbip_port || config.usbip_after || config.usbip_period || config.usbip_probe_timeout;
-  if (usb && (!config.usbip_port || !config.usbip_after || !config.usbip_period ||
-              !config.usbip_probe_timeout || config.reference_board.empty() || config.inspect)) {
-    throw blofeld::Fault("USB/IP requires a reference board, --usbip-port, --usbip-after, "
-                         "--usbip-period and --usbip-probe-timeout together");
-  }
+  validate_usb_options(config);
 }
 
 struct OptionValue {
@@ -187,6 +197,8 @@ bool path_option(Options &result, const OptionValue &input) {
     result.dsp_rom = input.value;
   } else if (input.name == "--audio-out") {
     result.audio_out = input.value;
+  } else if (input.name == "--display-dir") {
+    result.display_directory = input.value;
   } else if (input.name == "--midi-file") {
     result.midi_file = input.value;
   } else if (input.name == "--midi-device") {
@@ -241,6 +253,13 @@ void distinct_files(const FilePair &files) {
   if (same) { throw blofeld::Fault("Input/output file collision: " + files.first.string()); }
 }
 
+void distinct_display(const Options &config, const std::filesystem::path &path) {
+  if (config.display_directory.empty()) { return; }
+  for (const auto *const name : {"display.pbm", "display.txt", ".display.lock"}) {
+    distinct_files({.first = config.display_directory / name, .second = path});
+  }
+}
+
 void validate_files(const Options &config, const std::filesystem::path &specification) {
   if (!config.audio_out.empty() && config.audio_out.extension() != ".wav") {
     throw blofeld::Fault("Audio output requires the .wav extension");
@@ -261,8 +280,11 @@ void validate_files(const Options &config, const std::filesystem::path &specific
                             config.midi_device}) {
     distinct_files({.first = config.trace, .second = input});
     distinct_files({.first = config.audio_out, .second = input});
+    distinct_display(config, input);
   }
   distinct_files({.first = config.audio_out, .second = config.trace});
+  distinct_display(config, config.trace);
+  distinct_display(config, config.audio_out);
   for (const auto &input : {config.firmware,
                             specification,
                             config.reference_board,
@@ -272,6 +294,19 @@ void validate_files(const Options &config, const std::filesystem::path &specific
     distinct_files({.first = config.flash_out, .second = input});
     distinct_files({.first = config.device_state, .second = input});
   }
+}
+
+void validate_nand_files(const Options &config,
+                         const std::optional<blofeld::reference::Config> &board) {
+  if (!board || !board->nand) { return; }
+  const auto &path = board->nand->source_path;
+  if (!path) { return; }
+  const auto &source = *path;
+  for (const auto &output :
+       {config.trace, config.audio_out, config.flash_out, config.device_state}) {
+    distinct_files({.first = output, .second = source});
+  }
+  distinct_display(config, source);
 }
 
 void persist_flash(const Options &config,
@@ -385,6 +420,9 @@ int run_mcu(const Options &config,
 
 void validate_board_options(const Options &config,
                             const std::optional<blofeld::reference::Config> &board) {
+  if (!config.display_directory.empty() && (!board || !board->lcd_parallel)) {
+    throw blofeld::Fault("Display publication requires lcd-parallel in the reference board");
+  }
   if (!config.audio_out.empty() && (!board || !board->pcm)) {
     throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
   }
@@ -410,7 +448,11 @@ int run_reference(const Options &config,
                   const blofeld::reference::Execution &execution) {
   blofeld::reference::Board machine(board, execution);
   std::unique_ptr<blofeld::reference::HostMidiPump> input;
+  std::unique_ptr<blofeld::reference::HostDisplayPump> display;
   std::unique_ptr<blofeld::UsbipRuntime> usb;
+  if (!config.display_directory.empty()) {
+    display = std::make_unique<blofeld::reference::HostDisplayPump>(config.display_directory);
+  }
   if (!config.midi_file.empty() || !config.midi_device.empty()) {
     const bool raw = config.midi_file.empty();
     input = std::make_unique<blofeld::reference::HostMidiPump>(
@@ -435,11 +477,13 @@ int run_reference(const Options &config,
               << " output-timeout-ms=" << usb_options.tcp.output_timeout.count() << '\n'
               << std::flush;
   }
-  if (!input && !usb) { return machine.run(); }
+  if (!input && !usb && !display) { return machine.run(); }
   const auto result = machine.run([&](auto &target) {
     if (input) { (*input)(target); }
     if (usb) { target.poll_usb(*usb); }
+    if (display) { display->poll(target); }
   });
+  if (display) { display->capture(machine); }
   if (usb) {
     const auto published = usb->published();
     usb->retire();
@@ -463,6 +507,7 @@ int run(const Options &config) {
   const auto board = config.reference_board.empty()
                          ? std::optional<blofeld::reference::Config>{}
                          : blofeld::reference::load_config(config.reference_board);
+  validate_nand_files(config, board);
   const auto rom =
       board ? blofeld::reference::load_rom(config.dsp_rom) : std::vector<std::uint32_t>{};
   const auto firmware = blofeld::Firmware::load(config.firmware);

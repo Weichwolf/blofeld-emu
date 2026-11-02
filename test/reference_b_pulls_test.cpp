@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -183,13 +184,38 @@ void passive_and_restore() {
   }
 }
 
-std::vector<std::uint8_t> transfer(const bool direction) {
+void store_b(std::vector<std::uint8_t> &code,
+             const std::uint8_t value,
+             const std::optional<unsigned> word_address) {
+  if (!word_address) {
+    store(code, hc12::portb, value);
+    return;
+  }
+  constexpr unsigned load_d = 0xcc;
+  constexpr unsigned store_d = 0x7c;
+  constexpr std::uint8_t other_byte = 0xa5;
+  const bool head = *word_address == hc12::portb;
+  code.insert(code.end(),
+              {load_d,
+               head ? value : other_byte,
+               head ? other_byte : value,
+               store_d,
+               0,
+               static_cast<std::uint8_t>(*word_address)});
+}
+
+std::vector<std::uint8_t> transfer(const bool direction,
+                                   const std::optional<unsigned> word_address = std::nullopt) {
   std::vector<std::uint8_t> code;
-  store(code, hc12::portb, direction ? 0 : select_pin);
+  store_b(code, direction ? 0 : select_pin, word_address);
   store(code, hc12::ddrb, direction ? clock_pin | mosi_pin : serial);
   constexpr unsigned delay = 64;
   code.insert(code.end(), delay, nop);
-  store(code, direction ? hc12::ddrb : hc12::portb, direction ? serial : 0);
+  if (direction) {
+    store(code, hc12::ddrb, serial);
+  } else {
+    store_b(code, 0, word_address);
+  }
   for (unsigned remaining = word_bits; remaining > 0; --remaining) {
     const auto bit = remaining - 1;
     const bool high = (inbound & (1U << bit)) != 0;
@@ -200,14 +226,45 @@ std::vector<std::uint8_t> transfer(const bool direction) {
       store(code, hc12::ddrb, base);
     } else {
       const auto data = static_cast<std::uint8_t>(high ? mosi_pin : 0);
-      store(code, hc12::portb, data);
-      store(code, hc12::portb, data | clock_pin);
-      store(code, hc12::portb, data);
+      store_b(code, data, word_address);
+      store_b(code, data | clock_pin, word_address);
+      store_b(code, data, word_address);
     }
   }
-  store(code, direction ? hc12::ddrb : hc12::portb, direction ? clock_pin | mosi_pin : select_pin);
+  if (direction) {
+    store(code, hc12::ddrb, clock_pin | mosi_pin);
+  } else {
+    store_b(code, select_pin, word_address);
+  }
   store(code, hc12::ddrb, 0);
   return code;
+}
+
+void word_spi_stores() {
+  for (const unsigned cut : {0U, 100U, 180U}) {
+    auto c = config();
+    c.port_b_pulls = {.up = serial, .down = static_cast<std::uint8_t>(byte_mask & ~serial)};
+    Fixture f(c, transfer(false, hc12::porta), true);
+    steps(f.board, cut);
+    const auto saved = f.board.checkpoint();
+    const auto before = f.board.status();
+    f.trace.str({});
+    steps(f.board, suffix);
+    const auto expected = f.board.status();
+    const auto trace = f.trace.str();
+    require((expected.dsp.x & word_mask) == inbound && expected.frames == 1 &&
+                expected.writes == latch_word_writes && !expected.faulted,
+            "Actual aligned STD delivers its PORTB tail as the literal native SHI word");
+    for (unsigned replay = 0; replay < 2; ++replay) {
+      f.board.restore(saved);
+      require(f.board.status() == before, "Word-driven SPI restores the exact native prefix");
+      f.trace.str({});
+      steps(f.board, suffix);
+      require(f.board.status() == expected && f.trace.str() == trace,
+              "Aligned word observations survive fresh-owner restore");
+      ++continuations;
+    }
+  }
 }
 
 void native_receive() {
@@ -296,6 +353,11 @@ void electrical_guards() {
   c.port_b_pulls.reset();
   c.initial.push_back({.port = McuPort::b, .drive = {.mask = serial, .levels = select_pin}});
   expect_fault(c, passive_program(false), "Unknown MCU GPIO input");
+  c = config();
+  c.port_b_pulls = {.up = serial, .down = static_cast<std::uint8_t>(byte_mask & ~serial)};
+  // The MCU reference profile deliberately has no timing for odd register words.
+  expect_fault(
+      c, transfer(false, hc12::portb), "Unqualified MCU reference W address=0x0001 size=2");
 }
 
 void early_lcd_inputs() {
@@ -357,6 +419,7 @@ int main(const int count, char **arguments) {
     configuration_guards(arguments[1]);
     passive_and_restore();
     native_receive();
+    word_spi_stores();
     word_direction_store();
     electrical_guards();
     early_lcd_inputs();

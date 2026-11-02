@@ -1,6 +1,6 @@
 {
   "scope": "Regular Board original-POR evidence; each experiment retains its own clocks, inputs and limits",
-  "latest": "connected_LCD_observation",
+  "latest": "connected_LCD_terminal",
   "cold_PLL": {
     "scope": "Actual regular reference Board from digital POR with original firmware1.25; declared external inputs, clocks and functional NAND/GPIO topology",
     "source_commit": "b703b9d548e4efdc1ac3555927fb2f3d5ed1ccd3",
@@ -233,6 +233,47 @@
       "doc/local/normal-board-start/r6/native-lcd-observation.json": "107df7584fd940d93deadb9bac2b95b165b57084935a9be6a8ef28105e60f381",
       "doc/local/normal-board-start/r6/full-baseline-nand-audit.json": "5ecbdcf00020d5ae5a81fed1a13c315ae5ed5aff565880c3a66188b843a300eb",
       "doc/local/normal-board-start/r6/published-source-proof.json": "46fb9e6a51e83f2dcbc2798ba7e0c0250120dca3c354284d736c9d498396a3d0"
+    }
+  },
+  "connected_LCD_terminal": {
+    "status": "audited-natural-original-POR-LCD-budget-completion",
+    "source_commit": "79f9402adbcb01d7d2c9fa34f774fab43a716600",
+    "executable_sha256": "1f3ea57e0a178e2eb3687f3b43abbe76223881646e50c46dbc65928a886cf21f",
+    "MCU_operations": 8000000,
+    "MCU_instructions": 7999058,
+    "MCU_interrupts": 747,
+    "common_ticks": 442132703208,
+    "common_timebase_hz": 635040000000,
+    "DSP_instructions": 17734125,
+    "DSP_periods": 94322582,
+    "LCD_cycles": [
+      194,
+      2018,
+      1988
+    ],
+    "complete_images_published": 870,
+    "final_image_sha256": "f61d9d76e3eb60230e41c5cd77ecb52c79eba7cfc7a2e03f47e0592d37258dbf",
+    "original_text_observed": [
+      "bad serial!",
+      "V1.25",
+      "Feb 19 2018"
+    ],
+    "baseline_NAND_observations_matched": 335102,
+    "baseline_NAND_bytes": 83496,
+    "run_terminal": true,
+    "actual_exit": 0,
+    "elapsed_host_seconds": 6355.534217715962,
+    "sanitizer_clean": true,
+    "identity_scope": "Unprovisioned update with erased factory serial; polling at original serial warning",
+    "MIDI_input_bytes": 0,
+    "PCM_capture": false,
+    "full_instrument": false,
+    "real_time": false,
+    "firmware_patch": false,
+    "fuzz": false,
+    "physical_traffic": false,
+    "audits": {
+      "doc/local/normal-board-start/r6/terminal-audit.json": "94c05a8233d579a0fe0d45fa879753c9657a9ff55e83854e72f6f1c425e13de5"
     }
   }
 }

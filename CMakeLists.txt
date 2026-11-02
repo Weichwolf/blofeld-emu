@@ -318,7 +318,7 @@ target_include_directories(blofeld_reference_board PUBLIC src)
 target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp_runtime blofeld_private_files
   blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp
   blofeld_nand_peer blofeld_nand_store blofeld_lcd_export)
-add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
+add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp src/app/host_display_pump.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
@@ -4410,6 +4410,15 @@ if(BUILD_TESTING)
   add_dependencies(quality blofeld-mcu-dsp-shared-word-test)
 endif()
 
+if(BUILD_TESTING)
+  add_test(NAME reference_display_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_display_cli.py"
+    $<TARGET_FILE:blofeld-headless>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-display-cli")
+  set_tests_properties(reference_display_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+endif()
+
 # Durable ownership of the existing timed NAND model and actual native pin path.
 if(BUILD_TESTING)
   add_executable(blofeld-nand-write-store-test test/nand_write_store_test.cpp)
@@ -4421,5 +4430,10 @@ if(BUILD_TESTING)
   target_link_libraries(blofeld-nand-durable-peer-test PRIVATE blofeld_nand_native_fixture)
   add_test(NAME nand_durable_peer COMMAND blofeld-nand-durable-peer-test)
   set_tests_properties(nand_durable_peer PROPERTIES TIMEOUT 120)
-  add_dependencies(quality blofeld-nand-write-store-test blofeld-nand-durable-peer-test)
+  add_executable(blofeld-reference-nand-store-test test/reference_nand_store_test.cpp)
+  target_link_libraries(blofeld-reference-nand-store-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_nand_store COMMAND blofeld-reference-nand-store-test)
+  set_tests_properties(reference_nand_store PROPERTIES TIMEOUT 30)
+  add_dependencies(quality blofeld-nand-write-store-test blofeld-nand-durable-peer-test
+    blofeld-reference-nand-store-test)
 endif()
