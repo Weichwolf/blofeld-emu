@@ -165,16 +165,16 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inp
 bool OwnDspFetch::hold_program_fetch(
     const OwnDspAutomaticTiming timing,
     const std::optional<dsp56300::PendingInstruction> &pending) const {
-  const auto state = fetch_.view();
   if (pending && pending->effect.kind == dsp56300::EffectKind::read &&
       pending->effect.space == dsp56300::Space::program &&
       timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts) {
-    return state.pending_address.has_value();
+    return fetch_.view().pending_address.has_value();
   }
   if (!pending || pending->effect.kind != dsp56300::EffectKind::write ||
       pending->effect.space != dsp56300::Space::program) {
     return false;
   }
+  const auto state = fetch_.view();
   const auto address = pending->effect.address;
   bool already_fetched = state.pending_address == address;
   for (std::size_t index = 0; index < state.used; ++index) {
@@ -306,13 +306,15 @@ OwnDspFetch::native_overlap(const DspProgramFetchView &state,
 
 void OwnDspFetch::issue_pipeline(OwnDspFetchCycleResult &result, const bool requested) {
   const auto updated = fetch_.view();
-  const auto after = machine_.cpu_.registers();
   const bool retired = result.native && result.native->retired;
-  if (requested && !result.dma.core_stall && !retired &&
-      machine_.cpu_.fault().kind == dsp56300::FaultKind::none && !updated.pending_address &&
-      updated.used < updated.words.size() && updated.omr == after.omr &&
-      (after.sr & cache_enable) == 0 && !native_fetch_ && !native_latch_ && !repeated_ &&
-      !interrupt_vector_) {
+  if (!requested || result.dma.core_stall || retired ||
+      machine_.cpu_.fault().kind != dsp56300::FaultKind::none || updated.pending_address ||
+      updated.used >= updated.words.size() || native_fetch_ || native_latch_ || repeated_ ||
+      interrupt_vector_) {
+    return;
+  }
+  const auto after = machine_.cpu_.registers();
+  if (updated.omr == after.omr && (after.sr & cache_enable) == 0) {
     fetch_.issue();
     result.issued_address = fetch_.view().pending_address;
   }
