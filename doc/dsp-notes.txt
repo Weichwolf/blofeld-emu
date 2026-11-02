@@ -1,4 +1,8 @@
-Original MIDI note dispatch and allocation boundary
+Original MIDI allocation and connected DSP audio
+
+The regular Board engine renders original note-driven PCM from actual reset;
+the connected control and limits are described below. The first sections retain
+the separate strict diagnostic fixture, which deliberately refuses reserved reads.
 
 original_dsp_note feeds actual bytes into the original primary input ring. The
 unchanged parser selects the sound block, invokes its actual note handler,
@@ -54,21 +58,35 @@ profile. The normal and isolated target commands/properties are identical.
   cmake --build --preset strict --target blofeld-original-dsp-note-test
   ctest --test-dir build/strict -R '^original_dsp_note$' --output-on-failure
 
-A frozen original cold-start control reaches this same selector through ordinary
-31250-baud Timer0 input. Clock/NoteOn at 275 ms yields genuine status, note and
-velocity and an arpeggiator mode matching the Init program. The strict baseline
-stops at Y:ffffff; the component matrix above retains its diagnostic scope.
-A private functional decoder candidate explicitly supplies word A55AA5 only for
-reserved Y I/O reads and selects no register/RAM resource. All 25 original selector
-iterations now retire, followed by genuine voice construction, rendering and
-NoteOff. Seven received bytes / 63 native IRQ/RTI pairs lead to 1763 serial PCM
-frames, 595 nonzero, in a 39.98 ms observation window. Both actual DMA word streams
-agree; the captured serial words match them exactly with one-word alignment.
-The raw high-FS capture groups adjacent channels across a frame boundary; low-FS
-channel convention still needs qualification. A separately labeled re-framed
-file preserves captured words and is not a second native run. Native waveform
-output is observed; a no-note causal control, canonical standalone integration,
-correct stereo framing, sustained notes/polyphony and full acceptance remain open.
-The virtual unselected word is declared input, not a measured silicon value.
-No firmware bytes or routines are replaced. See own-dsp-nand-reference.json for
-local source/control/original/PCM audit hashes and the unmodified 24-bit capture.
+The regular Board engine now emits original DSP audio from actual digital POR
+using unchanged 1.25 and official Init in mutable A001. An external caller uses
+only public initialize/advance/checkpoint/restore/MIDI/recording APIs. At 274
+ms, before input, its 97 SPI frames and all 335102 native NAND observation lines
+match the completed R5 reference; 440 decoded PCM frames are zero.
+
+From that trusted checkpoint, F8-only and F8/NoteOn at 275 ms plus NoteOff at
+285 ms branches reach 305 ms and each capture 1807 low-FS stereo frames at 44100
+Hz. Clock-only remains silent; the note has 1206 nonzero frames, peak 357263 and
+equal centered-Init sample pairs. All common 440 prefix frames agree after
+native-owner restoration. No routines or firmware bytes are replaced, and no
+host synthesizer supplies samples.
+
+This is a regular-engine instrument result with an external MIDI test caller.
+Ordinary CLI scheduling/live host streams, long notes, independent release,
+polyphony, physical stereo labels and full Desktop/Keyboard acceptance are open.
+The separate R5 released-SPI-pad failure near 360 ms is beyond this 305 ms
+observation and remains unresolved. Original runtime evidence uses ASan/UBSan;
+twelve affected canonical decoder/Fetch/Board controls also pass separate TSan.
+See regular-board-midi-audio-reference.json for hashes, counts and remaining
+scope.
+
+The canonical functional decoder supplies an explicitly selected virtual word
+(nominal 0 on the NAND Board) for reserved Y I/O, with no selected
+storage/register resource. This is not a physical read-value measurement.
+Default strict fixtures, unknown assigned registers, unknown RAM reads and bit
+operations retain their guards; see dsp-reserved-read-decoder.txt. The earlier
+frozen candidate used A55AA5 and records 25 actual selector iterations, voice
+construction and NoteOff dispatch, 63 IRQ/RTI pairs and serial words matching
+both DMA streams. Those instruction observations are not inferred for the new
+run, which has no equivalent PC trace. See own-dsp-nand-reference.json for that
+narrower reference and raw-word evidence.

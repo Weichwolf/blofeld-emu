@@ -76,15 +76,16 @@ MCU/DSP boot or full physical DIN/USB and instrument acceptance. The ordinary
 Board and canonical decoder have separate integration coverage; see coverage.txt.
 No fuzzing or physical traffic runs as part of these deterministic checks.
 
-A separate frozen connected original-reset control selects official Init through
-mutable virtual A001 storage, preserving all firmware/boot bytes. Independent
-SMF data matches all 383 parameters in all 16 Parts before/after normalization.
-With normal-baud F8/NoteOn at 275 ms and NoteOff at 285 ms, an explicit private reserved-Y
-read model permits the actual original selector and voice routines to finish.
-Seven bytes/63 native Timer0 IRQ/RTI pairs lead to 595 nonzero frames among 1763
-captured frames; serial words match the actual original DMA streams. This is a
-private functional-clock/reference scope. Stereo polarity, a no-note causal
-control, ordinary standalone audio, longer notes and the complete instrument
-remain unqualified. The canonical optional reserved-Y word model now has separate
-ASan/UBSan and TSan native controls; see dsp-reserved-read-decoder.txt and
-own-dsp-nand-reference.json for exact evidence pins and limits.
+The regular Board engine now has an actual-reset note/PCM control using official
+Init in mutable virtual A001 storage. Public-API F8-only and F8/NoteOn at 275 ms
+plus NoteOff at 285 ms branches restore the same 274 ms checkpoint and end at
+305 ms. Both capture 1807 low-FS stereo frames: clock-only is silent; the note
+has 1206 nonzero frames and equal centered-Init pairs. All 335102 native NAND
+observation lines before that checkpoint match the completed R5 reference.
+Firmware and boot bytes remain unchanged. This qualifies the regular engine's
+note-driven output. Ordinary CLI/live host transport, independent release,
+long/polyphonic notes and physical stereo labels still need verification; the
+later R5 SPI-pad failure near 360 ms remains open. See regular-board-midi-audio-
+reference.json for counts, hashes and scope. Earlier frozen controls have
+separate IRQ/producer trace evidence in own-dsp-nand-reference.json; those
+counts are not claimed for this run.
