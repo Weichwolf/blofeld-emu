@@ -35,7 +35,11 @@
     "doc/local/nand-host-owner/canonical-build-r1.json": "ca1e173f500ddb2462653474b5ea84678f229ab39c91f56eba16d13aad1b89f1",
     "doc/local/nand-host-owner/runtime-link-review.json": "d41b616b55d1604ce4311585c738cdd5a1cd58a233992bef33ac3313be902d9d",
     "doc/local/nand-host-owner/canonical-qualified-r1.json": "6ae73fa087c99efad96cb70f9ac67d9ba6a1a90342f155ca773c87dd4e1f39fc",
-    "doc/local/durable-cli-midi-audio/r3/observed/frontier-audit.json": "55b94816bf4d5b6ef4a95cb5ece483daf9a1f3fa3a4ff28c8628970297a58ee3"
+    "doc/local/durable-cli-midi-audio/r3/observed/frontier-audit.json": "55b94816bf4d5b6ef4a95cb5ece483daf9a1f3fa3a4ff28c8628970297a58ee3",
+    "doc/local/durable-cli-midi-audio/r4/observed/direction-release-audit.json": "0db4b31096e9192d0e1713e9138071bf0dadc0712cf3c1ec20c47942d78220b3",
+    "doc/local/durable-cli-midi-audio/r4/observed/handoff-watch-r2.json": "858e82dda3dcee6795d32ea12c4fd8e0be80507c56d0aec8cd498882efd5a794",
+    "doc/local/durable-cli-midi-audio/r4/read-only-progress/PCM-witness-audit.json": "4d973800aad97b0a8ddb1f1eaaad694437e7da21241bc9af2b50fafdd98c0eef",
+    "doc/local/durable-cli-midi-audio/r4/read-only-progress/snapshot.json": "6aa3149a214ef9965cefe61b06821470ee882a7fe0efe7af19a36d41088e216d"
   },
   "discarded_compiler_generation": "Prior read-handoff lane r1 had a stale decoder object and was rejected before native admission; its r2 qualified. The separate current host-owner canonical r1 is qualified.",
   "preceding_original_case": {
@@ -46,7 +50,7 @@
     "complete_LCD_observed": false,
     "both_stores_unchanged": true
   },
-  "original_continuation_on_corrected_decoder": "Prior read-release correction passed; original continuation on the ownership model remains pending",
+  "original_continuation_on_corrected_decoder": "Original direction-owned release, host phase, return and later native NAND reads observed; full boot remains unqualified",
   "complete_instrument": false,
   "physical_traffic": false,
   "fuzz": false,
@@ -77,7 +81,7 @@
     "native_partial_owner_refusals_per_profile": 1,
     "decoder_checkpoint": "copied host-ownership state retains the inactive-entry requirement",
     "physical_select_wiring_verified": false,
-    "original_continuation_on_owner_model": "pending"
+    "original_continuation_on_owner_model": "Read/host/read observed in the actual original runtime; full instrument acceptance remains pending"
   },
   "original_GPIO_continuation": {
     "source_commit": "85a0688b848f15491d7bb89488937d03b504f9be",
@@ -91,5 +95,26 @@
     "LCD_blank": true,
     "final_WAV_published": false,
     "next_refusal": "Retained high control bits during a genuine GPIO host response were decoded as a NAND read"
+  },
+  "original_ownership_continuation": {
+    "source_commit": "b70da2eb5b617a8e668ea00cf51667e747c30ee2",
+    "run_status_at_observation": "live; final audio/display/storage audit pending",
+    "prior_NAND_bytes_with_identical_values_and_ticks": 84024,
+    "other_prior_NAND_observations_identical_after_explicit_phase_alignment": 337216,
+    "replaced_previous_phase_observations": 7,
+    "corrected_phase_observations": 9,
+    "second_release_earlier_DSP_periods": 4,
+    "independent_output_hold_and_release_ns": [
+      15,
+      30
+    ],
+    "read_to_host_to_NAND_observed": true,
+    "later_native_NAND_read_observed": true,
+    "read_only_PCM_frames_observed": 3602,
+    "MIDI_wire_frames_observed": 4,
+    "fixed_stereo_frame_and_tick_witnesses_matched": 2,
+    "final_WAV_qualified": false,
+    "healthy_identity_and_LCD_qualified": false,
+    "complete_instrument": false
   }
 }

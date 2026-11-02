@@ -4325,8 +4325,12 @@ Partial output ownership fails contextually; unfinished writes and unknown
 controls still refuse. Eleven affected NAND/Board groups pass per sanitizer,
 with the prior model failing the same retained-control native case. See
 nand-board.txt and nand-read-handoff-reference.json. Physical selection wiring
-is unverified. Original continuation on the ownership model, complete boot,
-both instrument profiles and update/recovery remain pending.
+is unverified. Frozen b70da2e original execution crosses the prior refusal and
+completes read/host/read: all 84024 previous NAND bytes/ticks remain identical,
+with 337216 other observations identical after explicit release-phase alignment.
+Independent 15/30 ns bounds, selected page/Ready and two fixed stereo PCM/tick
+witnesses are checked. Final WAV/display/storage audit, healthy identity, full
+boot, both instrument profiles and update/recovery remain pending.
 
 Functional disconnected PDR storage (requirements2/3/6): logical_pins reads
 explicitly written retained bits while their output driver is disconnected.

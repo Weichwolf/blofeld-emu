@@ -202,12 +202,19 @@ hashes are in nand-read-handoff-reference.json. An earlier read-release compiler
 generation retained a stale decoder object and was rejected before native
 admission; the current ownership generation uses newly compiled objects.
 
-The ordinary frozen 85a0688 original CLI case passes the former GPIO data-bit
-refusal, preserves all 337223 prior NAND observations and reaches a retained-
-control host-bus ownership refusal after 41 more DSP instructions/279 periods.
-Both stores stay identical; 4439 PCM/four MIDI wire frames are recorded, with
-no final WAV or completed LCD. The prior 9bb4197 case independently established
-the 15/30 ns output hold/release bounds. Original continuation on the ownership
-model and complete instrument acceptance remain pending; physical select wiring
-is unverified. See dsp-gpio-latch-reference.json for the separate storage model.
-Detailed firmware analysis and recordings remain local.
+The ordinary frozen b70da2e continuation crosses the prior ownership refusal:
+actual native execution releases the selected read, performs the host phase,
+returns to NAND and reads the next array byte. All 84024 preceding NAND data
+bytes and ticks remain identical. After explicitly aligning seven previous and
+nine new release-phase observations, 337216 other observations remain identical.
+Full-byte GPIO ownership releases two reads earlier; the second moves by four
+DSP periods. Both retain independently checked 15/30 ns output bounds and the
+selected page/Ready. This is functional bus-selection evidence, with physical
+CE wiring unverified.
+
+A read-only inspection observes 3602 complete PCM frames and four MIDI wire
+frames. Two fixed stereo frames/ticks match the previous run exactly. The
+observer disables inferior calls, writes and breakpoints, then detaches; its
+pause is excluded from throughput claims. Final WAV, display/storage audit,
+healthy identity and full boot remain pending. Detailed analysis and recordings
+stay local; nand-read-handoff-reference.json pins the scoped evidence.
