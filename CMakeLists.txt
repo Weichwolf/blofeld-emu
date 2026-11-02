@@ -325,7 +325,7 @@ target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp_runtime blo
   blofeld_pcm_transport blofeld_mcu_midi blofeld_mcu_midi_output blofeld_midi_timed blofeld_usbip_tcp
   blofeld_nand_peer blofeld_nand_store blofeld_lcd_export)
 add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp src/app/host_display_pump.cpp)
-target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_host_midi_session blofeld_sample_library blofeld_device_identity)
+target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_host_midi_session blofeld_audio_runtime blofeld_sample_library blofeld_device_identity)
 
 if(BUILD_TESTING)
   add_executable(blofeld-dsp-peripheral-form-own-test test/dsp_peripheral_form_own_test.cpp)
@@ -3518,6 +3518,12 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-midi-session-cli")
   set_tests_properties(reference_midi_session_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+  add_test(NAME reference_audio_live_cli COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/reference_audio_live_cli.py"
+    $<TARGET_FILE:blofeld-headless> $<TARGET_FILE:blofeld-reference-rom-fixture>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-audio-live-cli")
+  set_tests_properties(reference_audio_live_cli PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
   add_test(NAME host_midi_session_tools COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/host_midi_session_tools.py"
     $<TARGET_FILE:blofeld-host-midi-session-test>

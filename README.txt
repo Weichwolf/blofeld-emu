@@ -139,6 +139,8 @@ doc/host-midi.txt covers read-only Linux RawMIDI/binary-byte input to the headle
 reference driver, explicit SCI clock/routing, snapshots and unqualified live timing.
 doc/host-midi-session.txt covers --midi-port NAME for bidirectional sequencer
 sessions, common-time SCI during POR/WAI and actual native output capture.
+doc/runtime.txt also describes --audio-live for the existing native PCM worker,
+explicit source rates, actual initial stream grants and optional WAV recording.
 doc/dsp-host-midi.txt covers the alternative timed DSP TIO route, fixed 31250-baud
 bit grid and the explicit legacy original-receiver timing experiment.
 doc/mcu-timer.txt covers timer captures, compare outputs, flags and their limits.

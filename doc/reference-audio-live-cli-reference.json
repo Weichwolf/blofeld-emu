@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "scope": "Ordinary reference-config CLI native ESAI to live worker/private Pulse monitor and simultaneous WAV, with immutable first stream readback; original live instrument pending",
+  "source_base_commit": "533796f7816f7251c5ef15ecf2d4899a94b0bfc8",
+  "independent_DSP_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+  "source_sha256": {
+    "src/app/main.cpp": "c7d36f520cfc5d789bfe32921ac71888b6809ae7c54778143e6c54bd18382019",
+    "src/audio/audio_runtime.hpp": "104e91edd4010b066743196921b6bc71923e2ed9cad91a3518c59761bad5f0e5",
+    "src/audio/audio_runtime.cpp": "bb99b1de737b875194043e423e2a60623248f652a6dd277620ce066c2804f8de",
+    "src/audio/audio_worker.hpp": "ba31fa97535cd0d8c0ff9f8e826a538873b0b54397976288736746b1fdcd1dab",
+    "src/audio/audio_worker.cpp": "1143e3a03af167c8c6f8871fe25d3abc3c8e6208363af3ad40cd9b49f90e266b",
+    "test/reference_audio_live_cli.py": "e3e7921979d37510e6b7e88e991228618c126776d4247af97d03e81ef74bbebc"
+  },
+  "profiles": {
+    "strict": {
+      "qualified_native_processes": 34,
+      "new_CLI_elapsed_seconds": 3.357506341068074,
+      "MIDI_regression_elapsed_seconds": 9.063043880974874,
+      "headless_sha256": "de0f31029e6d25ef01089465405bc9171b23f0ce96e402d860a74dc55e629f2d",
+      "existing_worker_modes": [
+        {
+          "mode": "short",
+          "frames": 1,
+          "exact_monitor_match": true
+        },
+        {
+          "mode": "tail",
+          "frames": 1025,
+          "exact_monitor_match": true
+        },
+        {
+          "mode": "paced",
+          "frames": 8192,
+          "exact_monitor_match": true
+        }
+      ],
+      "captures": [
+        {
+          "ESAI": 0,
+          "native_frames": 64,
+          "startup_readback": "AUDIO initial format=s32-native rate=48000 channels=2 maximum-frames=513 target-frames=513 prebuffer-frames=386 minimum-request-frames=128 stream=0",
+          "capture_sha256": "14c5851e0affeee8c269f1e55d8af21a33a3393fcf4637306f4033f6c3a5962f",
+          "wave_sha256": "5fae4c141ca28166e2ef8c9adc0bc1abe063ac79fc1fcf88052a5b67e92f960d",
+          "source_prefix_offset_bytes": 309120,
+          "outside_source_bytes_all_zero": true,
+          "service_readback_sha256": "0c2c8972a36d5c20f6a4996b12fd73490f5bde9f6ff6fad417894331fdab3a45"
+        },
+        {
+          "ESAI": 1,
+          "native_frames": 64,
+          "startup_readback": "AUDIO initial format=s32-native rate=48000 channels=2 maximum-frames=4093 target-frames=4093 prebuffer-frames=3134 minimum-request-frames=960 stream=0",
+          "capture_sha256": "7cabae588a656fde63de8e41f69f288e4e4a8bf176cf79aca3388a8716854dd1",
+          "wave_sha256": "5fae4c141ca28166e2ef8c9adc0bc1abe063ac79fc1fcf88052a5b67e92f960d",
+          "source_prefix_offset_bytes": 305280,
+          "outside_source_bytes_all_zero": true,
+          "service_readback_sha256": "f05fa5eb2307d4c4acad05cd7459eaa1a9fcdf416cef9e423c122953adcf333b"
+        }
+      ],
+      "compiler_format_tidy_findings": 0,
+      "sanitizer_findings": 0,
+      "ELF_hardened": true,
+      "foreign_DSP_symbols_absent": true
+    },
+    "thread": {
+      "qualified_native_processes": 34,
+      "new_CLI_elapsed_seconds": 4.936853306135163,
+      "MIDI_regression_elapsed_seconds": 12.304092018166557,
+      "headless_sha256": "d744ef98f9bc17f9b46d564636bd2553c8853ad59144156e322e39b98b8bb178",
+      "existing_worker_modes": [
+        {
+          "mode": "short",
+          "frames": 1,
+          "exact_monitor_match": true
+        },
+        {
+          "mode": "tail",
+          "frames": 1025,
+          "exact_monitor_match": true
+        },
+        {
+          "mode": "paced",
+          "frames": 8192,
+          "exact_monitor_match": true
+        }
+      ],
+      "captures": [
+        {
+          "ESAI": 0,
+          "native_frames": 64,
+          "startup_readback": "AUDIO initial format=s32-native rate=48000 channels=2 maximum-frames=513 target-frames=513 prebuffer-frames=386 minimum-request-frames=128 stream=0",
+          "capture_sha256": "32116e27ccdab5fd9031d9746e9912af65e087edcac6adedbadf6c02754a0514",
+          "wave_sha256": "5fae4c141ca28166e2ef8c9adc0bc1abe063ac79fc1fcf88052a5b67e92f960d",
+          "source_prefix_offset_bytes": 641280,
+          "outside_source_bytes_all_zero": true,
+          "service_readback_sha256": "3fa8451040fd1a039024bd3e345031d45a7de46bcd9c9a6ff769d56aac8f712d"
+        },
+        {
+          "ESAI": 1,
+          "native_frames": 64,
+          "startup_readback": "AUDIO initial format=s32-native rate=48000 channels=2 maximum-frames=4093 target-frames=4093 prebuffer-frames=3134 minimum-request-frames=960 stream=0",
+          "capture_sha256": "8c3a3e6d9e219cbf5100daac387e2a2fc1941e3b4293959c0e032e733565b433",
+          "wave_sha256": "5fae4c141ca28166e2ef8c9adc0bc1abe063ac79fc1fcf88052a5b67e92f960d",
+          "source_prefix_offset_bytes": 647040,
+          "outside_source_bytes_all_zero": true,
+          "service_readback_sha256": "4e2b6011917a24c79c94ecb8065c2c73b0d2b808f06678cf43b58997fabf7e4e"
+        }
+      ],
+      "compiler_format_tidy_findings": 0,
+      "sanitizer_findings": 0,
+      "ELF_hardened": true,
+      "foreign_DSP_symbols_absent": true
+    }
+  },
+  "contracts": [
+    "--audio-live requires explicit source rate and decoded PCM route, optional server/capacity preferences; host negotiation never changes device clocks",
+    "Initial client stream dimensions are published by the worker before constructor returns and remain immutable startup evidence",
+    "Live sink outlives the Board binding; successful completion drains every accepted native frame, failures retain existing contextual retirement",
+    "Source samples enter existing bounded worker unchanged, without host synthesis/resampling/padded frames",
+    "Actual service client format/channel map independently queried by pactl; source64-frame monitor and WAV payloads match independent literal words",
+    "CLI option/route/replay/service refusals,3existingworker monitor modes and bidirectional MIDI CLI remain qualified"
+  ],
+  "limits": [
+    "Authored MCU/DSP programs, not complete original1.25 live startup or normal device profiles",
+    "Finite native source-prefix qualification, not sustained realtime performance or general host pacing",
+    "Private Pulse null sink only for this increment; no physical playback or USB Audio",
+    "Metadata getter exposes first validated grants, not later move/suspend snapshots or physical sink format"
+  ],
+  "private_evidence_sha256": {
+    "build-r3.json": "4dfb8f7eac51e6775a452ca83c47c0723fe3282efd0574179dcea6625bb483eb",
+    "frozen.json": "adca7d753fbedd193b63a282ad08b2b4b77394ca5f02756c75d2576ba2cbbe95",
+    "qualification.json": "acbf36a4127f933e49329dc565b96ea93a331657ddc9b4af39b4f2e27012d5e9"
+  },
+  "fuzz": false,
+  "physical_playback": false,
+  "profiles_are_complete": false
+}

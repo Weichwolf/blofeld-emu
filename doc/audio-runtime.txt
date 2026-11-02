@@ -9,6 +9,11 @@ sentinel slot. Indices wrap inside that allocation, without overflowing counters
 Release/acquire publication protects both frame visibility and slot reuse.
 check, accept, construction and finish are ordinary control-thread operations;
 they can wait/allocate/throw and must not be used as real-time audio callbacks.
+initial_stream_info() returns the first validated client stream grants. The
+worker writes that fixed-size value once before release-publishing ready;
+construction acquires that publication. The snapshot remains immutable and
+can be copied without locks or a new native-library call. It does not report
+subsequent device moves, suspensions or physical sink format.
 
 The ordinary worker reads actual host buffer grants and uses the reported target
 for startup. A separate requested filling target may differ from the configured
@@ -114,7 +119,11 @@ separately from ASan/UBSan. No fuzzing or physical playback occurs.
 
 Remaining acceptance
 The normal Keyboard/Desktop entry point has no qualified complete board profile,
-and does not yet instantiate this bridge automatically. Actual original1.25
+but the explicit reference-config CLI now attaches the bridge with --audio-live
+and prints its initial negotiated grants. Both ESAI fixtures deliver64 literal
+frames into a private monitor and simultaneous WAV;3existing worker modes and
+the MIDI CLI regression pass both sanitizer configurations. See
+reference-audio-live-cli-reference.json and runtime.txt. Actual original1.25
 boot, MIDI voice audio, sustained performance, physical clock/pin mapping,
 PipeWire suspension, ordinary sink rewind/active device moves and real-device
 equivalence remain unqualified. The separate host_audio_pipewire case covers

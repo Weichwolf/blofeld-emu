@@ -2,6 +2,8 @@
 #include "app/host_display_pump.hpp"
 #include "app/host_midi_runner.hpp"
 #include "app/host_midi_session.hpp"
+#include "audio/audio_runtime.hpp"
+#include "audio/host_audio.hpp"
 #include "audio/pcm_recording.hpp"
 #include "board/reference_board.hpp"
 #include "common/bus.hpp"
@@ -51,6 +53,8 @@ struct Options {
   std::filesystem::path midi_device;
   std::optional<std::string> midi_port;
   std::optional<std::uint32_t> audio_rate;
+  std::optional<std::uint32_t> audio_buffer_frames;
+  std::optional<std::string> audio_server;
   std::optional<std::size_t> audio_max_frames;
   std::optional<std::uint16_t> usbip_port;
   std::optional<std::uint64_t> usbip_after;
@@ -58,6 +62,7 @@ struct Options {
   std::optional<std::uint64_t> usbip_probe_timeout;
   std::uint64_t instructions = 1000000;
   bool inspect = false;
+  bool audio_live = false;
   std::optional<blofeld::PinDrive> port_e_input;
 };
 
@@ -126,6 +131,22 @@ void validate_midi_options(const Options &config) {
   }
 }
 
+void validate_audio_options(const Options &config) {
+  const bool file = !config.audio_out.empty();
+  const bool active = file || config.audio_live;
+  if (active != config.audio_rate.has_value() || file != config.audio_max_frames.has_value() ||
+      (active && (config.reference_board.empty() || config.inspect))) {
+    throw blofeld::Fault("Audio requires a reference board and --audio-rate; WAV output also "
+                         "requires --audio-out and --audio-max-frames together");
+  }
+  constexpr unsigned minimum_buffer_request = 256;
+  if ((!config.audio_live && (config.audio_server || config.audio_buffer_frames)) ||
+      (config.audio_buffer_frames && *config.audio_buffer_frames < minimum_buffer_request)) {
+    throw blofeld::Fault("Audio server/buffer options require --audio-live; buffer requests "
+                         "must be 256..65536 frames");
+  }
+}
+
 void validate_options(const Options &config) {
   if (config.firmware.empty()) {
     throw blofeld::Fault("Usage: blofeld-headless --firmware update.zip [--inspect] "
@@ -138,6 +159,7 @@ void validate_options(const Options &config) {
                          "--midi-port NAME] "
                          "[--usbip-port PORT --usbip-after TICKS --usbip-period TICKS "
                          "--usbip-probe-timeout TICKS] "
+                         "[--audio-live --audio-server SERVER --audio-buffer-frames N] "
                          "[--audio-out capture.wav --audio-rate HZ --audio-max-frames N]");
   }
   if (config.inspect && (!config.flash_in.empty() || !config.flash_out.empty())) {
@@ -157,12 +179,7 @@ void validate_options(const Options &config) {
     throw blofeld::Fault("Display publication requires reference-board execution");
   }
   validate_midi_options(config);
-  const bool audio = !config.audio_out.empty();
-  if (audio != config.audio_rate.has_value() || audio != config.audio_max_frames.has_value() ||
-      (audio && (config.reference_board.empty() || config.inspect))) {
-    throw blofeld::Fault("Audio output requires a reference board, --audio-out, --audio-rate and "
-                         "--audio-max-frames together");
-  }
+  validate_audio_options(config);
   validate_usb_options(config);
 }
 
@@ -188,6 +205,10 @@ bool numeric_option(Options &result, const OptionValue &input) {
   } else if (input.name == "--audio-max-frames") {
     result.audio_max_frames =
         static_cast<std::size_t>(positive(input.value, blofeld::PcmRecording::maximum_capacity));
+  } else if (input.name == "--audio-buffer-frames") {
+    constexpr unsigned maximum_buffer_request = 65536;
+    result.audio_buffer_frames =
+        static_cast<std::uint32_t>(positive(input.value, maximum_buffer_request));
   } else {
     return false;
   }
@@ -233,12 +254,18 @@ Options options(const int count, char **values) {
       result.inspect = true;
       continue;
     }
+    if (argument == "--audio-live") {
+      result.audio_live = true;
+      continue;
+    }
     if (index + 1 >= count) { throw blofeld::Fault("Missing value for " + std::string(argument)); }
     const std::string_view value(values[++index]);
     const OptionValue input{.name = argument, .value = value};
     if (numeric_option(result, input) || path_option(result, input)) { continue; }
     if (argument == "--midi-port") {
       result.midi_port = value;
+    } else if (argument == "--audio-server") {
+      result.audio_server = value;
     } else if (argument == "--port-e-input") {
       result.port_e_input = pin_drive(value);
     } else if (argument == "--instructions") {
@@ -441,8 +468,11 @@ void validate_board_options(const Options &config,
   if (!config.display_directory.empty() && (!board || !board->lcd_parallel)) {
     throw blofeld::Fault("Display publication requires lcd-parallel in the reference board");
   }
-  if (!config.audio_out.empty() && (!board || !board->pcm)) {
+  if ((!config.audio_out.empty() || config.audio_live) && (!board || !board->pcm)) {
     throw blofeld::Fault("Audio output requires pcm-receive in the reference board");
+  }
+  if (config.audio_live && board && board->checkpoint) {
+    throw blofeld::Fault("Live audio rejects automatic checkpoint replay");
   }
   const bool midi = !config.midi_file.empty() || !config.midi_device.empty() || config.midi_port;
   if (midi && (!board || (!board->midi && !board->midi_sci_timed && !board->midi_dsp) ||
@@ -483,10 +513,54 @@ std::unique_ptr<blofeld::reference::HostMidiSession> midi_session(const std::str
   return session;
 }
 
+std::unique_ptr<blofeld::AudioRuntime> live_audio(const Options &config,
+                                                  const blofeld::reference::Config &board) {
+  if (!config.audio_live) { return {}; }
+  if (!config.audio_rate || !board.pcm) { throw blofeld::Fault("Live audio requires PCM/rate"); }
+  constexpr unsigned default_buffer = 4096;
+  auto audio = std::make_unique<blofeld::AudioRuntime>(blofeld::AudioRuntimeOptions{
+      .output = {.pcm = board.pcm->format,
+                 .timebase_hz = board.dsp_clock.timebase_hz,
+                 .sample_rate = *config.audio_rate,
+                 .buffer_frames = config.audio_buffer_frames.value_or(default_buffer),
+                 .server = config.audio_server.value_or("")}});
+  const blofeld::HostAudioStreamInfo initial = audio->initial_stream_info();
+  std::cout << "AUDIO initial format=s32-native rate=" << initial.sample_rate
+            << " channels=" << initial.channels << " maximum-frames=" << initial.maximum_frames
+            << " target-frames=" << initial.target_frames
+            << " prebuffer-frames=" << initial.prebuffer_frames
+            << " minimum-request-frames=" << initial.minimum_request_frames
+            << " stream=" << initial.stream_index << '\n'
+            << std::flush;
+  return audio;
+}
+
+void finish_live_audio(blofeld::AudioRuntime *audio, const int result) {
+  if (audio != nullptr) {
+    if (result == 0) { audio->finish(); }
+    const auto status = audio->status();
+    audio->invalidate();
+    std::cout << "AUDIO closed=1 accepted=" << status.accepted << " written=" << status.written
+              << " underflows=" << status.underflows << " completed=" << (result == 0) << '\n';
+  }
+}
+
+void finish_midi_session(blofeld::reference::HostMidiSession *session,
+                         blofeld::reference::Board &machine,
+                         const int result) {
+  if (session != nullptr) {
+    const auto final_bytes = result == 0 ? session->flush_output(machine) : 0;
+    session->retire();
+    std::cout << "MIDI session closed=1 final-output-bytes=" << final_bytes << '\n';
+  }
+}
+
 int run_reference(const Options &config,
                   const blofeld::reference::Config &board,
                   const blofeld::reference::Execution &execution) {
+  auto audio = live_audio(config, board); // The sink outlives the Board's binding.
   blofeld::reference::Board machine(board, execution);
+  if (audio) { machine.attach_pcm_output(*audio); }
   std::unique_ptr<blofeld::reference::HostMidiPump> input;
   std::unique_ptr<blofeld::reference::HostMidiSession> session;
   std::unique_ptr<blofeld::reference::HostDisplayPump> display;
@@ -519,18 +593,15 @@ int run_reference(const Options &config,
               << " output-timeout-ms=" << usb_options.tcp.output_timeout.count() << '\n'
               << std::flush;
   }
-  if (!input && !session && !usb && !display) { return machine.run(); }
+  if (!input && !session && !usb && !display && !audio) { return machine.run(); }
   const auto result = machine.run([&](auto &target) {
     if (input) { (*input)(target); }
     if (session) { static_cast<void>(session->poll(target)); }
     if (usb) { target.poll_usb(*usb); }
     if (display) { display->poll(target); }
   });
-  if (session) {
-    const auto final_bytes = result == 0 ? session->flush_output(machine) : 0;
-    session->retire();
-    std::cout << "MIDI session closed=1 final-output-bytes=" << final_bytes << '\n';
-  }
+  finish_live_audio(audio.get(), result);
+  finish_midi_session(session.get(), machine, result);
   if (display) { display->capture(machine); }
   if (usb) {
     const auto published = usb->published();

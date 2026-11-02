@@ -108,8 +108,11 @@ matches all256 frames exactly once in the private monitor for each preference.
 Artifacts retain actual snapshots, captures and failures below build/Testing.
 Separate ASan/UBSan and TSan qualify the affected service/worker consumers.
 This does not qualify in-flight audio moves, resampler output, rewinds, timing
-accuracy or PipeWire suspension. The adapter's snapshots remain confined to its worker;
-forwarding that metadata through normal standalone/profile status is pending.
+accuracy or PipeWire suspension. AudioRuntime now forwards the first validated
+snapshot as immutable startup evidence, and --audio-live prints it in the
+reference-config CLI. Later snapshots remain confined to the worker; normal
+profile and ongoing move/suspend status forwarding are pending. See
+audio-runtime.txt and runtime.txt.
 
 Alternate-service qualification
   cmake --build --preset strict --target blofeld-host-audio-test blofeld-audio-runtime-test

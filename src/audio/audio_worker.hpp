@@ -42,6 +42,7 @@ struct AudioRuntime::Worker {
   [[nodiscard]] PcmSubmission submit(const SerialPcmFrame &frame) noexcept;
 
   const HostAudioConfig config;
+  HostAudioStreamInfo initial_stream;
   PcmQueue queue;
   AudioWake wake_event;
   std::array<SerialPcmFrame, batch_frames> batch{};

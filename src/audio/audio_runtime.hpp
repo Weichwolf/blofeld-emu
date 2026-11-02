@@ -52,6 +52,9 @@ public:
   void invalidate() noexcept override;
   void finish();
   [[nodiscard]] AudioRuntimeStatus status() const noexcept;
+  // First validated client grants, published before construction returns.
+  // Immutable startup evidence; later service moves/changes are worker-local.
+  [[nodiscard]] HostAudioStreamInfo initial_stream_info() const noexcept;
 
 private:
   struct Worker;

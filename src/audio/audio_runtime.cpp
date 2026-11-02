@@ -2,6 +2,7 @@
 #include "audio/audio_runtime.hpp"
 
 #include "audio/audio_worker.hpp"
+#include "audio/host_audio.hpp"
 #include "audio/serial_pcm.hpp"
 #include "common/bus.hpp"
 
@@ -122,5 +123,10 @@ AudioRuntimeStatus AudioRuntime::status() const noexcept {
           .written = worker_->written.load(std::memory_order_relaxed),
           .underflows = worker_->underflows.load(std::memory_order_relaxed),
           .waiting_for_source = worker_->waiting_for_source.load(std::memory_order_acquire)};
+}
+
+HostAudioStreamInfo AudioRuntime::initial_stream_info() const noexcept {
+  // The constructor acquired ready/failed after the worker's only write.
+  return worker_->initial_stream;
 }
 }

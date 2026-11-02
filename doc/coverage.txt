@@ -66,6 +66,12 @@ profiles; independent standard ALSA tools observe only owned virtual ports.
 Normal-profile integration and original bidirectional transfers remain open.
 See midi-output.txt, midi-output-reference.json, host-midi-session.txt,
 host-midi-output-session-reference.json and reference-midi-session-cli-reference.json.
+The CLI now also binds the existing live audio worker. Authored native DSP/ESAI
+fixtures on both instances produce64 literal frames matching a private monitor
+and simultaneous WAV. Initial host grants/format are reported independently of
+device clocks. Both sanitizer configurations pass the affected CLI,3worker modes
+and MIDI regression; sustained original-instrument playback remains open. See
+reference-audio-live-cli-reference.json and runtime.txt.
 
 Connected reset/SPI/NAND gates match all56238 known source bytes in actual
 protocol and retired DSP samples,107 address sequences and read deadlines.

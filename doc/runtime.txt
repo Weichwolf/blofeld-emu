@@ -44,8 +44,19 @@ alone does not establish output, bank/program changes or USB enumeration.
 The session audio adapter negotiates actual formats and buffer grants. A bounded
 AudioRuntime worker connects DSP/ESAI frames to the host service without changing
 emulated clocks; restore retires the stream (host-audio.txt, audio-runtime.txt).
-Private PulseAudio/PipeWire tests qualify their named transport scopes. Normal
-profile wiring, sustained playback and complete overload/disconnect behavior
+Private PulseAudio/PipeWire tests qualify their named transport scopes.
+The ordinary CLI now binds this worker with --audio-live --audio-rate HZ.
+--audio-server SERVER optionally selects a service; absent it, the native client
+uses the ordinary session service without daemon autospawn. --audio-buffer-frames
+N requests256..65536 frames (default4096); these are backend request bounds,
+not global hardware limits. Startup prints the actual first client stream rate,
+channels and maximum/target/prebuffer/minimum-request grants. Audio and MIDI
+negotiation remain independent. Live output may run alongside --audio-out WAV
+recording with its separate --audio-max-frames bound. Replay/missing PCM routes
+reject, faults retire output, and successful completion drains accepted frames.
+See reference-audio-live-cli-reference.json for authored native DSP/ESAI monitor
+and WAV evidence; this is not original live-instrument or realtime acceptance.
+Normal profile wiring, sustained playback and complete overload/disconnect behavior
 remain open. Host buffering must adapt independently of device clocks and MIDI.
 
 Required normal operation

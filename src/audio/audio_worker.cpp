@@ -137,6 +137,7 @@ void AudioRuntime::Worker::run(const std::stop_token &stop) noexcept {
     const auto named = ::pthread_setname_np(::pthread_self(), "blofeld-audio");
     if (named != 0) { throw Fault("Cannot name audio worker thread: " + std::to_string(named)); }
     HostAudioOutput output(config);
+    initial_stream = output.stream_info();
     publish(AudioRuntimeState::ready);
     transfer(output, stop);
   } catch (...) {
