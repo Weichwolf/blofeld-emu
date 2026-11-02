@@ -4201,16 +4201,17 @@ implicit MIDI TIO1 writer. Five affected groups pass per ASan/UBSan and separate
 TSan (four exact-ELF reuses, six executions). Original live instrument reset and
 interrupted NAND safety remain open. Local proof: held-tio-runtime/qualified.json.
 
-Regular Board original cold-start experiment (requirements 2/3/6): actual POR
-and native U0 release with GPIO/NAND reach all 97 original SPI stage frames
-and 107 NAND pages. All 56496 NAND output bytes, native addresses and 15us
-completion deadlines match the declared image. At 1080MHz common timebase the
-original runtime PLL transition completes; the complete prior trace remains
-identical after common-time conversion (6582586 rows/678667612 bytes). The next
-stop is P:002ebb, missing ESAI reset-edge clock timing at Y:ffff96. PHY/USB/T
-inputs, topology and clocks remain explicit reference hypotheses. Normal
-instrument/MIDI/audio/LCD, full resident-RAM comparison and update/recovery
-remain open. See regular-board-start-reference.json for audit/input hashes.
+Regular Board original cold-start experiment (requirements 2/3/6): actual POR,
+native U0 and GPIO/NAND load 97 exact original SPI stage frames and 107 cold pages.
+The functional 11.2896 MHz DSP candidate now passes runtime PLL/audio setup with
+continuous audio and 31250-baud MIDI idle from POR. All 83496 observed NAND output
+bytes (56496 cold + 27000 runtime) match the declared image; cold deadlines are 15us.
+A001 contains the official Init preset as ordinary mutable state. Next stop:
+DSP P002662 reads PortC control Xffffbf beside active DMA/F2; MCU Pb752 is in the
+actual F4 protocol. No MIDI data/PCM capture, resident-RAM comparison, full boot
+or update/recovery claim. Clocks/topology remain hypotheses. The separate 12MHz
+PLL experiment retains its exact normalized-prefix proof in
+regular-board-start-reference.json, alongside current audit/input hashes.
 Peer configuration now also rejects duplicate J0 sources, including SHI and
 loopback routes. Fifteen collision cases and unrelated J1 acceptance pass in
 the Board group under ASan/UBSan and separate TSan.

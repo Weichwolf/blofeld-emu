@@ -1,61 +1,114 @@
 {
-  "scope": "Actual regular reference Board from digital POR with original firmware1.25; declared external inputs, clocks and functional NAND/GPIO topology",
-  "source_commit": "b703b9d548e4efdc1ac3555927fb2f3d5ed1ccd3",
-  "executable_sha256": "01646bcaf1748e5acdc10cb31c9e17adc84adaf94ee8ae6fc6d7a8a9faa45bf2",
-  "firmware_manifest": "downloads.json:Blofeld_Firmware_V1.25.zip",
-  "document_derived_boot_ROM_manifest": "dsp-control-reference.json:derived_reference",
-  "virtual_NAND_sha256": "a07de70065080ca045af30f68156a2a89dde4067679549157b2546c10c30674a",
-  "SPI": {
-    "frames": 97,
-    "writes": 7346,
-    "all_stage_header_checksum_bytes_match_original": true
+  "scope": "Regular Board original-POR evidence; each experiment retains its own clocks, inputs and limits",
+  "latest": "audio_midi_continuation",
+  "cold_PLL": {
+    "scope": "Actual regular reference Board from digital POR with original firmware1.25; declared external inputs, clocks and functional NAND/GPIO topology",
+    "source_commit": "b703b9d548e4efdc1ac3555927fb2f3d5ed1ccd3",
+    "executable_sha256": "01646bcaf1748e5acdc10cb31c9e17adc84adaf94ee8ae6fc6d7a8a9faa45bf2",
+    "firmware_manifest": "downloads.json:Blofeld_Firmware_V1.25.zip",
+    "document_derived_boot_ROM_manifest": "dsp-control-reference.json:derived_reference",
+    "virtual_NAND_sha256": "a07de70065080ca045af30f68156a2a89dde4067679549157b2546c10c30674a",
+    "SPI": {
+      "frames": 97,
+      "writes": 7346,
+      "all_stage_header_checksum_bytes_match_original": true
+    },
+    "NAND": {
+      "pages": 107,
+      "output_bytes": 56496,
+      "original_source_bytes": 56238,
+      "declared_erased_tail_bytes": 258,
+      "commands_and_read_ends_checked": true,
+      "read_completion_microseconds": 15
+    },
+    "clocks": {
+      "MCU_oscillator_hz": 12000000,
+      "DSP_EXTAL_hz": 12000000,
+      "DSP_requested_stage_hz": 54000000,
+      "DSP_requested_runtime_hz": 216000000,
+      "common_timebase_hz": 1080000000,
+      "measured_hardware_clock": false
+    },
+    "prefix": {
+      "normalized_trace_bytes": 678667612,
+      "normalized_trace_rows": 6582586,
+      "sha256": "cd725712e415c236ad1084fe139a5cd0e9d0151ab0f45706c647caae92293bb2",
+      "only_common_time_fields_divided_by": 2
+    },
+    "frontier": {
+      "DSP_PC": "002ebb",
+      "MCU_PC": "869d",
+      "DSP_reference_periods": 3888514,
+      "MCU_operations": 2679384,
+      "reason": "ESAI generator requires explicit reference reset-edge timing at Y:ffff96",
+      "next_required_source": "Declared ESAI/DAX audio clock; exact half-period timebase required"
+    },
+    "audits": {
+      "doc/local/normal-board-start/r1/audit.json": "3242c7969e5b176d33875816e83a0710640820cb976b0e2b01477c080afb5f9d",
+      "doc/local/normal-board-start/r2/audit.json": "a13504f8387a173fa889a1c4fec826990882c73fe718c772d802f569bd4a9292",
+      "doc/local/normal-board-start/r3/audit.json": "775160d541803f24a7830d1f07b8d81b911b6e73b62d2e761567aefe2b8d28d2"
+    },
+    "limits": {
+      "separate_retired_CPU_byte_observer": false,
+      "all_resident_RAM_words_compared": false,
+      "normal_instrument_boot": false,
+      "normal_MIDI_audio_LCD_operation": false,
+      "update_recovery_qualified": false,
+      "physical_traffic": false,
+      "fuzz_execution": false
+    },
+    "sanitizers": [
+      "ASan",
+      "UBSan"
+    ]
   },
-  "NAND": {
-    "pages": 107,
-    "output_bytes": 56496,
-    "original_source_bytes": 56238,
-    "declared_erased_tail_bytes": 258,
-    "commands_and_read_ends_checked": true,
-    "read_completion_microseconds": 15
-  },
-  "clocks": {
-    "MCU_oscillator_hz": 12000000,
-    "DSP_EXTAL_hz": 12000000,
-    "DSP_requested_stage_hz": 54000000,
-    "DSP_requested_runtime_hz": 216000000,
-    "common_timebase_hz": 1080000000,
-    "measured_hardware_clock": false
-  },
-  "prefix": {
-    "normalized_trace_bytes": 678667612,
-    "normalized_trace_rows": 6582586,
-    "sha256": "cd725712e415c236ad1084fe139a5cd0e9d0151ab0f45706c647caae92293bb2",
-    "only_common_time_fields_divided_by": 2
-  },
-  "frontier": {
-    "DSP_PC": "002ebb",
-    "MCU_PC": "869d",
-    "DSP_reference_periods": 3888514,
-    "MCU_operations": 2679384,
-    "reason": "ESAI generator requires explicit reference reset-edge timing at Y:ffff96",
-    "next_required_source": "Declared ESAI/DAX audio clock; exact half-period timebase required"
-  },
-  "audits": {
-    "doc/local/normal-board-start/r1/audit.json": "3242c7969e5b176d33875816e83a0710640820cb976b0e2b01477c080afb5f9d",
-    "doc/local/normal-board-start/r2/audit.json": "a13504f8387a173fa889a1c4fec826990882c73fe718c772d802f569bd4a9292",
-    "doc/local/normal-board-start/r3/audit.json": "775160d541803f24a7830d1f07b8d81b911b6e73b62d2e761567aefe2b8d28d2"
-  },
-  "limits": {
-    "separate_retired_CPU_byte_observer": false,
-    "all_resident_RAM_words_compared": false,
-    "normal_instrument_boot": false,
-    "normal_MIDI_audio_LCD_operation": false,
-    "update_recovery_qualified": false,
-    "physical_traffic": false,
-    "fuzz_execution": false
-  },
-  "sanitizers": [
-    "ASan",
-    "UBSan"
-  ]
+  "audio_midi_continuation": {
+    "scope": "Actual regular Board from digital POR; unchanged original firmware1.25, explicit functional topology/clock/input hypotheses",
+    "source_commit": "6c91b3e98f4385585558ebd7c0e0bf0813cd9a91",
+    "executable_sha256": "16570de1b5fa543fcf54c3bc7e47a45deae217f1053f69bb3017b426628ca1cd",
+    "production_Board_sources_matched": 50,
+    "MCU_hz": 12000000,
+    "DSP_EXTAL_hz": 11289600,
+    "DSP_runtime_hz": 203212800,
+    "common_timebase_hz": 635040000000,
+    "audio_clock_hz": 11289600,
+    "audio_observations": 8133442,
+    "MIDI_idle_baud": 31250,
+    "MIDI_idle_observations": 11257,
+    "MIDI_data_frames": 0,
+    "NAND_image_sha256": "2eabcf7fdfc5740b30f5d7c43e537b9ff7b258204195d573183b237243e027dc",
+    "NAND_state": "Official Init copied to mutable A001; other records and107 boot pages unchanged",
+    "SPI_frames": 97,
+    "SPI_writes": 7346,
+    "exact_original_SPI_bytes": true,
+    "cold_NAND_pages": 107,
+    "cold_NAND_bytes": 56496,
+    "runtime_NAND_bytes": 27000,
+    "cold_NAND_completion_microseconds": 15,
+    "frontier": {
+      "DSP_PC": "002662",
+      "read": "X:ffffbf",
+      "F2_program_read": "P:002664",
+      "MCU_PC": "b752",
+      "reason": "GPIO configuration-bit test beside active DMA is not admitted",
+      "instruction": "BRCLR of GPIO configuration bit0; read footprint does not imply a whole-register MOVE"
+    },
+    "audits": {
+      "doc/local/normal-board-start/r4/audit.json": "d03a667f3c0ba028d26745d198bbf9726fb82de9750ee6a645c1a2cffb5cf56a",
+      "doc/local/normal-board-start/r4/runtime-pages-audit.json": "d4ff9fba0f5d5ee6656bbe3a6d0f0635357312b27fa7cd817401277c93eb78f4",
+      "doc/local/normal-board-start/r4/frontier.json": "7a9742d8fc7fd1a083f6aea1618e7a1225cbc9f2f9d8ea4a6fe5570426b08163",
+      "doc/local/normal-board-start/r4/production-source-proof.json": "7015534fb532eb6f2be2ce7c09a394ba4aac1cac17a525771f8427dacdcc2841"
+    },
+    "limits": {
+      "complete_instrument": false,
+      "PCM_capture": false,
+      "retired_CPU_byte_observer": false,
+      "resident_RAM_comparison": false,
+      "physical_clock_verified": false,
+      "physical_traffic": false,
+      "fuzz_execution": false
+    },
+    "NAND_output_bytes": 83496,
+    "NAND_output_matches_image": true
+  }
 }
