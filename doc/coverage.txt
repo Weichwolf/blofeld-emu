@@ -4031,3 +4031,17 @@ guard; 644 DMA words and 159 silent stereo frames are decoded. The diagnostic
 decoder control also reproduces. Normal instrument boot/audio remain pending;
 see own-dsp-nand-reference.json/native_ram_bit_candidate.
 See dsp-ram-rmw.txt.
+
+Functional NAND Ready capture: the board qualifies only the actual known
+R/B level at published NAND boundaries. Unknown power-on Ready stays unknown;
+repeated levels do not invent edges, rearm counters or acknowledge interrupts.
+Eight authored native cases cover both polarities/contracts and two timebases,
+independent CLK/2 counts, a genuine fast vector and foreground continuation;
+eight joint replays, an unknown-source guard and fresh-owner baseline also pass.
+Eleven affected groups pass per sanitizer (ASan/UBSan and separate TSan).
+The isolated original continuation preserves its cold prefix and all 18287
+loaded words, takes the genuine Timer1 vector and reaches an unknown initial
+NAND-page read. Both suffixes agree; the diagnostic control reproduces.
+646 DMA words decode to160 silent stereo frames. This supports requirements
+2/3/6, not complete instrument startup or calibrated silicon synchronization.
+See nand-board.txt and own-dsp-nand-reference.json/functional_ready_capture_candidate.

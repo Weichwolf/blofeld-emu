@@ -13,6 +13,26 @@ assumptions, not observations of a fitted part. Firmware correctness is judged
 as an instrument; physical part identification is not an acceptance gate.
 Unknown cells, invalid commands and missed deadlines remain visible failures.
 
+Ready also feeds Timer1's capture stage. The functional board observes the
+device's actual known R/B level at each published NAND boundary, including
+Busy caused by a native GPIO latch and Ready caused by its scheduled completion.
+This establishes the baseline before capture arming and delivers real selected
+edges afterward. Unknown power-on Ready remains unknown. Repeated levels cannot
+capture, acknowledge an IRQ or restart a halted counter. This contract does not
+claim a calibrated silicon synchronizer delay; the raw/synchronized distinction
+and all unknown-input guards remain in the standalone timer model.
+
+The authored nand_capture test uses native GPIO commands, both capture
+polarities, both bus contracts and 540/1080MHz timebases. It checks CLK/2 capture
+values independently, executes an actual two-word native interrupt vector,
+resumes its foreground and repeats a joint checkpoint continuation. The peer
+timebase test also checks fresh-owner capture baseline without a false edge.
+All eleven affected timer, NAND, checkpoint and audio-clock groups pass under
+ASan/UBSan and separate TSan with strict compilation and zero tidy findings.
+An isolated original-firmware continuation reaches the actual Timer1 vector
+and stops at unknown initial page 0x360; it emits initialization silence only.
+See own-dsp-nand-reference.json/functional_ready_capture_candidate.
+
 All interval conversions use the native owner's timebase. The new timebase test
 checks independently expected 54000/108000 tick power events at 540/1080MHz,
 unknown initial Ready, incorrect-event rejection, same-rate clones and atomic

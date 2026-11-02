@@ -8,6 +8,7 @@
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
+#include "dsp/dsp_timers.hpp"
 #include "dsp/own_dsp_machine.hpp"
 #include "dsp56300/core.hpp"
 #include "storage/nand.hpp"
@@ -238,7 +239,12 @@ struct NandPeer::Impl {
   }
 
   void publish() {
-    machine_.bus().timers().set_tio_drive(ready_timer, state_->device.device().ready());
+    auto &timers = machine_.bus().timers();
+    const auto ready = state_->device.device().ready();
+    timers.set_tio_drive(ready_timer, ready);
+    // Functional board sampling at the published NAND boundary. Only the
+    // device's actual known R/B level qualifies Timer1's capture input.
+    if (ready) { timers.observe_synchronized_tio(ready_timer, *ready); }
   }
 
   void drive(const std::uint64_t ticks) const {
@@ -353,7 +359,7 @@ struct NandPeer::Impl {
       }
     }
     state_->previous_re = re_n;
-    machine_.bus().timers().set_tio_drive(ready_timer, state_->device.device().ready());
+    publish();
   }
 
   OwnDspMachine &machine_;

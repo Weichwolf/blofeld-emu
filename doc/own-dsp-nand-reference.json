@@ -173,5 +173,29 @@
     "whole_goal_complete": false,
     "fuzzing": false,
     "physical_traffic": false
+  },
+  "functional_ready_capture_candidate": {
+    "scope": "Unmodified original cold loading and repeated native continuation with actual NAND Ready sampled at published board boundaries; complete instrument acceptance pending",
+    "execution_base_commit": "7e0ec62775fb24cfc12869ad9ccd391e65b0da73",
+    "nand_peer_source_sha256": "4e3cbbcbe42be010f165bb1ea4639fe8796090ad038e1d1d8efc5c1720c86c65",
+    "source_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+    "original_resident_words": 18287,
+    "cold_prefix_identical_to_native_ram_bit_candidate": true,
+    "original_timer1_vector_entry_verified": true,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "actual_dma_words": 646,
+    "decoded_stereo_pcm_frames": 160,
+    "nonzero_stereo_pcm_frames": 0,
+    "sample_rate_hz": 44100,
+    "next_runtime_limit": "Read of unknown initial NAND contents at page 0x360, column 0; virtual storage initialization remains a separate hypothesis",
+    "component_qualification": "Eleven scoped groups per sanitizer; eight native capture cases, eight joint replays, unknown-source guard and fresh-owner baseline",
+    "local_audit": "doc/local/nand-capture/original/audit.json",
+    "local_audit_sha256": "823acba71633eb0aa89ab89ed6c89e223df3512f5955561647b2a45e838d7338",
+    "physical_synchronizer_delay_qualified": false,
+    "instrument_audio_proven": false,
+    "whole_goal_complete": false,
+    "fuzzing": false,
+    "physical_traffic": false
   }
 }

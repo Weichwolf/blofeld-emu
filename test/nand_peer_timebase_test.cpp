@@ -63,6 +63,16 @@ void power(const Rate rate) {
   copy.before_native(rate.power_ticks);
   require(copy.detailed() == peer.detailed() && fresh.bus().timers().read(timer1, di) == di,
           "A fresh same-timebase peer restores actual protocol state and external pin knowledge");
+  constexpr unsigned capture = 0x65;
+  constexpr unsigned capture_flags = 0x300000;
+  fresh.bus().timers().write({.address = timer1 - 1, .value = 7});
+  fresh.bus().timers().write({.address = timer1, .value = capture});
+  fresh.bus().timers().advance_clk2(3);
+  copy.before_native(rate.power_ticks);
+  fresh.bus().timers().advance_clk2(1);
+  require(fresh.bus().timers().read(timer1, capture_flags) == 0 &&
+              fresh.bus().timers().read(timer1 - 3) == 0,
+          "A fresh Ready binding establishes capture baseline without inventing a new edge");
   const auto other = rate.hz == rates[0].hz ? rates[1].hz : rates[0].hz;
   OwnDspMachine incompatible(clocks(other));
   require(rejects([&] {
