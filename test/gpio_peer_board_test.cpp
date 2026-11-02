@@ -224,19 +224,29 @@ void route_ownership() {
     require(rejects([&] { const Fixture f(c); }).contains("GPIO peer"),
             "Two independent sources cannot silently own the same connected peer input");
   };
+  for (const auto port : {McuPort::q, McuPort::e, McuPort::j}) {
+    auto c = config(McuWriteOrder::before_mcu);
+    c.initial.push_back({.port = port, .drive = {.mask = 1}});
+    check(c);
+    c = config(McuWriteOrder::before_mcu);
+    c.events.push_back({.port = port, .drive = {.unknown = 1}});
+    check(c);
+    c = config(McuWriteOrder::before_mcu);
+    c.hreq = {.destination = port, .mask = 1};
+    check(c);
+    c = config(McuWriteOrder::before_mcu);
+    c.miso = {.destination = port, .mask = 1};
+    check(c);
+    c = config(McuWriteOrder::before_mcu);
+    c.loopback = {
+        .source = McuPort::p, .source_mask = 1, .destination = port, .destination_mask = 1};
+    check(c);
+  }
   auto c = config(McuWriteOrder::before_mcu);
-  c.initial.push_back({.port = McuPort::q, .drive = {.mask = 1}});
-  check(c);
-  c = config(McuWriteOrder::before_mcu);
-  c.events.push_back({.port = McuPort::e, .drive = {.unknown = 1}});
-  check(c);
-  c = config(McuWriteOrder::before_mcu);
-  c.hreq = {.destination = McuPort::e, .mask = 1};
-  check(c);
-  c = config(McuWriteOrder::before_mcu);
-  c.loopback = {
-      .source = McuPort::j, .source_mask = 1, .destination = McuPort::q, .destination_mask = 1};
-  check(c);
+  c.initial.push_back({.port = McuPort::j, .drive = {.mask = 2, .levels = 2}});
+  const Fixture other_j_pins(c);
+  require(!other_j_pins.board.status().faulted,
+          "Unrelated J input pins remain available beside the owned IRQA strobe");
 }
 
 void configuration(const std::filesystem::path &directory) {

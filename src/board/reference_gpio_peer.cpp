@@ -10,8 +10,8 @@
 namespace blofeld::reference {
 namespace {
 bool owned(const McuPort port, const unsigned mask) {
-  constexpr unsigned notification = 1;
-  return port == McuPort::q || (port == McuPort::e && (mask & notification) != 0);
+  constexpr unsigned signal = 1;
+  return port == McuPort::q || ((port == McuPort::e || port == McuPort::j) && (mask & signal) != 0);
 }
 }
 
@@ -29,7 +29,7 @@ void validate_gpio_peer(const Config &config) {
     const unsigned mask =
         static_cast<unsigned>(input.drive.mask) | input.drive.floating | input.drive.unknown;
     if (input.kind == InputKind::drive && owned(input.port, mask)) {
-      throw Fault("MCU/DSP GPIO peer owns Q and PE0; duplicate external input is unsupported");
+      throw Fault("MCU/DSP GPIO peer owns Q, J0 and PE0; duplicate external input is unsupported");
     }
   };
   for (const auto &input : config.initial) { check(input); }

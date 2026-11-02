@@ -107,8 +107,8 @@ Functional MCU/DSP GPIO peer
 Optional declared Q[7:0]<->C[7:0], J0->IRQA and DSP PE9->MCU PE0/XIRQ nets.
 Fields: hexadecimal idle data pull-down mask, notification pull none/up/down.
 Only actual chip outputs/biases cross each net; no protocol replies are supplied.
-Q and PE0 cannot share another input/return/loopback driver; other E pins remain
-available. Byte writes to MEBI/J/Q synchronize with the selected common-clock
+Q, J0 and PE0 cannot share another input/return/loopback driver; other E/J pins
+remain available. Byte writes to MEBI/J/Q synchronize with the selected common-clock
 write order. DSP effects publish return levels at their completion boundary.
 Unknown latches and conflicting drivers stay unknown. Native resets reconnect
 replacement MCU owners; coordinated Board restores rebuild both pad bindings.

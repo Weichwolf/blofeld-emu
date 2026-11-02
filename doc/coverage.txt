@@ -4164,3 +4164,14 @@ write orders. Five affected groups pass per ASan/UBSan and separate TSan;
 unchanged ELF evidence is reused. Topology/pulls remain explicit hypotheses;
 original-firmware normal instrument, MIDI/audio and storage/update acceptance
 remain open. See reference-board.txt and mcu_dsp_gpio_peer/gpio_peer_board tests.
+
+Regular Board original cold-start experiment (requirements 2/3/6): actual POR
+and native U0 assertion/release now reach 97 SPI frames with the GPIO peer and
+NAND connected. All header/stage/checksum bytes match original firmware;
+7346 SPI writes and 911423 DSP periods are observed. The 2m-operation budget
+ends during native Y-RAM clearing, before full firmware/NAND runtime or normal
+MIDI/audio/LCD operation. PHY/USB/T inputs, topology and clocks remain explicit
+reference hypotheses. Local audit: normal-board-start/r1/audit.json.
+Peer configuration now also rejects duplicate J0 sources, including SHI and
+loopback routes. Fifteen collision cases and unrelated J1 acceptance pass in
+the Board group under ASan/UBSan and separate TSan.
