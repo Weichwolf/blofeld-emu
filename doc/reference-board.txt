@@ -43,8 +43,9 @@ All six settings are required exactly once:
   pull-up and preserves other U inputs. An actual known MCU low must precede
   its release to input or high output; an initial high does not release reset.
   Configuration/data writes use their actual MCU bus boundary. Conflicting
-  sources, unknown levels and reset reassertion after release fail explicitly;
-  this option currently covers cold release only. Format2 declares mode5 and
+  sources and unknown levels fail explicitly. A later MCU low asserts hardware
+  reset again; high releases it through the same hold/recovery path. Existing
+  completed-native-boundary/alignment guards remain. Format2 declares mode5 and
   two reference recovery periods. The supported reset requires PINIT
   low; high is retained as an unsupported observation and fails. Release requires
   known SPI pads and deasserted SS. The DSP clock includes hold/recovery time;
@@ -124,7 +125,9 @@ Exact DSP inputs and shared-write ordering
 
 TIO indices are0/1; levels are high/low/unknown. raw changes the observed pad;
 synchronized also supplies a qualified synchronized level and requires known
-input. No pull, synchronized sample or timer result is invented.
+input. The last applied synchronized level remains observable across DSP
+reset, independently of future timed edges. Raw/unknown inputs do not acquire
+qualification. NAND Ready exclusively owns TIO1, including against MIDI routes.
 
 dsp-at timestamps increase strictly and execute at exact common ticks, including
 inside MCU periods. dsp-input-order selects input-before-dsp, dsp-before-input or
@@ -209,11 +212,14 @@ original component tests retain separate qualification. See coverage.txt for
 current evidence and unresolved boot, clocks, storage, USB/MIDI/audio and complete
 Desktop/Keyboard instrument requirements. No component result proves brick safety.
 
-MCU-driven cold release regression:
-  cmake --build --preset strict --target blofeld-reference-reset-release-test
-  ctest --preset strict -R '^reference_reset_release$' --output-on-failure
+MCU-driven reset and held-input regressions:
+  cmake --build --preset strict --target blofeld-reference-reset-release-test blofeld-reference-tio-hold-test
+  ctest --preset strict -R '^reference_(reset_release|tio_hold)$' --output-on-failure
 Use the thread preset for the separate TSan run. Authored native fixtures check
 14 release/POR cases over two timebases, exact CPU12 bus times, unknown pull
 conflicts, reset-latch initialization, source ownership and fresh-owner replay.
-These qualify the functional source; complete original boot and live reset
-reassertion are separate remaining requirements.
+Held-input tests add 16 reset/edge prefixes and 32 fresh-owner replay suffixes,
+both physical polarities, actual MCU cold/warm pulses and a real idle MIDI source.
+Raw/unknown guards and NAND/MIDI ownership conflicts remain explicit. These
+qualify authored functional cases; original instrument reset, interrupted NAND
+transactions, full boot and audio remain separate requirements.

@@ -38,7 +38,8 @@ void Board::prepare_dsp() {
       return input.kind == DspInputKind::tio && input.index == 1;
     };
     if (std::ranges::any_of(config_.dsp_initial, ready) ||
-        std::ranges::any_of(config_.dsp_events, ready)) {
+        std::ranges::any_of(config_.dsp_events, ready) ||
+        (config_.midi_dsp && config_.midi_dsp->index == 1)) {
       throw Fault("NAND Ready owns DSP timer1 input; a second input source is unsupported");
     }
     native_->dsp.bus().set_write_contract(DspWriteContract::functional_decode);
@@ -127,6 +128,7 @@ bool Board::timing_faulted() const {
 
 McuDspRuntime::CycleInputs Board::runtime_inputs() const {
   return [this] {
+    observe_held_dsp_tio();
     if (native_->nand) { native_->nand->before_native(native_->dsp.clock().elapsed_ticks()); }
     return DspDmaInputs{.timing = DspDmaTiming::reference_sampled_cycles,
                         .grant = config_.dma_grant};

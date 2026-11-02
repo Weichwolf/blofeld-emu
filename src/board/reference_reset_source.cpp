@@ -90,7 +90,16 @@ void Board::observe_u0_release() {
   }
   if ((sample.levels & reset_mask) == 0) {
     if (control_.release_epoch) {
-      throw Fault("MCU U0 DSP reset reassertion is not yet connected operation=assert" + context());
+      if (!config_.dsp.initial_reset) {
+        throw Fault("Missing MCU U0 DSP reset inputs operation=assert" + context());
+      }
+      try {
+        native_->runtime->begin_dsp_reset(config_.dsp.initial_reset.value());
+      } catch (const Fault &error) {
+        throw Fault("MCU U0 DSP reset operation=assert" + context() + ": " + error.what());
+      }
+      control_.release_epoch.reset();
+      control_.u0_asserted = false;
     }
     if (!control_.u0_asserted && execution_.trace != nullptr) {
       *execution_.trace << "DSP-U0-ASSERT" << context() << '\n';

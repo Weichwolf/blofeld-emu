@@ -337,6 +337,7 @@ private:
     std::optional<SquareClock> audio_clock;
     bool audio_clock_started = false;
     std::array<SerialPcmPins, 2> esai_inputs{};
+    std::array<std::optional<bool>, 2> held_synchronized_tio{};
     std::optional<SerialPcmReceiver> pcm;
     std::optional<SerialPcmStamp> pcm_stamp;
     std::optional<SerialPcmFrame> last_pcm;
@@ -404,6 +405,7 @@ private:
                          std::uint64_t core_hz);
   [[nodiscard]] std::uint64_t audio_core_hz() const;
   void apply_dsp(const DspInput &input);
+  void observe_held_dsp_tio() const;
   void trace_dsp_input(const DspInput &input, std::uint64_t at);
   void trace_dsp_midi(std::uint64_t at);
   void observe_sci_midi(std::uint64_t at);

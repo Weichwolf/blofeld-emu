@@ -5,6 +5,7 @@
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_timers.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <ostream>
@@ -35,6 +36,8 @@ void Board::apply_dsp(const DspInput &input) {
         if (input.synchronized && input.level.has_value()) {
           timers.observe_synchronized_tio(input.index, input.level.value());
         }
+        control_.held_synchronized_tio.at(input.index) =
+            input.synchronized ? input.level : std::nullopt;
         break;
       }
       case DspInputKind::esai:
@@ -49,6 +52,18 @@ void Board::apply_dsp(const DspInput &input) {
     throw Fault("Reference DSP " + std::string(kind) + " input write index=" +
                 std::to_string(input.index) + " mcu-pc=" + mcu_pc_context(native_->mcu) +
                 " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6) + ": " + error.what());
+  }
+}
+
+void Board::observe_held_dsp_tio() const {
+  // Peripheral RESET clears the synchronizer, not the external source. Reapply
+  // only its last qualified observation; a queued future MIDI edge is not a pad.
+  for (std::size_t index = 0; index < control_.held_synchronized_tio.size(); ++index) {
+    const auto level = control_.held_synchronized_tio.at(index);
+    if (level.has_value()) {
+      native_->dsp.bus().timers().observe_synchronized_tio(static_cast<unsigned>(index),
+                                                           level.value());
+    }
   }
 }
 

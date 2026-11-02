@@ -220,14 +220,22 @@ void guards() {
   require(reset_latch.board.status().held_reset &&
               reset_latch.trace.str().contains("DSP-U0-ASSERT at=0x0278"),
           "The defined zero PTU reset latch asserts reset when its direction becomes output");
-  for (const auto mode : {Mode::bias, Mode::reassert}) {
-    Fixture f(config(hz), mode, 0);
-    const auto fault = rejects([&] { steps(f.board, budget); });
-    require(f.board.status().faulted && fault.contains("at=0x0278") && fault.contains("mcu-pc=") &&
-                fault.contains("dsp-pc=") &&
-                fault.contains(mode == Mode::reassert ? "operation=assert" : "operation=read"),
-            "Opposing pulls and unsupported reassertion remain explicit");
-  }
+  Fixture biased(config(hz), Mode::bias, 0);
+  const auto fault = rejects([&] { steps(biased.board, budget); });
+  require(biased.board.status().faulted && fault.contains("at=0x0278") &&
+              fault.contains("mcu-pc=") && fault.contains("dsp-pc=") &&
+              fault.contains("operation=read"),
+          "Opposing pulls remain visible with native execution context");
+  Fixture reasserted(config(hz), Mode::reassert, 0);
+  steps(reasserted.board, budget);
+  const auto reset = reasserted.board.status();
+  constexpr unsigned boot_pc = 0xff0000;
+  require(reset.held_reset && reset.dsp.pc == boot_pc && reset.dsp_steps == 0 &&
+              reset.dsp_cycles > 0 && !reset.faulted,
+          "A second actual MCU low resets the running DSP and holds its boot PC");
+  const auto reset_trace = reasserted.trace.str();
+  require(reset_trace.find("DSP-U0-ASSERT") != reset_trace.rfind("DSP-U0-ASSERT"),
+          "Cold and warm MCU-driven assertions have separate actual trace boundaries");
   for (const unsigned kind : {0U, 1U, 2U, 3U}) {
     auto c = config(hz);
     if (kind == 0) { c.release_ticks = 1; }

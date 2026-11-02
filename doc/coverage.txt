@@ -4165,6 +4165,15 @@ unchanged ELF evidence is reused. Topology/pulls remain explicit hypotheses;
 original-firmware normal instrument, MIDI/audio and storage/update acceptance
 remain open. See reference-board.txt and mcu_dsp_gpio_peer/gpio_peer_board tests.
 
+Held external TIO source and MCU-driven DSP reset (requirements 2/3/6): the
+regular Board retains only last-applied qualified levels through peripheral
+reset. Actual U0 low/high can reset and restart the DSP using existing boundary
+and recovery guards. Authored tests cover 16 prefixes / 32 fresh-owner suffixes,
+both polarities, real idle MIDI and raw/unknown guards. NAND Ready rejects an
+implicit MIDI TIO1 writer. Five affected groups pass per ASan/UBSan and separate
+TSan (four exact-ELF reuses, six executions). Original live instrument reset and
+interrupted NAND safety remain open. Local proof: held-tio-runtime/qualified.json.
+
 Regular Board original cold-start experiment (requirements 2/3/6): actual POR
 and native U0 release with GPIO/NAND reach all 97 original SPI stage frames
 and 107 NAND pages. All 56496 NAND output bytes, native addresses and 15us
