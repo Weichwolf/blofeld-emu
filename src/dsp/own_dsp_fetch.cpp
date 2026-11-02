@@ -152,11 +152,12 @@ OwnDspFetchCycleResult OwnDspFetch::advance_dma_automatic(const DspDmaInputs inp
   const bool started = begin_automatic(
       timing == OwnDspAutomaticTiming::one_effect_per_cycle_write_priority_with_interrupts ||
       timing == OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts);
-  const auto pending = machine_.cpu_.pending_instruction();
-  const bool stale_context = in_flight_ && fetch_.view().omr != machine_.cpu_.registers().omr;
-  const bool hold_fetch = hold_program_fetch(timing, pending) || stale_context || repeated_ ||
-                          native_latch_ || interrupt_vector_;
-  auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch, pending);
+  const NativeSample sample{.regs = machine_.cpu_.registers(),
+                            .pending = machine_.cpu_.pending_instruction()};
+  const bool stale_context = in_flight_ && fetch_.view().omr != sample.regs.omr;
+  const bool hold_fetch = hold_program_fetch(timing, sample.pending) || stale_context ||
+                          repeated_ || native_latch_ || interrupt_vector_;
+  auto result = capture_cycle(inputs, in_flight_, false, true, hold_fetch, sample);
   result.instruction_started = started;
   if (result.native && result.native->retired) { synchronize(); }
   return result;
@@ -304,17 +305,18 @@ OwnDspFetch::native_overlap(const DspProgramFetchView &state,
       hex(access->target.address, 6) + " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6));
 }
 
-void OwnDspFetch::issue_pipeline(OwnDspFetchCycleResult &result, const bool requested) {
+void OwnDspFetch::observe_native_and_issue(OwnDspFetchCycleResult &result, const bool requested) {
   const auto updated = fetch_.view();
+  const bool observe_omr = result.native && result.native->fault.kind == dsp56300::FaultKind::none;
   const bool retired = result.native && result.native->retired;
-  if (!requested || result.dma.core_stall || retired ||
-      machine_.cpu_.fault().kind != dsp56300::FaultKind::none || updated.pending_address ||
-      updated.used >= updated.words.size() || native_fetch_ || native_latch_ || repeated_ ||
-      interrupt_vector_) {
-    return;
-  }
+  const bool issue = requested && !result.dma.core_stall && !retired &&
+                     machine_.cpu_.fault().kind == dsp56300::FaultKind::none &&
+                     !updated.pending_address && updated.used < updated.words.size() &&
+                     !native_fetch_ && !native_latch_ && !repeated_ && !interrupt_vector_;
+  if (!observe_omr && !issue) { return; }
   const auto after = machine_.cpu_.registers();
-  if (updated.omr == after.omr && (after.sr & cache_enable) == 0) {
+  if (observe_omr) { machine_.bus_.observe_omr(after.omr); }
+  if (issue && updated.omr == after.omr && (after.sr & cache_enable) == 0) {
     fetch_.issue();
     result.issued_address = fetch_.view().pending_address;
   }
@@ -326,19 +328,20 @@ OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
                                                   const bool issue_next,
                                                   const bool hold_fetch) {
   check_owner();
-  const auto pending = machine_.cpu_.pending_instruction();
-  return capture_cycle(inputs, admit_native, require_capture, issue_next, hold_fetch, pending);
+  const NativeSample sample{.regs = machine_.cpu_.registers(),
+                            .pending = machine_.cpu_.pending_instruction()};
+  return capture_cycle(inputs, admit_native, require_capture, issue_next, hold_fetch, sample);
 }
 
-OwnDspFetchCycleResult
-OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
-                           const bool admit_native,
-                           const bool require_capture,
-                           const bool issue_next,
-                           const bool hold_fetch,
-                           const std::optional<dsp56300::PendingInstruction> &pending) {
+OwnDspFetchCycleResult OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
+                                                  const bool admit_native,
+                                                  const bool require_capture,
+                                                  const bool issue_next,
+                                                  const bool hold_fetch,
+                                                  const NativeSample &sample) {
   check_owner();
-  const auto regs = machine_.cpu_.registers();
+  const auto &regs = sample.regs;
+  const auto &pending = sample.pending;
   check_sample_context(regs, pending.has_value(), hold_fetch);
   const auto state = fetch_.view();
   const auto context = [&regs] { return " pc=" + hex(regs.pc, 6) + " omr=" + hex(regs.omr, 6); };
@@ -382,12 +385,9 @@ OwnDspFetch::capture_cycle(const DspDmaInputs inputs,
       if (admit_native) {
         result.native_pc = pending->effect.pc;
         result.native = machine_.interrupts_.advance(pending->ticket);
-        if (result.native->fault.kind == dsp56300::FaultKind::none) {
-          machine_.bus_.observe_omr(machine_.cpu_.registers().omr);
-        }
       }
     }
-    issue_pipeline(result, issue_next);
+    observe_native_and_issue(result, issue_next);
     machine_.clock_.finish_dma_cycle(machine_.bus_, inputs.cycle, switch_was_pending);
     return result;
   } catch (const std::exception &error) {

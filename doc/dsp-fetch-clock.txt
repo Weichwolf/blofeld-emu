@@ -45,9 +45,10 @@ that setup is explicitly untimed. A stopped-CPU DMA request observation at the
 epoch is not an elapsed clock. Actual elapsed time retains reset hold/recovery,
 while completed reference-cycle and CLK2 totals begin at zero.
 
-Automatic cycles share one current native pending snapshot between fetch holding
-and effect admission. It stays local to that cycle; accepted I/O and CPU
-publications still execute natively.
+Automatic cycles share one current native register/pending sample between fetch
+holding and effect admission. Actual post-effect OMR observation and new F1
+eligibility share one fresh native sample. Both stay local to that cycle;
+accepted I/O and CPU publications still execute natively.
 Fetch eligibility checks precede otherwise unused register snapshots. Program
 write hazards still inspect issued and buffered addresses.
 

@@ -79,6 +79,11 @@ public:
   [[nodiscard]] OwnDspFetchCheckpoint checkpoint() const;
 
 private:
+  struct NativeSample {
+    dsp56300::Registers regs;
+    std::optional<dsp56300::PendingInstruction> pending;
+  };
+
   [[nodiscard]] static const OwnDspFetchCheckpoint::Storage &
   saved_state(const OwnDspFetchCheckpoint &checkpoint);
   void check_owner() const;
@@ -92,19 +97,18 @@ private:
   [[nodiscard]] std::optional<DspMemoryAccess>
   native_overlap(const DspProgramFetchView &state,
                  const dsp56300::PendingInstruction &pending) const;
-  void issue_pipeline(OwnDspFetchCycleResult &result, bool requested);
+  void observe_native_and_issue(OwnDspFetchCycleResult &result, bool requested);
   [[nodiscard]] OwnDspFetchCycleResult capture_cycle(DspDmaInputs inputs,
                                                      bool admit_native,
                                                      bool require_capture,
                                                      bool issue_next,
                                                      bool hold_fetch);
-  [[nodiscard]] OwnDspFetchCycleResult
-  capture_cycle(DspDmaInputs inputs,
-                bool admit_native,
-                bool require_capture,
-                bool issue_next,
-                bool hold_fetch,
-                const std::optional<dsp56300::PendingInstruction> &pending);
+  [[nodiscard]] OwnDspFetchCycleResult capture_cycle(DspDmaInputs inputs,
+                                                     bool admit_native,
+                                                     bool require_capture,
+                                                     bool issue_next,
+                                                     bool hold_fetch,
+                                                     const NativeSample &sample);
   [[nodiscard]] dsp56300::InstructionProgress admit(const DspFetchedInstruction &captured);
   [[nodiscard]] dsp56300::InstructionProgress begin_native();
   void finish_interrupt_vector();
