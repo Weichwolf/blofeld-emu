@@ -4166,12 +4166,15 @@ original-firmware normal instrument, MIDI/audio and storage/update acceptance
 remain open. See reference-board.txt and mcu_dsp_gpio_peer/gpio_peer_board tests.
 
 Regular Board original cold-start experiment (requirements 2/3/6): actual POR
-and native U0 assertion/release now reach 97 SPI frames with the GPIO peer and
-NAND connected. All header/stage/checksum bytes match original firmware;
-7346 SPI writes and 911423 DSP periods are observed. The 2m-operation budget
-ends during native Y-RAM clearing, before full firmware/NAND runtime or normal
-MIDI/audio/LCD operation. PHY/USB/T inputs, topology and clocks remain explicit
-reference hypotheses. Local audit: normal-board-start/r1/audit.json.
+and native U0 release with GPIO/NAND reach all 97 original SPI stage frames
+and 107 NAND pages. All 56496 NAND output bytes, native addresses and 15us
+completion deadlines match the declared image. At 1080MHz common timebase the
+original runtime PLL transition completes; the complete prior trace remains
+identical after common-time conversion (6582586 rows/678667612 bytes). The next
+stop is P:002ebb, missing ESAI reset-edge clock timing at Y:ffff96. PHY/USB/T
+inputs, topology and clocks remain explicit reference hypotheses. Normal
+instrument/MIDI/audio/LCD, full resident-RAM comparison and update/recovery
+remain open. See regular-board-start-reference.json for audit/input hashes.
 Peer configuration now also rejects duplicate J0 sources, including SHI and
 loopback routes. Fifteen collision cases and unrelated J1 acceptance pass in
 the Board group under ASan/UBSan and separate TSan.
