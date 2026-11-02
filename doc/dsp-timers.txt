@@ -10,9 +10,27 @@ Registers (X word addresses)
   Timer 2: TCSR ffff87, TLR ffff86, TCPR ffff85, TCR ffff84
   Shared prescaler: TPLR ffff83, TPCR ffff82
 TCR and TPCR are read-only; TLR is write-only. TCR/TPLR/TPCR reset to zero.
-TLR and TCPR reset content is undefined and remains unknown until supplied.
-Both hardware reset and peripheral RESET clear timer control/count/flags and
-restore undefined load/compare knowledge. External TIO observations survive.
+TLR and TCPR reset content is unspecified. The chip-only timer interface keeps
+it unknown until supplied. Hardware reset and peripheral RESET clear timer
+control/count/flags and restore that unknown load/compare state; external TIO
+observations survive. The functional virtual-device bus supplies the explicit
+Timer2 reset choice below, without changing the diagnostic timer component.
+
+Virtual-device reset choice
+DspBus with functional_decode selects TLR2=TCPR2=0 at actual hardware/peripheral
+reset. This is a concrete virtual instance, not a recovered silicon reset value.
+TE/count/flags retain their disabled zero reset state. Selecting the decoder
+does not rewrite running registers; later firmware writes replace the chosen
+values normally. Strict/internal-writable-storage diagnostics retain unknown
+TLR2/TCPR2. Timer0/1 and unobserved external inputs remain unknown in all profiles.
+The regular board selects the functional decoder before its actual DSP reset.
+
+own_dsp_reset executes authored native TCR2/TCPR2 reads and RESET, checks full
+CPU/flag state and genuine first-load/match behavior, restores to the same/fresh
+owner, and repeats hardware reset. Nine affected reset/clock/timer/NAND groups
+pass per sanitizer (ASan/UBSan and separate TSan), with zero format/tidy findings.
+Receipt: doc/local/timer2-integration/qualified.json. Instrument equivalence of
+the initial-state choice still needs the complete connected acceptance path.
 
 GPIO and input qualification
 Only timers 0/1 have TIO pins. TC=0 leaves the pins as GPIO independently of TE;
@@ -170,12 +188,11 @@ reaches Timer2 enable, then refuses an unknown TLR2 at X:ffff86 (native P:0001a7
 The firmware has supplied neither TLR2 nor TCPR2. Appendix C-25 leaves both
 reset values unspecified; this is distinct from an unsupported register access.
 A declared concrete initial state is a permissible virtual-device hypothesis,
-not a recovered silicon reset value. The production timer component retains
-unknown load/compare state. A declared TLR2=TCPR2=0 reset candidate passes
-independent counter/IRQ/guard tests and connected original startup through its
-first main-loop work. Both joint suffixes reach P:000271, where a GPIO output
-latch remains unknown. Their prior guest trace is unchanged through the old
-timer refusal. This frozen reference experiment does not qualify normal runtime
-integration or instrument equivalence of the reset choice. See
-own-dsp-nand-reference.json, timer2_reset_candidate, for the audit. Full
-instrument/MIDI/audio, storage and update/recovery remain open.
+not a recovered silicon reset value. The declared TLR2=TCPR2=0 reset candidate
+and functional GPIO preloads now pass connected original startup into block/
+voice service. Both joint suffixes consume page0x1220 and reach P:00043e,
+where the frontend refuses a DMA controller read beside F2 prefetch. The prior
+guest trace is unchanged through the old timer/GPIO refusals. This frozen
+reference experiment does not establish complete normal instrument operation.
+See own-dsp-nand-reference.json, functional_gpio_preload_candidate, for the audit.
+Full instrument/MIDI/audio, storage and update/recovery remain open.

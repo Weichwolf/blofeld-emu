@@ -133,6 +133,14 @@ void DspBus::reset_peripherals() {
   interrupts_.reset();
   shi_.reset();
   timers_.reset();
+  if (write_contract_ == DspWriteContract::functional_decode) {
+    // C-25 leaves these reset bits unspecified. Choose a concrete virtual
+    // instance; this is not a recovered silicon value or a guest transaction.
+    constexpr unsigned timer2_load = 0xffff86;
+    constexpr unsigned timer2_compare = 0xffff85;
+    timers_.write({.address = timer2_load, .value = 0});
+    timers_.write({.address = timer2_compare, .value = 0});
+  }
   dma_.reset();
   dax_.reset();
   for (auto &port : gpio_) { port.reset(); }

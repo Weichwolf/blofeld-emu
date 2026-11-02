@@ -131,6 +131,96 @@ void run() {
   retire(machine, step, boot_entry + 1);
 }
 
+constexpr unsigned timer2_control = 0xffff87;
+constexpr unsigned timer2_count = 0xffff84;
+constexpr unsigned timer2_compare = 0xffff85;
+constexpr unsigned timer2_load = 0xffff86;
+constexpr unsigned timer_match = 0x200000;
+constexpr unsigned timer_seed = 0x123;
+constexpr Word load_x0 = 0x44f000;       // FM MOVE X:ea,X0 with an absolute extension.
+constexpr Word reset_instruction = 0x84; // FM13-162 RESET.
+
+void reset_policy(const DspWriteContract contract) {
+  DspBus bus;
+  bus.set_write_contract(contract);
+  reject([&] { static_cast<void>(bus.timers().read(timer2_compare)); });
+  bus.reset_peripherals();
+  if (contract == DspWriteContract::functional_decode) {
+    require(bus.timers().read(timer2_compare) == 0 && bus.timers().read(timer2_control) == 0 &&
+                bus.timers().read(timer2_count) == 0,
+            "Functional virtual Timer2 resets to its chosen disabled zero instance");
+  } else {
+    reject([&] { static_cast<void>(bus.timers().read(timer2_compare)); });
+  }
+  constexpr unsigned timer0_compare = 0xffff8d;
+  constexpr unsigned timer1_compare = 0xffff89;
+  reject([&] { static_cast<void>(bus.timers().read(timer0_compare)); });
+  reject([&] { static_cast<void>(bus.timers().read(timer1_compare)); });
+  reject([&] { static_cast<void>(bus.timers().read(timer2_load)); });
+  bus.timers().write({.address = timer2_compare, .value = timer_seed});
+  bus.set_write_contract(contract);
+  require(bus.timers().read(timer2_compare) == timer_seed,
+          "Choosing a decoder cannot overwrite running firmware state");
+}
+
+void timer2_reset_runtime() {
+  OwnDspMachine machine({.extal_hz = extal_hz,
+                         .timebase_hz = timebase_hz,
+                         .switch_timing = DspClockSwitch::reference_instruction_boundary});
+  machine.bus().set_write_contract(DspWriteContract::functional_decode);
+  const std::array<Word, 6> program{
+      load_x0, timer2_count, reset_instruction, load_x0, timer2_compare, 0};
+  machine.bus().install_rom({.start = boot_entry, .words = program});
+  machine.begin_hardware_reset(pins());
+  finish_reset(machine);
+  auto &timers = machine.bus().timers();
+  timers.write({.address = timer2_control, .value = 1});
+  constexpr unsigned edges = 17;
+  timers.advance_clk2(edges);
+  require(timers.read(timer2_count) == edges - 1 &&
+              timers.read(timer2_control) == (1U | timer_match) &&
+              timers.interrupt_vectors().empty(),
+          "One zero preload plus sixteen increments sets a real match flag without enabling IRQs");
+  auto expected = machine.cpu().registers();
+  expected.pc += 2;
+  expected.x = (expected.x & ~std::uint64_t{word_mask}) | (edges - 1);
+  retire(machine, machine.begin_fetch(), expected.pc);
+  require(machine.cpu().registers() == expected,
+          "Native timer count read publishes the genuine count and preserves every CPU flag");
+  timers.write({.address = timer2_compare, .value = timer_seed});
+  timers.write({.address = timer2_load, .value = timer_seed});
+  const auto checkpoint = machine.checkpoint();
+  for (unsigned replay = 0; replay < 2; ++replay) {
+    OwnDspMachine fresh({.extal_hz = extal_hz,
+                         .timebase_hz = timebase_hz,
+                         .switch_timing = DspClockSwitch::reference_instruction_boundary});
+    auto &target = replay == 0 ? machine : fresh;
+    target.restore(checkpoint);
+    auto registers = expected;
+    ++registers.pc;
+    retire(target, target.begin_fetch(), registers.pc);
+    require(
+        target.cpu().registers() == registers && target.bus().timers().read(timer2_compare) == 0 &&
+            target.bus().timers().read(timer2_count) == 0 &&
+            target.bus().timers().read(timer2_control) == 0,
+        "Genuine RESET preserves CPU state while re-establishing the virtual timer on both owners");
+    registers.pc += 2;
+    registers.x &= ~std::uint64_t{word_mask};
+    retire(target, target.begin_fetch(), registers.pc);
+    require(target.cpu().registers() == registers,
+            "Native TCPR2 read after RESET observes the selected virtual reset value");
+    target.bus().timers().write({.address = timer2_control, .value = 1});
+    target.bus().timers().advance_clk2(1);
+    require(target.bus().timers().read(timer2_count) == 0,
+            "RESET also replaces the previous nonzero TLR2 for the next genuine first clock");
+  }
+  machine.begin_hardware_reset(pins());
+  finish_reset(machine);
+  require(machine.bus().timers().read(timer2_compare) == 0 &&
+              machine.bus().timers().read(timer2_control) == 0,
+          "A subsequent hardware reset retains the selected virtual-device profile");
+}
+
 void reset_during_register_write(const bool published) {
   OwnDspMachine machine({.extal_hz = extal_hz,
                          .timebase_hz = timebase_hz,
@@ -229,6 +319,12 @@ void reset_during_interrupt_entry(const bool fetched) {
 int main() {
   try {
     run();
+    for (const auto contract : {DspWriteContract::strict,
+                                DspWriteContract::internal_writable_storage,
+                                DspWriteContract::functional_decode}) {
+      reset_policy(contract);
+    }
+    timer2_reset_runtime();
     reset_during_register_write(false);
     reset_during_register_write(true);
     reset_during_interrupt_entry(false);

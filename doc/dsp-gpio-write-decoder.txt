@@ -72,4 +72,11 @@ unknown GPIO data, unsupported phases and program-fetch contention remain
 explicit. Neither DMA admission nor strict GPIO semantics changed.
 Component receipts: doc/local/gpio-preload/qualified.json
 SHA-256: 85b029ba87cb430bcfd67af35e3a5bf981a9b702434914e2c44ab382f739d0b3
-Connected original qualification of this preload change remains pending.
+A fresh connected original run now retires the previously refused PE9 BSET,
+consumes all528 bytes of page0x1220 and enters block/voice service. The entire
+prior guest trace is preserved through the old GPIO refusal. Both joint suffixes,
+MCU accounting, clocks and the diagnostic decoder control match;1460 DMA words
+yield363 silent frames. The next frontend limit is a DMA0 source-register read
+beside F2 prefetch at P:00043e. See own-dsp-nand-reference.json,
+functional_gpio_preload_candidate. This is a frozen reference runtime, with
+declared initial storage/reset state; full instrument acceptance remains open.

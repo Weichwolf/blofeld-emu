@@ -297,5 +297,47 @@
     "full_instrument_complete": false,
     "fuzzing": false,
     "physical_traffic": false
+  },
+  "functional_gpio_preload_candidate": {
+    "scope": "Unmodified original reset/loading and native block/voice continuation with functional GPIO preloads and declared virtual storage/reset state; instrument operation remains incomplete",
+    "initial_image_sha256": "a07de70065080ca045af30f68156a2a89dde4067679549157b2546c10c30674a",
+    "initial_image_bytes": 139460644,
+    "total_nand_pages": 131072,
+    "prior_page_records_preserved": 1134,
+    "additional_pages_explicitly_erased": 129938,
+    "block_flags_unchanged": true,
+    "new_erased_pages_actually_read": [
+      4640
+    ],
+    "new_erased_page_reads_and_stores": 528,
+    "total_runtime_nand_reads_and_stores": 10104,
+    "native_parameter_restores": 16,
+    "first_chain_gpio_bset_retired": true,
+    "prior_guest_trace_preserved_through_gpio_refusal": true,
+    "cold_prefix_unchanged": true,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "actual_dma_words": 1460,
+    "silent_stereo_frames": 363,
+    "next_runtime_limit": "F2/native overlap at P:00043e reading DMA0 source register X:ffffef, prefetch P:00043f",
+    "local_audit": "doc/local/virtual-flash-erased/audit.json",
+    "local_audit_sha256": "c796008401fa66b251d2ff27adf6081c8974d0a9306d3c3653ec6bdb7c0d7d78",
+    "manufacturer_factory_image_claim": false,
+    "instrument_audio_proven": false,
+    "whole_goal_complete": false,
+    "fuzzing": false,
+    "physical_traffic": false
+  },
+  "functional_timer_reset_integration": {
+    "scope": "Regular functional bus reset establishes the explicit virtual TLR2/TCPR2 zero choice; diagnostic profiles and other unknown state preserved",
+    "component_qualification": "doc/local/timer2-integration/qualified.json",
+    "component_qualification_sha256": "8eedb0e71ad03dd5402ebaa36acca7432da7bb519429dd138c693c7ee86e2221",
+    "groups_per_sanitizer": 9,
+    "native_reads_and_reset_checked": true,
+    "hardware_and_peripheral_reset_checked": true,
+    "same_and_fresh_owner_checked": true,
+    "decoder_selection_does_not_rewrite_live_state": true,
+    "whole_original_regular_runtime_qualified": false,
+    "whole_goal_complete": false
   }
 }

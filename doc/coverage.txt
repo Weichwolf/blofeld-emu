@@ -4108,3 +4108,18 @@ preloads without driving inputs or supplying external values. 222 preload
 cases, six native bit cases, 16 native setup streams and seven affected groups
 per sanitizer qualify; connected original qualification of that change remains
 pending. See dsp-gpio-write-decoder.txt and own-dsp-nand-reference.json.
+
+Functional reset and block/voice continuation (requirements 2/3/6): the regular
+functional bus now establishes the declared zero TLR2/TCPR2 initial state on
+hardware/peripheral reset. Real native timer reads/RESET, full CPU/flags and
+same/fresh-owner/hardware-reset continuation pass; nine affected groups qualify
+per sanitizer. Diagnostic profiles and unknown Timer0/1/input state remain.
+The connected frozen original with GPIO preloads also passes the prior PE9
+refusal, reads/stores all 528 bytes of declared erased page0x1220, and enters
+block/voice service. Both joint suffixes and the old-decoder control match;
+10104 runtime NAND reads/stores and 1460 DMA words/363 silent frames are checked.
+Its next limit is the frontend refusing a DMA0 source-register read beside F2
+prefetch at P:00043e. All 1134 earlier NAND records remain byte-identical; the
+other previously absent pages are explicitly erased, not recovered factory
+metadata. Full normal instrument/USB/MIDI/audio/storage/update acceptance remains
+open. See dsp-timers.txt and own-dsp-nand-reference.json for scope and audit pins.
