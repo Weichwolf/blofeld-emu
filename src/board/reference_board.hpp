@@ -9,6 +9,8 @@
 #include "board/nand_peer.hpp"
 #include "board/reference_square_clock.hpp"
 #include "common/bus.hpp"
+#include "display/lcd_image.hpp"
+#include "display/st7565_parallel.hpp"
 #include "dsp/dsp_dma.hpp"
 #include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -143,6 +145,11 @@ struct NandConnection {
   NandReadContinuation continuation = NandReadContinuation::unqualified;
 };
 
+// Declared peripheral POR source; first native pad observation at/after release wins.
+struct LcdConnection {
+  std::uint64_t reset_release_ticks = 0;
+};
+
 struct Config {
   McuRunContract mcu;
   DspRunClockInputs dsp_clock;
@@ -152,6 +159,7 @@ struct Config {
   std::optional<NandConnection> nand;
   std::optional<McuDspGpioWiring> gpio_peer;
   bool mcu_u0_release = false;
+  std::optional<LcdConnection> lcd_parallel;
   std::uint64_t release_ticks = 0;
   std::uint64_t operations = 0;
   std::uint8_t select_n = 0;
@@ -181,6 +189,7 @@ struct Config {
 [[nodiscard]] DspRunClockInputs dsp_clock_inputs(const Config &config);
 void validate_returns(const Config &config);
 void validate_gpio_peer(const Config &config);
+void validate_lcd(const Config &config);
 void validate_midi(const Config &config);
 void validate_dsp_midi(const Config &config);
 
@@ -252,6 +261,7 @@ struct Status {
   std::uint64_t frames = 0;
   std::uint64_t ties = 0;
   std::uint64_t ordered_pairs = 0;
+  std::array<std::uint64_t, 3> lcd_cycles{};
   std::size_t next_event = 0;
   std::size_t next_dsp_event = 0;
   std::array<std::uint64_t, 2> next_esai_edge{};
@@ -297,6 +307,8 @@ public:
   void attach_pcm_output(PcmFrameSink &sink);
   // Non-real-time input admission at an inactive native MCU operation boundary.
   void poll_usb(UsbipRuntime &runtime);
+  // Read-only host capture; unknown pixels retain their knownness.
+  [[nodiscard]] std::optional<LcdImage> display_image(LcdPanel panel) const;
   [[nodiscard]] Checkpoint checkpoint() const;
   // Strong exception guarantee; restores native owners and all wiring together.
   void restore(const Checkpoint &checkpoint);
@@ -317,6 +329,9 @@ private:
   class Busy;
 
   struct Control {
+    std::optional<St7565Parallel> lcd;
+    std::uint64_t lcd_epoch = 0;
+    std::array<std::uint64_t, 3> lcd_cycles{};
     SpiInputs previous;
     ExecutionContext context;
     std::optional<std::uint64_t> return_boundary;
@@ -362,6 +377,10 @@ private:
   void require_healthy() const;
   void attach(Owners &owners);
   void prepare_dsp();
+  void prepare_lcd();
+  void observe_lcd(unsigned address);
+  void observe_lcd_epoch();
+  [[nodiscard]] LcdHostPins lcd_pins() const;
   void connect_runtime();
   [[nodiscard]] Outcome finish_branch(const std::function<void(Board &)> &input = {});
   [[nodiscard]] Outcome run_replays();

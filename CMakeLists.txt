@@ -306,13 +306,13 @@ target_link_libraries(blofeld_host_midi_port PUBLIC blofeld_quality)
 add_library(blofeld_reference_board src/board/mcu_dsp_gpio_peer.cpp src/board/reference_gpio_peer.cpp
   src/board/reference_config.cpp src/board/reference_square_clock.cpp src/board/reference_audio_clock.cpp
   src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
-  src/board/reference_reset_source.cpp
+  src/board/reference_reset_source.cpp src/board/reference_lcd.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
   src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
 target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp_runtime blofeld_private_files
   blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp
-  blofeld_nand_peer blofeld_nand_store)
+  blofeld_nand_peer blofeld_nand_store blofeld_lcd_export)
 add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
 
@@ -4369,4 +4369,12 @@ if(BUILD_TESTING)
   add_test(NAME reference_tio_hold COMMAND blofeld-reference-tio-hold-test)
   set_tests_properties(reference_tio_hold PROPERTIES TIMEOUT 30)
   add_dependencies(quality blofeld-reference-tio-hold-test)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(blofeld-reference-lcd-test test/reference_lcd_test.cpp)
+  target_link_libraries(blofeld-reference-lcd-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_lcd COMMAND blofeld-reference-lcd-test)
+  set_tests_properties(reference_lcd PROPERTIES TIMEOUT 60)
+  add_dependencies(quality blofeld-reference-lcd-test)
 endif()

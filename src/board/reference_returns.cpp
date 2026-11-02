@@ -97,6 +97,7 @@ void Board::update_return(const std::optional<ReturnRoute> &route,
 
 void Board::update_wiring() {
   update_u0_drive();
+  observe_lcd_epoch();
   if (config_.hreq || config_.miso) {
     const auto outputs = native_->dsp.bus().shi().outputs();
     update_return(config_.hreq, outputs.request, control_.hreq_observed, "hreq");

@@ -116,6 +116,24 @@ replacement MCU owners; coordinated Board restores rebuild both pad bindings.
 This functional topology/pull choice is a hypothesis, not measured wiring or
 proof of original-firmware boot, MIDI, audio or complete instrument behavior.
 
+Optional LCD candidate
+
+  lcd-parallel st7565 reset-release 12000
+
+Declared routing: A[7:0] data; B7=/CS1, B6=CS2, B5=R/W, B0=A0, E4=E.
+The peripheral starts in explicit reset; release is sampled at the first native
+pad boundary at/after the common-tick deadline, including with E already high.
+This is a functional POR contract, not a recovered reset net or measured latency.
+Every MEBI write observes actual pads. The LCD exclusively owns external A data;
+unknown read bits remain active unknown drivers, so MCU pulls cannot invent FF.
+Controller RAM/holder/overlap and reset history restore with both native owners.
+Status.lcd_cycles counts commands, data writes and reads. display_image(panel)
+is read-only; it supplies no bus cycle. Host publication is separate work.
+Native tests cover 16 prefixes / 32 fresh-owner suffixes, nominal and actual POR,
+literal pixels/dummy reads, reset release during a held read, unknown/status
+faults and driver ownership. Six groups pass per ASan/UBSan and TSan. Complete
+original LCD boot and instrument reset remain unqualified.
+
 Exact DSP inputs and shared-write ordering
 
   dsp-input-order input-before-dsp 4

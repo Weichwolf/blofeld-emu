@@ -4201,6 +4201,14 @@ implicit MIDI TIO1 writer. Five affected groups pass per ASan/UBSan and separate
 TSan (four exact-ELF reuses, six executions). Original live instrument reset and
 interrupted NAND safety remain open. Local proof: held-tio-runtime/qualified.json.
 
+Integrated LCD candidate (requirements 2/3/6): opt-in regular Board routing now
+executes native MCU display cycles from a declared peripheral reset source.
+Six groups pass per ASan/UBSan and TSan, including 16 prefixes / 32 fresh-owner
+suffixes, independent pixels, dummy reads and an E-high reset-release/pull-up
+guard. Parsed configuration also reaches one actual cold reset period in both
+profiles. Host publication, original connected LCD boot and instrument reset
+remain open. Local proof: board-lcd-runtime/qualified.json.
+
 Regular Board original cold-start experiment (requirements 2/3/6): actual POR,
 native U0 and GPIO/NAND load 97 exact original SPI stage frames and 107 cold pages.
 The functional 11.2896 MHz DSP candidate now passes runtime PLL/audio setup with

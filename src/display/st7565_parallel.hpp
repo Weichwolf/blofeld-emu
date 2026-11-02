@@ -45,6 +45,8 @@ public:
 
   [[nodiscard]] const St7565 &controller() const { return controller_; }
 
+  [[nodiscard]] bool reset_active() const { return in_reset_; }
+
 private:
   static void validate(LcdHostPins pins);
   [[nodiscard]] static bool enabled(LcdHostPins pins);

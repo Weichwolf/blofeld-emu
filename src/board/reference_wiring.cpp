@@ -85,6 +85,7 @@ void Board::transition(const SpiInputs pins) {
 void Board::on_write(const BusEvent &event) {
   if (!event.write) { return; }
   update_wiring();
+  observe_lcd(event.address);
   if (execution_.trace != nullptr) {
     *execution_.trace << "WRITE cycle=" << native_->mcu.run_clock().bus_cycles()
                       << " address=" << hex(event.address) << " value=" << hex(event.value, 2)

@@ -55,6 +55,7 @@ Board::Board(const Config &config, const Execution &execution)
       native_(std::make_unique<Owners>(config_, execution_)) {
   validate_midi(config_);
   validate_gpio_peer(config_);
+  validate_lcd(config_);
   validate_u0_release();
   const auto common = common_hz();
   const auto local = native_->mcu.run_clock().timebase_hz();
@@ -93,6 +94,7 @@ Board::Board(const Config &config, const Execution &execution)
     control_.recording = PcmRecording(config.pcm->format, execution.audio->maximum_frames);
   }
   for (const auto &entry : config.initial) { apply(entry); }
+  prepare_lcd();
   connect_runtime();
   if (config_.gpio_peer) {
     native_->gpio_peer =
@@ -182,6 +184,7 @@ void Board::boundary() {
          config_.events[control_.next_event].ticks <= ticks()) {
     const auto &event = config_.events[control_.next_event];
     apply(event);
+    observe_lcd(0);
     update_wiring();
     if (execution_.trace != nullptr) {
       *execution_.trace << "INPUT requested=" << event.ticks << " actual=" << ticks()
