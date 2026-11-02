@@ -15,31 +15,39 @@ establish that all persistent NAND, ROM, wavetable, sample or device-identity
 contents required by the original hardware are available.
 
 The separate Keyboard Controller 1.4 archive is not a main 1.25 image. Its four
-transfer bodies, additional short messages and two HC12 helper objects are
-identity-pinned in keyboard-update-reference.json. The original DSP decoder can
-execute the four isolated transfers (keyboard-update.txt). The external
-controller image/architecture, short-message effects, helper execution and
-keyboard scanning/update/recovery remain unqualified; no successful controller
-is substituted.
+transfers, short messages and HC12 helpers are pinned in keyboard-update-reference.json.
+Original-routine and HCS08 core/peripheral fixtures support reconstruction; the
+complete controller connected to normal Keyboard startup, scanning and update/
+recovery remains unqualified. See coverage.txt and function-acceptance.tsv.
+
+The main 1.25 ZIP also supplies sixteen 528-byte secondary pages for MCU RAM
+overlays. They are a separate update transfer, not part of the resident 32 KiB
+MCU image or the DSP record stream. Its header names NAND first page0x380;
+all 8448 bytes have a verified object checksum. Each page additionally matches
+the resident MCU's per-page checksum table. Page 15 supplies the startup logo;
+other pages supply instrument views/functions. See secondary-pages-reference.json.
+A virtual image initialized only from DSP records can therefore produce audio
+while still lacking code/data needed for the normal display. Declared erased
+secondary pages are not a complete installed 1.25 state.
 
 Static inspection also identifies a 94-word (282-byte) DSP first stage embedded
 in the MCU image. Its transfer header specifies P:0x6a and matches the documented
 DSP56371 SHI bootstrap framing. This is separate from the 127 runtime records.
 The stage appears to read further records through a GPIO NAND interface.
-The native coupling fixture connects the original MCU sender to the documented
-partial DSP SPI ROM and reaches the mapped RAM-clear frontier (coupled-boot.txt).
-NAND loading, measured timing, complete persistent contents and verified board
-wiring remain unresolved. Detailed extracted code remains private.
-
-The current native MCU executor starts the original reset vector and stops at
-an unmodeled input port. Complete boot, DSP handoff, MIDI/audio and real-device
-equivalence are not established. See coverage.txt for the full acceptance scope.
+The current regular Board runs the original MCU reset, SPI download, DSP/NAND
+loading and bounded MIDI-driven original DSP audio. Complete Desktop/Keyboard
+startup and every documented instrument function remain open. See coverage.txt
+for current evidence and explicit storage/clock/wiring hypotheses; the older
+isolated bootstrap frontier is not the current runtime limit.
 Private firmware analysis and execution artifacts belong under doc/local/.
 
 Reproduce locally:
   python3 tools/references.py --fetch
   python3 tools/extract_runtime.py doc/Blofeld_Firmware_V1.25.zip --output doc/local/runtime-1.25
-  cmake --build build/strict --target quality
+  cmake --build --preset strict --target blofeld-headless
+
+Scope runtime validation to the behavior changed; do not rerun every test for
+a reference-layout correction. No fuzzing is automatic.
 
 All reference contents retain their original terms and remain outside the
 emulator's GPL-3.0-only license. Only our original implementation is published.

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "scope": "Static original1.25 secondary-page source identity; connected startup and complete updater execution not qualified",
+  "official_firmware_zip_sha256": "095c760a576dcb04fe3e379bed1b95a0360002295ab42b29e3335a39514f0c72",
+  "secondary_payload_bytes": 8448,
+  "secondary_payload_sha256": "6e3bbd97e1d1a0578c579eabbcf0002fed7847b9d769c228a4d7f628a77ae9a8",
+  "first_NAND_page": 896,
+  "page_count": 16,
+  "bytes_per_page": 528,
+  "all_page_checksums_match_original_MCU_table": true,
+  "private_offline_audit_sha256": "17bcb40747c377d1aa522411b7ee30c421ac6b5c46644ef03890f4b5b60e7064",
+  "initial_storage_requirement": "Populate verified secondary pages as well as runtime DSP data; erased secondary pages are not a complete installed image",
+  "limits": [
+    "Source identity does not prove physical NAND contents or updater program/erase history",
+    "No executing firmware bytes, PC, RAM payload or live store were modified by this audit",
+    "Complete original update/recovery and both normal profiles remain pending"
+  ],
+  "fuzz": false,
+  "physical_traffic": false
+}
