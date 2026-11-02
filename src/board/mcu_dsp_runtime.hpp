@@ -89,10 +89,13 @@ public:
                 DspRuntimePeripheralEvents peripheral = {});
   McuDspRuntime(const McuDspRuntime &) = delete;
   McuDspRuntime &operator=(const McuDspRuntime &) = delete;
+  // Words require the one explicitly declared shared byte; other sub-writes
+  // cannot complete its observation. Unspecified shared accesses remain byte-only.
   void begin_cycle(Hc12BusCycle cycle,
                    bool shared_write,
                    const CycleInputs &inputs,
-                   const Observer &observer = {});
+                   const Observer &observer = {},
+                   std::optional<std::uint16_t> shared_byte = std::nullopt);
   void observe_write(const BusEvent &event,
                      const std::function<void()> &observe,
                      const CycleInputs &inputs,
@@ -140,6 +143,7 @@ private:
     bool waiting = false;
     bool offered = false;
     bool shared_write = false;
+    std::optional<std::uint16_t> shared_address;
     bool cop_deadline = false;
   };
 

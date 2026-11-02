@@ -22,7 +22,8 @@ SpiInputs Board::sample() const {
   const auto pins = native_->mcu.bus().observe_pads(McuPort::b, mask);
   if (pins.known != mask) {
     throw Fault("Unknown reference SPI pad read at 0x0001 mask=" + hex(mask, 2) +
-                " known=" + hex(pins.known, 2) + " mcu-pc=" + mcu_pc_context(native_->mcu) +
+                " known=" + hex(pins.known, 2) + " conflicts=" + hex(pins.conflicts, 2) +
+                " mcu-pc=" + mcu_pc_context(native_->mcu) +
                 " dsp-pc=" + hex(native_->dsp.cpu().registers().pc, 6));
   }
   return {.selected = (pins.levels & config_.select_n) == 0,
@@ -93,7 +94,7 @@ void Board::on_write(const BusEvent &event) {
   }
   constexpr unsigned port_b = 1;
   if (event.address != port_b && !u0_release_write(event.address) &&
-      !gpio_peer_write(event.address)) {
+      !gpio_peer_write(event.address) && !b_direction_write(event.address)) {
     check_signals();
     return;
   }
@@ -102,6 +103,8 @@ void Board::on_write(const BusEvent &event) {
       [&] {
         if (event.address == port_b) {
           observe_spi_write(event);
+        } else if (b_direction_write(event.address)) {
+          observe_b_direction();
         } else if (u0_release_write(event.address)) {
           observe_u0_release();
         }

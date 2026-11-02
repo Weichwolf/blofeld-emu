@@ -4226,11 +4226,23 @@ interrupted NAND safety remain open. Local proof: held-tio-runtime/qualified.jso
 
 Integrated LCD candidate (requirements 2/3/6): opt-in regular Board routing now
 executes native MCU display cycles from a declared peripheral reset source.
-Six groups pass per ASan/UBSan and TSan, including 16 prefixes / 32 fresh-owner
-suffixes, independent pixels, dummy reads and an E-high reset-release/pull-up
-guard. Parsed configuration also reaches one actual cold reset period in both
-profiles. Host publication, original connected LCD boot and instrument reset
-remain open. Local proof: board-lcd-runtime/qualified.json.
+Eleven affected groups pass per ASan/UBSan and TSan, including 32 prefixes /
+64 fresh-owner suffixes, independent pixels, dummy reads and an E-high reset-release/pull-up
+guard with strong and passive B inputs. Parsed configuration also reaches one
+actual cold reset period in both profiles. Original connected LCD rendering and
+instrument reset remain open. Local proof: board-b-pulls/qualified-r7.json.
+
+Passive B network (requirements 2/3/6): opt-in disjoint up/down masks resolve
+actual MCU outputs, internal bias and external drivers without hiding unknowns
+or conflicts. Real DDRB writes clock SPI; native word stores require exactly one
+declared shared byte. Authored tests pass 36 fresh-owner and 12 fault suffixes,
+literal SHI reception, both shared-write orders and declaration/delivery guards.
+Qualification SHA256 a30240875b9703917c1a6c947bdcf5e3fe5977c237bb1b7a10e8422273ae1d2f.
+An original-POR preflight reaches 100000 operations beyond the earlier unknown
+LCD selects with up82/down7d. Its read-only host observer exports a fresh reset/
+off frame; no LCD bus cycles or DSP instructions have occurred. This does not
+qualify original rendering or the later released-SPI frontier. Input/audit hashes
+are in regular-board-start-reference.json; pulls/reset remain functional hypotheses.
 
 Regular Board original cold-start experiment (requirements 2/3/6): actual POR,
 native U0 and GPIO/NAND load 107 cold pages. The functional 11.2896 MHz DSP
@@ -4242,9 +4254,9 @@ at MCU8211/DSP000c72 when startup releases B1..4 and SPI pads become unknown;
 it retires 5180314 DSP instructions. Its final SPI counters remain 97 frames /
 7346 writes; only the earlier traced run qualifies their exact byte sequence.
 A separate early-POR LCD preflight stops at unknown chip selects after external
-inputs change, before DSP release. Released SPI nets and early LCD input/idle
-levels need a declared functional board model. No MIDI data/PCM capture,
-resident-RAM comparison, full instrument or update/recovery claim follows.
+inputs change, before DSP release. The passive network above addresses early
+idle inputs; continuation through the later SPI release is unqualified. No MIDI
+data/PCM capture, resident-RAM comparison, full instrument or update/recovery claim follows.
 Clocks/topology remain hypotheses. The earlier 12 MHz PLL trace-prefix proof
 and each current audit/input hash remain in regular-board-start-reference.json.
 Peer configuration now also rejects duplicate J0 sources, including SHI and

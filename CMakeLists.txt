@@ -306,7 +306,7 @@ target_link_libraries(blofeld_host_midi_port PUBLIC blofeld_quality)
 add_library(blofeld_reference_board src/board/mcu_dsp_gpio_peer.cpp src/board/reference_gpio_peer.cpp
   src/board/reference_config.cpp src/board/reference_square_clock.cpp src/board/reference_audio_clock.cpp
   src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
-  src/board/reference_reset_source.cpp src/board/reference_lcd.cpp
+  src/board/reference_reset_source.cpp src/board/reference_lcd.cpp src/board/reference_b_pulls.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
   src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
@@ -4386,4 +4386,21 @@ if(BUILD_TESTING)
   add_dependencies(quality blofeld-gpio-configuration-bits-dma-test)
   add_test(NAME dsp_gpio_configuration_bits_dma COMMAND blofeld-gpio-configuration-bits-dma-test)
   set_tests_properties(dsp_gpio_configuration_bits_dma PROPERTIES TIMEOUT 300)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(blofeld-reference-b-pulls-test test/reference_b_pulls_test.cpp)
+  target_link_libraries(blofeld-reference-b-pulls-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_b_pulls COMMAND blofeld-reference-b-pulls-test
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/reference-b-pulls.bfboard")
+  set_tests_properties(reference_b_pulls PROPERTIES TIMEOUT 120)
+  add_dependencies(quality blofeld-reference-b-pulls-test)
+endif()
+
+if(BUILD_TESTING)
+  add_executable(blofeld-mcu-dsp-shared-word-test test/mcu_dsp_shared_word_test.cpp)
+  target_link_libraries(blofeld-mcu-dsp-shared-word-test PRIVATE blofeld_mcu_dsp_fixture)
+  add_test(NAME mcu_dsp_shared_word COMMAND blofeld-mcu-dsp-shared-word-test)
+  set_tests_properties(mcu_dsp_shared_word PROPERTIES TIMEOUT 60)
+  add_dependencies(quality blofeld-mcu-dsp-shared-word-test)
 endif()

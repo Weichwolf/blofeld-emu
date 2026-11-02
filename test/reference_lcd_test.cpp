@@ -192,11 +192,16 @@ void verify(const Fixture &f) {
           "Image capture cannot consume a native LCD read or alter either CPU");
 }
 
-void checkpoints() {
+void checkpoints(const bool passive = false) {
   constexpr std::array cuts{0U, 12U, 43U, 48U, 70U, 90U, 110U, 130U};
   for (const auto power_on : {false, true}) {
     for (const auto cut : cuts) {
-      Fixture f(config(power_on));
+      auto c = config(power_on);
+      if (passive) {
+        c.port_b_pulls = {.up = idle_b, .down = static_cast<std::uint8_t>(byte_mask & ~idle_b)};
+        c.initial.erase(c.initial.begin());
+      }
+      Fixture f(c);
       f.board.initialize();
       constexpr unsigned reset_periods = 195;
       const auto prefix_cut = power_on && cut >= 43 ? reset_periods + cut : cut;
@@ -261,6 +266,7 @@ void faults_and_ownership() {
 int main() {
   try {
     checkpoints();
+    checkpoints(true);
     faults_and_ownership();
     std::cout
         << "Regular Board native LCD cycles, POR, independent pixels and fresh restore passed\n";

@@ -159,6 +159,7 @@ void Board::restore(const Checkpoint &checkpoint) {
     replacement->gpio_peer =
         std::make_unique<McuDspGpioPeer>(replacement->mcu, replacement->dsp, *config_.gpio_peer);
   }
+  attach_b_pulls(*replacement);
   attach(*replacement);
   static_assert(std::is_nothrow_copy_assignable_v<Control>);
   native_.swap(replacement);

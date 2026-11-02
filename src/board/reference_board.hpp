@@ -160,6 +160,7 @@ struct Config {
   std::optional<McuDspGpioWiring> gpio_peer;
   bool mcu_u0_release = false;
   std::optional<LcdConnection> lcd_parallel;
+  std::optional<PinBiases> port_b_pulls;
   std::uint64_t release_ticks = 0;
   std::uint64_t operations = 0;
   std::uint8_t select_n = 0;
@@ -190,6 +191,7 @@ struct Config {
 void validate_returns(const Config &config);
 void validate_gpio_peer(const Config &config);
 void validate_lcd(const Config &config);
+void validate_b_pulls(const Config &config);
 void validate_midi(const Config &config);
 void validate_dsp_midi(const Config &config);
 
@@ -329,6 +331,7 @@ private:
   class Busy;
 
   struct Control {
+    PinDrive b_external;
     std::optional<St7565Parallel> lcd;
     std::uint64_t lcd_epoch = 0;
     std::array<std::uint64_t, 3> lcd_cycles{};
@@ -378,6 +381,11 @@ private:
   void attach(Owners &owners);
   void prepare_dsp();
   void prepare_lcd();
+  void attach_b_pulls(Owners &owners);
+  void set_b_drive(PinDrive drive);
+  [[nodiscard]] GpioPadSample sample_b_pulls(const Owners &owners, std::uint32_t mask) const;
+  [[nodiscard]] bool b_direction_write(unsigned address, unsigned size = 1) const;
+  void observe_b_direction();
   void observe_lcd(unsigned address);
   void observe_lcd_epoch();
   [[nodiscard]] LcdHostPins lcd_pins() const;

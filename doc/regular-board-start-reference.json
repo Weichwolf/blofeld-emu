@@ -166,5 +166,35 @@
     "audit": {
       "doc/local/normal-board-start/lcd-preflight-r1/audit.json": "c12b0adf7c582e3541d909ecf780560d2b36dd018d2318b7d89348d4843012eb"
     }
+  },
+  "early_LCD_passive_network": {
+    "scope": "Original digital POR with continuous LCD, passive B up82/down7d and read-only host observer; 100000-operation preflight",
+    "executable_sha256": "1f3ea57e0a178e2eb3687f3b43abbe76223881646e50c46dbc65928a886cf21f",
+    "observer_source_sha256": "c14ce542ac0d06a038af40589f0c7b0615523b69a71cd760a4d80bef088406e3",
+    "source_qualification_sha256": "a30240875b9703917c1a6c947bdcf5e3fe5977c237bb1b7a10e8422273ae1d2f",
+    "MCU_operations": 100000,
+    "common_ticks": 5542110504,
+    "MCU_PC": "b95e",
+    "DSP_held_reset": true,
+    "DSP_instructions": 0,
+    "LCD_cycles": [
+      0,
+      0,
+      0
+    ],
+    "published_frame": "Fresh native reset/off 128x64 image; no firmware drawing yet",
+    "published_frame_sha256": "64e8a33cebde468eb7682205af1da9e6ec90e586091b5df552116586704e675c",
+    "earlier_unknown_chip_select_frontier_passed": true,
+    "limits": {
+      "original_LCD_rendering": false,
+      "later_SPI_release_tested": false,
+      "complete_instrument": false,
+      "physical_traffic": false,
+      "fuzz_execution": false
+    },
+    "audits": {
+      "doc/local/normal-board-start/lcd-preflight-r2/audit.json": "bce3de2fd9d1430b52b8b76e599168433492a96e41500998d2fe202f44b8a9e7",
+      "doc/local/normal-board-start/lcd-preflight-r2/input-pins.json": "a04a75c7375bb349abc351d0299c307cefc9b0b46e27b0998d1913fe3a42aeb1"
+    }
   }
 }

@@ -459,6 +459,8 @@ bool timing_setting(Config &config, const std::string_view key, std::istringstre
     input_write_order(config, line);
   } else if (key == "gpio-peer") {
     config.gpio_peer = gpio_peer(line);
+  } else if (key == "port-b-pulls") {
+    config.port_b_pulls = {.up = byte(line), .down = byte(line)};
   } else if (key == "lcd-parallel") {
     literal(line, "st7565");
     literal(line, "reset-release");
@@ -623,6 +625,7 @@ Config parse(const std::string &text) {
   validate_returns(parser.result);
   validate_gpio_peer(parser.result);
   validate_lcd(parser.result);
+  validate_b_pulls(parser.result);
   validate_midi(parser.result);
   return parser.result;
 }

@@ -419,19 +419,25 @@ void McuDspRuntime::prepare_write(const CycleInputs &inputs, const Observer &obs
 void McuDspRuntime::begin_cycle(const Hc12BusCycle cycle,
                                 const bool shared_write,
                                 const CycleInputs &inputs,
-                                const Observer &observer) {
+                                const Observer &observer,
+                                const std::optional<std::uint16_t> shared_byte) {
   healthy();
   const Guard guard(*this);
   consumed();
-  if (state_.waiting || state_.shared_write ||
-      (shared_write &&
-       ((cycle.kind != 'w' && cycle.kind != 'W') || !cycle.address || cycle.size != 1))) {
-    throw Fault("MCU/DSP runtime requires a consumed byte-sized shared write or native cycle");
+  const auto address = cycle.address;
+  const bool byte = address && cycle.size == 1 && (!shared_byte || *shared_byte == *address);
+  const bool word = address && cycle.kind == 'W' && cycle.size == 2 && shared_byte &&
+                    *shared_byte >= *address && *shared_byte - *address < 2;
+  if (state_.waiting || state_.shared_write || (shared_byte && !shared_write) ||
+      (shared_write && ((cycle.kind != 'w' && cycle.kind != 'W') || (!byte && !word)))) {
+    throw Fault("MCU/DSP runtime requires a consumed byte-sized or declared word shared write");
   }
   cycle_ = cycle;
   offer_period(false);
   state_.offered = true;
   state_.shared_write = shared_write && !state_.cop_deadline;
+  state_.shared_address.reset();
+  if (state_.shared_write) { state_.shared_address = shared_byte ? shared_byte : address; }
   advance(!state_.shared_write, !state_.shared_write, inputs, observer);
   if (state_.shared_write) { prepare_write(inputs, observer); }
 }
@@ -444,7 +450,7 @@ void McuDspRuntime::observe_write(const BusEvent &event,
   const Guard guard(*this);
   consumed();
   if (!state_.offered || !state_.shared_write || !event.write || !cycle_.address ||
-      *cycle_.address != event.address || !observe) {
+      state_.shared_address != event.address || !observe) {
     throw Fault("MCU/DSP observation must match the consumed shared-write period");
   }
   const auto before = detail::mcu_boundary(mcu_);
@@ -468,6 +474,7 @@ void McuDspRuntime::observe_write(const BusEvent &event,
   }
   advance(true, true, inputs, observer);
   state_.shared_write = false;
+  state_.shared_address.reset();
 }
 
 void McuDspRuntime::finish_boundary() {

@@ -116,6 +116,26 @@ replacement MCU owners; coordinated Board restores rebuild both pad bindings.
 This functional topology/pull choice is a hypothesis, not measured wiring or
 proof of original-firmware boot, MIDI, audio or complete instrument behavior.
 
+Optional passive Port B network
+
+  port-b-pulls 82 7d
+
+Hexadecimal disjoint up/down masks declare weak bias for floating inputs. The
+example deselects SPI and LCD: B1=/SS and B7=/CS1 high, other B pins low. This is
+an explicit functional hypothesis, not measured wiring. Native outputs/internal
+biases and external drivers resolve together; strong/unknown conflicts cannot
+be hidden by pulls. SHI return or loopback destinations on B are rejected.
+External B state and fresh-owner pad bindings survive Board restore.
+Actual DDRB writes publish resolved SPI transitions in shared-write order,
+without incrementing PORTB-write counts. A native word store declares exactly
+one shared byte; only its actual write observation can consume that period.
+Undeclared words and foreign observations remain errors.
+Authored tests check literal reads, real 24-bit SHI reception through latch and
+direction writes, 36 fresh-owner suffixes, 12 unknown/conflict suffixes and
+configuration guards. Shared-word tests cover both write orders, four fresh
+suffixes and five declaration/delivery guards. Eleven affected groups pass per
+ASan/UBSan and separate TSan. Original connected startup remains separate.
+
 Optional LCD candidate
 
   lcd-parallel st7565 reset-release 12000
@@ -129,9 +149,9 @@ unknown read bits remain active unknown drivers, so MCU pulls cannot invent FF.
 Controller RAM/holder/overlap and reset history restore with both native owners.
 Status.lcd_cycles counts commands, data writes and reads. display_image(panel)
 is read-only; it supplies no bus cycle. Host publication is separate work.
-Native tests cover 16 prefixes / 32 fresh-owner suffixes, nominal and actual POR,
+Native tests cover 32 prefixes / 64 fresh-owner suffixes, nominal and actual POR,
 literal pixels/dummy reads, reset release during a held read, unknown/status
-faults and driver ownership. Six groups pass per ASan/UBSan and TSan. Complete
+faults and driver ownership, with strong or passive B inputs. Complete
 original LCD boot and instrument reset remain unqualified.
 
 Exact DSP inputs and shared-write ordering

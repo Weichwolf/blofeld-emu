@@ -7,6 +7,7 @@
 #include "common/bus.hpp"
 #include "mcu/hc12.hpp"
 #include "mcu/hc12_cycles.hpp"
+#include "mcu/hc12_registers.hpp"
 #include "mcu/mcu_bus.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "midi/midi_serial.hpp"
@@ -56,6 +57,7 @@ Board::Board(const Config &config, const Execution &execution)
   validate_midi(config_);
   validate_gpio_peer(config_);
   validate_lcd(config_);
+  validate_b_pulls(config_);
   validate_u0_release();
   const auto common = common_hz();
   const auto local = native_->mcu.run_clock().timebase_hz();
@@ -94,6 +96,7 @@ Board::Board(const Config &config, const Execution &execution)
     control_.recording = PcmRecording(config.pcm->format, execution.audio->maximum_frames);
   }
   for (const auto &entry : config.initial) { apply(entry); }
+  attach_b_pulls(*native_);
   prepare_lcd();
   connect_runtime();
   if (config_.gpio_peer) {
@@ -140,7 +143,9 @@ std::uint64_t Board::ticks() const {
 void Board::apply(const Input &input) {
   switch (input.kind) {
     case InputKind::drive:
-      if (config_.gpio_peer && input.port == McuPort::e) {
+      if (config_.port_b_pulls && input.port == McuPort::b) {
+        set_b_drive(input.drive);
+      } else if (config_.gpio_peer && input.port == McuPort::e) {
         constexpr std::uint8_t other_e_pins = 0xfe;
         native_->mcu.bus().update_pin_drive(input.port, other_e_pins, input.drive);
       } else {
@@ -208,11 +213,20 @@ void Board::on_cycle(const Hc12BusCycle cycle) {
   observe_midi(cycle.context);
   check_signals();
   constexpr unsigned port_b = 1;
-  const bool shared =
-      (cycle.kind == 'w' || cycle.kind == 'W') && cycle.address &&
-      ((*cycle.address <= port_b && port_b - *cycle.address < cycle.size) ||
-       u0_release_write(*cycle.address, cycle.size) || gpio_peer_write(*cycle.address, cycle.size));
-  native_->runtime->begin_cycle(cycle, shared, runtime_inputs(), runtime_observer());
+  const bool shared = (cycle.kind == 'w' || cycle.kind == 'W') && cycle.address &&
+                      ((*cycle.address <= port_b && port_b - *cycle.address < cycle.size) ||
+                       u0_release_write(*cycle.address, cycle.size) ||
+                       gpio_peer_write(*cycle.address, cycle.size) ||
+                       b_direction_write(*cycle.address, cycle.size));
+  std::optional<std::uint16_t> shared_byte;
+  if (shared && config_.port_b_pulls && cycle.size == 2 && cycle.address) {
+    if (b_direction_write(*cycle.address, cycle.size)) {
+      shared_byte = hc12::ddrb;
+    } else if (*cycle.address <= port_b && port_b - *cycle.address < cycle.size) {
+      shared_byte = port_b;
+    }
+  }
+  native_->runtime->begin_cycle(cycle, shared, runtime_inputs(), runtime_observer(), shared_byte);
   update_wiring();
 }
 
