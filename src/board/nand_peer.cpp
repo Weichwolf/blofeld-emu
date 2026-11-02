@@ -305,6 +305,16 @@ struct NandPeer::Impl {
               << " reference-tRB=0ns\n";
   }
 
+  [[nodiscard]] unsigned decode_controls(const unsigned controls) const {
+    const auto outputs = machine_.bus().gpio(DspPort::c).outputs().mask & data_mask;
+    if (state_->decoder.contract() == NandBusContract::functional_transactions && outputs != 0 &&
+        outputs != data_mask) {
+      throw Fault("Unqualified NAND shared-bus owner operation=observe: partial GPIO output mask=" +
+                  hex(outputs, 3));
+    }
+    return state_->decoder.observe(controls, outputs == data_mask);
+  }
+
   void observe(const std::uint64_t ticks) {
     const auto controls = machine_.bus().gpio(DspPort::c).observe_pads(control_mask);
     if (controls.known != control_mask) {
@@ -326,7 +336,7 @@ struct NandPeer::Impl {
       state_->connected = true;
     }
     const bool was_neutral = state_->decoder.neutral();
-    const auto logical = state_->decoder.observe(controls.levels);
+    const auto logical = decode_controls(controls.levels);
     if (was_neutral != state_->decoder.neutral()) {
       std::cerr << "NAND_FUNCTIONAL_BUS ticks=" << ticks << " pc=" << hex(state_->context.pc, 6)
                 << " raw=" << hex(controls.levels, 3) << " logical=" << hex(logical, 3)

@@ -72,6 +72,42 @@ void transition_table() {
           "Unmodeled control bits cannot mutate decoder state");
 }
 
+void host_ownership() {
+  NandBusDecode decoder(NandBusContract::functional_transactions);
+  static_cast<void>(decoder.observe(inactive));
+  static_cast<void>(decoder.observe(0x200));
+  require(decoder.observe(0x200, true) == inactive && decoder.neutral(),
+          "Declared host GPIO output releases a NAND read independently of raw strobes");
+  constexpr unsigned modes = 16;
+  constexpr unsigned shift = 8;
+  for (unsigned mode = 0; mode < modes; ++mode) {
+    require(decoder.observe(mode << shift, true) == inactive && decoder.neutral(),
+            "Every retained host qualifier/strobe word stays logically inactive for NAND");
+  }
+  for (const unsigned raw : {0x200U, 0x100U, 0U}) {
+    require(decoder.observe(raw, false) == inactive && decoder.neutral(),
+            "Host release with active or neutral raw strobes cannot start a NAND transfer");
+  }
+  const auto saved = decoder;
+  auto copy = saved;
+  require(copy.observe(0x200) == inactive && copy.neutral(),
+          "A copied paused decoder retains bus ownership until an inactive phase");
+  require(copy.observe(inactive) == inactive && !copy.neutral() && copy.observe(0x200) == 0x200,
+          "Only actual inactive controls arm the next ordinary read");
+  NandBusDecode write(NandBusContract::functional_transactions);
+  static_cast<void>(write.observe(0x100));
+  const auto before = write;
+  require(rejects([&] { static_cast<void>(write.observe(0x100, true)); }).contains("unfinished") &&
+              write == before,
+          "Host ownership cannot truncate an active NAND write or mutate refused decoder state");
+  require(rejects([&] { static_cast<void>(decoder.observe(0x1000, true)); }).contains("mask") &&
+              decoder == saved,
+          "Unknown controls remain errors even while the host owns the bus");
+  NandBusDecode strict(NandBusContract::ordered_pins);
+  require(strict.observe(0x200, true) == 0x200 && !strict.neutral(),
+          "Ordered pin fixtures retain their literal bus observations");
+}
+
 Nand device() {
   NandArray cells;
   constexpr std::array<std::uint8_t, 1> data{sample_value};
@@ -195,6 +231,7 @@ void strict_control() {
 int main() {
   try {
     transition_table();
+    host_ownership();
     peer_and_restore();
     strict_control();
     std::cout

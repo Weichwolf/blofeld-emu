@@ -3,6 +3,7 @@
 #include "board/nand_peer.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
+#include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_peripheral_calendar.hpp"
 #include "dsp/dsp_run_clock.hpp"
 #include "dsp/own_dsp_machine.hpp"
@@ -59,9 +60,12 @@ Nand image(const NandReadContinuation part) {
   return {result, part};
 }
 
+enum class HostDirection : std::uint8_t { full_byte, partial_byte };
+
 class Program {
 public:
-  explicit Program(const unsigned count) {
+  explicit Program(const unsigned count,
+                   const HostDirection host_direction = HostDirection::full_byte) {
     write(b_control, bus_value);
     write(c_function, input_functions);
     write(c_direction, control_outputs);
@@ -76,16 +80,26 @@ public:
     }
     markers_.active = pc();
     write(c_function, 0);
-    write(c_direction, all_c_outputs);
+    write(c_direction,
+          host_direction == HostDirection::full_byte ? all_c_outputs : control_outputs | 1U);
     write(c_data, host_command);
     markers_.neutral = pc();
     nops(release_wait);
     markers_.released = pc();
-    for (unsigned value = 0; value <= byte_mask; ++value) { write(c_data, value); }
+    for (unsigned value = 0; value <= byte_mask; ++value) { write(c_data, read_active | value); }
+    constexpr unsigned qualifiers = 16;
+    constexpr unsigned control_shift = 8;
+    for (unsigned controls = 0; controls < qualifiers; ++controls) {
+      write(c_data, (controls << control_shift) | host_command);
+    }
+    write(c_data, read_active | host_command);
     markers_.host_done = pc();
     write(c_function, input_functions);
     write(c_direction, control_outputs);
+    nops(release_wait);
+    markers_.host_input = pc();
     write(c_data, inactive);
+    markers_.armed = pc();
     if (count == Nand::page_bytes) {
       output();
       select_row(1);
@@ -101,7 +115,8 @@ public:
   void install(DspBus &bus) const { bus.install_rom({.start = boot, .words = words_}); }
 
   struct Markers {
-    unsigned active = 0, neutral = 0, released = 0, host_done = 0, stop = 0;
+    unsigned active = 0, neutral = 0, released = 0, host_done = 0, host_input = 0, armed = 0,
+             stop = 0;
   };
 
   [[nodiscard]] const Markers &markers() const { return markers_; }
@@ -155,8 +170,10 @@ private:
 };
 
 struct Fixture {
-  Fixture(const NandReadContinuation part, const unsigned count)
-      : program(count),
+  Fixture(const NandReadContinuation part,
+          const unsigned count,
+          const HostDirection host_direction = HostDirection::full_byte)
+      : program(count, host_direction),
         peer(machine, image(part), NandCellProfile{}, NandBusContract::functional_transactions) {
     program.install(machine.bus());
     runtime = std::make_unique<NandNativeRun>(
@@ -168,9 +185,10 @@ struct Fixture {
             .observe = [](std::uint64_t) { throw Fault("Inherited event remains pending"); }});
   }
 
-  void until(const unsigned target) const {
-    for (unsigned cycles = 0;; ++cycles) {
-      require(cycles < maximum_cycles, "Authored read/host/read native suffix is bounded");
+  void until(const unsigned target) {
+    for (;;) {
+      require(native_cycles_ < maximum_cycles, "Authored read/host/read native suffix is bounded");
+      ++native_cycles_;
       const auto result = runtime->tick();
       if (result.native && result.native->retired && machine.cpu().registers().pc == target) {
         return;
@@ -182,6 +200,7 @@ struct Fixture {
   Program program;
   NandPeer peer;
   std::unique_ptr<NandNativeRun> runtime;
+  unsigned native_cycles_ = 0;
 };
 
 void neutral_endpoint(const Fixture &f, const unsigned count, const bool released) {
@@ -202,6 +221,16 @@ void finish(Fixture &f, const unsigned count) {
   neutral_endpoint(f, count, true);
   f.until(f.program.markers().host_done);
   neutral_endpoint(f, count, true);
+  require(f.machine.bus().gpio(DspPort::c).read(DspGpioRegister::data) ==
+              (read_active | host_command),
+          "Functional NAND isolation leaves the actual GPIO host word unchanged");
+  f.until(f.program.markers().host_input);
+  neutral_endpoint(f, count, true);
+  f.until(f.program.markers().armed);
+  const auto armed = f.peer.detailed();
+  require(!armed.neutral_bus && armed.page == 0 && armed.column == count &&
+              armed.base.ready == true && armed.base.pending == NandPending::none,
+          "Only a real inactive control phase arms NAND again, without a phantom byte or Busy");
   f.until(f.program.markers().stop);
   const auto state = f.peer.detailed();
   const bool full = count == Nand::page_bytes;
@@ -213,6 +242,22 @@ void finish(Fixture &f, const unsigned count) {
   require(f.runtime->state().next_external == inherited_tick &&
               f.runtime->state().external_events == 0,
           "Read/host/read keeps unrelated inherited events intact");
+}
+
+void partial_guard() {
+  Fixture f(NandReadContinuation::k9f1208_j, 1, HostDirection::partial_byte);
+  f.until(f.program.markers().active);
+  bool refused = false;
+  try {
+    f.until(f.program.markers().neutral);
+  } catch (const Fault &error) {
+    const std::string message = error.what();
+    refused = message.contains("partial GPIO output mask=0x001") &&
+              message.contains("Joined NAND pins at X:0xffffbd/Y:0xfffff5 pc=");
+  }
+  require(refused && f.peer.faulted(),
+          "An unqualified partial-byte owner fails visibly and quarantines its native peer");
+  std::cout << "PASS partial-byte owner refusal with native PC/address context\n";
 }
 
 void run(const NandReadContinuation part, const unsigned count) {
@@ -238,7 +283,7 @@ void run(const NandReadContinuation part, const unsigned count) {
               f.runtime->peripheral_state() == calendar_endpoint,
           "Joint active-read restore repeats complete native CPU, cell and calendar suffix");
   std::cout << "PASS read-host-read part=" << static_cast<unsigned>(part) << " consumed=" << count
-            << " host-bytes=256 replay=1\n";
+            << " host-bytes=256 host-control-words=16 retained-read-input-pause=1 replay=1\n";
 }
 }
 
@@ -247,6 +292,7 @@ int main() {
     for (const auto part : {NandReadContinuation::k9f1208_j, NandReadContinuation::k9f1208_p}) {
       for (const auto count : {1U, Nand::page_bytes}) { run(part, count); }
     }
+    partial_guard();
     std::cout
         << "Native J/P mid-page/final-byte read handoff, host ownership and restore passed.\n";
     return 0;

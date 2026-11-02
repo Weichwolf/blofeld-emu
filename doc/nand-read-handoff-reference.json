@@ -1,5 +1,5 @@
 {
-  "scope": "Functional selected-read release into a shared host phase; authored native J/P controls and affected Board regressions",
+  "scope": "Functional selected-read release and full-byte GPIO host ownership; authored native J/P controls and affected Board regressions",
   "profiles": [
     "ASan/UBSan",
     "TSan"
@@ -16,11 +16,11 @@
   "protocol_pause": "CE-style array read pause; no physical CE wiring assertion",
   "timing": "Existing output hold/release and Ready scheduler retained",
   "source_sha256": {
-    "src/board/nand_bus_decode.cpp": "2181aaeb7ab0c24bb94475169801c4dc0b5d92f246db08403a01f938a44cfa90",
-    "src/board/nand_bus_decode.hpp": "d910bc5767a2b94a5ec2100d2aa499d4d2becc331bf95d3d059367da8071c68b",
-    "src/board/nand_peer.cpp": "be6bc7148a09f554a3f32259e074b51e2b140de7687a54081431d606a31e97b6",
-    "test/nand_bus_decode_test.cpp": "3e8caf5eff3f509612fe6300719b03f6243b54ef9509347062af14e87ba3e4ea",
-    "test/nand_read_handoff_test.cpp": "de855f96f269f3bbb0d9ead31beba0748d57ded8241895bc5f8040be73bd7414"
+    "src/board/nand_bus_decode.cpp": "2f4f9472dd9bba934571c40d3fc38b5d918c62f7319a9f87040b9f01bf8d77fe",
+    "src/board/nand_bus_decode.hpp": "c24547d8f7f455d3d4a82b580a6e80c0d74d778cb5cf36d8135da1ca17980464",
+    "src/board/nand_peer.cpp": "d91da57bb11a3e76ec7c04bd7fac6665cceee2baea2d115966997f7e0159ce01",
+    "test/nand_bus_decode_test.cpp": "1a9dbe059260fc5817596bb9fb79dce7419516c2a1ce2e3ae8f7a2a2a05e8ea2",
+    "test/nand_read_handoff_test.cpp": "e796a4c1d500aae11f3f0560f35f90a4b30a222c6b9ed1547df06983603d1b12"
   },
   "evidence_sha256": {
     "doc/local/nand-read-handoff/canonical-build-r2.json": "d2c8f5efd5b23dcbc56951b1d08db1c82bb6de7f07b261cefaa8fd4b65be6432",
@@ -29,9 +29,15 @@
     "doc/local/nand-read-handoff/negative-native.json": "c0f88149096f77b9ed5bbfe1856dc916dc31aeb31816ca8d76abd16cdbf03362",
     "doc/local/nand-read-handoff/canonical-r1-stale-object-audit.json": "6691418876edcbc544ea46ad647de5cfef1a3336a1cc87fb50e2d8cc8aa5b14e",
     "doc/local/durable-cli-midi-audio/observed/frontier-audit.json": "f94384621557a3e60cdb4be87568b6e5967293266e613370b4e3c19baf8c7252",
-    "doc/local/durable-cli-midi-audio/r2/observed/frontier-audit.json": "1f36fd64cb94a1d3c2ec66dd060f3556d496ace0a3eedad957dd400138d42ae8"
+    "doc/local/durable-cli-midi-audio/r2/observed/frontier-audit.json": "1f36fd64cb94a1d3c2ec66dd060f3556d496ace0a3eedad957dd400138d42ae8",
+    "doc/local/nand-host-owner/build-r3.json": "40e422b601d25f66ce757a9d78d1c5423d8269e01b900dd1035a42cf9e88022a",
+    "doc/local/nand-host-owner/native-r3.json": "6ce6a5ccd81f0bf38aaf899017563f53554e5e140a6bb07912dacdecf0cc9795",
+    "doc/local/nand-host-owner/canonical-build-r1.json": "ca1e173f500ddb2462653474b5ea84678f229ab39c91f56eba16d13aad1b89f1",
+    "doc/local/nand-host-owner/runtime-link-review.json": "d41b616b55d1604ce4311585c738cdd5a1cd58a233992bef33ac3313be902d9d",
+    "doc/local/nand-host-owner/canonical-qualified-r1.json": "6ae73fa087c99efad96cb70f9ac67d9ba6a1a90342f155ca773c87dd4e1f39fc",
+    "doc/local/durable-cli-midi-audio/r3/observed/frontier-audit.json": "55b94816bf4d5b6ef4a95cb5ece483daf9a1f3fa3a4ff28c8628970297a58ee3"
   },
-  "discarded_compiler_generation": "r1 had a stale decoder object; detected before any native admission. Only r2 is qualified.",
+  "discarded_compiler_generation": "Prior read-handoff lane r1 had a stale decoder object and was rejected before native admission; its r2 qualified. The separate current host-owner canonical r1 is qualified.",
   "preceding_original_case": {
     "native_exit": 2,
     "completed_PCM_frames": 4439,
@@ -40,7 +46,7 @@
     "complete_LCD_observed": false,
     "both_stores_unchanged": true
   },
-  "original_continuation_on_corrected_decoder": "entry, array pause and timed output release observed; GPIO data-bit refusal before a later NAND transfer",
+  "original_continuation_on_corrected_decoder": "Prior read-release correction passed; original continuation on the ownership model remains pending",
   "complete_instrument": false,
   "physical_traffic": false,
   "fuzz": false,
@@ -58,5 +64,32 @@
     "final_WAV_published": false,
     "LCD_blank": true,
     "handoff_return_to_NAND_observed": false
+  },
+  "host_ownership": {
+    "selection": "Port C low byte fully configured as GPIO outputs",
+    "retained_active_strobes_isolated": true,
+    "retained_CLE_ALE_isolated": true,
+    "raw_GPIO_word_unchanged": true,
+    "resume": "GPIO output release followed by actual inactive NAND strobes",
+    "partial_byte_owner": "visible contextual refusal",
+    "unfinished_write_owner_entry": "refused before decoder state change",
+    "host_control_words_per_native_case": 16,
+    "native_partial_owner_refusals_per_profile": 1,
+    "decoder_checkpoint": "copied host-ownership state retains the inactive-entry requirement",
+    "physical_select_wiring_verified": false,
+    "original_continuation_on_owner_model": "pending"
+  },
+  "original_GPIO_continuation": {
+    "source_commit": "85a0688b848f15491d7bb89488937d03b504f9be",
+    "native_exit": 2,
+    "prior_NAND_observations_unchanged": 337223,
+    "additional_DSP_instructions": 41,
+    "additional_DSP_periods": 279,
+    "completed_PCM_frames": 4439,
+    "MIDI_wire_frames": 4,
+    "both_stores_unchanged": true,
+    "LCD_blank": true,
+    "final_WAV_published": false,
+    "next_refusal": "Retained high control bits during a genuine GPIO host response were decoded as a NAND read"
   }
 }

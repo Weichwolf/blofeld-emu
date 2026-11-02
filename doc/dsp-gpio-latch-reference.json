@@ -32,10 +32,11 @@
     "doc/local/gpio-rmw/canonical-build-r1.json": "a6c88c96a16a9915618ff48b4b63765a1b302e39c3a470c43d7d2f155928ce9a",
     "doc/local/gpio-rmw/canonical-qualified-r1.json": "1c9bb1c18f6828545c5f7520bc1f3554052af8b034d48b2a27cd0a43c65249ff",
     "doc/local/gpio-rmw/hypothesis.json": "2f77c37586da5871c13ccdcb6b0cab19279c76c945b73538d7372efe9632651d",
-    "doc/local/durable-cli-midi-audio/r2/observed/frontier-audit.json": "1f36fd64cb94a1d3c2ec66dd060f3556d496ace0a3eedad957dd400138d42ae8"
+    "doc/local/durable-cli-midi-audio/r2/observed/frontier-audit.json": "1f36fd64cb94a1d3c2ec66dd060f3556d496ace0a3eedad957dd400138d42ae8",
+    "doc/local/durable-cli-midi-audio/r3/observed/frontier-audit.json": "55b94816bf4d5b6ef4a95cb5ece483daf9a1f3fa3a4ff28c8628970297a58ee3"
   },
   "original_case_trigger": "Original GPIO notification releases its direction; later native data-bit operation was refused despite retained explicit output storage",
-  "original_continuation_on_new_storage_model": "pending",
+  "original_continuation_on_new_storage_model": "Former data-bit refusal passed; 41 more DSP instructions and 279 periods reach the next shared-bus ownership refusal. Full boot remains pending.",
   "complete_Desktop_Keyboard": false,
   "physical_traffic": false,
   "fuzz": false

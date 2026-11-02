@@ -142,14 +142,19 @@ Functional shared-bus transactions
 The regular Board selects NandBusContract::functional_transactions. Both-low
 RE/WE encodes a neutral shared-bus phase, interpreted as inactive strobes by
 the NAND transaction model. Raw GPIO values remain unchanged. A selected read
-may release directly into neutral; unfinished writes still fail. Exit requires inactive strobes before another transfer. Unknown controls
-still fail. An array read released into neutral uses the device's CE-style
+may release directly into neutral. The full Port C low byte configured as GPIO
+outputs also selects the host phase, isolating all retained RE/WE/CLE/ALE bits
+from NAND. Output release retains the pause until an actual inactive-strobe
+phase; raw GPIO is unchanged. Unfinished writes, partial-byte output ownership
+and unknown controls fail visibly with address and native PC. An array read
+released into neutral uses the device's CE-style
 protocol pause, preserving its next column without a P-part sequential-row
 start. Output hold/release keeps its existing timing model; no physical CE
 wiring or edge ordering is inferred. Status uses ordinary read release.
-CLE/ALE and data retain their values. Neutral creates no read, write latch,
-reset, Ready response or cell change. Single-strobe transfers use the existing
-real command/address/data protocol, cells, Busy deadlines and timing checks.
+Outside the host phase CLE/ALE and data retain their values. Neutral creates no
+read, write latch, reset, Ready response or cell change. Single-strobe transfers
+use the existing real command/address/data protocol, cells, Busy deadlines and
+timing checks.
 The ordered_pins contract remains the default for direct peer fixtures.
 This is a functional board abstraction, not a claim about CE wiring or physical
 edge ordering. It leaves unsupported commands and unknown cells explicit.
@@ -181,26 +186,28 @@ Read-to-host handoff qualification
     -R '^(nand_read_handoff|nand_bus_decode)$'
 
 Repeat with the thread preset for separate TSan. Four authored native streams
-cover J/P parts, mid-page and final-byte handoff, all 256 host payloads, real
-MOVEP samples with literal byte expectations, preserved Ready/column/output
-release and unrelated calendar events. Joint active-read restore repeats each
-suffix. The existing 512-transition table checks both contracts and unchanged
-write/entry/unknown-control guards; the neutral fresh-owner reset check remains.
+cover J/P parts, mid-page and final-byte handoff, all 256 host payloads and
+16 retained control words, real MOVEP samples with literal byte expectations,
+preserved Ready/column/output release and unrelated calendar events. GPIO
+input release stays paused until actual inactive controls rearm a real read.
+Joint active-read restore repeats each suffix; partial output ownership fails
+contextually. The 512-transition table checks both contracts, paused ownership
+copy/restore and unchanged write/entry/unknown-control guards. The neutral
+fresh-owner reset check remains.
 Eleven affected NAND/Board groups pass per sanitizer, including durable native
 writes, status, timer capture, live mount and checkpoint controls. The same new
-native test fails at the expected selected-read handoff with the prior decoder
-under both sanitizers. Compiler, format, tidy, ELF and receipt hashes are in
-nand-read-handoff-reference.json. The first compiler generation retained a
-stale decoder object and was discarded before native admission.
+native test fails at the expected retained-control refusal with the prior
+ownership model under both sanitizers. Compiler, format, tidy, ELF and receipt
+hashes are in nand-read-handoff-reference.json. An earlier read-release compiler
+generation retained a stale decoder object and was rejected before native
+admission; the current ownership generation uses newly compiled objects.
 
-The preceding ordinary original-firmware CLI run accepted four real MIDI wire
-frames and recorded 4439 PCM frames before this shared-bus refusal. A read-only
-observation found nonzero original DSP samples; no final WAV was published on
-the failed run and its LCD remained blank. Both file stores stayed identical.
-A frozen 9bb4197 continuation now preserves all 337219 prior NAND observations
-and 84024 data bytes, observes the real read-to-neutral entry with unchanged
-page/Ready, and retains independently checked 15/30 ns hold/release bounds.
-It then stops on disconnected GPIO data readback after 61 more DSP instructions
-and one additional MCU interrupt; return to a later NAND transfer is unobserved.
-See dsp-gpio-latch-reference.json for that separate functional storage model.
-Original boot/MIDI/audio/LCD and complete instrument acceptance remain pending. Detailed firmware analysis and recordings remain local.
+The ordinary frozen 85a0688 original CLI case passes the former GPIO data-bit
+refusal, preserves all 337223 prior NAND observations and reaches a retained-
+control host-bus ownership refusal after 41 more DSP instructions/279 periods.
+Both stores stay identical; 4439 PCM/four MIDI wire frames are recorded, with
+no final WAV or completed LCD. The prior 9bb4197 case independently established
+the 15/30 ns output hold/release bounds. Original continuation on the ownership
+model and complete instrument acceptance remain pending; physical select wiring
+is unverified. See dsp-gpio-latch-reference.json for the separate storage model.
+Detailed firmware analysis and recordings remain local.
