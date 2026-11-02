@@ -242,7 +242,7 @@ add_library(blofeld_core src/mcu/hc12.cpp src/mcu/hc12_decimal.cpp src/mcu/mcu_m
 add_library(blofeld_hc12_cycles src/mcu/hc12_cycle_plan.cpp src/mcu/hc12_cycle_page2.cpp src/mcu/hc12_cycle_bus.cpp)
 target_include_directories(blofeld_hc12_cycles PUBLIC src)
 target_link_libraries(blofeld_hc12_cycles PUBLIC blofeld_firmware)
-add_library(blofeld_midi_serial src/midi/midi_serial.cpp)
+add_library(blofeld_midi_serial src/midi/midi_serial.cpp src/midi/midi_serial_receiver.cpp)
 target_include_directories(blofeld_midi_serial PUBLIC src)
 target_link_libraries(blofeld_midi_serial PUBLIC blofeld_firmware)
 add_library(blofeld_midi_timed src/midi/midi_timed.cpp)
@@ -265,6 +265,9 @@ target_link_libraries(blofeld_audio_runtime PUBLIC blofeld_host_audio blofeld_pc
 add_library(blofeld_mcu_midi src/mcu/mcu_midi.cpp src/mcu/mcu_clocked_midi.cpp)
 target_include_directories(blofeld_mcu_midi PUBLIC src)
 target_link_libraries(blofeld_mcu_midi PUBLIC blofeld_mcu blofeld_midi_serial)
+add_library(blofeld_mcu_midi_output src/mcu/mcu_midi_output.cpp)
+target_include_directories(blofeld_mcu_midi_output PUBLIC src)
+target_link_libraries(blofeld_mcu_midi_output PUBLIC blofeld_mcu blofeld_midi_serial)
 if(BUILD_TESTING OR BLOFELD_FUZZING)
   add_library(blofeld_dsp
     src/dsp/dsp_memory_form.cpp src/dsp/dsp_address_stages.cpp src/dsp/dsp_core.cpp
@@ -313,10 +316,10 @@ add_library(blofeld_reference_board src/board/mcu_dsp_gpio_peer.cpp src/board/re
   src/board/reference_board.cpp src/board/reference_pipeline.cpp src/board/reference_wiring.cpp src/board/reference_returns.cpp src/board/reference_checkpoint.cpp
   src/board/reference_reset_source.cpp src/board/reference_lcd.cpp src/board/reference_b_pulls.cpp
   src/board/reference_dsp_inputs.cpp src/board/reference_dsp_clocks.cpp src/board/reference_pcm.cpp src/board/reference_audio.cpp
-  src/board/reference_midi.cpp src/board/reference_dsp_midi.cpp)
+  src/board/reference_midi.cpp src/board/reference_midi_output.cpp src/board/reference_dsp_midi.cpp)
 target_include_directories(blofeld_reference_board PUBLIC src)
 target_link_libraries(blofeld_reference_board PUBLIC blofeld_mcu_dsp_runtime blofeld_private_files
-  blofeld_pcm_transport blofeld_mcu_midi blofeld_midi_timed blofeld_usbip_tcp
+  blofeld_pcm_transport blofeld_mcu_midi blofeld_mcu_midi_output blofeld_midi_timed blofeld_usbip_tcp
   blofeld_nand_peer blofeld_nand_store blofeld_lcd_export)
 add_executable(blofeld-headless src/app/main.cpp src/app/host_midi_runner.cpp src/app/host_display_pump.cpp)
 target_link_libraries(blofeld-headless PRIVATE blofeld_reference_board blofeld_host_midi blofeld_sample_library blofeld_device_identity)
@@ -1847,6 +1850,17 @@ if(BUILD_TESTING)
   add_executable(blofeld-midi-serial-test test/midi_serial_test.cpp)
   target_link_libraries(blofeld-midi-serial-test PRIVATE blofeld_midi_serial)
   add_test(NAME midi_serial COMMAND blofeld-midi-serial-test)
+  add_executable(blofeld-midi-serial-receiver-test test/midi_serial_receiver_test.cpp)
+  target_link_libraries(blofeld-midi-serial-receiver-test PRIVATE blofeld_midi_serial blofeld_mcu)
+  add_test(NAME midi_serial_receiver COMMAND blofeld-midi-serial-receiver-test)
+  add_executable(blofeld-mcu-midi-output-test test/mcu_midi_output_test.cpp)
+  target_link_libraries(blofeld-mcu-midi-output-test PRIVATE blofeld_mcu_midi_output)
+  add_test(NAME mcu_midi_output COMMAND blofeld-mcu-midi-output-test)
+  add_executable(blofeld-reference-midi-output-test test/reference_midi_output_test.cpp)
+  target_link_libraries(blofeld-reference-midi-output-test PRIVATE blofeld_reference_board)
+  add_test(NAME reference_midi_output COMMAND blofeld-reference-midi-output-test
+    "${CMAKE_CURRENT_BINARY_DIR}/midi-output.bfboard")
+  set_tests_properties(reference_midi_output PROPERTIES TIMEOUT 120)
   add_executable(blofeld-mcu-midi-test test/mcu_midi_test.cpp)
   target_link_libraries(blofeld-mcu-midi-test PRIVATE blofeld_mcu_midi)
   add_test(NAME mcu_midi COMMAND blofeld-mcu-midi-test)
@@ -3333,7 +3347,9 @@ add_custom_target(quality
     blofeld-original-cycle-application-test
     blofeld-original-run-clock-test
     blofeld-original-owned-clock-test
-    blofeld-midi-serial-test blofeld-mcu-midi-test blofeld-clocked-midi-test
+    blofeld-midi-serial-test blofeld-midi-serial-receiver-test
+    blofeld-mcu-midi-output-test blofeld-reference-midi-output-test
+    blofeld-mcu-midi-test blofeld-clocked-midi-test
     blofeld-nand-read-test blofeld-nand-write-test blofeld-nand-power-test blofeld-nand-gpio-test
     blofeld-nand-read-timing-test blofeld-original-nand-read-timing-test
     blofeld-original-nand-pack-test

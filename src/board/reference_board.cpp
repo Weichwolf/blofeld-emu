@@ -65,6 +65,7 @@ Board::Board(const Config &config, const Execution &execution)
   const auto local = native_->mcu.run_clock().timebase_hz();
   if (common < local || common % local != 0) { throw Fault("Invalid reference-board timebase"); }
   control_.scale = common / local;
+  if (config_.midi_output) { control_.midi_output.emplace(*config_.midi_output, common); }
   prepare_audio_clock();
   if (config_.midi_sci_timed) {
     if (config_.midi_reference) { native_->mcu.set_sci_receive_reference(config_.midi_reference); }
@@ -207,6 +208,7 @@ void Board::boundary() {
     release(ticks());
   }
   start_midi();
+  observe_midi_output();
   check_signals();
 }
 
@@ -268,6 +270,10 @@ void Board::report(std::ostream &stream) const {
   if (control_.recording) {
     stream << "AUDIO recorded=" << control_.recording.frames().size()
            << " limit=" << control_.recording.capacity() << '\n';
+  }
+  if (control_.midi_output) {
+    stream << "MIDI-OUTPUT transmitted=" << control_.midi_output->transmitted_bytes()
+           << " queued=" << control_.midi_output->queued_bytes() << '\n';
   }
   if (config_.midi || config_.midi_dsp) {
     stream << "MIDI accepted=" << control_.midi_bytes << " queued=" << midi_queue_size()

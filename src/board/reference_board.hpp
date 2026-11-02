@@ -22,8 +22,10 @@
 #include "mcu/mcu_clocked_midi.hpp"
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
+#include "mcu/mcu_midi_output.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_sci.hpp"
+#include "midi/midi_serial_receiver.hpp"
 #include "midi/midi_timed.hpp"
 #include "storage/flash_image.hpp"
 #include "storage/nand.hpp"
@@ -188,6 +190,7 @@ struct Config {
   std::optional<PcmRoute> pcm;
   std::optional<MidiRoute> midi;
   std::optional<SciMidiRoute> midi_sci_timed;
+  std::optional<SciTransmitPin> midi_output;
   std::optional<SciReceiveReference> midi_reference;
   std::optional<DspMidiRoute> midi_dsp;
   std::optional<DspMidiReference> midi_dsp_reference;
@@ -199,6 +202,7 @@ void validate_gpio_peer(const Config &config);
 void validate_lcd(const Config &config);
 void validate_b_pulls(const Config &config);
 void validate_midi(const Config &config);
+void validate_midi_output(const Config &config);
 void validate_dsp_midi(const Config &config);
 
 [[nodiscard]] Config load_config(const std::filesystem::path &path);
@@ -216,6 +220,15 @@ struct MidiInputWindow {
   bool started = false;
   bool configured = false;
   // External lifetime evidence, never part of modeled checkpoint control.
+  std::shared_ptr<const void> owner;
+  std::uint64_t restore_revision = 0;
+};
+
+struct MidiOutputWindow {
+  std::uint64_t ticks = 0;
+  std::size_t queued_bytes = 0;
+  std::uint64_t transmitted_bytes = 0;
+  bool configured = false;
   std::shared_ptr<const void> owner;
   std::uint64_t restore_revision = 0;
 };
@@ -287,6 +300,8 @@ struct Status {
   std::uint64_t midi_sci_frames = 0;
   std::uint64_t midi_dsp_events = 0;
   std::uint64_t midi_dsp_frames = 0;
+  std::size_t midi_output_queued = 0;
+  std::uint64_t midi_output_bytes = 0;
   bool started = false;
   bool waiting = false;
   bool held_reset = true;
@@ -311,6 +326,8 @@ public:
   [[nodiscard]] std::optional<NandImage> nand_image() const;
   [[nodiscard]] MidiInputWindow midi_window() const;
   void enqueue_midi(std::span<const std::uint8_t> bytes);
+  [[nodiscard]] MidiOutputWindow midi_output_window() const;
+  [[nodiscard]] std::optional<MidiSerialByte> pop_midi_output();
   // Explicit external binding; a restored model requires a fresh sink session.
   void attach_pcm_output(PcmFrameSink &sink);
   // Non-real-time input admission at an inactive native MCU operation boundary.
@@ -369,6 +386,7 @@ private:
     std::optional<McuClockedMidiInput> midi;
     std::optional<MidiTimedInput> midi_dsp;
     std::optional<MidiTimedInput> midi_sci;
+    std::optional<McuMidiOutput> midi_output;
     std::uint64_t midi_bytes = 0;
     bool started = false;
     bool dsp_initial_pending = false;
@@ -467,6 +485,7 @@ private:
   void boundary();
   void start_midi();
   void observe_midi(ExecutionContext context);
+  void observe_midi_output();
   void synchronize_midi();
   [[nodiscard]] std::size_t midi_queue_size() const;
   void step();

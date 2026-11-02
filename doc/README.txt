@@ -10,6 +10,7 @@ Running and viewing
   runtime.txt                 Available runtime interface and current limits
   display-export.txt          Display file format, publication and GTK viewer
   host-midi-session.txt       Host MIDI input/session contract
+  midi-output.txt             Native serial output capture and scoped evidence
   host-audio.txt              Session audio negotiation and transport
   own-dsp-integration.txt     Current independent-core composition
 

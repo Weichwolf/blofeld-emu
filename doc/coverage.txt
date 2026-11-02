@@ -14,6 +14,10 @@ used for experiments declare their provenance and virtual initial conditions;
 they are not recovered factory NAND. Required contents and licensing behavior
 for every wavetable/sample function remain open. See firmware-layout.txt,
 sample-library.txt and nand-board.txt.
+The update also contains sixteen verified secondary pages for MCU RAM overlays.
+An installed virtual image must include these pages; the earlier bounded audio
+cases declared them erased and do not establish a complete installed image.
+See secondary-pages-reference.json and firmware-layout.txt.
 
 2. Connected CPU/DSP/device implementation — partial
 The regular Board/headless runtime uses the independent dsp56300 core pinned in
@@ -43,6 +47,11 @@ prefix against the ordinary CLI, pre-NoteOff causality and declared pitch bounds
 This uses cold-value snapshots, not live-store rewind. It does not qualify all
 controllers/channels, bank/program selection, bidirectional host MIDI or both
 hardware profiles. See original-notes-reference.json and function-acceptance.tsv.
+Passive MCU serial output is now captured from resolved PR3/PS5 pads into a
+bounded queue, including WAI and joint snapshots. Ten scoped native cases pass
+under both sanitizer configurations. This supports Board output capture; original
+firmware replies, host delivery and USB remain unqualified. See midi-output.txt
+and midi-output-reference.json.
 
 Connected reset/SPI/NAND gates match all56238 known source bytes in actual
 protocol and retired DSP samples,107 address sequences and read deadlines.

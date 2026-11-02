@@ -13,6 +13,7 @@
 #include "mcu/mcu_gpio.hpp"
 #include "mcu/mcu_machine.hpp"
 #include "mcu/mcu_midi.hpp"
+#include "mcu/mcu_midi_output.hpp"
 #include "mcu/mcu_reset.hpp"
 #include "mcu/mcu_run_clock.hpp"
 #include "storage/nand.hpp"
@@ -397,6 +398,10 @@ DspMidiRoute dsp_midi_route(std::istringstream &line) {
 bool midi_setting(Config &config, const std::string_view key, std::istringstream &line) {
   if (key == "midi-sci") {
     config.midi = midi_route(line);
+  } else if (key == "midi-output") {
+    const auto output = token(line);
+    if (output != "PR3" && output != "PS5") { throw Fault("MIDI output pin must be PR3 or PS5"); }
+    config.midi_output = output == "PR3" ? SciTransmitPin::pr3 : SciTransmitPin::ps5;
   } else if (key == "midi-transfer-reference") {
     const auto divisor = static_cast<unsigned>(number(line, UINT32_MAX));
     config.midi_reference = {.baud_divisor = divisor,

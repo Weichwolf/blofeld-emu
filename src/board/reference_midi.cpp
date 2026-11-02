@@ -32,6 +32,7 @@ Pad pad(const SciReceivePin pin) {
 
 void validate_midi(const Config &config) {
   validate_dsp_midi(config);
+  validate_midi_output(config);
   if (config.midi_reference) {
     if (!config.midi && !config.midi_sci_timed) {
       throw Fault("MIDI transfer reference requires an SCI route");
@@ -92,12 +93,14 @@ void Board::start_midi() {
 }
 
 void Board::observe_midi(const ExecutionContext context) {
+  observe_midi_output();
   if (control_.midi) {
     control_.midi->observe(native_->mcu.bus(), native_->mcu.run_clock(), context);
   }
 }
 
 void Board::synchronize_midi() {
+  observe_midi_output();
   if (control_.midi) {
     const auto cpu = native_->mcu.cpu().state();
     control_.midi->synchronize(native_->mcu.run_clock(), {.pc = cpu.pc, .ccr = cpu.ccr});

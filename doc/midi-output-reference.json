@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "scope": "Passive native serial MIDI output, resolved MCU pads and optional reference Board capture; original instrument/host output pending",
+  "source_base_commit": "a2ac966cf5441395e9fd36a5430106342e2a1efe",
+  "frozen_source_files": 1713,
+  "frozen_source_manifest_sha256": "f79d9c34f60532f89bc2854bc11a6b3e335400249a170324a09858c5f050f86b",
+  "changed_source_sha256": {
+    "src/midi/midi_serial_receiver.hpp": "e48be9318783bc3ca4f75f4eae838ac845a0735a828cb13346da5e405b3d615f",
+    "src/midi/midi_serial_receiver.cpp": "e740aa66fc94f46e7152b4caba44476b09df95cd84088a569752612712225a21",
+    "test/midi_serial_receiver_test.cpp": "c73c01781a2334c9f1768b22c14b85dc6df0c75578b24b6f0e81f9ebd0cf2301",
+    "src/mcu/mcu_midi_output.hpp": "4f954e053803134169dad1bc4759a39490169298c717e15d98a21dd314d9b686",
+    "src/mcu/mcu_midi_output.cpp": "5f2f52c9676e75a32af435db897ab1c326c6c24bc9eb21aee76b1e656c4a5f3e",
+    "test/mcu_midi_output_test.cpp": "dae0d93519223698e54517c9b6dd50e17723889f20120b7baba41611798c4009",
+    "src/board/reference_board.hpp": "70db4c4eadce6ce936ebc86e72ba00cf907124fcbe1c7783b44b01be89e84ee2",
+    "src/board/reference_board.cpp": "12e83b1150f50386561dfae42009f3678f5fbe5fd00d50e901f0cea15887259f",
+    "src/board/reference_config.cpp": "ee3f0f8f025c6a805611189e7587ea5fc7952d04abf36ef959640c2433e43224",
+    "src/board/reference_checkpoint.cpp": "c5cf2eae9fb216d0bbf529402b4c4d5013c8b58a8f96b0fd677c733e8e7eb32a",
+    "src/board/reference_midi.cpp": "6a2030880052df74248e67bf65035abfea2b513b51e1870f0b4505753275a052",
+    "src/board/reference_wiring.cpp": "7c0509689adaa393b4023f6fcd07f4297cdfb700e11513bb6e80e3bcc818ea57",
+    "src/board/reference_midi_output.cpp": "5505c35d3eb7535ba0be386d82144d7d67398baff9d4f6c5894ea23bbac18d8d",
+    "test/reference_midi_output_test.cpp": "66ab6e850b4e75cbb5e02d8f367711984a7b1308630a5b3801c43e7de6355afb"
+  },
+  "native_cases": [
+    {
+      "name": "midi_serial_receiver",
+      "profile": "strict",
+      "actual_exit": 0,
+      "actual_executable_sha256": "e6795dc3048c2d57fccba84861218299abb3404ba912bff439c2d33d74e6095b",
+      "elapsed_seconds": 0.01917648920789361
+    },
+    {
+      "name": "midi_serial_receiver",
+      "profile": "thread",
+      "actual_exit": 0,
+      "actual_executable_sha256": "8b7194ef52c2820d2f8b6c3c88d1dd557d2800543369af9633fbbc02c4c01e70",
+      "elapsed_seconds": 0.025244890013709664
+    },
+    {
+      "name": "mcu_midi_output",
+      "profile": "strict",
+      "actual_exit": 0,
+      "actual_executable_sha256": "ab501a4585b779e4b4d8fca136789bc3a55920adf09a6cf11482ab74f7efa5df",
+      "elapsed_seconds": 0.03930427599698305
+    },
+    {
+      "name": "mcu_midi_output",
+      "profile": "thread",
+      "actual_exit": 0,
+      "actual_executable_sha256": "9a31b65f34721051eabc259b09eb54a7a8d57929f42164590aa3cceacb900b29",
+      "elapsed_seconds": 0.051765786949545145
+    },
+    {
+      "name": "reference_midi_output",
+      "profile": "strict",
+      "actual_exit": 0,
+      "actual_executable_sha256": "e95981cf8434050f530db636c839c36cd4b634adc262fa0ca328fb4fd7990090",
+      "elapsed_seconds": 1.1553810590412468
+    },
+    {
+      "name": "reference_pipeline",
+      "profile": "strict",
+      "actual_exit": 0,
+      "actual_executable_sha256": "72328d9f337bee036f25fff91af7cea6175f7f1686a1f0f85744bf678d9cd509",
+      "elapsed_seconds": 3.6383529459126294
+    },
+    {
+      "name": "reference_checkpoint",
+      "profile": "strict",
+      "actual_exit": 0,
+      "actual_executable_sha256": "54169c3f8d20deead5ce23cf05202f6d8497e0685c7ff6afbf219718a8eab51b",
+      "elapsed_seconds": 4.736982309026644
+    },
+    {
+      "name": "reference_midi_output",
+      "profile": "thread",
+      "actual_exit": 0,
+      "actual_executable_sha256": "d75ac3ee617cffb41aa844a35aabb3f9e6c3b945c40655ca4de045761c8cc5af",
+      "elapsed_seconds": 1.4673840729519725
+    },
+    {
+      "name": "reference_pipeline",
+      "profile": "thread",
+      "actual_exit": 0,
+      "actual_executable_sha256": "975aba04f3cee33121ec1a8334ccd15bab7a3ec38e0318df8a14957b81cf969f",
+      "elapsed_seconds": 4.618222957011312
+    },
+    {
+      "name": "reference_checkpoint",
+      "profile": "thread",
+      "actual_exit": 0,
+      "actual_executable_sha256": "ea7ea40b741098ae40ee55deb9e3e9c118ee2325c487f905666558d2db88e21d",
+      "elapsed_seconds": 6.167579971952364
+    }
+  ],
+  "current_headless": {
+    "strict": {
+      "sha256": "09644266fa94d58343fde093d0380bd5c2b4540509b405b29384ce7f394b48f9",
+      "hardened": true,
+      "independent_DSP_symbols_present": true,
+      "foreign_DSP_symbols_absent": true
+    },
+    "thread": {
+      "sha256": "782ba695e6f715d62397c2899dee4d8a0374d77feb98911242e297eeb79f6289",
+      "hardened": true,
+      "independent_DSP_symbols_present": true,
+      "foreign_DSP_symbols_absent": true
+    }
+  },
+  "contracts": [
+    "31250baud8-N-1, absolute fractional sample centers, raw bytes without MIDI semantic filtering",
+    "Actual PR3/PS5 pad observations,256-byte bounded queue, contextual unknown/framing/overflow failures",
+    "Actual authored MCU reset and WAI; partial and queued joint restore; external owner/revision window",
+    "No register reads, driven pins, firmware edits, replacement audio or host sends introduced by capture"
+  ],
+  "limits": [
+    "Authored component programs and existing Board controls; no original-firmware reply qualification",
+    "Full Desktop/Keyboard startup and bank/program/native UI acceptance remain open",
+    "Host MIDI delivery, USB enumeration and sustained realtime playback remain open",
+    "Reset during an active transmitted frame and complete update/recovery remain open"
+  ],
+  "fuzz": false,
+  "physical_traffic": false,
+  "private_evidence_sha256": {
+    "midi-serial-receiver": "71ceb11cedbfda384147f09d4d154f851b87205d8a94904fd0bca87cf13a782d",
+    "mcu-midi-output": "3b965ae03848c88143f587225e29d44627fe78fbf2557b8eb45335785d140029",
+    "reference-midi-output": "3a063ab1e02580d5da2939234e998855286d0f9d3b1d300a6824c4a3eef7ca90"
+  }
+}
