@@ -3193,6 +3193,7 @@ add_custom_target(quality
     blofeld-dsp-independent-io-fetch-test
     blofeld-dsp-ram-rmw-test
     blofeld-dsp-gpio-write-decoder-test
+    blofeld-dsp-gpio-latch-test
     blofeld-own-dsp-reset-test blofeld-own-dsp-checkpoint-test
     blofeld-hcs08-bit-known-test blofeld-hcs08-gpio-known-test
     blofeld-hcs08-captured-known-test blofeld-hcs08-known-load-test blofeld-hcs08-icg-events-test

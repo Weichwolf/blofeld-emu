@@ -20,9 +20,11 @@ status or NAND response is fabricated. Strict mode retains its BCR prerequisite.
 Reads never acquire guessed external data. Functional PDR writes retain an
 output preload even while the pin is input, disconnected or peripheral-owned.
 Only later GPIO-output selection drives it. Input reads still require the real
-pad, and disconnected/peripheral PDR reads remain unsupported. This models
-the original data-before-direction initialization without inventing a reset
-value or an external peer. Masked writes preserve unrelated latch knowledge.
+pad. In logical_pins, disconnected reads return only explicitly known PDR
+storage; unwritten bits and peripheral-mux reads remain unsupported. No unknown
+input falls back to that storage. Strict C/E/F disconnected reads still refuse.
+This models data-before-direction initialization and later output-latch bit
+operations without inventing a cold reset value, external level or peer. Masked writes preserve unrelated latch knowledge.
 Strict diagnostics retain their conservative non-output-write semantics.
 Reset clears real configuration and retains the chosen contract; C/E/F latch
 history survives and D still resets its latch to zero. Trusted
@@ -80,3 +82,35 @@ yield363 silent frames. The next frontend limit is a DMA0 source-register read
 beside F2 prefetch at P:00043e. See own-dsp-nand-reference.json,
 functional_gpio_preload_candidate. This is a frozen reference runtime, with
 declared initial storage/reset state; full instrument acceptance remains open.
+
+Functional disconnected PDR storage
+
+  cmake --build --preset strict --target blofeld-dsp-gpio-latch-test
+  ctest --preset strict -j1 --output-on-failure -R '^dsp_gpio_latch$'
+
+Repeat with the thread preset for separate TSan. UM8-47/9-48 calls disconnected
+PDR data undefined and says it is not reset. The explicit logical_pins model
+retains native writes and reads those known stored bits while the pin driver
+is disconnected. This is a functional choice for instrument behavior, not a
+silicon readback guarantee. Pad observations remain separate and unchanged;
+active-input and peripheral-mux reads retain their own qualification rules.
+Unknown reads include control, direction, latch-knowledge and pad-knowledge
+context. No firmware address or instruction-specific success path is used.
+
+Seventy directed storage/guard cases per sanitizer cover all 35 C/E/F pins and
+both values, strict/unknown/input/peripheral controls, reset and copies.
+Another 140 native cases use actual reset, MOVEP and BSET through untimed and
+clock-owned execution. Independent literal expectations check the complete CPU
+state, PC, Carry, neighboring bits and eventual output selection; 70 fresh-owner
+continuations retain the same effects. The same authored clocked E9 sequence
+rejects the old model at its genuine unknown read under both sanitizers.
+Ten affected GPIO/peer/Board/audio/NAND groups pass per profile, with compiler,
+format and tidy checks at zero findings. Source and receipt hashes are in
+dsp-gpio-latch-reference.json. No fuzzing or physical traffic is included.
+
+The preceding ordinary original-firmware run confirms the NAND read release
+and its real hold/Hi-Z bounds, preserving every earlier NAND observation. It
+then reaches the disconnected data-bit refusal after 61 further DSP instructions
+and one additional MCU interrupt. The new GPIO storage model still requires
+its own original-firmware continuation; complete boot, UI, MIDI/audio/storage
+and both instrument profiles remain open. Private analysis/recordings stay local.

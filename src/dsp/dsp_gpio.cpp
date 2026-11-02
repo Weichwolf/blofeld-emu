@@ -116,12 +116,17 @@ std::uint32_t DspGpio::read(const DspGpioRegister reg, const std::uint32_t mask)
       const auto requested = mask & pin_mask();
       const auto gpio = control_ ^ direction_;
       const auto sample = resolve(requested);
-      const auto disconnected = port_ == DspPort::d ? requested & ~(control_ | direction_) : 0U;
+      // Functional GPIO keeps explicit PDR storage while its driver is disconnected.
+      // Cold/unwritten bits remain unknown; active inputs still require their pad.
+      const bool retained_mode = port_ == DspPort::d || contract_ == DspGpioContract::logical_pins;
+      const auto disconnected = retained_mode ? requested & ~(control_ | direction_) : 0U;
       const auto retained = disconnected & latch_known_;
       const auto unknown = requested & ~((sample.known & gpio) | retained);
       if (unknown != 0) {
         throw Fault("Unknown DSP GPIO data read at " + address(reg) + " mask=" + hex(unknown, 6) +
-                    " conflicts=" + hex(sample.conflicts, 6));
+                    " conflicts=" + hex(sample.conflicts, 6) + " control=" + hex(control_, 6) +
+                    " direction=" + hex(direction_, 6) + " latch-known=" + hex(latch_known_, 6) +
+                    " pad-known=" + hex(sample.known, 6));
       }
       return ((sample.levels & gpio) | (latch_ & retained)) & requested;
     }

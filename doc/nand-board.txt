@@ -197,6 +197,10 @@ The preceding ordinary original-firmware CLI run accepted four real MIDI wire
 frames and recorded 4439 PCM frames before this shared-bus refusal. A read-only
 observation found nonzero original DSP samples; no final WAV was published on
 the failed run and its LCD remained blank. Both file stores stayed identical.
-This explains the integration trigger, not successful continuation on the new
-model. Original boot/MIDI/audio/LCD and complete instrument acceptance remain
-pending. Detailed firmware analysis and recordings remain local.
+A frozen 9bb4197 continuation now preserves all 337219 prior NAND observations
+and 84024 data bytes, observes the real read-to-neutral entry with unchanged
+page/Ready, and retains independently checked 15/30 ns hold/release bounds.
+It then stops on disconnected GPIO data readback after 61 more DSP instructions
+and one additional MCU interrupt; return to a later NAND transfer is unobserved.
+See dsp-gpio-latch-reference.json for that separate functional storage model.
+Original boot/MIDI/audio/LCD and complete instrument acceptance remain pending. Detailed firmware analysis and recordings remain local.

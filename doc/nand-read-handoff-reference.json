@@ -28,7 +28,8 @@
     "doc/local/nand-read-handoff/private-native-r3.json": "dabb7749b552b0a757df0623b5fd52042fae9e93e74169425d5e70f32aeff1e8",
     "doc/local/nand-read-handoff/negative-native.json": "c0f88149096f77b9ed5bbfe1856dc916dc31aeb31816ca8d76abd16cdbf03362",
     "doc/local/nand-read-handoff/canonical-r1-stale-object-audit.json": "6691418876edcbc544ea46ad647de5cfef1a3336a1cc87fb50e2d8cc8aa5b14e",
-    "doc/local/durable-cli-midi-audio/observed/frontier-audit.json": "f94384621557a3e60cdb4be87568b6e5967293266e613370b4e3c19baf8c7252"
+    "doc/local/durable-cli-midi-audio/observed/frontier-audit.json": "f94384621557a3e60cdb4be87568b6e5967293266e613370b4e3c19baf8c7252",
+    "doc/local/durable-cli-midi-audio/r2/observed/frontier-audit.json": "1f36fd64cb94a1d3c2ec66dd060f3556d496ace0a3eedad957dd400138d42ae8"
   },
   "discarded_compiler_generation": "r1 had a stale decoder object; detected before any native admission. Only r2 is qualified.",
   "preceding_original_case": {
@@ -39,8 +40,23 @@
     "complete_LCD_observed": false,
     "both_stores_unchanged": true
   },
-  "original_continuation_on_corrected_decoder": "pending",
+  "original_continuation_on_corrected_decoder": "entry, array pause and timed output release observed; GPIO data-bit refusal before a later NAND transfer",
   "complete_instrument": false,
   "physical_traffic": false,
-  "fuzz": false
+  "fuzz": false,
+  "original_continuation": {
+    "source_commit": "9bb4197d8d874d0f9940166fde2016a12bc34f4b",
+    "native_exit": 2,
+    "prior_NAND_observations_unchanged": 337219,
+    "NAND_output_bytes": 84024,
+    "independent_output_hold_and_release_ns": [
+      15,
+      30
+    ],
+    "additional_DSP_instructions": 61,
+    "additional_MCU_interrupts": 1,
+    "final_WAV_published": false,
+    "LCD_blank": true,
+    "handoff_return_to_NAND_observed": false
+  }
 }
