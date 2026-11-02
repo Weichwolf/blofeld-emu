@@ -4052,3 +4052,13 @@ runs its reserved-field normalization and tuning helper. Both suffixes stop
 at the expected first Sound request, unknown page 0x400; 702 DMA words yield
 174 silent stereo frames. Live Global values remain unmeasured. These erased
 pages are chosen virtual initial conditions, not recovered factory data.
+
+Official2012 Sound storage (declared virtual import, frozen original runtime):
+all 1024 official 383-byte payloads/checksums match the pinned Soundset. Actual
+reset preserves all 18287 loaded DSP words; the first Sound executes 383 native
+literal stores, 385 token visits and no damaged-block fallback. All 1128 runtime
+NAND bytes match the declared image. Two identical joint suffixes produce 742
+DMA words/184 silent initialization frames, then refuse an unsupported AA6
+JSSET RAM-read admission. Final Sound memory values and the other 1023 Sound
+paths remain unmeasured. This is not a recovered physical NAND image or complete
+instrument acceptance. Source: library/sources.json; detailed analysis stays local.
