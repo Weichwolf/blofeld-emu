@@ -4350,3 +4350,13 @@ former GPIO data-bit refusal and all 337223 prior NAND observations; 41 more DSP
 instructions reach a retained-control host-bus ownership refusal. Both stores
 stay unchanged; 4439 PCM/four MIDI wire frames, blank LCD and no final WAV do not
 establish healthy UI/serial or complete instrument operation.
+
+
+Native interrupt-owner host path (requirements2/3/6): unowned staged effects
+use the core's complete ticket validation directly; admitted vectors retain
+actual two-word fetch/acknowledgement checks. Literal NOP state/counts and
+foreign/stale/retired/faulted ticket plus unknown-fetch controls pass, alongside
+ten affected integration groups per sanitizer. The independent core is unchanged.
+Single paired cost probes are exploratory and do not qualify real-time or full
+instrument throughput. See dsp-interrupt-owner-reference.json. Full original
+startup and documented function acceptance remain pending.

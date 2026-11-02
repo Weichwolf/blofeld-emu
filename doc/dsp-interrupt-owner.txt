@@ -1,0 +1,32 @@
+Native staged interrupt ownership
+
+Ordinary effects delegate directly to dsp56300::Core::advance_instruction.
+The core still validates active pending work, fault state and ticket owner,
+epoch and position before advancing. Foreign, consumed, unavailable and
+faulted tickets remain visible errors. Unowned unavailable tickets now use
+the native std::invalid_argument diagnostic in the std::logic_error family.
+
+An admitted interrupt retains the owner's existing vector inspection. Only
+successful actual vector reads advance its two-word acknowledgement state;
+stale tickets and failed reads cannot acknowledge a peripheral. Admission,
+priority, native effects, clocks and device behavior are unchanged. The common
+unowned path no longer copies a complete pending-instruction/register snapshot
+solely to discover that it has no vector to inspect.
+
+  cmake --build --preset strict --target blofeld-own-dsp-interrupts-test
+  ctest --preset strict -j1 --output-on-failure -R '^own_dsp_interrupts$'
+
+Repeat with the thread preset for separate TSan. Authored native controls check
+literal NOP PC/register/counter results, foreign/stale/retired/faulted tickets,
+unknown instruction memory, relocated vectors, missing second words and exact
+acknowledgement boundaries. Ten affected clock/DMA/RAM/MCU/NAND/Board/audio
+integration groups pass per sanitizer, with zero compiler/format/tidy findings.
+The dependency remains the unchanged independent d03de44 core.
+
+An ignored paired cost probe executes 262144 authored NOPs and 786432 actual
+staged effects on each implementation. Both end with the same literal complete
+register and instruction/base-cost expectations. Single candidate/baseline wall
+ratios are about 0.998 under ASan/UBSan and 0.902 under TSan. These observations
+provide no stable speedup, real-time or whole-instrument throughput guarantee.
+Complete original startup and instrument acceptance remain unqualified by these
+component checks. dsp-interrupt-owner-reference.json pins the exact evidence.

@@ -31,6 +31,9 @@ bool OwnDspInterrupts::admit(const dsp56300::InstructionWords foreground) {
 }
 
 dsp56300::InstructionProgress OwnDspInterrupts::advance(const dsp56300::EffectTicket &ticket) {
+  // The native core validates every ticket. Vector inspection is needed only
+  // while this owner is acknowledging an admitted interrupt.
+  if (!request_) { return cpu_.advance_instruction(ticket); }
   const auto before = cpu_.pending_instruction();
   if (!before) { throw std::logic_error("DSP interrupt owner has no staged effect to advance"); }
   const auto effect = before->effect;
