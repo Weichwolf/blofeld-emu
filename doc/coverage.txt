@@ -4023,7 +4023,11 @@ reset cases per sanitizer (ASan/UBSan and separate TSan). Whole-register ISA
 expectations include Carry, PC and linear AGU updates; accepted RAM writes
 survive reset and unfinished effects are discarded. This is functional ordering
 evidence, not exact bus-phase calibration. Ten adjacent native clock, DMA/bank,
-IRQ, checkpoint, I/O and Board/reset groups also pass in both profiles. A complete
-original-firmware run beyond the previous BSET frontier and normal instrument
-audio remain pending.
+IRQ, checkpoint, I/O and Board/reset groups also pass in both profiles. An audited
+original cold run on SDK d03de44 now retires that BSET. Its 116206017-byte cold
+prefix matches the previous reference exactly, including all 18287 loaded words.
+Two native suffixes match through the next Timer1 synchronized-Ready capture
+guard; 644 DMA words and 159 silent stereo frames are decoded. The diagnostic
+decoder control also reproduces. Normal instrument boot/audio remain pending;
+see own-dsp-nand-reference.json/native_ram_bit_candidate.
 See dsp-ram-rmw.txt.

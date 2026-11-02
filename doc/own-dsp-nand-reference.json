@@ -150,5 +150,28 @@
     "full_instrument_boot_proven": false,
     "original_instrument_audio_proven": false,
     "original_new_sdk_boot_proven": false
+  },
+  "native_ram_bit_candidate": {
+    "execution_source_commit": "7e0ec62775fb24cfc12869ad9ccd391e65b0da73",
+    "source_core_revision": "d03de4498e2a3ac108dc7faff5a1a5253815521a",
+    "scope": "Unmodified original cold reset/loading and repeated connected native suffixes; not complete instrument acceptance",
+    "original_resident_words": 18287,
+    "cold_prefix_bytes": 116206017,
+    "cold_prefix_sha256": "13f3473c1d6043d7dc3e90c5fcd9ab1fd801d585498d913f40f272dc930d596d",
+    "cold_prefix_identical_to_94d4a30": true,
+    "original_ram_bset_retirement_verified": true,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "actual_dma_words": 644,
+    "decoded_stereo_pcm_frames": 159,
+    "nonzero_stereo_pcm_frames": 0,
+    "sample_rate_hz": 44100,
+    "next_runtime_limit": "Timer1 capture input lacks synchronized publication of the already connected NAND Ready signal",
+    "local_audit": "doc/local/ram-control/rmw/original/audit.json",
+    "local_audit_sha256": "e6af5bbc8444daf4c054c728a6320f5ca183c40ca9ba980d35ba374e0faab49b",
+    "instrument_audio_proven": false,
+    "whole_goal_complete": false,
+    "fuzzing": false,
+    "physical_traffic": false
   }
 }
