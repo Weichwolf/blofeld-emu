@@ -4075,3 +4075,12 @@ and reserved-decoder control all match. It next refuses unknown startup page
 0x300; 1412 DMA words yield 351 silent frames. Live Part values and full
 instrument acceptance remain open. Supports requirements 2/3/6; see
 dsp-ram-control.txt for exact scope, input and audit hashes.
+
+Original Part RAM observations (declared virtual startup state): 32 owner-thread
+snapshots measure all 383 Sound fields before/after block validation in all 16
+Parts. All 12256 word observations match the independently parsed official A001
+payload; every input is within its original descriptor bounds. Removing the
+RAM-only diagnostic records leaves the prior complete guest trace unchanged
+through its page0x300 frontier. Both restored suffixes, MCU censuses and phases
+match. These measured values qualify one Sound across 16 Parts; the other 1023
+presets and normal instrument/MIDI/audio acceptance remain open.
