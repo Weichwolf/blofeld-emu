@@ -444,11 +444,11 @@ OwnDspDmaCycleResult OwnDspMachine::dma_cycle(const DspDmaInputs inputs, const b
   clock_.begin_step(bus_, {.pc = regs.pc, .omr = regs.omr});
   try {
     OwnDspDmaCycleResult result;
-    result.dma =
-        bus_.advance_dma(inputs,
-                         {.accesses = std::span(access).first(count),
-                          .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy,
-                          .indivisible_instruction = dma_indivisible_instruction(pending)});
+    result.dma = bus_.advance_dma(
+        inputs,
+        {.accesses = std::span(access).first(count),
+         .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy,
+         .indivisible_instruction = bus_.has_active_dma() && dma_indivisible_instruction(pending)});
     if (admit_native && !result.dma.core_stall) {
       result.native = interrupts_.advance(pending->ticket);
       if (result.native->fault.kind == dsp56300::FaultKind::none) {
