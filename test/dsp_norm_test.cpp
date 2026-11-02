@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "dma_native_fixture.hpp"
 #include "dsp/dsp_bus.hpp"
-#include "dsp/dsp_core.hpp"
-#include "dsp_norm_fixture.hpp"
+#include "dsp/own_dsp_machine.hpp"
+#include "dsp56300/core.hpp"
+#include "dsp_norm_expectations.hpp"
 
 #include <array>
 #include <cstddef>
@@ -14,35 +16,60 @@
 
 namespace blofeld::test {
 namespace {
+namespace native = dma_test;
+using Program = native::NativeProgram;
+// FM13-118/131/146: long immediate data/control MOVE and NORM Rn,D.
+constexpr unsigned move_r0 = 0x60f400, move_n0 = 0x70f400, move_m0 = 0x05f420;
+constexpr unsigned move_sr = 0x05f439, move_a1 = 0x54f400;
+constexpr unsigned clear_sr = 0x0500b9; // FM13-131: eight-bit MOVEC #0,SR clears SC.
+constexpr unsigned norm_base = 0x01d815, clear_a = 0x200013;
+constexpr unsigned register_shift = 16, norm_register_shift = 8;
+constexpr unsigned norm_cycle_units = 5;           // FM tableA-1, A-7.
+constexpr unsigned mode_settling_instructions = 3; // FM4.2/5.4.1: SC transition restriction.
+constexpr std::array accumulator_seeds{
+    0x50f400U, 0x54f400U, 0x52f400U, 0x51f400U, 0x55f400U, 0x53f400U};
+
+void immediate(Program &program, const unsigned opcode, const unsigned value) {
+  program.word(opcode);
+  program.word(value);
+}
+
+unsigned norm(const NormInput input) {
+  constexpr unsigned accumulator_b = 8;
+  return norm_base | (input.address_register << norm_register_shift) |
+         (input.accumulator_b ? accumulator_b : 0U);
+}
+
 void test_no_shift_refreshes_flags() {
-  DspBus bus;
-  DspProgram program;
-  program.immediate("r1", 0);
-  program.emit("clr a");
+  OwnDspMachine machine(native::native_clocks);
+  Program program;
+  immediate(program, move_r0 | (1U << register_shift), 0);
+  program.word(clear_a);
   constexpr unsigned initial_value = 0x123;
-  program.immediate("a1", initial_value);
+  immediate(program, move_a1, initial_value);
   const auto first_norm = program.pc();
-  for (unsigned index = 0; index < 3; ++index) { program.emit("norm r1,a"); }
-  program.install(bus);
-  DspCore cpu(bus);
-  while (cpu.state().pc != first_norm) { cpu.step(); }
-  require((cpu.state().sr & zero) != 0 &&
-              cpu.state().a == (std::uint64_t{initial_value} << word_bits),
+  for (unsigned index = 0; index < 3; ++index) { program.word(norm({.address_register = 1})); }
+  native::reset_native(machine, program);
+  while (machine.cpu().registers().pc != first_norm) { native::step_native(machine); }
+  require((machine.cpu().registers().sr & zero) != 0 &&
+              machine.cpu().registers().a == (std::uint64_t{initial_value} << word_bits),
           "Own MOVEs change A without replacing the prior CLR zero flag");
-  cpu.step();
-  require(cpu.state().a == (std::uint64_t{initial_value} << word_bits) && cpu.state().r[1] == 0 &&
-              cpu.state().sr == (masked_status | unnormalized),
+  native::step_native(machine);
+  require(machine.cpu().registers().a == (std::uint64_t{initial_value} << word_bits) &&
+              machine.cpu().registers().r[1] == 0 &&
+              machine.cpu().registers().sr == (masked_status | unnormalized),
           "NORM's no-shift path must refresh result flags, allowing the next iteration");
-  cpu.step();
+  native::step_native(machine);
   constexpr unsigned second_value = 0x246;
-  require(cpu.state().a == (std::uint64_t{second_value} << word_bits) &&
-              cpu.state().r[1] == word_mask,
+  require(machine.cpu().registers().a == (std::uint64_t{second_value} << word_bits) &&
+              machine.cpu().registers().r[1] == word_mask,
           "Second NORM consumes the refreshed flags and decrements R1");
-  cpu.step();
+  native::step_native(machine);
   constexpr unsigned final_value = 0x48c;
-  require(cpu.state().a == (std::uint64_t{final_value} << word_bits) &&
-              cpu.state().r[1] == word_mask - 1 && cpu.state().sr == (masked_status | unnormalized),
-          "Three native NORM instructions match the independent hardware observation");
+  require(machine.cpu().registers().a == (std::uint64_t{final_value} << word_bits) &&
+              machine.cpu().registers().r[1] == word_mask - 1 &&
+              machine.cpu().registers().sr == (masked_status | unnormalized),
+          "Three native NORM instructions match the independent iteration expectations");
 }
 
 void append_flag_modes(std::vector<NormInput> &result, const NormInput base) {
@@ -94,29 +121,33 @@ std::vector<NormInput> inputs() {
   return result;
 }
 
-unsigned initialize(DspProgram &program, const NormInput input) {
+unsigned initialize(Program &program, const NormInput input) {
+  program.word(clear_sr);
+  for (unsigned index = 0; index < mode_settling_instructions; ++index) { program.word(0); }
   for (const bool accumulator_b : {false, true}) {
     const auto value = accumulator_b == input.accumulator_b ? input.value : other_accumulator;
-    const std::string name = accumulator_b ? "b" : "a";
-    program.immediate(name + '0', value & word_mask);
-    program.immediate(name + '1', (value >> word_bits) & word_mask);
-    program.immediate(name + '2', value >> data_bits);
+    const unsigned first = accumulator_b ? 3U : 0U;
+    immediate(program, accumulator_seeds[first], static_cast<unsigned>(value & word_mask));
+    immediate(program,
+              accumulator_seeds[first + 1],
+              static_cast<unsigned>((value >> word_bits) & word_mask));
+    immediate(program, accumulator_seeds[first + 2], static_cast<unsigned>(value >> data_bits));
   }
   for (unsigned reg = 0; reg < 8; ++reg) {
-    const auto name = std::to_string(reg);
-    program.immediate("r" + name,
-                      reg == input.address_register ? input.counter : address_seed + reg);
-    program.immediate("n" + name, offset_seed + reg);
-    program.immediate("m" + name, modifier_seed);
+    immediate(program,
+              move_r0 | (reg << register_shift),
+              reg == input.address_register ? input.counter : address_seed + reg);
+    immediate(program, move_n0 | (reg << register_shift), offset_seed + reg);
+    immediate(program, move_m0 | reg, modifier_seed);
   }
-  program.immediate("sr", input.status);
+  immediate(program, move_sr, input.status);
+  for (unsigned index = 0; index < mode_settling_instructions; ++index) { program.word(0); }
   const auto instruction = program.pc();
-  program.emit("norm r" + std::to_string(input.address_register) +
-               (input.accumulator_b ? ",b" : ",a"));
+  program.word(norm(input));
   return instruction;
 }
 
-void check_result(const DspState &after, const NormInput input, const unsigned pc) {
+void check_result(const dsp56300::Registers &after, const NormInput input, const unsigned pc) {
   const auto expected = expected_norm(input);
   const auto actual = input.accumulator_b ? after.b : after.a;
   const auto other = input.accumulator_b ? after.a : after.b;
@@ -135,22 +166,26 @@ void check_result(const DspState &after, const NormInput input, const unsigned p
   }
 }
 
-void run_batch(DspBus &bus, DspCore &cpu, const std::span<const NormInput> batch) {
-  DspProgram program;
+void run_batch(OwnDspMachine &machine, const std::span<const NormInput> batch) {
+  Program program;
   std::vector<unsigned> instructions;
   for (const auto input : batch) { instructions.push_back(initialize(program, input)); }
-  program.install(bus);
-  cpu.reset_spi_boot();
+  native::reset_native(machine, program);
   for (std::size_t index = 0; index < batch.size(); ++index) {
     unsigned setup = 0;
-    while (cpu.state().pc != instructions[index]) {
+    while (machine.cpu().registers().pc != instructions[index]) {
       constexpr unsigned setup_limit = 40;
       require(++setup <= setup_limit,
               "NORM diagnostic setup exceeded its literal instruction bound");
-      cpu.step();
+      native::step_native(machine);
     }
-    cpu.step();
-    check_result(cpu.state(), batch[index], instructions[index]);
+    const auto before = machine.cpu().progress();
+    native::step_native(machine);
+    check_result(machine.cpu().registers(), batch[index], instructions[index]);
+    require(machine.cpu().progress().instructions == before.instructions + 1 &&
+                machine.cpu().progress().estimated_cycles ==
+                    before.estimated_cycles + norm_cycle_units,
+            "NORM retires once with its independent FM tableA-1 base cost");
   }
 }
 
@@ -158,11 +193,10 @@ void test_norm_matrix() {
   const auto cases = inputs();
   constexpr unsigned expected_cases = 4608;
   require(cases.size() == expected_cases, "NORM matrix covers every declared vector combination");
-  DspBus bus;
-  DspCore cpu(bus);
+  OwnDspMachine machine(native::native_clocks);
   constexpr unsigned batch_size = 32;
   for (std::size_t offset = 0; offset < cases.size(); offset += batch_size) {
-    run_batch(bus, cpu, std::span(cases).subspan(offset, batch_size));
+    run_batch(machine, std::span(cases).subspan(offset, batch_size));
   }
   std::cout << cases.size()
             << " independent NORM value/scaling/A-B/Rn/compatibility/flag vectors passed\n";

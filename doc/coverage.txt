@@ -80,6 +80,13 @@ reset/storage/GPIO/NAND cases pass both sanitizer profiles. This prefix does not
 establish loader completion or unchanged persistent storage. See
 original-fetch-nand-reference.json and original-fetch-nand.txt.
 
+The native NORM regression retains all4608 independent ISA vectors and the
+legacy oracle unchanged. Both sanitizer profiles pass actual Mode5/literal
+instruction execution with exact flags, R/N/M and five-unit retirement. Its
+pinned core additionally qualifies non-shift flag refresh and SC exponent16;
+SC transition timing and original full-device runtime remain separate. See
+dsp-norm-native.txt and dsp-norm-native-reference.json.
+
 4. Complete update/recovery — partial
 Native flash/NAND command, persistence, interrupted-operation and loader tests
 provide component evidence. Full connected valid/damaged update, every power-loss

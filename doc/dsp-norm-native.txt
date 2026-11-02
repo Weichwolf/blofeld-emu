@@ -1,0 +1,22 @@
+Independent native NORM regression
+
+  cmake --build build/strict --target blofeld-dsp-norm-test --parallel 1
+  ctest --test-dir build/strict -R '^dsp_norm$' --output-on-failure
+Repeat with build/thread for TSan; strict uses ASan/UBSan.
+
+All4608 original independent value/scaling/A-B/Rn/SC/flag vectors remain. The
+assembler-free expectations header preserves the original constants and model
+byte-for-byte; the legacy fixture reexports it and retains its program class.
+Literal authored instructions execute through actual Mode5 reset and the native
+owner, checking PC, accumulators, flags, all R/N/M, controls and one retirement
+with five base units. Three consecutive NORMs check non-shift flag refresh.
+SC is cleared with short MOVEC #0,SR before24-bit seeds; three actual NOPs follow
+each SC change. This avoids unqualified long-immediate MOVEC under active SC;
+it does not qualify transition timing or other SC instructions.
+
+The pinned independent core corrects non-shift E/U/N/Z/V refresh and shifted
+SC exponent wrap16, following the manual condition-code table interpretation.
+Core independent fixtures/publication checks and additional combined SC/SM
+boundaries pass separately. Both emulator sanitizer profiles pass with eight
+independent archives and no foreign DSP symbols. Exact pins/results:
+dsp-norm-native-reference.json. Original full-device operation remains pending.
