@@ -4155,23 +4155,26 @@ conflict remain unresolved; connected original startup, normal host MIDI,
 parser/voices/audio and a separate TSan scope are not qualified by this run.
 See dsp-clocked-wire.txt and own-dsp-nand-reference.json.
 
-Connected original normal-baud input (requirements 2/3/6): unchanged cold loading
-at the functional DSP clock now leads to six correctly received NoteOn/Off bytes
-through original Timer0 vectors and the real ring. Six cursor advances and 54
-native IRQ/RTI pairs are checked, with both joint suffixes and diagnostic control.
-The original factory preset uses an arpeggiator and Clocked Delay; no positive
-voice allocation occurs in this short gate. 1679 stereo frames remain silent.
-The Delay's first Y:016000 read is still unmodeled; no firmware repair is used.
-This frozen reference evidence does not qualify regular standalone MIDI/audio.
-A controlled mutable-bank input replaces A001 with the official Init preset;
-the firmware, boot records and remaining NAND state stay unchanged. Independent
-official SMF comparison verifies 383 parameters in all 16 Parts before and after
-normalization (32 snapshots / 12256 words). With arpeggiator and both effects off,
-both original suffixes reach the 12000000-unit bound without a new hardware
-refusal. Six normal MIDI bytes / 54 native IRQ/RTI pairs still produce no positive
-voice allocation; 1763 stereo frames remain silent. This excludes Clocked Delay
-as the only obstacle to a sounding note in this frozen scope, not in every preset
-or the ordinary Board. See own-dsp-nand-reference.json for pinned local audits.
+Connected original MIDI/audio reference (requirements 2/3/6): unchanged cold
+loading at the functional DSP clock leads to real Timer0 reception and native
+NoteOn/Off dispatch. The original A001 program retains its unresolved Clocked
+Delay Y:016000 read. A mutable virtual bank control selects official Init instead;
+independent SMF comparison verifies 383 parameters in all 16 Parts before/after
+normalization (32 snapshots / 12256 words), without changing firmware/boot records.
+Clock/NoteOn at 275 ms reaches the real voice selector; its first reserved Y:ffffff
+read remains refused by the diagnostic component and frozen baseline models.
+A private explicit unselected-Y decoder candidate supplies a declared A55AA5 word
+without a selected storage/register resource. All 25 selector iterations retire,
+followed by original voice construction and NoteOff. Seven correctly received
+bytes / 63 native IRQ/RTI pairs reach the 12M-unit bound: 1763 captured PCM frames
+at 44100 Hz include 595 nonzero frames after the note. Both actual DMA streams are
+identical; the complete serial word sequence matches them with one-word offset.
+This proves nonzero original DSP output in that frozen functional scope. Correct
+stereo frame polarity, a no-note causal control, canonical standalone integration,
+longer/polyphonic behavior and full Desktop/Keyboard acceptance are pending.
+The chosen reserved-read word is not a silicon measurement. Independent authored
+decoder/native controls and ASan/UBSan pass; a separate TSan scope is pending.
+See dsp-notes.txt and own-dsp-nand-reference.json for exact local evidence pins.
 
 Coincident independent DSP inputs (requirements 2/3/6): the regular Board now
 applies a bounded set of independent inputs at one actual deadline, on the

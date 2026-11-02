@@ -54,12 +54,21 @@ profile. The normal and isolated target commands/properties are identical.
   cmake --build --preset strict --target blofeld-original-dsp-note-test
   ctest --test-dir build/strict -R '^original_dsp_note$' --output-on-failure
 
-A frozen original cold-start control now reaches this same selector through
-ordinary 31250-baud Timer0 input. Moving Clock/NoteOn from270ms to275ms yields
-four correctly received bytes and36 complete native IRQ/RTI pairs. Original
-NoteOn entries116e/116f execute with the actual staged status/note/velocity and
-matching zero arpeggiator mode. The selector still stops at reserved Y:ffffff;
-1107 decoded stereo frames remain silent. This is connected reference evidence,
-not completed allocation or regular standalone qualification. The final wire
-frame is still in its stop interval; NoteOff has not yet been enqueued.
-See own-dsp-nand-reference.json for exact input, executable and audit hashes.
+A frozen original cold-start control reaches this same selector through ordinary
+31250-baud Timer0 input. Clock/NoteOn at 275 ms yields genuine status, note and
+velocity and an arpeggiator mode matching the Init program. The strict baseline
+stops at Y:ffffff; the component matrix above retains its diagnostic scope.
+A private functional decoder candidate explicitly supplies word A55AA5 only for
+reserved Y I/O reads and selects no register/RAM resource. All 25 original selector
+iterations now retire, followed by genuine voice construction, rendering and
+NoteOff. Seven received bytes / 63 native IRQ/RTI pairs lead to 1763 serial PCM
+frames, 595 nonzero, in a 39.98 ms observation window. Both actual DMA word streams
+agree; the captured serial words match them exactly with one-word alignment.
+The raw high-FS capture groups adjacent channels across a frame boundary; low-FS
+channel convention still needs qualification. A separately labeled re-framed
+file preserves captured words and is not a second native run. Native waveform
+output is observed; a no-note causal control, canonical standalone integration,
+correct stereo framing, sustained notes/polyphony and full acceptance remain open.
+The virtual unselected word is declared input, not a measured silicon value.
+No firmware bytes or routines are replaced. See own-dsp-nand-reference.json for
+local source/control/original/PCM audit hashes and the unmodified 24-bit capture.
