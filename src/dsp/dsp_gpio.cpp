@@ -144,10 +144,13 @@ void DspGpio::write_checked(const DspGpioWrite access) {
     case DspGpioRegister::direction: direction_ = (direction_ & ~mask) | value; break;
     case DspGpioRegister::data: {
       const auto outputs = direction_ & ~control_;
-      const auto selected = outputs & mask;
+      const bool retain_preload = contract_ == DspGpioContract::logical_pins;
+      const auto selected = retain_preload ? mask : outputs & mask;
       latch_ = (latch_ & ~selected) | (value & selected);
-      // Input/disconnected/peripheral writes do not qualify a later output latch.
-      latch_known_ = (latch_known_ | selected) & outputs;
+      // Functional PDR storage permits data-before-direction initialization.
+      // Input reads still sample the pad; only output selection exposes a latch.
+      const auto retained = retain_preload ? pin_mask() : outputs;
+      latch_known_ = (latch_known_ | selected) & retained;
       break;
     }
     default: throw Fault("Invalid DSP GPIO register write");

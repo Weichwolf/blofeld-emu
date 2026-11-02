@@ -4096,3 +4096,15 @@ The next refusal is unknown Timer2 load at X:ffff86 after native enable
 TLR2/TCPR2 reset values unspecified. Concrete virtual reset state and complete
 instrument behavior remain unqualified. See own-dsp-nand-reference.json and
 dsp-timers.txt; this initial state is not recovered manufacturer metadata.
+
+Functional timer/GPIO startup (requirements 2/3/6): an explicitly selected
+zero TLR2/TCPR2 reset state advances the unchanged original firmware into its
+main service loop, preserving the complete prior trace through the old timer
+refusal. Both joint suffixes reach the same PE9 output-latch read at P:000271;
+1434 DMA words decode to 357 silent frames. This is a frozen reference run,
+not normal-runtime timer-reset integration or demonstrated instrument audio.
+The functional GPIO contract now retains explicit data-before-direction
+preloads without driving inputs or supplying external values. 222 preload
+cases, six native bit cases, 16 native setup streams and seven affected groups
+per sanitizer qualify; connected original qualification of that change remains
+pending. See dsp-gpio-write-decoder.txt and own-dsp-nand-reference.json.

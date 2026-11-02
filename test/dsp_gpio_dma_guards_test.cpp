@@ -59,6 +59,34 @@ void rejection(const DspMemoryAccess access) {
   ++refused;
 }
 
+void sampling(const bit::Port port) {
+  DspBus bus;
+  auto &gpio = bus.gpio(port.port);
+  gpio.write({.reg = DspGpioRegister::control, .value = 1});
+  const std::array fetch{DspMemoryAccess{.target = {.address = banks::p_rom_begin}}};
+  static_cast<void>(bus.advance_dma(banks::inputs({.index = 0}), banks::use(fetch)));
+  bus.write({.space = DspSpace::x, .address = dma::ring_start, .value = first});
+  banks::configure(bus, {.control = dma::software_copy});
+  const auto captured = bus.advance_dma(banks::inputs({.index = 1}), banks::use(fetch));
+  require(captured.phase && !captured.word && captured.phase->kind == DspDmaPhaseKind::source_read,
+          "GPIO sample admission starts with a real captured DMA source");
+  bus.write({.space = DspSpace::x, .address = dma::ring_start, .value = second});
+  const std::array core{fetch[0],
+                        DspMemoryAccess{.target = {.space = port.space, .address = port.address},
+                                        .phase = DspMemoryPhase::peripheral_sample}};
+  const auto completed = bus.advance_dma(banks::inputs({.index = 2}), banks::use(core));
+  require(completed.word && completed.word->value == first && !completed.core_stall &&
+              bus.read({.space = DspSpace::y, .address = dma::destination}) == first &&
+              bus.read({.space = DspSpace::x, .address = dma::control0}) ==
+                  (dma::software_copy & ~dma::enable),
+          "An admitted GPIO sample permits exactly the already captured independent DMA write");
+  require(gpio.read(DspGpioRegister::control) == 1 && gpio.read(DspGpioRegister::direction) == 0 &&
+              gpio.outputs().mask == 0 && test::esai::rejects([&] {
+                                            static_cast<void>(gpio.read(DspGpioRegister::data, 1));
+                                          }).contains("Unknown DSP GPIO data read"),
+          "Resource admission cannot change GPIO modes or supply unknown actual input data");
+}
+
 void footprints() {
   for (const auto port : bit::ports) {
     for (const auto operation : {DspMemoryOperation::read, DspMemoryOperation::write}) {
@@ -76,8 +104,7 @@ void footprints() {
                  .phase = operation == DspMemoryOperation::write ? DspMemoryPhase::peripheral_sample
                                                                  : DspMemoryPhase::execute});
     }
-    rejection({.target = {.space = port.space, .address = port.address},
-               .phase = DspMemoryPhase::peripheral_sample});
+    sampling(port);
   }
   constexpr std::array data{DspAddress{.space = DspSpace::x, .address = 0xffffa0},
                             DspAddress{.space = DspSpace::y, .address = 0xffff80},

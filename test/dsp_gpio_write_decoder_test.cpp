@@ -141,8 +141,9 @@ void transient_mux() {
           "Withdrawing the input cannot turn the transient mode into known data");
   gpio.write({.reg = Register::direction, .value = 1});
   gpio.write({.reg = Register::control});
-  require(gpio.outputs().mask == 1 && gpio.outputs().known == 0,
-          "A write in the reserved mode cannot initialize a later output latch");
+  require(gpio.outputs().mask == 1 && gpio.outputs().known == 1 &&
+              gpio.read(Register::data, 1) == 1,
+          "Functional latch storage retains a preload without driving the reserved mux");
   gpio.write({.value = 1});
   require(gpio.read(Register::data, 1) == 1,
           "An explicit output write restores normal defined GPIO behavior");
@@ -188,14 +189,65 @@ void logical_bus() {
           "Actual BCR commands still cannot invent bus-master status");
 }
 
-void native_bit(const unsigned bit) {
+enum class PreloadMux : std::uint8_t { disconnected, input, peripheral };
+
+void preloaded_pin(const Port port, const unsigned index, const PreloadMux mode, const bool high) {
+  const auto bit = 1U << index;
+  DspGpio gpio(port.kind);
+  gpio.set_contract(functional);
+  if (mode != PreloadMux::disconnected) { gpio.write({.reg = Register::control, .value = bit}); }
+  if (mode == PreloadMux::peripheral) { gpio.write({.reg = Register::direction, .value = bit}); }
+  gpio.write({.value = high ? bit : 0U, .mask = bit});
+  require(gpio.outputs().mask == 0 && gpio.observe_pads(bit).known == 0,
+          "A preload does not drive an input, disconnected pin or peripheral");
+  if (mode == PreloadMux::input) {
+    gpio.set_drive({.mask = bit, .levels = high ? 0U : bit});
+    require(gpio.read(Register::data, bit) == (high ? 0U : bit),
+            "An input reads its actual pad, independently of a pending output preload");
+    gpio.set_drive({});
+  }
+  const auto saved = gpio;
+  gpio.write({.reg = Register::control});
+  gpio.write({.reg = Register::direction, .value = bit});
+  require(gpio.outputs().mask == bit && gpio.outputs().known == bit &&
+              gpio.read(Register::data, bit) == (high ? bit : 0U),
+          "Selecting an output publishes exactly its explicitly preloaded bit");
+  require(rejects([&] {
+            gpio.set_drive({.mask = bit, .levels = high ? 0U : bit});
+          }).contains("contention"),
+          "A preload never permits opposed strong output drivers");
+  auto copy = saved;
+  copy.write({.reg = Register::control});
+  copy.write({.reg = Register::direction, .value = bit});
+  require(copy.read(Register::data, bit) == gpio.read(Register::data, bit),
+          "Independent copies preserve a preload before output selection");
+}
+
+void preloaded_pins() {
+  for (const auto port : ports) {
+    for (unsigned index = 0; index < port.bits; ++index) {
+      for (const auto mode :
+           {PreloadMux::disconnected, PreloadMux::input, PreloadMux::peripheral}) {
+        for (const bool high : {false, true}) { preloaded_pin(port, index, mode, high); }
+      }
+    }
+  }
+}
+
+void native_bit(const unsigned bit, const bool preload) {
   constexpr unsigned f_direction_opcode = 0x09f4b6;
   constexpr unsigned f_data_opcode = 0x09f4b5;
   constexpr unsigned f_set_opcode = 0x0ab560;
   constexpr unsigned pins = 0x7ff;
   native::NativeProgram program;
-  for (const auto word : {f_direction_opcode, word_mask, f_data_opcode, pattern}) {
-    program.word(word);
+  if (preload) {
+    for (const auto word : {f_data_opcode, pattern, f_direction_opcode, word_mask}) {
+      program.word(word);
+    }
+  } else {
+    for (const auto word : {f_direction_opcode, word_mask, f_data_opcode, pattern}) {
+      program.word(word);
+    }
   }
   program.word(f_set_opcode | bit);
   program.word(0);
@@ -215,13 +267,20 @@ void native_bit(const unsigned bit) {
           "Native BSET reads real Carry and changes only an existing selected pin");
 }
 
-void execute(const Port port, const bool clocked) {
+void execute(const Port port, const bool clocked, const bool preload) {
   const auto pins = (1U << port.bits) - 1;
   native::NativeProgram program;
-  program.word(port.opcode + 1);
-  program.word(word_mask);
-  program.word(port.opcode);
-  program.word(pattern);
+  if (preload) {
+    program.word(port.opcode);
+    program.word(pattern);
+    program.word(port.opcode + 1);
+    program.word(word_mask);
+  } else {
+    program.word(port.opcode + 1);
+    program.word(word_mask);
+    program.word(port.opcode);
+    program.word(pattern);
+  }
   OwnDspMachine machine(native::native_clocks);
   machine.bus().gpio(port.kind).set_contract(functional);
   native::reset_native(machine, program);
@@ -266,11 +325,16 @@ int main() {
     every_bit();
     reset_and_guards();
     transient_mux();
+    preloaded_pins();
     logical_bus();
-    for (const unsigned bit : {0U, 1U, 23U}) { native_bit(bit); }
+    for (const unsigned bit : {0U, 1U, 23U}) {
+      for (const bool preload : {false, true}) { native_bit(bit, preload); }
+    }
     for (const auto port : ports) {
-      execute(port, false);
-      execute(port, true);
+      for (const bool preload : {false, true}) {
+        execute(port, false, preload);
+        execute(port, true, preload);
+      }
     }
     std::cout << "Functional GPIO pin decoding and native execution passed.\n";
   } catch (const std::exception &error) {

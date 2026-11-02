@@ -170,7 +170,12 @@ reaches Timer2 enable, then refuses an unknown TLR2 at X:ffff86 (native P:0001a7
 The firmware has supplied neither TLR2 nor TCPR2. Appendix C-25 leaves both
 reset values unspecified; this is distinct from an unsupported register access.
 A declared concrete initial state is a permissible virtual-device hypothesis,
-not a recovered silicon reset value. The production component currently retains
-unknown load/compare state; connected qualification of a concrete choice remains
-open. See own-dsp-nand-reference.json, startup_page_candidate, for the audited
-boundary. Full instrument/MIDI/audio, storage and update/recovery remain open.
+not a recovered silicon reset value. The production timer component retains
+unknown load/compare state. A declared TLR2=TCPR2=0 reset candidate passes
+independent counter/IRQ/guard tests and connected original startup through its
+first main-loop work. Both joint suffixes reach P:000271, where a GPIO output
+latch remains unknown. Their prior guest trace is unchanged through the old
+timer refusal. This frozen reference experiment does not qualify normal runtime
+integration or instrument equivalence of the reset choice. See
+own-dsp-nand-reference.json, timer2_reset_candidate, for the audit. Full
+instrument/MIDI/audio, storage and update/recovery remain open.

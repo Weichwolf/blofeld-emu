@@ -17,8 +17,15 @@ as unknown; sampling conflicting data fails rather than selecting a winner.
 Port F uses logical register/bit access independently of BIU wait-state
 qualification. BCR command/read state remains unchanged; no BCR write, bus-master
 status or NAND response is fabricated. Strict mode retains its BCR prerequisite.
-Reads never acquire guessed external data. Reset clears real configuration and
-retains the chosen contract; port-specific latch behavior is unchanged. Trusted
+Reads never acquire guessed external data. Functional PDR writes retain an
+output preload even while the pin is input, disconnected or peripheral-owned.
+Only later GPIO-output selection drives it. Input reads still require the real
+pad, and disconnected/peripheral PDR reads remain unsupported. This models
+the original data-before-direction initialization without inventing a reset
+value or an external peer. Masked writes preserve unrelated latch knowledge.
+Strict diagnostics retain their conservative non-output-write semantics.
+Reset clears real configuration and retains the chosen contract; C/E/F latch
+history survives and D still resets its latch to zero. Trusted
 chip/bus copies preserve the contract, with normal borrowed-pad lifetime rules.
 
   cmake --build --preset strict --target blofeld-dsp-gpio-write-decoder-test \
@@ -46,6 +53,23 @@ and endpoint oracles include twelve fixed corruption controls.
 Component and connected GPIO checks pass under ASan/UBSan and separate TSan.
 The existing strict GPIO component checks also pass, and the original
 storage-only reset regression passes again under ASan/UBSan. No fuzzing or
-physical traffic is involved. Original NAND loading, instrument boot, MIDI/audio
-and every documented function remain open. See dsp-write-decoder.txt for the
-separate storage contract and its strict GPIO frontier.
+physical traffic is involved. These GPIO checks alone do not establish complete
+instrument operation, MIDI/audio or every documented function. See coverage.txt
+for connected original NAND loading and later frontiers; dsp-write-decoder.txt
+describes the separate storage contract.
+
+Functional output-preload qualification:
+222 fixed cases cover all 37 pins, both values and disconnected/input/peripheral
+modes before output selection. Six authored native BSET cases check full CPU
+state and Carry after ordinary or preloaded setup; 16 native MOVEP streams cover
+both store orders, untimed/clock-owned execution and fresh-owner continuations.
+Seven affected GPIO/DMA/NAND groups qualify in both ASan/UBSan and separate
+TSan builds, with zero format/tidy findings. Three unchanged ASan cases reuse
+identical passing ELF/XML evidence instead of repeating them. Adjacent older
+DMA guards now positively check the already supported peripheral_sample read
+phase: the old captured payload commits despite a changed RAM source, while
+unknown GPIO data, unsupported phases and program-fetch contention remain
+explicit. Neither DMA admission nor strict GPIO semantics changed.
+Component receipts: doc/local/gpio-preload/qualified.json
+SHA-256: 85b029ba87cb430bcfd67af35e3a5bf981a9b702434914e2c44ab382f739d0b3
+Connected original qualification of this preload change remains pending.

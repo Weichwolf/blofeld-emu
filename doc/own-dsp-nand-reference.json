@@ -272,5 +272,30 @@
     "whole_goal_complete": false,
     "fuzzing": false,
     "physical_traffic": false
+  },
+  "timer2_reset_candidate": {
+    "scope": "Explicit virtual TLR2=TCPR2=0 on modeled reset; original firmware and same declared NAND; frozen reference runtime, not regular instrument acceptance",
+    "initial_image_sha256": "6775c7880527593603ff6904a7a58a4d98afb144ce638987b5c388a105da194c",
+    "reset_choice": {
+      "timer": 2,
+      "load": 0,
+      "compare": 0
+    },
+    "manufacturer_reset_contents_recovered": false,
+    "native_main_service_loop_reached": true,
+    "prior_guest_trace_preserved_through_timer_refusal": true,
+    "runtime_nand_reads_and_stores": 9576,
+    "actual_dma_words": 1434,
+    "silent_stereo_frames": 357,
+    "identical_joint_suffixes": 2,
+    "cold_prefix_unchanged": true,
+    "diagnostic_decoder_control_reproduced": true,
+    "next_runtime_limit": "Native BSET at P:000271 reads unknown GPIO output PE9, Y:ffff9d; the earlier data-before-direction PDR write has not qualified that latch",
+    "local_audit": "doc/local/timer2-start/audit.json",
+    "local_audit_sha256": "77084378340900c0f6f132c2d86dab84a3a4c7bb8936c29c65f4ee54eb89e822",
+    "production_timer_reset_integration_qualified": false,
+    "full_instrument_complete": false,
+    "fuzzing": false,
+    "physical_traffic": false
   }
 }

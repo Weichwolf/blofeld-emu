@@ -38,14 +38,23 @@ without changing state. Peripheral output validation requires a strong drive.
 Reset and copies retain both external drive and explicit floating observations.
 This is logical weak/strong resolution, not analog resistance or timing.
 
-Output values require
-an explicit PDR write while configured output or the documented Port D reset.
+In strict diagnostics, output values require an explicit PDR write while
+configured output or the documented Port D reset.
 No pull-up, NAND-ready level or unqualified peripheral waveform is fabricated.
 The PDR
 behavior does not qualify a future output latch after a write in a non-output
 mode; those bits are conservatively marked unknown. Subsequent output-mode
 writes qualify them. Silicon behavior for input/disconnected preload still
 needs comparison, rather than assuming a retained or overwritten latch value.
+
+The functional logical_pins contract stores explicit PDR writes independently
+of the current mux/direction. Selecting GPIO output exposes that preload; input
+reads still sample actual pads, and peripheral/disconnected pins are not driven
+by the latch. Masked writes retain unselected latch knowledge. No initial value
+is supplied for an unwritten C/E/F latch. This permits the original data-before-
+direction startup sequence without assigning an external level or patching it.
+It is a functional model, not a silicon measurement; strict diagnostics retain
+their conservative non-output-write behavior. See dsp-gpio-write-decoder.txt.
 
 Pad observations return known/level masks independently of GPIO register reads.
 GPIO outputs expose driven/known/level masks and delegated peripheral ownership.

@@ -14,6 +14,7 @@ namespace {
 using namespace blofeld;
 constexpr unsigned control = 0xffffec, count = 0xffffed, target = 0xffffee, source = 0xffffef;
 constexpr unsigned payload = 0x123456, canary = 0xa55a33, destination = 0x900;
+constexpr unsigned dma_enable = 0x800000;
 constexpr unsigned software_copy = 0x9802d4, x_address = 0x660;
 constexpr std::array data_ports{DspAddress{.space = DspSpace::x, .address = 0xffffbd},
                                 DspAddress{.space = DspSpace::y, .address = 0xffff9d},
@@ -86,6 +87,29 @@ void refusal(const DspMemoryAccess access, const bool unknown_owner = false) {
   ++guards;
 }
 
+void sample_read(const DspAddress address) {
+  DspBus bus;
+  setup(bus);
+  const DspCoreBusUse empty{.accesses = {},
+                            .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy};
+  const auto read = bus.advance_dma(inputs(1), empty);
+  require(read.phase && read.phase->kind == DspDmaPhaseKind::source_read && !read.word,
+          "Actual source capture precedes a qualified independent GPIO read footprint");
+  put(bus, x_address, canary);
+  const std::array footprint{
+      DspMemoryAccess{.target = address, .phase = DspMemoryPhase::peripheral_sample}};
+  const auto write = bus.advance_dma(
+      inputs(2),
+      {.accesses = footprint, .knowledge = DspCoreBusKnowledge::reference_cycle_occupancy});
+  require(write.word && write.word->value == payload && !write.core_stall &&
+              bus.read({.space = DspSpace::y, .address = destination}) == payload &&
+              bus.read({.space = DspSpace::x, .address = x_address}) == canary &&
+              bus.read({.space = DspSpace::x, .address = control}) == (software_copy & ~dma_enable),
+          "GPIO read admission commits the old captured word, not its overwritten source");
+  require(!bus.advance_dma(inputs(3), empty).phase,
+          "Qualified GPIO read footprint cannot duplicate a completed DMA transaction");
+}
+
 void program_contention() {
   DspBus bus;
   setup(bus, true);
@@ -134,9 +158,10 @@ int main() {
   try {
     for (unsigned port = 0; port < data_ports.size(); ++port) {
       const auto address = data_ports.at(port);
-      for (const auto phase : {DspMemoryPhase::execute, DspMemoryPhase::peripheral_sample}) {
-        refusal({.target = address, .operation = DspMemoryOperation::read, .phase = phase});
-      }
+      refusal({.target = address,
+               .operation = DspMemoryOperation::read,
+               .phase = DspMemoryPhase::execute});
+      sample_read(address);
       refusal({.target = address,
                .operation = DspMemoryOperation::write,
                .phase = DspMemoryPhase::peripheral_sample});
