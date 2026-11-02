@@ -197,20 +197,26 @@
     "whole_goal_complete": false,
     "fuzzing": false,
     "physical_traffic": false,
-    "erased_page_initial_state_experiment": {
-      "scope": "One explicitly erased virtual page; not recovered manufacturer contents or a factory image",
-      "initial_image_sha256": "187cc3b256a6fb4c3499d4bb7c689c76c493be3f7479fefe21dee3f80052c269",
+    "virtual_erased_state_candidate": {
+      "scope": "Two explicitly erased virtual pages; not recovered manufacturer contents or a factory image",
+      "initial_image_sha256": "ff25edc8804e92bc9183343c46585f5ebfd05ad2e79fec0105a86c826638f500",
       "original_image_cells_preserved": true,
-      "erased_page": 864,
-      "actual_ff_bytes_read": 528,
-      "native_receiver_stores": 528,
-      "native_decoder_stores": 15,
+      "erased_pages": [
+        864,
+        4576
+      ],
+      "actual_ff_runtime_bytes_read": 600,
+      "native_receiver_stores": 600,
+      "native_window_decoder_stores": 15,
+      "native_global_installer_stores": 72,
+      "native_global_reserved_normalizations": 1,
+      "live_global_memory_values_verified": false,
       "identical_functional_suffixes": 2,
-      "actual_dma_words": 694,
-      "silent_stereo_frames": 172,
-      "next_runtime_limit": "Unknown initial Global-settings contents at NAND page 0x11e0, column 0",
-      "local_audit": "doc/local/nand-capture/erased-page/audit.json",
-      "local_audit_sha256": "faedc08769ffd2782cb2f49714e629b60b18a6ef6cef27f76aba9ba47c73dd90",
+      "actual_dma_words": 702,
+      "silent_stereo_frames": 174,
+      "next_runtime_limit": "Unknown initial Sound contents at NAND page 0x400, column 0",
+      "local_audit": "doc/local/nand-capture/erased-global/audit.json",
+      "local_audit_sha256": "e477d1e7c5a9d7e7c02ec346fc0d789609d20384a873a57f8161f13180b3a409",
       "instrument_audio_proven": false
     }
   }

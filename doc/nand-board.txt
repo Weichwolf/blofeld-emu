@@ -32,11 +32,14 @@ ASan/UBSan and separate TSan with strict compilation and zero tidy findings.
 An isolated original-firmware continuation reaches the actual Timer1 vector
 and stops at unknown initial page 0x360; it emits initialization silence only.
 See own-dsp-nand-reference.json/functional_ready_capture_candidate.
-A separate one-page-erased initial-state experiment retains the exact ELF and
-all previous image cells. The original firmware reads/stores 528 bytes and
-executes 15 table-decoder stores before requesting unknown Global settings at
-page 0x11e0. Both suffixes match; audio remains silent. This does not establish
-manufacturer table contents or a factory NAND image.
+A separate initial-state experiment retains the exact ELF and all previous
+image cells, declaring only pages 0x360/0x11e0 erased. The firmware reads/stores
+528 window bytes and 72 Global bytes, executes 15 table-decoder stores and
+72 Global field stores, takes its reserved-field normalization and enters
+the tuning helper. Both suffixes then request unknown Sound page 0x400.
+Audio remains silent; live Global values and complete instrument operation
+are unqualified. This does not establish manufacturer contents or a factory
+NAND image. The manifest pins the exact virtual input and connected audit.
 
 All interval conversions use the native owner's timebase. The new timebase test
 checks independently expected 54000/108000 tick power events at 540/1080MHz,

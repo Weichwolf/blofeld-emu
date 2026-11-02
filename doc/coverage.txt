@@ -4045,8 +4045,10 @@ NAND-page read. Both suffixes agree; the diagnostic control reproduces.
 646 DMA words decode to 160 silent stereo frames. This supports requirements
 2/3/6, not complete instrument startup or calibrated silicon synchronization.
 See nand-board.txt and own-dsp-nand-reference.json/functional_ready_capture_candidate.
-A separate initial-state experiment preserves all prior image cells and declares
-only page 0x360 erased. Unchanged native firmware reads all 528 FF bytes, stores
-them itself and executes 15 decoder stores, then requests Global settings.
-Two suffixes match and stop at unknown page 0x11e0;694 DMA words yield 172 silent
-stereo frames. This is a declared virtual state, not recovered factory data.
+A separate declared virtual state preserves every prior image cell and erases
+only pages 0x360/0x11e0. Native firmware reads/stores 528 window bytes and 72
+Global bytes, executes 15 window-decoder and 72 Global-installer stores, then
+runs its reserved-field normalization and tuning helper. Both suffixes stop
+at the expected first Sound request, unknown page 0x400; 702 DMA words yield
+174 silent stereo frames. Live Global values remain unmeasured. These erased
+pages are chosen virtual initial conditions, not recovered factory data.
