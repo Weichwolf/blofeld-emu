@@ -196,6 +196,22 @@
     "instrument_audio_proven": false,
     "whole_goal_complete": false,
     "fuzzing": false,
-    "physical_traffic": false
+    "physical_traffic": false,
+    "erased_page_initial_state_experiment": {
+      "scope": "One explicitly erased virtual page; not recovered manufacturer contents or a factory image",
+      "initial_image_sha256": "187cc3b256a6fb4c3499d4bb7c689c76c493be3f7479fefe21dee3f80052c269",
+      "original_image_cells_preserved": true,
+      "erased_page": 864,
+      "actual_ff_bytes_read": 528,
+      "native_receiver_stores": 528,
+      "native_decoder_stores": 15,
+      "identical_functional_suffixes": 2,
+      "actual_dma_words": 694,
+      "silent_stereo_frames": 172,
+      "next_runtime_limit": "Unknown initial Global-settings contents at NAND page 0x11e0, column 0",
+      "local_audit": "doc/local/nand-capture/erased-page/audit.json",
+      "local_audit_sha256": "faedc08769ffd2782cb2f49714e629b60b18a6ef6cef27f76aba9ba47c73dd90",
+      "instrument_audio_proven": false
+    }
   }
 }
