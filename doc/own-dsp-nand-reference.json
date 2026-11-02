@@ -339,5 +339,75 @@
     "decoder_selection_does_not_rewrite_live_state": true,
     "whole_original_regular_runtime_qualified": false,
     "whole_goal_complete": false
+  },
+  "native_dma_controller_read_continuation": {
+    "scope": "Unmodified original cold startup and connected frozen native runtime; actual DMA controller reads pass former overlap refusal and reach host analysis bound",
+    "local_audit": "doc/local/dma-controller-read/original/audit.json",
+    "local_audit_sha256": "860194411cdc60d9980a8bd49c380f62de749d47da9f6e3cdbbef2c304950d4c",
+    "binary_sha256": "178db2982cb9f186382b2d6a4cdf636d3d46b57f6e354b5d1763605dc43a4faf",
+    "initial_image_sha256": "a07de70065080ca045af30f68156a2a89dde4067679549157b2546c10c30674a",
+    "cold_prefix_unchanged": true,
+    "prior_guest_suffix_preserved": true,
+    "identical_functional_suffixes": 2,
+    "diagnostic_decoder_control_reproduced": true,
+    "retired_controller_reads": 5,
+    "additional_sound_pages": [
+      1024,
+      1088,
+      1152,
+      1216
+    ],
+    "additional_native_byte_reads_and_stores": 2112,
+    "total_runtime_nand_reads_and_stores": 12216,
+    "actual_dma_words": 1726,
+    "silent_stereo_frames": 430,
+    "rate_hz": 44100,
+    "termination": "Declared 6000000-unit host analysis budget, not a guest hardware fault",
+    "played_instrument_audio_proven": false,
+    "complete_regular_runtime_qualified": false,
+    "whole_goal_complete": false,
+    "fuzzing": false,
+    "physical_traffic": false
+  },
+  "normal_baud_timer_input_clock_comparison": {
+    "scope": "Private original receiver component with supplied caller, actual stage/runtime PLL sequence and ordinary contiguous 8N1 input",
+    "local_audit": "doc/local/midi-runtime-clock/audit.json",
+    "local_audit_sha256": "360f57d89a80417ce5f9c3f089a8faff51854a51b295e8e5f941592d1e056107",
+    "source_sha256": "8e61b8f1e0da87e525c073dde4a4638b57b102c909b27aa4b5a6e68c0e2fcdfe",
+    "binary_sha256": "1af1c19be379204fb8386473d0bba54164c39b64981d8b263c8dfbb8c618b2ab",
+    "normal_baud": 31250,
+    "frame_bits": 10,
+    "extra_idle_bits": 0,
+    "timebase_hz": 635040000000,
+    "candidate_extal_hz": 11289600,
+    "candidate_runtime_clk_hz": 203212800,
+    "independent_candidate_basis": "Original tempo/output nominal calibration, not a Timer0-fit input cadence",
+    "candidate_bytes_correct": 8,
+    "native_irq_rti_pairs": 72,
+    "complete_ring_cursor_and_guards_checked": true,
+    "negative_controls": [
+      {
+        "extal_hz": 12000000,
+        "first_expected_byte": 144,
+        "first_observed_byte": 16
+      },
+      {
+        "extal_hz": 10000000,
+        "first_expected_byte": 144,
+        "first_observed_byte": 200
+      }
+    ],
+    "sanitizer": "ASan/UBSan",
+    "format_tidy_findings": 0,
+    "separate_tsan_qualified": false,
+    "installed_clock_measured": false,
+    "published_speed_grade_conflict_unresolved": true,
+    "connected_original_reset_to_instrument_qualified": false,
+    "parser_voices_audio_qualified": false,
+    "normal_host_midi_qualified": false,
+    "whole_goal_complete": false,
+    "firmware_patched": false,
+    "fuzzing": false,
+    "physical_traffic": false
   }
 }

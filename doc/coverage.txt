@@ -4132,9 +4132,28 @@ payloads, unknown preloads and repeating DTD uncertainty, with 440 same/fresh
 restores per sanitizer. Six affected groups qualify under ASan/UBSan and
 separate TSan; one exact unchanged ASan observation is reused. The identical
 matrix also passes on the frozen reference frontend with the proper production
-Bus reset model, without the temporary Timer2 override. Full original connected
-continuation is pending. See dsp-dma-controller-read.txt; component results do
-not establish complete instrument/MIDI/audio/storage/update acceptance.
+Bus reset model, without the temporary Timer2 override. The connected original
+passes the former read refusal: five native controller reads retire, four
+further Sound pages contribute 2112 reads/stores, and both continuations reach
+the declared analysis budget in main-loop service without another hardware
+refusal. Full cold/prior prefixes, 12216 runtime NAND reads/stores, matching
+suffixes and the diagnostic decoder control are checked. 1726 DMA words decode
+to 430 silent stereo frames; no played note audio is established. See
+dsp-dma-controller-read.txt and own-dsp-nand-reference.json. Complete regular
+instrument/MIDI/audio/storage/update acceptance remains open.
+
+Normal-baud receiver clock comparison (requirements 2/3/6): a directed private
+component run executes original Timer0 setup/vectors/receiver with an authored
+caller and explicit stage/runtime PCTL sequence. The independently derived
+tempo/output calibration supplies the functional EXTAL candidate 11289600 Hz;
+it is not fitted to slowed serial input. Eight directed bytes at ordinary
+31250 baud and contiguous 8N1 frames reach the original ring correctly, with
+72 native IRQ/RTI pairs and complete ring/guard checks. Identical 12/10 MHz
+controls each misread the first byte. Compiler/format/tidy gates and ASan/UBSan
+pass for this private scope. Installed clocks and the published speed-grade
+conflict remain unresolved; connected original startup, normal host MIDI,
+parser/voices/audio and a separate TSan scope are not qualified by this run.
+See dsp-clocked-wire.txt and own-dsp-nand-reference.json.
 
 Functional MCU/DSP GPIO peer (requirements 2/3/6): the regular Board can connect
 Q[7:0]/C[7:0], J0/IRQA and PE9/PE0-XIRQ using actual chip drivers. Tests cover

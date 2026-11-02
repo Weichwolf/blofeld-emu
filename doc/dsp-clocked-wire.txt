@@ -54,3 +54,30 @@ No fuzzing or physical input occurs.
 
   cmake --build --preset strict --target blofeld-original-dsp-clocked-wire-test
   ctest --test-dir build/strict -R '^original_dsp_clocked_wire_' --output-on-failure
+
+Separate normal-baud functional clock comparison
+
+A private native-core experiment uses the same complete original receiver and
+vectors with an authored caller executing the stage/runtime PLL sequence. Its
+EXTAL candidate is 11289600 Hz, giving runtime CLK=203212800 Hz. This candidate
+comes from the independent tempo/output calibration, rather than fitting the
+input cadence to Timer0. Physical oscillator/grade/net identification remains
+unresolved; this runtime value exceeds the published 181 MHz grade ceiling.
+It is a functional clock hypothesis, not an electrical compliance claim.
+
+All three runs use the same 635040000000 Hz integer timebase and input at
+31250 baud: contiguous ten-bit 8N1 frames, without an added idle bit. The eight
+directed bytes 90,3c,64,80,3c,00,f8,aa reach the original ring correctly at the
+candidate clock, with all 72 genuine IRQ/RTI pairs, full ring/cursor/guard checks
+and natural completion. The otherwise identical 12 MHz and 10 MHz controls
+misread the first 90 as 10 and c8 respectively. Their explicit expectation
+failures are negative observations, not successful sequence tests.
+
+  python3 doc/local/midi-runtime-clock/audit.py
+
+Private source/build/run/audit identities are pinned in own-dsp-nand-reference.json.
+This ASan/UBSan component experiment has zero format/tidy findings; it does not
+establish normal reset-to-instrument boot, MIDI parsing/voices/audio, host MIDI,
+all byte values, speed, or a separate TSan result. The ordinary directed test
+scopes above retain their existing declared timing. Next integration must feed
+normal MIDI into connected original execution without modifying guest state.
