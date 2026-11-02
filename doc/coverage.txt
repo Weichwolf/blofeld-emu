@@ -41,6 +41,11 @@ pass authored REP/NOP/GPIO, actual DMA wait/restore, vector-read/IRQ/reset and
 affected fetch/timeline regressions. Physical interlocks, corrected original
 overlay transfer and normal-profile integration remain open. See
 dsp-native-budget.txt and dsp-native-budget-reference.json.
+An original reference-effects run with all sixteen secondary pages installed
+read NAND page 15 correctly 21 times. Two completed MCU RAM snapshots each differ
+from that source at 474 of 528 bytes. The run was deliberately stopped and reaped;
+both stores remain unchanged. See original-overlay-transfer-reference.json.
+The new scheduling model still requires connected original-transfer/startup proof.
 
 The successful bounded ordinary case executes 4.8M MCU operations from actual
 reset and reaches about 418ms of DSP virtual time. It exports 6792 stereo PCM
