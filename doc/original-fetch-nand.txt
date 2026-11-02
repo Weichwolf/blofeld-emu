@@ -1,0 +1,11 @@
+original_fetch_nand_start connects actual MCU reset/SPI, the independent DSP
+core and the NAND peer. Both sanitizer profiles match all56238 pinned source
+bytes in protocol observations and retired CPU samples,107 address sequences
+and107 read deadlines (15us in the declared540MHz reference timebase).
+Unknown row106/column270 still refuses; four fixed evidence corruptions reject.
+Reset, writable-storage and GPIO gates also pass in both profiles. Original
+MCU timing/wire ledgers and600s limits remain; NAND uses3300s inner/3600s outer.
+Compiler/format/tidy and ELF hardening pass; no foreign core symbols.
+The unregistered nand-runtime diagnostic, loader handoff, unchanged persistent
+storage and complete Desktop/Keyboard boot are not qualified by these tests.
+Hashes: original-fetch-nand-reference.json. References remain local.

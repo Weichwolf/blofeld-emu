@@ -44,6 +44,13 @@ This uses cold-value snapshots, not live-store rewind. It does not qualify all
 controllers/channels, bank/program selection, bidirectional host MIDI or both
 hardware profiles. See original-notes-reference.json and function-acceptance.tsv.
 
+Connected reset/SPI/NAND gates match all56238 known source bytes in actual
+protocol and retired DSP samples,107 address sequences and read deadlines.
+Unknown tail cells still refuse; fixed evidence corruptions reject. All eight
+reset/storage/GPIO/NAND cases pass both sanitizer profiles. This prefix does not
+establish loader completion or unchanged persistent storage. See
+original-fetch-nand-reference.json and original-fetch-nand.txt.
+
 4. Complete update/recovery — partial
 Native flash/NAND command, persistence, interrupted-operation and loader tests
 provide component evidence. Full connected valid/damaged update, every power-loss

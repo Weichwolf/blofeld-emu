@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "board/gpio_pads.hpp"
 #include "board/mcu_dsp_runtime.hpp"
+#include "board/nand_peer.hpp"
 #include "common/bus.hpp"
 #include "dsp/dsp_bus.hpp"
 #include "dsp/dsp_dma.hpp"
+#include "dsp/dsp_esai.hpp"
 #include "dsp/dsp_gpio.hpp"
 #include "dsp/dsp_pll.hpp"
 #include "dsp/dsp_run_clock.hpp"
@@ -22,6 +24,8 @@
 #include "mcu/mcu_run_clock.hpp"
 #include "original_owned_clock_fixture.hpp"
 #include "storage/flash_image.hpp"
+#include "storage/nand.hpp"
+#include "storage/nand_file.hpp"
 
 #include <array>
 #include <cstddef>
@@ -31,6 +35,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -38,6 +43,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <utility>
 
 namespace blofeld::test::reset_source {
 namespace {
@@ -63,10 +69,10 @@ void require(const bool condition, const std::string_view message) {
   if (!condition) { throw Fault(std::string(message)); }
 }
 
-std::uint64_t common_ticks(const McuMachine &machine) {
+std::uint64_t common_ticks(const McuMachine &machine, const std::uint64_t timebase = common_hz) {
   const auto &clock = machine.run_clock();
-  require(common_hz % clock.timebase_hz() == 0, "MCU/common timebase ratio must be exact");
-  const auto factor = common_hz / clock.timebase_hz();
+  require(timebase % clock.timebase_hz() == 0, "MCU/common timebase ratio must be exact");
+  const auto factor = timebase / clock.timebase_hz();
   require(clock.elapsed_ticks() <= std::numeric_limits<std::uint64_t>::max() / factor,
           "MCU/common clock conversion must not wrap");
   return clock.elapsed_ticks() * factor;
@@ -108,10 +114,18 @@ constexpr unsigned rx_overrun = 0x100000, ram_begin = 0x1200, ram_size = 5120;
 constexpr unsigned recovery_periods = 2, word_bytes = 3, clear_pc = 0x72;
 constexpr std::uint64_t common = source::common_hz;
 constexpr unsigned no_pending_effect = 0xff;
+constexpr unsigned nand_sample_pc = 0x98, accumulator_word_shift = 24;
 
 struct Lab {
-  Lab(McuMachine &native_mcu, source::Progress &native_progress, std::ostream &output)
-      : mcu(native_mcu), progress(native_progress), trace(output) {}
+  Lab(McuMachine &native_mcu,
+      source::Progress &native_progress,
+      std::ostream &output,
+      const std::uint64_t timebase = common)
+      : mcu(native_mcu), progress(native_progress), trace(output), timebase_hz(timebase) {}
+
+  [[nodiscard]] std::uint64_t common_ticks() const {
+    return source::common_ticks(mcu, timebase_hz);
+  }
 
   void inputs() {
     const auto pc = mcu.cpu().state().pc;
@@ -148,6 +162,7 @@ struct Lab {
   McuMachine &mcu;
   source::Progress &progress;
   std::ostream &trace;
+  const std::uint64_t timebase_hz;
   owned_clock::Inputs observed;
   ExecutionContext context;
   std::optional<std::uint64_t> asserted;
@@ -161,11 +176,13 @@ struct LinkCounts {
   unsigned writes = 0;
   unsigned frames = 0;
   unsigned ordered_pairs = 0;
+  bool runtime_entered = false;
 };
 
 class Link {
 public:
-  Link(Lab &lab, OwnDspMachine &dsp) : lab_(lab), dsp_(dsp) {
+  Link(Lab &lab, OwnDspMachine &dsp, const Firmware &firmware, NandPeer *nand = nullptr)
+      : lab_(lab), dsp_(dsp), firmware_(firmware), nand_(nand) {
     scheduler_ = std::make_unique<McuDspRuntime>(
         McuDspRuntimeInputs{
             .timing = OwnDspAutomaticTiming::one_effect_per_cycle_program_priority_with_interrupts,
@@ -177,7 +194,19 @@ public:
                                                .pinit = false,
                                                .recovery_cycles = recovery_periods}},
         lab.mcu,
-        dsp);
+        dsp,
+        DspRuntimeEvents{},
+        peripheral());
+  }
+
+  [[nodiscard]] DspRuntimePeripheralEvents peripheral() const {
+    if (nand_ == nullptr) { return {}; }
+    const auto events = nand_->events();
+    return {.identity = events.identity,
+            .next_ticks = events.next_ticks,
+            .observe = events.observe,
+            .order = DspPeerOrder::peer_first,
+            .maximum_events_per_period = 8};
   }
 
   [[nodiscard]] SpiInputs sample() const {
@@ -191,24 +220,65 @@ public:
             .mosi = (pins.levels & coupled::mosi_pin) != 0};
   }
 
-  static DspDmaInputs cycle_inputs() {
+  DspDmaInputs cycle_inputs() {
+    if (nand_ != nullptr) { nand_->before_native(dsp_.clock().elapsed_ticks()); }
     return {.known_requests = 15,
             .timing = DspDmaTiming::reference_sampled_cycles,
             .grant = DspDmaGrant::available};
+  }
+
+  [[nodiscard]] std::size_t verify_runtime_records() const {
+    constexpr unsigned maximum_address = 0xffffff;
+    std::map<std::pair<unsigned, unsigned>, unsigned> expected;
+    for (const auto &record : firmware_.dsp) {
+      require(record.space <= 2 && record.address <= maximum_address,
+              "Known original DSP record space and address");
+      for (std::size_t index = 0; index < record.words.size(); ++index) {
+        require(index <= maximum_address - record.address, "Original DSP record address range");
+        const auto address = record.address + static_cast<unsigned>(index);
+        expected.insert_or_assign({record.space, address}, record.words[index]);
+      }
+    }
+    for (const auto &[key, value] : expected) {
+      const DspAddress address{.space = static_cast<DspSpace>(key.first), .address = key.second};
+      if (dsp_.bus().read(address) != value) {
+        throw Fault("Original loader record mismatch at space=" + std::to_string(key.first) +
+                    " address=" + hex(key.second, 6) + " pc=" + hex(dsp_.cpu().registers().pc, 6));
+      }
+    }
+    return expected.size();
   }
 
   void before(const DspRuntimeCycle &event) {
     ++counts_.dsp_steps;
     const auto state = dsp_.cpu().registers();
     const auto pending = dsp_.cpu().pending_instruction();
-    lab_.trace << "DSP cycle=" << event.cycle + 1 << " end=" << event.completion_ticks
-               << " period=" << event.completion_ticks - event.start_ticks
-               << " pc=" << hex(state.pc, 6) << " pctl=" << hex(dsp_.bus().pll().read(), 6)
-               << " retired=" << (event.result.native && event.result.native->retired)
-               << " native=" << event.result.native.has_value()
-               << " native_pc=" << hex(event.result.native_pc.value_or(0), 6) << " pending="
-               << (pending ? static_cast<unsigned>(pending->effect.kind) : no_pending_effect)
-               << " r4=" << state.r[4] << " lc=" << state.lc << '\n';
+    const bool retired = event.result.native && event.result.native->retired;
+    if (nand_ == nullptr || retired) {
+      lab_.trace << "DSP cycle=" << event.cycle + 1 << " end=" << event.completion_ticks
+                 << " period=" << event.completion_ticks - event.start_ticks
+                 << " pc=" << hex(state.pc, 6) << " pctl=" << hex(dsp_.bus().pll().read(), 6)
+                 << " retired=" << (event.result.native && event.result.native->retired)
+                 << " native=" << event.result.native.has_value()
+                 << " native_pc=" << hex(event.result.native_pc.value_or(0), 6) << " pending="
+                 << (pending ? static_cast<unsigned>(pending->effect.kind) : no_pending_effect)
+                 << " r4=" << state.r[4] << " lc=" << state.lc << '\n';
+    }
+    constexpr unsigned runtime_pc = 0x100;
+    if (nand_ != nullptr) {
+      if (retired && event.result.native_pc == nand_sample_pc) {
+        lab_.trace << "CPU_BYTE tick=" << event.completion_ticks
+                   << " value=" << hex(state.a >> accumulator_word_shift, 6) << " r5=" << state.r[5]
+                   << '\n';
+      }
+      if (retired && state.pc == runtime_pc && !counts_.runtime_entered) {
+        const auto resident = verify_runtime_records();
+        counts_.runtime_entered = true;
+        lab_.trace << "HANDOFF tick=" << event.completion_ticks << " r4=" << state.r[4]
+                   << " r5=" << state.r[5] << " resident=" << resident << '\n';
+      }
+      nand_->after_native(event.completion_ticks, event.result.native_pc);
+    }
   }
 
   void attach() {
@@ -219,7 +289,10 @@ public:
                           (*cycle.address == coupled::port_b || *cycle.address == u_data ||
                            *cycle.address == u_direction);
       scheduler_->begin_cycle(
-          cycle, shared, cycle_inputs, [this](const auto &event) { before(event); });
+          cycle,
+          shared,
+          [this] { return cycle_inputs(); },
+          [this](const auto &event) { before(event); });
     });
     lab_.mcu.bus().set_observer([this](const auto &event) {
       if (!event.write) { return; }
@@ -231,7 +304,7 @@ public:
       scheduler_->observe_write(
           event,
           [&] { observe(event); },
-          cycle_inputs,
+          [this] { return cycle_inputs(); },
           [this](const auto &native) { before(native); });
     });
   }
@@ -246,7 +319,7 @@ public:
                    << " known=" << static_cast<unsigned>(output.known)
                    << " levels=" << static_cast<unsigned>(output.levels) << '\n';
         if ((output.mask & output.known & 1U) != 0 && (output.levels & 1U) == 0) {
-          lab_.asserted = source::common_ticks(lab_.mcu);
+          lab_.asserted = lab_.common_ticks();
         }
         return;
       }
@@ -296,6 +369,7 @@ public:
   [[nodiscard]] std::optional<SpiInputs> previous() const { return previous_; }
 
   void restore(const McuDspRuntimeCheckpoint &snapshot) {
+    if (nand_ != nullptr) { throw Fault("NAND replay requires its joint peripheral payload"); }
     scheduler_.reset();
     scheduler_ = std::make_unique<McuDspRuntime>(snapshot, lab_.mcu, dsp_);
   }
@@ -317,6 +391,8 @@ private:
   LinkCounts counts_;
   Lab &lab_;
   OwnDspMachine &dsp_;
+  const Firmware &firmware_;
+  NandPeer *nand_;
   std::unique_ptr<McuDspRuntime> scheduler_;
   std::optional<SpiInputs> previous_;
 };
@@ -328,7 +404,7 @@ void prefix(Lab &lab, Link &link) {
   mcu.bus().set_pin_drive(McuPort::r, {.mask = receive_pad, .levels = receive_pad});
   for (unsigned count = 0; count < limit && !lab.asserted; ++count) { link.step(); }
   if (!lab.asserted) { throw Fault("No actual native U0 low output assertion"); }
-  lab.trace << "ASSERT tick=" << lab.assert_tick() << " completed=" << source::common_ticks(mcu)
+  lab.trace << "ASSERT tick=" << lab.assert_tick() << " completed=" << lab.common_ticks()
             << " pc=" << hex(mcu.cpu().state().pc) << " retired=" << lab.progress.census.retired
             << '\n';
 }
@@ -396,14 +472,15 @@ void record(const unsigned replay,
             OwnDspMachine &dsp,
             Link &link,
             std::ostream &summary,
-            const std::string &error) {
+            const std::string &error,
+            const bool nvm_verified = true) {
   const auto state = dsp.cpu().registers();
   const auto &clock = lab.mcu.run_clock();
   summary << "STOP replay=" << replay << " unused_pulldowns=" << lab.unused_pulldowns
           << " release=" << link.counts().release_tick << " retired=" << lab.progress.census.retired
           << " cycles=" << clock.bus_cycles() << " ticks=" << clock.elapsed_ticks()
           << " OSC=" << clock.oscillator_cycles() << " entries=" << lab.progress.interrupts.entries
-          << " common=" << source::common_ticks(lab.mcu) << " mcu=" << hex(lab.mcu.cpu().state().pc)
+          << " common=" << lab.common_ticks() << " mcu=" << hex(lab.mcu.cpu().state().pc)
           << " dsp=" << hex(state.pc, 6) << " r4=" << state.r[4] << " lc=" << state.lc
           << " omr=" << hex(state.omr, 6) << " units=" << link.schedule().completed_cycles()
           << " dsp_ticks=" << dsp.clock().elapsed_ticks()
@@ -411,8 +488,9 @@ void record(const unsigned replay,
           << " dsp_retired=" << dsp.cpu().progress().instructions
           << " clk2=" << dsp.clock().timer_clk2_edges()
           << " dsp_attempts=" << link.counts().dsp_steps << " frames=" << link.counts().frames
-          << " writes=" << link.counts().writes << " pairs=" << link.counts().ordered_pairs
-          << " nvm=1 fault=" << error << '\n';
+          << " writes=" << link.counts().writes << " pairs=" << link.counts().ordered_pairs;
+  if (nvm_verified) { summary << " nvm=1"; }
+  summary << " fault=" << error << '\n';
 }
 
 void require_quarantined(OwnDspMachine &dsp, const bool clock_fault = true) {
@@ -672,13 +750,53 @@ void exercise_pins(Lab &lab,
   require_runtime_quarantined(lab, dsp, link);
 }
 
-enum class StartupContract : std::uint8_t { strict, writable_storage, existing_pins };
+void exercise_nand(Lab &lab,
+                   OwnDspMachine &dsp,
+                   Link &link,
+                   NandPeer &nand,
+                   std::ostringstream &trace,
+                   const std::string &path,
+                   std::ostream &summary) {
+  constexpr unsigned maximum_cycles = 6000000;
+  std::string error;
+  try {
+    for (unsigned count = 0; count < limit && link.counts().dsp_steps < maximum_cycles; ++count) {
+      link.step();
+    }
+    throw Fault("Connected original NAND source exceeded its execution bound");
+  } catch (const Fault &fault) { error = fault.what(); }
+  record(0, lab, dsp, link, summary, error, false);
+  const auto state = dsp.cpu().registers();
+  summary << "NAND faulted=" << nand.faulted() << " runtime=" << link.counts().runtime_entered
+          << " r0=" << hex(state.r[0], 6) << " r4=" << hex(state.r[4], 6)
+          << " r5=" << hex(state.r[5], 6) << " timebase=" << dsp.clock().timebase_hz() << '\n';
+  if (!nand.faulted()) {
+    const auto actual = nand.detailed();
+    summary << "MEDIUM ticks=" << actual.base.ticks << " page=" << actual.page
+            << " column=" << actual.column
+            << " pending=" << static_cast<unsigned>(actual.base.pending) << '\n';
+  }
+  summary.flush();
+  write_text(path + ".0.trace", trace.str());
+  lab.progress.census.write(path + ".0.mcu.jsonl");
+  lab.progress.phases.write(path + ".0.phases.json");
+  throw Fault(error);
+}
+
+enum class StartupContract : std::uint8_t {
+  strict,
+  writable_storage,
+  existing_pins,
+  nand,
+  nand_runtime
+};
 
 struct Paths {
   std::filesystem::path firmware;
   std::filesystem::path rom;
   std::filesystem::path trace;
   StartupContract contract = StartupContract::strict;
+  std::optional<std::filesystem::path> nand_image;
 };
 
 void run(const Paths &paths) {
@@ -699,25 +817,40 @@ void run(const Paths &paths) {
   std::ostringstream trace;
   std::ofstream summary(trace_path);
   summary.exceptions(std::ios::failbit | std::ios::badbit);
-  Lab lab(mcu, progress, trace);
+  const auto timebase = paths.contract == StartupContract::nand_runtime ? 2 * common : common;
+  Lab lab(mcu, progress, trace, timebase);
   // Explicit initial-held profile; no pre-assert DSP execution is inferred.
   OwnDspMachine dsp({.extal_hz = source::oscillator_hz,
-                     .timebase_hz = common,
+                     .timebase_hz = timebase,
                      .switch_timing = DspClockSwitch::reference_cycle_boundary});
   if (paths.contract != StartupContract::strict) {
     dsp.bus().set_write_contract(DspWriteContract::internal_writable_storage);
   }
-  if (paths.contract == StartupContract::existing_pins) {
+  if (paths.contract == StartupContract::existing_pins || paths.nand_image) {
     for (const auto port : {DspPort::c, DspPort::e, DspPort::f, DspPort::d}) {
       dsp.bus().gpio(port).set_contract(DspGpioContract::logical_pins);
     }
   }
+  if (paths.contract == StartupContract::nand_runtime) {
+    dsp.bus().set_write_contract(DspWriteContract::functional_decode);
+    dsp.bus().shi().set_reset_contract(ShiResetContract::selected_quiescent_reference);
+    dsp.bus().set_esai_configuration_contract(
+        DspEsaiInstance::secondary, DspEsaiConfigurationContract::cold_unclocked_reference);
+    std::cerr << "FUNCTIONAL_BOOT IO=decoded-reserved-unselected SHI=selected-quiescent "
+                 "ESAI1=cold-unclocked "
+                 "SS/HBUSY=unchanged external-audio-clocks=unsupplied\n";
+  }
   dsp.bus().install_rom({.start = coupled::bootstrap_base, .words = rom});
-  Link link(lab, dsp);
+  std::unique_ptr<NandPeer> nand;
+  if (paths.nand_image) {
+    nand = std::make_unique<NandPeer>(
+        dsp, Nand(load_nand_image(*paths.nand_image), NandReadContinuation::k9f1208_j));
+  }
+  Link link(lab, dsp, firmware, nand.get());
   lab.bind_u();
   link.attach();
   prefix(lab, link);
-  const auto tail = source::common_ticks(mcu) - lab.assert_tick();
+  const auto tail = lab.common_ticks() - lab.assert_tick();
   for (unsigned count = 0; count < limit && mcu.cpu().state().pc != release_pc; ++count) {
     link.step();
   }
@@ -729,13 +862,15 @@ void run(const Paths &paths) {
   if (!reset) { throw Fault("Expected the actual held native reset phase"); }
   summary << "HELD_CUT retired=" << progress.census.retired
           << " cycles=" << mcu.run_clock().bus_cycles()
-          << " ticks=" << mcu.run_clock().elapsed_ticks() << " common=" << source::common_ticks(mcu)
+          << " ticks=" << mcu.run_clock().elapsed_ticks() << " common=" << lab.common_ticks()
           << " assert=" << lab.assert_tick() << " tail=" << tail
           << " held=" << dsp.clock().elapsed_ticks() << " phase=" << reset->phase_ticks << '\n';
   write_text(std::string(trace_path) + ".prefix.trace", trace.str());
   progress.census.write(std::string(trace_path) + ".held.mcu.jsonl");
   progress.phases.write(std::string(trace_path) + ".held.phases.json");
-  if (paths.contract == StartupContract::existing_pins) {
+  if (paths.nand_image && nand) {
+    exercise_nand(lab, dsp, link, *nand, trace, trace_path, summary);
+  } else if (paths.contract == StartupContract::existing_pins) {
     exercise_pins(lab, dsp, link, firmware, trace, trace_path, summary);
   } else if (paths.contract == StartupContract::writable_storage) {
     exercise_decoder(lab, dsp, link, firmware, trace, trace_path, summary);
@@ -748,14 +883,20 @@ void run(const Paths &paths) {
 
 int main(int count, char **args) {
   try {
-    if (count != 4 && count != 5) {
-      throw blofeld::Fault(
-          "firmware.zip private-rom private.trace [writable-storage|writable-pins]");
+    if (count != 4 && count != 5 && count != 6) {
+      throw blofeld::Fault("firmware.zip private-rom private.trace "
+                           "[writable-storage|writable-pins|nand image|nand-runtime image]");
     }
     auto contract = StartupContract::strict;
-    if (count == 5) {
+    std::optional<std::filesystem::path> nand;
+    if (count >= 5) {
       const std::string_view name(args[4]);
-      if (name == "writable-storage") {
+      if (count == 6 && (name == "nand" || name == "nand-runtime")) {
+        contract = name == "nand" ? StartupContract::nand : StartupContract::nand_runtime;
+        nand = args[5];
+      } else if (count == 6) {
+        throw blofeld::Fault("Only the NAND contract accepts an image path");
+      } else if (name == "writable-storage") {
         contract = StartupContract::writable_storage;
       } else if (name == "writable-pins") {
         contract = StartupContract::existing_pins;
@@ -763,7 +904,11 @@ int main(int count, char **args) {
         throw blofeld::Fault("Unknown original startup contract");
       }
     }
-    run({.firmware = args[1], .rom = args[2], .trace = args[3], .contract = contract});
+    run({.firmware = args[1],
+         .rom = args[2],
+         .trace = args[3],
+         .contract = contract,
+         .nand_image = nand});
     std::string_view message =
         "Original reset-net source, dsp56300 runtime, SPI and held replay passed.\n";
     if (contract == StartupContract::writable_storage) {

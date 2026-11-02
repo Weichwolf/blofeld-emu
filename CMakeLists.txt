@@ -2875,7 +2875,7 @@ if(BUILD_TESTING)
   add_executable(blofeld-original-fetch-reset-start-test test/original_fetch_reset_start_test.cpp
     test/original_owned_clock_fixture.cpp)
   target_link_libraries(blofeld-original-fetch-reset-start-test PRIVATE blofeld_mcu_dsp_runtime
-    blofeld_lcd_fixture)
+    blofeld_lcd_fixture blofeld_nand_peer blofeld_nand_store)
   add_test(NAME original_fetch_reset_start COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_reset_start.py"
     $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
@@ -2897,6 +2897,14 @@ if(BUILD_TESTING)
     "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
     "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-gpio-start.json")
   set_tests_properties(original_fetch_gpio_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+  add_test(NAME original_fetch_nand_start COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/original_fetch_nand_start.py"
+    $<TARGET_FILE:blofeld-original-fetch-reset-start-test>
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/Blofeld_Firmware_V1.25.zip"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/nxp-main-boot-document.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/doc/local/connected-nand/initial-nand.bfnand"
+    "${CMAKE_CURRENT_BINARY_DIR}/Testing/original-fetch-nand-start.json")
+  set_tests_properties(original_fetch_nand_start PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600)
   add_test(NAME original_shi_routes COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/test/original_shi_routes.py"
     $<TARGET_FILE:blofeld-headless>
